@@ -52,7 +52,6 @@ describe("builtinSkills", () => {
       expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
         "copilot-web-search",
         "copilot-web-fetch",
-        "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
         "openartifacts-publish",
@@ -130,6 +129,7 @@ describe("builtinSkills", () => {
           "renew their Copilot Plus license at https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=skill_license_invalid"
         );
         expect(sh).not.toContain("require Copilot Plus");
+        expect(sh).toContain("higher-quality web, YouTube, and X tools");
 
         expect(sh).toContain("$RELAY_FAILED_FALLBACK");
         expect(sh).toContain("your own equivalent built-in tool for this");
@@ -206,24 +206,10 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-fetch-x", ".ps1")).toContain('Invoke-Relay "/twitter4llm"');
     });
 
-    it("read-pdf base64-encodes the file into the pdf field (both scripts)", () => {
-      const sh = scriptOf("copilot-read-pdf", ".sh");
-      expect(sh).toContain('relay "/pdf4llm"');
-      expect(sh).toContain("base64");
-      expect(sh).toContain('\\"pdf\\"');
-
-      const ps1 = scriptOf("copilot-read-pdf", ".ps1");
-      expect(ps1).toContain('Invoke-Relay "/pdf4llm"');
-      expect(ps1).toContain(
-        "[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($FILE))"
-      );
-      expect(ps1).toContain("@{ pdf = $PDF; user_id = $USER_ID }");
-    });
-
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(7);
+      expect(skill!.version).toBe(8);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -283,6 +269,38 @@ describe("builtinSkills", () => {
       expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
         '-File "%~dp0openartifacts-publish.ps1"'
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 asks who can open a new page, shares through the wrapper, and never sends linkAccess on create", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+      expect(skill!.version).toBe(8);
+
+      const md = skill!.skillMd;
+      expect(md).toContain(
+        "Who should be able to open it? Reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them."
+      );
+      expect(md).toContain("share <docId> add");
+      expect(md).toContain("share <docId> decline");
+      expect(md).toContain("share <docId> link invited");
+      expect(md).toContain("People who opened it while it was public may have kept a copy.");
+      expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
+      expect(md).toContain("Manage who can open it: {manageUrl}");
+      expect(md).toContain("Nothing was published.");
+      expect(md).toContain('Report an update as "Updated: {url}."');
+      expect(md).not.toContain("Report a public publish as");
+      expect(md).toContain("After `link invited` makes a public page private");
+      expect(md).not.toContain("removes the new page");
+      expect(md).not.toContain("Share dialog");
+
+      for (const path of ["openartifacts-publish.sh", "openartifacts-publish.ps1"]) {
+        const script = skill!.files.find((file) => file.path === path)!.content;
+        expect(script).toContain("/api/v1/private-docs");
+        expect(script).toContain("Nothing was published.");
+        expect(script).toContain("Not found, or this server does not support private documents.");
+        expect(script).not.toContain('linkAccess":"invited');
+        expect(script).not.toContain("linkAccess = 'invited'");
+      }
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
@@ -515,14 +533,12 @@ describe("builtinSkills", () => {
       expect(miyoParseScript(".cmd")).toContain("where miyo");
     });
 
-    it("tells the agent to fail closed rather than reach for a cloud parser", () => {
-      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Never fall back/i);
-      expect(MIYO_PARSE_SKILL.skillMd).toContain("copilot-read-pdf");
-    });
-
-    it("names the recovery path when the CLI is absent, since a remote server can't parse", () => {
-      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/remote\s+Miyo\s+server\s+does\s+not\s+help/i);
-      expect(MIYO_PARSE_SKILL.skillMd).toMatch(/Document\s+Processor to Plus/i);
+    it("tells the agent to report a parse error and then read the file itself without retrying https://github.com/Brevilabs/obsidian-copilot-private/issues/656", () => {
+      const { skillMd } = MIYO_PARSE_SKILL;
+      expect(skillMd).toContain(
+        "Report the error to the user, then read the file with any other tool you\nhave. Do not run `miyo parse` again on that file."
+      );
+      expect(skillMd).not.toMatch(/never fall back|copilot-read-pdf|\bPlus\b/i);
     });
 
     it("does not embed Copilot Plus credentials", () => {
@@ -547,7 +563,6 @@ describe("builtinSkills", () => {
       expect(scripted.map((skill) => skill.name)).toEqual([
         "copilot-web-search",
         "copilot-web-fetch",
-        "copilot-read-pdf",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
         "openartifacts-publish",
@@ -578,32 +593,27 @@ describe("builtinSkills", () => {
         "miyo-search",
       ]);
       expect(planManagedBuiltins({ search: true, documents: false }).prune).toEqual(["miyo-parse"]);
-      expect(planManagedBuiltins({ search: false, documents: true }).seed).toContain(
-        MIYO_PARSE_SKILL
-      );
-      expect(planManagedBuiltins({ search: false, documents: true }).prune).toContain(
-        "miyo-search"
-      );
-    });
-
-    it("replaces the cloud PDF skill with Miyo parse when Miyo owns documents", () => {
-      const plan = planManagedBuiltins({ search: true, documents: true });
-      expect(names(plan.seed)).not.toContain("copilot-read-pdf");
-      expect(plan.prune).toEqual(["copilot-read-pdf"]);
-      expect(names(plan.seed)).toEqual([
-        ...names(BUILTIN_SKILLS).filter((name) => name !== "copilot-read-pdf"),
-        "miyo-search",
+      expect(names(planManagedBuiltins({ search: false, documents: true }).seed)).toEqual([
+        ...names(BUILTIN_SKILLS),
         "miyo-parse",
       ]);
+      expect(planManagedBuiltins({ search: false, documents: true }).prune).toEqual([
+        "miyo-search",
+      ]);
+    });
+
+    it("seeds both Miyo skills and prunes nothing when both gates are on", () => {
+      const plan = planManagedBuiltins({ search: true, documents: true });
+      expect(names(plan.seed)).toEqual([...names(BUILTIN_SKILLS), "miyo-search", "miyo-parse"]);
+      expect(plan.prune).toEqual([]);
     });
   });
 
   describe("DEFAULT_BUILTIN_PREFERENCES", () => {
-    it("stores web search, web fetch, and PDF reading as opt-outs so older releases keep them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
+    it("stores web search and web fetch as opt-outs so older releases keep them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
       expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
         "copilot-web-search": { disabled: true },
         "copilot-web-fetch": { disabled: true },
-        "copilot-read-pdf": { disabled: true },
       });
       expect(DEFAULT_SETTINGS.agentMode.skills.builtinPreferences).toBe(
         DEFAULT_BUILTIN_PREFERENCES
@@ -613,10 +623,9 @@ describe("builtinSkills", () => {
 
   describe("isBuiltinSkillEnabledFor()", () => {
     it("enables every seeded builtin for every agent when no preference is stored", () => {
-      const settings = settingsWith({});
+      const settings = settingsWith({}, { enableMiyoDocumentProcessing: false });
       for (const agent of ["claude", "codex", "opencode"]) {
         expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
-        expect(isBuiltinSkillEnabledFor(settings, "copilot-read-pdf", agent)).toBe(true);
       }
     });
 
@@ -642,15 +651,17 @@ describe("builtinSkills", () => {
       }
     });
 
-    it("follows the Miyo gates: Miyo skills need their setting, and Miyo documents drop the cloud PDF skill", () => {
-      const off = settingsWith({});
+    it("follows the Miyo gates: each Miyo skill needs its setting", () => {
+      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
       expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
 
-      const on = settingsWith({}, { enableMiyoSearchSkill: true, docProcessorBackend: "miyo" });
+      const on = settingsWith(
+        {},
+        { enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
+      );
       expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
-      expect(isBuiltinSkillEnabledFor(on, "copilot-read-pdf", "claude")).toBe(false);
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

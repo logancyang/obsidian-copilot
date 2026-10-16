@@ -1,6 +1,5 @@
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { Clock, X } from "lucide-react";
 import React from "react";
 
@@ -26,16 +25,8 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, 
             className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-rounded-md tw-bg-secondary-alt tw-px-2 tw-py-1 tw-text-ui-smaller"
             title={label}
           >
-            <Clock
-              className={cn(
-                "tw-size-3 tw-shrink-0",
-                m.queueReason === "context" ? "tw-text-warning" : "tw-text-muted"
-              )}
-            />
+            <Clock className="tw-size-3 tw-shrink-0 tw-text-muted" />
             <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-whitespace-nowrap tw-text-normal">
-              {m.queueReason === "context" && (
-                <span className="tw-font-semibold tw-text-warning">Waiting for context · </span>
-              )}
               {label}
             </span>
             <Button

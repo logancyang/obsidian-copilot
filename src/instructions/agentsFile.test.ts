@@ -31,11 +31,9 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const openFile = jest.fn().mockResolvedValue(undefined);
   const folderWithChildren = (path: string) => {
     const folder = toFolder(path);
-    const children = path.split("/").some((segment) => segment.startsWith("."))
-      ? []
-      : [...state.files.keys()]
-          .filter((key) => key.slice(0, key.lastIndexOf("/") + 1) === (path ? `${path}/` : ""))
-          .map(toFile);
+    const children = [...state.files.keys()]
+      .filter((key) => key.slice(0, key.lastIndexOf("/") + 1) === (path ? `${path}/` : ""))
+      .map(toFile);
     (folder as unknown as { children: unknown[] }).children = children;
     return folder;
   };
@@ -48,7 +46,6 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
   const app = {
     vault: {
       getAbstractFileByPath: jest.fn((path: string) => {
-        if (path.split("/").some((segment) => segment.startsWith("."))) return null;
         if (state.files.has(path)) return toFile(path);
         if (state.folders.has(path)) return folderWithChildren(path);
         return null;
@@ -69,6 +66,9 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
           state.files.set(diskPath(path) ?? path, content);
         }),
         stat: jest.fn(async () => ({ ctime: 0, mtime: 0, size: 0 })),
+        mkdir: jest.fn(async (path: string) => {
+          state.folders.add(path);
+        }),
       },
     },
     workspace: {
@@ -380,15 +380,6 @@ describe("agentsFile", () => {
       expect(openFile).toHaveBeenCalledWith(expect.objectContaining({ path: "AGENTS.md" }));
     });
 
-    it("reports the path instead of opening a file Obsidian cannot show", async () => {
-      const { app, openFile } = makeApp({ ".copilot/projects/One/AGENTS.md": "rules" });
-
-      await expect(openAgentsFile(app, ".copilot/projects/One")).rejects.toThrow(
-        ".copilot/projects/One/AGENTS.md"
-      );
-      expect(openFile).not.toHaveBeenCalled();
-    });
-
     it("opens a note the vault stores under another casing", async () => {
       setCaseInsensitiveFilesystem(true);
       const { app, openFile } = makeApp({ "agents.md": "rules" });
@@ -421,13 +412,11 @@ describe("agentsFile", () => {
       expect(app.vault.adapter.write).not.toHaveBeenCalled();
     });
 
-    it("does not look for a variant when the folder simply has no instruction file", async () => {
+    it("reads nothing when the folder has no instruction file under any casing", async () => {
       setCaseInsensitiveFilesystem(true);
       const { app } = makeApp();
 
       await expect(readAgentsFile(app, "")).resolves.toBe("");
-
-      expect(app.vault.getRoot).not.toHaveBeenCalled();
     });
 
     it("keeps them separate on a case-sensitive volume, where the backends read only the exact name", async () => {

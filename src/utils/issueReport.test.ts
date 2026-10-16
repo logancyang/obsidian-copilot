@@ -29,6 +29,7 @@ const LOG_BUDGET_BYTES = 24 * 1024 * 1024 - (64 + 8) * 1024;
 const TAILABLE_BUDGET_BYTES = 64 * 1024 + 256 + 512;
 const MAX_NOTE_BYTES = 64 * 1024;
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/202";
+const FEEDBACK_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/672";
 
 const SECRET_LOG = "log line for /Users/alice/vault key sk-abcdef0123456789\n";
 const ACTIVITY_PATH = "/tmp/acp-frames.ndjson";
@@ -253,22 +254,48 @@ describe("issueReport", () => {
       expect(attachment(bundle, "report").included).toBe(true);
     });
 
-    it(`spends the budget on the screenshot first, then on the logs in request order (${ISSUE_URL})`, async () => {
-      const line = "e\n".repeat(300);
+    it(`spends the budget on the screenshot before any log (${ISSUE_URL})`, async () => {
       const bundle = await build({
         screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 1024),
-        logs: [
-          { id: "first", name: "first.log", text: line },
-          { id: "second", name: "second.log", text: line },
-        ],
+        logs: [{ id: "only", name: "only.log", text: "e\n".repeat(600) }],
       });
 
       expect(attachment(bundle, "screenshot").included).toBe(true);
-      expect(attachment(bundle, "first").included).toBe(true);
-      expect(attachment(bundle, "second")).toMatchObject({
+      expect(attachment(bundle, "only")).toMatchObject({
         included: false,
-        note: "log is 600 B, over the 424 B left",
+        note: "log is 1.2 KB, over the 1.0 KB left",
       });
+    });
+
+    it(`cuts an early large log to its even share of the room, so a later log still fits whole (${FEEDBACK_ISSUE_URL})`, async () => {
+      const later = "f\n".repeat(300);
+      const bundle = await build({
+        screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 2 * TAILABLE_BUDGET_BYTES),
+        logs: [
+          { id: "backend", name: "backend.log", text: "e\n".repeat(100_000) },
+          { id: "chat", name: "chat.log", text: later },
+        ],
+      });
+
+      expect(attachment(bundle, "backend")).toMatchObject({
+        included: true,
+        note: "truncated to the newest entries of 195.3 KB",
+      });
+      expect(attachment(bundle, "backend").bytes).toBeLessThanOrEqual(TAILABLE_BUDGET_BYTES);
+      expect(entryText(bundle, "chat.log")).toBe(later);
+    });
+
+    it(`passes a small log's unused share on to the logs after it (${FEEDBACK_ISSUE_URL})`, async () => {
+      const bundle = await build({
+        screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 2 * TAILABLE_BUDGET_BYTES),
+        logs: [
+          { id: "chat", name: "chat.log", text: "f\n".repeat(300) },
+          { id: "backend", name: "backend.log", text: "e\n".repeat(100_000) },
+        ],
+      });
+
+      expect(attachment(bundle, "chat").included).toBe(true);
+      expect(attachment(bundle, "backend").bytes).toBeGreaterThan(TAILABLE_BUDGET_BYTES);
     });
 
     it(`records a log with neither path nor text as not found, or with the reason its request gives (${ISSUE_URL})`, async () => {
@@ -574,7 +601,7 @@ describe("issueReport", () => {
     });
 
     it("lists in report.md the same attachments and notes the bundle reports", async () => {
-      const room = withRoom(TAILABLE_BUDGET_BYTES, { text: "old\n".repeat(50_000) });
+      const room = withRoom(2 * TAILABLE_BUDGET_BYTES, { text: "old\n".repeat(50_000) });
       const bundle = await build(
         { ...room, logs: [...room.logs, { id: "o", name: "opencode.log", path: OPENCODE_PATH }] },
         rejecting(new Error("EACCES"))

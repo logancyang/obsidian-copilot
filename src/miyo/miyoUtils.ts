@@ -43,28 +43,17 @@ export function getSearchBackend(settings: CopilotSettings = getSettings()): "ke
   return shouldUseMiyo(settings) ? "miyo" : "keyword";
 }
 
-export function seedDocProcessorBackend(
+export async function canProcessDocumentsWithMiyo(
   settings: CopilotSettings = getSettings()
-): "plus" | "miyo" {
-  return settings.enableSelfHostMode && settings.enableMiyo ? "miyo" : "plus";
-}
-
-export type ResolvedDocProcessorBackend = "plus" | "miyo" | "miyo-unavailable";
-
-export async function resolveDocProcessorBackend(
-  settings: CopilotSettings = getSettings()
-): Promise<ResolvedDocProcessorBackend> {
-  if (settings.docProcessorBackend !== "miyo") {
-    return "plus";
-  }
-  if (!shouldUseMiyo(settings)) {
-    return "miyo-unavailable";
+): Promise<boolean> {
+  if (!settings.enableMiyoDocumentProcessing || !shouldUseMiyo(settings)) {
+    return false;
   }
   const status = getMiyoStatusSnapshot().documentProcessor;
   if (status === "unknown" || status === "stale") {
     await refreshMiyoStatus();
   }
-  return isMiyoAvailableForCapability("documentProcessor") ? "miyo" : "miyo-unavailable";
+  return isMiyoAvailableForCapability("documentProcessor");
 }
 
 export interface MiyoSearchFolderOption {

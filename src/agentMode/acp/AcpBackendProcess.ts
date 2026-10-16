@@ -7,6 +7,7 @@ import {
   PROTOCOL_VERSION,
   RequestError,
   ndJsonStream,
+  type McpServer,
   type NewSessionRequest,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -20,12 +21,14 @@ import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager
 import { VaultClient } from "./VaultClient";
 import { JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "@/agentMode/session/errors";
 import type {
+  AgentMcpServer,
   BackendDescriptor,
   BackendProcess,
   BackendState,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
   CancelInput,
+  CompactionTrigger,
   ListSessionsInput,
   ListSessionsOutput,
   LoadSessionInput,
@@ -43,6 +46,7 @@ import type {
   SessionUpdateHandler as DomainSessionUpdateHandler,
   SessionUsage,
 } from "@/agentMode/session/types";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
 import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
@@ -72,7 +76,7 @@ export type AcpCapability =
   | "session/load"
   | "session/set_mode"
   | "session/set_config_option"
-  | "session/additional_directories";
+  | "mcp/http";
 
 function isMethodNotFoundError(err: unknown): boolean {
   if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
@@ -108,6 +112,8 @@ export class AcpBackendProcess implements BackendProcess {
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
+  private readonly manualCompactSessions = new Set<SessionId>();
+  private readonly loadingSessions = new Set<SessionId>();
   private readonly sawLiveUsage = new Set<SessionId>();
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
@@ -193,6 +199,8 @@ export class AcpBackendProcess implements BackendProcess {
           // Without this, codex-acp also streams the plan body as chat text, duplicating the
           // plan-approval card. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
           plan: {},
+          // Without this, codex-acp reports compaction as a "Compact conversation" tool card. https://github.com/Brevilabs/obsidian-copilot-private/issues/636
+          session: { compaction: {} },
           ...(this.backend.clientCapabilitiesMeta
             ? { _meta: this.backend.clientCapabilitiesMeta }
             : {}),
@@ -214,11 +222,11 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.set("session/load", true);
       }
-      if (init.agentCapabilities?.sessionCapabilities?.additionalDirectories != null) {
-        this.capabilities.set("session/additional_directories", true);
+      if (init.agentCapabilities?.mcpCapabilities?.http === true) {
+        this.capabilities.set("mcp/http", true);
       }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, additionalDirectories=${this.hasCapability("session/additional_directories")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
       );
     } catch (err) {
       logError(
@@ -274,7 +282,11 @@ export class AcpBackendProcess implements BackendProcess {
             });
             continue;
           }
-          for (const event of acpNotificationToEvents(wire, this.todoToolCallIdsFor(sessionId)))
+          for (const event of acpNotificationToEvents(
+            wire,
+            this.todoToolCallIdsFor(sessionId),
+            this.compactionTriggerFor(sessionId)
+          ))
             handler(event);
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
@@ -306,8 +318,7 @@ export class AcpBackendProcess implements BackendProcess {
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
     const req: NewSessionRequest = {
       cwd: params.cwd,
-      mcpServers: [],
-      ...this.additionalDirectoriesField(params.additionalDirectories),
+      mcpServers: this.mcpServersField(params.mcpServers),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -326,14 +337,20 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection()
-      .agent.request("session/prompt", {
+    const connection = this.requireConnection();
+    const [first] = params.prompt;
+    if (first?.type === "text" && isCompactCommand(first.text)) {
+      this.manualCompactSessions.add(params.sessionId);
+    }
+    const resp = await connection.agent
+      .request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
       })
       .catch(async (err: unknown) => {
         throw await this.serviceStoppedOr(err);
-      });
+      })
+      .finally(() => this.manualCompactSessions.delete(params.sessionId));
     this.hasServedSession = true;
     const usage = resp.usage;
     if (usage && !this.sawLiveUsage.has(params.sessionId)) {
@@ -439,16 +456,16 @@ export class AcpBackendProcess implements BackendProcess {
     return this.capabilities.get(cap) === true;
   }
 
-  supportsAdditionalDirectories(): boolean {
-    return this.hasCapability("session/additional_directories");
-  }
-
-  private additionalDirectoriesField(roots: string[] | undefined): {
-    additionalDirectories?: string[];
-  } {
-    return this.supportsAdditionalDirectories() && roots?.length
-      ? { additionalDirectories: roots }
-      : {};
+  // An agent that never advertised HTTP MCP may reject the whole session, so its chat runs without Copilot's tools.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  private mcpServersField(servers: ReadonlyArray<AgentMcpServer> | undefined): McpServer[] {
+    if (!servers?.length || !this.hasCapability("mcp/http")) return [];
+    return servers.map((server) => ({
+      type: "http",
+      name: server.name,
+      url: server.url,
+      headers: Object.entries(server.headers).map(([name, value]) => ({ name, value })),
+    }));
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
@@ -562,8 +579,7 @@ export class AcpBackendProcess implements BackendProcess {
         c.agent.request("session/resume", {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
-          mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
+          mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
     );
@@ -580,17 +596,17 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
+    this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
       "session/load",
       (c) =>
         c.agent.request("session/load", {
           sessionId: sessionIdToAcp(sessionId),
           cwd: params.cwd,
-          mcpServers: [],
-          ...this.additionalDirectoriesField(params.additionalDirectories),
+          mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
-    );
+    ).finally(() => this.loadingSessions.delete(sessionId));
     this.hasServedSession = true;
     this.recordWireState(sessionIdToAcp(sessionId), {
       modes: wireResp.modes ?? null,
@@ -673,6 +689,13 @@ export class AcpBackendProcess implements BackendProcess {
     return ids;
   }
 
+  // A replayed compaction carries no trigger, and "manual" is the label that does not claim it ran by itself. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
+  private compactionTriggerFor(sessionId: SessionId): CompactionTrigger {
+    return this.manualCompactSessions.has(sessionId) || this.loadingSessions.has(sessionId)
+      ? "manual"
+      : "auto";
+  }
+
   private computeState(sessionId: AcpSessionId): BackendState {
     const wire = this.sessionWireState.get(sessionIdFromAcp(sessionId)) ?? {
       modes: null,
@@ -726,7 +749,11 @@ export class AcpBackendProcess implements BackendProcess {
       return;
     }
 
-    for (const event of acpNotificationToEvents(update, this.todoToolCallIdsFor(sessionId)))
+    for (const event of acpNotificationToEvents(
+      update,
+      this.todoToolCallIdsFor(sessionId),
+      this.compactionTriggerFor(sessionId)
+    ))
       handler(this.withBackendContextWindow(event));
   }
 

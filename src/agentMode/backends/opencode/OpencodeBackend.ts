@@ -2,7 +2,7 @@ import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryMa
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { ChatModelProviders } from "@/constants";
-import { logInfo, logWarn } from "@/logger";
+import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
@@ -49,7 +49,6 @@ export interface OpencodeModelDeps {
   providerRegistry: ProviderRegistry;
   backendConfigRegistry: BackendConfigRegistry;
   clientVersion?: string;
-  getCacheRoot?: () => string | undefined;
   getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
 }
@@ -102,7 +101,6 @@ export class OpencodeBackend implements AcpBackend {
       this.displayName
     );
 
-    const cacheRoot = normalizeCacheRoot(this.#deps.getCacheRoot?.());
     const envOverrides = sanitizeBuiltinSkillEnvOverrides(
       settings.agentMode?.backends?.opencode?.envOverrides
     );
@@ -114,7 +112,6 @@ export class OpencodeBackend implements AcpBackend {
         await buildOpencodeConfig(
           settings,
           this.#deps,
-          cacheRoot,
           this.#deps.getCopilotPluginDir &&
             (await installOpencodeCopilotPlugin(this.#deps.getCopilotPluginDir()))
         )
@@ -145,13 +142,6 @@ export class OpencodeBackend implements AcpBackend {
         agent.permissions = appendNativeWebDenies(agent.permissions);
       }
       configContent = JSON.stringify(overriddenConfig);
-    }
-    if (cacheRoot && configOverride !== undefined) {
-      logWarn(
-        "[AgentMode] opencode envOverrides.OPENCODE_CONFIG_CONTENT replaces the generated config; " +
-          "the context-cache external_directory allow rule is dropped — opencode will prompt on every " +
-          "snapshot read. Remove that override to restore silent cache access."
-      );
     }
     const selfHostSearchChannel =
       settings.enableSelfHostMode === true
@@ -190,11 +180,6 @@ export class OpencodeBackend implements AcpBackend {
   }
 }
 
-function normalizeCacheRoot(raw: string | undefined): string | undefined {
-  const trimmed = raw?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 function agentConfigs(agents: unknown): Record<string, unknown>[] {
   if (!agents || typeof agents !== "object" || Array.isArray(agents)) return [];
   return Object.values(agents).filter(
@@ -229,7 +214,6 @@ const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as c
 export async function buildOpencodeConfig(
   s: CopilotSettings,
   deps: OpencodeModelDeps,
-  cacheRoot?: string,
   copilotPluginDir?: string
 ): Promise<GeneratedOpencodeConfig> {
   const { providerRegistry, backendConfigRegistry } = deps;
@@ -356,10 +340,6 @@ export async function buildOpencodeConfig(
   const skillManagerReady = SkillManager.hasInstance();
   const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id);
 
-  const cacheRules: PermissionRule[] = cacheRoot
-    ? [{ action: "external_directory", resource: `${cacheRoot}/**`, effect: "allow" }]
-    : [];
-
   if (!skillManagerReady) {
     logInfo(
       "[AgentMode] SkillManager not yet initialised at OpenCode spawn — shipping empty deny list; next session will pick it up."
@@ -396,10 +376,7 @@ export async function buildOpencodeConfig(
     websearch: { provider: "random" },
     permissions,
     agents: {
-      [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
-        system,
-        permissions: cacheRules.length > 0 ? cacheRules : undefined,
-      },
+      [OPENCODE_BUILTIN_BUILD_AGENT_ID]: { system },
       [OPENCODE_COPILOT_BUILD_AGENT_ID]: {
         mode: "primary",
         system,
@@ -412,7 +389,6 @@ export async function buildOpencodeConfig(
           // this out to keep its top-level deny decisive.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
           ...(selfHost ? [] : [{ action: "websearch", resource: "*", effect: "ask" } as const]),
-          ...cacheRules,
         ],
       },
     },

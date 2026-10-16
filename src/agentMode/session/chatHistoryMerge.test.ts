@@ -140,6 +140,16 @@ describe("chatHistoryMerge", () => {
         deriveChatTitleFromMessages([{ ...imageMessage, content: [null, {}, { type: "text" }] }])
       ).toBeNull();
     });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/634 skips /compact messages so the chat is titled from the first real message", () => {
+      expect(deriveChatTitleFromMessages([msg(USER_SENDER, "/compact")])).toBeNull();
+      expect(
+        deriveChatTitleFromMessages([
+          msg(USER_SENDER, "/compact keep the API"),
+          msg(USER_SENDER, "Plan the migration"),
+        ])
+      ).toBe("Plan the migration");
+    });
+
     it("uses the first user message", () => {
       const title = deriveChatTitleFromMessages([
         msg(USER_SENDER, "Summarize today's meeting notes"),

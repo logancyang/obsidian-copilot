@@ -8,11 +8,7 @@ import {
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getEffectiveSystemPromptsFolder } from "@/settings/copilotFolder";
-import {
-  listMarkdownFiles,
-  readFrontmatterFile,
-  updateFrontmatter,
-} from "@/utils/vaultAdapterUtils";
+import { stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
   addPendingFileWrite,
@@ -62,9 +58,10 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
 }
 
 export async function parseSystemPromptFile(app: App, file: TFile): Promise<UserSystemPrompt> {
-  const parsed = (await readFrontmatterFile(app, file.path)) ?? { frontmatter: {}, body: "" };
-  const { frontmatter } = parsed;
-  const content = parsed.body.trimStart();
+  const rawContent = await app.vault.read(file);
+  const content = stripFrontmatter(rawContent);
+  const metadata = app.metadataCache.getFileCache(file);
+  const frontmatter = metadata?.frontmatter;
 
   const createdMs = coerceFrontmatterNumber(
     frontmatter?.[COPILOT_SYSTEM_PROMPT_CREATED],
@@ -89,9 +86,7 @@ export async function parseSystemPromptFile(app: App, file: TFile): Promise<User
 }
 
 export async function fetchAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
-  const files = (await listMarkdownFiles(app, getSystemPromptsFolder())).filter((file) =>
-    isSystemPromptFile(file)
-  );
+  const files = app.vault.getFiles().filter((file) => isSystemPromptFile(file));
   return await Promise.all(files.map((file) => parseSystemPromptFile(app, file)));
 }
 
@@ -102,8 +97,7 @@ export async function loadAllSystemPrompts(app: App): Promise<UserSystemPrompt[]
 }
 
 export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: UserSystemPrompt) {
-  const filePath = file.path;
-  const alreadyPending = isPendingFileWrite(filePath);
+  const alreadyPending = isPendingFileWrite(file.path);
   const now = Date.now();
 
   const createdMs =
@@ -115,9 +109,9 @@ export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: Use
 
   try {
     if (!alreadyPending) {
-      addPendingFileWrite(filePath);
+      addPendingFileWrite(file.path);
     }
-    await updateFrontmatter(app, filePath, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] == null) {
         frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = createdMs;
       }
@@ -130,7 +124,7 @@ export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: Use
     });
   } finally {
     if (!alreadyPending) {
-      removePendingFileWrite(filePath);
+      removePendingFileWrite(file.path);
     }
   }
 }
@@ -142,17 +136,19 @@ export async function updatePromptDefaultFlag(
   folder?: string
 ): Promise<void> {
   const filePath = getPromptFilePathInFolder(title, folder);
-  if (!(await app.vault.adapter.exists(filePath))) {
+  const file = app.vault.getAbstractFileByPath(filePath);
+
+  if (!(file instanceof TFile)) {
     logWarn(`System prompt file not found for default flag update: ${filePath}`);
     return;
   }
 
-  const alreadyPending = isPendingFileWrite(filePath);
+  const alreadyPending = isPendingFileWrite(file.path);
   try {
     if (!alreadyPending) {
-      addPendingFileWrite(filePath);
+      addPendingFileWrite(file.path);
     }
-    await updateFrontmatter(app, filePath, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (isDefault) {
         frontmatter[COPILOT_SYSTEM_PROMPT_DEFAULT] = true;
       } else {
@@ -161,7 +157,7 @@ export async function updatePromptDefaultFlag(
     });
   } finally {
     if (!alreadyPending) {
-      removePendingFileWrite(filePath);
+      removePendingFileWrite(file.path);
     }
   }
 }

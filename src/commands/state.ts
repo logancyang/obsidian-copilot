@@ -49,7 +49,3 @@ export function useCustomCommands(): CustomCommand[] {
 export function getCachedCustomCommands(): CustomCommand[] {
   return customCommandsStore.get(customCommandsAtom);
 }
-
-export function subscribeToCustomCommandsChange(callback: () => void): () => void {
-  return customCommandsStore.sub(customCommandsAtom, callback);
-}

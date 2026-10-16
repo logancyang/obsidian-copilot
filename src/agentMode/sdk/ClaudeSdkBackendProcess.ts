@@ -1,3 +1,4 @@
+import { isCompactCommand } from "@/commands/compactCommand";
 import { logError, logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import {
@@ -22,6 +23,7 @@ import type {
   BackendProcess,
   RawModelState,
   RawModeState,
+  AgentMcpServer,
   BackendState,
   CancelInput,
   ListSessionsInput,
@@ -75,7 +77,7 @@ interface SessionState {
   model?: string;
   permissionMode?: PermissionMode;
   effort?: EffortLevel;
-  additionalDirectories?: string[];
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
   claudeTaskPlan: ClaudeTaskPlanState;
   backgroundTasks: ClaudeBackgroundTaskStateMachine;
   active?: Query;
@@ -240,7 +242,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       projectId: params.projectId,
       firstPromptStarted: false,
       model: seedModelId,
-      additionalDirectories: params.additionalDirectories,
+      mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan: createClaudeTaskPlanState(),
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
@@ -303,8 +305,17 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
     if (session.effort) options.effort = session.effort;
-    if (session.additionalDirectories?.length) {
-      options.additionalDirectories = session.additionalDirectories;
+    if (session.mcpServers?.length) {
+      options.mcpServers = Object.fromEntries(
+        session.mcpServers.map((server) => [
+          server.name,
+          { type: "http" as const, url: server.url, headers: { ...server.headers } },
+        ])
+      );
+      options.allowedTools = [
+        ...(options.allowedTools ?? []),
+        ...session.mcpServers.map((server) => `mcp__${server.name}`),
+      ];
     }
     options.thinking = this.opts.getEnableThinking?.()
       ? { type: "adaptive", display: "summarized" }
@@ -345,7 +356,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
     });
 
-    const translatorState = createTranslatorState(session.claudeTaskPlan, session.backgroundTasks);
+    const translatorState = createTranslatorState(
+      session.claudeTaskPlan,
+      session.backgroundTasks,
+      typeof messageContent === "string" && isCompactCommand(messageContent) ? "manual" : "auto"
+    );
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
@@ -558,7 +573,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       projectId: params.projectId,
       firstPromptStarted: true,
       model: seedModelId,
-      additionalDirectories: params.additionalDirectories,
+      mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(),
       claudeTaskPlan,
       backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
@@ -582,10 +597,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] could not read Claude transcript for ${sessionId}`, err);
       return "";
     }
-  }
-
-  supportsAdditionalDirectories(): boolean {
-    return true;
   }
 
   async shutdown(): Promise<void> {

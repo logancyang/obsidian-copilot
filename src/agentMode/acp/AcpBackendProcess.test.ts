@@ -384,6 +384,16 @@ describe("AcpBackendProcess", () => {
         );
       });
 
+      it("advertises compaction updates so an agent reports compaction as status instead of a tool card (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+        await startBackend();
+
+        expect(mockInitializeRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientCapabilities: expect.objectContaining({ session: { compaction: {} } }),
+          })
+        );
+      });
+
       it("sends the backend's client capability metadata so it can opt into agent extensions https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),
@@ -1103,26 +1113,6 @@ describe("AcpBackendProcess", () => {
       });
     });
 
-    describe("supportsAdditionalDirectories()", () => {
-      it("reports no additional-directories support when the agent does not advertise the capability", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { list: {}, close: {} } },
-        };
-        const backend = await startBackend();
-        expect(backend.supportsAdditionalDirectories()).toBe(false);
-      });
-
-      it("reports additional-directories support when the agent advertises the capability", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
-        };
-        const backend = await startBackend();
-        expect(backend.supportsAdditionalDirectories()).toBe(true);
-      });
-    });
-
     describe("newSession()", () => {
       async function makeListingBackend(): Promise<AcpBackendProcess> {
         mockInitializeResult = {
@@ -1139,44 +1129,36 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
-      it("forwards additionalDirectories to session/new when the agent advertises the capability", async () => {
+      const FEEDBACK_SERVER = {
+        name: "obsidian-copilot",
+        url: "http://127.0.0.1:4100/mcp",
+        headers: { Authorization: "Bearer t0k3n" },
+      };
+
+      it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
+          agentCapabilities: { mcpCapabilities: { http: true } },
         };
         const backend = await startBackend();
-        await backend.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
-        });
-        const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          {
+            type: "http",
+            name: "obsidian-copilot",
+            url: "http://127.0.0.1:4100/mcp",
+            headers: [{ name: "Authorization", value: "Bearer t0k3n" }],
+          },
+        ]);
       });
 
-      it("drops additionalDirectories from session/new when the agent lacks the capability", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 starts the chat without Copilot's MCP servers when the agent never advertised HTTP MCP", async () => {
         mockInitializeResult = { protocolVersion: 1 };
         const backend = await startBackend();
-        await backend.newSession({
-          cwd: "/vault",
-          additionalDirectories: ["/abs/context"],
-        });
-        const req = mockNewSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
+        await backend.newSession({ cwd: "/vault", mcpServers: [FEEDBACK_SERVER] });
+        const req = mockNewSession.mock.calls[0][0] as { mcpServers: unknown[] };
         expect(req.mcpServers).toEqual([]);
-        expect(req).not.toHaveProperty("additionalDirectories");
-      });
-
-      it("omits additionalDirectories from session/new when none are supplied", async () => {
-        mockInitializeResult = {
-          protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { additionalDirectories: {} } },
-        };
-        const backend = await startBackend();
-        await backend.newSession({ cwd: "/vault" });
-        const req = mockNewSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req).not.toHaveProperty("additionalDirectories");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 requests recovery and explains the failure when a new chat finds the internal service stopped", async () => {
@@ -1239,38 +1221,38 @@ describe("AcpBackendProcess", () => {
     });
 
     describe("resumeSession()", () => {
-      it("forwards additionalDirectories to session/resume when the agent advertises the capability", async () => {
+      it("passes Copilot's MCP servers to session/resume when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: { sessionCapabilities: { resume: {}, additionalDirectories: {} } },
+          agentCapabilities: {
+            sessionCapabilities: { resume: {} },
+            mcpCapabilities: { http: true },
+          },
         };
         const backend = await startBackend();
         await backend.resumeSession({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
         });
-        const req = mockResumeSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
-        expect(req.mcpServers).toEqual([]);
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        const req = mockResumeSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
       });
 
-      it("drops additionalDirectories from session/resume when the agent lacks the capability", async () => {
+      it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
           agentCapabilities: { sessionCapabilities: { resume: {} } },
         };
         const backend = await startBackend();
-        await backend.resumeSession({
+        await backend.resumeSession({ sessionId: "s1", cwd: "/vault" });
+        expect(mockResumeSession.mock.calls[0][0]).toEqual({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context"],
+          mcpServers: [],
         });
-        const req = mockResumeSession.mock.calls[0][0] as { additionalDirectories?: string[] };
-        expect(req).not.toHaveProperty("additionalDirectories");
       });
     });
 
@@ -1294,26 +1276,21 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
-      it("forwards additionalDirectories to session/load when the agent advertises the capability", async () => {
+      it("passes Copilot's MCP servers to session/load when the agent advertises HTTP MCP", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
-          agentCapabilities: {
-            loadSession: true,
-            sessionCapabilities: { additionalDirectories: {} },
-          },
+          agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
         };
         const backend = await startBackend();
         await backend.loadSession({
           sessionId: "s1",
           cwd: "/vault",
-          additionalDirectories: ["/abs/context-a", "/abs/context-b"],
+          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
         });
-        const req = mockLoadSession.mock.calls[0][0] as {
-          additionalDirectories?: string[];
-          mcpServers: unknown[];
-        };
-        expect(req.mcpServers).toEqual([]);
-        expect(req.additionalDirectories).toEqual(["/abs/context-a", "/abs/context-b"]);
+        const req = mockLoadSession.mock.calls[0][0] as { mcpServers: unknown[] };
+        expect(req.mcpServers).toEqual([
+          { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
+        ]);
       });
 
       it("returns the session id and the state the agent reports", async () => {
@@ -1350,6 +1327,26 @@ describe("AcpBackendProcess", () => {
         expect(handler.mock.calls.map((c) => c[0].update.sessionUpdate)).toEqual([
           "user_message_chunk",
           "agent_message_chunk",
+        ]);
+      });
+
+      it("labels a replayed compaction that carries no trigger as manual, the label that does not claim it was automatic (https://github.com/Brevilabs/obsidian-copilot-private/issues/638)", async () => {
+        const backend = await startLoadCapableBackend();
+        const handler = jest.fn();
+        backend.registerSessionHandler("ses_load", handler);
+        mockLoadSession.mockImplementationOnce(async () => {
+          replayer(backend)({
+            sessionUpdate: "compaction_update",
+            compactionId: "past",
+            status: "completed",
+          });
+          return {};
+        });
+
+        await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(handler.mock.calls.map(([e]) => [e.update.id, e.update.trigger])).toEqual([
+          ["past", "manual"],
         ]);
       });
     });
@@ -1397,6 +1394,114 @@ describe("AcpBackendProcess", () => {
         expect(result).toEqual({
           stopReason: "end_turn",
           turnDiff: { root: "/repo", unifiedDiff: "diff --git a/x b/x\n" },
+        });
+      });
+
+      describe("compaction trigger", () => {
+        async function compactionTriggersDuring(
+          promptText: string,
+          compactionIds: string[]
+        ): Promise<string[]> {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockImplementationOnce(async () => {
+            for (const compactionId of compactionIds) {
+              await client.sessionUpdate({
+                sessionId: "s1",
+                update: { sessionUpdate: "compaction_update", compactionId, status: "in_progress" },
+              } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+            }
+            return { stopReason: "end_turn" };
+          });
+
+          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: promptText }] });
+
+          return handler.mock.calls
+            .map(([e]) => e.update)
+            .filter((u) => u.sessionUpdate === "compaction")
+            .map((u) => u.trigger);
+        }
+
+        it("labels a compaction manual when the turn is a bare /compact (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+          await expect(compactionTriggersDuring("/compact", ["c1"])).resolves.toEqual(["manual"]);
+        });
+
+        it("labels a compaction auto when the turn is an ordinary prompt because codex sends no trigger (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+          await expect(compactionTriggersDuring("summarize my note", ["c1"])).resolves.toEqual([
+            "auto",
+          ]);
+        });
+
+        it("labels a compaction auto after a manual /compact turn has ended", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockResolvedValueOnce({ stopReason: "end_turn" });
+          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] });
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
+        });
+
+        it("labels a compaction auto after a /compact prompt is rejected because the subprocess is gone", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          (backend as unknown as { connection: null }).connection = null;
+          await expect(
+            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+          ).rejects.toThrow();
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
+        });
+
+        it("labels a compaction auto after a manual /compact turn fails", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockRejectedValueOnce(new Error("agent exited"));
+          await expect(
+            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+          ).rejects.toThrow();
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
         });
       });
 

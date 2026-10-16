@@ -179,7 +179,6 @@ export enum Verbosity {
 export const DEFAULT_MAX_OUTPUT_TOKENS = 20_000;
 
 export const DEFAULT_MODEL_SETTING = {
-  TEMPERATURE: 0.1,
   REASONING_EFFORT: ReasoningEffort.LOW,
   VERBOSITY: Verbosity.MEDIUM,
 } as const;
@@ -595,6 +594,8 @@ export const COMMAND_IDS = {
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
   PUBLISH_FILE_TO_OPENARTIFACTS: "publish-file-to-symposium",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
+  NEXT_DIFF_CHANGE: "turn-diff-next-change",
+  PREVIOUS_DIFF_CHANGE: "turn-diff-previous-change",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -621,6 +622,8 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
   [COMMAND_IDS.PUBLISH_FILE_TO_OPENARTIFACTS]: "Publish file to OpenArtifacts",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
+  [COMMAND_IDS.NEXT_DIFF_CHANGE]: "Go to next change in file diff",
+  [COMMAND_IDS.PREVIOUS_DIFF_CHANGE]: "Go to previous change in file diff",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -731,7 +734,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   parallelApiKey: "",
   exaApiKey: "",
   supadataApiKey: "",
-  docProcessorBackend: "plus",
+  enableMiyoDocumentProcessing: true,
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentEnabledToolIds: [
@@ -763,6 +766,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: true,
+    offerFeedbackCards: true,
     notificationSound: true,
     notificationSoundId: "piano",
     welcomeDismissed: false,

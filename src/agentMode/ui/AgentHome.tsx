@@ -2,9 +2,10 @@ import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevan
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
+import { formatChatReportNote } from "@/agentMode/session/feedback/feedbackOffer";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
 import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
-import AgentContextStatusIcon from "@/agentMode/ui/AgentContextStatusIcon";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
@@ -40,9 +41,8 @@ import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
-import { agentProjectContextLoadAtom, type ProjectConfig } from "@/aiParams";
+import { type ProjectConfig } from "@/aiParams";
 import { makeNewProjectConfig } from "@/agentMode/ui/AgentProjectCreateForm";
-import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
@@ -53,8 +53,7 @@ import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getProjectLandingCaptureSignature } from "@/projects/projectContextSignature";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { getSettings, settingsStore, updateSetting, useSettingsValue } from "@/settings/model";
-import { useAtomValue } from "jotai";
+import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -98,6 +97,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
+    feedbackOffer,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
 
@@ -185,6 +185,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     copyChatLink: handleCopyHistoryChatLink,
     getChatBookmarkState,
     setChatBookmarked: handleSetChatBookmarked,
+    setActiveChatBookmarked: handleSetActiveChatBookmarked,
   } = useAgentHistoryControls(manager, plugin, activeProjectId);
 
   const handleCloseSession = useCallback(
@@ -206,10 +207,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const attentionChatIds = useAttentionChatIds(manager);
-
-  const contextLoadStates = useAtomValue(agentProjectContextLoadAtom, { store: settingsStore });
-  const contextLoadBlocking =
-    isProjectScope && (contextLoadStates[activeProjectId]?.blocking ?? false);
 
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
@@ -328,7 +325,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     activeProjectId,
     signature: activeProjectLandingCaptureSignature,
     isLanding,
-    blocking: contextLoadBlocking,
     draftEmpty: draftIsEmpty,
     refresh: refreshContextForEmptyLanding,
   });
@@ -521,44 +517,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
-  const openProjectManageModal = () => {
-    if (!activeProject) return;
-    new ContextManageModal(
-      app,
-      (updated) => {
-        void ProjectFileManager.getInstance(app)
-          .updateProject(activeProjectId, updated)
-          .catch((err) => logError("[AgentMode] save context changes failed", err));
-      },
-      activeProject
-    ).open();
-  };
-
-  const contextStatusIndicator =
-    isProjectScope && !isOrphanedProject && activeProject ? (
-      <AgentContextStatusIcon
-        app={app}
-        activeProjectId={activeProjectId}
-        project={activeProject}
-        hasConfiguredContextSource={!contextSummary.isEmpty}
-        landing={isLanding}
-        onReindex={() => manager.rematerializeContext(activeProjectId)}
-        onRetryItem={(item) =>
-          manager
-            .rematerializeSource(activeProjectId, {
-              kind: item.cacheKind,
-              source: item.id,
-            })
-            .catch((e) => {
-              logError("[AgentMode] retry source failed", e);
-              return false;
-            })
-        }
-        onRefreshLanding={refreshContextForEmptyLanding}
-        onEditContext={openProjectManageModal}
-      />
-    ) : undefined;
-
   const composerNode = (
     <AgentChatInput
       backend={backend}
@@ -574,10 +532,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}
       onCycleMode={handleCycleMode}
-      activeProjectId={activeProjectId}
-      contextLoadBlocking={contextLoadBlocking}
       disabled={isOrphanedProject}
-      contextStatusIndicator={contextStatusIndicator}
     />
   );
 
@@ -596,11 +551,24 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const activeSession = manager.getSession(sessionId);
+  const getActiveChatBookmarkState = useCallback(
+    () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
+    [getChatBookmarkState, manager, sessionId]
+  );
   const handleCopyChatLink = () =>
     plugin.copyChatLink(async () => {
       // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
       return (await manager.saveActiveSession())?.path ?? "";
     });
+
+  const handleReportError = () => {
+    const evidence = activeSession?.getReportEvidence();
+    openReportIssueModal(plugin, {
+      activeBackend: evidence?.backendId ?? settings.agentMode.activeBackend,
+      initialNote: evidence ? formatChatReportNote(evidence) : undefined,
+      preselectAllSources: true,
+    });
+  };
 
   return (
     <div ref={setRootEl} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
@@ -708,17 +676,25 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       sourcePath={manager.getSessionSourcePath(sessionId)}
                       key={sessionId}
                       messages={messages}
-                      app={app}
+                      plugin={plugin}
                       currentPlan={currentPlan}
                       pendingToolPermissions={pendingToolPermissions}
                       pendingAskUserQuestions={pendingAskUserQuestions}
                       chatBackend={backend}
                       isLoading={isLoading}
+                      feedbackOffer={feedbackOffer}
                     />
                     <AgentChatControls
                       onCopyChatLink={
                         activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
                       }
+                      getChatBookmarkState={
+                        activeSession?.hasUserVisibleMessages()
+                          ? getActiveChatBookmarkState
+                          : undefined
+                      }
+                      onSetChatBookmarked={handleSetActiveChatBookmarked}
+                      onReportError={handleReportError}
                       onNewChat={handleNewChat}
                       onSaveAsNote={handleSaveAsNote}
                       chatHistoryItems={chatHistoryItems}

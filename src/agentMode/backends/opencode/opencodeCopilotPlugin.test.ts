@@ -276,6 +276,38 @@ describe("opencodeCopilotPlugin", () => {
         await expect(before({ tool: "edit", id: "call-2", input: null })).resolves.toBeUndefined();
       });
     });
+
+    describe("send_feedback caller", () => {
+      async function runBefore(event: Record<string, unknown>) {
+        const { toolHooks } = await setUpPlugin(plugin);
+        await toolHooks.get("execute.before")!(event);
+        return event.input;
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a send_feedback call, replacing any value the model wrote", async () => {
+        const input = await runBefore({
+          tool: "obsidian-copilot_send_feedback",
+          sessionID: "ses_caller",
+          id: "call-1",
+          input: { title: "t", caller_session_id: "ses_guessed" },
+        });
+
+        expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
+      });
+
+      it("leaves other tools' input untouched", async () => {
+        const original = { title: "t" };
+
+        const input = await runBefore({
+          tool: "other-server_send_feedback",
+          sessionID: "ses_caller",
+          id: "call-1",
+          input: original,
+        });
+
+        expect(input).toBe(original);
+      });
+    });
   });
 
   describe("opencodeCopilotPluginDir()", () => {

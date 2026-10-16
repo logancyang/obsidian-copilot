@@ -23,7 +23,8 @@ export type ProductUtmMedium =
   | "model_settings_lock"
   | "preview_hint"
   | "skill_no_license"
-  | "skill_license_invalid";
+  | "skill_license_invalid"
+  | "openartifacts_private_sharing";
 
 export function createProductUrl(destination: ProductUrl, medium: ProductUtmMedium): string {
   const url = new URL(destination);

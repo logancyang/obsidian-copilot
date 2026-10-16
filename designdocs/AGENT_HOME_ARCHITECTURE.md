@@ -11,7 +11,7 @@ single axis — **does it touch the backend?**
   behavior changed.
 - **PR2 (project workspaces + backend)** turned Agent Mode "projects" into Claude
   Projects-style workspaces: entering a project gives a scoped workspace with its
-  own sessions, chat history, and materialized context, while the global
+  own sessions, chat history, and project context, while the global
   workspace becomes one special scope sharing the same code path.
 
 This doc describes the **current** architecture (PR1 + PR2). Two follow-on areas —
@@ -30,7 +30,7 @@ and are not covered here.
 | Projects section                                          | ✅ read-only list + picker                 | real entry + CRUD                       |
 | Enter a project (header + per-project sessions + Context) | ❌ coming-soon `Notice`                    | ✅                                      |
 | `projectId` on sessions, scoped history, scope cwd        | ❌                                         | ✅                                      |
-| Project context materialization (URL/YouTube/PDF)         | ❌                                         | ✅ off-vault shared cache               |
+| Project context manifest (paths and links)                | ❌                                         | ✅ first prompt, nothing prefetched     |
 | Project instructions (`project.md` + `AGENTS.md` mirror)  | ❌                                         | ✅                                      |
 | Drag-to-add context, Welcome onboarding card              | ❌                                         | ✅                                      |
 | Built-in MCP tool surface, Outputs / Discover URLs        | ❌                                         | PR3                                     |
@@ -167,7 +167,7 @@ CSS, never by editing `ChatInput`.
 
 # Part II — Project workspaces (PR2, backend)
 
-Entering a project gives it its own sessions, chat history, and materialized
+Entering a project gives it its own sessions, chat history, and project
 context. The global workspace is modeled as one special scope (the
 `GLOBAL_SCOPE` sentinel) running the same code path, so there is no separate
 "no-project" branch to keep in sync.
@@ -199,153 +199,67 @@ Two behaviors preserve the invariant across the rough edges:
   unused empty landing is reused rather than stacked. The global workspace keeps
   its restore-the-last-tab behavior.
 
-## Context materialization
+## Project context
 
-A project can attach **URL / YouTube** links and **in-vault binary files** (PDFs,
-Office docs, e-books, images — all materialized under the single `file` kind).
-Before a session
-opens, `projectContextMaterializer` captures them once per session
-(single-flight per project), converts each via brevilabs into a text snapshot,
-and builds a `<project_context>` block that is inlined into the session's first
-user prompt. The block lists absolute paths to the snapshots so the agent can
-read them directly; the composer shows a context status icon and queues sends
-while context is still materializing.
+Before a project session opens, `buildProjectContext`
+(`context/manifestBuilder.ts`) reads the project's saved sources and builds a
+`<project_context>` block that is inlined into the session's first user prompt.
+It runs synchronously against Obsidian's in-memory vault index when that first
+message is sent: nothing is fetched, converted, or cached, so session start
+never waits on it, there is no load state to report, and an empty landing
+session never carries a stale listing.
 
-Folders, notes, tags, extensions, and properties are listed in the same block by
-path/pattern (they need no conversion); folders that live outside the session cwd
-are also reported as `additionalDirectories` to widen the agent's searchable
-roots. Property inclusions additionally enumerate the notes they matched, because
-a frontmatter value is not something the agent could grep its way to.
+The block lists:
 
-**Contract (relied on by the session manager):** materialization **never
-rejects** — any failure degrades to a best-effort partial / empty result so
-session start is never blocked. It is cheap on unchanged context (snapshots
-cheap-skip by fingerprint, known-bad sources cheap-skip by failure marker), and a
-`contextSignature` over the source fields drives reactivity: a re-entered project
-re-materializes only when its sources changed, and the active project warms its
-cache in the background.
+- **Folders** by absolute path.
+- **Notes** (`[[Title]]` inclusions) resolved to the absolute path of every file
+  with that basename.
+- **Properties** as labels, and expanded into the notes whose frontmatter
+  matches, because a frontmatter value is not something an agent can grep its
+  way to reliably.
+- **Document files** (PDFs, Office docs, e-books, images — the extensions in
+  `DOCUMENT_EXTENSIONS`) by the absolute path of the original vault file.
+  Claude Code reads PDFs and images natively; with Miyo document processing on,
+  the `miyo-parse` Skill parses PDFs and EPUBs for any agent.
+- **Tags and file-type patterns** as labels for the agent to search.
+- **Web and YouTube links** as plain links. The agent fetches one when a
+  question needs it, with its own web tool or the `copilot-web-fetch` /
+  `copilot-youtube-transcript` Skill.
 
-### The shared off-vault conversion cache
+Resolving notes, properties, and documents to paths instead of passing them as
+labels costs nothing at session start and saves the agent a vault search per
+question; it also keeps agents from reading same-named or similarly tagged notes
+that are not part of the project
+(https://github.com/Brevilabs/obsidian-copilot-private/issues/711). The block is
+capped at `MAX_MANIFEST_ENTRIES`, with declared sources listed before the
+property and document expansions so a large expansion cannot crowd them out.
 
-Snapshots are the supporting subsystem behind context materialization. Each
-source is converted **once per vault** and shared across every project that
-references it, instead of once per project.
+The block carries one line of preamble ("Context sources for this project.")
+and no tool instructions: section headings and absolute paths are enough for
+agents to search folders and tags, open documents, and fetch links on demand,
+and the system prompt already names the Skills for links and documents. An eval
+of Claude Haiku, Claude Sonnet, and Codex on folder, tag, property, document,
+link, note, and over-cap questions scored the same with this preamble as with a
+paragraph of per-source instructions.
 
-**Off-vault, per-vault layout.** The cache lives outside the vault — single copy,
-not synced by Obsidian Sync / git, never indexed as note content — under the
-existing per-vault namespace that already hosts the recent-chats index:
+Listed paths need no extra directory grant: Claude, Codex, and OpenCode read
+any vault file from the project's working directory, and they gate edits by
+mode, not by directory.
 
-```
-~/.obsidian-copilot/vaults/<vaultId>/context-cache/
-  remotes/   web-<md5(url)>.md · youtube-<md5(url)>.md          # shared by all projects
-  files/     file-<md5(vaultPath)>.md                           # shared by all projects
-  markers/   <md5(projectId)>/failed-<type>-<md5(source)>.json  # failure markers, per project
-```
+A session still fixes its working directory and its instructions when it
+starts. The landing capture signature (`projects/projectContextSignature.ts`)
+covers those and the project's sources: a re-entered project
+replaces its empty landing session only when its sources, folder, or
+instructions changed. Once a chat has messages, `ProjectContentTracker` bumps a
+per-project epoch on vault or source changes in the project's scope, and the
+next message carries a `<project_context_updates>` note asking the agent to
+re-check its sources.
 
-`vaultId = md5(adapter.getBasePath()).slice(0, 8)` (extracted as `getVaultId` in
-`utils/appPaths.ts`). Per-vault bucketing means the current vault's project
-registry is the cache's complete reference set, so garbage collection needs no
-cross-vault refs subsystem — at the cost of the same URL being converted once in
-each of two different vaults (rare). **All paths derive from one source of truth,
-`context/conversionsLocation.ts`** (`cacheRoot` / `remotesDir` / `filesDir` /
-`markersDir(projectId)`), shared by the writer and every reader.
-
-**Identity keys + internal freshness.** Snapshot filenames hash the **source
-identity** (`md5(url)` / `md5(vaultPath)`) — never content, never `projectId`.
-Freshness is a `fingerprint` stored in the snapshot's own metadata header, and it
-differs by kind: a **file** uses `mtime:size` (an edit changes the fingerprint, so
-the cheap-skip misses and the **same file is overwritten** — no orphans), while a
-**remote** uses its identity (`type:url`), so a successfully fetched URL is kept
-until its configured string changes. A URL's identity is the exact trimmed string
-the user configured — there is no semantic canonicalization (`x.com` ≠ `x.com/`).
-
-**Per-artifact lock.** A module-level lock (keyed by the snapshot filename, via
-`async-mutex`) wraps each source's whole read-decide-write. Because the key is
-identity-derived, the **same source across two projects maps to the same lock**:
-the first project to cold-convert acquires it, reads metadata (miss), fetches,
-atomically writes, releases; a second project waiting on the same source then
-acquires the lock, re-reads the now-present metadata, and **cheap-skips without
-re-fetching or overwriting**. Two projects cold-converting one URL converge to a
-single brevilabs call.
-
-**Failure markers (CAG-style negative cache).** A source that fails to
-fetch/parse with no usable snapshot writes a `failed-…json` marker in _its own
-project's_ marker bucket, carrying the error and (for files) the `mtime:size`
-fingerprint. A later automatic run cheap-skips that known-bad source — re-surfacing
-the stored error instead of re-hitting brevilabs every session — until the file
-changes or the user forces a retry (`forceRetryFailed`, the status popover's
-"Retry"). Markers are bucketed per project because a failure is meaningful only to
-the project that hit it; snapshots are shared, so they are **never reconciled
-against a single project's sources** (that would delete files other projects
-still use). Cross-project convergence is handled instead: when project B writes a
-shared snapshot for a source project A previously failed, A's next run cheap-skips
-the snapshot and best-effort clears its now-stale marker. A successful snapshot is
-kept indefinitely (no TTL) — the plugin can't observe an agent reading an absolute
-path, so a time-based or touch-on-read policy would either over-retain or delete
-context that is still in use.
-
-**Delivery to the three backends.** The shared cache lives outside every project
-cwd, so the only pointer all three backends can reach is an **absolute path**: the
-manifest lists each snapshot's absolute path (keyed by `type:source` so the same
-URL used as both a web and a YouTube source resolves to distinct snapshots), and
-agents read it with their native file tool. claude additionally accepts the cache
-root as an `additionalDirectories` entry; codex reads the whole disk; **opencode
-blocks reads outside the vault by default, so it is granted an
-`external_directory: { "<cacheRoot>/**": "allow" }`\*\* on its spawn agents.
-
-### The root-confined node:fs backend
-
-`ContextCacheFs` is a small injectable filesystem interface kept **node-free** (a
-pure type), so mobile-reachable code can import the type without pulling
-`node:fs` into the bundle. The single production implementation,
-`createNodeContextCacheFs`, is rooted at the absolute cache directory and loads
-`node:fs` / `node:path` **lazily via `require` inside the factory** — never at
-module top level — so the builtins are evaluated only behind the desktop Agent
-boundary. Three hard rules:
-
-- **Root-confined.** Internal paths are cache-root-relative (absolute paths are
-  resolved only in `conversionsLocation`); `resolveWithin` rejects `..` segments,
-  absolute inputs, and anything that resolves outside the root, and `clear` never
-  ascends to the parent `vaults/<id>/` (which holds `agent-chat-index.json`).
-  Symlink escape is documented as intentionally out of scope: every path is
-  plugin-derived md5 filenames, so no caller can inject one, and following a
-  pre-seeded symlink would require a local actor who already has write access to
-  this directory.
-- **Split best-effort policy.** `writeText` / `mkdirRecursive` **throw** — a
-  swallowed write would let the store report success while the snapshot is
-  missing (a manifest pointing at nothing). The store turns a write throw into a
-  per-source failure and a mkdir throw into a whole-run degradation. `list` /
-  `remove` / `clear` **tolerate** a missing target (`[]` / idempotent). `readText`
-  **passes the error through** — the store's `readMeta` / `readFailureMarker` and
-  the UI's tolerant helpers each `try/catch → null`, so read-as-miss tolerance
-  lives at the call sites, not the fs layer.
-- **Atomic writes.** `writeText` stages into a same-dir temp file then renames
-  over the target (with a short retry for transient Windows watcher/AV locks);
-  `list` ignores temp files. The cache is regenerable, so there is no `fsync`.
-
-### Mobile boundary
-
-The Agent-Mode context readers (status icon, content-conversion preview, the
-Clear command) are reachable from a shared modal that mobile also renders. They
-must never evaluate `node:fs` on mobile, so each reaches the node-touching modules
-(`conversionsLocation`, `contextCacheFs`) through a desktop-gated **dynamic
-`import`**, never a static top-level import. (Desktop-only paths that mobile can
-never reach — the materializer, the opencode descriptor — import the same modules
-statically, which is fine; only the mobile-reachable readers need the dynamic
-boundary.) On mobile the readers degrade to an empty state (there is no Agent Mode
-there anyway). A static-import smoke check (`scripts/mobile-load-smoke.cjs`) guards
-this boundary over the cache consumers.
-
-### Cleanup
-
-There is **no automatic garbage collection** in this version — the existing
-`Clear Copilot cache` command additionally wipes `context-cache/` (all three
-subdirectories) while leaving the sibling `agent-chat-index.json` intact. Marker
-cleanup happens incrementally (a stale marker is cleared when its source later
-succeeds, as above). The released CAG caches (`.copilot/*`) are a separate system
-and are left untouched. Source kinds are a single source of truth,
-`MATERIALIZED_SOURCE_TYPES` (`web` / `youtube` / `file`), so adding a kind updates
-the filename patterns and marker-pruning regex together.
+`Clear Copilot cache` also runs `clearLegacyCaches` (`cache/legacyCaches.ts`),
+which deletes two folders no current code reads or writes: the in-vault
+`.copilot/pdf-cache/` and the off-vault
+`~/.obsidian-copilot/vaults/<vaultId>/context-cache/`. It leaves the sibling
+`agent-chat-index.json` intact.
 
 ## Project instructions (`project.md` + `AGENTS.md`)
 
@@ -386,8 +300,6 @@ the awaited spawn means the user has moved on).
 
 ## Hardening & cross-cutting
 
-- **`contextCacheFs` path guards** — `..`, absolute, and root-escaping paths are
-  rejected; symlink escape is a documented out-of-scope design note (above).
 - **Hard-disabled composer** — when the active project is orphaned (deleted out
   from under the user), the composer blocks both keyboard sends and the
   queued-message flush, not just pointer events, so a turn can't drain into a dead
@@ -398,11 +310,6 @@ the awaited spawn means the user has moved on).
 
 ## Verification
 
-The cache and scope behavior are covered by unit + integration suites, including
-a real-filesystem dedup integration test that drives the production
-`createNodeContextCacheFs` and the real per-artifact lock against a temp
-directory (two projects sharing a URL → one snapshot on disk, one fetch; the same
-for a shared PDF; a failed project's marker cleared once another project
-materializes the source). The opencode `external_directory` allow injection, the
-mobile static-import boundary, and the three-backend snapshot read were validated
-against a real vault.
+Project context resolution is covered by `manifestBuilder.test.ts`, and its
+hand-off into new and resumed sessions by the `AgentSession` and
+`AgentSessionManager` suites.

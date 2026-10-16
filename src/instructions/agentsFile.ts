@@ -1,10 +1,6 @@
 import { logWarn } from "@/logger";
-import {
-  hasCaseInsensitiveFilesystem,
-  isInVaultCache,
-  resolveFileByPath,
-  trashFile,
-} from "@/utils/vaultAdapterUtils";
+import { ensureFolderExists } from "@/utils";
+import { hasCaseInsensitiveFilesystem, trashFile } from "@/utils/vaultAdapterUtils";
 import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 export const AGENTS_FILE_NAME = "AGENTS.md";
@@ -24,16 +20,16 @@ const GENERATED_MIRROR_HEADER =
 
 export async function agentsFileIsUninitialized(app: App, folderPath: string): Promise<boolean> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  const file = await resolveInstructionFile(app, agentsPath);
+  const file = findCachedInstructionFile(app, agentsPath);
   if (!file) return true;
-  return GENERATED_MIRROR_HEADER.test(await readFileContent(app, file));
+  return GENERATED_MIRROR_HEADER.test(await app.vault.read(file));
 }
 
 export async function readAgentsFile(app: App, folderPath: string): Promise<string> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  const file = await resolveInstructionFile(app, agentsPath);
+  const file = findCachedInstructionFile(app, agentsPath);
   if (!file) return "";
-  const content = await readFileContent(app, file);
+  const content = await app.vault.read(file);
   return content.replace(GENERATED_MIRROR_HEADER, "$1");
 }
 
@@ -43,18 +39,18 @@ export async function writeAgentsFile(
   content: string
 ): Promise<void> {
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-  if (!(await resolveInstructionFile(app, agentsPath)) && !content.trim()) return;
+  if (!findCachedInstructionFile(app, agentsPath) && !content.trim()) return;
   const file = await ensureAgentsFile(app, folderPath, content);
-  if ((await readFileContent(app, file)) === content) return;
-  await writeFileContent(app, file, content);
+  if ((await app.vault.read(file)) === content) return;
+  await app.vault.modify(file, content);
 }
 
 export async function removeGeneratedInstructionFiles(app: App, folderPath: string): Promise<void> {
   try {
-    const file = await resolveInstructionFile(app, childPath(folderPath, AGENTS_FILE_NAME));
+    const file = findCachedInstructionFile(app, childPath(folderPath, AGENTS_FILE_NAME));
     if (!file) return;
-    if (!GENERATED_MIRROR_HEADER.test(await readFileContent(app, file))) return;
-    await deleteInstructionFile(app, file);
+    if (!GENERATED_MIRROR_HEADER.test(await app.vault.read(file))) return;
+    await trashFile(app, file);
   } catch (error) {
     logWarn(
       `[Instructions] Failed to remove the generated ${AGENTS_FILE_NAME} in "${folderPath}"`,
@@ -92,30 +88,22 @@ export async function restoreInstructionFiles(
 }
 
 async function readIfPresent(app: App, filePath: string): Promise<string | null> {
-  const file = await resolveInstructionFile(app, filePath);
-  return file ? await readFileContent(app, file) : null;
+  const file = findCachedInstructionFile(app, filePath);
+  return file ? await app.vault.read(file) : null;
 }
 
 async function restoreFile(app: App, filePath: string, previous: string | null): Promise<void> {
-  const file = await resolveInstructionFile(app, filePath);
+  const file = findCachedInstructionFile(app, filePath);
   if (previous === null) {
-    if (file) await deleteInstructionFile(app, file);
+    if (file) await trashFile(app, file);
     return;
   }
   if (!file) {
     await ensureFile(app, filePath, previous);
     return;
   }
-  if ((await readFileContent(app, file)) !== previous) {
-    await writeFileContent(app, file, previous);
-  }
-}
-
-async function deleteInstructionFile(app: App, file: TFile): Promise<void> {
-  if (isInVaultCache(app, file.path)) {
-    await trashFile(app, file);
-  } else {
-    await app.vault.adapter.remove(file.path);
+  if ((await app.vault.read(file)) !== previous) {
+    await app.vault.modify(file, previous);
   }
 }
 
@@ -134,7 +122,7 @@ export async function ensureAgentsFile(
 export async function ensureAgentsFileForDiscovery(app: App, folderPath: string): Promise<void> {
   try {
     const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
-    const existing = await resolveInstructionFile(app, agentsPath);
+    const existing = findCachedInstructionFile(app, agentsPath);
     if (!existing) return;
     await ensureAgentsFile(app, folderPath, "");
   } catch (error) {
@@ -147,24 +135,11 @@ export async function ensureAgentsFileForDiscovery(app: App, folderPath: string)
 
 export async function openAgentsFile(app: App, folderPath: string): Promise<void> {
   const file = await ensureAgentsFile(app, folderPath, "");
-  if (!isInVaultCache(app, file.path)) {
-    throw new Error(`${file.path} is in a hidden folder Obsidian cannot open. Edit it externally.`);
-  }
   await app.workspace.getLeaf(true).openFile(file);
 }
 
 function childPath(folderPath: string, fileName: string): string {
   return normalizePath(folderPath ? `${folderPath}/${fileName}` : fileName);
-}
-
-async function resolveInstructionFile(app: App, filePath: string): Promise<TFile | null> {
-  const cached = app.vault.getAbstractFileByPath(filePath);
-  if (cached instanceof TFile) return cached;
-
-  const resolved = await resolveFileByPath(app, filePath);
-  if (!resolved) return null;
-
-  return findCasedSibling(app, filePath) ?? resolved;
 }
 
 export function findCachedInstructionFile(app: App, filePath: string): TFile | null {
@@ -186,48 +161,27 @@ function findCasedSibling(app: App, filePath: string): TFile | null {
   );
 }
 
-async function readFileContent(app: App, file: TFile): Promise<string> {
-  return isInVaultCache(app, file.path)
-    ? await app.vault.read(file)
-    : await app.vault.adapter.read(file.path);
-}
-
-async function writeFileContent(app: App, file: TFile, content: string): Promise<void> {
-  if (isInVaultCache(app, file.path)) {
-    await app.vault.modify(file, content);
-  } else {
-    await app.vault.adapter.write(file.path, content);
-  }
-}
-
 async function ensureFile(app: App, filePath: string, content: string): Promise<TFile> {
-  const existing = await resolveInstructionFile(app, filePath);
+  const existing = findCachedInstructionFile(app, filePath);
   if (existing) return existing;
 
-  const folderPath = normalizePath(filePath.split("/").slice(0, -1).join("/"));
-  const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
-  if (!folderPath || folder instanceof TFolder) {
-    return await app.vault.create(filePath, content);
-  }
-
-  await app.vault.adapter.write(filePath, content);
-  const created = await resolveInstructionFile(app, filePath);
-  if (!created) throw new Error(`Failed to create ${filePath}`);
-  return created;
+  const folderPath = filePath.split("/").slice(0, -1).join("/");
+  if (folderPath) await ensureFolderExists(app.vault, folderPath);
+  return await app.vault.create(filePath, content);
 }
 
 async function ensureClaudeReference(app: App, claudePath: string): Promise<void> {
-  const file = await resolveInstructionFile(app, claudePath);
+  const file = findCachedInstructionFile(app, claudePath);
   if (!file) {
     await ensureFile(app, claudePath, `${CLAUDE_AGENTS_REFERENCE}\n`);
     return;
   }
 
-  const content = await readFileContent(app, file);
+  const content = await app.vault.read(file);
   if (CLAUDE_REFERENCE_PATTERN.test(content)) return;
 
   const separator = content.length === 0 ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-  await writeFileContent(app, file, `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`);
+  await app.vault.modify(file, `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`);
 }
 
 async function convertLegacyGeneratedFile(
@@ -235,12 +189,12 @@ async function convertLegacyGeneratedFile(
   file: TFile,
   initialContent: string
 ): Promise<void> {
-  const content = await readFileContent(app, file);
+  const content = await app.vault.read(file);
   const match = content.match(GENERATED_MIRROR_HEADER);
   if (!match) return;
 
   const nextContent = initialContent
     ? `${match[1]}${initialContent}`
     : `${match[1]}${content.slice(match[0].length)}`;
-  await writeFileContent(app, file, nextContent);
+  await app.vault.modify(file, nextContent);
 }

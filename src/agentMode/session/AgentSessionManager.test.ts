@@ -16,18 +16,10 @@ import {
   setSettings as mockedSetSettings,
 } from "@/settings/model";
 import * as projectsState from "@/projects/state";
-import {
-  ensureProjectContextMaterialized,
-  type ContextMaterializeProgress,
-} from "@/context/projectContextMaterializer";
+import { buildProjectContext } from "@/context/manifestBuilder";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import {
-  agentProjectContextLoadAtom,
-  type AgentProjectContextLoadState,
-  type ProjectConfig,
-} from "@/aiParams";
+import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
-import { getProjectContextSignature } from "@/projects/projectContextSignature";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildCodexModeMapping } from "@/agentMode/backends/codex/codexModeMapping";
 import type {
@@ -42,7 +34,7 @@ import type {
   SessionEvent,
 } from "./types";
 
-const mockEnsureMaterialized = ensureProjectContextMaterialized as jest.Mock;
+const mockBuildProjectContext = buildProjectContext as jest.Mock;
 const getSettingsMock = mockedGetSettings as jest.Mock;
 const setSettingsMock = mockedSetSettings as jest.Mock;
 const noticeMock = Notice as unknown as jest.Mock;
@@ -71,20 +63,9 @@ jest.mock("@/projects/ProjectFileManager", () => ({
   },
 }));
 
-jest.mock("@/context/projectContextMaterializer", () => {
-  const { getProjectContextSignature } = jest.requireActual("@/projects/projectContextSignature");
-  const { getCachedProjectRecordById } = jest.requireActual("@/projects/state");
-  return {
-    ensureProjectContextMaterialized: jest.fn(async (_app: unknown, projectId: string) => {
-      const record = getCachedProjectRecordById(projectId);
-      return {
-        additionalDirectories: [],
-        contextSignature: record ? getProjectContextSignature(record) : undefined,
-      };
-    }),
-    EMPTY_CONTEXT_MATERIALIZATION_RESULT: { additionalDirectories: [] },
-  };
-});
+jest.mock("@/context/manifestBuilder", () => ({
+  buildProjectContext: jest.fn(() => "<project_context>\n</project_context>"),
+}));
 
 let mockNotificationSound = true;
 
@@ -199,6 +180,7 @@ function makeMockSession(overrides: {
   backendId: string;
   backend?: BackendProcess;
   projectId?: string;
+  cwd?: string;
   ready?: Promise<void>;
   label?: string;
 }): AgentSession {
@@ -219,6 +201,7 @@ function makeMockSession(overrides: {
     chatInputId: overrides.chatInputId ?? overrides.internalId,
     backendId: overrides.backendId,
     projectId: overrides.projectId ?? GLOBAL_SCOPE,
+    cwd: overrides.cwd ?? null,
     ready: overrides.ready ?? Promise.resolve(),
     getBackendSessionId: () => sessionId,
     getStatus: () => status,
@@ -243,6 +226,7 @@ function makeMockSession(overrides: {
       hasUserVisibleMessages = messages.length > 0;
     }),
     seedSessionUsage: jest.fn(),
+    offerFeedback: jest.fn(() => "shown"),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -287,6 +271,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "start").mockImplementation((o
     backendId: opts.backendId,
     backend: opts.backend,
     projectId: opts.projectId,
+    cwd: opts.cwd ?? undefined,
   })
 );
 
@@ -401,6 +386,7 @@ interface ManagerOptions {
   persistence?: unknown;
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
+  feedbackServer?: ManagerDeps["feedbackServer"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -430,11 +416,31 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       persistenceManager: options.persistence as ManagerDeps["persistenceManager"],
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
+      feedbackServer: options.feedbackServer,
     }
   );
   builtManagers.push(manager);
   return manager;
 }
+
+const FEEDBACK_CHANNEL = Object.freeze({
+  name: "obsidian-copilot",
+  url: "http://127.0.0.1:4100/mcp",
+  headers: Object.freeze({ Authorization: "Bearer t0k3n" }),
+});
+
+function buildFeedbackServer(connect: jest.Mock = jest.fn(async () => FEEDBACK_CHANNEL)) {
+  return { connect, disconnect: jest.fn(), dispose: jest.fn() };
+}
+
+function offerFeedbackCards(enabled: boolean): void {
+  getSettingsMock.mockReturnValue({
+    ...mockDefaultSettings(),
+    agentMode: { ...mockDefaultSettings().agentMode, offerFeedbackCards: enabled },
+  });
+}
+
+const FEEDBACK_DRAFT = { title: "t", whatHappened: "w", userSaid: "u", repro: "r" };
 
 function seedProjects(...ids: string[]): void {
   projectsState.updateCachedProjectRecords(
@@ -572,7 +578,8 @@ function senderAndText(session: AgentSession): [string, string][] {
 
 function buildManagerWithReplay(
   backendOverrides: Record<string, unknown> = {},
-  descriptorOverrides: Partial<BackendDescriptor> = {}
+  descriptorOverrides: Partial<BackendDescriptor> = {},
+  feedbackServer?: ManagerDeps["feedbackServer"]
 ): AgentSessionManager {
   const backend = {
     ...makeMockBackendProcess(),
@@ -584,6 +591,7 @@ function buildManagerWithReplay(
   };
   return buildManager({
     descriptor: buildDescriptor({ createBackendProcess: () => backend, ...descriptorOverrides }),
+    feedbackServer,
   });
 }
 
@@ -634,7 +642,7 @@ beforeEach(() => {
   getSettingsMock.mockImplementation(mockDefaultSettings);
   setSettingsMock.mockClear();
   noticeMock.mockClear();
-  mockEnsureMaterialized.mockClear();
+  mockBuildProjectContext.mockClear();
   mockTouchProjectLastUsed.mockClear();
   ensureAgentsFileForDiscoverySpy.mockClear();
   projectsState.updateCachedProjectRecords([]);
@@ -902,6 +910,126 @@ describe("AgentSessionManager", () => {
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
       });
 
+      it("attaches the feedback MCP server to a new session and routes its cards to that session", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
+        const session = await mgr.createSession();
+
+        expect(feedbackServer.connect).toHaveBeenCalledWith(
+          session.internalId,
+          expect.any(Function)
+        );
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
+        );
+        const onOffer = feedbackServer.connect.mock.calls[0][1] as (draft: unknown) => string;
+        expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
+        expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+      });
+
+      it("starts a session without the feedback server while feedback cards are turned off", async () => {
+        offerFeedbackCards(false);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
+        await mgr.createSession();
+
+        expect(feedbackServer.connect).not.toHaveBeenCalled();
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [] })
+        );
+      });
+
+      it("tells the agent feedback is turned off when the user opts out after the session started", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+        const session = await mgr.createSession();
+        const onOffer = feedbackServer.connect.mock.calls[0][1] as (draft: unknown) => string;
+
+        offerFeedbackCards(false);
+
+        expect(onOffer(FEEDBACK_DRAFT)).toBe("turned_off");
+        expect(session.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+
+        const a = await mgr.createSession();
+        const b = await mgr.createSession();
+
+        const keys = feedbackServer.connect.mock.calls.map(([key]) => key);
+        expect(keys).toEqual([`opencode:${a.cwd}`, `opencode:${b.cwd}`]);
+        expect(keys[0]).toBe(keys[1]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows a shared connection's card in the chat whose backend session the agent stamped on the call", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        const caller = await mgr.createSession();
+        const newest = await mgr.createSession();
+        const onOffer = feedbackServer.connect.mock.calls[1][1] as (
+          draft: unknown,
+          callerSessionId: string | null
+        ) => string;
+
+        expect(onOffer(FEEDBACK_DRAFT, caller.getBackendSessionId())).toBe("shown");
+        expect(caller.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+        expect(newest.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ["carries no caller session", null],
+        ["names a session outside the folder's chats", "backend-elsewhere"],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows no card when a shared connection's call %s",
+        async (_label, callerSessionId) => {
+          offerFeedbackCards(true);
+          const feedbackServer = buildFeedbackServer();
+          const mgr = buildManager({
+            feedbackServer,
+            descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+          });
+          const session = await mgr.createSession();
+          const onOffer = feedbackServer.connect.mock.calls[0][1] as (
+            draft: unknown,
+            callerSessionId: string | null
+          ) => string;
+
+          expect(onOffer(FEEDBACK_DRAFT, callerSessionId)).toBe("unattributed");
+          expect(session.offerFeedback).not.toHaveBeenCalled();
+        }
+      );
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer(
+          jest.fn(async () => {
+            throw new Error("EADDRINUSE");
+          })
+        );
+        const mgr = buildManager({ feedbackServer });
+
+        const session = await mgr.createSession();
+
+        expect(mgr.getActiveSession()).toBe(session);
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ mcpServers: [] })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to start a chat, and asks for an enabled model, when a backend that may only run enabled models has none", async () => {
         mockSavedDefault(null);
         const mgr = buildManager({
@@ -932,6 +1060,25 @@ describe("AgentSessionManager", () => {
         expect(sessionCreateSpy).toHaveBeenCalledWith(
           expect.objectContaining({ defaultMode: "default" })
         );
+      });
+
+      it("hands a project session a first-message context builder and a global session none", async () => {
+        seedProjects("proj-ctx");
+        mockBuildProjectContext.mockReturnValueOnce(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
+        const mgr = buildManager();
+
+        await mgr.createSession(undefined, "proj-ctx");
+        await mgr.createSession(undefined, GLOBAL_SCOPE);
+
+        const [projectOpts, globalOpts] = sessionCreateSpy.mock.calls.map(([opts]) => opts);
+        expect(projectOpts).toMatchObject({ projectId: "proj-ctx" });
+        expect(mockBuildProjectContext).not.toHaveBeenCalled();
+        expect(projectOpts.getProjectContextBlock!()).toBe(
+          "<project_context>\n- `/vault/Shared`\n</project_context>"
+        );
+        expect(globalOpts.getProjectContextBlock).toBeUndefined();
       });
 
       it("only spawns the backend once across multiple createSession calls", async () => {
@@ -1424,6 +1571,56 @@ describe("AgentSessionManager", () => {
         expect(mockSessionDispose).toHaveBeenCalled();
       });
 
+      it("revokes the closed session's feedback server token", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+        const a = await mgr.createSession();
+
+        await mgr.closeSession(a.internalId);
+
+        expect(feedbackServer.disconnect).toHaveBeenCalledWith(a.internalId);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 releases the dropped chat's backend session, so reopening it from history starts one with a live feedback token", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+
+        await mgr.closeSession(a.internalId);
+
+        expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: a.getBackendSessionId() });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still closes the chat when the backend cannot release its session", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const proc = mgr.getBackendProcess(a.backendId)!;
+        jest.mocked(proc.closeSession!).mockRejectedValueOnce(new Error("session/close timed out"));
+
+        await mgr.closeSession(a.internalId);
+
+        expect(mgr.getSessions()).toEqual([]);
+        expect(mockSessionDispose).toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a folder's shared feedback key when one of its chats closes", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({
+          feedbackServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        await mgr.createSession();
+        const newest = await mgr.createSession();
+
+        await mgr.closeSession(newest.internalId);
+
+        expect(feedbackServer.disconnect).not.toHaveBeenCalledWith(
+          feedbackServer.connect.mock.calls[0][0]
+        );
+      });
+
       it("when the active session is closed, picks the right neighbor as active", async () => {
         const mgr = buildManager();
         const a = await mgr.createSession();
@@ -1662,29 +1859,13 @@ describe("AgentSessionManager", () => {
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 
-      it("stops reacting to project record changes", async () => {
-        const projectId = "proj-shutdown";
-        projectsState.updateCachedProjectRecords([
-          {
-            project: { id: projectId, contextSource: { webUrls: "https://a.com" } },
-            filePath: `Projects/${projectId}/project.md`,
-            folderName: projectId,
-          } as unknown as ProjectFileRecord,
-        ]);
-        const mgr = buildManager();
-        await mgr.enterProject(projectId);
+      it("closes the feedback server", async () => {
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManager({ feedbackServer });
+
         await mgr.shutdown();
-        mockEnsureMaterialized.mockClear();
 
-        projectsState.updateCachedProjectRecords([
-          {
-            project: { id: projectId, contextSource: { webUrls: "https://a.com\nhttps://b.com" } },
-            filePath: `Projects/${projectId}/project.md`,
-            folderName: projectId,
-          } as unknown as ProjectFileRecord,
-        ]);
-
-        expect(mockEnsureMaterialized).not.toHaveBeenCalled();
+        expect(feedbackServer.dispose).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -2120,9 +2301,11 @@ describe("AgentSessionManager", () => {
       it("restarts an idle backend and replaces the active affected session", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();
+        const proc = mgr.getBackendProcess(first.backendId)!;
 
         await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
 
+        expect(proc.closeSession).not.toHaveBeenCalled();
         expect(mockSessionCancel).toHaveBeenCalledWith();
         expect(mockSessionDispose).toHaveBeenCalledWith();
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
@@ -2452,6 +2635,42 @@ describe("AgentSessionManager", () => {
         expect(replacement?.getBackendSessionId()).toBe(backendSessionId);
         expect(replacement?.chatInputId).toBe(chatInputId);
         expect(mgr.getSessions()).toHaveLength(1);
+      });
+
+      it("re-attaches the feedback MCP server when it reloads the replaced tab", async () => {
+        offerFeedbackCards(true);
+        const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+          sessionId,
+          state: { model: null, mode: null },
+        }));
+        const mgr = buildManagerWithReplay({ loadSession }, {}, buildFeedbackServer());
+        await mgr.createSession();
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+
+        expect(loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
+        );
+      });
+
+      it("revokes the feedback token it handed a replaced tab that fails to reload", async () => {
+        offerFeedbackCards(true);
+        const feedbackServer = buildFeedbackServer();
+        const mgr = buildManagerWithReplay(
+          {
+            loadSession: jest.fn(async () => {
+              throw new Error("load blew up");
+            }),
+          },
+          {},
+          feedbackServer
+        );
+        await mgr.createSession();
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+
+        const reloadKey = feedbackServer.connect.mock.calls[1][0];
+        expect(feedbackServer.disconnect).toHaveBeenCalledWith(reloadKey);
       });
 
       it("rebuilds the replaced tab with the tool calls its backend replays during load (https://github.com/Brevilabs/obsidian-copilot-private/issues/643)", async () => {
@@ -4219,6 +4438,57 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
+      it("reattaches a project chat to its project scope", async () => {
+        seedProjects("proj-ctx");
+        const replay = buildReplayingBackend();
+
+        await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: "proj-ctx",
+              messages: savedTurn,
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(replay.backend.loadSession).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: "native-1", projectId: "proj-ctx" })
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 keeps the replayed chat when the note also holds a /compact turn that the agent's replay omits", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit({
+              sessionUpdate: "tool_call",
+              toolCallId: "tool-read",
+              title: "Read note.md",
+              kind: "read",
+              status: "completed",
+            });
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "/compact", isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
+        ]);
+        expect(session.store.getDisplayMessages()[1].parts?.map((p) => p.kind)).toEqual([
+          "tool_call",
+          "text",
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the reattached session replays nothing", async () => {
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
@@ -4261,6 +4531,33 @@ describe("AgentSessionManager", () => {
           [USER_SENDER, "ask both"],
           [AI_SENDER, fanoutBody],
         ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the replayed chat and its compaction row when the note also holds the /compact turn the replay never repeats", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+            emit({ sessionUpdate: "compaction", id: "c1", status: "completed", trigger: "manual" });
+          },
+        });
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "/compact", isVisible: true, timestamp: null },
+          { id: "s4", sender: AI_SENDER, message: "", isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
+        ]);
+        expect(
+          session.store
+            .getDisplayMessages()
+            .flatMap((m) => m.parts ?? [])
+            .filter((p) => p.kind === "compaction")
+        ).toHaveLength(1);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the note holds a refused turn that never reached the agent", async () => {
@@ -4618,8 +4915,6 @@ describe("AgentSessionManager", () => {
             id: PROJECT_ID,
             name: PROJECT_ID,
             systemPrompt,
-            projectModelKey: "",
-            modelConfigs: {},
             contextSource,
             created: 0,
             UsageTimestamps: usageTimestamps,
@@ -4756,7 +5051,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("marks an inactive project dirty so re-entry detaches the stale empty landing and respawns", async () => {
+      it("replaces an empty landing on re-entry after the project's sources change", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
 
@@ -4775,7 +5070,7 @@ describe("AgentSessionManager", () => {
         expect(visible[0]).not.toBe(landing);
       });
 
-      it("clears dirty once a fresh session captured the new sources (later re-entry reuses)", async () => {
+      it("reuses the replacement landing on a later re-entry when nothing changed since", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4794,58 +5089,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(fresh);
       });
 
-      it("keeps a project dirty when the fresh session fails to start (ready rejects)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        sessionCreateSpy.mockImplementationOnce((opts) => {
-          const rejected = Promise.reject(new Error("startup boom"));
-          rejected.catch(() => {});
-          return makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-            projectId: opts.projectId,
-            ready: rejected,
-          });
-        });
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("keeps a project dirty when the create captured an older signature (single-flight race)", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        await mgr.enterProject(PROJECT_ID);
-        await mgr.exitProject();
-
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        const v1Signature = getProjectContextSignature(makeRecord({ webUrls: "https://a.com" }));
-        mockEnsureMaterialized.mockImplementationOnce(async () => ({
-          additionalDirectories: [],
-          contextSignature: v1Signature,
-        }));
-
-        await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-        await mgr.exitProject();
-
-        sessionCreateSpy.mockClear();
-        await mgr.enterProject(PROJECT_ID);
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-      });
-
-      it("ignores a usage-timestamp-only touch (no dirty, empty landing still reused)", async () => {
+      it("reuses an empty landing after a usage-timestamp-only touch", async () => {
         publish(makeRecord({ webUrls: "https://a.com" }));
         const mgr = buildManager();
         await mgr.enterProject(PROJECT_ID);
@@ -4877,7 +5121,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(landing);
       });
 
-      it("does not reuse an empty landing after vault content inside the project's sources changes", async () => {
+      it("reuses an empty landing after vault content inside the project's sources changes, building its context at the first message", async () => {
         jest.useFakeTimers();
         publish(makeRecord({ inclusions: "Notes" }));
         const app = buildApp();
@@ -4895,91 +5139,25 @@ describe("AgentSessionManager", () => {
         sessionCreateSpy.mockClear();
         await mgr.enterProject(PROJECT_ID);
 
-        expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
-        expect(mgr.getActiveSession()).not.toBe(landing);
+        expect(sessionCreateSpy).not.toHaveBeenCalled();
+        expect(mgr.getActiveSession()).toBe(landing);
       });
 
-      it("publishes processingSources and incremental failedSources during a run, then clears them when done", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
-        const setMock = jest.requireMock("@/settings/model").settingsStore.set as jest.Mock;
-        const latest = (): AgentProjectContextLoadState | undefined => {
-          for (let i = setMock.mock.calls.length - 1; i >= 0; i--) {
-            const [atom, updater] = setMock.mock.calls[i];
-            if (atom !== agentProjectContextLoadAtom || typeof updater !== "function") continue;
-            const next = updater({}) as Record<string, AgentProjectContextLoadState>;
-            if (next[PROJECT_ID]) return next[PROJECT_ID];
-          }
-          return undefined;
-        };
-
-        let drive!: (p: ContextMaterializeProgress) => void;
-        let release!: () => void;
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        mockEnsureMaterialized.mockImplementationOnce(
-          async (
-            _app: unknown,
-            _pid: string,
-            _cwd: string,
-            onProgress: (p: ContextMaterializeProgress) => void
-          ) => {
-            drive = onProgress;
-            onProgress({ phase: "prefetch", done: 0, total: 1 });
-            onProgress({ phase: "itemStart", item: { kind: "web", source: "https://a.com" } });
-            await gate;
-            return { additionalDirectories: [] };
-          }
-        );
-
-        const entering = mgr.enterProject(PROJECT_ID);
-        await flushTimers();
-
-        expect(latest()).toMatchObject({
-          phase: "prefetch",
-          blocking: true,
-          processingSources: [{ kind: "web", source: "https://a.com" }],
-        });
-
-        drive({
-          phase: "itemFailed",
-          item: { kind: "web", source: "https://a.com" },
-          failure: {
-            kind: "web",
-            source: "https://a.com",
-            error: "boom",
-            usedStaleSnapshot: false,
-          },
-        });
-        const afterFail = latest()!;
-        expect(afterFail.processingSources).toBeUndefined();
-        expect(afterFail.failedSources).toEqual([
-          { path: "https://a.com", type: "web", error: "boom", usedStaleSnapshot: false },
-        ]);
-
-        release();
-        await entering;
-        await flushTimers();
-        expect(latest()).toMatchObject({ phase: "done", blocking: false });
-        expect(latest()!.processingSources).toBeUndefined();
-      });
-
-      it("warms the active project's cache on a source edit without gating the composer", async () => {
-        publish(makeRecord({ webUrls: "https://a.com" }));
-        const mgr = buildManager();
+      it("leaves the first message without an update note, since its context block is built from the current vault", async () => {
+        jest.useFakeTimers();
+        publish(makeRecord({ inclusions: "Notes" }));
+        const app = buildApp();
+        const mgr = buildManager({ app });
         await mgr.enterProject(PROJECT_ID);
-        await flushTimers();
+        const hooks = sessionCreateSpy.mock.calls.at(-1)![0];
 
-        mockEnsureMaterialized.mockClear();
-        const settingsStoreSet = jest.requireMock("@/settings/model").settingsStore
-          .set as jest.Mock;
-        settingsStoreSet.mockClear();
+        const onModify = (app.vault.on as jest.Mock).mock.calls.find(
+          ([event]) => event === "modify"
+        )![1];
+        onModify(mockTFile({ path: "Notes/topic.md", extension: "md" }));
 
-        publish(makeRecord({ webUrls: "https://a.com\nhttps://b.com" }));
-
-        expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
-        expect(settingsStoreSet).not.toHaveBeenCalled();
+        hooks.getProjectContextBlock!();
+        expect(hooks.getProjectContextUpdates!()).toBeNull();
       });
 
       it("hands a project session the update note once per change until it acknowledges the epoch", async () => {
@@ -5011,41 +5189,6 @@ describe("AgentSessionManager", () => {
         await mgr.exitProject();
 
         expect(mockTouchProjectLastUsed).not.toHaveBeenCalled();
-      });
-    });
-
-    describe("rematerializeContext()", () => {
-      const PID = "proj-rematerialize";
-
-      async function enterProjectReady(): Promise<AgentSessionManager> {
-        seedProjects(PID);
-        const mgr = buildManager();
-        await mgr.enterProject(PID);
-        await flushTimers();
-        mockEnsureMaterialized.mockClear();
-        return mgr;
-      }
-
-      it("forces a retry of known-bad sources", async () => {
-        const mgr = await enterProjectReady();
-
-        const started = mgr.rematerializeContext(PID);
-        await flushTimers();
-
-        expect(started).toBe(true);
-        expect(mockEnsureMaterialized).toHaveBeenCalledTimes(1);
-        expect(mockEnsureMaterialized.mock.calls[0][4]).toBe(true);
-      });
-
-      it("early-exits while a run already owns the load atom", async () => {
-        const mgr = await enterProjectReady();
-        const getMock = jest.requireMock("@/settings/model").settingsStore.get as jest.Mock;
-        getMock.mockReturnValueOnce({ [PID]: { phase: "prefetch", blocking: true } });
-
-        const started = mgr.rematerializeContext(PID);
-
-        expect(started).toBe(false);
-        expect(mockEnsureMaterialized).not.toHaveBeenCalled();
       });
     });
   });

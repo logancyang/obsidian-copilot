@@ -5,8 +5,6 @@ export const EMPTY_PROJECT_CONFIG: ProjectConfig = {
   name: "",
   description: "",
   systemPrompt: "",
-  projectModelKey: "",
-  modelConfigs: {},
   contextSource: {},
   created: 0,
   UsageTimestamps: 0,
@@ -15,9 +13,6 @@ export const EMPTY_PROJECT_CONFIG: ProjectConfig = {
 export const COPILOT_PROJECT_ID = "copilot-project-id";
 export const COPILOT_PROJECT_NAME = "copilot-project-name";
 export const COPILOT_PROJECT_DESCRIPTION = "copilot-project-description";
-export const COPILOT_PROJECT_MODEL_KEY = "copilot-project-model-key";
-export const COPILOT_PROJECT_TEMPERATURE = "copilot-project-temperature";
-export const COPILOT_PROJECT_MAX_TOKENS = "copilot-project-max-tokens";
 export const COPILOT_PROJECT_CREATED = "copilot-project-created";
 export const COPILOT_PROJECT_LAST_USED = "copilot-project-last-used";
 export const COPILOT_PROJECT_INCLUSIONS = "copilot-project-inclusions";

@@ -95,8 +95,6 @@ describe("projectUtils", () => {
       const frontmatter = await writeFor({
         name: "My Project",
         description: "A test project",
-        projectModelKey: "gpt-4",
-        modelConfigs: { temperature: 0.7, maxTokens: 2048 },
         contextSource: {
           inclusions: "notes/",
           exclusions: "archive/",
@@ -109,9 +107,6 @@ describe("projectUtils", () => {
         "copilot-project-id": "my-project",
         "copilot-project-name": "My Project",
         "copilot-project-description": "A test project",
-        "copilot-project-model-key": "gpt-4",
-        "copilot-project-temperature": 0.7,
-        "copilot-project-max-tokens": 2048,
         "copilot-project-inclusions": "notes/",
         "copilot-project-exclusions": "archive/",
         "copilot-project-web-urls": ["https://example.com", "https://example.org"],
@@ -121,15 +116,11 @@ describe("projectUtils", () => {
       });
     });
 
-    it("names the project after its folder and clears stale model overrides when none are set", async () => {
-      const frontmatter = await writeFor(
-        {},
-        { "copilot-project-temperature": 0.2, "copilot-project-max-tokens": 10, extra: "kept" }
-      );
+    it("names the project after its folder and leaves properties it does not own untouched", async () => {
+      const frontmatter = await writeFor({}, { "copilot-project-temperature": 0.2, extra: "kept" });
 
       expect(frontmatter["copilot-project-name"]).toBe("my-project");
-      expect(frontmatter).not.toHaveProperty("copilot-project-temperature");
-      expect(frontmatter).not.toHaveProperty("copilot-project-max-tokens");
+      expect(frontmatter["copilot-project-temperature"]).toBe(0.2);
       expect(frontmatter.extra).toBe("kept");
     });
   });
@@ -189,9 +180,6 @@ describe("projectUtils", () => {
       expect(result!.project.id).toBe("my-project");
       expect(result!.project.name).toBe("My Project");
       expect(result!.project.description).toBe("A test project");
-      expect(result!.project.projectModelKey).toBe("gpt-4");
-      expect(result!.project.modelConfigs?.temperature).toBe(0.7);
-      expect(result!.project.modelConfigs?.maxTokens).toBe(2048);
       expect(result!.project.contextSource?.inclusions).toBe("notes/");
       expect(result!.project.contextSource?.exclusions).toBe("archive/");
       expect(result!.project.contextSource?.webUrls).toBe("https://example.com");
@@ -255,7 +243,7 @@ describe("projectUtils", () => {
 
     it("returns a record for a folder whose project.md holds a valid project", async () => {
       const app = setupScanApp({ beta: { "project.md": validConfig("beta") } });
-      const { records } = await scanAllProjectConfigFiles(app);
+      const records = await scanAllProjectConfigFiles(app);
       expect(records).toHaveLength(1);
       expect(records[0].project.id).toBe("beta");
       expect(records[0].filePath).toBe("copilot-projects/beta/project.md");
@@ -263,7 +251,7 @@ describe("projectUtils", () => {
 
     it("skips a folder that only has an AGENTS.md mirror", async () => {
       const app = setupScanApp({ alpha: { "AGENTS.md": validConfig("alpha") } });
-      const { records } = await scanAllProjectConfigFiles(app);
+      const records = await scanAllProjectConfigFiles(app);
       expect(records).toHaveLength(0);
     });
 
@@ -271,7 +259,7 @@ describe("projectUtils", () => {
       const app = setupScanApp({
         gamma: { "AGENTS.md": validConfig("gamma"), "project.md": validConfig("gamma") },
       });
-      const { records } = await scanAllProjectConfigFiles(app);
+      const records = await scanAllProjectConfigFiles(app);
       expect(records).toHaveLength(1);
       expect(records[0].filePath).toBe("copilot-projects/gamma/project.md");
     });

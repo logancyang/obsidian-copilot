@@ -79,12 +79,6 @@ Permission choices depend on the active agent. **Stop** cancels the current turn
 
 An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent Chats** for earlier work.
 
-### A project message says “Waiting for context”
-
-The message is queued while Copilot prepares saved sources. Fix or remove any source that cannot load. After changing saved context or instructions, start **New Chat**.
-
-See [Projects](projects.md) for what is saved with a project.
-
 ### A skill or skill command is missing
 
 In **Settings → Copilot → Skills**, confirm the skill has a valid `SKILL.md` and is enabled for your agent. Toggle the agent off and on to recreate its link.
@@ -118,10 +112,20 @@ Use **Advanced → Debugging & support → Report an issue** for any Copilot pro
 
 ### Filing a report
 
-1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Agent Chat pane (only while one is open), the **Agent Mode activity log**, the regular Copilot chat log, and the opencode log when opencode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.
-2. **Let Copilot prepare the report.** The review page shows **Preparing report…** until the zip is ready. Copilot briefly hides the dialog to photograph the pane behind it, reads and cleans the logs you asked for, and packs everything into one zip on your own computer — the zip is the only file it writes.
+1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Obsidian window, the **Agent Mode activity log**, the regular Copilot chat log, and the opencode log when opencode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.
+2. **Let Copilot prepare the report.** The review page shows **Preparing report…** until the zip is ready. Copilot briefly hides open dialogs, including Settings, to photograph the window behind them, reads and cleans the logs you asked for, and packs everything into one zip on your own computer — the zip is the only file it writes.
 3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip unless you have already chosen **Open issue anyway**.
 4. **Finish the issue in your browser.** As soon as the upload lands, Copilot opens a prefilled GitHub issue with the report ID already in the body, closes the dialog, and shows a short notice. If your browser could not be opened, the notice carries the report ID and a link to the issue page instead. Nothing is filed until you press Submit in your browser.
+
+### Reporting from Agent Chat
+
+When something goes wrong in an Agent Chat, select **More Actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
+
+When you tell Agent Chat it got something wrong, or the agent notices its own mistake, it may draft a report for you. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
+
+- **Review & report** opens **Report an issue** with the agent's draft already in the description: what happened, what you said, steps to reproduce, and which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
+- **Dismiss** removes the card. Nothing is sent.
+- **Don't offer again** removes the card and turns off **Offer feedback reports in Agent Chat** in **Advanced → Debugging & support**.
 
 ### What gets sent, and what does not
 

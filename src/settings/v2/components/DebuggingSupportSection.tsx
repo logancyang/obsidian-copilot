@@ -11,6 +11,8 @@ export interface DebuggingSupportSectionProps {
   onFrameLogChange: (checked: boolean) => void;
   frameLogPath: string;
   onReportIssue: () => void;
+  offerFeedbackCards: boolean;
+  onOfferFeedbackCardsChange: (checked: boolean) => void;
   onOpenFrameLog: React.MouseEventHandler<HTMLButtonElement>;
   onClearFrameLog: React.MouseEventHandler<HTMLButtonElement>;
 }
@@ -22,6 +24,8 @@ export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = (
   onFrameLogChange,
   frameLogPath,
   onReportIssue,
+  offerFeedbackCards,
+  onOfferFeedbackCardsChange,
   onOpenFrameLog,
   onClearFrameLog,
 }) => (
@@ -35,6 +39,14 @@ export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = (
         Report an issue
       </Button>
     </SettingItem>
+
+    <SettingItem
+      type="switch"
+      title="Offer feedback reports in Agent Chat"
+      description="When something goes wrong in Agent Chat, the agent can draft a report for you to review. Nothing is sent unless you press Report."
+      checked={offerFeedbackCards}
+      onCheckedChange={onOfferFeedbackCardsChange}
+    />
 
     <SettingItem
       type="switch"

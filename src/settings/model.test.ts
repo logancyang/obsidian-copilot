@@ -16,6 +16,7 @@ import {
   sanitizeSettings,
   settingsAtom,
   settingsStore,
+  toVisibleCopilotFolder,
   validateCopilotFolder,
   CopilotSettings,
   getModelKeyFromModel,
@@ -125,6 +126,7 @@ describe("model", () => {
         activeBackend: "opencode",
         backends: {},
         debugFullFrames: true,
+        offerFeedbackCards: true,
         notificationSound: true,
         notificationSoundId: "piano",
         welcomeDismissed: false,
@@ -133,7 +135,6 @@ describe("model", () => {
           builtinPreferences: {
             "copilot-web-search": { disabled: true },
             "copilot-web-fetch": { disabled: true },
-            "copilot-read-pdf": { disabled: true },
           },
         },
       });
@@ -201,6 +202,21 @@ describe("model", () => {
         },
       } as unknown as CopilotSettings);
       expect(sanitized.agentMode.debugFullFrames).toBe(false);
+    });
+
+    it("offers feedback cards to an install that never saved the setting, and keeps an explicit opt-out", () => {
+      const base = { byok: {}, activeBackend: "opencode", backends: {} };
+      const fresh = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: base,
+      } as unknown as CopilotSettings);
+      const optedOut = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        agentMode: { ...base, offerFeedbackCards: false },
+      } as unknown as CopilotSettings);
+
+      expect(fresh.agentMode.offerFeedbackCards).toBe(true);
+      expect(optedOut.agentMode.offerFeedbackCards).toBe(false);
     });
 
     it("falls back to debugFullFrames=true when the persisted value is not a boolean", () => {
@@ -381,28 +397,28 @@ describe("model", () => {
       expect(sanitized.enableSelfHostMode).toBe(true);
     });
 
-    it("defaults docProcessorBackend to 'plus' when missing", () => {
+    it("defaults enableMiyoDocumentProcessing to true when missing", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: undefined,
+        enableMiyoDocumentProcessing: undefined,
       } as unknown as CopilotSettings);
-      expect(out.docProcessorBackend).toBe("plus");
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
     });
 
-    it("resets an invalid docProcessorBackend to 'plus'", () => {
+    it("resets a non-boolean enableMiyoDocumentProcessing to true", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: "bogus",
+        enableMiyoDocumentProcessing: "bogus",
       } as unknown as CopilotSettings);
-      expect(out.docProcessorBackend).toBe("plus");
+      expect(out.enableMiyoDocumentProcessing).toBe(true);
     });
 
-    it("preserves docProcessorBackend='miyo'", () => {
+    it("preserves enableMiyoDocumentProcessing=false", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
-        docProcessorBackend: "miyo",
+        enableMiyoDocumentProcessing: false,
       });
-      expect(out.docProcessorBackend).toBe("miyo");
+      expect(out.enableMiyoDocumentProcessing).toBe(false);
     });
 
     it.each(["http://miyo-home:8742", "http://127.0.0.1:8742"])(
@@ -591,13 +607,15 @@ describe("model", () => {
       expect(out.copilotFolder).toBe("notes/ai");
     });
 
-    it("keeps an existing config-like copilotFolder without vault context", () => {
-      const out = sanitizeSettings({
-        ...DEFAULT_SETTINGS,
-        copilotFolder: ".vault-config/plugins/copilot-data",
-      });
-
-      expect(out.copilotFolder).toBe(".vault-config/plugins/copilot-data");
+    it("loads a hidden copilotFolder as its visible name so every feature can index it (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      for (const [hidden, visible] of [
+        [".copilot", "copilot"],
+        ["notes/.ai/", "notes/ai"],
+      ]) {
+        const out = sanitizeSettings({ ...DEFAULT_SETTINGS, copilotFolder: hidden });
+        expect(out.copilotFolder).toBe(visible);
+        expect(out.copilotRootHistory).toContain(visible);
+      }
     });
 
     it("unions the active root into a normalized, deduped copilotRootHistory", () => {
@@ -840,8 +858,14 @@ describe("model", () => {
       expect(validateCopilotFolder("C:/Users/evil").ok).toBe(false);
     });
 
-    it("rejects a lone dot segment", () => {
+    it("rejects any segment that starts with a dot, because Obsidian does not index hidden folders (https://github.com/Brevilabs/obsidian-copilot-private/issues/712)", () => {
+      expect(validateCopilotFolder(".copilot")).toEqual({
+        ok: false,
+        reason: "Folder names cannot start with a dot.",
+      });
+      expect(validateCopilotFolder("notes/.ai").ok).toBe(false);
       expect(validateCopilotFolder("a/./b").ok).toBe(false);
+      expect(validateCopilotFolder("notes.ai/copilot").ok).toBe(true);
     });
 
     it("rejects roots that overlap the active config folder at a segment boundary", () => {
@@ -871,6 +895,19 @@ describe("model", () => {
       expect(validateCopilotFolder("copilot.").ok).toBe(false);
       expect(validateCopilotFolder("team /ai").ok).toBe(false);
       expect(validateCopilotFolder("team./ai").ok).toBe(false);
+    });
+  });
+
+  describe("toVisibleCopilotFolder()", () => {
+    it("drops the leading dots of every segment and keeps visible paths unchanged", () => {
+      expect(toVisibleCopilotFolder(" .copilot ")).toBe("copilot");
+      expect(toVisibleCopilotFolder("..a\\.b/c.d")).toBe("a\\b/c.d");
+      expect(toVisibleCopilotFolder("notes/ai")).toBe("notes/ai");
+    });
+
+    it("turns traversal segments into empty segments that validation still rejects", () => {
+      expect(validateCopilotFolder(toVisibleCopilotFolder("../escape")).ok).toBe(false);
+      expect(validateCopilotFolder(toVisibleCopilotFolder("a/../b")).ok).toBe(false);
     });
   });
 

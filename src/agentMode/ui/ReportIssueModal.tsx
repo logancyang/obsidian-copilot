@@ -14,9 +14,11 @@ import {
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { findLatestOpencodeLog } from "@/utils/opencodeLog";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { captureBehindOverlay } from "./reportScreenshot";
+import { captureWindowBehindDialogs } from "./reportScreenshot";
 import { getSettings } from "@/settings/model";
-import { App, Modal, Notice, apiVersion } from "obsidian";
+import { getPersistedDeviceId } from "@/utils/deviceId";
+import { createReportUploader } from "@/utils/reportUpload.brevilabs";
+import { App, ItemView, Modal, Notice, Plugin, apiVersion } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
 import {
@@ -35,12 +37,35 @@ const OPENCODE_LOG_NAME = "opencode.log";
 
 export interface ReportIssueModalParams {
   app: App;
-  resolveCaptureTarget: () => Promise<HTMLElement | null> | HTMLElement | null;
-  dismissSettings: () => void;
-  canCaptureTarget: () => boolean;
   activeBackend: string;
   pluginVersion: string;
   uploader: ReportUploader;
+  initialNote?: string;
+  preselectAllSources?: boolean;
+  onReported?: (report: { reportId: string; issueUrl: string }) => void;
+}
+
+export type OpenReportIssueOptions = Pick<
+  ReportIssueModalParams,
+  "activeBackend" | "initialNote" | "preselectAllSources" | "onReported"
+>;
+
+export function openReportIssueModal(
+  plugin: Pick<Plugin, "app" | "manifest">,
+  options: OpenReportIssueOptions
+): ReportIssueModal {
+  const { app, manifest } = plugin;
+  const modal = new ReportIssueModal({
+    ...options,
+    app,
+    pluginVersion: manifest.version,
+    uploader: createReportUploader({
+      installId: () => getPersistedDeviceId(app),
+      clientVersion: manifest.version,
+    }),
+  });
+  modal.open();
+  return modal;
 }
 
 interface ElectronShell {
@@ -131,6 +156,7 @@ export class ReportIssueModal extends Modal {
     this.root = createPluginRoot(this.contentEl, this.app);
     this.root.render(
       <ReportIssueFlow
+        initialNote={this.params.initialNote}
         sources={this.buildSources()}
         prepare={(note, selected) => this.prepare(note, selected)}
         upload={(report) => this.upload(report)}
@@ -166,16 +192,9 @@ export class ReportIssueModal extends Modal {
 
   private buildSources(): ReportSourceOption[] {
     const settings = getSettings();
-    const sources: ReportSourceOption[] = [];
-    if (this.params.canCaptureTarget()) {
-      sources.push({
-        id: "screenshot",
-        label: "Screenshot of the Agent Mode pane",
-        defaultChecked: true,
-      });
-    }
     const activityLogOn = settings.agentMode.debugFullFrames;
-    sources.push(
+    const sources: ReportSourceOption[] = [
+      { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
       {
         id: "activityLog",
         label: "Agent Mode activity log",
@@ -189,14 +208,16 @@ export class ReportIssueModal extends Modal {
         // OpenCode 2's server errors reach only this log, and reporters skipped it unchecked.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/649
         defaultChecked: true,
-      }
-    );
+      },
+    ];
     if (this.params.activeBackend === OPENCODE_BACKEND_ID) {
       sources.push({
         id: "opencodeLog",
         label: "OpenCode backend log",
         description: "may include unrelated sessions",
-        defaultChecked: false,
+        // A report opened from a chat is about that chat, so it ticks the log Settings leaves off for privacy.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+        defaultChecked: this.params.preselectAllSources === true,
       });
     }
     return sources;
@@ -213,24 +234,17 @@ export class ReportIssueModal extends Modal {
     if (selected.has("screenshot")) {
       screenshotPng = null;
       try {
-        screenshotPng = await captureBehindOverlay(
-          this.containerEl,
-          () => this.params.resolveCaptureTarget(),
-          () => this.params.dismissSettings()
-        );
+        const workspaceWindow =
+          this.app.workspace.getActiveViewOfType(ItemView)?.containerEl.win ?? this.containerEl.win;
+        screenshotPng = await captureWindowBehindDialogs(workspaceWindow);
       } catch (err) {
         logWarn("[ReportIssue] the screenshot failed; the report goes without it:", err);
       }
     }
 
-    // This order is the budget: `buildReportBundle` spends the bundle's room in
-    // request order and cuts each log to what is left, so an early source can
-    // starve every later one below the tail floor and drop it whole. Ask in
-    // ascending order of how large the source gets. The chat log is capped at
-    // the source (`logFileManager` keeps 500 lines), opencode's log is its own
-    // and stays modest, and the frame log routinely reaches its 50 MiB rotation
-    // on a heavy session, so it goes last and loses a tail instead — the
-    // degradation it is built for and already announces.
+    // `buildReportBundle` gives each log an even share of the room left, so a log
+    // smaller than its share passes the rest on. Asking in ascending order of how
+    // large the source gets hands that room to the logs most likely to need it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/538
     const logs: ReportLogRequest[] = [];
     if (selected.has("chatLog")) logs.push(await chatLogRequest());
@@ -286,6 +300,11 @@ export class ReportIssueModal extends Modal {
     this.uploading = true;
     const outcome = await uploadReport(this.params.uploader, report);
     this.uploading = false;
+    // Only a report the server accepted turns the feedback card into its sent state.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+    if (outcome.ok) {
+      this.params.onReported?.({ reportId: outcome.reportId, issueUrl: outcome.issueUrl });
+    }
     if (this.root) return outcome;
     // The dialog closed while the bytes were in flight. No browser tab — the
     // user has moved on — but the id is the one thing they cannot reconstruct,

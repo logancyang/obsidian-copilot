@@ -1,23 +1,53 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { ChatBookmarkMenuItem } from "@/agentMode/ui/ChatBookmarkMenuItem";
+import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { describeChatDelete } from "@/lib/chatDeleteText";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
-import { CopyChatLinkButton } from "@/components/chat-components/CopyChatLinkButton";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
-import { Download, History, MessageCirclePlus, Sparkles } from "lucide-react";
-import React from "react";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import {
+  Bookmark,
+  Bug,
+  Download,
+  History,
+  Link,
+  MessageCirclePlus,
+  MoreHorizontal,
+  Sparkles,
+} from "lucide-react";
+import React, { useCallback, useState } from "react";
 
 const resolveDeleteSummary = (item: ChatHistoryItem) =>
   describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined);
 
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
+
+// An empty chat has no note to link or bookmark, so its items stay visible but explain why they are off.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/702
+const NeedsMessageMenuItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div>
+        <DropdownMenuItem disabled>{children}</DropdownMenuItem>
+      </div>
+    </TooltipTrigger>
+    <TooltipContent side="left">Send a message to the chat first.</TooltipContent>
+  </Tooltip>
+);
 
 interface AgentChatControlsProps {
   onNewChat?: () => void;
@@ -32,6 +62,9 @@ interface AgentChatControlsProps {
   runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
   onCopyChatLink?: () => void | Promise<void>;
+  getChatBookmarkState?: () => Promise<ChatBookmarkState>;
+  onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
+  onReportError?: () => void;
   usageMeter?: React.ReactNode;
   showMultiAgentUpsell?: boolean;
 }
@@ -49,6 +82,9 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   runningChatIds,
   onOpenSourceFile,
   onCopyChatLink,
+  getChatBookmarkState,
+  onSetChatBookmarked,
+  onReportError,
   usageMeter,
   showMultiAgentUpsell = false,
 }) => {
@@ -56,6 +92,11 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   const canUseMultiAgent = useCanUseMultiAgent();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
+  );
+  const [moreActionsBody, setMoreActionsBody] = useState<HTMLElement | null>(null);
+  const trackMoreActionsBody = useCallback(
+    (node: HTMLButtonElement | null) => setMoreActionsBody(node?.ownerDocument.body ?? null),
+    []
   );
 
   return (
@@ -81,31 +122,13 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
         {onNewChat && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
-                  <MessageCirclePlus className="tw-size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>New Chat</TooltipContent>
-            </Tooltip>
-            <CopyChatLinkButton onCopyLink={onCopyChatLink} />
-          </>
-        )}
-        {!settings.autosaveChat && onSaveAsNote && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost2"
-                size="icon"
-                title="Save Chat as Note"
-                onClick={() => void onSaveAsNote()}
-              >
-                <Download className="tw-size-4" />
+              <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
+                <MessageCirclePlus className="tw-size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Save Chat as Note</TooltipContent>
+            <TooltipContent>New Chat</TooltipContent>
           </Tooltip>
         )}
         {historyAvailable && (
@@ -137,6 +160,54 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             </ChatHistoryPopover>
             <TooltipContent>Chat History</TooltipContent>
           </Tooltip>
+        )}
+        {onNewChat && (
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost2" size="icon" title="More Actions" ref={trackMoreActionsBody}>
+                <MoreHorizontal className="tw-size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" container={moreActionsBody}>
+              {onCopyChatLink ? (
+                <DropdownMenuItem onSelect={() => void onCopyChatLink()}>
+                  <Link />
+                  Copy chat link
+                </DropdownMenuItem>
+              ) : (
+                <NeedsMessageMenuItem>
+                  <Link />
+                  Copy chat link
+                </NeedsMessageMenuItem>
+              )}
+              {onSetChatBookmarked &&
+                (getChatBookmarkState ? (
+                  <ChatBookmarkMenuItem
+                    getBookmarkState={getChatBookmarkState}
+                    onSetBookmarked={safeAsyncHandler(onSetChatBookmarked)}
+                  />
+                ) : (
+                  <NeedsMessageMenuItem>
+                    <Bookmark />
+                    Add to bookmarks
+                  </NeedsMessageMenuItem>
+                ))}
+              {!settings.autosaveChat && onSaveAsNote && (
+                <DropdownMenuItem onSelect={() => void onSaveAsNote()}>
+                  <Download />
+                  Save chat as note
+                </DropdownMenuItem>
+              )}
+              {/* A report from here names the chat's agent, model and session, so only a host with a chat offers it.
+                  https://github.com/Brevilabs/obsidian-copilot-private/issues/672 */}
+              {onReportError && (
+                <DropdownMenuItem onSelect={onReportError}>
+                  <Bug />
+                  Report error
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
     </div>

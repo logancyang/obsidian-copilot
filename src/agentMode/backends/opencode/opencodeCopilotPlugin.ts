@@ -1,3 +1,8 @@
+import {
+  CALLER_SESSION_ARGUMENT,
+  FEEDBACK_MCP_SERVER_NAME,
+  SEND_FEEDBACK_TOOL_NAME,
+} from "@/agentMode/session/feedback/feedbackMcpServer";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
@@ -10,6 +15,9 @@ import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
 // It also reads each file an edit, write or patch is about to change and returns that text with
 // the tool's result, because OpenCode names the file only milliseconds before writing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
+// It stamps the calling session on send_feedback, because every chat in a folder shares one MCP
+// connection and the call itself does not say which chat made it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 export const OPENCODE_COPILOT_PLUGIN_SOURCE = `"use strict";
 const fs = require("fs");
 const path = require("path");
@@ -87,6 +95,11 @@ function captureOriginals(ctx) {
   };
 }
 
+function stampFeedbackCaller(event) {
+  if (event.tool !== ${JSON.stringify(`${FEEDBACK_MCP_SERVER_NAME}_${SEND_FEEDBACK_TOOL_NAME}`)}) return;
+  event.input = { ...event.input, ${JSON.stringify(CALLER_SESSION_ARGUMENT)}: event.sessionID };
+}
+
 module.exports = {
   id: "copilot",
   setup: async (ctx) => {
@@ -95,7 +108,10 @@ module.exports = {
     }
     await ctx.skill.transform((skills) => skills.remove("report"));
     const originals = captureOriginals(ctx);
-    await ctx.tool.hook("execute.before", originals.before);
+    await ctx.tool.hook("execute.before", async (event) => {
+      stampFeedbackCaller(event);
+      await originals.before(event);
+    });
     await ctx.tool.hook("execute.after", originals.after);
   },
 };

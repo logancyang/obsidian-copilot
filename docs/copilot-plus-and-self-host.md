@@ -88,14 +88,13 @@ A Claude or ChatGPT subscription is not an API key. Use the Claude or Codex Agen
 
 The selected model is only one possible route. A feature may call another service for the part of the task you asked it to perform:
 
-- A **Copilot-hosted Skill** sends the search query, URL, or document needed by that Skill to Brevilabs.
-- **Plus document processing** sends the supported document to Copilot's hosted processor.
-- In **Agent Chat**, **Miyo document processing** runs through the local Miyo CLI, so PDF and EPUB parsing stays on this computer even when search uses a remote Miyo server.
-- In **Quick Chat**, **Miyo document processing** uses the connected Miyo service. A configured remote Miyo server processes the document there rather than on this computer.
-- Saved **project context** that needs web, YouTube, or binary-file conversion can use Copilot's hosted project service. The Miyo Document Processor choice does not change that project route.
+- A **Copilot-hosted Skill** sends the search query or URL needed by that Skill to Brevilabs.
+- In **Agent Chat**, **Miyo document processing** installs the `miyo-parse` Skill, which runs the local Miyo CLI, so PDF and EPUB parsing stays on this computer even when search uses a remote Miyo server. If Miyo cannot parse a file, the agent reads it with its own tools.
+- In **Quick Chat**, **Miyo document processing** uses the connected Miyo service to read PDFs. A configured remote Miyo server processes the document there rather than on this computer. Without Miyo document processing, Quick Chat does not send PDFs anywhere and tells you to use Miyo or Agent Chat.
+- Saved **project context** is not converted. The agent receives the path of each file, such as a PDF or Office document, and reads it itself. It fetches a saved web page or YouTube link only when a question needs it, through its own tools or a Copilot-hosted Skill.
 - An agent can read a local note and include relevant text in the prompt sent to the selected model. Opening Agent Chat alone does not upload the whole vault.
 
-For a workflow that does not send task content to Brevilabs, use direct Markdown context, local tools or local Miyo, and a local model. Disable Copilot's cloud-backed Skills for every agent you use. Do not add web pages, YouTube links, or binary files as saved project context when their hosted conversion is outside your intended boundary.
+For a workflow that does not send task content to Brevilabs, use direct Markdown context, local tools or local Miyo, and a local model. Disable Copilot's cloud-backed Skills for every agent you use.
 
 The [privacy policy](https://www.obsidiancopilot.com/en/privacy) describes how Copilot's hosted requests are processed. Your model provider and Miyo server have their own boundaries and terms.
 

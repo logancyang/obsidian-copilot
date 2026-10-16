@@ -7,6 +7,7 @@ import {
   mapStopReason,
   replayClaudeTranscript,
   translateSdkMessage,
+  type TranslatorState,
 } from "./sdkMessageTranslator";
 import { createClaudeTaskPlanState } from "./claudeTodoPlan";
 
@@ -17,11 +18,8 @@ interface FixtureFrame {
   payload: SDKMessage;
 }
 
-function readFixture(): FixtureFrame[] {
-  const fixturePath = path.join(
-    __dirname,
-    "__fixtures__/claude-notification-only-subagents.ndjson"
-  );
+function readFixture(name = "claude-notification-only-subagents"): FixtureFrame[] {
+  const fixturePath = path.join(__dirname, `__fixtures__/${name}.ndjson`);
   return fs
     .readFileSync(fixturePath, "utf8")
     .trim()
@@ -1207,6 +1205,182 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
+    describe("compaction system frames", () => {
+      const ISSUE_635 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/635";
+
+      function translateFixture(
+        name: string,
+        state = createTranslatorState()
+      ): { updates: SessionUpdate[]; state: TranslatorState } {
+        const updates = readFixture(name).flatMap((frame) =>
+          translateSdkMessage(frame.payload, SESSION_ID, state).map((e) => e.update)
+        );
+        return { updates, state };
+      }
+
+      function isCompaction(update: SessionUpdate): boolean {
+        return update.sessionUpdate === "compaction";
+      }
+
+      function statusFrame(extra: object, uuid: string): SDKMessage {
+        return {
+          type: "system",
+          subtype: "status",
+          status: null,
+          uuid,
+          session_id: SESSION_ID,
+          ...extra,
+        } as unknown as SDKMessage;
+      }
+
+      function translateOne(msg: SDKMessage, state: TranslatorState): SessionUpdate[] {
+        return translateSdkMessage(msg, SESSION_ID, state).map((e) => e.update);
+      }
+
+      it("turns a recorded manual /compact into a running compaction that completes with the token counts", () => {
+        const { updates } = translateFixture(
+          "claude-compact-manual",
+          createTranslatorState(undefined, undefined, "manual")
+        );
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "compaction",
+            id: "20000000-0000-0000-0000-000000000001",
+            status: "in_progress",
+            trigger: "manual",
+          },
+          {
+            sessionUpdate: "compaction",
+            id: "20000000-0000-0000-0000-000000000001",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 103249,
+            postTokens: 4046,
+          },
+        ]);
+      });
+
+      it("opens a recorded automatic compaction as automatic and reports the boundary's trigger on completion", () => {
+        const { updates } = translateFixture("claude-compact-auto");
+
+        expect(updates).toEqual([
+          expect.objectContaining({
+            id: expect.any(String),
+            status: "in_progress",
+            trigger: "auto",
+          }),
+          expect.objectContaining({
+            status: "completed",
+            trigger: "auto",
+            preTokens: 70500,
+            postTokens: 3813,
+          }),
+        ]);
+      });
+
+      it(`keeps repeated compacting statuses on the one open compaction (${ISSUE_635})`, () => {
+        const state = createTranslatorState();
+        const ids = ["repeat-1", "repeat-2", "repeat-3"].flatMap((uuid) =>
+          translateOne(statusFrame({ status: "compacting" }, uuid), state).map(
+            (u) => (u as { id: string }).id
+          )
+        );
+
+        expect(ids).toEqual(["repeat-1", "repeat-1", "repeat-1"]);
+      });
+
+      it(`gives a compaction that starts after the previous one finished its own id (${ISSUE_635})`, () => {
+        const state = createTranslatorState();
+        translateOne(statusFrame({ status: "compacting" }, "first"), state);
+        translateOne(statusFrame({ compact_result: "failed", compact_error: "boom" }, "f"), state);
+
+        const next = translateOne(statusFrame({ status: "compacting" }, "second"), state);
+
+        expect(next).toEqual([expect.objectContaining({ id: "second", status: "in_progress" })]);
+      });
+
+      it(`creates a completed row when a boundary arrives with no compacting status before it (${ISSUE_635})`, () => {
+        const [boundary] = readFixture("claude-compact-manual").filter(
+          (f) => (f.payload as { subtype?: string }).subtype === "compact_boundary"
+        );
+
+        const updates = translateOne(boundary.payload, createTranslatorState());
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "compaction",
+            id: "20000000-0000-0000-0000-000000000003",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 103249,
+            postTokens: 4046,
+          },
+        ]);
+      });
+
+      it(`leaves the completed compaction without token counts when the boundary reports no post_tokens (${ISSUE_635})`, () => {
+        const state = createTranslatorState();
+        const updates = translateOne(
+          {
+            type: "system",
+            subtype: "compact_boundary",
+            uuid: "boundary",
+            session_id: SESSION_ID,
+            compact_metadata: { trigger: "manual", pre_tokens: 900 },
+          } as unknown as SDKMessage,
+          state
+        );
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "compaction",
+            id: "boundary",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 900,
+            postTokens: undefined,
+          },
+        ]);
+      });
+
+      it("shows a failed compaction with Claude's error", () => {
+        const { updates } = translateFixture("claude-compact-stopped");
+
+        expect(updates.filter(isCompaction)).toEqual([
+          expect.objectContaining({ status: "in_progress" }),
+          expect.objectContaining({ status: "failed", error: "API Error: Request was aborted." }),
+        ]);
+      });
+
+      it(`reports nothing to compact as skipped, not failed, and adds no agent text for it (${ISSUE_635})`, () => {
+        const { updates } = translateFixture(
+          "claude-compact-nothing-to-compact",
+          createTranslatorState(undefined, undefined, "manual")
+        );
+
+        expect(updates.filter(isCompaction)).toEqual([
+          expect.objectContaining({ status: "in_progress", trigger: "manual" }),
+          {
+            sessionUpdate: "compaction",
+            id: expect.any(String),
+            status: "skipped",
+            trigger: "manual",
+          },
+        ]);
+        expect(updates.map((u) => u.sessionUpdate)).not.toContain("agent_message_chunk");
+      });
+
+      it(`drops the context usage sampled before a compaction so the turn result cannot restore the full meter (${ISSUE_635})`, () => {
+        const state = createTranslatorState();
+        translateOne(assistantMsg({ input_tokens: 90000, output_tokens: 10 }), state);
+
+        const { updates } = translateFixture("claude-compact-auto", state);
+
+        expect(updates.map((u) => u.sessionUpdate)).not.toContain("usage_update");
+      });
+    });
+
     describe("usage_update on a turn result", () => {
       const FIXED_NOW = 1_700_000_000_000;
       let nowSpy: jest.SpyInstance;
@@ -1651,6 +1825,25 @@ describe("sdkMessageTranslator", () => {
         userEntry("summary-1", "This session is being continued from a previous conversation.", {
           isCompactSummary: true,
         }),
+        userEntry("u-1", "real prompt")
+      );
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "real prompt" },
+          messageId: "u-1",
+        },
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 skips the command echo and hook output Claude records for a local command such as /compact", () => {
+      const jsonl = transcript(
+        userEntry(
+          "echo-1",
+          "<command-name>/compact</command-name>\n<command-message>compact</command-message>"
+        ),
+        userEntry("out-1", "<local-command-stdout>Compacted</local-command-stdout>"),
         userEntry("u-1", "real prompt")
       );
 

@@ -1,5 +1,6 @@
 import {
   getOpenArtifactsDocId,
+  getOpenArtifactsSavedLink,
   parseOpenArtifactsDocId,
   removeOpenArtifactsDocId,
   saveOpenArtifactsLink,
@@ -143,6 +144,30 @@ describe("openArtifactsFrontmatter", () => {
       await expect(getOpenArtifactsDocId(malformed.app, file)).rejects.toBeInstanceOf(
         OpenArtifactsPropertyConflictError
       );
+    });
+  });
+
+  describe("getOpenArtifactsSavedLink()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 returns the link exactly as the note saved it", async () => {
+      const current = createApp({ openartifacts: DOC_URL });
+      await expect(getOpenArtifactsSavedLink(current.app, file)).resolves.toEqual({
+        docId: DOC_ID,
+        url: DOC_URL,
+      });
+
+      const legacyHost = createApp({ openartifacts: LEGACY_DOC_URL });
+      await expect(getOpenArtifactsSavedLink(legacyHost.app, file)).resolves.toEqual({
+        docId: DOC_ID,
+        url: LEGACY_DOC_URL,
+      });
+
+      const legacyProperty = createApp({ symposium: LEGACY_DOC_URL });
+      await expect(getOpenArtifactsSavedLink(legacyProperty.app, file)).resolves.toEqual({
+        docId: DOC_ID,
+        url: LEGACY_DOC_URL,
+      });
+
+      await expect(getOpenArtifactsSavedLink(createApp().app, file)).resolves.toBeNull();
     });
   });
 

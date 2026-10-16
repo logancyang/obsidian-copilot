@@ -8,11 +8,6 @@ describe("projectUtils", () => {
       name: "React Project",
       description: "A React-based frontend project",
       systemPrompt: "You are a helpful assistant.",
-      projectModelKey: "gpt-3.5-turbo",
-      modelConfigs: {
-        temperature: 0.7,
-        maxTokens: 6000,
-      },
       contextSource: {
         inclusions: "src/**/*.tsx",
       },
@@ -24,10 +19,6 @@ describe("projectUtils", () => {
       name: "Vue Dashboard",
       description: "A Vue.js dashboard application",
       systemPrompt: "You are a helpful assistant.",
-      projectModelKey: "gpt-4",
-      modelConfigs: {
-        temperature: 0.5,
-      },
       contextSource: {
         inclusions: "src/**/*.vue",
       },
@@ -39,8 +30,6 @@ describe("projectUtils", () => {
       name: "API Service",
       description: undefined,
       systemPrompt: "You are a helpful assistant.",
-      projectModelKey: "gpt-3.5-turbo",
-      modelConfigs: {},
       contextSource: {
         inclusions: "src/**/*.ts",
       },
@@ -118,8 +107,6 @@ describe("projectUtils", () => {
         name: "Test-Project_123",
         description: "Project with (special) chars!",
         systemPrompt: "You are a helpful assistant.",
-        projectModelKey: "gpt-3.5-turbo",
-        modelConfigs: {},
         contextSource: { inclusions: "*" },
         created: Date.now(),
         UsageTimestamps: Date.now(),

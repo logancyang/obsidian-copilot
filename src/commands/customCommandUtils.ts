@@ -26,13 +26,9 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
+  stripFrontmatter,
 } from "@/utils";
 import { sortByStrategy } from "@/utils/recentUsageManager";
-import {
-  listMarkdownFiles,
-  readFrontmatterFile,
-  updateFrontmatter,
-} from "@/utils/vaultAdapterUtils";
 import {
   NOTE_CONTEXT_PROMPT_TAG,
   SELECTED_TEXT_TAG,
@@ -94,37 +90,23 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
   return true;
 }
 
-export function commandFrontmatter(command: CustomCommand): Record<string, unknown> {
-  return {
-    [COPILOT_COMMAND_CONTEXT_MENU_ENABLED]: command.showInContextMenu,
-    [COPILOT_COMMAND_SLASH_ENABLED]: command.showInSlashMenu,
-    [COPILOT_COMMAND_CONTEXT_MENU_ORDER]: command.order,
-    [COPILOT_COMMAND_MODEL_KEY]: command.modelKey,
-    [COPILOT_COMMAND_LAST_USED]: command.lastUsedMs,
-  };
-}
-
-export async function hasOrderFrontmatter(app: App, file: TFile): Promise<boolean> {
-  const parsed = await readFrontmatterFile(app, file.path);
-  return parsed?.frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
+export function hasOrderFrontmatter(app: App, file: TFile): boolean {
+  const metadata = app.metadataCache.getFileCache(file);
+  return metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] != null;
 }
 
 export async function parseCustomCommandFile(app: App, file: TFile): Promise<CustomCommand> {
-  const parsed = (await readFrontmatterFile(app, file.path)) ?? { frontmatter: {}, body: "" };
-  const metadata = parsed.frontmatter;
-  const content = parsed.body.trimStart();
+  const rawContent = await app.vault.read(file);
+  const content = stripFrontmatter(rawContent);
+  const metadata = app.metadataCache.getFileCache(file);
   const showInContextMenu =
-    (metadata[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] as boolean | undefined) ??
+    metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ??
     EMPTY_COMMAND.showInContextMenu;
   const showInSlashMenu =
-    (metadata[COPILOT_COMMAND_SLASH_ENABLED] as boolean | undefined) ??
-    EMPTY_COMMAND.showInSlashMenu;
-  const lastUsedMs =
-    (metadata[COPILOT_COMMAND_LAST_USED] as number | undefined) ?? EMPTY_COMMAND.lastUsedMs;
-  const order =
-    (metadata[COPILOT_COMMAND_CONTEXT_MENU_ORDER] as number | undefined) ?? EMPTY_COMMAND.order;
-  const modelKey =
-    (metadata[COPILOT_COMMAND_MODEL_KEY] as string | undefined) ?? EMPTY_COMMAND.modelKey;
+    metadata?.frontmatter?.[COPILOT_COMMAND_SLASH_ENABLED] ?? EMPTY_COMMAND.showInSlashMenu;
+  const lastUsedMs = metadata?.frontmatter?.[COPILOT_COMMAND_LAST_USED] ?? EMPTY_COMMAND.lastUsedMs;
+  const order = metadata?.frontmatter?.[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ?? EMPTY_COMMAND.order;
+  const modelKey = metadata?.frontmatter?.[COPILOT_COMMAND_MODEL_KEY] ?? EMPTY_COMMAND.modelKey;
 
   return {
     title: file.basename,
@@ -138,9 +120,7 @@ export async function parseCustomCommandFile(app: App, file: TFile): Promise<Cus
 }
 
 export async function fetchAllCustomCommands(app: App): Promise<CustomCommand[]> {
-  const files = (await listMarkdownFiles(app, getCustomCommandsFolder())).filter((file) =>
-    isCustomCommandFile(file)
-  );
+  const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
   return await Promise.all(files.map((file) => parseCustomCommandFile(app, file)));
 }
 
@@ -438,12 +418,22 @@ export function getNextCustomCommandOrder(): number {
 export async function ensureCommandFrontmatter(app: App, file: TFile, command: CustomCommand) {
   try {
     addPendingFileWrite(file.path);
-    await updateFrontmatter(app, file.path, (frontmatter) => {
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] ??= command.showInContextMenu;
-      frontmatter[COPILOT_COMMAND_SLASH_ENABLED] ??= command.showInSlashMenu;
-      frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] ??= command.order;
-      frontmatter[COPILOT_COMMAND_MODEL_KEY] ??= command.modelKey;
-      frontmatter[COPILOT_COMMAND_LAST_USED] ??= command.lastUsedMs;
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+      if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] == null) {
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
+      }
+      if (frontmatter[COPILOT_COMMAND_SLASH_ENABLED] == null) {
+        frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
+      }
+      if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] == null) {
+        frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;
+      }
+      if (frontmatter[COPILOT_COMMAND_MODEL_KEY] == null) {
+        frontmatter[COPILOT_COMMAND_MODEL_KEY] = command.modelKey;
+      }
+      if (frontmatter[COPILOT_COMMAND_LAST_USED] == null) {
+        frontmatter[COPILOT_COMMAND_LAST_USED] = command.lastUsedMs;
+      }
     });
   } finally {
     removePendingFileWrite(file.path);

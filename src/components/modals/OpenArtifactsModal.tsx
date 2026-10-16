@@ -1,8 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import type { OpenArtifactsAction, OpenArtifactsReceipt } from "@/openArtifacts/types";
+import { Input } from "@/components/ui/input";
+import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
+import {
+  OpenArtifactsClientError,
+  PRIVATE_UNAVAILABLE_CODE,
+} from "@/openArtifacts/OpenArtifactsClient";
+import type {
+  OpenArtifactsAccess,
+  OpenArtifactsAction,
+  OpenArtifactsLinkAccess,
+  OpenArtifactsReceipt,
+} from "@/openArtifacts/types";
 import { App, Modal } from "obsidian";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Root } from "react-dom/client";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -18,6 +29,9 @@ export interface OpenArtifactsFailureResult {
   message: string;
   accessNotice: boolean;
   retryable: boolean;
+  // The plan refusal's upgrade link, so a 402 on the first private publish can show it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+  upgradeUrl?: string;
 }
 
 export interface OpenArtifactsPersistenceResult {
@@ -33,13 +47,25 @@ export type OpenArtifactsModalResult =
   | OpenArtifactsFailureResult
   | OpenArtifactsPersistenceResult;
 
+export interface OpenArtifactsAccessPort {
+  load(docId: string): Promise<OpenArtifactsAccess>;
+  setLinkAccess(docId: string, linkAccess: OpenArtifactsLinkAccess): Promise<OpenArtifactsAccess>;
+  addPerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
+  removePerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
+  declineRequest(docId: string, email: string): Promise<OpenArtifactsAccess>;
+  open(docId: string): Promise<string>;
+}
+
 export interface OpenArtifactsModalOptions {
   fileName: string;
   docId: string | null;
+  docUrl?: string | null;
   initialResult?: OpenArtifactsModalResult;
+  access?: OpenArtifactsAccessPort;
   onConfirm: (
     action: OpenArtifactsAction,
-    ownerDocument: Document
+    ownerDocument: Document,
+    linkAccess?: OpenArtifactsLinkAccess
   ) => Promise<OpenArtifactsModalResult>;
   onClosed?: () => void;
 }
@@ -58,12 +84,33 @@ const WORKING_LABELS: Record<OpenArtifactsAction, string> = {
   delete: "Deleting…",
 };
 
+const LINK_ACCESS_OPTIONS: SegmentedControlOption<OpenArtifactsLinkAccess>[] = [
+  { label: "Anyone with the link", value: "anyone" },
+  { label: "Only those invited", value: "invited" },
+];
+
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+const COPY_NOTICE = "People who opened it while it was public may have kept a copy.";
+
+// Keyed on the code alone so a port, or a gallery story, can raise it without the client class.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+function isPrivateUnavailable(error: unknown): error is Error {
+  return error instanceof Error && (error as { code?: unknown }).code === PRIVATE_UNAVAILABLE_CODE;
+}
+
+function errorText(error: unknown): string {
+  return error instanceof OpenArtifactsClientError
+    ? error.message
+    : "Copilot could not complete this OpenArtifacts action.";
+}
+
 interface OpenArtifactsReceiptViewProps {
   receipt: OpenArtifactsReceipt;
+  access?: OpenArtifactsAccessPort;
   actions?: React.ReactNode;
 }
 
-function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptViewProps) {
+function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsReceiptViewProps) {
   const [copyMessage, setCopyMessage] = useState("");
 
   const copyUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -75,8 +122,17 @@ function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptView
     }
   };
 
-  const openUrl = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.currentTarget.win.open(receipt.url, "_blank", "noopener,noreferrer");
+  const openUrl = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const win = event.currentTarget.win;
+    if (!access) {
+      win.open(receipt.url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      win.open(await access.open(receipt.docId), "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setCopyMessage(errorText(error));
+    }
   };
 
   return (
@@ -100,8 +156,208 @@ function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptView
         <Button variant="secondary" onClick={safeAsyncHandler(copyUrl)}>
           Copy
         </Button>
-        <Button onClick={openUrl}>Open</Button>
+        <Button onClick={safeAsyncHandler(openUrl)}>Open</Button>
       </div>
+    </div>
+  );
+}
+
+function AccessPanel({
+  docId,
+  docUrl,
+  access,
+  showLinkActions = true,
+}: {
+  docId: string;
+  docUrl?: string | null;
+  access: OpenArtifactsAccessPort;
+  showLinkActions?: boolean;
+}) {
+  const [state, setState] = useState<OpenArtifactsAccess | null>(null);
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ message: string; upgradeUrl?: string } | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
+  // Set when the server answers the access family with 404: an old or unconfigured server.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+  const [unavailable, setUnavailable] = useState<string | null>(null);
+  const [showCopyNotice, setShowCopyNotice] = useState(false);
+
+  const run = async (call: () => Promise<OpenArtifactsAccess>): Promise<boolean> => {
+    setBusy(true);
+    setError(null);
+    try {
+      setState(await call());
+      return true;
+    } catch (caught) {
+      if (isPrivateUnavailable(caught)) {
+        setUnavailable(caught.message);
+        return false;
+      }
+      setError({
+        message: errorText(caught),
+        upgradeUrl: caught instanceof OpenArtifactsClientError ? caught.upgradeUrl : undefined,
+      });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    void run(() => access.load(docId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per document; run and access are stable enough
+  }, [docId]);
+
+  const addPerson = async () => {
+    const address = email.trim();
+    if (address && (await run(() => access.addPerson(docId, address)))) {
+      setEmail("");
+    }
+  };
+
+  const switchLinkAccess = async (next: OpenArtifactsLinkAccess) => {
+    const previous = state?.linkAccess;
+    if (await run(() => access.setLinkAccess(docId, next))) {
+      // Only a real switch from public to private can leave copies behind.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      setShowCopyNotice(previous === "anyone" && next === "invited");
+    }
+  };
+
+  const copyLink = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    try {
+      await event.currentTarget.win.navigator.clipboard.writeText(state?.url ?? docUrl ?? "");
+      setCopyMessage("Copied");
+    } catch {
+      setCopyMessage("Could not copy the link");
+    }
+  };
+
+  const openPage = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    const win = event.currentTarget.win;
+    try {
+      win.open(await access.open(docId), "_blank", "noopener,noreferrer");
+    } catch (caught) {
+      setError({ message: errorText(caught) });
+    }
+  };
+
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-3">
+      {error && (
+        <p className="tw-m-0 tw-text-error" role="alert">
+          {error.message}
+          {error.upgradeUrl && (
+            <>
+              {" "}
+              <a href={error.upgradeUrl} target="_blank" rel="noopener noreferrer">
+                Upgrade
+              </a>
+            </>
+          )}
+        </p>
+      )}
+      {unavailable && <p className="tw-m-0 tw-text-small tw-text-muted">{unavailable}</p>}
+      {state && !unavailable && (
+        <>
+          <div className="tw-flex tw-flex-col tw-gap-1">
+            <div className="tw-text-small tw-text-muted">Link access</div>
+            <SegmentedControl
+              aria-label="Link access"
+              className="tw-self-start"
+              options={LINK_ACCESS_OPTIONS}
+              value={state.linkAccess}
+              disabled={busy}
+              onChange={(next) => void switchLinkAccess(next)}
+            />
+            {showCopyNotice && <p className="tw-m-0 tw-text-small tw-text-muted">{COPY_NOTICE}</p>}
+          </div>
+          <form
+            className="tw-flex tw-gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void addPerson();
+            }}
+          >
+            <Input
+              type="email"
+              aria-label="Add people"
+              placeholder="Add people by email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              disabled={busy}
+            />
+            <Button type="submit" variant="secondary" disabled={busy || !email.trim()}>
+              Add
+            </Button>
+          </form>
+          {state.requests.length > 0 && (
+            <div className="tw-flex tw-flex-col tw-gap-1">
+              <div className="tw-text-small tw-text-muted">Requests</div>
+              {state.requests.map((request) => (
+                <div key={request.email} className="tw-flex tw-items-center tw-justify-between">
+                  <div className="tw-flex tw-flex-col">
+                    <span className="tw-break-all">{request.email}</span>
+                    <span className="tw-text-small tw-text-muted">Asked to open it</span>
+                  </div>
+                  <div className="tw-flex tw-gap-1">
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => void run(() => access.addPerson(docId, request.email))}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void run(() => access.declineRequest(docId, request.email))}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="tw-flex tw-flex-col tw-gap-1">
+            <div className="tw-text-small tw-text-muted">Who has access</div>
+            <div className="tw-flex tw-items-center tw-justify-between">
+              <span>You</span>
+              <span className="tw-text-small tw-text-muted">Owner</span>
+            </div>
+            {state.people.map((person) => (
+              <div key={person.email} className="tw-flex tw-items-center tw-justify-between">
+                <div className="tw-flex tw-flex-col">
+                  <span className="tw-break-all">{person.email}</span>
+                  <span className="tw-text-small tw-text-muted">
+                    {state.email ? "Invited · email sent" : "Invited · send them the link"}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void run(() => access.removePerson(docId, person.email))}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {showLinkActions && (
+        <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+          {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
+          <Button variant="secondary" onClick={safeAsyncHandler(copyLink)}>
+            Copy link
+          </Button>
+          <Button variant="secondary" onClick={safeAsyncHandler(openPage)}>
+            Open
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -109,7 +365,9 @@ function OpenArtifactsReceiptView({ receipt, actions }: OpenArtifactsReceiptView
 export function OpenArtifactsModalContent({
   fileName,
   docId,
+  docUrl,
   initialResult,
+  access,
   onConfirm,
   onClose,
 }: OpenArtifactsModalContentProps) {
@@ -117,13 +375,14 @@ export function OpenArtifactsModalContent({
     docId ? null : "publish"
   );
   const [result, setResult] = useState<OpenArtifactsModalResult | null>(initialResult ?? null);
+  const [linkAccess, setLinkAccess] = useState<OpenArtifactsLinkAccess>("anyone");
   const [workingAction, setWorkingAction] = useState<OpenArtifactsAction | null>(null);
   const working = workingAction !== null;
 
   const runAction = async (nextAction: OpenArtifactsAction, ownerDocument: Document) => {
     setWorkingAction(nextAction);
     try {
-      setResult(await onConfirm(nextAction, ownerDocument));
+      setResult(await onConfirm(nextAction, ownerDocument, linkAccess));
     } finally {
       setWorkingAction(null);
     }
@@ -161,9 +420,16 @@ export function OpenArtifactsModalContent({
             : `${actionLabel(result.action)} complete`}
         </div>
         {result.receipt ? (
-          <OpenArtifactsReceiptView receipt={result.receipt} actions={closeButton} />
+          <OpenArtifactsReceiptView
+            receipt={result.receipt}
+            access={access}
+            actions={closeButton}
+          />
         ) : (
           <div className="tw-flex tw-justify-end">{closeButton}</div>
+        )}
+        {result.receipt && result.action !== "delete" && access && (
+          <AccessPanel docId={result.receipt.docId} access={access} showLinkActions={false} />
         )}
       </div>
     );
@@ -177,7 +443,17 @@ export function OpenArtifactsModalContent({
             ? "OpenArtifacts access required"
             : `${actionLabel(result.action)} failed`}
         </div>
-        <p className="tw-m-0 tw-text-muted">{result.message}</p>
+        <p className="tw-m-0 tw-text-muted">
+          {result.message}
+          {result.upgradeUrl && (
+            <>
+              {" "}
+              <a href={result.upgradeUrl} target="_blank" rel="noopener noreferrer">
+                Upgrade
+              </a>
+            </>
+          )}
+        </p>
         <div className="tw-flex tw-justify-end tw-gap-2">
           <Button variant="secondary" onClick={onClose}>
             Close
@@ -216,7 +492,7 @@ export function OpenArtifactsModalContent({
         </div>
         <p className="tw-m-0 tw-text-muted">{result.message}</p>
         {result.receipt ? (
-          <OpenArtifactsReceiptView receipt={result.receipt} actions={actions} />
+          <OpenArtifactsReceiptView receipt={result.receipt} access={access} actions={actions} />
         ) : (
           <div className="tw-flex tw-justify-end tw-gap-2">{actions}</div>
         )}
@@ -231,10 +507,12 @@ export function OpenArtifactsModalContent({
     confirmationAction === "delete"
       ? "Yes withdraws the link and deletes OpenArtifacts’s stored copy. Previously fetched or cached copies cannot be recalled."
       : confirmationAction === "update"
-        ? "Yes replaces the current public page with this note’s latest content."
+        ? "Yes replaces the current page with this note’s latest content."
         : confirmationAction === "publish"
-          ? "Yes makes this note available to anyone with the public link."
-          : "Choose whether to replace the current public page or withdraw it.";
+          ? linkAccess === "invited"
+            ? "Yes publishes this note privately. Only people you invite can open it."
+            : "Yes makes this note available to anyone with the public link."
+          : "Choose whether to replace the current page or withdraw it.";
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
@@ -242,6 +520,20 @@ export function OpenArtifactsModalContent({
         <div className="tw-font-semibold tw-text-normal">{heading}</div>
         <p className="tw-mb-0 tw-mt-2 tw-text-muted">{description}</p>
       </div>
+
+      {confirmationAction === "publish" && (
+        <SegmentedControl
+          aria-label="Link access"
+          className="tw-self-start"
+          options={LINK_ACCESS_OPTIONS}
+          value={linkAccess}
+          disabled={working}
+          onChange={(next) => setLinkAccess(next)}
+        />
+      )}
+      {!confirmationAction && docId && access && (
+        <AccessPanel docId={docId} docUrl={docUrl} access={access} />
+      )}
 
       <div
         className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2"

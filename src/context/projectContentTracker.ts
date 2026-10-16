@@ -27,7 +27,6 @@ export class ProjectContentTracker {
   private readonly metadataRefs: EventRef[] = [];
   private readonly pending: PendingChange[] = [];
   private readonly epochs = new Map<string, number>();
-  private readonly listeners = new Set<(projectId: string) => void>();
   private readonly debouncedDrain: DebouncedFunction<() => void>;
   private disposed = false;
 
@@ -59,11 +58,6 @@ export class ProjectContentTracker {
     return next;
   }
 
-  onContentChanged(callback: (projectId: string) => void): () => void {
-    this.listeners.add(callback);
-    return () => this.listeners.delete(callback);
-  }
-
   flushNow(): void {
     this.debouncedDrain.flush();
   }
@@ -76,7 +70,6 @@ export class ProjectContentTracker {
     for (const ref of this.metadataRefs) this.app.metadataCache.offref(ref);
     this.metadataRefs.length = 0;
     this.pending.length = 0;
-    this.listeners.clear();
     this.epochs.clear();
   }
 
@@ -107,16 +100,7 @@ export class ProjectContentTracker {
       }
     }
 
-    for (const projectId of affected) {
-      this.bumpEpoch(projectId);
-      for (const listener of this.listeners) {
-        try {
-          listener(projectId);
-        } catch (err) {
-          logWarn(`[project-content] content-change listener failed for ${projectId}`, err);
-        }
-      }
-    }
+    for (const projectId of affected) this.bumpEpoch(projectId);
   }
 }
 

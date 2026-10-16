@@ -39,7 +39,6 @@ jest.mock("@/commands/state", () => ({
   deleteCachedCommand: jest.fn(),
   getCachedCustomCommands: jest.fn(() => []),
   isFileWritePending: jest.fn(() => false),
-  subscribeToCustomCommandsChange: jest.fn(() => jest.fn()),
   updateCachedCommand: jest.fn(),
   updateCachedCommands: jest.fn(),
 }));
@@ -111,6 +110,10 @@ describe("customCommandRegister", () => {
         settingsChangeHandler(settingsWithRoot("copilot"), settingsWithRoot("team/ai"));
         await jest.advanceTimersByTimeAsync(0);
 
+        expect(removeCommand).toHaveBeenCalledWith("copilot-command-Old");
+        expect(addCommand).toHaveBeenCalledWith(
+          expect.objectContaining({ id: "copilot-command-New", name: "New" })
+        );
         expect(updateCachedCommands).toHaveBeenCalledWith([command("New")]);
       });
 
@@ -156,28 +159,24 @@ describe("customCommandRegister", () => {
     });
 
     describe("initialize()", () => {
-      it("adds a created command and removes a deleted one https://github.com/logancyang/obsidian-copilot/issues/3075", () => {
+      it("registers every loaded custom command with the plugin", async () => {
         jest.clearAllMocks();
-        const { getCachedCustomCommands, subscribeToCustomCommandsChange } = jest.requireMock<{
+        const { getCachedCustomCommands } = jest.requireMock<{
           getCachedCustomCommands: jest.Mock;
-          subscribeToCustomCommandsChange: jest.Mock;
         }>("@/commands/state");
-        const addCommand = jest.fn();
-        const removeCommand = jest.fn();
-        const mockPlugin = { addCommand, removeCommand, app: {} } as unknown as Plugin;
-        const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
-        new CustomCommandRegister(mockPlugin, { vault: mockVault } as unknown as App);
-        const syncPalette = subscribeToCustomCommandsChange.mock.calls[0][0] as () => void;
-
         getCachedCustomCommands.mockReturnValue([command("Summarize")]);
-        syncPalette();
+        const addCommand = jest.fn();
+        const mockPlugin = { addCommand, removeCommand: jest.fn(), app: {} } as unknown as Plugin;
+        const mockVault = { on: jest.fn(), off: jest.fn() } as unknown as Vault;
+        const register = new CustomCommandRegister(mockPlugin, {
+          vault: mockVault,
+        } as unknown as App);
+
+        await register.initialize();
+
         expect(addCommand).toHaveBeenCalledWith(
           expect.objectContaining({ id: "copilot-command-Summarize", name: "Summarize" })
         );
-
-        getCachedCustomCommands.mockReturnValue([]);
-        syncPalette();
-        expect(removeCommand).toHaveBeenCalledWith("copilot-command-Summarize");
       });
 
       it("registers nothing when cleanup runs while commands are still loading https://github.com/logancyang/obsidian-copilot/issues/3518", async () => {

@@ -1,5 +1,60 @@
 # Release Notes
 
+# v4.0.15 - Review agent edits, pin and bookmark chats, and report issues from Agent Chat
+
+[![Demo video: Obsidian Copilot 4.0.15: Review Agent Edits, Pin and Bookmark Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/IH6EvcazpgA-horizontal-fdf439fd.png)](https://youtube.com/shorts/IH6EvcazpgA?feature=share)
+
+See exactly what an agent changed in your vault. When Claude Code, Codex, or OpenCode edits notes in Agent Chat, the reply ends with a list of the changed files. Open one to read the note the way Obsidian renders it, so you can check the agent's work at a glance and spot an edit you didn't want before you move on.
+
+This release also lets you pin and bookmark chats, and the agent can offer a drafted report when something goes wrong.
+
+## ✨ Enhancements
+
+- When an agent edits your notes, its reply ends with a **Files changed** card that lists each file with the lines added and removed, and marks files the agent created or deleted. ([#3289](https://github.com/logancyang/obsidian-copilot/pull/3289), [#3596](https://github.com/logancyang/obsidian-copilot/pull/3596), @zeroliu)
+
+  ![Agent Chat reply ending with a Files changed (3) card that lists three edited notes with added and removed line counts](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/files-changed-card-48beb031.png)
+
+- Click a file to see the whole note with deletions struck through and additions highlighted. In long notes, the arrows in the header step through each change. ([#3289](https://github.com/logancyang/obsidian-copilot/pull/3289), [#3603](https://github.com/logancyang/obsidian-copilot/pull/3603), [#3604](https://github.com/logancyang/obsidian-copilot/pull/3604), @zeroliu)
+
+  ![Diff tab for a note with an added sentence highlighted in green, a removed bullet struck through in red, a new bullet in green, change marks along the left edge, and 1 of 6 arrows in the header](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/file-diff-tab-aec89ff7.png)
+
+- Open the new **⋯** menu on a chat in Recent Chats to pin it to the top, add it to Obsidian's bookmarks, and more. ([#3576](https://github.com/logancyang/obsidian-copilot/pull/3576), [#3579](https://github.com/logancyang/obsidian-copilot/pull/3579), [#3581](https://github.com/logancyang/obsidian-copilot/pull/3581), [#3592](https://github.com/logancyang/obsidian-copilot/pull/3592), @zeroliu)
+
+  ![Recent Chats with pinned chats above a divider and the More actions menu open, showing Unpin chat, Open source note, Rename, Copy chat link, Add to bookmarks, and Delete](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/recent-chats-menu-9ec476a9.png)
+
+  ![Obsidian's Bookmarks pane listing two Copilot chats, with the selected chat open in the Copilot Agent view beside it](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/chat-bookmarks-pane-6908d5f8.png)
+
+- When something goes wrong in Agent Chat, the agent can offer a drafted report for the Copilot team, which you review before you send it. ([#3566](https://github.com/logancyang/obsidian-copilot/pull/3566), [#3594](https://github.com/logancyang/obsidian-copilot/pull/3594), @zeroliu)
+
+  ![Report this to the Copilot team? card under an Agent Chat reply, with a summary, the quoted complaint, and Don't offer again, Dismiss, and Review & report buttons](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/feedback-card-1fd8e6f7.png)
+
+- **Report an Issue** can attach a screenshot of the whole Obsidian window. ([#3594](https://github.com/logancyang/obsidian-copilot/pull/3594), @zeroliu)
+- Choose **Report error** in a chat's **⋯** menu to open **Report an Issue** with that chat's details already filled in. ([#3616](https://github.com/logancyang/obsidian-copilot/pull/3616), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Claude asks before it writes or edits a note in Safe mode. ([#3573](https://github.com/logancyang/obsidian-copilot/pull/3573), @zeroliu)
+- Agent Chat autosave keeps the properties you add to a chat note and the title you give it. ([#3589](https://github.com/logancyang/obsidian-copilot/pull/3589), @zeroliu)
+- Deleted Agent chats stay deleted after a reload. ([#3567](https://github.com/logancyang/obsidian-copilot/pull/3567), @logancyang)
+- A denied or failed edit shows **Didn't edit** on its card. ([#3574](https://github.com/logancyang/obsidian-copilot/pull/3574), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- **Breaking:** Copilot Plus document parsing is retired. Miyo now reads your documents on your computer, and you can turn it on or off with **Miyo document processing** in **Settings → Copilot → Miyo**. ([#3578](https://github.com/logancyang/obsidian-copilot/pull/3578), [#3580](https://github.com/logancyang/obsidian-copilot/pull/3580), [#3582](https://github.com/logancyang/obsidian-copilot/pull/3582), @zeroliu)
+
+  ![Miyo settings with the Miyo document processing switch turned on and its description, Miyo parses PDF and EPUB files on your computer](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/miyo-document-processing-6431940e.png)
+
+- **Breaking:** The Copilot folder can no longer be a hidden folder such as `.copilot`. Obsidian doesn't index hidden folders, so supporting them made Copilot larger and less reliable. If yours is hidden, Copilot moves it to the same name without the dot. ([#3619](https://github.com/logancyang/obsidian-copilot/pull/3619), [#3620](https://github.com/logancyang/obsidian-copilot/pull/3620), @zeroliu)
+- Agent Chat projects no longer fetch your saved web and YouTube links ahead of time. The agent reads them when you ask about them. ([#3583](https://github.com/logancyang/obsidian-copilot/pull/3583), @zeroliu)
+- Copilot now installs Codex (codex-acp) 2.2.2, the version that works best for reviewing Codex edits. ([#3572](https://github.com/logancyang/obsidian-copilot/pull/3572), [#3275](https://github.com/logancyang/obsidian-copilot/pull/3275), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.14 - Web page context in Agent Chat, improved Miyo scope control, and stability improvements
 
 [![Demo video: Copilot 4.0.14: Web Pages, Miyo Folders, and Automations](https://images.brevilabs.com/newsletters/copilot-releases/4.0.14/demo-video-obsidian-copilot-4-0-14-49219052.png)](https://www.youtube.com/shorts/yVl0pULi36A)

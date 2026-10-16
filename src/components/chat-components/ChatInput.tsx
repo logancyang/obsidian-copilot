@@ -58,7 +58,6 @@ const DEFAULT_PLACEHOLDER =
   "Your AI assistant for Obsidian • @ to add context • / for custom prompts";
 
 export interface ChatInputProps {
-  topRightAccessory?: React.ReactNode;
   placeholder?: string;
   inputMessage: string;
   setInputMessage: (message: string) => void;
@@ -160,7 +159,6 @@ export interface ChatInputHandle {
 
 const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
   {
-    topRightAccessory,
     placeholder = DEFAULT_PLACEHOLDER,
     inputMessage,
     setInputMessage,
@@ -722,13 +720,10 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               currentChain={currentChain}
               onEscape={onEscape}
               onShiftTab={onShiftTab}
+              isAgentMode={isAgentMode}
             />
           </div>
         </div>
-
-        {topRightAccessory && (
-          <div className="-tw-ml-4 tw-w-6 tw-shrink-0 tw-self-start">{topRightAccessory}</div>
-        )}
       </div>
 
       <div className="tw-flex tw-h-7 tw-justify-between tw-gap-1 tw-px-1">

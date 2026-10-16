@@ -4,6 +4,7 @@ import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
   AgentChatMessage,
+  AgentMcpServer,
   AgentMessagePart,
   AgentToolKind,
   AgentPlanEntry,
@@ -16,6 +17,7 @@ import {
   BackendProcess,
   BackendState,
   CopilotMode,
+  CompactionSnapshot,
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
@@ -64,8 +66,8 @@ import {
 } from "@/agentMode/session/turnFileChanges";
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { ContextProcessor } from "@/contextProcessor";
-import type { ContextMaterializationResult } from "@/context/projectContextMaterializer";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
@@ -90,6 +92,11 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
+import type {
+  FeedbackDraft,
+  FeedbackOfferResult,
+} from "@/agentMode/session/feedback/feedbackMcpServer";
+import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -100,7 +107,6 @@ const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
 const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
-const EMPTY_ADDITIONAL_DIRECTORIES: string[] = Object.freeze([]) as unknown as string[];
 
 interface TurnFileCapture {
   edited: boolean;
@@ -171,7 +177,8 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
-  contextReady?: Promise<ContextMaterializationResult>;
+  getProjectContextBlock?: () => string;
+  mcpServers?: ReadonlyArray<AgentMcpServer>;
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -200,9 +207,8 @@ export class AgentSession {
   readonly ready: Promise<void>;
   private backendSessionId: SessionId | null = null;
   private readonly backend: BackendProcess;
-  private readonly cwd: string | null;
-  private readonly contextReady: Promise<ContextMaterializationResult> | null;
-  private projectContextBlock: string | null = null;
+  readonly cwd: string | null;
+  private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
@@ -269,6 +275,7 @@ export class AgentSession {
   private currentTodoList: AgentTodoListEntry[] | null = null;
   private currentTodoListSignature: string | null = null;
   private currentUsage: SessionUsage | null = null;
+  private feedbackOffer: FeedbackOffer | null = null;
 
   private currentPlanUsage: PlanUsage | null = null;
   private planSeq = 0;
@@ -291,7 +298,8 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
-    this.contextReady = "contextReady" in opts ? (opts.contextReady ?? null) : null;
+    this.getProjectContextBlockFn =
+      "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
@@ -339,15 +347,10 @@ export class AgentSession {
   private async initialize(opts: AgentSessionStartOptions): Promise<void> {
     const { backend, cwd, defaultModelSelection } = opts;
     try {
-      const contextResult = this.contextReady ? await this.contextReady : null;
-      const additionalDirectories =
-        contextResult?.additionalDirectories ?? EMPTY_ADDITIONAL_DIRECTORIES;
-      this.projectContextBlock = contextResult?.projectContextBlock ?? null;
-      if (this.disposed) return;
       const resp = await backend.newSession({
         cwd,
         projectId: this.projectId,
-        additionalDirectories,
+        mcpServers: opts.mcpServers,
       });
       if (this.disposed) return;
       const modelLog = resp.state.model
@@ -656,6 +659,15 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+    const sendsCompact = isCompactCommand(displayText);
+    if (sendsCompact) {
+      displayText = displayText.trim();
+      context = undefined;
+      promptContent = undefined;
+      mentionedAgents = undefined;
+    }
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -702,7 +714,14 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
+    const turn = this.runTurn(
+      displayText,
+      userMessageId,
+      context,
+      turnStartedAtMs,
+      promptContent,
+      sendsCompact
+    );
     return { userMessageId, turn };
   }
 
@@ -711,7 +730,8 @@ export class AgentSession {
     userMessageId: string,
     context: MessageContext | undefined,
     turnStartedAtMs: number,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    sendsCompact = false
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
@@ -736,9 +756,13 @@ export class AgentSession {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      const isFirstTurn = !this.firstPromptSent;
-      const projectContextBlock = isFirstTurn ? this.projectContextBlock : null;
-      const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
+      // Project context, its updates and fanout history ride the next normal turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const isFirstTurn = !this.firstPromptSent && !sendsCompact;
+      const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
+      const projectContextUpdates = sendsCompact
+        ? null
+        : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       if (
@@ -771,7 +795,9 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
-      const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      const leadingContextBlock = sendsCompact
+        ? null
+        : buildPriorFanoutContextBlock(this.pendingFanoutContext);
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
@@ -842,6 +868,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      if (placeholderId) this.store.settleOpenCompactions(placeholderId);
       if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
@@ -865,11 +892,11 @@ export class AgentSession {
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
-        this.store.markMessageError(
-          placeholderId,
-          formatPromptFailure(err),
-          Date.now() - turnStartedAtMs
-        );
+        const failure = formatPromptFailure(err);
+        // The turn's error already shows the failure, so the row must not repeat it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        this.store.settleOpenCompactions(placeholderId, "failed");
+        this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }
       this.lastTurnError = true;
@@ -1057,6 +1084,50 @@ export class AgentSession {
     return this.currentTodoList;
   }
 
+  getReportEvidence(): FeedbackEvidence {
+    return {
+      backendId: this.backendId,
+      model: this.currentState?.model?.current.baseModelId ?? null,
+      sessionId: this.backendSessionId,
+      raisedAt: new Date().toISOString(),
+    };
+  }
+
+  getFeedbackOffer(): FeedbackOffer | null {
+    return this.feedbackOffer;
+  }
+
+  // One card per session, whatever became of it, so a frustrated user is never nagged.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+  offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
+    if (this.feedbackOffer) return "already_offered";
+    const userMessages = this.store
+      .getDisplayMessages()
+      .filter((message) => message.sender === USER_SENDER);
+    this.feedbackOffer = {
+      draft,
+      evidence: this.getReportEvidence(),
+      afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
+      status: "open",
+    };
+    this.notifyMessages();
+    return "shown";
+  }
+
+  dismissFeedbackOffer(): void {
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "dismissed" };
+    this.notifyMessages();
+  }
+
+  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
+    // An upload can land after the user closed the dialog and dismissed the card, which must stay dismissed.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+    if (this.feedbackOffer?.status !== "open") return;
+    this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
+    this.notifyMessages();
+  }
+
   getSessionUsage(): SessionUsage | null {
     return this.currentUsage;
   }
@@ -1113,6 +1184,18 @@ export class AgentSession {
     }
     this.currentUsage = usage;
     this.notifyMessages();
+  }
+
+  // Compaction reports the new context size directly, so it bypasses applyUsageUpdate's guards.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+  private applyCompactedUsage(compaction: CompactionSnapshot): boolean {
+    if (compaction.status !== "completed" || compaction.postTokens === undefined) return false;
+    this.currentUsage = {
+      usedTokens: compaction.postTokens,
+      contextWindow: this.currentUsage?.contextWindow,
+      updatedAt: Date.now(),
+    };
+    return true;
   }
 
   /**
@@ -1337,6 +1420,7 @@ export class AgentSession {
           return;
         case "tool_call":
         case "plan":
+        case "compaction":
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1357,7 +1441,10 @@ export class AgentSession {
     }
 
     if (update.sessionUpdate === "session_info_update") {
-      if (this.backendSummarizesTitle()) this.applyAgentLabel(update.title);
+      // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      if (update.title !== undefined && this.backendSummarizesTitle()) {
+        this.applyAgentLabel(update.title);
+      }
       return;
     }
     if (update.sessionUpdate === "state_changed") {
@@ -1472,6 +1559,12 @@ export class AgentSession {
         }
         return;
       }
+      case "compaction": {
+        const upserted = this.upsertCompactionPart(targetMessageId, update);
+        const metered = this.applyCompactedUsage(update);
+        if (upserted || metered) this.scheduleNotifyMessages();
+        return;
+      }
       default:
         logInfo(
           `[AgentMode] ignoring session/update kind=${(update as { sessionUpdate: string }).sessionUpdate}`
@@ -1531,9 +1624,26 @@ export class AgentSession {
         // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
         if (this.applyCurrentTodoList(update.entries)) this.notifyCurrentTodoListChanged();
         return true;
+      case "compaction": {
+        // A replayed compaction is already over, so one that never reports an end settles as cancelled rather than spinning. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
+        const settled: CompactionSnapshot =
+          update.status === "in_progress" ? { ...update, status: "cancelled" } : update;
+        if (this.upsertCompactionPart(this.historyAiBubbleId(occurredAt), settled)) {
+          this.scheduleNotifyMessages();
+        }
+        return true;
+      }
       default:
         return false;
     }
+  }
+
+  private upsertCompactionPart(messageId: string, update: CompactionSnapshot): boolean {
+    const existing = this.store
+      .getMessage(messageId)
+      ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
+    const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
+    return this.store.upsertAgentPart(messageId, compactionToPart(update, startedAtMs));
   }
 
   // A prompt's context envelope stays hidden until its wrapper is complete, so a user bubble waits for the message to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
@@ -2109,6 +2219,19 @@ function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessag
       priority: e.priority,
       status: e.status,
     })),
+  };
+}
+
+function compactionToPart(update: CompactionSnapshot, startedAtMs: number): AgentMessagePart {
+  return {
+    kind: "compaction",
+    id: update.id,
+    status: update.status,
+    trigger: update.trigger,
+    error: update.error,
+    preTokens: update.preTokens,
+    postTokens: update.postTokens,
+    startedAtMs,
   };
 }
 

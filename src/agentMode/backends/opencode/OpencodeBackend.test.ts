@@ -4,7 +4,6 @@ import * as path from "path";
 import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { OPENCODE_COPILOT_PLUGIN_SOURCE } from "./opencodeCopilotPlugin";
 import { updateAgentModeBackendFields } from "@/settings/model";
-import { logWarn } from "@/logger";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import type { OpencodeBackendSettings } from "@/settings/model";
@@ -830,7 +829,6 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(
         getSettings(),
         NO_MODELS_DEPS,
-        undefined,
         "/home/.obsidian-copilot/opencode/plugins/copilot"
       );
 
@@ -935,27 +933,6 @@ describe("OpencodeBackend", () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
       expect(cfg.permissions).toEqual(BASE_DENIES);
     });
-
-    it("allows external_directory access to the cache root for both agents", async () => {
-      const cfg = await buildOpencodeConfig(
-        getSettings(),
-        NO_MODELS_DEPS,
-        "/home/u/.obsidian-copilot/vaults/abc123/context-cache"
-      );
-      const allow = {
-        action: "external_directory",
-        resource: "/home/u/.obsidian-copilot/vaults/abc123/context-cache/**",
-        effect: "allow",
-      };
-      expect(cfg.agents.build.permissions).toEqual([allow]);
-      expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
-    });
-
-    it("adds no external_directory allow when no cache root is provided", async () => {
-      const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
-      expect(cfg.agents.build.permissions).toBeUndefined();
-      expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
-    });
   });
 
   describe("OpencodeBackend", () => {
@@ -979,7 +956,6 @@ describe("OpencodeBackend", () => {
         resetSettings();
         seedSkills([]);
         resetPromptState();
-        (logWarn as jest.Mock).mockClear();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 rejects a V1 executable even when settings claim a supported V2 version", async () => {
@@ -1177,21 +1153,6 @@ describe("OpencodeBackend", () => {
         ).rejects.toThrow("OPENCODE_CONFIG_CONTENT must be a JSON object");
       });
 
-      it("allows external_directory access to the cache root supplied by getCacheRoot", async () => {
-        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
-        const deps: OpencodeModelDeps = {
-          ...NO_MODELS_DEPS,
-          getCacheRoot: () => "/cache/root",
-        };
-        const backend = new OpencodeBackend(deps);
-        const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-        const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
-        const allow = { action: "external_directory", resource: "/cache/root/**", effect: "allow" };
-        expect(cfg.agents.build.permissions).toEqual([allow]);
-        expect(cfg.agents["copilot-build"].permissions).toEqual([...COPILOT_BUILD_ASKS, allow]);
-        expect(logWarn).not.toHaveBeenCalled();
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 writes Copilot's plugin and has OpenCode load it from that folder", async () => {
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
         const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-backend-"));
@@ -1234,36 +1195,6 @@ describe("OpencodeBackend", () => {
         }
       });
 
-      it("warns when an OPENCODE_CONFIG_CONTENT override drops the cache allow rule", async () => {
-        setOpencodeSettings({
-          binaryPath: "/path/to/opencode",
-          envOverrides: { OPENCODE_CONFIG_CONTENT: "{}" },
-        });
-        const deps: OpencodeModelDeps = {
-          ...NO_MODELS_DEPS,
-          getCacheRoot: () => "/cache/root",
-        };
-        const backend = new OpencodeBackend(deps);
-        await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-        expect(logWarn).toHaveBeenCalledWith(
-          expect.stringContaining("external_directory allow rule is dropped")
-        );
-      });
-
-      it("adds no allow rule and no warning when getCacheRoot returns blank text", async () => {
-        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
-        const deps: OpencodeModelDeps = {
-          ...NO_MODELS_DEPS,
-          getCacheRoot: () => "   ",
-        };
-        const backend = new OpencodeBackend(deps);
-        const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-        const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
-        expect(cfg.agents.build.permissions).toBeUndefined();
-        expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
-        expect(logWarn).not.toHaveBeenCalled();
-      });
-
       it("skips building the generated config when an override replaces it (https://github.com/logancyang/obsidian-copilot/issues/2917)", async () => {
         setOpencodeSettings({
           binaryPath: "/path/to/opencode",
@@ -1281,16 +1212,6 @@ describe("OpencodeBackend", () => {
 
         expect(desc.env.OPENCODE_CONFIG_CONTENT).toBe('{"model":"custom"}');
         expect(resolveEnabled).not.toHaveBeenCalled();
-      });
-
-      it("does not warn about a config override when no cache root is resolved", async () => {
-        setOpencodeSettings({
-          binaryPath: "/path/to/opencode",
-          envOverrides: { OPENCODE_CONFIG_CONTENT: "{}" },
-        });
-        const backend = new OpencodeBackend(NO_MODELS_DEPS);
-        await backend.buildSpawnDescriptor({ vaultBasePath: "/vault/abs" });
-        expect(logWarn).not.toHaveBeenCalled();
       });
     });
   });

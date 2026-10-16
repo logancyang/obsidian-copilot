@@ -10,6 +10,7 @@ import {
   type GroupedTrailNode,
 } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep, isReasoningActive } from "@/agentMode/ui/activityLiveStep";
+import { CompactionRow } from "@/agentMode/ui/CompactionRow";
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
@@ -31,6 +32,7 @@ interface AgentTrailProps {
   timestamp?: string;
   app: App;
   turnStopReason?: StopReason;
+  errorText?: string;
   fileChanges?: TurnFileChange[];
   onOpenFileChange?: (change: TurnFileChange) => void;
 }
@@ -45,11 +47,17 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   timestamp,
   app,
   turnStopReason,
+  errorText,
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
 }) => {
   const answer = agentResponseText(parts);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
+  // A compaction row reports its own progress and is not a reply to time or copy.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+  const trailNodes = buildAgentTrail(parts);
+  const compactionOnly =
+    trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions
@@ -71,13 +79,20 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      {errorText && answer.length === 0 ? (
+        // A failed turn's error is stored as message text, which a reply with parts never shows.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        <div className="tw-text-error">
+          <AgentMarkdownText text={errorText} app={app} />
+        </div>
+      ) : null}
       {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}
-      {hasRunningDuration ? (
+      {hasRunningDuration && !compactionOnly ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {footer}
+      {compactionOnly ? null : footer}
     </div>
   );
 };
@@ -168,6 +183,8 @@ function renderNode(
       return <AgentMarkdownText key={key} text={node.part.text} app={ctx.app} />;
     case "plan":
       return <PlanPill key={key} entries={node.part.entries} />;
+    case "compaction":
+      return <CompactionRow key={key} part={node.part} />;
   }
 }
 

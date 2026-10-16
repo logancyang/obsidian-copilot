@@ -40,6 +40,7 @@ const MAX_COMPARE_TEXT_EDGE_CHARS = 128;
 function agentPartId(part: AgentMessagePart): string | undefined {
   if (part.kind === "tool_call") return `tool:${part.id}`;
   if (part.kind === "plan") return "plan";
+  if (part.kind === "compaction") return `compaction:${part.id}`;
   return undefined;
 }
 
@@ -57,6 +58,16 @@ function partsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
     case "plan":
       if (b.kind !== "plan") return false;
       return planEntriesEqual(a.entries, b.entries);
+    case "compaction":
+      if (b.kind !== "compaction") return false;
+      return (
+        a.status === b.status &&
+        a.trigger === b.trigger &&
+        a.error === b.error &&
+        a.preTokens === b.preTokens &&
+        a.postTokens === b.postTokens &&
+        a.startedAtMs === b.startedAtMs
+      );
     case "tool_call":
       if (b.kind !== "tool_call") return false;
       return (
@@ -349,6 +360,20 @@ export class AgentMessageStore {
     }
     this.finishTrailingThought(msg);
     msg.parts.push(part);
+    this.touch(msg);
+    return true;
+  }
+
+  // A spinner must not outlive the turn that started it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+  settleOpenCompactions(id: string, status: "cancelled" | "failed" = "cancelled"): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg?.parts?.some((p) => p.kind === "compaction" && p.status === "in_progress")) {
+      return false;
+    }
+    msg.parts = msg.parts.map((p) =>
+      p.kind === "compaction" && p.status === "in_progress" ? { ...p, status } : p
+    );
     this.touch(msg);
     return true;
   }

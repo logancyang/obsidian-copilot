@@ -6,10 +6,7 @@ import {
   COPILOT_PROJECT_ID,
   COPILOT_PROJECT_INCLUSIONS,
   COPILOT_PROJECT_LAST_USED,
-  COPILOT_PROJECT_MAX_TOKENS,
-  COPILOT_PROJECT_MODEL_KEY,
   COPILOT_PROJECT_NAME,
-  COPILOT_PROJECT_TEMPERATURE,
   COPILOT_PROJECT_WEB_URLS,
   COPILOT_PROJECT_YOUTUBE_URLS,
   EMPTY_PROJECT_CONFIG,
@@ -21,7 +18,7 @@ import {
   getProjectsFolder,
   splitUrlsStringToArray,
 } from "@/projects/projectPaths";
-import { ProjectFileRecord, ProjectScanDiagnostics } from "@/projects/type";
+import { ProjectFileRecord } from "@/projects/type";
 import { stripFrontmatter } from "@/utils";
 import { logError, logWarn } from "@/logger";
 import { App, parseYaml, TFile, TFolder } from "obsidian";
@@ -40,7 +37,6 @@ export {
   getProjectConfigFilePath,
   isProjectConfigFile,
   sanitizeVaultPathSegment,
-  splitUrlsStringToArray,
   readFrontmatterFieldFromFile,
 } from "@/projects/projectPaths";
 
@@ -58,20 +54,6 @@ export async function writeProjectFrontmatter(
     frontmatter[COPILOT_PROJECT_ID] = project.id.trim();
     frontmatter[COPILOT_PROJECT_NAME] = (project.name || folderName).trim();
     frontmatter[COPILOT_PROJECT_DESCRIPTION] = (project.description || "").trim();
-    frontmatter[COPILOT_PROJECT_MODEL_KEY] = (project.projectModelKey || "").trim();
-
-    if (project.modelConfigs?.temperature != null) {
-      frontmatter[COPILOT_PROJECT_TEMPERATURE] = project.modelConfigs.temperature;
-    } else {
-      delete frontmatter[COPILOT_PROJECT_TEMPERATURE];
-    }
-
-    if (project.modelConfigs?.maxTokens != null) {
-      frontmatter[COPILOT_PROJECT_MAX_TOKENS] = project.modelConfigs.maxTokens;
-    } else {
-      delete frontmatter[COPILOT_PROJECT_MAX_TOKENS];
-    }
-
     frontmatter[COPILOT_PROJECT_INCLUSIONS] = project.contextSource?.inclusions || "";
     frontmatter[COPILOT_PROJECT_EXCLUSIONS] = project.contextSource?.exclusions || "";
     frontmatter[COPILOT_PROJECT_WEB_URLS] = webUrls;
@@ -125,11 +107,7 @@ export async function parseProjectConfigFile(
   app: App,
   file: TFile
 ): Promise<ProjectFileRecord | null> {
-  const cachedFile = app.vault.getAbstractFileByPath(file.path);
-  const isRealVaultFile = cachedFile instanceof TFile;
-  const rawContent = isRealVaultFile
-    ? await app.vault.read(cachedFile)
-    : await app.vault.adapter.read(file.path);
+  const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent, { trimStart: false });
 
   let frontmatter: Record<string, unknown> | undefined;
@@ -145,9 +123,8 @@ export async function parseProjectConfigFile(
       return null;
     }
   }
-  if (!frontmatter && isRealVaultFile) {
-    const metadata = app.metadataCache.getFileCache(cachedFile);
-    frontmatter = metadata?.frontmatter;
+  if (!frontmatter) {
+    frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
   }
 
   const folderName = getProjectFolderNameFromConfigPath(file.path);
@@ -171,10 +148,6 @@ export async function parseProjectConfigFile(
   const projectName = nameFromFrontmatter || folderName;
 
   const description = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_DESCRIPTION]).trim();
-  const projectModelKey = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_MODEL_KEY]).trim();
-
-  const temperature = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_TEMPERATURE], NaN);
-  const maxTokens = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_MAX_TOKENS], NaN);
 
   const rawInclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_INCLUSIONS]);
   const rawExclusions = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_EXCLUSIONS]);
@@ -192,14 +165,6 @@ export async function parseProjectConfigFile(
   );
   const lastUsedMs = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_LAST_USED], 0);
 
-  const modelConfigs: ProjectFileRecord["project"]["modelConfigs"] = {};
-  if (Number.isFinite(temperature)) {
-    modelConfigs.temperature = temperature;
-  }
-  if (Number.isFinite(maxTokens) && maxTokens > 0) {
-    modelConfigs.maxTokens = maxTokens;
-  }
-
   return {
     project: {
       ...EMPTY_PROJECT_CONFIG,
@@ -207,8 +172,6 @@ export async function parseProjectConfigFile(
       name: projectName,
       description: description || "",
       systemPrompt: content,
-      projectModelKey,
-      modelConfigs,
       contextSource: {
         inclusions: inclusions || "",
         exclusions: exclusions || "",
@@ -223,10 +186,7 @@ export async function parseProjectConfigFile(
   };
 }
 
-export async function scanAllProjectConfigFiles(app: App): Promise<{
-  records: ProjectFileRecord[];
-  diagnostics: ProjectScanDiagnostics;
-}> {
+export async function scanAllProjectConfigFiles(app: App): Promise<ProjectFileRecord[]> {
   const projectsFolder = getProjectsFolder();
   const rootFolder = app.vault.getAbstractFileByPath(projectsFolder);
 
@@ -242,24 +202,11 @@ export async function scanAllProjectConfigFiles(app: App): Promise<{
         files.push(configFile);
       }
     }
-  } else if (await app.vault.adapter.exists(projectsFolder)) {
-    const { resolveFileByPath } = await import("@/utils/vaultAdapterUtils");
-    const listing = await app.vault.adapter.list(projectsFolder);
-    for (const subFolderPath of listing.folders) {
-      const folderName = subFolderPath.split("/").pop() ?? "";
-      if (folderName === PROJECTS_UNSUPPORTED_FOLDER_NAME) continue;
-      const configPath = `${subFolderPath}/${PROJECT_CONFIG_FILE_NAME}`;
-      if (await app.vault.adapter.exists(configPath)) {
-        const resolved = await resolveFileByPath(app, configPath);
-        if (resolved) files.push(resolved);
-      }
-    }
   }
 
   files.sort((a, b) => a.path.localeCompare(b.path));
 
-  const duplicateIdIndex: Record<string, string[]> = {};
-  const ignoredFiles: string[] = [];
+  const firstPathById = new Map<string, string>();
   const records: ProjectFileRecord[] = [];
 
   for (const file of files) {
@@ -268,42 +215,26 @@ export async function scanAllProjectConfigFiles(app: App): Promise<{
       record = await parseProjectConfigFile(app, file);
     } catch (error) {
       logError(`[Projects] Failed to parse project file, skipping: ${file.path}`, error);
-      ignoredFiles.push(file.path);
       continue;
     }
-    if (!record) {
-      ignoredFiles.push(file.path);
-      continue;
-    }
+    if (!record) continue;
 
     const id = record.project.id;
-    if (!duplicateIdIndex[id]) {
-      duplicateIdIndex[id] = [];
-    }
-    duplicateIdIndex[id].push(file.path);
-
-    if (duplicateIdIndex[id].length > 1) {
-      logWarn(
-        `[Projects] Duplicate project id="${id}": ` +
-          `${duplicateIdIndex[id].join(", ")}; keeping first: ${duplicateIdIndex[id][0]}`
-      );
+    const firstPath = firstPathById.get(id);
+    if (firstPath !== undefined) {
+      logWarn(`[Projects] Duplicate project id="${id}": ${file.path}; keeping first: ${firstPath}`);
       continue;
     }
-
+    firstPathById.set(id, file.path);
     records.push(record);
   }
 
-  return { records, diagnostics: { duplicateIdIndex, ignoredFiles } };
-}
-
-export async function loadAllProjects(app: App): Promise<ProjectFileRecord[]> {
-  const { records } = await scanAllProjectConfigFiles(app);
-  updateCachedProjectRecords(records);
   return records;
 }
 
-export async function fetchAllProjects(app: App): Promise<ProjectFileRecord[]> {
-  const { records } = await scanAllProjectConfigFiles(app);
+export async function loadAllProjects(app: App): Promise<ProjectFileRecord[]> {
+  const records = await scanAllProjectConfigFiles(app);
+  updateCachedProjectRecords(records);
   return records;
 }
 
@@ -339,21 +270,6 @@ export async function ensureProjectFrontmatter(
       }
       if (frontmatter[COPILOT_PROJECT_DESCRIPTION] == null && record.project.description) {
         frontmatter[COPILOT_PROJECT_DESCRIPTION] = record.project.description;
-      }
-      if (frontmatter[COPILOT_PROJECT_MODEL_KEY] == null && record.project.projectModelKey) {
-        frontmatter[COPILOT_PROJECT_MODEL_KEY] = record.project.projectModelKey;
-      }
-      if (
-        frontmatter[COPILOT_PROJECT_TEMPERATURE] == null &&
-        record.project.modelConfigs?.temperature != null
-      ) {
-        frontmatter[COPILOT_PROJECT_TEMPERATURE] = record.project.modelConfigs.temperature;
-      }
-      if (
-        frontmatter[COPILOT_PROJECT_MAX_TOKENS] == null &&
-        record.project.modelConfigs?.maxTokens != null
-      ) {
-        frontmatter[COPILOT_PROJECT_MAX_TOKENS] = record.project.modelConfigs.maxTokens;
       }
       if (
         frontmatter[COPILOT_PROJECT_INCLUSIONS] == null &&

@@ -149,6 +149,14 @@ export const TASK_LIST_REORDERED: RenderedDiffFixture = {
   after: "- [ ] Send the invite\n- [ ] Draft the migration runbook\n- [ ] Book the review slot\n",
 };
 
+export const NESTED_TASKS_EDITED: RenderedDiffFixture = {
+  path: "Daily/2026-10-14.md",
+  before:
+    "## Today\n\n- Ship every PR for this release.\n  - [ ] Bookmark chat action\n- [ ] Agent compaction\n- [ ] File edit prompt\n- [ ] Plus parser\n",
+  after:
+    "## Today\n\n- Finish the remaining release merges.\n- [ ] Agent compaction\n- [ ] Plus parser\n",
+};
+
 export const LIST_ITEM_WITH_CODE_EDIT: RenderedDiffFixture = {
   path: "projects/Alpha/Queries.md",
   before: "- Run the checks:\n  ```bash\n  npm run verify\n  ```\n- Ship the build\n",
@@ -703,3 +711,84 @@ export const RECORDED_PARSES: ReadonlyMap<
     },
   ],
 ]);
+
+const LONG_NOTE_BEFORE = `# Onboarding interviews
+
+We will talk to eight people who installed the plugin in the last month. The goal is to understand what they expected on day one, where they got stuck, and what made the ones who stayed come back.
+
+## Goals
+
+- Find the first moment where a new user decides the plugin is worth keeping.
+- List the setup steps people skip, and what they assume those steps do.
+- Hear how people describe Copilot to a friend, in their own words.
+- Collect three to five concrete ideas for the first-run screen.
+
+We are not testing a prototype in these sessions. Each one is a conversation about the person's own vault and the first week they spent with the plugin.
+
+## Who we recruit
+
+Recruiting runs through three channels so we do not hear only from the most engaged users. The in-app banner reaches people inside their first two weeks, the Discord post reaches people who already talk to us, and the churn email reaches people who stopped opening the chat panel.
+
+| Segment | Sessions | Source |
+| --- | --- | --- |
+| New installs | 4 | In-app banner |
+| Returning users | 3 | Discord |
+| Stopped using | 3 | Churn email |
+
+Each participant gets a gift card. We schedule 45 minutes and aim to finish in 35, which leaves time for the questions people save for the end.
+
+## Interview script
+
+1. Tell me about your vault. What do you keep in it?
+2. What made you look for an AI plugin in the first place?
+3. Walk me through the first time you opened Copilot.
+4. Which settings did you change before your first chat, and why?
+5. Was there a moment you almost uninstalled it?
+6. If Copilot disappeared tomorrow, what would you miss first?
+
+The script is a guide, not a checklist. If a participant goes deep on one question, follow them and drop the later questions instead of rushing.
+
+Take notes in the session note, not in a separate document, so quotes stay next to the context they came from.
+
+## Logistics
+
+Sessions run on video calls between October 20 and November 7. Two people join each call: one asks the questions and one takes notes.
+
+Record only with permission, and delete recordings within 30 days of the session.
+
+If a participant does not show up, wait ten minutes, send one follow-up message, and offer a new slot.
+
+## Analysis
+
+After each session, the note taker writes a five-line summary while the conversation is fresh. At the end of every week we read the summaries together and update the list of themes.
+
+Tag each quote in a spreadsheet by theme, segment, and session date so we can filter by segment later.
+
+> I installed it, typed one question, got a good answer, and then didn't know what else it could do.
+
+Quotes like this one point at a gap between the first success and the second use, and that gap is what the first-run screen needs to close.
+
+## Timeline
+
+- October 14: finalize script and recruiting copy.
+- October 20 to November 7: run sessions.
+- November 12: themes review with the team.
+- November 19: readout and first-run proposals.
+`;
+
+export const LONG_NOTE_SCATTERED_EDITS: RenderedDiffFixture = {
+  path: "Research/Onboarding interviews.md",
+  before: LONG_NOTE_BEFORE,
+  after: LONG_NOTE_BEFORE.replace("talk to eight people", "talk to twelve people")
+    .replace("in the last month", "in the last six weeks")
+    .replace("| Returning users | 3 |", "| Returning users | 5 |")
+    .replace("4. Which settings did you change before your first chat, and why?\n", "")
+    .replace(
+      "\nIf a participant does not show up",
+      "\nSend a reminder 24 hours before each session with the call link and a one-line agenda.\n\nIf a participant does not show up"
+    )
+    .replace("in a spreadsheet", "in the Interviews base")
+    .concat(
+      "\n## Open questions\n\n- Should we include people who only use Copilot on mobile?\n- Do we offer sessions in languages other than English?\n"
+    ),
+};
