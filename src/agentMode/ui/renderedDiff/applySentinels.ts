@@ -33,8 +33,9 @@ const DELETION_END_CLASS = "tw-me-1";
 // a frame of its own outlines the whole image, outside the embed's children that load later.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/727
 const MEDIA_SELECTOR = "img, .internal-embed";
-const MEDIA_FRAME_BASE_CLASS =
-  "tw-m-1.5 tw-inline-block tw-max-w-full tw-align-top tw-outline tw-outline-2 tw-outline-offset-2 [&_img]:tw-block";
+const MEDIA_FRAME_BASE_CLASS = cn(
+  "tw-m-1.5 tw-inline-block tw-max-w-full tw-align-top tw-outline tw-outline-2 tw-outline-offset-2 [&_img]:tw-block"
+);
 const MEDIA_FRAME_CLASS: Record<Change, string> = {
   inserted: cn(MEDIA_FRAME_BASE_CLASS, "tw-outline-[color:var(--color-green)]"),
   deleted: cn(MEDIA_FRAME_BASE_CLASS, "tw-outline-[color:var(--color-red)]"),
