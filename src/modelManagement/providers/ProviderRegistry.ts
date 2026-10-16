@@ -3,11 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import { logError } from "@/logger";
-import {
-  isCopilotOwnedSecret,
-  KeychainService,
-  providerKeychainName,
-} from "@/services/keychainService";
+import { KeychainService, providerKeychainName } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemo, sliceMemoByKey } from "@/utils/sliceCache";
 
@@ -130,27 +126,16 @@ export class ProviderRegistry {
     });
   }
 
-  // Linked names may be shared with another provider row or another plugin, so only an unshared
-  // Copilot-owned name is deleted.
-  // https://github.com/logancyang/obsidian-copilot/issues/3618
-  #releaseKeychainName(row: Provider, caller: string): void {
-    const name = row.apiKeyKeychainId;
-    if (!name || !isCopilotOwnedSecret(name)) return;
-    const shared = Object.values(getSettings().providers).some(
-      (other) => other.providerId !== row.providerId && other.apiKeyKeychainId === name
-    );
-    if (shared) return;
-    try {
-      KeychainService.getInstance(this.#app).deleteSecretById(name);
-    } catch (err) {
-      logError(`[modelManagement] ProviderRegistry.${caller}: failed to clear keychain`, err);
-    }
-  }
-
   async remove(providerId: string): Promise<void> {
     const existing = getSettings().providers[providerId];
     if (!existing) return;
-    this.#releaseKeychainName(existing, "remove");
+    if (existing.apiKeyKeychainId) {
+      try {
+        KeychainService.getInstance(this.#app).deleteSecretById(existing.apiKeyKeychainId);
+      } catch (err) {
+        logError(`[modelManagement] ProviderRegistry.remove: failed to clear keychain`, err);
+      }
+    }
     setSettings((cur) => {
       const next = { ...cur.providers };
       delete next[providerId];
@@ -197,7 +182,11 @@ export class ProviderRegistry {
     const row = getSettings().providers[providerId];
     if (!row) return;
     if (row.apiKeyKeychainId) {
-      this.#releaseKeychainName(row, "clearApiKey");
+      try {
+        KeychainService.getInstance(this.#app).deleteSecretById(row.apiKeyKeychainId);
+      } catch (err) {
+        logError(`[modelManagement] ProviderRegistry.clearApiKey: failed to delete keychain`, err);
+      }
       this.#setApiKeyKeychainId(providerId, null);
       this.#emit(providerId);
     }

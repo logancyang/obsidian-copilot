@@ -49,15 +49,6 @@ const anthropicStub: ProviderAdapter = {
   }),
 };
 
-function linkKeychainName(providerId: string, apiKeyKeychainId: string): void {
-  setSettings((cur) => ({
-    providers: {
-      ...cur.providers,
-      [providerId]: { ...cur.providers[providerId], apiKeyKeychainId },
-    },
-  }));
-}
-
 describe("ProviderRegistry", () => {
   let app: App;
   let secrets: SecretStore;
@@ -300,41 +291,6 @@ describe("ProviderRegistry", () => {
       await registry.remove(id);
       expect(registry.get(id)).toBeUndefined();
       expect(KeychainService.getInstance(app).getSecretById(keychainId)).toBeNull();
-    });
-
-    it("keeps a keychain entry that another provider still points at (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
-      const removed = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
-      });
-      const kept = await registry.add({
-        providerType: "anthropic",
-        displayName: "B",
-        origin: { kind: "agent", agentType: "claude" },
-      });
-      secrets.set("copilot-anthropic-api-key", "sk-shared");
-      linkKeychainName(removed, "copilot-anthropic-api-key");
-      linkKeychainName(kept, "copilot-anthropic-api-key");
-
-      await registry.remove(removed);
-
-      expect(registry.get(removed)).toBeUndefined();
-      expect(await registry.getApiKey(kept)).toBe("sk-shared");
-    });
-
-    it("keeps a keychain entry whose name Copilot does not own (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
-      const id = await registry.add({
-        providerType: "anthropic",
-        displayName: "A",
-        origin: { kind: "byok" },
-      });
-      secrets.set("anthropic-api-key", "sk-other-plugin");
-      linkKeychainName(id, "anthropic-api-key");
-
-      await registry.remove(id);
-
-      expect(secrets.get("anthropic-api-key")).toBe("sk-other-plugin");
     });
   });
 
