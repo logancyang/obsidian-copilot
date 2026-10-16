@@ -325,7 +325,10 @@ export const AgentChatInput = memo(function AgentChatInput({
         shouldIncludeActiveWebTab
       );
 
-      if (selectedImages.length > 0 && unsupportedImageModelLabel) {
+      // /compact drops attachments, so an image the model can't read must not block it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const images = isCompactCommand(resolvedText) ? [] : selectedImages;
+      if (images.length > 0 && unsupportedImageModelLabel) {
         new Notice(
           `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
         );
@@ -346,14 +349,14 @@ export const AgentChatInput = memo(function AgentChatInput({
       clearSelectedTextContexts();
 
       const content: PromptContent[] = [];
-      for (const image of selectedImages) {
+      for (const image of images) {
         const block = await fileToImageBlock(image);
         if (block) content.push(block);
       }
 
       // Failed image reads must not turn an image-only message into an empty request.
       // https://github.com/logancyang/obsidian-copilot/issues/2850
-      if (selectedImages.length > 0 && !resolvedText && content.length === 0) {
+      if (images.length > 0 && !resolvedText && content.length === 0) {
         new Notice("Could not read the attached images. Please attach them again.");
         return;
       }

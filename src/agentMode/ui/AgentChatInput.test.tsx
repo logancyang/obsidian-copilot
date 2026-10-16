@@ -382,6 +382,25 @@ describe("AgentChatInput", () => {
       expect(draft.resetCompose).not.toHaveBeenCalled();
     });
 
+    it("sends /compact without its image when the selected model lacks vision https://github.com/Brevilabs/obsidian-copilot-private/issues/634", async () => {
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        cancel: jest.fn(),
+      } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "/compact", images: [image] });
+      renderInput(backend, draft, {
+        modelPickerOverride: {
+          models: [{ name: "text-only", provider: "agent", enabled: true, capabilities: [] }],
+          value: "text-only|agent",
+          onChange: jest.fn(),
+        },
+      });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("/compact");
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][2]).toBeUndefined();
+    });
+
     it("preserves a queued image-only follow-up through normal auto-send https://github.com/logancyang/obsidian-copilot/issues/2850", async () => {
       const { backend, getDraft, settleTurn } = setupCancellation();
       act(() => getDraft().setInput("first turn"));
