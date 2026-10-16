@@ -2,7 +2,7 @@ import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 
-const SHIMMER = ".tw-bg-clip-text";
+const SHIMMER = ".copilot-shimmer-text";
 
 describe("MiyoSearchCard", () => {
   describe("MiyoSearchCard()", () => {
@@ -33,14 +33,24 @@ describe("MiyoSearchCard", () => {
       expect(screen.queryByText(/note/)).toBeNull();
     });
 
-    it("turns the shimmer off for reduced motion by gating the animation and restoring plain text", () => {
+    it("stops the label shimmer for reduced motion", () => {
       const { container } = render(<MiyoSearchCard status="pending" query="q" noteCount={null} />);
-      const label = container.querySelector(SHIMMER)!;
 
-      expect(label.className).toContain("motion-safe:tw-animate-");
-      expect(label.className).toContain("motion-reduce:tw-bg-none");
-      expect(label.className).toContain("motion-reduce:tw-text-normal");
+      expect(container.querySelector(SHIMMER)?.className).toContain(
+        "motion-reduce:tw-animate-none"
+      );
     });
+
+    it.each(["pending", "in_progress", "completed", "failed"] as const)(
+      "draws the logo in the normal text color with no animation when the status is %s",
+      (status) => {
+        const { container } = render(<MiyoSearchCard status={status} query="q" noteCount={null} />);
+        const logo = container.querySelector("svg")!;
+
+        expect(logo.getAttribute("class")).toContain("tw-text-normal");
+        expect(logo.getAttribute("class")).not.toContain("animate");
+      }
+    );
 
     it("says No notes when Miyo returned nothing", () => {
       render(<MiyoSearchCard status="completed" query="offsite agenda" noteCount={0} />);
@@ -54,7 +64,6 @@ describe("MiyoSearchCard", () => {
 
       expect(screen.getByText("Miyo search failed").className).toContain("tw-text-error");
       expect(container.querySelector(SHIMMER)).toBeNull();
-      expect(container.querySelector(".tw-animate-pulse")).toBeNull();
     });
 
     it("omits the count when the backend gave no parsable output", () => {

@@ -27,19 +27,13 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({ status, query, n
 
   return (
     <div className="tw-my-1 tw-flex tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1.5 tw-text-sm">
-      <MiyoLogo
-        className={cn(
-          "tw-size-4",
-          failed ? "tw-text-faint" : "tw-text-miyo",
-          running && "motion-safe:tw-animate-pulse"
-        )}
-      />
+      <MiyoLogo className="tw-size-4 tw-text-normal" />
       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-baseline tw-gap-1.5">
         <span
           className={cn(
             "tw-shrink-0 tw-font-medium",
             running
-              ? "tw-bg-gradient-to-r tw-from-cyan-rgb/70 tw-via-cyan tw-to-cyan-rgb/70 tw-bg-[length:200%_100%] tw-bg-clip-text tw-text-transparent motion-safe:tw-animate-[copilot-text-shimmer_2.5s_ease-in-out_infinite] motion-reduce:tw-bg-none motion-reduce:tw-text-normal"
+              ? "copilot-shimmer-text motion-reduce:tw-animate-none"
               : failed
                 ? "tw-text-error"
                 : "tw-text-normal"
