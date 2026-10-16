@@ -23,7 +23,9 @@ async function loadModule(overrides: Record<string, unknown> = {}) {
 
   const keychain = {
     isAvailable: jest.fn().mockReturnValue(true),
-    migrateLegacyNames: jest.fn((settings: CopilotSettings) => settings),
+    getVaultId: jest.fn().mockReturnValue("abcd1234"),
+    setVaultId: jest.fn(),
+    migrateProviderNames: jest.fn((settings: CopilotSettings) => settings),
     hydrateFromKeychain: jest.fn(async (settings: CopilotSettings) => ({
       settings,
       hadFailures: false,
@@ -159,6 +161,7 @@ describe("settingsPersistence", () => {
       expect(loaded.openAIApiKey).toBe("keychain-key");
       expect(saveData).toHaveBeenCalledWith(
         expect.objectContaining({
+          _keychainVaultId: "1234abcd",
           openAIApiKey: "",
           activeModels: [expect.objectContaining({ apiKey: "" })],
         })
@@ -172,11 +175,12 @@ describe("settingsPersistence", () => {
         providerId: "row-1",
         apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
       };
-      keychain.migrateLegacyNames.mockImplementation(
+      const stableName = "copilot-v1234abcd-provider-anthropic-api-key";
+      keychain.migrateProviderNames.mockImplementation(
         (settings: CopilotSettings) =>
           ({
             ...settings,
-            providers: { "row-1": { ...legacyRow, apiKeyKeychainId: "copilot-anthropic-api-key" } },
+            providers: { "row-1": { ...legacyRow, apiKeyKeychainId: stableName } },
           }) as unknown as CopilotSettings
       );
       const saveData = jest.fn().mockResolvedValue(undefined);
@@ -188,14 +192,11 @@ describe("settingsPersistence", () => {
         backedUp
       );
 
-      expect(keychain.migrateLegacyNames).toHaveBeenCalledWith(
-        expect.objectContaining({ providers: { "row-1": legacyRow } }),
-        "1234abcd"
+      expect(keychain.setVaultId.mock.invocationCallOrder[0]).toBeLessThan(
+        keychain.migrateProviderNames.mock.invocationCallOrder[0]
       );
-      expect(saveData.mock.calls[0][0].providers["row-1"].apiKeyKeychainId).toBe(
-        "copilot-anthropic-api-key"
-      );
-      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
+      expect(saveData.mock.calls[0][0].providers["row-1"].apiKeyKeychainId).toBe(stableName);
+      expect(loaded.providers["row-1"].apiKeyKeychainId).toBe(stableName);
     });
 
     it("loads with the stored pointers when the Keychain name migration throws, so the next load retries", async () => {
@@ -204,7 +205,7 @@ describe("settingsPersistence", () => {
         providerId: "row-1",
         apiKeyKeychainId: "copilot-v1234abcd-provider-row-1",
       };
-      keychain.migrateLegacyNames.mockImplementation(() => {
+      keychain.migrateProviderNames.mockImplementation(() => {
         throw new Error("keychain locked");
       });
 
@@ -233,13 +234,17 @@ describe("settingsPersistence", () => {
       expect(keychain.hydrateFromKeychain).not.toHaveBeenCalled();
     });
 
-    it("persists only the current schema version for a fresh install", async () => {
-      const { module } = await loadModule();
+    it("persists a vault namespace and current schema version for a fresh install", async () => {
+      const { module, keychain } = await loadModule();
       const saveData = jest.fn().mockResolvedValue(undefined);
 
       await module.loadSettingsWithKeychain(APP, null, saveData, backedUp);
 
-      expect(saveData).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+      expect(keychain.setVaultId).toHaveBeenCalledWith("abcd1234");
+      expect(saveData).toHaveBeenCalledWith({
+        _keychainVaultId: "abcd1234",
+        settingsVersion: CURRENT_SETTINGS_VERSION,
+      });
     });
     it("leaves data.json intact when the credential backup fails", async () => {
       const { module } = await loadModule();

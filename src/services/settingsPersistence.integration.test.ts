@@ -18,8 +18,8 @@ if (typeof window.structuredClone === "undefined") {
 
 const noLegacyBackup = async () => ({ status: "not-needed" }) as const;
 
-const THIS_DEVICE_VAULT_ID = "1234abcd";
-const OTHER_DEVICE_VAULT_ID = "0a1b2c3d";
+const VAULT_ID = "1234abcd";
+const STABLE_NAME = `copilot-v${VAULT_ID}-provider-anthropic-api-key`;
 
 let secrets: Map<string, string>;
 
@@ -51,10 +51,10 @@ function anthropicRow(apiKeyKeychainId: string): Provider {
   };
 }
 
-function diskSettings(vaultId: string, pointer: string): CopilotSettings {
+function diskSettings(pointer: string): CopilotSettings {
   return {
     ...structuredClone(DEFAULT_SETTINGS),
-    _keychainVaultId: vaultId,
+    _keychainVaultId: VAULT_ID,
     isPaidUser: true,
     providers: { "row-anthropic": anthropicRow(pointer) },
   };
@@ -92,41 +92,30 @@ describe("settingsPersistence", () => {
     it("keeps an upgrading user's license key and provider key working without re-entry, across repeated loads (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
       const app = makeApp();
       KeychainService.getInstance(app);
-      const legacyPointer = `copilot-v${THIS_DEVICE_VAULT_ID}-provider-row-anthropic`;
-      secrets.set(`copilot-v${THIS_DEVICE_VAULT_ID}-plus-license-key`, "lic-12345");
+      const legacyPointer = `copilot-v${VAULT_ID}-provider-row-anthropic`;
+      secrets.set(`copilot-v${VAULT_ID}-plus-license-key`, "lic-12345");
       secrets.set(legacyPointer, "sk-ant-12345");
 
-      const { settings: first, saved } = await load(
-        app,
-        diskSettings(THIS_DEVICE_VAULT_ID, legacyPointer)
-      );
+      const { settings: first, saved } = await load(app, diskSettings(legacyPointer));
       resetPersistenceState();
       const { settings: second } = await load(app, saved);
 
       expect(first.plusLicenseKey).toBe("lic-12345");
-      expect(first.providers["row-anthropic"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
+      expect(first.providers["row-anthropic"].apiKeyKeychainId).toBe(STABLE_NAME);
       expect(apiKeyFor(app, first)).toBe("sk-ant-12345");
-      expect(saved?.providers["row-anthropic"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
-      expect(saved?._keychainVaultId).toBe(THIS_DEVICE_VAULT_ID);
+      expect(saved?.providers["row-anthropic"].apiKeyKeychainId).toBe(STABLE_NAME);
+      expect(saved?._keychainVaultId).toBe(VAULT_ID);
       expect(second.plusLicenseKey).toBe("lic-12345");
       expect(apiKeyFor(app, second)).toBe("sk-ant-12345");
     });
 
-    it("resolves keys on a device whose data.json was overwritten by another device's sync (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
+    it("resolves this device's key after another device's sync already rewrote the provider pointer (https://github.com/logancyang/obsidian-copilot/issues/3618)", async () => {
       const app = makeApp();
       KeychainService.getInstance(app);
-      secrets.set(`copilot-v${THIS_DEVICE_VAULT_ID}-plus-license-key`, "lic-12345");
-      secrets.set(`copilot-v${THIS_DEVICE_VAULT_ID}-provider-row-anthropic`, "sk-ant-12345");
+      secrets.set(`copilot-v${VAULT_ID}-provider-row-anthropic`, "sk-ant-12345");
 
-      const { settings: loaded } = await load(
-        app,
-        diskSettings(
-          OTHER_DEVICE_VAULT_ID,
-          `copilot-v${OTHER_DEVICE_VAULT_ID}-provider-row-anthropic`
-        )
-      );
+      const { settings: loaded } = await load(app, diskSettings(STABLE_NAME));
 
-      expect(loaded.plusLicenseKey).toBe("lic-12345");
       expect(apiKeyFor(app, loaded)).toBe("sk-ant-12345");
     });
   });

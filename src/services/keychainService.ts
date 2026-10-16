@@ -1,4 +1,4 @@
-import { type App, type SecretStorage } from "obsidian";
+import { type App, type SecretStorage, FileSystemAdapter } from "obsidian";
 import { type CopilotSettings, getModelKeyFromModel, getSettings } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
@@ -23,14 +23,40 @@ export function isSecretKey(key: string): boolean {
   return isSensitiveKey(key) || EXTRA_SECRET_KEYS.includes(key);
 }
 
-// Names must not depend on the device: `data.json` syncs, the Keychain does not, so a synced
-// pointer has to resolve on every device that holds the key.
-// https://github.com/logancyang/obsidian-copilot/issues/3618
-const COPILOT_SECRET_PREFIX = "copilot-";
-const LEGACY_SECRET_ID = /^copilot-v([0-9a-f]{8})-/;
-const RETIRED_EMBEDDING_SECRET_ID = /^copilot-v[0-9a-f]{8}-model-api-key-embedding-/;
+function generateVaultId(app: App): string {
+  const basePath = getVaultBasePath(app);
+  if (basePath) {
+    return md5(basePath).slice(0, 8);
+  }
+  const cryptoApi = window.crypto;
+  if (typeof cryptoApi?.getRandomValues === "function") {
+    const bytes = new Uint8Array(4);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  return md5(`${Date.now()}-${Math.random()}`).slice(0, 8);
+}
+
+function getVaultBasePath(app: App): string | undefined {
+  const adapter = app.vault.adapter;
+  if (adapter instanceof FileSystemAdapter) {
+    return adapter.getBasePath();
+  }
+  const adapterAny = adapter as unknown as { getBasePath?: () => string; basePath?: string };
+  if (typeof adapterAny.getBasePath === "function") {
+    return adapterAny.getBasePath();
+  }
+  if (typeof adapterAny.basePath === "string") {
+    return adapterAny.basePath;
+  }
+  return undefined;
+}
+
 const MAX_SECRET_ID_LENGTH = 64;
-const API_KEY_SUFFIX = "-api-key";
+// Provider names must not embed the provider's random id: `data.json` syncs, the Keychain does
+// not, so a pointer minted on one device has to name an entry every device can hold.
+// https://github.com/logancyang/obsidian-copilot/issues/3618
+const LEGACY_PROVIDER_SECRET_ID = /^copilot-v[0-9a-f]{8}-provider-(.+)$/;
 
 function slugify(raw: string): string {
   return raw
@@ -47,51 +73,30 @@ function normalizeKeychainId(raw: string, maxLength = MAX_SECRET_ID_LENGTH): str
   return prefix + "-" + hash;
 }
 
-function kebabCase(key: string): string {
-  return key
+function toKeychainId(vaultId: string, settingsKey: string): string {
+  const prefix = `copilot-v${vaultId}-`;
+  const kebab = settingsKey
     .replace(/([A-Z])/g, "-$1")
     .toLowerCase()
     .replace(/^-/, "");
-}
-
-function fitSecretId(id: string, hashSource: string): string {
+  const id = prefix + kebab;
   if (id.length <= MAX_SECRET_ID_LENGTH) return id;
-  return id.slice(0, MAX_SECRET_ID_LENGTH - 9) + "-" + md5(hashSource).slice(0, 8);
-}
-
-function toKeychainId(settingsKey: string): string {
-  return fitSecretId(`${COPILOT_SECRET_PREFIX}setting-${kebabCase(settingsKey)}`, settingsKey);
-}
-
-function toLegacyKeychainId(vaultId: string, settingsKey: string): string {
-  return fitSecretId(`copilot-v${vaultId}-${kebabCase(settingsKey)}`, settingsKey);
-}
-
-function modelKeychainId(
-  prefix: string,
-  scope: ModelScope,
-  modelIdentity: string,
-  field: ModelSecretField
-): string {
-  const fullPrefix = `${prefix}model-${kebabCase(field)}-${scope}-`;
-  return fullPrefix + normalizeKeychainId(modelIdentity, MAX_SECRET_ID_LENGTH - fullPrefix.length);
+  const hash = md5(settingsKey).slice(0, 8);
+  return id.slice(0, MAX_SECRET_ID_LENGTH - 9) + "-" + hash;
 }
 
 function toModelKeychainId(
-  scope: ModelScope,
-  modelIdentity: string,
-  field: ModelSecretField
-): string {
-  return modelKeychainId(COPILOT_SECRET_PREFIX, scope, modelIdentity, field);
-}
-
-function toLegacyModelKeychainId(
   vaultId: string,
   scope: ModelScope,
   modelIdentity: string,
   field: ModelSecretField
 ): string {
-  return modelKeychainId(`copilot-v${vaultId}-`, scope, modelIdentity, field);
+  const kebabField = field.replace(/([A-Z])/g, "-$1").toLowerCase();
+  const fieldSegment = `model-${kebabField}`;
+  const prefix = `copilot-v${vaultId}-${fieldSegment}-${scope}-`;
+  const budget = MAX_SECRET_ID_LENGTH - prefix.length;
+  const normalizedModel = normalizeKeychainId(modelIdentity, budget);
+  return prefix + normalizedModel;
 }
 
 function providerNameSource(provider: Provider): string {
@@ -106,6 +111,7 @@ function providerNameSource(provider: Provider): string {
 }
 
 export function providerKeychainName(
+  vaultId: string,
   provider: Provider,
   providers: Record<string, Provider>
 ): string {
@@ -114,18 +120,18 @@ export function providerKeychainName(
       .filter((row) => row.providerId !== provider.providerId)
       .map((row) => row.apiKeyKeychainId)
   );
-  const slugBudget =
-    MAX_SECRET_ID_LENGTH - COPILOT_SECRET_PREFIX.length - API_KEY_SUFFIX.length - "-99".length;
-  const slug =
-    slugify(providerNameSource(provider)).slice(0, slugBudget).replace(/-$/, "") || "provider";
-  const base = `${COPILOT_SECRET_PREFIX}${slug}${API_KEY_SUFFIX}`;
-  let name = base;
-  for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
-  return name;
+  const prefix = `copilot-v${vaultId}-provider-`;
+  const slug = slugify(providerNameSource(provider)) || "custom";
+  for (let n = 1; ; n++) {
+    const suffix = n === 1 ? "-api-key" : `-api-key-${n}`;
+    const budget = MAX_SECRET_ID_LENGTH - prefix.length - suffix.length;
+    const name = prefix + slug.slice(0, budget).replace(/-$/, "") + suffix;
+    if (!taken.has(name)) return name;
+  }
 }
 
 export function isCopilotOwnedSecret(id: string): boolean {
-  return id.startsWith(COPILOT_SECRET_PREFIX);
+  return id.startsWith("copilot-");
 }
 
 export interface HydrateResult {
@@ -140,19 +146,14 @@ export interface PersistSecretsResult {
 
 export type SaveDataFn = (data: CopilotSettings) => Promise<void>;
 
-function topLevelSecretKeys(settings: CopilotSettings): Set<string> {
-  return new Set<string>([
-    ...TOP_LEVEL_SECRET_FIELDS,
-    ...Object.keys(settings).filter((key) => isSecretKey(key)),
-  ]);
-}
-
 export class KeychainService {
   private static instance: KeychainService | null = null;
   private app: App;
+  private vaultId: string;
 
   private constructor(app: App) {
     this.app = app;
+    this.vaultId = generateVaultId(app);
   }
 
   static getInstance(app?: App): KeychainService {
@@ -171,6 +172,14 @@ export class KeychainService {
 
   isAvailable(): boolean {
     return !!this.app.secretStorage;
+  }
+
+  getVaultId(): string {
+    return this.vaultId;
+  }
+
+  setVaultId(id: string): void {
+    this.vaultId = id;
   }
 
   private get storage(): SecretStorage {
@@ -201,16 +210,16 @@ export class KeychainService {
   }
 
   deleteSecret(settingsKey: string): void {
-    this.removeSecret(toKeychainId(settingsKey));
+    this.removeSecret(toKeychainId(this.vaultId, settingsKey));
   }
 
   getSecret(settingsKey: string): string | null {
-    const id = toKeychainId(settingsKey);
+    const id = toKeychainId(this.vaultId, settingsKey);
     return this.storage.getSecret(id);
   }
 
   getModelSecret(scope: ModelScope, modelIdentity: string, field: ModelSecretField): string | null {
-    const id = toModelKeychainId(scope, modelIdentity, field);
+    const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
     return this.storage.getSecret(id);
   }
 
@@ -218,7 +227,11 @@ export class KeychainService {
     const hydrated = { ...settings };
     let hadFailures = false;
 
-    for (const key of topLevelSecretKeys(hydrated)) {
+    const topLevelKeys = new Set<string>([
+      ...TOP_LEVEL_SECRET_FIELDS,
+      ...Object.keys(hydrated).filter((key) => isSecretKey(key)),
+    ]);
+    for (const key of topLevelKeys) {
       let keychainValue: string | null;
       try {
         keychainValue = this.getSecret(key);
@@ -253,7 +266,7 @@ export class KeychainService {
     for (const key of Object.keys(settings)) {
       if (!isSecretKey(key)) continue;
       const value = (settings as unknown as Record<string, unknown>)[key];
-      const id = toKeychainId(key);
+      const id = toKeychainId(this.vaultId, key);
 
       if (typeof value === "string" && value.length > 0) {
         secretEntries.push([id, value]);
@@ -284,76 +297,43 @@ export class KeychainService {
     return { secretEntries, keychainIdsToDelete };
   }
 
-  // The previous version resolves the synced vault id and provider pointer, so those entries are
-  // the keys that work today; other legacy ids are what this device saved before a sync replaced it.
+  // Every device migrates on load because the pointer it reads may have been rewritten by another
+  // device that already ran this, while this device's key still sits under the old name.
   // https://github.com/logancyang/obsidian-copilot/issues/3618
-  migrateLegacyNames(settings: CopilotSettings, syncedVaultId: unknown): CopilotSettings {
-    const vaultIds = this.legacyVaultIds(syncedVaultId);
-    const adopt = (
-      name: string,
-      legacyIdFor: (vaultId: string) => string,
-      currentLegacyId?: string
-    ): void => {
-      if (this.storage.getSecret(name) !== null) return;
-      const candidates = [currentLegacyId, ...vaultIds.map(legacyIdFor)];
-      for (const id of candidates) {
-        const value = id === undefined ? null : this.storage.getSecret(id);
-        if (value !== null) {
-          this.storage.setSecret(name, value);
-          return;
-        }
-      }
-    };
-
-    for (const key of topLevelSecretKeys(settings)) {
-      adopt(toKeychainId(key), (vaultId) => toLegacyKeychainId(vaultId, key));
-    }
-    for (const model of settings.activeModels ?? []) {
-      const identity = getModelKeyFromModel(model);
-      for (const field of MODEL_SECRET_FIELDS) {
-        adopt(toModelKeychainId("chat", identity, field), (vaultId) =>
-          toLegacyModelKeychainId(vaultId, "chat", identity, field)
-        );
-      }
-    }
-
+  migrateProviderNames(settings: CopilotSettings): CopilotSettings {
     const providers = { ...(settings.providers ?? {}) };
-    let pointersChanged = false;
+    let changed = false;
     for (const row of Object.values(settings.providers ?? {})) {
       const pointer = row.apiKeyKeychainId;
-      if (!pointer) continue;
-      const isLegacy = LEGACY_SECRET_ID.test(pointer);
-      const name = isLegacy ? providerKeychainName(row, providers) : pointer;
-      adopt(
-        name,
-        (vaultId) => `copilot-v${vaultId}-provider-${row.providerId}`,
-        isLegacy ? pointer : undefined
-      );
+      if (!pointer || !isCopilotOwnedSecret(pointer)) continue;
+      const isLegacy = LEGACY_PROVIDER_SECRET_ID.exec(pointer)?.[1] === row.providerId;
+      const name = isLegacy ? providerKeychainName(this.vaultId, row, providers) : pointer;
+      const legacyIds = new Set([pointer, `copilot-v${this.vaultId}-provider-${row.providerId}`]);
+      legacyIds.delete(name);
+      for (const id of legacyIds) {
+        const value = this.storage.getSecret(id);
+        if (value === null) continue;
+        if (this.storage.getSecret(name) === null) this.storage.setSecret(name, value);
+        try {
+          this.removeSecret(id);
+        } catch (error) {
+          logWarn(`Keychain: failed to remove migrated provider secret ${id}`, error);
+        }
+      }
       if (name !== pointer) {
         providers[row.providerId] = { ...row, apiKeyKeychainId: name };
-        pointersChanged = true;
+        changed = true;
       }
     }
-    return pointersChanged ? { ...settings, providers } : settings;
-  }
-
-  private legacyVaultIds(syncedVaultId: unknown): string[] {
-    const synced =
-      typeof syncedVaultId === "string" && /^[0-9a-f]{8}$/.test(syncedVaultId)
-        ? [syncedVaultId]
-        : [];
-    const stored = this.storage
-      .listSecrets()
-      .map((id) => LEGACY_SECRET_ID.exec(id)?.[1])
-      .filter((id): id is string => id !== undefined);
-    return [...new Set([...synced, ...stored])];
+    return changed ? { ...settings, providers } : settings;
   }
 
   removeRetiredEmbeddingSecrets(): void {
     if (typeof this.storage.listSecrets !== "function") return;
 
+    const retiredPrefix = `copilot-v${this.vaultId}-model-api-key-embedding-`;
     for (const id of this.storage.listSecrets()) {
-      if (!RETIRED_EMBEDDING_SECRET_ID.test(id)) continue;
+      if (!id.startsWith(retiredPrefix)) continue;
       try {
         this.removeSecret(id);
       } catch (error) {
@@ -362,7 +342,8 @@ export class KeychainService {
     }
   }
 
-  clearCopilotSecrets(): void {
+  clearAllVaultSecrets(): void {
+    const vaultPrefix = `copilot-v${this.vaultId}-`;
     if (typeof this.storage.listSecrets !== "function") {
       throw new Error(
         "Obsidian Keychain on this build does not support listing entries; " +
@@ -372,7 +353,7 @@ export class KeychainService {
     const allIds = this.storage.listSecrets();
     const failures: string[] = [];
     for (const id of allIds) {
-      if (isCopilotOwnedSecret(id)) {
+      if (id.startsWith(vaultPrefix)) {
         try {
           this.removeSecret(id);
         } catch {
@@ -422,7 +403,7 @@ export class KeychainService {
 
     let keychainError: Error | undefined;
     try {
-      this.clearCopilotSecrets();
+      this.clearAllVaultSecrets();
     } catch (e) {
       keychainError = e instanceof Error ? e : new Error(String(e));
     }
@@ -498,7 +479,7 @@ export class KeychainService {
 
       for (const field of MODEL_SECRET_FIELDS) {
         const value = model[field];
-        const id = toModelKeychainId(scope, identity, field);
+        const id = toModelKeychainId(this.vaultId, scope, identity, field);
 
         if (typeof value === "string" && value.length > 0) {
           secretEntries.push([id, value]);
@@ -530,7 +511,7 @@ export class KeychainService {
           if (typeof prevValue !== "string" || prevValue.length === 0) {
             return [];
           }
-          return [toModelKeychainId(scope, identity, field)];
+          return [toModelKeychainId(this.vaultId, scope, identity, field)];
         });
       });
   }

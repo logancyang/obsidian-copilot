@@ -36,7 +36,6 @@ import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import type { CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
-import { md5 } from "@/utils/hash";
 import {
   KeychainService,
   isCopilotOwnedSecret,
@@ -96,8 +95,8 @@ function makeProvider(overrides: Partial<Provider> = {}): Provider {
   };
 }
 
-const SYNCED_VAULT_ID = "1234abcd";
-const EARLIER_VAULT_ID = "0a1b2c3d";
+const VAULT_ID = "1234abcd";
+const OTHER_VAULT_ID = "0a1b2c3d";
 
 function makeAdapter(basePath: string) {
   const adapter = new FileSystemAdapter();
@@ -140,11 +139,19 @@ describe("keychainService", () => {
   });
 
   describe("providerKeychainName()", () => {
-    it("names a catalog provider after its catalog id, so every device mints the same name", () => {
+    it("names a catalog provider after its catalog id, so every device mints the same name for the vault", () => {
       const provider = makeProvider({ displayName: "My Claude" });
 
-      expect(providerKeychainName(provider, { [provider.providerId]: provider })).toBe(
-        "copilot-anthropic-api-key"
+      expect(providerKeychainName(VAULT_ID, provider, { [provider.providerId]: provider })).toBe(
+        `copilot-v${VAULT_ID}-provider-anthropic-api-key`
+      );
+    });
+
+    it("gives the same provider a different name in another vault, so vaults sharing a phone's Keychain keep separate keys", () => {
+      const provider = makeProvider();
+
+      expect(providerKeychainName(OTHER_VAULT_ID, provider, {})).not.toBe(
+        providerKeychainName(VAULT_ID, provider, {})
       );
     });
 
@@ -155,48 +162,55 @@ describe("keychainService", () => {
         origin: { kind: "byok" },
       });
 
-      expect(providerKeychainName(provider, {})).toBe("copilot-my-local-llm-api-key");
+      expect(providerKeychainName(VAULT_ID, provider, {})).toBe(
+        `copilot-v${VAULT_ID}-provider-my-local-llm-api-key`
+      );
     });
 
-    it("names the Copilot Plus provider copilot-plus-api-key", () => {
+    it("names the Copilot Plus provider after plus", () => {
       const provider = makeProvider({ displayName: "Copilot", origin: { kind: "copilot-plus" } });
 
-      expect(providerKeychainName(provider, {})).toBe("copilot-plus-api-key");
+      expect(providerKeychainName(VAULT_ID, provider, {})).toBe(
+        `copilot-v${VAULT_ID}-provider-plus-api-key`
+      );
     });
 
     it("suffixes a name another provider holds but not the provider's own current name", () => {
-      const holder = makeProvider({
-        providerId: "holder",
-        apiKeyKeychainId: "copilot-anthropic-api-key",
-      });
+      const name = `copilot-v${VAULT_ID}-provider-anthropic-api-key`;
+      const holder = makeProvider({ providerId: "holder", apiKeyKeychainId: name });
       const candidate = makeProvider({ providerId: "candidate" });
 
-      expect(providerKeychainName(candidate, { holder, candidate })).toBe(
-        "copilot-anthropic-api-key-2"
-      );
-      expect(providerKeychainName(holder, { holder, candidate })).toBe("copilot-anthropic-api-key");
+      expect(providerKeychainName(VAULT_ID, candidate, { holder, candidate })).toBe(`${name}-2`);
+      expect(providerKeychainName(VAULT_ID, holder, { holder, candidate })).toBe(name);
     });
 
-    it("keeps a long display name within Obsidian's 64-character secret id limit", () => {
-      const provider = makeProvider({
-        displayName: "A Very Long Self Hosted Gateway Name That Goes On And On Forever",
-        origin: { kind: "byok" },
-      });
+    it("keeps a collision suffix of any width within Obsidian's 64-character secret id limit", () => {
+      const providers: Record<string, Provider> = {};
+      for (let i = 0; i < 100; i++) {
+        const row = makeProvider({
+          providerId: `row-${i}`,
+          displayName: "A Very Long Self Hosted Gateway Name That Goes On And On Forever",
+          origin: { kind: "byok" },
+        });
+        row.apiKeyKeychainId = providerKeychainName(VAULT_ID, row, providers);
+        providers[row.providerId] = row;
+      }
 
-      const name = providerKeychainName(provider, {});
+      const names = Object.values(providers).map((row) => row.apiKeyKeychainId!);
 
-      expect(name.length).toBeLessThanOrEqual(64);
-      expect(name).toMatch(/^copilot-a-very-long-[a-z0-9-]*[a-z0-9]-api-key$/);
+      expect(new Set(names).size).toBe(100);
+      expect(names[0]).toMatch(
+        /^copilot-v1234abcd-provider-a-very-long-[a-z0-9-]*[a-z0-9]-api-key$/
+      );
+      expect(names[99]).toMatch(/-api-key-100$/);
+      expect(Math.max(...names.map((name) => name.length))).toBeLessThanOrEqual(64);
     });
   });
 
   describe("isCopilotOwnedSecret()", () => {
-    it.each(["copilot-anthropic-api-key", "copilot-v1234abcd-plus-license-key"])(
-      "treats %s as Copilot-owned",
-      (id) => {
-        expect(isCopilotOwnedSecret(id)).toBe(true);
-      }
-    );
+    it("treats a copilot- name as Copilot-owned", () => {
+      expect(isCopilotOwnedSecret(`copilot-v${VAULT_ID}-provider-anthropic-api-key`)).toBe(true);
+    });
 
     it("treats a secret another plugin named as not Copilot-owned", () => {
       expect(isCopilotOwnedSecret("anthropic-api-key")).toBe(false);
@@ -204,147 +218,140 @@ describe("keychainService", () => {
   });
 
   describe("KeychainService", () => {
-    describe("migrateLegacyNames()", () => {
-      function migrate(
-        entries: Record<string, string>,
-        settings: CopilotSettings,
-        syncedVaultId?: string
-      ) {
+    describe("migrateProviderNames()", () => {
+      function migrate(entries: Record<string, string>, settings: CopilotSettings) {
         const storage = makeMapStorage(entries);
         const service = KeychainService.getInstance(makeApp({ secretStorage: storage }));
-        const migrated = service.migrateLegacyNames(settings, syncedVaultId);
-        return { secrets: storage.secrets, migrated };
+        service.setVaultId(VAULT_ID);
+        return { storage, service, migrated: service.migrateProviderNames(settings) };
       }
 
-      it("copies a top-level secret from the synced vault id's name to its stable name and keeps the original (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const legacyId = `copilot-v${SYNCED_VAULT_ID}-plus-license-key`;
+      const legacyPointer = `copilot-v${VAULT_ID}-provider-row-1`;
+      const stableName = `copilot-v${VAULT_ID}-provider-anthropic-api-key`;
 
-        const { secrets } = migrate({ [legacyId]: "lic-current" }, makeSettings(), SYNCED_VAULT_ID);
-
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-current");
-        expect(secrets.get(legacyId)).toBe("lic-current");
-      });
-
-      it("recovers a key this device saved under a vault id that a later sync replaced (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const { secrets } = migrate(
-          { [`copilot-v${EARLIER_VAULT_ID}-plus-license-key`]: "lic-earlier" },
-          makeSettings(),
-          SYNCED_VAULT_ID
-        );
-
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-earlier");
-      });
-
-      it("prefers the entry under the synced vault id, which is the key the previous version resolves today", () => {
-        const { secrets } = migrate(
-          {
-            [`copilot-v${EARLIER_VAULT_ID}-plus-license-key`]: "lic-stale",
-            [`copilot-v${SYNCED_VAULT_ID}-plus-license-key`]: "lic-current",
-          },
-          makeSettings(),
-          SYNCED_VAULT_ID
-        );
-
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-current");
-      });
-
-      it("leaves an existing stable entry untouched, so a key changed after migration is not reverted", () => {
-        const { secrets } = migrate(
-          {
-            "copilot-setting-plus-license-key": "lic-new",
-            [`copilot-v${SYNCED_VAULT_ID}-plus-license-key`]: "lic-old",
-          },
-          makeSettings(),
-          SYNCED_VAULT_ID
-        );
-
-        expect(secrets.get("copilot-setting-plus-license-key")).toBe("lic-new");
-      });
-
-      it("copies a model-level apiKey to its stable model name", () => {
-        const identityHash = md5("gpt-4|openai").slice(0, 8);
-
-        const { secrets } = migrate(
-          {
-            [`copilot-v${SYNCED_VAULT_ID}-model-api-key-chat-gpt-4-openai-${identityHash}`]:
-              "sk-model",
-          },
-          makeSettings({ activeModels: [makeModel({ name: "gpt-4", provider: "openai" })] }),
-          SYNCED_VAULT_ID
-        );
-
-        expect(secrets.get(`copilot-model-api-key-chat-gpt-4-openai-${identityHash}`)).toBe(
-          "sk-model"
-        );
-      });
-
-      it("rewrites a legacy provider pointer to its readable name and copies the key (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const legacyPointer = `copilot-v${SYNCED_VAULT_ID}-provider-row-1`;
-        const provider = makeProvider({ apiKeyKeychainId: legacyPointer });
-
-        const { secrets, migrated } = migrate(
+      it("moves a key from its random-id name to its stable name and rewrites the pointer (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const { storage, migrated } = migrate(
           { [legacyPointer]: "sk-ant" },
-          makeSettings({ providers: { "row-1": provider } })
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
         );
 
-        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
-        expect(secrets.get("copilot-anthropic-api-key")).toBe("sk-ant");
-        expect(secrets.get(legacyPointer)).toBe("sk-ant");
+        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe(stableName);
+        expect(storage.secrets.get(stableName)).toBe("sk-ant");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
       });
 
-      it("prefers the entry the provider's current pointer names over other legacy entries for that provider", () => {
-        const currentPointer = `copilot-v${EARLIER_VAULT_ID}-provider-row-1`;
-        const provider = makeProvider({ apiKeyKeychainId: currentPointer });
-
-        const { secrets } = migrate(
-          {
-            [`copilot-v${SYNCED_VAULT_ID}-provider-row-1`]: "sk-stale",
-            [currentPointer]: "sk-current",
-          },
-          makeSettings({ providers: { "row-1": provider } }),
-          SYNCED_VAULT_ID
+      it("rewrites a legacy pointer this device never held, so a re-entered key lands on the stable name", () => {
+        const { storage, migrated } = migrate(
+          {},
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
         );
 
-        expect(secrets.get("copilot-anthropic-api-key")).toBe("sk-current");
+        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe(stableName);
+        expect(storage.secrets.has(stableName)).toBe(false);
       });
 
-      it("fills a readable pointer synced from another device with this device's legacy key for the same provider (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const provider = makeProvider({ apiKeyKeychainId: "copilot-anthropic-api-key" });
-        const settings = makeSettings({ providers: { "row-1": provider } });
+      it("fills a stable pointer synced from another device with this device's legacy key for the same provider (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const settings = makeSettings({
+          providers: { "row-1": makeProvider({ apiKeyKeychainId: stableName }) },
+        });
 
-        const { secrets, migrated } = migrate(
-          { [`copilot-v${EARLIER_VAULT_ID}-provider-row-1`]: "sk-ant-local" },
-          settings
-        );
+        const { storage, migrated } = migrate({ [legacyPointer]: "sk-ant-local" }, settings);
 
-        expect(secrets.get("copilot-anthropic-api-key")).toBe("sk-ant-local");
+        expect(storage.secrets.get(stableName)).toBe("sk-ant-local");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
         expect(migrated).toBe(settings);
       });
 
-      it("rewrites a legacy pointer this device never held, so a re-entered key lands on the shared name", () => {
-        const provider = makeProvider({
-          apiKeyKeychainId: `copilot-v${SYNCED_VAULT_ID}-provider-row-1`,
-        });
-
-        const { secrets, migrated } = migrate(
-          {},
-          makeSettings({ providers: { "row-1": provider } })
+      it("leaves an existing stable entry untouched, so a key changed after migration is not reverted", () => {
+        const { storage } = migrate(
+          { [stableName]: "sk-new", [legacyPointer]: "sk-old" },
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
         );
 
-        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe("copilot-anthropic-api-key");
-        expect(secrets.has("copilot-anthropic-api-key")).toBe(false);
+        expect(storage.secrets.get(stableName)).toBe("sk-new");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
+      });
+
+      it("does not restore a key deleted from its stable name after migration (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const { storage, service, migrated } = migrate(
+          { [legacyPointer]: "sk-ant" },
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
+        );
+
+        storage.deleteSecret(stableName);
+        service.migrateProviderNames(migrated);
+
+        expect(storage.secrets.size).toBe(0);
+      });
+
+      it("leaves another vault's provider entries alone on a Keychain shared between vaults", () => {
+        const otherVaultEntry = `copilot-v${OTHER_VAULT_ID}-provider-row-1`;
+
+        const { storage } = migrate(
+          { [otherVaultEntry]: "sk-other-vault" },
+          makeSettings({ providers: { "row-1": makeProvider({ apiKeyKeychainId: stableName }) } })
+        );
+
+        expect(storage.secrets.get(otherVaultEntry)).toBe("sk-other-vault");
+        expect(storage.secrets.has(stableName)).toBe(false);
+      });
+
+      it("leaves a pointer to another plugin's secret and this vault's legacy entry alone (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const settings = makeSettings({
+          providers: { "row-1": makeProvider({ apiKeyKeychainId: "anthropic-api-key" }) },
+        });
+
+        const { storage, migrated } = migrate(
+          { "anthropic-api-key": "sk-plugin", [legacyPointer]: "sk-legacy" },
+          settings
+        );
+
+        expect(migrated).toBe(settings);
+        expect(storage.secrets.get("anthropic-api-key")).toBe("sk-plugin");
+        expect(storage.secrets.get(legacyPointer)).toBe("sk-legacy");
+      });
+    });
+
+    describe("getVaultId()", () => {
+      it("derives an 8-character hex ID from the desktop vault path", () => {
+        const service = KeychainService.getInstance(makeApp({ basePath: "/Users/test/MyVault" }));
+        const id = service.getVaultId();
+
+        expect(id).toHaveLength(8);
+        expect(/^[0-9a-f]{8}$/.test(id)).toBe(true);
+      });
+
+      it("returns the same ID on every call", () => {
+        const service = KeychainService.getInstance(makeApp({ basePath: "/Users/test/MyVault" }));
+        expect(service.getVaultId()).toBe(service.getVaultId());
+      });
+
+      it("falls back to vault name + configDir when no base path is available", () => {
+        const service = KeychainService.getInstance(makeApp({ adapter: {} }));
+        const id = service.getVaultId();
+
+        expect(id).toHaveLength(8);
+        expect(/^[0-9a-f]{8}$/.test(id)).toBe(true);
       });
     });
 
     describe("deleteSecret()", () => {
-      it("removes the stable entry for a settings key", () => {
+      it("removes the vault-namespaced entry for a settings key", () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
 
         service.deleteSecret("githubCopilotToken");
 
         expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
-          "copilot-setting-github-copilot-token"
+          `copilot-v${service.getVaultId()}-github-copilot-token`
         );
       });
 
@@ -356,7 +363,7 @@ describe("keychainService", () => {
         service.deleteSecret("githubCopilotToken");
 
         expect(secretStorage.setSecret).toHaveBeenCalledWith(
-          "copilot-setting-github-copilot-token",
+          `copilot-v${service.getVaultId()}-github-copilot-token`,
           ""
         );
       });
@@ -499,13 +506,14 @@ describe("keychainService", () => {
     });
 
     describe("forgetAllSecrets()", () => {
-      it("clears Copilot's keychain entries, strips settings, and notifies the user", async () => {
+      it("clears vault secrets, strips settings, and notifies the user", async () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        const vaultId = service.getVaultId();
 
         secretStorage.listSecrets.mockReturnValue([
-          "copilot-setting-open-a-i-api-key",
-          "anthropic-api-key",
+          `copilot-v${vaultId}-open-a-i-api-key`,
+          "copilot-vother000-google-api-key",
         ]);
 
         (getSettings as jest.Mock).mockReturnValue(
@@ -520,8 +528,12 @@ describe("keychainService", () => {
 
         await service.forgetAllSecrets(saveData, syncMemory);
 
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith("copilot-setting-open-a-i-api-key");
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith("anthropic-api-key");
+        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
+          `copilot-v${vaultId}-open-a-i-api-key`
+        );
+        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(
+          "copilot-vother000-google-api-key"
+        );
 
         expect(saveData).toHaveBeenCalled();
         const saved = saveData.mock.calls[0][0] as unknown as Record<string, unknown>;
@@ -562,9 +574,10 @@ describe("keychainService", () => {
       it("propagates keychain delete failures after successful disk save so the user can retry", async () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        const vaultId = service.getVaultId();
 
-        const idA = "copilot-setting-open-a-i-api-key";
-        const idB = "copilot-anthropic-api-key";
+        const idA = `copilot-v${vaultId}-open-a-i-api-key`;
+        const idB = `copilot-v${vaultId}-google-api-key`;
         secretStorage.listSecrets.mockReturnValue([idA, idB]);
 
         secretStorage.deleteSecret.mockImplementation((id: string) => {
@@ -619,15 +632,16 @@ describe("keychainService", () => {
     });
 
     describe("removeRetiredEmbeddingSecrets()", () => {
-      it("deletes only embedding-scoped model credentials (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782)", () => {
+      it("deletes only this vault's embedding-scoped model credentials (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782)", () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        const retired = "copilot-v1234abcd-model-api-key-embedding-text-embedding-3-small";
+        const vaultId = service.getVaultId();
+        const retired = `copilot-v${vaultId}-model-api-key-embedding-text-embedding-3-small`;
         secretStorage.listSecrets.mockReturnValue([
           retired,
-          "copilot-v1234abcd-model-api-key-chat-gpt-4o",
-          "copilot-model-api-key-chat-gpt-4o-1a2b3c4d",
-          "copilot-v1234abcd-open-a-i-api-key",
+          `copilot-v${vaultId}-model-api-key-chat-gpt-4o`,
+          `copilot-v${vaultId}-open-a-i-api-key`,
+          "copilot-vother000-model-api-key-embedding-text-embedding-3-small",
         ]);
 
         service.removeRetiredEmbeddingSecrets();
@@ -646,38 +660,23 @@ describe("keychainService", () => {
       });
     });
 
-    describe("clearCopilotSecrets()", () => {
-      it("deletes stable and legacy Copilot entries but leaves other plugins' secrets (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        secretStorage.listSecrets.mockReturnValue([
-          "copilot-anthropic-api-key",
-          "copilot-v1234abcd-provider-row-1",
-          "anthropic-api-key",
-        ]);
-
-        service.clearCopilotSecrets();
-
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith("copilot-anthropic-api-key");
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith("copilot-v1234abcd-provider-row-1");
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith("anthropic-api-key");
-      });
-
+    describe("clearAllVaultSecrets()", () => {
       it("clears what it can, then throws aggregating the count of failed entries", () => {
         const secretStorage = makeSecretStorage();
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
+        const vaultId = service.getVaultId();
 
-        const ok = "copilot-setting-open-a-i-api-key";
-        const bad1 = "copilot-setting-google-api-key";
-        const bad2 = "copilot-v1234abcd-cohere-api-key";
-        const foreign = "anthropic-api-key";
+        const ok = `copilot-v${vaultId}-open-a-i-api-key`;
+        const bad1 = `copilot-v${vaultId}-google-api-key`;
+        const bad2 = `copilot-v${vaultId}-cohere-api-key`;
+        const foreign = "copilot-vother000-anthropic-api-key";
         secretStorage.listSecrets.mockReturnValue([ok, bad1, bad2, foreign]);
 
         secretStorage.deleteSecret.mockImplementation((id: string) => {
           if (id === bad1 || id === bad2) throw new Error("os denied");
         });
 
-        expect(() => service.clearCopilotSecrets()).toThrow(/Failed to clear 2 keychain entries/);
+        expect(() => service.clearAllVaultSecrets()).toThrow(/Failed to clear 2 keychain entries/);
 
         expect(secretStorage.deleteSecret).toHaveBeenCalledWith(ok);
         expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(foreign);
@@ -688,7 +687,7 @@ describe("keychainService", () => {
         (secretStorage as unknown as { listSecrets: unknown }).listSecrets = undefined;
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
 
-        expect(() => service.clearCopilotSecrets()).toThrow(/does not support listing entries/);
+        expect(() => service.clearAllVaultSecrets()).toThrow(/does not support listing entries/);
         expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
       });
     });

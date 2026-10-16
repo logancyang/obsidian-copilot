@@ -183,7 +183,7 @@ describe("ProviderRegistry", () => {
   });
 
   describe("setApiKey()", () => {
-    it("mints a readable keychain name on the first key and reuses it when the key is rotated", async () => {
+    it("mints a stable keychain name for the vault on the first key and reuses it when the key is rotated", async () => {
       const id = await registry.add({
         providerType: "anthropic",
         displayName: "A",
@@ -192,11 +192,15 @@ describe("ProviderRegistry", () => {
       expect(registry.get(id)!.apiKeyKeychainId).toBeNull();
 
       await registry.setApiKey(id, "sk-first");
-      expect(registry.get(id)!.apiKeyKeychainId).toBe("copilot-anthropic-api-key");
+      expect(registry.get(id)!.apiKeyKeychainId).toBe(
+        `copilot-v${KeychainService.getInstance(app).getVaultId()}-provider-anthropic-api-key`
+      );
       expect(await registry.getApiKey(id)).toBe("sk-first");
 
       await registry.setApiKey(id, "sk-rotated");
-      expect(registry.get(id)!.apiKeyKeychainId).toBe("copilot-anthropic-api-key");
+      expect(registry.get(id)!.apiKeyKeychainId).toBe(
+        `copilot-v${KeychainService.getInstance(app).getVaultId()}-provider-anthropic-api-key`
+      );
       expect(await registry.getApiKey(id)).toBe("sk-rotated");
     });
 
@@ -233,8 +237,12 @@ describe("ProviderRegistry", () => {
       await registry.setApiKey(first, "sk-personal");
       await registry.setApiKey(second, "sk-work");
 
-      expect(registry.get(first)!.apiKeyKeychainId).toBe("copilot-openrouter-api-key");
-      expect(registry.get(second)!.apiKeyKeychainId).toBe("copilot-openrouter-api-key-2");
+      expect(registry.get(first)!.apiKeyKeychainId).toBe(
+        `copilot-v${KeychainService.getInstance(app).getVaultId()}-provider-openrouter-api-key`
+      );
+      expect(registry.get(second)!.apiKeyKeychainId).toBe(
+        `copilot-v${KeychainService.getInstance(app).getVaultId()}-provider-openrouter-api-key-2`
+      );
       expect(await registry.getApiKey(first)).toBe("sk-personal");
       expect(await registry.getApiKey(second)).toBe("sk-work");
     });

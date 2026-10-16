@@ -16,6 +16,12 @@ let transactionEpoch = 0;
 let legacyCredentialsUnprotected = false;
 const pendingTombstones = new Set<string>();
 
+const KEYCHAIN_VAULT_ID_RE = /^[a-f0-9]{8}$/;
+
+function isValidKeychainVaultId(value: unknown): value is string {
+  return typeof value === "string" && KEYCHAIN_VAULT_ID_RE.test(value);
+}
+
 function cloneRawSettings(rawData: unknown): CopilotSettings {
   if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
     return {} as CopilotSettings;
@@ -23,8 +29,13 @@ function cloneRawSettings(rawData: unknown): CopilotSettings {
   return structuredClone(rawData) as CopilotSettings;
 }
 
-function buildDiskSettings(settings: CopilotSettings, isFreshInstall: boolean): CopilotSettings {
+function buildDiskSettings(
+  settings: CopilotSettings,
+  vaultId: string,
+  isFreshInstall: boolean
+): CopilotSettings {
   const stripped = stripKeychainFields(cleanupLegacyFields(structuredClone(settings)));
+  stripped._keychainVaultId = vaultId;
   if (isFreshInstall) {
     stripped.settingsVersion = CURRENT_SETTINGS_VERSION;
   }
@@ -97,15 +108,15 @@ function credentialMigrationFromRecovery(
   };
 }
 
-function migrateKeychainNames(
+function migrateProviderNames(
   keychain: KeychainService,
   rawSettings: CopilotSettings
 ): CopilotSettings {
   if (!keychain.isAvailable()) return rawSettings;
   try {
-    return keychain.migrateLegacyNames(rawSettings, rawSettings._keychainVaultId);
+    return keychain.migrateProviderNames(rawSettings);
   } catch (error) {
-    logWarn("Keychain name migration failed; it will retry on the next load.", error);
+    logWarn("Keychain provider name migration failed; it will retry on the next load.", error);
     return rawSettings;
   }
 }
@@ -120,8 +131,13 @@ export async function loadSettingsWithKeychain(
   const isFreshInstall = rawData == null;
   const rawSettings = cloneRawSettings(rawData);
   const keychain = KeychainService.getInstance();
-  const migratedSettings = migrateKeychainNames(keychain, rawSettings);
-  const diskSettings = buildDiskSettings(migratedSettings, isFreshInstall);
+  const persistedVaultId = rawSettings._keychainVaultId;
+  const vaultId = isValidKeychainVaultId(persistedVaultId)
+    ? persistedVaultId
+    : keychain.getVaultId();
+  keychain.setVaultId(vaultId);
+  const migratedSettings = migrateProviderNames(keychain, rawSettings);
+  const diskSettings = buildDiskSettings(migratedSettings, vaultId, isFreshInstall);
   let credentialMigration = credentialMigrationFromRecovery(
     app,
     diskSettings._pendingCredentialRecovery
@@ -195,6 +211,7 @@ export async function loadSettingsWithKeychain(
   const sanitized = cleanupLegacyFields(sanitizeSettings(runtimeSource));
   const baseline = stripKeychainFields({
     ...sanitized,
+    _keychainVaultId: vaultId,
     _pendingCredentialRecovery: diskSettings._pendingCredentialRecovery,
   });
 

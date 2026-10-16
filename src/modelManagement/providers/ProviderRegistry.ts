@@ -130,8 +130,8 @@ export class ProviderRegistry {
     });
   }
 
-  // Linked names may be shared with another provider row, another plugin, or (on mobile, where
-  // the Keychain spans vaults) another vault, so only an unshared Copilot-owned name is deleted.
+  // Linked names may be shared with another provider row or another plugin, so only an unshared
+  // Copilot-owned name is deleted.
   // https://github.com/logancyang/obsidian-copilot/issues/3618
   #releaseKeychainName(row: Provider, caller: string): void {
     const name = row.apiKeyKeychainId;
@@ -173,7 +173,9 @@ export class ProviderRegistry {
       );
     }
     const keychain = KeychainService.getInstance(this.#app);
-    const keychainId = row.apiKeyKeychainId ?? providerKeychainName(row, getSettings().providers);
+    const keychainId =
+      row.apiKeyKeychainId ??
+      providerKeychainName(keychain.getVaultId(), row, getSettings().providers);
     // Re-registering with the key already stored is not a change, and emitting
     // one restarts every backend that bakes provider config into its spawn
     // (Plus reconciliation replays the license key on every sign-in and load).
