@@ -1203,7 +1203,7 @@ export const MIYO_SEARCH_SKILL: BuiltinSkill = {
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: miyo-search
-description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. Use it first for every request that might be answered from the user's notes, including questions that sound external, together with grep for exact terms. Needs the Miyo desktop app installed and running.
+description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. Use it for every request that might be answered from the user's notes, alongside grep for exact terms. Needs the Miyo desktop app installed and running.
 metadata:
   copilot-enabled-agents: claude, codex, opencode
   copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
@@ -1218,11 +1218,9 @@ app by default, or the remote Miyo server they configured in settings — never 
 third-party API, and no API key.
 
 When to use it: for every request that might be answered from the user's
-notes, including questions that sound external or current. Run it before
-answering from anything else, and also run \`grep\`/glob for any exact names,
-terms, tags or quoted phrases in the request. The two searches can run back to
-back; they do not need to run in parallel. Miyo finds notes that match by
-meaning even when the wording or title differs; grep finds exact strings.
+notes, alongside \`grep\`/glob for any exact names, terms, tags or quoted
+phrases in the request. Miyo finds notes that match by meaning even when the
+wording or title differs; grep finds exact strings.
 
 ${howToRunSection({
   shFile: "miyo-search.sh",
@@ -1233,12 +1231,8 @@ ${howToRunSection({
 
 The script locates the Miyo binary itself — you do not need to know where Miyo
 is installed or which shell you are in. Combine its results with your keyword
-search results by note path, then open the strongest matches before answering:
-a note with an unrelated or generic title (for example "Untitled 12") can still
-be the answer. Say the vault does not cover the question only after opening the
-top matches and finding no support. If Miyo reports that it is unavailable,
-continue with keyword search. Read the JSON straight from stdout; do not pipe it
-through other tools (no \`jq\`, no \`|\`).
+search results by note path. If Miyo reports that it is unavailable, continue
+with keyword search.
 
 Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
 folder boundary for the active vault and any other Miyo folders ticked in Copilot

@@ -223,32 +223,32 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain("miyo-search");
     });
 
-    it(`steers every vault lookup to miyo-search plus keyword search for exact terms, even for external-sounding questions (${ISSUE_717})`, () => {
+    it(`steers every request the notes might answer, even an external-sounding one, to miyo-search plus grep/glob for exact terms (${ISSUE_717})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
-        "For any request that may be answered from the user's notes, even one that sounds external or current, search the vault before answering: run miyo-search, and also grep/glob for any exact names, terms, tags or quoted phrases in the request"
+        "For any request that may be answered from the user's notes, even one that sounds external or current, run miyo-search and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
       );
       expect(prompt).not.toContain("when grep is too slow");
     });
 
-    it(`merges both result sets by note path and opens the top matches before saying the vault lacks an answer, then searches the web for external topics (${ISSUE_717})`, () => {
+    it(`merges both result sets by note path and opens the strongest matches before answering (${ISSUE_717})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain("Merge the results by note path and open the strongest matches");
       expect(prompt).toContain(
-        "Say the vault does not cover it only after opening the top matches from both searches and finding no support; for external topics, then search the web."
+        "Merge the results by note path and open the strongest matches before answering."
       );
     });
 
-    it(`allows the two searches to run one after the other so backends that serialize tool calls follow it (${ISSUE_717})`, () => {
+    it(`says the vault does not cover a request when neither search finds support, then searches the web for external topics (${ISSUE_717})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain("(one after the other is fine)");
-      expect(prompt).not.toMatch(/parallel|simultaneous|same step/i);
+      expect(prompt).toContain(
+        "If neither finds support, say the vault does not cover it; for external topics, then search the web."
+      );
     });
 
     it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {

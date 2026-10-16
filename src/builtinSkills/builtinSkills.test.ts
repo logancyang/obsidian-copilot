@@ -404,13 +404,10 @@ describe("builtinSkills", () => {
     it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
       const md = flattened(MIYO_SEARCH_SKILL.skillMd);
       expect(md).toMatch(
-        /description:[^\n]*every request that might be answered from the user's notes, including questions that sound external, together with grep for exact terms/
+        /description:[^\n]*Use it for every request that might be answered from the user's notes, alongside grep for exact terms\./
       );
       expect(md).toContain(
-        "When to use it: for every request that might be answered from the user's notes, including questions that sound external or current."
-      );
-      expect(md).toContain(
-        "also run `grep`/glob for any exact names, terms, tags or quoted phrases in the request"
+        "When to use it: for every request that might be answered from the user's notes, alongside `grep`/glob for any exact names, terms, tags or quoted phrases in the request."
       );
     });
 
@@ -420,19 +417,10 @@ describe("builtinSkills", () => {
       expect(md).not.toMatch(/single search step|do not fall back to other search tools/i);
     });
 
-    it(`has the agent merge Miyo and keyword results by note path and open the top matches before saying the vault lacks an answer (${ISSUE_717})`, () => {
+    it(`has the agent combine Miyo and keyword results by note path and continue with keyword search when Miyo is unavailable (${ISSUE_717})`, () => {
       const md = flattened(MIYO_SEARCH_SKILL.skillMd);
-      expect(md).toContain("Combine its results with your keyword search results by note path");
-      expect(md).toContain("open the strongest matches before answering");
       expect(md).toContain(
-        "Say the vault does not cover the question only after opening the top matches and finding no support."
-      );
-      expect(md).toContain("If Miyo reports that it is unavailable, continue with keyword search.");
-    });
-
-    it(`lets the two searches run back to back instead of requiring parallel tool calls (${ISSUE_717})`, () => {
-      expect(flattened(MIYO_SEARCH_SKILL.skillMd)).toContain(
-        "can run back to back; they do not need to run in parallel"
+        "Combine its results with your keyword search results by note path. If Miyo reports that it is unavailable, continue with keyword search."
       );
     });
 
