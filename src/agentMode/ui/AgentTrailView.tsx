@@ -55,10 +55,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   // A compaction row reports its own progress and is not a reply to time or copy.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  const compactionOnly = useMemo(() => {
-    const nodes = buildAgentTrail(parts);
-    return nodes.length > 0 && nodes.every((node) => node.type === "compaction");
-  }, [parts]);
+  const trailNodes = buildAgentTrail(parts);
+  const compactionOnly =
+    trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions

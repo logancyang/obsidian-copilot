@@ -61,19 +61,19 @@ describe("CompactionRow", () => {
       expect(container.querySelector(".copilot-spinner")).toBeNull();
     });
 
-    it("shows how far a completed compaction shrank the context when both token counts are known", () => {
+    it("shows how far a completed compaction shrank the context when both token counts are known https://github.com/Brevilabs/obsidian-copilot-private/issues/633", () => {
       render(<CompactionRow part={part({ preTokens: 182_340, postTokens: 24_100 })} />);
 
       expect(screen.getByText("Context compacted · 182k → 24k tokens")).toBeTruthy();
     });
 
-    it("omits the token counts when the backend reported only one of them", () => {
+    it("omits the token counts when the backend reported only one of them https://github.com/Brevilabs/obsidian-copilot-private/issues/633", () => {
       render(<CompactionRow part={part({ preTokens: 182_340 })} />);
 
       expect(screen.getByText("Context compacted")).toBeTruthy();
     });
 
-    it("says an automatic completed compaction happened automatically", () => {
+    it("says an automatic completed compaction happened automatically https://github.com/Brevilabs/obsidian-copilot-private/issues/633", () => {
       render(
         <CompactionRow part={part({ trigger: "auto", preTokens: 90_000, postTokens: 8_000 })} />
       );

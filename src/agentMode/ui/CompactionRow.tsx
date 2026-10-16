@@ -17,6 +17,8 @@ function formatTokens(count: number): string {
   return count >= 1000 ? `${Math.round(count / 1000)}k` : String(count);
 }
 
+// Not every backend reports both token counts, and an automatic compaction says so because the user didn't ask for it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/633
 function completedText(part: CompactionPart): string {
   const label = part.trigger === "auto" ? "Context compacted automatically" : "Context compacted";
   return part.preTokens !== undefined && part.postTokens !== undefined

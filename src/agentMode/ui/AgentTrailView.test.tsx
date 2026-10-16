@@ -286,6 +286,18 @@ describe("AgentTrail", () => {
     }
   );
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 restores Worked for and the copy action once an answer streams into the same parts list after a compaction", () => {
+    const parts: AgentMessagePart[] = [compaction({ trigger: "auto" })];
+    const { rerenderTrail } = renderTrail({ parts, turnDurationMs: 138_000 });
+    expect(screen.queryByTitle("Copy")).toBeNull();
+
+    parts.push(text("The final answer."));
+    rerenderTrail({ parts, turnDurationMs: 138_000 });
+
+    expect(screen.getByText("Worked for")).toBeTruthy();
+    expect(screen.getByTitle("Copy")).toBeTruthy();
+  });
+
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 shows only the compaction's own elapsed time while a compaction-only reply is running", () => {
     renderTrail({
       parts: [compaction({ status: "in_progress", startedAtMs: Date.now() - 5_000 })],
