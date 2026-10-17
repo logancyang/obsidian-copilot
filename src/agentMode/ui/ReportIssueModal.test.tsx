@@ -489,6 +489,9 @@ describe("ReportIssueModal", () => {
         const entries = unzipSync(new Uint8Array(await realFs.readFile(report.zipPath)));
         const entryText = (name: string) => new TextDecoder().decode(entries[name]);
         expect(entryText("acp-frames.ndjson.txt")).toBe(frames);
+        expect(
+          bundleInput().logs.find((log) => log.id === "activityLog")?.preserveConversations
+        ).toBe(true);
         expect(entryText("copilot-log.md")).toBe(chatLog);
       });
 

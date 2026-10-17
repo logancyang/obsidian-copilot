@@ -378,7 +378,7 @@ async function activityLogRequest(): Promise<ReportLogRequest> {
   const text = await frameSink.readConversations();
   return text === null
     ? { ...base, unavailableReason: "The Agent Mode activity log has no chats to attach." }
-    : { ...base, text };
+    : { ...base, text, preserveConversations: true };
 }
 
 async function chatLogRequest(): Promise<ReportLogRequest> {

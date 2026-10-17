@@ -14,6 +14,7 @@ interface JsonRpcFrame {
 interface PendingRequest {
   method: string;
   sessionId: string | null;
+  state?: unknown;
 }
 
 function sessionIdOf(value: unknown): string | null {
@@ -126,7 +127,8 @@ function logFrame(
         method: string,
         id: string | null,
         payload: unknown,
-        sessionId: string | null
+        sessionId: string | null,
+        confirmedState?: unknown
       ) =>
         frameSink.append({
           ts: new Date().toISOString(),
@@ -137,6 +139,7 @@ function logFrame(
           id,
           payload,
           sessionId,
+          confirmedState,
         })
     : null;
 
@@ -155,7 +158,17 @@ function logFrame(
     const method = frame.method;
     const idLabel = idStr !== null ? `#${idStr}` : "(notif)";
     const sessionId = sessionIdOf(frame.params);
-    if (idStr !== null) ownPending.set(idStr, { method, sessionId });
+    if (idStr !== null)
+      ownPending.set(idStr, {
+        method,
+        sessionId,
+        // Empty setter results still confirm the requested state; errors must never promote it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+        state:
+          method === "session/set_mode" || method === "session/set_model"
+            ? frame.params
+            : undefined,
+      });
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.params)}`);
     emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params, sessionId);
     return;
@@ -171,6 +184,6 @@ function logFrame(
     emit?.("error", method, idStr, frame.error, sessionId);
   } else {
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.result)}`);
-    emit?.("result", method, idStr, frame.result, sessionId);
+    emit?.("result", method, idStr, frame.result, sessionId, request?.state);
   }
 }

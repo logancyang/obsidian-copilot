@@ -62,7 +62,7 @@ function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
     stat: jest.fn(async (path) => {
       const data = files.get(path);
       if (data === undefined) throw errno("ENOENT");
-      return { size: data.length, mtimeMs: mtimes.get(path) ?? 0 };
+      return { size: Buffer.byteLength(data, "utf8"), mtimeMs: mtimes.get(path) ?? 0 };
     }),
     readdir: jest.fn(async (dir) =>
       [...files.keys()].filter((f) => f.startsWith(dir + "/")).map((f) => f.slice(dir.length + 1))
@@ -156,7 +156,7 @@ describe("debugSink", () => {
                 sessionUpdate: "tool_call_update",
                 toolCallId: "call-1",
               },
-              content: "x".repeat(100_000),
+              content: "漢".repeat(30_000),
             },
           })
         );
@@ -165,6 +165,7 @@ describe("debugSink", () => {
         const log = runtime.files.get(bgPath(paths)) ?? "";
         expect(log.length).toBeLessThan(5_000);
         expect(log).toContain('"__truncated":true');
+        expect(JSON.parse(log).payload.originalBytes).toBeGreaterThan(90_000);
         expect(log).toContain("sessionUpdate=tool_call_update");
         expect(log).toContain("toolCallId=call-1");
       });
@@ -189,7 +190,16 @@ describe("debugSink", () => {
         const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
         const paths = getFrameLogPaths("/vault", runtime);
         const frame = (id: string, payload: unknown) =>
-          sink.append(makeFrame({ id, sessionId: "chat", payload }));
+          sink.append(
+            makeFrame({
+              id,
+              sessionId: "chat",
+              dir: "←",
+              kind: id === "first" ? "result" : "notif",
+              method: id === "first" ? "session/new" : "session/update",
+              payload,
+            })
+          );
 
         frame("first", { sessionId: "chat", models: { currentModelId: "model-a" } });
         for (let i = 0; i < 120; i++) {
@@ -209,6 +219,98 @@ describe("debugSink", () => {
         expect(text).toContain('"frameSink":"elided"');
         expect(text).toContain('"payload":{"model":"model-a"}');
         expect(text).toContain('"payload":{"model":"model-b"}');
+      });
+
+      it("caps repeated CJK frames by UTF-8 bytes, including after trimming (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+        const paths = getFrameLogPaths("/vault", runtime);
+        for (let i = 0; i < 100; i++) {
+          sink.append(makeFrame({ sessionId: "cjk", id: String(i), payload: "漢".repeat(20_000) }));
+          await sink.flush();
+          expect(
+            Buffer.byteLength(runtime.files.get(sessionPath(paths, "cjk")) ?? "", "utf8")
+          ).toBeLessThanOrEqual(4 * 1024 * 1024);
+        }
+        const text = runtime.files.get(sessionPath(paths, "cjk")) ?? "";
+        expect(text).toContain('"id":"0"');
+        expect(text).toContain('"id":"99"');
+        expect(text).toContain('"frameSink":"elided"');
+      });
+
+      it.each(["queue rejection", "write failure"])(
+        "records an identical state after %s rather than caching unwritten evidence (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)",
+        async (failure) => {
+          const runtime = makeRuntime();
+          const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+          const state = makeFrame({
+            sessionId: "chat",
+            dir: "←",
+            payload: { currentModeId: "plan" },
+          });
+          if (failure === "queue rejection") {
+            for (let i = 0; i < 32; i++) sink.append(makeFrame());
+          } else {
+            (runtime.appendFile as jest.Mock).mockRejectedValueOnce(errno("EIO"));
+          }
+          sink.append(state);
+          await sink.flush();
+          sink.append(state);
+          await sink.flush();
+          const text =
+            runtime.files.get(sessionPath(getFrameLogPaths("/vault", runtime), "chat")) ?? "";
+          expect(text).toContain('"method":"frameSink.state"');
+          expect(text).toContain('"payload":{"mode":"plan"}');
+        }
+      );
+
+      it("records confirmed mode changes but not a rejected request or unrelated payload (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+        const emit = (record: Partial<FrameRecord>) =>
+          sink.append(makeFrame({ sessionId: "chat", ...record }));
+        emit({
+          dir: "←",
+          kind: "result",
+          method: "session/new",
+          payload: { modes: { currentModeId: "default" } },
+        });
+        emit({ kind: "request", method: "session/set_mode", payload: { modeId: "plan" } });
+        emit({
+          dir: "←",
+          kind: "error",
+          method: "session/set_mode",
+          payload: { message: "rejected" },
+        });
+        await sink.flush();
+        const rejectedText =
+          runtime.files.get(sessionPath(getFrameLogPaths("/vault", runtime), "chat")) ?? "";
+        expect(rejectedText).not.toContain('"payload":{"mode":"plan"}');
+        emit({
+          dir: "←",
+          payload: { update: { sessionUpdate: "tool_call_update", modeId: "invented" } },
+        });
+        emit({
+          kind: "result",
+          method: "session/set_mode",
+          payload: {},
+          confirmedState: { modeId: "plan" },
+        });
+        emit({ kind: "request", method: "setSessionMode", payload: { modeId: "plan" } });
+        emit({ kind: "result", method: "setSessionMode", payload: { currentModeId: "plan" } });
+        emit({
+          dir: "←",
+          payload: { update: { sessionUpdate: "current_mode_update", currentModeId: "default" } },
+        });
+        await sink.flush();
+        const text =
+          runtime.files.get(sessionPath(getFrameLogPaths("/vault", runtime), "chat")) ?? "";
+        const states = text
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((record) => record.method === "frameSink.state");
+        expect(states.map((record) => record.payload.mode)).toEqual(["default", "plan", "default"]);
       });
 
       it("keeps the model probe out of the newest 5 conversations (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
@@ -347,6 +449,26 @@ describe("debugSink", () => {
         await sink.clear();
 
         expect(runtime.files.size).toBe(0);
+      });
+
+      it("re-emits unchanged state when an append is queued immediately after clear (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+        const state = makeFrame({
+          sessionId: "chat",
+          dir: "←",
+          payload: { currentModelId: "model-a", currentModeId: "default" },
+        });
+        sink.append(state);
+        await sink.flush();
+        const cleared = sink.clear();
+        sink.append(state);
+        await cleared;
+        await sink.flush();
+        const text =
+          runtime.files.get(sessionPath(getFrameLogPaths("/vault", runtime), "chat")) ?? "";
+        expect(text).toContain('"method":"frameSink.state"');
+        expect(text).toContain('"payload":{"model":"model-a","mode":"default"}');
       });
 
       it("deletes nothing when path validation fails (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {

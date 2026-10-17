@@ -249,9 +249,16 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
 
     const state = this.computeState(sessionId);
+    // Sessions that never switch mode still need their established mode in reports.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
     logSdkOutboundResult(
       "newSession",
-      { sessionId, currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
+      {
+        sessionId,
+        currentModelId: seedModelId ?? null,
+        currentModeId: state.mode?.current ?? null,
+        hasEffort: state.model !== null,
+      },
       sessionId
     );
     return { sessionId, state };
@@ -435,6 +442,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
+    logSdkOutboundResult("setSessionModel", { currentModelId: session.model }, params.sessionId);
     return state;
   }
 
@@ -461,6 +469,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
+    logSdkOutboundResult(
+      "setSessionMode",
+      { currentModeId: session.permissionMode },
+      params.sessionId
+    );
     return state;
   }
 
@@ -585,9 +598,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
 
     const state = this.computeState(params.sessionId);
+    // Reopening establishes a mode even when the user never switches it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
     logSdkOutboundResult(
       method,
-      { currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
+      {
+        currentModelId: seedModelId ?? null,
+        currentModeId: state.mode?.current ?? null,
+        hasEffort: state.model !== null,
+      },
       params.sessionId
     );
     return { sessionId: params.sessionId, state };

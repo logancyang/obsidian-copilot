@@ -1,4 +1,5 @@
 import { err2String } from "@/errorFormat";
+import { fitConversationFrames } from "@/utils/frameLogBudget";
 import { formatBytes } from "@/utils/formatBytes";
 import { type ReportUploadAttempt } from "@/utils/reportUpload";
 import { zipSync } from "fflate";
@@ -42,6 +43,7 @@ export interface ReportLogRequest {
   name: string;
   path?: string;
   text?: string;
+  preserveConversations?: boolean;
   unavailableReason?: string;
 }
 
@@ -181,12 +183,18 @@ async function logEntry(
     const truncated = redactedBytes > remainingBytes;
     if (truncated && remainingBytes < MIN_LOG_TAIL_BYTES)
       return tooBig(redactedBytes, `${formatBytes(remainingBytes)} left`);
-    const whole = truncated ? cutToFit(redacted) : redacted;
+    const whole = truncated
+      ? log.preserveConversations
+        ? fitConversationFrames(redacted, room)
+        : cutToFit(redacted)
+      : redacted;
     if (truncated && whole.trim() === "") return emptyTail();
-    const bytes = encodeText(truncated ? withTruncationNote(whole, raw.totalBytes) : whole);
+    const bytes = encodeText(
+      truncated && !log.preserveConversations ? withTruncationNote(whole, raw.totalBytes) : whole
+    );
 
     const note = truncated
-      ? `truncated to the newest entries of ${formatBytes(raw.totalBytes)}`
+      ? `truncated to ${log.preserveConversations ? "each conversation's state and first/newest frames" : "the newest entries"} of ${formatBytes(raw.totalBytes)}`
       : undefined;
     return {
       result: { id: log.id, name: log.name, bytes: bytes.length, included: true, note },

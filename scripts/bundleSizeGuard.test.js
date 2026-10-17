@@ -23,20 +23,24 @@ function legalBundle(...entries) {
 
 describe("bundleSizeGuard", () => {
   describe("rewriteExactZodImports()", () => {
-    it("rewrites exact z-only imports from zod and zod/v4 for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+    it("rewrites exact z-only imports from zod, zod/v3 and zod/v4 for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
       expect(
         rewriteExactZodImports(
           [
             'import { z } from "zod";',
+            'import { z as legacy } from "zod/v3";',
             "import { z as schema } from 'zod/v4';",
             "schema.string();",
           ].join("\n"),
           "dependency.js"
         )
       ).toBe(
-        ['import * as z from "zod";', "import * as schema from 'zod/v4';", "schema.string();"].join(
-          "\n"
-        )
+        [
+          'import * as z from "zod";',
+          'import * as legacy from "zod/v3";',
+          "import * as schema from 'zod/v4';",
+          "schema.string();",
+        ].join("\n")
       );
     });
 

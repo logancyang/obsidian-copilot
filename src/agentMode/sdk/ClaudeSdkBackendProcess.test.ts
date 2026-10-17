@@ -45,8 +45,9 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+let mockDebugFullFrames = false;
 jest.mock("@/settings/model", () => ({
-  getSettings: () => ({ agentMode: { debugFullFrames: false } }),
+  getSettings: () => ({ agentMode: { debugFullFrames: mockDebugFullFrames } }),
 }));
 
 jest.mock("@/agentMode/session/debugSink", () => ({
@@ -67,6 +68,7 @@ import {
 } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
 import { AuthRequiredError } from "@/agentMode/session/errors";
+import { frameSink } from "@/agentMode/session/debugSink";
 
 beforeEach(() => {
   (getCachedSdkCatalog as jest.Mock).mockReturnValue(FAKE_CATALOG);
@@ -437,6 +439,47 @@ describe("ClaudeSdkBackendProcess", () => {
         );
         expect(pro?.effortOptions.map((o) => o.value)).toEqual(["low", "medium", "high"]);
         expect(pro?.description).toBe("test");
+      });
+
+      it("logs the confirmed default mode for both new and resumed sessions without a mode switch (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          const proc = makeProc({
+            descriptor: {
+              ...fakeDescriptor(),
+              getModeMapping: () => ({
+                kind: "setMode",
+                canonical: { default: "default", plan: "plan", auto: "bypassPermissions" },
+              }),
+            },
+          });
+          const opened = await proc.newSession({ cwd: "/vault" });
+          await proc.resumeSession({ sessionId: opened.sessionId, cwd: "/vault" });
+          const results = (frameSink.append as jest.Mock).mock.calls
+            .map(([record]) => record)
+            .filter((record) => record.kind === "result");
+          expect(
+            results.map((record) => ({ method: record.method, payload: record.payload }))
+          ).toEqual([
+            {
+              method: "newSession",
+              payload: expect.objectContaining({
+                currentModelId: "claude-fake-pro",
+                currentModeId: "default",
+              }),
+            },
+            {
+              method: "resumeSession",
+              payload: expect.objectContaining({
+                currentModelId: "claude-fake-pro",
+                currentModeId: "default",
+              }),
+            },
+          ]);
+        } finally {
+          mockDebugFullFrames = false;
+        }
       });
 
       it("honors persisted default model when it appears in the catalog", async () => {

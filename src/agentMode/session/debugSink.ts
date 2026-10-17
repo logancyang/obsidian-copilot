@@ -1,5 +1,7 @@
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { byteLength } from "@/utils/logTail";
+import { fitConversationFrames } from "@/utils/frameLogBudget";
 
 export interface FrameRecord {
   ts: string;
@@ -10,6 +12,7 @@ export interface FrameRecord {
   id: string | null;
   payload: unknown;
   sessionId?: string | null;
+  confirmedState?: unknown;
 }
 
 const LEGACY_LOG_FILE_NAMES = ["acp-frames.ndjson", "acp-frames.old.ndjson"];
@@ -26,8 +29,7 @@ const LOG_DIR_PREFIX = ["obsidian-copilot", "acp-frames"] as const;
 const LOG_DIR_MODE = 0o700;
 const LOG_FILE_MODE = 0o600;
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
-const KEEP_HEAD_BYTES = 1024 * 1024;
-const KEEP_TAIL_BYTES = 2 * 1024 * 1024;
+const RETAINED_FILE_BYTES = 3 * 1024 * 1024;
 const MAX_LINE_BYTES = 64 * 1024;
 const MAX_QUEUE_FRAMES = 32;
 const MAX_QUEUE_BYTES = 8 * 1024 * 1024;
@@ -111,6 +113,7 @@ export class FrameSink {
     const filePath = runtime.join(paths.dirPath, conversationFileName(sessionId));
     this.writeChain = this.writeChain.then(async () => {
       this.fileBytes.delete(filePath);
+      this.conversationState.delete(filePath);
       await removeIfExists(runtime, filePath);
     });
   }
@@ -121,33 +124,24 @@ export class FrameSink {
 
     const sessionId =
       record.sessionId && !this.probeSessions.has(record.sessionId) ? record.sessionId : null;
-    let line = this.toLine(record);
-    if (sessionId) line += this.stateLine(sessionId, record);
+    const line = this.toLine(record);
+    const lineBytes = byteLength(line);
 
-    if (
-      this.pendingFrames >= MAX_QUEUE_FRAMES ||
-      this.pendingBytes + line.length > MAX_QUEUE_BYTES
-    ) {
+    if (this.pendingFrames >= MAX_QUEUE_FRAMES || this.pendingBytes + lineBytes > MAX_QUEUE_BYTES) {
       this.droppedSinceLastWrite++;
       return;
     }
 
-    const lineBytes = line.length;
     this.pendingFrames++;
     this.pendingBytes += lineBytes;
 
     this.writeChain = this.writeChain
-      .then(() => this.doAppend(paths, sessionId, line, isPromptRequest(record)))
-      .then(
-        () => {
-          this.pendingFrames--;
-          this.pendingBytes -= lineBytes;
-        },
-        () => {
-          this.pendingFrames--;
-          this.pendingBytes -= lineBytes;
-        }
-      );
+      .then(() => this.doAppend(paths, sessionId, line, record))
+      .catch(() => {})
+      .then(() => {
+        this.pendingFrames--;
+        this.pendingBytes -= lineBytes;
+      });
   }
 
   async clear(): Promise<void> {
@@ -164,6 +158,7 @@ export class FrameSink {
         await removeIfExists(runtime, runtime.join(paths.dirPath, name));
       }
       this.fileBytes.clear();
+      this.conversationState.clear();
       this.pruned.clear();
     });
     this.writeChain = task.catch(() => {});
@@ -300,11 +295,11 @@ export class FrameSink {
       );
     }
 
-    if (line.length <= MAX_LINE_BYTES) return line;
+    if (byteLength(line) <= MAX_LINE_BYTES) return line;
 
     let payloadBytes = 0;
     try {
-      payloadBytes = JSON.stringify(record.payload).length;
+      payloadBytes = byteLength(JSON.stringify(record.payload));
     } catch {
       payloadBytes = 0;
     }
@@ -320,34 +315,41 @@ export class FrameSink {
     );
   }
 
-  private stateLine(sessionId: string, record: FrameRecord): string {
-    const found = modelModeOf(record.payload);
-    if (!found) return "";
-    const prior = this.conversationState.get(sessionId);
+  private nextState(filePath: string, record: FrameRecord): ConversationState | null {
+    // Requests can be rejected, so only successful session operations and state notifications establish diagnostic state.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+    const confirmed =
+      record.kind === "result" ||
+      (record.kind === "notif" && record.dir === "←" && record.method === "session/update");
+    if (!confirmed) return null;
+    const found = modelModeOf(record.payload) ?? modelModeOf(record.confirmedState);
+    if (!found) return null;
+    const prior = this.conversationState.get(filePath);
     const next = { ...prior, ...found };
-    if (prior?.model === next.model && prior?.mode === next.mode) return "";
-    this.conversationState.set(sessionId, next);
-    return this.toLine({
-      ...record,
-      dir: "→",
-      tag: "frameSink",
-      kind: "raw",
-      method: STATE_METHOD,
-      id: null,
-      payload: next,
-    });
+    return prior?.model === next.model && prior?.mode === next.mode ? null : next;
   }
 
   private async doAppend(
     paths: FrameLogPaths,
     sessionId: string | null,
     line: string,
-    isPrompt: boolean
+    record: FrameRecord
   ): Promise<void> {
     const runtime = this.getRuntime();
     if (!runtime) return;
-
+    const name = sessionId ? conversationFileName(sessionId) : BACKGROUND_FILE_NAME;
+    const filePath = runtime.join(paths.dirPath, name);
+    const state = sessionId ? this.nextState(filePath, record) : null;
     let payload = line;
+    if (state)
+      payload += this.toLine({
+        ...record,
+        tag: "frameSink",
+        kind: "raw",
+        method: STATE_METHOD,
+        id: null,
+        payload: state,
+      });
     if (this.droppedSinceLastWrite > 0) {
       const dropped = this.droppedSinceLastWrite;
       this.droppedSinceLastWrite = 0;
@@ -361,17 +363,17 @@ export class FrameSink {
           id: null,
           payload: { dropped },
         }) + "\n";
-      payload = note + line;
+      payload = note + payload;
     }
-
-    const name = sessionId ? conversationFileName(sessionId) : BACKGROUND_FILE_NAME;
-    const filePath = runtime.join(paths.dirPath, name);
     try {
       await this.ensureFolder(runtime, paths);
       await runtime.appendFile(filePath, payload, {
         encoding: "utf8",
         mode: LOG_FILE_MODE,
       });
+      // The cache describes written evidence, not queued frames, and shares the files' serialized clear lifecycle.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+      if (state) this.conversationState.set(filePath, state);
     } catch {
       // Drop the frame and forget the validated directory, so the next frame
       // re-runs the full safety check (and recreates a deleted folder). A
@@ -385,10 +387,10 @@ export class FrameSink {
     try {
       const known = this.fileBytes.get(filePath);
       const size =
-        known === undefined ? (await runtime.stat(filePath)).size : known + payload.length;
+        known === undefined ? (await runtime.stat(filePath)).size : known + byteLength(payload);
       this.fileBytes.set(filePath, size);
       if (size > MAX_FILE_BYTES) await this.trimFile(runtime, filePath);
-      if (sessionId && isPrompt && !this.pruned.has(name)) {
+      if (sessionId && isPromptRequest(record) && !this.pruned.has(name)) {
         this.pruned.add(name);
         await this.pruneConversations(runtime, paths.dirPath);
       }
@@ -403,25 +405,12 @@ export class FrameSink {
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/658
    */
   private async trimFile(runtime: NodeRuntime, filePath: string): Promise<void> {
-    const lines = (await runtime.readFile(filePath, "utf8")).split("\n").filter(Boolean);
-    let head = 0;
-    for (let bytes = 0; head < lines.length && bytes < KEEP_HEAD_BYTES; head++) {
-      bytes += lines[head].length + 1;
-    }
-    let tail = lines.length;
-    for (let bytes = 0; tail > head && bytes < KEEP_TAIL_BYTES; ) {
-      bytes += lines[--tail].length + 1;
-    }
-    const cut = lines.slice(head, tail);
-    const kept = [
-      ...lines.slice(0, head),
-      JSON.stringify({ frameSink: "elided", frames: cut.length }),
-      ...cut.filter((l) => l.includes(`"method":"${STATE_METHOD}"`)),
-      ...lines.slice(tail),
-    ];
-    const text = kept.join("\n") + "\n";
+    const text = fitConversationFrames(
+      await runtime.readFile(filePath, "utf8"),
+      RETAINED_FILE_BYTES
+    );
     await runtime.writeFile(filePath, text, { encoding: "utf8", mode: LOG_FILE_MODE });
-    this.fileBytes.set(filePath, text.length);
+    this.fileBytes.set(filePath, byteLength(text));
   }
 
   private async pruneConversations(runtime: NodeRuntime, dirPath: string): Promise<void> {
@@ -429,6 +418,7 @@ export class FrameSink {
     for (const name of names.slice(MAX_CONVERSATIONS)) {
       const filePath = runtime.join(dirPath, name);
       this.fileBytes.delete(filePath);
+      this.conversationState.delete(filePath);
       this.pruned.delete(name);
       await removeIfExists(runtime, filePath);
     }
@@ -481,13 +471,18 @@ function modelModeOf(payload: unknown): ConversationState | null {
     string,
     unknown
   >;
+  if (
+    root.update &&
+    !["current_mode_update", "config_option_update"].includes(String(body.sessionUpdate))
+  )
+    return null;
   const text = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   const nested = (key: string, field: string) => {
     const v = body[key];
     return v && typeof v === "object" ? text((v as Record<string, unknown>)[field]) : undefined;
   };
-  let model = text(body.modelId) ?? text(body.currentModelId) ?? nested("models", "currentModelId");
-  let mode = text(body.modeId) ?? text(body.currentModeId) ?? nested("modes", "currentModeId");
+  let model = text(body.currentModelId) ?? text(body.modelId) ?? nested("models", "currentModelId");
+  let mode = text(body.currentModeId) ?? text(body.modeId) ?? nested("modes", "currentModeId");
   if (Array.isArray(body.configOptions)) {
     for (const option of body.configOptions as Record<string, unknown>[]) {
       const kind = option?.category ?? option?.id;
