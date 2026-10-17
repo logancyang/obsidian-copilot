@@ -4,6 +4,7 @@ import {
   SEND_FEEDBACK_TOOL,
   type FeedbackMcpServer,
 } from "./feedbackMcpServer";
+import { MIYO_SEARCH_TOOL } from "@/agentMode/session/miyoSearch/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -57,7 +58,7 @@ describe("feedbackMcpServer", () => {
     let server: FeedbackMcpServer;
 
     beforeEach(() => {
-      server = createFeedbackMcpServer(() => true);
+      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback", jest.fn());
     });
 
     afterEach(() => server.dispose());
@@ -65,7 +66,7 @@ describe("feedbackMcpServer", () => {
     it("reports whether any hosted tool is switched on, following the switch as it changes", () => {
       let on = true;
       server.dispose();
-      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback" && on);
+      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback" && on, jest.fn());
 
       expect(server.hasEnabledTools()).toBe(true);
       on = false;
@@ -126,9 +127,106 @@ describe("feedbackMcpServer", () => {
       });
     });
 
+    it("lists miyo_search beside send_feedback when both are on, read-only and always loaded", async () => {
+      server.dispose();
+      server = createFeedbackMcpServer(() => true, jest.fn());
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toEqual({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { tools: [SEND_FEEDBACK_TOOL, MIYO_SEARCH_TOOL] },
+      });
+      expect(MIYO_SEARCH_TOOL).toMatchObject({
+        annotations: { readOnlyHint: true },
+        _meta: { "anthropic/alwaysLoad": true },
+      });
+    });
+
+    it("lists only miyo_search and reports tools enabled when send_feedback is off", async () => {
+      server.dispose();
+      server = createFeedbackMcpServer((toolName) => toolName === "miyo_search", jest.fn());
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(server.hasEnabledTools()).toBe(true);
+      expect(result.body).toEqual({ jsonrpc: "2.0", id: 2, result: { tools: [MIYO_SEARCH_TOOL] } });
+    });
+
+    it("hands a miyo_search call's arguments to the search and returns its text, raising no feedback card", async () => {
+      const searchMiyo = jest
+        .fn()
+        .mockResolvedValue({ text: '{"results":[],"count":0}', isError: false });
+      server.dispose();
+      server = createFeedbackMcpServer(() => true, searchMiyo);
+      const offer = jest.fn();
+      const channel = await server.connect("session-a", offer);
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", {
+          name: "miyo_search",
+          arguments: { query: "sourdough", variants: ["bread starter"] },
+        })
+      );
+
+      expect(searchMiyo).toHaveBeenCalledWith({ query: "sourdough", variants: ["bread starter"] });
+      expect(offer).not.toHaveBeenCalled();
+      expect(result.body).toEqual({
+        jsonrpc: "2.0",
+        id: 3,
+        result: { content: [{ type: "text", text: '{"results":[],"count":0}' }], isError: false },
+      });
+    });
+
+    it("marks a failed miyo_search call as an error result", async () => {
+      server.dispose();
+      server = createFeedbackMcpServer(
+        () => true,
+        jest.fn().mockResolvedValue({ text: "Miyo search failed.", isError: true })
+      );
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", { name: "miyo_search", arguments: { query: "x" } })
+      );
+
+      expect(result.body).toMatchObject({
+        result: { content: [{ text: "Miyo search failed." }], isError: true },
+      });
+    });
+
+    it("answers a call to a switched-off miyo_search with the turned-off result and runs no search", async () => {
+      const searchMiyo = jest.fn();
+      server.dispose();
+      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback", searchMiyo);
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", { name: "miyo_search", arguments: { query: "x" } })
+      );
+
+      expect(searchMiyo).not.toHaveBeenCalled();
+      expect(result.body).toMatchObject({
+        result: {
+          content: [
+            {
+              text: "miyo_search is not available in this chat. Don't call it again.",
+            },
+          ],
+          isError: false,
+        },
+      });
+    });
+
     it("lists no tools while send_feedback is switched off", async () => {
       server.dispose();
-      server = createFeedbackMcpServer(() => false);
+      server = createFeedbackMcpServer(() => false, jest.fn());
       const channel = await server.connect("session-a", jest.fn());
 
       const result = await post(channel, rpc(2, "tools/list"));
@@ -190,7 +288,7 @@ describe("feedbackMcpServer", () => {
     it("answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
       let on = true;
       server.dispose();
-      server = createFeedbackMcpServer(() => on);
+      server = createFeedbackMcpServer(() => on, jest.fn());
       const handler = jest.fn().mockReturnValue("shown");
       const channel = await server.connect("session-a", handler);
 
