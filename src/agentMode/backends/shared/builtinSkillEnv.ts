@@ -1,12 +1,7 @@
 import { BREVILABS_API_BASE_URL } from "@/constants";
-import { type CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
+import { type CopilotSettings, getSettings } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import {
-  isMiyoSearchSkillActive,
-  MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
-  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
-  MIYO_SEARCH_FOLDER_ENV,
-  MIYO_SEARCH_SCOPE_ENV,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -23,10 +18,6 @@ import type { BackendId } from "@/agentMode/session/types";
 const MIYO_URL_ENV = "MIYO_URL";
 
 const PROTECTED_BUILTIN_ENV_KEYS = [
-  MIYO_SEARCH_SCOPE_ENV,
-  MIYO_SEARCH_FOLDER_ENV,
-  MIYO_SEARCH_EXTRA_FOLDERS_ENV,
-  MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -37,7 +28,6 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
 export async function buildBuiltinSkillEnv(
   clientVersion = "",
   workspaceRootAbs = "",
-  vaultName = "",
   selfHostSearchChannel?: Readonly<{ url: string; token: string }>
 ): Promise<Readonly<Record<string, string>>> {
   const os = requireNodeModule<typeof import("node:os")>("os");
@@ -64,28 +54,6 @@ export async function buildBuiltinSkillEnv(
 
   const miyoUrl = getMiyoCustomUrl(settings);
   if (miyoUrl) env[MIYO_URL_ENV] = miyoUrl;
-
-  if (workspaceRootAbs) {
-    // Only an explicit Unrestricted setting may remove the exact pre-retrieval
-    // vault boundary. The active vault identity stays independent of a Project
-    // session's cwd and remains portable to remote Miyo hosts.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-    env[MIYO_SEARCH_SCOPE_ENV] = settings.miyoSearchAll === true ? "unrestricted" : "current";
-    if (vaultName) env[MIYO_SEARCH_FOLDER_ENV] = vaultName;
-    const extraFolders = normalizeMiyoFolderNames(settings.miyoExtraSearchFolders).filter(
-      (name) => name !== vaultName
-    );
-    // Ticked folders widen only Current vault scope. sh splits the list on "/", which no stored
-    // name contains; cmd gets pre-quoted arguments because splitting a list there needs delayed
-    // expansion or call, which re-expand ! or % in a name.
-    // https://github.com/logancyang/obsidian-copilot/issues/3508
-    if (settings.miyoSearchAll !== true && extraFolders.length > 0) {
-      env[MIYO_SEARCH_EXTRA_FOLDERS_ENV] = extraFolders.join("/");
-      env[MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV] = extraFolders
-        .map((name) => `--folder "${name}"`)
-        .join(" ");
-    }
-  }
 
   if (settings.isPaidUser && settings.plusLicenseKey) {
     env[PLUS_ENV.licenseKey] = settings.plusLicenseKey;
@@ -121,39 +89,12 @@ export function getBuiltinSkillEnvRestartPolicy(
     prev.miyoServerUrl !== next.miyoServerUrl;
   const selfHostRoutingChanged =
     backendId === "opencode" && prev.enableSelfHostMode !== next.enableSelfHostMode;
-  // Scope changes only affect a currently enabled skill. Tightening an active
-  // boundary must cancel the current turn; widening can wait until it is idle.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-  const activeMiyoSkill = isMiyoSearchSkillActive(prev) && isMiyoSearchSkillActive(next);
-  const activeMiyoScopeChanged = activeMiyoSkill && prev.miyoSearchAll !== next.miyoSearchAll;
-  // Ticked folders widen only Current vault scope, so unticking one tightens the boundary.
-  // https://github.com/logancyang/obsidian-copilot/issues/3508
-  const currentScopeKept =
-    activeMiyoSkill && prev.miyoSearchAll !== true && next.miyoSearchAll !== true;
-  const extraFolderRemoved =
-    currentScopeKept &&
-    prev.miyoExtraSearchFolders.some((name) => !next.miyoExtraSearchFolders.includes(name));
-  const extraFolderAdded =
-    currentScopeKept &&
-    next.miyoExtraSearchFolders.some((name) => !prev.miyoExtraSearchFolders.includes(name));
-
-  if (extraFolderRemoved) return "immediate";
-  if (
-    !ordinaryEnvChanged &&
-    !selfHostRoutingChanged &&
-    !activeMiyoScopeChanged &&
-    !extraFolderAdded
-  ) {
-    return "none";
-  }
+  if (!ordinaryEnvChanged && !selfHostRoutingChanged) return "none";
   if (
     selfHostRoutingChanged &&
     prev.enableSelfHostMode !== true &&
     next.enableSelfHostMode === true
   ) {
-    return "immediate";
-  }
-  if (activeMiyoScopeChanged && prev.miyoSearchAll === true && next.miyoSearchAll !== true) {
     return "immediate";
   }
   return "deferred";

@@ -7,7 +7,6 @@ jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState } from "@/agentMode/session/types";
 import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
-import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
@@ -229,7 +228,7 @@ describe("descriptor", () => {
       __resetVaultBaseCache();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 exports no Miyo search scope to global or Project sessions, because miyo_search reads the scope when it runs", async () => {
       resetSettings();
       __resetVaultBaseCache();
       mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
@@ -244,14 +243,7 @@ describe("descriptor", () => {
           notificationSoundId: "piano",
           welcomeDismissed: false,
           skills: { folder: "copilot/skills" },
-          backends: {
-            claude: {
-              envOverrides: {
-                [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
-                [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
-              },
-            },
-          },
+          backends: {},
         },
       });
       const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
@@ -270,12 +262,9 @@ describe("descriptor", () => {
         };
       };
 
-      expect(process.opts.getEnvOverrides?.()).toEqual({});
-      await expect(process.opts.getManagedEnv?.()).resolves.toEqual(
-        expect.objectContaining({
-          [MIYO_SEARCH_SCOPE_ENV]: "current",
-          [MIYO_SEARCH_FOLDER_ENV]: "active-vault",
-        })
+      const env = await process.opts.getManagedEnv?.();
+      expect(Object.keys(env ?? {}).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))).toEqual(
+        []
       );
     });
   });

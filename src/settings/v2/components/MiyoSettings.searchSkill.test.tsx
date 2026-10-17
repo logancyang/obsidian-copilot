@@ -2,11 +2,6 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-const refreshSkills = jest.fn<Promise<{ ok: boolean; reconcileErrorCount?: number }>, unknown[]>();
-jest.mock("@/agentMode", () => ({
-  SkillManager: { getInstance: () => ({ refresh: refreshSkills }) },
-}));
-
 const updateSetting = jest.fn<void, unknown[]>();
 let currentSettings = { ...DEFAULT_SETTINGS };
 jest.mock("@/settings/model", () => ({
@@ -80,6 +75,8 @@ jest.mock("@/miyo/miyoUtils", () => ({
     "@/miyo/miyoRuntimePolicy"
   ).getMiyoCustomUrl,
   getMiyoFolderName: () => "vault",
+  isMiyoSearchActive:
+    jest.requireActual<typeof import("@/miyo/miyoUtils")>("@/miyo/miyoUtils").isMiyoSearchActive,
   getExtraSearchFolderOptions:
     jest.requireActual<typeof import("@/miyo/miyoUtils")>("@/miyo/miyoUtils")
       .getExtraSearchFolderOptions,
@@ -147,7 +144,7 @@ jest.mock("obsidian", () => ({
 import { MiyoSettings } from "./MiyoSettings";
 import { refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 
-const toggle = () => screen.getByLabelText("Enable Miyo semantic search skill");
+const toggle = () => screen.getByLabelText("Enable Miyo semantic search for agents");
 
 function disconnectedMiyo() {
   mockMiyoBackend = "unavailable";
@@ -165,7 +162,6 @@ function deferred<T>() {
 describe("MiyoSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    refreshSkills.mockResolvedValue({ ok: true });
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
     updateSetting.mockImplementation((key, value) => {
       currentSettings = { ...currentSettings, [key as string]: value };
@@ -238,15 +234,16 @@ describe("MiyoSettings", () => {
     });
 
     it("shows Search scope only while Semantic search is enabled — https://github.com/Brevilabs/obsidian-copilot-private/issues/466", async () => {
-      render(<MiyoSettings />);
+      currentSettings = { ...currentSettings, enableMiyo: true };
+      const { rerender } = render(<MiyoSettings />);
       await act(async () => {});
       expect(screen.queryByLabelText("Search scope")).toBeNull();
       fireEvent.click(toggle());
+      rerender(<MiyoSettings />);
       expect(screen.getByLabelText("Search scope")).toBeTruthy();
-      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(true));
       fireEvent.click(toggle());
+      rerender(<MiyoSettings />);
       expect(screen.queryByLabelText("Search scope")).toBeNull();
-      await waitFor(() => expect(currentSettings.enableMiyoSearchSkill).toBe(false));
     });
     it("lists the connected Miyo host's other folders under Current vault scope, ticked as saved and without this vault — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
       currentSettings = {
@@ -322,7 +319,7 @@ describe("MiyoSettings", () => {
       expect(await screen.findByText("Couldn't load your Miyo folders.")).toBeTruthy();
     });
 
-    it("hides the agent search skill row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
+    it("hides the agent search row on mobile, where Agent mode cannot run — https://github.com/Brevilabs/obsidian-copilot-private/issues/471", async () => {
       mockOnDesktop.mockReturnValue(false);
       currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
@@ -662,68 +659,34 @@ describe("MiyoSettings", () => {
       expect(notifyMiyoIndexChanged).not.toHaveBeenCalled();
     });
 
-    it("saves the gate before using shared preference-aware reconciliation (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
-      refreshSkills.mockImplementation(async () => {
-        expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-        return { ok: true };
-      });
+    it("saves the switch on when the user turns Semantic search for agents on https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
       render(<MiyoSettings />);
       fireEvent.click(toggle());
-      await waitFor(() => expect(refreshSkills).toHaveBeenCalledWith(true));
+
+      expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
       expect(NoticeMock).not.toHaveBeenCalled();
     });
 
-    it.each([{ ok: false }, { ok: true, reconcileErrorCount: 1 }])(
-      "restores the disabled Miyo gate after an enable failure %j (https://github.com/logancyang/obsidian-copilot/issues/3022)",
-      async (result) => {
-        refreshSkills.mockResolvedValue(result);
-        render(<MiyoSettings />);
-        fireEvent.click(toggle());
-        await waitFor(() =>
-          expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false)
-        );
-        expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-      }
-    );
-
-    it("retains a disable preference and reports unsuccessful cleanup (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
+    it("saves the switch off when the user turns Semantic search for agents off https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
-      refreshSkills.mockResolvedValue({ ok: true, reconcileErrorCount: 1 });
       render(<MiyoSettings />);
       fireEvent.click(toggle());
-      await waitFor(() =>
-        expect(NoticeMock).toHaveBeenCalledWith(expect.stringContaining("preference saved"))
-      );
+
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
-      expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
-    });
-
-    it("does not notify an unmounted tab after reconciliation (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
-      const gate = deferred<{ ok: boolean }>();
-      refreshSkills.mockReturnValue(gate.promise);
-      const { unmount } = render(<MiyoSettings />);
-      fireEvent.click(toggle());
-      await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
-      unmount();
-      await act(async () => {
-        gate.resolve({ ok: false });
-      });
       expect(NoticeMock).not.toHaveBeenCalled();
-      expect(updateSetting).toHaveBeenLastCalledWith("enableMiyoSearchSkill", false);
     });
 
-    it("reports an unexpected reconciliation failure (https://github.com/logancyang/obsidian-copilot/issues/3022)", async () => {
-      refreshSkills.mockRejectedValue(new Error("unavailable"));
+    it("describes the switch as a Miyo search tool for agents https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
       render(<MiyoSettings />);
-      fireEvent.click(toggle());
-      await waitFor(() =>
-        expect(NoticeMock).toHaveBeenCalledWith(
-          "Couldn't update the Miyo search skill. Please try again."
+
+      expect(
+        screen.getByText(
+          "Gives Copilot agents a Miyo search tool to find notes by meaning, not just keywords."
         )
-      );
+      ).toBeTruthy();
     });
 
-    it("blocks ENABLING the skill while Miyo is disconnected (skill off)", async () => {
+    it("blocks ENABLING agent search while Miyo is disconnected (switch off)", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
       render(<MiyoSettings />);
@@ -732,11 +695,10 @@ describe("MiyoSettings", () => {
       expect(control.getAttribute("aria-disabled")).toBe("true");
       fireEvent.click(control);
 
-      expect(refreshSkills).not.toHaveBeenCalled();
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
     });
 
-    it("ALLOWS disabling an already-installed skill while the connected Miyo is offline", async () => {
+    it("ALLOWS disabling agent search while the connected Miyo is offline", async () => {
       mockMiyoBackend = "unavailable";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
@@ -745,7 +707,6 @@ describe("MiyoSettings", () => {
       expect(control.getAttribute("aria-disabled")).toBe("false");
       fireEvent.click(control);
 
-      await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
     });
 
@@ -758,7 +719,7 @@ describe("MiyoSettings", () => {
       expect(screen.queryByText("Search scope")).toBeNull();
     });
 
-    it("keeps the skill toggle operable while the status snapshot is stale", async () => {
+    it("keeps the agent search switch operable while the status snapshot is stale", () => {
       mockMiyoBackend = "stale";
       currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
@@ -766,7 +727,7 @@ describe("MiyoSettings", () => {
       const control = toggle();
       expect(control.getAttribute("aria-disabled")).toBe("false");
       fireEvent.click(control);
-      await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
+      expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
     });
 
     it("shows Offline with Check connection and Disconnect when enabled Miyo is unavailable (https://github.com/Brevilabs/obsidian-copilot-private/issues/356)", async () => {
