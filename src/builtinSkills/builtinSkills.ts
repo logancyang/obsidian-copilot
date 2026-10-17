@@ -1054,6 +1054,8 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 ];
 
 const MIYO_SEARCH_VERSION = 6;
+const MIYO_SEARCH_SH_FILE = "miyo-search.sh";
+const MIYO_SEARCH_CMD_FILE = "miyo-search.cmd";
 const MIYO_PARSE_VERSION = 3;
 
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
@@ -1084,7 +1086,7 @@ die() {
 }
 
 QUERY="$*"
-[ -n "$QUERY" ] || die "Usage: sh miyo-search.sh <query>" 1
+[ -n "$QUERY" ] || die "Usage: sh ${MIYO_SEARCH_SH_FILE} <query>" 1
 
 ${MIYO_POSIX_RESOLVER}
 
@@ -1131,7 +1133,7 @@ const MIYO_SEARCH_CMD = `@echo off
 setlocal enableextensions disabledelayedexpansion
 rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
 if "%~1"=="" (
-  echo Usage: miyo-search.cmd "query" 1>&2
+  echo Usage: ${MIYO_SEARCH_CMD_FILE} "query" 1>&2
   exit /b 1
 )
 ${MIYO_WINDOWS_RESOLVER}
@@ -1223,8 +1225,8 @@ phrases in the request. Miyo finds notes that match by meaning even when the
 wording or title differs; grep finds exact strings.
 
 ${howToRunSection({
-  shFile: "miyo-search.sh",
-  cmdFile: "miyo-search.cmd",
+  shFile: MIYO_SEARCH_SH_FILE,
+  cmdFile: MIYO_SEARCH_CMD_FILE,
   argPlaceholder: "<the user's question>",
   extraNote: "Pass the user's full question as the query.",
 })}
@@ -1256,8 +1258,8 @@ The script exits with a clear message when Miyo can't be used:
   vault search if they can't.
 `,
   files: [
-    { path: "miyo-search.sh", content: MIYO_SEARCH_SH },
-    { path: "miyo-search.cmd", content: MIYO_SEARCH_CMD },
+    { path: MIYO_SEARCH_SH_FILE, content: MIYO_SEARCH_SH },
+    { path: MIYO_SEARCH_CMD_FILE, content: MIYO_SEARCH_CMD },
   ],
 };
 

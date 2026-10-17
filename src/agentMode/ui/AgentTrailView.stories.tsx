@@ -99,6 +99,32 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
+const MIYO_SEARCH_COMMAND =
+  'sh ".claude/skills/miyo-search/miyo-search.sh" "back pain standing desk"';
+const MIYO_RESULTS = JSON.stringify({
+  results: [{ path: "notes/Standing desk setup.md" }, { path: "notes/Untitled 3.md" }],
+});
+
+const MIYO_SEARCH: AgentMessagePart[] = [
+  tool("miyo-load", "Skill", { input: { skill: "miyo-search" } }),
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    input: { command: MIYO_SEARCH_COMMAND },
+    output: [{ type: "text", text: MIYO_RESULTS }],
+  }),
+  tool("grep-1", "Grep", { input: { pattern: "standing desk|back pain" } }),
+  tool("read-1", "Read", { locations: [{ path: "notes/Standing desk setup.md" }] }),
+  say("You wrote that a monitor arm and a sit-stand rhythm fixed it. See [[Standing desk setup]]."),
+];
+
+const MIYO_SEARCH_RUNNING: AgentMessagePart[] = [
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    status: "in_progress",
+    input: { command: MIYO_SEARCH_COMMAND },
+  }),
+];
+
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
 const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
@@ -154,6 +180,14 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 
 export const FailedFileChanges: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
+};
+
+export const MiyoSearch: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_SEARCH} />,
+};
+
+export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_SEARCH_RUNNING} isStreaming />,
 };
 
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {

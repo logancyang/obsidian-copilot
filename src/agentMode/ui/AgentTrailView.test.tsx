@@ -591,4 +591,29 @@ describe("AgentTrail", () => {
     expect(screen.queryByText("Running `npm run child`")).toBeNull();
     expect(screen.getByText("Running `npm run root`")).toBeTruthy();
   });
+
+  it("renders a Miyo search as its own card between grouped work, without the skill load row (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+    renderTrail({
+      parts: [
+        READ_A,
+        LINT,
+        toolCall("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
+        toolCall("miyo", {
+          vendorToolName: "Bash",
+          toolKind: "execute",
+          input: { command: 'sh "/v/.claude/skills/miyo-search/miyo-search.sh" "standing desk"' },
+          output: [{ type: "text", text: '{"results":[{"path":"a.md"},{"path":"b.md"}]}' }],
+        }),
+        READ_B,
+        LINT,
+        text("Found it."),
+      ],
+    });
+
+    expect(screen.getByText("Searched with Miyo")).toBeTruthy();
+    expect(screen.getByText("“standing desk”")).toBeTruthy();
+    expect(screen.getByText("2 notes")).toBeTruthy();
+    expect(screen.queryByText("Ran skill miyo-search")).toBeNull();
+    expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
+  });
 });

@@ -5,6 +5,7 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { formatDuration } from "@/lib/duration";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
+import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
 
 export interface ToolSummaryContext {
   vaultBase: string | null;
@@ -442,4 +443,69 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   const prompt = extractSubAgentInputPrompt(part);
   if (prompt && prompt === result) return null;
   return result;
+}
+
+export interface MiyoSearchRun {
+  query: string | null;
+  noteCount: number | null;
+}
+
+const MIYO_SEARCH_SCRIPTS: ReadonlySet<string> = new Set(
+  MIYO_SEARCH_SKILL.files.map((file) => file.path)
+);
+
+function shellWords(command: string): string[] {
+  // Codex wraps some commands as `/bin/zsh -lc "<command>"` with the inner quotes escaped.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
+  const inner = command.replace(/^\S+\s+-lc\s+"([\s\S]*)"$/, (_, body: string) =>
+    body.replace(/\\"/g, '"')
+  );
+  return (inner.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((word) =>
+    word.replace(/^(["'])([\s\S]*)\1$/, "$2")
+  );
+}
+
+// Words after which the next word is the program being run, so `cat miyo-search.sh` is not a run.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/718
+const MIYO_LAUNCHERS: ReadonlySet<string> = new Set(["sh", "bash", "zsh", "&", "&&", ";", "||"]);
+
+function miyoSearchQuery(command: string): string | null | undefined {
+  const words = shellWords(command);
+  for (let i = 0; i < words.length; i++) {
+    if (i > 0 && !MIYO_LAUNCHERS.has(words[i - 1].split("/").pop() ?? "")) continue;
+    const name = words[i].split(/[\\/]/).pop() ?? "";
+    const isScript = MIYO_SEARCH_SCRIPTS.has(name);
+    if (!isScript && !(/^miyo(\.exe)?$/.test(name) && words[i + 1] === "search")) continue;
+    const query: string[] = [];
+    for (let j = i + (isScript ? 1 : 2); j < words.length; j++) {
+      if (/^(\d?[<>]|[|&;])/.test(words[j])) break;
+      if (words[j] === "--json") continue;
+      if (words[j].startsWith("-")) j++;
+      else query.push(words[j]);
+    }
+    return query.length > 0 ? query.join(" ") : null;
+  }
+  return undefined;
+}
+
+function miyoNoteCount(part: ToolCallPart): number | null {
+  const stdout = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
+  try {
+    const results = (JSON.parse(stdout) as { results?: unknown }).results;
+    if (!Array.isArray(results)) return null;
+    return new Set(results.map((r: { path?: unknown } | null, i) => r?.path ?? i)).size;
+  } catch {
+    return null;
+  }
+}
+
+export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
+  const command = (part.input as { command?: unknown } | null | undefined)?.command;
+  if (typeof command !== "string") return null;
+  const query = miyoSearchQuery(command);
+  return query === undefined ? null : { query, noteCount: miyoNoteCount(part) };
+}
+
+export function isMiyoSkillLoad(part: ToolCallPart): boolean {
+  return part.vendorToolName === "Skill" && skillNameFromInput(part) === MIYO_SEARCH_SKILL.name;
 }
