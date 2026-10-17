@@ -431,7 +431,12 @@ const FEEDBACK_CHANNEL = Object.freeze({
 });
 
 function buildFeedbackServer(connect: jest.Mock = jest.fn(async () => FEEDBACK_CHANNEL)) {
-  return { connect, disconnect: jest.fn(), dispose: jest.fn() };
+  return {
+    hasEnabledTools: jest.fn(() => getSettingsMock().agentMode.offerFeedbackCards === true),
+    connect,
+    disconnect: jest.fn(),
+    dispose: jest.fn(),
+  };
 }
 
 function offerFeedbackCards(enabled: boolean): void {
@@ -941,19 +946,6 @@ describe("AgentSessionManager", () => {
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [] })
         );
-      });
-
-      it("tells the agent feedback is turned off when the user opts out after the session started", async () => {
-        offerFeedbackCards(true);
-        const feedbackServer = buildFeedbackServer();
-        const mgr = buildManager({ feedbackServer });
-        const session = await mgr.createSession();
-        const onOffer = feedbackServer.connect.mock.calls[0][1] as (draft: unknown) => string;
-
-        offerFeedbackCards(false);
-
-        expect(onOffer(FEEDBACK_DRAFT)).toBe("turned_off");
-        expect(session.offerFeedback).not.toHaveBeenCalled();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {

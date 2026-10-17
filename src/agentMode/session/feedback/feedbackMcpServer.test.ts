@@ -57,10 +57,20 @@ describe("feedbackMcpServer", () => {
     let server: FeedbackMcpServer;
 
     beforeEach(() => {
-      server = createFeedbackMcpServer();
+      server = createFeedbackMcpServer(() => true);
     });
 
     afterEach(() => server.dispose());
+
+    it("reports whether any hosted tool is switched on, following the switch as it changes", () => {
+      let on = true;
+      server.dispose();
+      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback" && on);
+
+      expect(server.hasEnabledTools()).toBe(true);
+      on = false;
+      expect(server.hasEnabledTools()).toBe(false);
+    });
 
     it("hands each session a loopback MCP server named obsidian-copilot with its own bearer token", async () => {
       const first = await server.connect("session-a", jest.fn());
@@ -116,6 +126,16 @@ describe("feedbackMcpServer", () => {
       });
     });
 
+    it("lists no tools while send_feedback is switched off", async () => {
+      server.dispose();
+      server = createFeedbackMcpServer(() => false);
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toEqual({ jsonrpc: "2.0", id: 2, result: { tools: [] } });
+    });
+
     it("forwards a send_feedback call to its own session and tells the agent the card was shown", async () => {
       const ownHandler = jest.fn().mockReturnValue("shown");
       const otherHandler = jest.fn();
@@ -165,6 +185,30 @@ describe("feedbackMcpServer", () => {
       );
 
       expect(result.body).toMatchObject({ result: { content: [{ text }], isError: false } });
+    });
+
+    it("answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
+      let on = true;
+      server.dispose();
+      server = createFeedbackMcpServer(() => on);
+      const handler = jest.fn().mockReturnValue("shown");
+      const channel = await server.connect("session-a", handler);
+
+      on = false;
+      const result = await post(
+        channel,
+        rpc(4, "tools/call", { name: "send_feedback", arguments: COMPLAINT })
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(result.body).toMatchObject({
+        result: {
+          content: [
+            { text: "The user turned off feedback reports. Don't call send_feedback again." },
+          ],
+          isError: false,
+        },
+      });
     });
 
     it("treats a missing user_said as an agent-noticed problem and trims every field", async () => {
