@@ -380,7 +380,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
           void this.refreshPlanUsage(q);
         }
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
-        for (const e of events) this.dispatchEvent(e);
+        for (const e of events) {
+          this.dispatchEvent(e);
+          // SDK plan-mode transitions must reach diagnostic state. https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+          if (e.update.sessionUpdate === "current_mode_update") {
+            logSdkInbound("session/update", e, e.sessionId);
+          }
+        }
         if (sdkMsg.type === "result") {
           stopReason = mapStopReason(sdkMsg);
           if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
@@ -404,7 +410,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       logSdkError("→", "prompt", { error: resultErrorMessage }, params.sessionId);
       throw new Error(resultErrorMessage);
     }
-    logSdkOutboundResult("prompt", { stopReason }, params.sessionId);
+    logSdkOutboundResult(
+      "prompt",
+      {
+        stopReason,
+        modelId: options.model,
+        modeId: options.permissionMode,
+      },
+      params.sessionId
+    );
     return { stopReason };
   }
 
@@ -435,6 +449,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.active) {
       try {
         await session.active.setModel(params.modelId);
+        logSdkOutboundResult("setModel", { modelId: params.modelId }, params.sessionId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setModel() threw (will apply on next turn)", e);
         logSdkError("→", "setModel", { error: err2String(e) }, params.sessionId);
@@ -442,7 +457,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
-    logSdkOutboundResult("setSessionModel", { currentModelId: session.model }, params.sessionId);
     return state;
   }
 
@@ -462,6 +476,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.active) {
       try {
         await session.active.setPermissionMode(mode);
+        logSdkOutboundResult("setMode", { modeId: mode }, params.sessionId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setPermissionMode() threw (will apply on next turn)", e);
         logSdkError("→", "setPermissionMode", { error: err2String(e) }, params.sessionId);
@@ -469,11 +484,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
-    logSdkOutboundResult(
-      "setSessionMode",
-      { currentModeId: session.permissionMode },
-      params.sessionId
-    );
     return state;
   }
 

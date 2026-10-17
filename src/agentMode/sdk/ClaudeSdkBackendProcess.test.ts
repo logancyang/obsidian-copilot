@@ -574,6 +574,85 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("prompt()", () => {
+      it("records deferred model and mode changes when the next prompt applies them (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          await proc.setSessionModel({ sessionId, modelId: "claude-fake-mini" });
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).not.toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "prompt",
+              payload: expect.objectContaining({ modelId: "claude-fake-mini" }),
+            })
+          );
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "prompt",
+              payload: expect.objectContaining({ modelId: "claude-fake-mini", modeId: "plan" }),
+            })
+          );
+        } finally {
+          mockDebugFullFrames = false;
+        }
+      });
+
+      it("records the translated plan-mode update when EnterPlanMode changes the session mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          queryMock.mockImplementation(() =>
+            makeQuery([
+              streamEvent({
+                type: "content_block_start",
+                index: 0,
+                content_block: {
+                  type: "tool_use",
+                  id: "tu-plan",
+                  name: "EnterPlanMode",
+                  input: {},
+                },
+              }),
+              resultMessage(),
+            ])
+          );
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "plan this" }] });
+
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).toContainEqual(
+            expect.objectContaining({
+              dir: "←",
+              method: "session/update",
+              id: sessionId,
+              payload: expect.objectContaining({
+                update: {
+                  sessionUpdate: "current_mode_update",
+                  currentModeId: "plan",
+                },
+              }),
+            })
+          );
+        } finally {
+          mockDebugFullFrames = false;
+        }
+      });
+
       it("emits SDK text deltas as agent_message_chunk events and resolves with end_turn", async () => {
         queryMock.mockImplementation(() =>
           makeQuery([
@@ -1186,7 +1265,87 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     });
 
+    describe("setSessionModel()", () => {
+      it("does not record a rejected live model change as confirmed (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          const active = makeControlledQuery();
+          active.query.setModel.mockRejectedValue(new Error("setter failed"));
+          queryMock.mockReturnValue(active.query);
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const prompt = proc.prompt({ sessionId, prompt: [] });
+          await flushMicrotasks();
+
+          await proc.setSessionModel({ sessionId, modelId: "claude-fake-mini" });
+          active.finish();
+          await prompt;
+
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).not.toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "setModel",
+              payload: expect.objectContaining({ modelId: "claude-fake-mini" }),
+            })
+          );
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).not.toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "prompt",
+              payload: expect.objectContaining({ modelId: "claude-fake-mini" }),
+            })
+          );
+        } finally {
+          mockDebugFullFrames = false;
+        }
+      });
+    });
+
     describe("setSessionMode()", () => {
+      it("does not record a rejected live permission-mode change as confirmed (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          const active = makeControlledQuery();
+          active.query.setPermissionMode.mockRejectedValue(new Error("setter failed"));
+          queryMock.mockReturnValue(active.query);
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const prompt = proc.prompt({ sessionId, prompt: [] });
+          await flushMicrotasks();
+
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+          active.finish();
+          await prompt;
+
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).not.toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "setMode",
+              payload: expect.objectContaining({ modeId: "plan" }),
+            })
+          );
+          expect(
+            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
+          ).not.toContainEqual(
+            expect.objectContaining({
+              kind: "result",
+              method: "prompt",
+              payload: expect.objectContaining({ modeId: "plan" }),
+            })
+          );
+        } finally {
+          mockDebugFullFrames = false;
+        }
+      });
+
       it.each(["default", "plan", "acceptEdits", "auto", "bypassPermissions"])(
         "carries the %s permission mode into the next turn",
         async (modeId) => {
