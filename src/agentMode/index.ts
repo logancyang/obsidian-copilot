@@ -2,6 +2,7 @@ import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -179,7 +180,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         runMiyoSearch(args, {
           client: new MiyoClient(),
           getSettings,
-          getVaultName: () => app.vault.getName(),
+          getVaultName: () => getMiyoFolderName(app),
         })
     ),
   });
