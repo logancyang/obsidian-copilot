@@ -7,7 +7,6 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
-  CODEX_QUESTION_CARD_STEERING,
   COPILOT_FOLDER_MENTION_DIRECTIVE,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
@@ -111,12 +110,16 @@ describe("agentSystemPrompt", () => {
       expect(allOn.endsWith(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`)).toBe(true);
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3536 steers only Codex to the request_user_input card, even with the builtin prompt disabled", () => {
-      expect(buildAgentSystemPrompt("codex")).toContain(CODEX_QUESTION_CARD_STEERING);
-      expect(buildAgentSystemPrompt("claude")).not.toContain("request_user_input");
-      expect(buildAgentSystemPrompt("opencode")).not.toContain("request_user_input");
+    it(`places a backend's own steering after the always-on lines and before the settings-dependent ones (${ISSUE_441})`, () => {
+      const steering = "Backend-specific steering.";
+      const prompt = buildAgentSystemPrompt(AGENT, steering);
+
+      expect(prompt).toContain(
+        `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
+      );
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(steering);
       setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt("codex")).toContain(CODEX_QUESTION_CARD_STEERING);
+      expect(buildAgentSystemPrompt(AGENT, steering)).toContain(steering);
     });
 
     it("keeps the project workspace policy internal and always on", () => {
