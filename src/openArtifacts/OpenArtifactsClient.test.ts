@@ -180,6 +180,62 @@ describe("OpenArtifactsClient", () => {
         }
       );
 
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 sends the client header only on a create that asks for the account-link offer", async () => {
+        const receipt = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          version: 1,
+        };
+        mockedRequestUrl.mockResolvedValue(response(201, receipt));
+        const client = new OpenArtifactsClient();
+
+        await client.publish(DOCUMENT, "decrypted-license", undefined, true);
+        await client.publish(DOCUMENT, "decrypted-license", "invited", true);
+        await client.publish(DOCUMENT, "decrypted-license", "invited");
+        mockedRequestUrl.mockResolvedValue(response(200, { ...receipt, version: 2 }));
+        await client.update(DOC_ID, DOCUMENT, "decrypted-license");
+
+        const headers = mockedRequestUrl.mock.calls.map(([options]) => [
+          (options as RequestUrlParam).url,
+          (options as RequestUrlParam).headers,
+        ]);
+        const authorization = { Authorization: "Bearer decrypted-license" };
+        const offer = { ...authorization, "x-openartifacts-client": "obsidian-copilot" };
+        expect(headers).toEqual([
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/docs`, offer],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`, offer],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`, authorization],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}`, authorization],
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 returns the server's guidance and drops it when malformed", async () => {
+        const receipt = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          version: 1,
+        };
+        const guidance = { message: "Link your account.", url: "https://openartifacts.ai/account" };
+        const client = new OpenArtifactsClient();
+
+        mockedRequestUrl.mockResolvedValue(response(201, { ...receipt, guidance }));
+        await expect(client.publish(DOCUMENT, "decrypted-license")).resolves.toEqual({
+          ...receipt,
+          guidance,
+        });
+
+        for (const malformed of [
+          { message: "", url: guidance.url },
+          { message: guidance.message, url: "http://openartifacts.ai/account" },
+          { message: guidance.message },
+          { url: guidance.url },
+          "Link your account.",
+        ]) {
+          mockedRequestUrl.mockResolvedValue(response(201, { ...receipt, guidance: malformed }));
+          await expect(client.publish(DOCUMENT, "decrypted-license")).resolves.toEqual(receipt);
+        }
+      });
+
       it("treats an unexpected successful POST status as ambiguous", async () => {
         mockedRequestUrl.mockResolvedValue(response(200));
 

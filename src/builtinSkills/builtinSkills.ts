@@ -5,6 +5,9 @@ import {
   OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_THEMES_DIR,
+  OPENARTIFACTS_CLIENT_HEADER,
+  OPENARTIFACTS_CLIENT_ID,
+  OPENARTIFACTS_LINK_OFFER_MARKER,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
@@ -598,6 +601,8 @@ report with this line, using the \`manageUrl\` the wrapper printed:
 
 Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
 
+If a create receipt has a \`guidance\` object, end the report with one line, whatever else it says: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
+
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
 it, and the failed address with the wrapper's message.
 
@@ -778,6 +783,16 @@ BODY=$(mktemp) || exit 1
 RESPONSE=$(mktemp) || exit 1
 trap 'rm -f "$HEADERS" "$BODY" "$RESPONSE"' EXIT
 printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
+# A create asks for the one-time account-link offer until the marker file exists. A missing
+# workspace root cannot record the marker, so it never asks.
+# https://github.com/Brevilabs/OpenArtifacts/issues/94
+WORKSPACE_ROOT=$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}
+OFFER_MARKER="$WORKSPACE_ROOT/${OPENARTIFACTS_LINK_OFFER_MARKER}"
+OFFER_ASKED=
+if [ "$COMMAND" = publish ] && [ -z "$DOC_ID" ] && [ -n "$WORKSPACE_ROOT" ] && [ ! -e "$OFFER_MARKER" ]; then
+  OFFER_ASKED=1
+  printf '${OPENARTIFACTS_CLIENT_HEADER}: ${OPENARTIFACTS_CLIENT_ID}\n' >> "$HEADERS"
+fi
 
 if [ "$COMMAND" = unshare ]; then
   STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$DOC_ID")
@@ -864,6 +879,10 @@ case "$STATUS" in
     else
       cat "$RESPONSE"
       printf '\n'
+    fi
+    # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
+    if [ -n "$OFFER_ASKED" ] && grep -q '"guidance"' "$RESPONSE"; then
+      mkdir -p "$(dirname "$OFFER_MARKER")" && : > "$OFFER_MARKER"
     fi
     exit 0
     ;;
@@ -970,6 +989,13 @@ function Add-ManageUrl([string]$Json) {
 }
 
 $headers = @{ Authorization = "Bearer $KEY" }
+# A create asks for the one-time account-link offer until the marker file exists. A missing
+# workspace root cannot record the marker, so it never asks.
+# https://github.com/Brevilabs/OpenArtifacts/issues/94
+$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
+$OFFER_MARKER = if ($WORKSPACE_ROOT) { Join-Path $WORKSPACE_ROOT '${OPENARTIFACTS_LINK_OFFER_MARKER}' } else { '' }
+$OFFER_ASKED = $COMMAND -eq 'publish' -and -not $DOC_ID -and $OFFER_MARKER -and -not (Test-Path -LiteralPath $OFFER_MARKER)
+if ($OFFER_ASKED) { $headers['${OPENARTIFACTS_CLIENT_HEADER}'] = '${OPENARTIFACTS_CLIENT_ID}' }
 try {
   if ($COMMAND -eq 'share') {
     $accessUri = "$API_HOST/api/v1/docs/$DOC_ID/access"
@@ -1002,6 +1028,13 @@ try {
       [Console]::Out.WriteLine((Add-ManageUrl ([string]$response.Content)))
     } else {
       [Console]::Out.WriteLine([string]$response.Content)
+    }
+    # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
+    if ($OFFER_ASKED -and ([string]$response.Content) -match '"guidance"') {
+      try {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) | Out-Null
+        New-Item -ItemType File -Force -Path $OFFER_MARKER | Out-Null
+      } catch {}
     }
   }
 } catch {

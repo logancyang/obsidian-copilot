@@ -187,6 +187,29 @@ export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> 
   },
 };
 
+// The first publish for a Copilot license that is not linked to an OpenArtifacts account: the server's one-time offer.
+// https://github.com/Brevilabs/OpenArtifacts/issues/94
+export const PublishedWithAccountLinkOffer: StoryObj<OpenArtifactsModalContentProps> = {
+  args: {
+    access: fakeAccessPort(PUBLIC_ACCESS),
+    initialResult: {
+      kind: "success",
+      action: "publish",
+      receipt: {
+        docId: DOC_ID,
+        url: PUBLIC_ACCESS.url,
+        version: 1,
+        linkAccess: "anyone",
+        guidance: {
+          message:
+            "Publish from other agents too? Link your Copilot for Obsidian account to OpenArtifacts to get an email when people you share with comment or ask for access.",
+          url: "https://example.com/link-account",
+        },
+      },
+    },
+  },
+};
+
 export const Removed: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
     docId: "9f2k4mvq7t0xbz3n",

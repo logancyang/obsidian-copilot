@@ -150,6 +150,14 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
       <div className="tw-text-small tw-text-muted">
         Document {receipt.docId} · Version {receipt.version}
       </div>
+      {receipt.guidance && (
+        <p className="tw-m-0 tw-text-small tw-text-muted">
+          {receipt.guidance.message}{" "}
+          <a href={receipt.guidance.url} target="_blank" rel="noopener noreferrer">
+            Link account
+          </a>
+        </p>
+      )}
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
         {actions}

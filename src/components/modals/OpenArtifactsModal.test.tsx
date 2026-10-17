@@ -646,6 +646,30 @@ describe("OpenArtifactsModal", () => {
         expect(writeText).toHaveBeenCalledWith(RECEIPT.url);
         expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
       });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 shows the server's account-link offer verbatim with a Link account link only when the receipt carries guidance", async () => {
+        const message = "Publish from other agents too? Link your account.";
+        const guidance = { message, url: "https://openartifacts.ai/account" };
+        const onConfirm = createConfirmMock()
+          .mockResolvedValueOnce({ kind: "success", action: "publish", receipt: RECEIPT })
+          .mockResolvedValueOnce({
+            kind: "success",
+            action: "publish",
+            receipt: { ...RECEIPT, guidance },
+          });
+
+        renderModal(onConfirm);
+        await clickButton("Yes, publish");
+        expect(screen.queryByText(/Link account/)).toBeNull();
+
+        renderModal(onConfirm);
+        await clickButton("Yes, publish");
+        expect(screen.getByText(message, { exact: false })).toBeTruthy();
+        const link = screen.getByRole("link", { name: "Link account" });
+        expect(link.getAttribute("href")).toBe(guidance.url);
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+      });
     });
 
     describe("onClose()", () => {

@@ -25,6 +25,7 @@ import {
   appendOpenArtifactsLedgerEntry,
   type OpenArtifactsLedgerEntry,
 } from "@/openArtifacts/openArtifactsLedger";
+import { isLinkOfferPending, markLinkOfferShown } from "@/openArtifacts/openArtifactsLinkOffer";
 import type {
   OpenArtifactsAccess,
   OpenArtifactsAction,
@@ -39,7 +40,8 @@ interface OpenArtifactsClientPort {
   publish(
     document: OpenArtifactsDocument,
     licenseKey: string,
-    linkAccess?: OpenArtifactsLinkAccess
+    linkAccess?: OpenArtifactsLinkAccess,
+    requestLinkOffer?: boolean
   ): Promise<OpenArtifactsReceipt>;
   update(
     docId: string,
@@ -70,6 +72,8 @@ interface OpenArtifactsPublisherDependencies {
   buildDocument?: (file: TFile, ownerDocument: Document) => Promise<OpenArtifactsDocument>;
   createModal?: (options: OpenArtifactsModalOptions) => OpenArtifactsModalPort;
   recordLedger?: (entry: OpenArtifactsLedgerEntry) => Promise<void>;
+  isLinkOfferPending?: () => Promise<boolean>;
+  markLinkOfferShown?: () => Promise<void>;
 }
 
 const MISSING_LICENSE_MESSAGE =
@@ -158,6 +162,8 @@ export class OpenArtifactsPublisher {
   ) => Promise<OpenArtifactsDocument>;
   private readonly createModal: (options: OpenArtifactsModalOptions) => OpenArtifactsModalPort;
   private readonly recordLedger: (entry: OpenArtifactsLedgerEntry) => Promise<void>;
+  private readonly isLinkOfferPending: () => Promise<boolean>;
+  private readonly markLinkOfferShown: () => Promise<void>;
   private readonly inFlightFiles = new Set<TFile>();
   private readonly blockedPublishResults = new Map<
     TFile,
@@ -180,6 +186,10 @@ export class OpenArtifactsPublisher {
     this.recordLedger =
       dependencies.recordLedger ??
       ((entry) => appendOpenArtifactsLedgerEntry(this.app.vault, entry));
+    this.isLinkOfferPending =
+      dependencies.isLinkOfferPending ?? (() => isLinkOfferPending(this.app.vault));
+    this.markLinkOfferShown =
+      dependencies.markLinkOfferShown ?? (() => markLinkOfferShown(this.app.vault));
   }
 
   async open(file: TFile): Promise<void> {
@@ -367,8 +377,17 @@ export class OpenArtifactsPublisher {
           const receipt = await this.client.publish(
             document,
             licenseKey,
-            ...(linkAccess === "invited" ? (["invited"] as const) : [])
+            linkAccess === "invited" ? "invited" : undefined,
+            await this.isLinkOfferPending()
           );
+          if (receipt.guidance) {
+            await this.markLinkOfferShown().catch((error) =>
+              logWarn(
+                "[OpenArtifacts] Could not record that the account-link offer was shown",
+                error
+              )
+            );
+          }
           await this.recordPublishedReceipt(file, document, receipt);
           return await this.savePublishedIdentity(file, receipt);
         }
