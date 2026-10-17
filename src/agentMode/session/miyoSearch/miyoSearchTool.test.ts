@@ -130,22 +130,28 @@ describe("miyoSearchTool", () => {
       expect(results[19].path).toBe("step-1/other-18.md");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/734 keeps every path and valid JSON within 80,000 characters when the notes are larger", async () => {
-      const chunks = Array.from({ length: 20 }, (_, i) =>
-        chunk({ path: `step-1/note-${i}.md`, chunk_text: `"quoted"\n${"x".repeat(50_000)}` })
-      );
-      const { deps } = setup({}, { chunks });
+    it.each([
+      ["quotes and newlines", '"quoted"\n' + "x".repeat(50_000)],
+      ["three-byte characters", "笔记".repeat(25_000)],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/734 keeps every path and valid JSON within 32,000 bytes when the notes hold %s",
+      async (_label, body) => {
+        const chunks = Array.from({ length: 20 }, (_, i) =>
+          chunk({ path: `step-1/note-${i}.md`, chunk_text: body })
+        );
+        const { deps } = setup({}, { chunks });
 
-      const result = await runMiyoSearch({ query: "q" }, deps);
+        const result = await runMiyoSearch({ query: "q" }, deps);
 
-      const parsed = JSON.parse(result.text);
-      expect(result.text.length).toBeLessThanOrEqual(80_000);
-      expect(result.isError).toBe(false);
-      expect(parsed.results.map((r: { path: string }) => r.path)).toEqual(
-        chunks.map((c) => c.path)
-      );
-      expect(parsed.results[0].content).toMatch(/^"quoted"\nxxx/);
-    });
+        const parsed = JSON.parse(result.text);
+        expect(new TextEncoder().encode(result.text).length).toBeLessThanOrEqual(32_000);
+        expect(result.isError).toBe(false);
+        expect(parsed.results.map((r: { path: string }) => r.path)).toEqual(
+          chunks.map((c) => c.path)
+        );
+        expect(parsed.results[0].content.length).toBeGreaterThan(100);
+      }
+    );
 
     it("widens Current vault scope with the extra Miyo folders ticked in settings, leaving out the vault itself", async () => {
       const { client, deps } = setup({ miyoExtraSearchFolders: ["Research", "step-1", "ChatGPT"] });
