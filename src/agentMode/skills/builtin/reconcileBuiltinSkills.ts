@@ -4,6 +4,7 @@ import { joinPosix } from "@/utils/pathUtils";
 import {
   ALL_MANAGED_SKILLS,
   RETIRED_BUILTIN_SKILLS,
+  builtinSkillUnavailableReason,
   isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
 import {
@@ -39,8 +40,10 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   }
   // Canonical files sync between devices, so an unavailable device keeps them rather than
   // deleting another device's tools. https://github.com/logancyang/obsidian-copilot/issues/3022
-  const seed = ALL_MANAGED_SKILLS.filter((skill) =>
-    enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
+  const seed = ALL_MANAGED_SKILLS.filter(
+    (skill) =>
+      !builtinSkillUnavailableReason(skill.name) &&
+      enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
   );
   await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed, enabledAgents });
   for (const skill of seed) {

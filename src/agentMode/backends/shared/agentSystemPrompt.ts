@@ -1,6 +1,9 @@
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import type { BackendId } from "@/agentMode/session/types";
-import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
+import {
+  builtinSkillUnavailableReason,
+  isBuiltinSkillEnabledFor,
+} from "@/builtinSkills/builtinSkills";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
@@ -73,7 +76,8 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
 
   if (!getDisableBuiltinSystemPrompt()) {
     const settings = getSettings();
-    const enabled = (skill: string) => isBuiltinSkillEnabledFor(settings, skill, backendId);
+    const enabled = (skill: string) =>
+      !builtinSkillUnavailableReason(skill) && isBuiltinSkillEnabledFor(settings, skill, backendId);
     parts.push(COPILOT_PROMPT_BASE);
     const enabledJobs = (jobs: typeof RELAY_SKILL_JOBS) =>
       jobs.filter(([skill]) => enabled(skill)).map(([skill, job]) => `${skill} for ${job}`);

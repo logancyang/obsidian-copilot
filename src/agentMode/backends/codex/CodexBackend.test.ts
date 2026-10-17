@@ -9,6 +9,9 @@ import * as codexVersion from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: () => true,
+}));
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
