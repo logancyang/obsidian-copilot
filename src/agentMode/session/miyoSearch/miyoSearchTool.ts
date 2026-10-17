@@ -11,9 +11,10 @@ export const MIYO_SEARCH_TOOL_NAME = "miyo_search";
 
 const NOTE_LIMIT = 20;
 const MAX_VARIANTS = 2;
-// Stays below Claude Code's default 25K-token cap on MCP tool output.
+// Codex cuts the middle out of any MCP output over about 10K tokens (40,000 UTF-8 bytes) and Claude Code saves
+// output over its own cap to a file, either of which leaves the agent a result that no longer parses.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
-const OUTPUT_BUDGET_CHARS = 80_000;
+const OUTPUT_BUDGET_BYTES = 32_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
@@ -141,7 +142,7 @@ function toNotes(chunks: readonly MiyoSearchResult[]): FileResult[] {
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
 function serialize(notes: readonly FileResult[], note: string | undefined): string {
-  let contentCap = Math.floor(OUTPUT_BUDGET_CHARS / notes.length);
+  let contentCap = Math.floor(OUTPUT_BUDGET_BYTES / notes.length);
   let text: string;
   do {
     const results = notes.map(({ path, content }) => ({
@@ -150,6 +151,6 @@ function serialize(notes: readonly FileResult[], note: string | undefined): stri
     }));
     text = JSON.stringify({ results, count: results.length, ...(note ? { note } : {}) });
     contentCap = Math.floor(contentCap * 0.8);
-  } while (text.length > OUTPUT_BUDGET_CHARS && contentCap > 0);
+  } while (new TextEncoder().encode(text).length > OUTPUT_BUDGET_BYTES && contentCap > 0);
   return text;
 }
