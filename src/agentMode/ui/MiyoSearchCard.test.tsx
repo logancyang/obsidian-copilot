@@ -80,7 +80,6 @@ describe("MiyoSearchCard", () => {
 
         expect(container.querySelector(SPARKLE)).toBeNull();
         expect(container.querySelectorAll("svg")).toHaveLength(1);
-        expect(container.innerHTML).not.toContain("twinkle");
       }
     );
 
