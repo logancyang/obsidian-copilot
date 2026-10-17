@@ -32,12 +32,6 @@ export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the wor
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
-// Codex's built-in Default mode says to ask in plain text instead of calling
-// request_user_input, so name the tool Copilot renders as a card.
-// https://github.com/logancyang/obsidian-copilot/issues/3536
-export const CODEX_QUESTION_CARD_STEERING =
-  "When you need the user to answer a question or choose between options, call the `request_user_input` tool. It works in every collaboration mode, including Default, and this client shows it as an interactive question card. Use it instead of asking multiple-choice or clarifying questions in plain text.";
-
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 export const COPILOT_FEEDBACK_POINTER = `When the user complains about you or Copilot, or you notice your own mistake, call the obsidian-copilot send_feedback tool once, even if you also retry or fix it.`;
@@ -58,9 +52,10 @@ function buildFileEditPolicy(backendId: BackendId): string {
   return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Write via shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;
 }
 
-// Settings-dependent lines go last so a toggle change leaves the cached prefix before them intact.
+// Settings-dependent lines go last so a toggle change leaves the cached prefix before them intact;
+// a backend's own fixed steering joins the always-on lines ahead of them.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/441
-export function buildAgentSystemPrompt(backendId: BackendId): string {
+export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: string): string {
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
@@ -73,7 +68,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
     COPILOT_PROJECT_WORKSPACE_POLICY,
     COPILOT_FOLDER_MENTION_DIRECTIVE
   );
-  if (backendId === "codex") parts.push(CODEX_QUESTION_CARD_STEERING);
+  if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
   if (builtinPrompt && isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);

@@ -14,6 +14,12 @@ import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
 import { buildCodexAcpInvocation, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
+// Codex's built-in Default mode says to ask in plain text instead of calling
+// request_user_input, so name the tool Copilot renders as a card.
+// https://github.com/logancyang/obsidian-copilot/issues/3536
+export const CODEX_QUESTION_CARD_STEERING =
+  "When you need the user to answer a question or choose between options, call the `request_user_input` tool. It works in every collaboration mode, including Default, and this client shows it as an interactive question card. Use it instead of asking multiple-choice or clarifying questions in plain text.";
+
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
@@ -44,7 +50,7 @@ export class CodexBackend implements AcpBackend {
     );
     descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(
       descriptor.env.CODEX_CONFIG,
-      buildAgentSystemPrompt("codex")
+      buildAgentSystemPrompt("codex", CODEX_QUESTION_CARD_STEERING)
     );
     const installed = inspectCodexAcpPackage(descriptor.command);
     const entryPath = installed.entryPath;

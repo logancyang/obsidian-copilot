@@ -3,7 +3,7 @@ import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
-import { CodexBackend } from "./CodexBackend";
+import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
 import * as codexVersion from "./codexVersion";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
@@ -86,11 +86,11 @@ describe("CodexBackend", () => {
         expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault");
       });
 
-      it("encodes the shared Codex product prompt byte for byte", async () => {
+      it("encodes the shared product prompt with the question-card steering byte for byte", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(
-          buildAgentSystemPrompt("codex")
+          buildAgentSystemPrompt("codex", CODEX_QUESTION_CARD_STEERING)
         );
       });
 
