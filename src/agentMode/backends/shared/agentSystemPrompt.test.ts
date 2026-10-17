@@ -7,10 +7,10 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_FOLDER_MENTION_DIRECTIVE,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_FEEDBACK_POINTER,
-  COPILOT_INSTRUCTION_PRECEDENCE,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
@@ -27,12 +27,13 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
 }
 
+const ISSUE_441 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/441";
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const AGENT = "opencode";
 const ALL_RELAY_SKILLS_LINE =
-  "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
+  "Run these Copilot skills before any built-in web tool: copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
 
 function setBuiltinPreferences(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>
@@ -63,7 +64,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3700);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(2400);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -71,20 +72,54 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it("includes the Copilot base prompt and the pill-syntax directive by default", () => {
+    it("starts with the Copilot base prompt and includes the folder-mention directive by default", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-      expect(prompt).toContain("{folder_name}");
-      expect(prompt).toContain("{activeNote}");
+      expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
       expect(prompt).not.toContain("<user_custom_instructions>");
     });
 
-    it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", () => {
+    it("suppresses the base prompt when 'disable builtin' is on, keeping the folder-mention directive", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
       expect(prompt).not.toContain("You are Obsidian Copilot");
-      expect(prompt).toContain("{folder_name}");
+      expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
+    });
+
+    it(`places settings-dependent lines after the always-on text, so toggling them keeps the cached prefix (${ISSUE_441})`, () => {
+      updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: false });
+      updateSetting("enableMiyoSearchSkill", false);
+      setBuiltinPreferences({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabled: true },
+        "copilot-youtube-transcript": { disabled: true },
+        "copilot-fetch-x": { disabled: true },
+      });
+      const alwaysOn = buildAgentSystemPrompt(AGENT);
+
+      updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: true });
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoDocumentProcessing", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      setBuiltinPreferences({});
+      const allOn = buildAgentSystemPrompt(AGENT);
+
+      expect(allOn.startsWith(`${alwaysOn}\n\n`)).toBe(true);
+      expect(allOn).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      expect(allOn.endsWith(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`)).toBe(true);
+    });
+
+    it(`places a backend's own steering after the always-on lines and before the settings-dependent ones (${ISSUE_441})`, () => {
+      const steering = "Backend-specific steering.";
+      const prompt = buildAgentSystemPrompt(AGENT, steering);
+
+      expect(prompt).toContain(
+        `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
+      );
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(steering);
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT, steering)).toContain(steering);
     });
 
     it("keeps the project workspace policy internal and always on", () => {
@@ -132,7 +167,7 @@ describe("agentSystemPrompt", () => {
 
     it("omits web search and web fetch skills under default settings https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+        "Run these Copilot skills before any built-in web tool: copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
     });
 
@@ -140,7 +175,7 @@ describe("agentSystemPrompt", () => {
       setBuiltinPreferences({ "copilot-web-search": { disabledAgents: ["opencode"] } });
 
       expect(buildAgentSystemPrompt("opencode")).toContain(
-        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+        "Run these Copilot skills before any built-in web tool: copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
       expect(buildAgentSystemPrompt("opencode")).not.toContain("copilot-web-search");
       expect(buildAgentSystemPrompt("claude")).toContain(ALL_RELAY_SKILLS_LINE);
@@ -272,15 +307,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain("<project_instructions>");
       expect(prompt).not.toMatch(/<project_context>[\s\S]*<\/project_context>/);
-    });
-
-    it("tells the agent that a project AGENTS.md outranks the vault one", () => {
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
-    });
-
-    it("keeps the precedence rule through the builtin toggle, like the workspace policy", () => {
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 points the agent at send_feedback while feedback cards are on, even with the builtin prompt disabled", () => {

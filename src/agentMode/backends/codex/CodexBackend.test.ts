@@ -87,11 +87,11 @@ describe("CodexBackend", () => {
         expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault");
       });
 
-      it("encodes the shared product prompt byte for byte, followed by the question-card steering", async () => {
+      it("encodes the shared product prompt with the question-card steering byte for byte", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(
-          `${buildAgentSystemPrompt("codex")}\n\n${CODEX_QUESTION_CARD_STEERING}`
+          buildAgentSystemPrompt("codex", CODEX_QUESTION_CARD_STEERING)
         );
       });
 
