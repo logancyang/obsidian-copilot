@@ -234,6 +234,84 @@ const testAcpNotificationToEvents = () => {
     ).not.toHaveProperty("originalFiles");
   });
 
+  const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/735";
+  const mcpResult = (text: string) => ({
+    result: { content: [{ type: "text", text }], structuredContent: null, _meta: null },
+    error: null,
+  });
+  const asContent = (text: string) => [{ type: "content", content: { type: "text", text } }];
+
+  it(`keeps the result text codex-acp reports only in rawOutput.result.content on a completed update (${issue})`, () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "exec-1",
+        status: "completed",
+        rawOutput: mcpResult('{"results":[],"count":0}'),
+      })
+    );
+
+    expect(event.update).toMatchObject({ content: asContent('{"results":[],"count":0}') });
+  });
+
+  it(`keeps the error text of a failed MCP call (${issue})`, () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "exec-1",
+        status: "failed",
+        rawOutput: mcpResult("Miyo search failed. Details: net::ERR_CONNECTION_REFUSED"),
+      })
+    );
+
+    expect(event.update).toMatchObject({
+      status: "failed",
+      content: asContent("Miyo search failed. Details: net::ERR_CONNECTION_REFUSED"),
+    });
+  });
+
+  it(`keeps the result text of a call replayed from history as one completed tool_call (${issue})`, () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call",
+        toolCallId: "exec-1",
+        title: "mcp.obsidian-copilot.miyo_search",
+        status: "completed",
+        rawOutput: mcpResult('{"results":[],"count":0}'),
+      })
+    );
+
+    expect(event.update).toMatchObject({
+      status: "completed",
+      content: asContent('{"results":[],"count":0}'),
+    });
+  });
+
+  it("prefers the update's own content over rawOutput.result.content", () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "exec-1",
+        content: asContent("own"),
+        rawOutput: mcpResult("raw"),
+      })
+    );
+
+    expect(event.update).toMatchObject({ content: asContent("own") });
+  });
+
+  it("adds no content when the result has no text parts", () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "exec-1",
+        rawOutput: { result: { content: [{ type: "image", data: "x" }] }, error: null },
+      })
+    );
+
+    expect((event.update as { content?: unknown }).content).toBeUndefined();
+  });
+
   it.each([
     ["available_commands_update", { availableCommands: [] }],
     ["notice", { message: "retrying" }],

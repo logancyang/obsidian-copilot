@@ -2,11 +2,12 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import type { AgentMessagePart } from "@/agentMode/session/types";
+import type { AgentMessagePart, AgentToolStatus } from "@/agentMode/session/types";
 import { formatDuration } from "@/lib/duration";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
-import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
+import { FEEDBACK_MCP_SERVER_NAME } from "@/agentMode/session/feedback/feedbackMcpServer";
+import { MIYO_SEARCH_TOOL_NAME } from "@/agentMode/session/miyoSearch/miyoSearchTool";
 
 export interface ToolSummaryContext {
   vaultBase: string | null;
@@ -449,53 +450,57 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
 export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
 
 export interface MiyoSearchRun {
+  status: AgentToolStatus;
   query: string | null;
   noteCount: number | null;
   notePaths: readonly string[];
+  error: string | null;
 }
 
-const MIYO_SEARCH_SCRIPTS: ReadonlySet<string> = new Set(
-  MIYO_SEARCH_SKILL.files.map((file) => file.path)
+const OPENCODE_MIYO_CALL = new RegExp(
+  `tools\\[["']${FEEDBACK_MCP_SERVER_NAME}["']\\]\\.${MIYO_SEARCH_TOOL_NAME}\\(`
 );
 
-function shellWords(command: string): string[] {
-  // Codex wraps some commands as `/bin/zsh -lc "<command>"` with the inner quotes escaped.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-  const inner = command.replace(/^\S+\s+-lc\s+"([\s\S]*)"$/, (_, body: string) =>
-    body.replace(/\\"/g, '"')
-  );
-  return (inner.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((word) =>
-    word.replace(/^(["'])([\s\S]*)\1$/, "$2")
-  );
+function inputOf(part: ToolCallPart): Record<string, unknown> {
+  const input = part.input;
+  return input && typeof input === "object" ? (input as Record<string, unknown>) : {};
 }
 
-// Words after which the next word is the program being run, so `cat miyo-search.sh` is not a run.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-const MIYO_LAUNCHERS: ReadonlySet<string> = new Set(["sh", "bash", "zsh", "&", "&&", ";", "||"]);
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
-function miyoSearchQuery(command: string): string | null | undefined {
-  const words = shellWords(command);
-  for (let i = 0; i < words.length; i++) {
-    if (i > 0 && !MIYO_LAUNCHERS.has(words[i - 1].split("/").pop() ?? "")) continue;
-    const name = words[i].split(/[\\/]/).pop() ?? "";
-    const isScript = MIYO_SEARCH_SCRIPTS.has(name);
-    if (!isScript && !(/^miyo(\.exe)?$/.test(name) && words[i + 1] === "search")) continue;
-    const query: string[] = [];
-    for (let j = i + (isScript ? 1 : 2); j < words.length; j++) {
-      if (/^(\d?[<>]|[|&;])/.test(words[j])) break;
-      if (words[j] === "--json") continue;
-      if (words[j].startsWith("-")) j++;
-      else query.push(words[j]);
-    }
-    return query.length > 0 ? query.join(" ") : null;
+// Claude names the call by server and tool, Codex nests the arguments under `server`/`tool`, and
+// OpenCode runs it as JavaScript inside its `execute` tool.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
+  const input = inputOf(part);
+  if (
+    part.mcpServer === FEEDBACK_MCP_SERVER_NAME &&
+    part.vendorToolName === MIYO_SEARCH_TOOL_NAME
+  ) {
+    return stringOrNull(input.query);
   }
-  return undefined;
+  if (input.server === FEEDBACK_MCP_SERVER_NAME && input.tool === MIYO_SEARCH_TOOL_NAME) {
+    const args = input.arguments;
+    return stringOrNull(
+      args && typeof args === "object" ? (args as { query?: unknown }).query : null
+    );
+  }
+  const code = typeof input.code === "string" ? input.code : "";
+  const call = OPENCODE_MIYO_CALL.exec(code);
+  if (!call) return undefined;
+  const literal = /\bquery["']?:\s*("(?:[^"\\]|\\.)*")/.exec(code.slice(call.index));
+  try {
+    return literal ? stringOrNull(JSON.parse(literal[1])) : null;
+  } catch {
+    return null;
+  }
 }
 
-function miyoNotePaths(part: ToolCallPart): string[] | null {
-  const stdout = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
+function miyoNotePaths(text: string): string[] | null {
   try {
-    const results = (JSON.parse(stdout) as { results?: unknown }).results;
+    const results = (JSON.parse(text) as { results?: unknown }).results;
     if (!Array.isArray(results)) return null;
     const paths = results.map((r: { path?: unknown } | null) => r?.path);
     return [...new Set(paths.filter((path): path is string => typeof path === "string"))];
@@ -505,12 +510,20 @@ function miyoNotePaths(part: ToolCallPart): string[] | null {
 }
 
 export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
-  const command = (part.input as { command?: unknown } | null | undefined)?.command;
-  if (typeof command !== "string") return null;
-  const query = miyoSearchQuery(command);
+  const query = miyoSearchQuery(part);
   if (query === undefined) return null;
-  const paths = miyoNotePaths(part);
-  return { query, noteCount: paths?.length ?? null, notePaths: paths ?? EMPTY_MIYO_PATHS };
+  const text = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
+  const paths = miyoNotePaths(text);
+  // OpenCode reports a tool error as a completed call carrying the error text.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+  const failed = part.status === "failed" || (part.status === "completed" && text !== "" && !paths);
+  return {
+    status: failed ? "failed" : part.status,
+    query,
+    noteCount: paths?.length ?? null,
+    notePaths: paths ?? EMPTY_MIYO_PATHS,
+    error: failed ? stringOrNull(text) : null,
+  };
 }
 
 export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly string[] {
@@ -518,8 +531,4 @@ export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly st
     part.kind === "tool_call" ? (miyoSearchRun(part)?.notePaths ?? []) : []
   );
   return paths.length > 0 ? paths : EMPTY_MIYO_PATHS;
-}
-
-export function isMiyoSkillLoad(part: ToolCallPart): boolean {
-  return part.vendorToolName === "Skill" && skillNameFromInput(part) === MIYO_SEARCH_SKILL.name;
 }

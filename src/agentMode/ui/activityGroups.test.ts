@@ -58,7 +58,11 @@ describe("activityGroups", () => {
       const grouped = foldActivityGroups([
         action("a", { vendorToolName: "Read" }),
         action("b", { vendorToolName: "Grep" }),
-        action("miyo", { vendorToolName: "Bash", input: { command: 'sh miyo-search.sh "desk"' } }),
+        action("miyo", {
+          mcpServer: "obsidian-copilot",
+          vendorToolName: "miyo_search",
+          input: { query: "desk" },
+        }),
         action("c", { vendorToolName: "Read" }),
         action("d", { vendorToolName: "Read" }),
       ]);
