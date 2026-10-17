@@ -65,6 +65,17 @@ describe("miyoLinkBadges", () => {
       ]).toEqual(["copilot-test-vault/edit-eval/a.md"]);
     });
 
+    it("under Unrestricted scope, drops a relative path without the vault prefix because it may come from any Miyo folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+      setSettings({ miyoSearchAll: true });
+      try {
+        expect([
+          ...miyoVaultPaths(app, ["Work/meeting.md", "step-2/notes/Standing desk setup.md"]),
+        ]).toEqual(["notes/Standing desk setup.md"]);
+      } finally {
+        setSettings({ miyoSearchAll: false });
+      }
+    });
+
     it("reads Windows backslash paths the same as forward-slash paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
       expect([
         ...miyoVaultPaths(app, ["step-2\\notes\\Standing desk setup.md", "Archive\\notes\\Old.md"]),
