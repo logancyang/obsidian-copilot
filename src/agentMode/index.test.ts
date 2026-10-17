@@ -4,6 +4,7 @@ import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager } from "./index";
+import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 
@@ -291,6 +292,20 @@ describe("agentMode", () => {
         "opencode",
         "system prompt changed"
       );
+    });
+
+    it("hands sessions Copilot's MCP server only while feedback cards are on, following the setting as it changes", () => {
+      const withCards = (offerFeedbackCards: boolean) => ({
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
+      });
+      mockSettings = withCards(true);
+      createAgentSessionManager({} as App, plugin);
+      const { feedbackServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+      expect(feedbackServer?.hasEnabledTools()).toBe(true);
+      mockSettings = withCards(false);
+      expect(feedbackServer?.hasEnabledTools()).toBe(false);
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
