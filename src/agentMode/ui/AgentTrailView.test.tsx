@@ -658,18 +658,21 @@ describe("AgentTrail", () => {
   );
 
   it.each([
-    ["Claude", CLAUDE_MIYO, "failed"],
-    ["Codex", CODEX_MIYO, "failed"],
-    ["OpenCode", OPENCODE_MIYO, "completed"],
+    ["Claude", CLAUDE_MIYO],
+    ["Codex", CODEX_MIYO],
+    ["OpenCode", OPENCODE_MIYO],
   ] as const)(
     "renders a failed %s miyo_search call as a failed card with the error text and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
-    (_name, miyo, status) => {
+    (_name, miyo) => {
       renderTrail({
         parts: [
           miyo({
-            status,
+            status: "failed",
             output: [
-              { type: "text", text: "Miyo search failed. Details: net::ERR_CONNECTION_REFUSED" },
+              {
+                type: "text",
+                text: "Miyo search failed. Continue with keyword search. Details: net::ERR_CONNECTION_REFUSED",
+              },
             ],
           }),
           text("See [[a]]."),
@@ -678,9 +681,7 @@ describe("AgentTrail", () => {
       });
 
       expect(screen.getByText("Miyo search failed")).toBeTruthy();
-      expect(
-        screen.getByText("Miyo search failed. Details: net::ERR_CONNECTION_REFUSED")
-      ).toBeTruthy();
+      expect(screen.getByText("net::ERR_CONNECTION_REFUSED")).toBeTruthy();
       expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("");
     }
   );

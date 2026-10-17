@@ -495,6 +495,10 @@ function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
   }
 }
 
+// The tool's failure text opens with an instruction to the agent; the card shows only the reason.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+const MIYO_FAILURE_REASON = /Details: ([\s\S]*)$/;
+
 function miyoNotePaths(text: string): string[] | null {
   try {
     const results = (JSON.parse(text) as { results?: unknown }).results;
@@ -511,15 +515,13 @@ export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
   if (query === undefined) return null;
   const text = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
   const paths = miyoNotePaths(text);
-  // OpenCode reports a tool error as a completed call carrying the error text.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-  const failed = part.status === "failed" || (part.status === "completed" && text !== "" && !paths);
   return {
-    status: failed ? "failed" : part.status,
+    status: part.status,
     query,
     noteCount: paths?.length ?? null,
     notePaths: paths ?? EMPTY_MIYO_PATHS,
-    error: failed ? stringOrNull(text) : null,
+    error:
+      part.status === "failed" ? stringOrNull(MIYO_FAILURE_REASON.exec(text)?.[1] ?? text) : null,
   };
 }
 

@@ -134,7 +134,18 @@ function toolKindFromAcp(kind: AcpToolKind | undefined): AgentToolKind | undefin
   return kind;
 }
 
-function toolStatusFromAcp(status: string | undefined): AgentToolStatus | undefined {
+function toolStatusFromAcp(
+  status: string | undefined,
+  rawOutput?: unknown
+): AgentToolStatus | undefined {
+  // OpenCode marks a failed tool call completed and flags the error in the result's metadata.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+  if (
+    status === "completed" &&
+    (rawOutput as { metadata?: { error?: unknown } } | null)?.metadata?.error === true
+  ) {
+    return "failed";
+  }
   if (!status) return undefined;
   return status as AgentToolStatus;
 }
@@ -196,7 +207,7 @@ function toolCallSnapshotFromAcp(
     toolCallId: call.toolCallId,
     title,
     kind: toolKindFromAcp(call.kind),
-    status: toolStatusFromAcp(call.status),
+    status: toolStatusFromAcp(call.status, call.rawOutput),
     rawInput: call.rawInput,
     content: toolCallContentFromAcp(call.content) ?? mcpResultContent(call.rawOutput),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
@@ -232,7 +243,7 @@ function toolCallDeltaFromAcp(
     toolCallId: upd.toolCallId,
     title: resolved?.tool,
     kind: toolKindFromAcp(upd.kind ?? undefined),
-    status: toolStatusFromAcp(upd.status as string | undefined),
+    status: toolStatusFromAcp(upd.status as string | undefined, upd.rawOutput),
     rawInput: upd.rawInput,
     content:
       upd.content == null && mcpResult

@@ -22,9 +22,9 @@ You can ask naturally, such as “Find everything I have written about memory co
 
 With **Semantic search for agents** on, agents search your notes with Miyo and file search for any question your notes might answer before turning to the web.
 
-Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found.
+Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found, or why the search failed.
 
-Links in the answer to notes Miyo found get a small Miyo logo. Codex answers don't show it.
+Links in the answer to notes Miyo found get a small Miyo logo.
 
 ## Connect Miyo
 

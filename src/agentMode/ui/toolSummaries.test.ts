@@ -664,17 +664,22 @@ describe("toolSummaries", () => {
       expect(miyoSearchRun(t)?.noteCount).toBe(2);
     });
 
-    it.each([
-      ["Claude", claudeCall],
-      ["Codex", codexCall],
-    ])("reports a failed %s call with the error text the tool returned", (_name, call) => {
-      expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }))).toEqual({
-        status: "failed",
-        query: "hiking trip",
-        noteCount: null,
-        notePaths: [],
-        error: DOWN,
-      });
+    it.each(backends)(
+      "reports a failed %s call with the error text the tool returned",
+      (_name, call) => {
+        expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }))).toEqual({
+          status: "failed",
+          query: "hiking trip",
+          noteCount: null,
+          notePaths: [],
+          error: "net::ERR_CONNECTION_REFUSED",
+        });
+      }
+    );
+
+    it("reports the whole failure text when it has no Details part (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+      const text = "query must be a non-empty string.";
+      expect(miyoSearchRun(claudeCall({ status: "failed", ...stdout(text) }))?.error).toBe(text);
     });
 
     it("reports a failed call without output as failed with no error text", () => {
@@ -684,11 +689,14 @@ describe("toolSummaries", () => {
       });
     });
 
-    it("reports an OpenCode call that completed with an error message as failed, because OpenCode marks a tool error completed (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
-      expect(miyoSearchRun(opencodeCall(stdout(DOWN)))).toMatchObject({
-        status: "failed",
+    it("keeps an OpenCode call completed when its code returned something other than the raw result list (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+      const t = opencodeCall(stdout(JSON.stringify({ len: 1200, count: 3 }, null, 2)));
+      expect(miyoSearchRun(t)).toEqual({
+        status: "completed",
+        query: "hiking trip",
         noteCount: null,
-        error: DOWN,
+        notePaths: [],
+        error: null,
       });
     });
 
