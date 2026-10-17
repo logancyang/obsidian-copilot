@@ -287,6 +287,35 @@ const testAcpNotificationToEvents = () => {
     });
   });
 
+  it.each(["tool_call_update", "tool_call"] as const)(
+    `reports an OpenCode %s that completed with metadata.error as failed (${issue})`,
+    (sessionUpdate) => {
+      const [event] = acpNotificationToEvents(
+        notification({
+          sessionUpdate,
+          toolCallId: "exec-1",
+          status: "completed",
+          rawOutput: { metadata: { error: true, truncated: false } },
+        })
+      );
+
+      expect(event.update).toMatchObject({ status: "failed" });
+    }
+  );
+
+  it("keeps a completed call completed when its metadata flags no error", () => {
+    const [event] = acpNotificationToEvents(
+      notification({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "exec-1",
+        status: "completed",
+        rawOutput: { metadata: { truncated: false } },
+      })
+    );
+
+    expect(event.update).toMatchObject({ status: "completed" });
+  });
+
   it("prefers the update's own content over rawOutput.result.content", () => {
     const [event] = acpNotificationToEvents(
       notification({

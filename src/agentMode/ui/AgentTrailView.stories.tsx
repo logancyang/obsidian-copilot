@@ -193,7 +193,7 @@ const MIYO_SEARCH_FAILED: AgentMessagePart[] = [
 ];
 
 const MIYO_SEARCH_FAILED_OPENCODE: AgentMessagePart[] = [
-  opencodeMiyo({ output: [{ type: "text", text: MIYO_ERROR }] }),
+  opencodeMiyo({ status: "failed", output: [{ type: "text", text: MIYO_ERROR }] }),
   say("Miyo is not running, so I could not search your notes. Open Miyo and ask again."),
 ];
 
