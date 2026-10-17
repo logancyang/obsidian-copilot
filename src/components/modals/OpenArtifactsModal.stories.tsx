@@ -23,11 +23,6 @@ const PUBLIC_ACCESS: OpenArtifactsAccess = {
 const PRIVATE_ACCESS: OpenArtifactsAccess = {
   ...PUBLIC_ACCESS,
   linkAccess: "invited",
-  people: [
-    { email: "alice@example.com", role: "comment", addedAt: 1785000000000 },
-    { email: "carol@example.org", role: "comment", addedAt: 1785000050000 },
-  ],
-  requests: [{ email: "bob@example.com", requestedAt: 1785000100000 }],
 };
 
 // Mounts the dialog and chooses Only those invited, so a story can show the state that follows
@@ -74,19 +69,6 @@ function fakeAccessPort(initial: OpenArtifactsAccess): OpenArtifactsAccessPort {
   return {
     load: async () => current,
     setLinkAccess: async (_docId, linkAccess) => (current = { ...current, linkAccess }),
-    addPerson: async (_docId, email) =>
-      (current = {
-        ...current,
-        people: [...current.people, { email, role: "comment", addedAt: Date.now() }],
-        requests: current.requests.filter((request) => request.email !== email),
-      }),
-    removePerson: async (_docId, email) =>
-      (current = { ...current, people: current.people.filter((person) => person.email !== email) }),
-    declineRequest: async (_docId, email) =>
-      (current = {
-        ...current,
-        requests: current.requests.filter((request) => request.email !== email),
-      }),
     open: async () => current.url,
   };
 }
@@ -174,7 +156,7 @@ export const PrivateSharingNeedsPaidPlan: StoryObj<OpenArtifactsModalContentProp
   },
 };
 
-// The screen after a first publish: the receipt, then the access panel with people already invited.
+// The screen after a first publish: the receipt, then the access panel.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> = {
   args: {

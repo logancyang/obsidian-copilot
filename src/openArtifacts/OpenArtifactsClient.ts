@@ -114,18 +114,6 @@ export class OpenArtifactsClient {
     return this.access("PUT", docId, "", licenseKey, { linkAccess });
   }
 
-  addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("PUT", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
-  }
-
-  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
-  }
-
-  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/requests/${encodeURIComponent(email)}`, licenseKey);
-  }
-
   async openAsOwner(docId: string, licenseKey: string): Promise<string> {
     const response = await this.request({
       url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/open`,

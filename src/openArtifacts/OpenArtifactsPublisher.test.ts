@@ -33,10 +33,7 @@ interface Harness {
     publish: jest.Mock;
     update: jest.Mock;
     delete: jest.Mock;
-    declineRequest: jest.Mock;
     setLinkAccess: jest.Mock;
-    addPerson: jest.Mock;
-    removePerson: jest.Mock;
   };
   file: TFile;
   frontmatter: Record<string, unknown>;
@@ -78,9 +75,6 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     delete: jest.fn().mockResolvedValue(undefined),
     getAccess: jest.fn(),
     setLinkAccess: jest.fn(),
-    addPerson: jest.fn(),
-    removePerson: jest.fn(),
-    declineRequest: jest.fn(),
     openAsOwner: jest.fn(),
   };
   const loadLicenseKey = jest.fn().mockResolvedValue("decrypted-license");
@@ -550,54 +544,32 @@ describe("OpenArtifactsPublisher", () => {
         });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 routes the access port's decline through the client with the license key", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 rejects a stale setLinkAccess after the note identity changes during license loading", async () => {
+        const harness = createHarness({ openartifacts: DOC_URL });
+        await harness.publisher.open(harness.file);
+        harness.loadLicenseKey.mockImplementation(async () => {
+          harness.frontmatter.openartifacts = NEW_DOC_URL;
+          return "decrypted-license";
+        });
+
+        await expect(
+          harness.modalOptions[0].access!.setLinkAccess(DOC_ID, "anyone")
+        ).rejects.toMatchObject({ code: "identity_changed" });
+        expect(harness.client.setLinkAccess).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 allows setLinkAccess for the note's current document", async () => {
         const harness = createHarness({ openartifacts: DOC_URL });
         await harness.publisher.open(harness.file);
 
-        await harness.modalOptions[0].access!.declineRequest(DOC_ID, "bob@other.com");
+        await harness.modalOptions[0].access!.setLinkAccess(DOC_ID, "anyone");
 
-        expect(harness.client.declineRequest).toHaveBeenCalledWith(
+        expect(harness.client.setLinkAccess).toHaveBeenCalledWith(
           DOC_ID,
-          "bob@other.com",
+          "anyone",
           "decrypted-license"
         );
       });
-
-      it.each(["setLinkAccess", "addPerson", "removePerson", "declineRequest"] as const)(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/707 rejects stale %s after the note identity changes during license loading",
-        async (method) => {
-          const harness = createHarness({ openartifacts: DOC_URL });
-          await harness.publisher.open(harness.file);
-          harness.loadLicenseKey.mockImplementation(async () => {
-            harness.frontmatter.openartifacts = NEW_DOC_URL;
-            return "decrypted-license";
-          });
-          const access = harness.modalOptions[0].access!;
-          const action =
-            method === "setLinkAccess"
-              ? access.setLinkAccess(DOC_ID, "anyone")
-              : access[method](DOC_ID, "bob@other.com");
-
-          await expect(action).rejects.toMatchObject({ code: "identity_changed" });
-          expect(harness.client[method]).not.toHaveBeenCalled();
-        }
-      );
-
-      it.each(["setLinkAccess", "addPerson", "removePerson", "declineRequest"] as const)(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/707 allows %s for the note's current document",
-        async (method) => {
-          const harness = createHarness({ openartifacts: DOC_URL });
-          await harness.publisher.open(harness.file);
-          const access = harness.modalOptions[0].access!;
-          if (method === "setLinkAccess") await access.setLinkAccess(DOC_ID, "anyone");
-          else await access[method](DOC_ID, "bob@other.com");
-          expect(harness.client[method]).toHaveBeenCalledWith(
-            DOC_ID,
-            method === "setLinkAccess" ? "anyone" : "bob@other.com",
-            "decrypted-license"
-          );
-        }
-      );
 
       it("blocks another POST after a publish response is lost", async () => {
         const message =

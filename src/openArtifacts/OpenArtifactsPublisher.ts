@@ -55,9 +55,6 @@ interface OpenArtifactsClientPort {
     linkAccess: OpenArtifactsLinkAccess,
     licenseKey: string
   ): Promise<OpenArtifactsAccess>;
-  addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
-  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
-  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
   openAsOwner(docId: string, licenseKey: string): Promise<string>;
 }
 
@@ -267,11 +264,6 @@ export class OpenArtifactsPublisher {
       load: (docId) => withKey((key) => this.client.getAccess(docId, key)),
       setLinkAccess: (docId, linkAccess) =>
         mutate(docId, (key) => this.client.setLinkAccess(docId, linkAccess, key)),
-      addPerson: (docId, email) => mutate(docId, (key) => this.client.addPerson(docId, email, key)),
-      removePerson: (docId, email) =>
-        mutate(docId, (key) => this.client.removePerson(docId, email, key)),
-      declineRequest: (docId, email) =>
-        mutate(docId, (key) => this.client.declineRequest(docId, email, key)),
       open: (docId) => withKey((key) => this.client.openAsOwner(docId, key)),
     };
   }

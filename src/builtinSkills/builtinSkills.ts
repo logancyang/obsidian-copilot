@@ -794,9 +794,6 @@ BODY=$(mktemp) || exit 1
 RESPONSE=$(mktemp) || exit 1
 trap 'rm -f "$HEADERS" "$BODY" "$RESPONSE"' EXIT
 printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
-# A create asks for the one-time account-link offer until the marker file exists. A missing
-# workspace root cannot record the marker, so it never asks.
-# https://github.com/Brevilabs/OpenArtifacts/issues/94
 WORKSPACE_ROOT=$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}
 OFFER_MARKER="$WORKSPACE_ROOT/${OPENARTIFACTS_LINK_OFFER_MARKER}"
 OFFER_ASKED=
@@ -891,7 +888,6 @@ case "$STATUS" in
       cat "$RESPONSE"
       printf '\n'
     fi
-    # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
     # touch, not a redirection: a failed redirection on a special built-in exits a POSIX shell.
     if [ -n "$OFFER_ASKED" ] && grep -q '"guidance"' "$RESPONSE"; then
       { mkdir -p "$(dirname "$OFFER_MARKER")" && touch "$OFFER_MARKER"; } 2>/dev/null || :
@@ -1001,9 +997,6 @@ function Add-ManageUrl([string]$Json) {
 }
 
 $headers = @{ Authorization = "Bearer $KEY" }
-# A create asks for the one-time account-link offer until the marker file exists. A missing
-# workspace root cannot record the marker, so it never asks.
-# https://github.com/Brevilabs/OpenArtifacts/issues/94
 $WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
 $OFFER_MARKER = if ($WORKSPACE_ROOT) { Join-Path $WORKSPACE_ROOT '${OPENARTIFACTS_LINK_OFFER_MARKER}' } else { '' }
 $OFFER_ASKED = $COMMAND -eq 'publish' -and -not $DOC_ID -and $OFFER_MARKER -and -not (Test-Path -LiteralPath $OFFER_MARKER)
@@ -1041,7 +1034,6 @@ try {
     } else {
       [Console]::Out.WriteLine([string]$response.Content)
     }
-    # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
     if ($OFFER_ASKED -and ([string]$response.Content) -match '"guidance"') {
       try {
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) -ErrorAction Stop | Out-Null

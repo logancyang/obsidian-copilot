@@ -524,26 +524,21 @@ describe("OpenArtifactsClient", () => {
       });
 
       describe("access calls", () => {
-        it("changes access one address at a time", async () => {
+        it("reads and changes the link access on the access route", async () => {
           const client = new OpenArtifactsClient();
           mockedRequestUrl.mockResolvedValue(response(200, ACCESS));
 
+          await client.getAccess(DOC_ID, "k");
           await client.setLinkAccess(DOC_ID, "invited", "k");
-          await client.addPerson(DOC_ID, "a+b@c.co", "k");
-          await client.removePerson(DOC_ID, "a+b@c.co", "k");
-          await client.declineRequest(DOC_ID, "a+b@c.co", "k");
 
           const base = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/access`;
           expect(
             mockedRequestUrl.mock.calls.map((_call, i) => [sent(i).method, sent(i).url])
           ).toEqual([
+            ["GET", base],
             ["PUT", base],
-            ["PUT", `${base}/people/a%2Bb%40c.co`],
-            ["DELETE", `${base}/people/a%2Bb%40c.co`],
-            ["DELETE", `${base}/requests/a%2Bb%40c.co`],
           ]);
-          expect(JSON.parse(sent(0).body as string)).toEqual({ linkAccess: "invited" });
-          expect(sent(1).body).toBeUndefined();
+          expect(JSON.parse(sent(1).body as string)).toEqual({ linkAccess: "invited" });
         });
 
         it(`${ISSUE} rejects with private_unavailable when any access route answers 404`, async () => {
@@ -558,9 +553,6 @@ describe("OpenArtifactsClient", () => {
 
           await expectClientError(client.getAccess(DOC_ID, "k"), expected);
           await expectClientError(client.setLinkAccess(DOC_ID, "invited", "k"), expected);
-          await expectClientError(client.addPerson(DOC_ID, "a@b.co", "k"), expected);
-          await expectClientError(client.removePerson(DOC_ID, "a@b.co", "k"), expected);
-          await expectClientError(client.declineRequest(DOC_ID, "a@b.co", "k"), expected);
         });
 
         it("returns the Access the server answered", async () => {
@@ -642,7 +634,7 @@ describe("OpenArtifactsClient", () => {
           );
 
           await expect(
-            new OpenArtifactsClient().addPerson(DOC_ID, "a@b.co", "k")
+            new OpenArtifactsClient().setLinkAccess(DOC_ID, "invited", "k")
           ).rejects.toMatchObject({ status: 402, upgradeUrl: "https://openartifacts.ai/account" });
         });
 
@@ -682,7 +674,7 @@ describe("OpenArtifactsClient", () => {
             })
           );
           const insecure = await new OpenArtifactsClient()
-            .addPerson(DOC_ID, "a@b.co", "k")
+            .setLinkAccess(DOC_ID, "invited", "k")
             .catch((caught: unknown) => caught);
           expect((insecure as OpenArtifactsClientError).upgradeUrl).toContain(
             "utm_medium=openartifacts_private_sharing"
@@ -694,7 +686,7 @@ describe("OpenArtifactsClient", () => {
             })
           );
           const other = await new OpenArtifactsClient()
-            .addPerson(DOC_ID, "a@b.co", "k")
+            .setLinkAccess(DOC_ID, "invited", "k")
             .catch((caught: unknown) => caught);
           expect((other as OpenArtifactsClientError).upgradeUrl).toBeUndefined();
         });
