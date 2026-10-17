@@ -54,7 +54,7 @@ describe("miyoSearchTool", () => {
   });
 
   describe("runMiyoSearch()", () => {
-    it("searches only the active vault in Current vault scope and returns the CLI's result shape", async () => {
+    it("searches only the active vault in Current vault scope and returns the CLI's result shape without the note envelope", async () => {
       const { client, deps } = setup(
         {},
         {
@@ -67,7 +67,7 @@ describe("miyoSearchTool", () => {
 
       const result = await runMiyoSearch({ query: "hiking trip" }, deps);
 
-      expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "hiking trip", 10, {
+      expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "hiking trip", 1000, {
         variants: [],
         folderNames: undefined,
       });
@@ -76,11 +76,11 @@ describe("miyoSearchTool", () => {
         results: [
           {
             path: "step-1/notes/Trip planning.md",
-            content: "NOTE BLOCK CONTENT:\nbody of step-1/notes/Trip planning.md",
+            content: "body of step-1/notes/Trip planning.md",
           },
           {
             path: "step-1/notes/Sourdough starter.md",
-            content: "NOTE BLOCK CONTENT:\nbody of step-1/notes/Sourdough starter.md",
+            content: "body of step-1/notes/Sourdough starter.md",
           },
         ],
         count: 2,
@@ -95,14 +95,14 @@ describe("miyoSearchTool", () => {
       expect(result).toEqual({ text: '{"results":[],"count":0}', isError: false });
     });
 
-    it("merges one file's chunks in note order and keeps files in Miyo's ranking", async () => {
+    it("merges one file's chunks in rank order and keeps files in Miyo's ranking", async () => {
       const { deps } = setup(
         {},
         {
           chunks: [
-            chunk({ path: "step-1/b.md", chunk_index: 0, chunk_text: "only" }),
-            chunk({ path: "step-1/a.md", chunk_index: 1, chunk_text: "second" }),
-            chunk({ path: "step-1/a.md", chunk_index: 0, chunk_text: "first" }),
+            chunk({ path: "step-1/b.md", chunk_text: "only" }),
+            chunk({ path: "step-1/a.md", chunk_text: "better" }),
+            chunk({ path: "step-1/a.md", chunk_text: "worse" }),
           ],
         }
       );
@@ -110,12 +110,41 @@ describe("miyoSearchTool", () => {
       const result = await runMiyoSearch({ query: "q" }, deps);
 
       expect(JSON.parse(result.text).results).toEqual([
-        { path: "step-1/b.md", content: "NOTE BLOCK CONTENT:\nonly" },
-        {
-          path: "step-1/a.md",
-          content: "NOTE BLOCK CONTENT:\nfirst\n\nNOTE BLOCK CONTENT:\nsecond",
-        },
+        { path: "step-1/b.md", content: "only" },
+        { path: "step-1/a.md", content: "better\n\nworse" },
       ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/734 still lists other notes when one note matches most chunks, and stops at 20 notes", async () => {
+      const crowded = Array.from({ length: 30 }, (_, i) =>
+        chunk({ path: "step-1/transcript.md", chunk_text: `part ${i}` })
+      );
+      const others = Array.from({ length: 25 }, (_, i) => chunk({ path: `step-1/other-${i}.md` }));
+      const { deps } = setup({}, { chunks: [...crowded, ...others] });
+
+      const { results, count } = JSON.parse((await runMiyoSearch({ query: "q" }, deps)).text);
+
+      expect(count).toBe(20);
+      expect(results[0].path).toBe("step-1/transcript.md");
+      expect(results[1].path).toBe("step-1/other-0.md");
+      expect(results[19].path).toBe("step-1/other-18.md");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/734 keeps every path and valid JSON within 80,000 characters when the notes are larger", async () => {
+      const chunks = Array.from({ length: 20 }, (_, i) =>
+        chunk({ path: `step-1/note-${i}.md`, chunk_text: `"quoted"\n${"x".repeat(50_000)}` })
+      );
+      const { deps } = setup({}, { chunks });
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      const parsed = JSON.parse(result.text);
+      expect(result.text.length).toBeLessThanOrEqual(80_000);
+      expect(result.isError).toBe(false);
+      expect(parsed.results.map((r: { path: string }) => r.path)).toEqual(
+        chunks.map((c) => c.path)
+      );
+      expect(parsed.results[0].content).toMatch(/^"quoted"\nxxx/);
     });
 
     it("widens Current vault scope with the extra Miyo folders ticked in settings, leaving out the vault itself", async () => {
@@ -123,13 +152,13 @@ describe("miyoSearchTool", () => {
 
       await runMiyoSearch({ query: "q" }, deps);
 
-      expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "q", 10, {
+      expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "q", 1000, {
         variants: [],
         folderNames: ["step-1", "Research", "ChatGPT"],
       });
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3508 retries with the vault alone and says so when a ticked folder is missing from Miyo", async () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3508 searches without a ticked folder that Miyo lacks and says so", async () => {
       const { client, deps } = setup(
         { miyoExtraSearchFolders: ["Research", "Gone"] },
         { chunks: [chunk({ path: "step-1/a.md" })] }
@@ -139,14 +168,14 @@ describe("miyoSearchTool", () => {
       const result = await runMiyoSearch({ query: "q" }, deps);
 
       expect(client.search).toHaveBeenCalledTimes(2);
-      expect(client.search).toHaveBeenLastCalledWith(BASE_URL, "step-1", "q", 10, {
+      expect(client.search).toHaveBeenLastCalledWith(BASE_URL, "step-1", "q", 1000, {
         variants: [],
-        folderNames: undefined,
+        folderNames: ["step-1", "Research"],
       });
       expect(result.isError).toBe(false);
       expect(JSON.parse(result.text)).toMatchObject({
         count: 1,
-        note: 'Miyo has no folder "Gone" that is ticked in Copilot settings, so only the active vault was searched.',
+        note: 'Miyo has no folder "Gone" ticked in Copilot settings, so it was not searched.',
       });
     });
 
@@ -169,7 +198,7 @@ describe("miyoSearchTool", () => {
 
       await runMiyoSearch({ query: "q" }, deps);
 
-      expect(client.search).toHaveBeenCalledWith(BASE_URL, undefined, "q", 10, {
+      expect(client.search).toHaveBeenCalledWith(BASE_URL, undefined, "q", 1000, {
         variants: [],
         folderNames: undefined,
       });
@@ -182,8 +211,8 @@ describe("miyoSearchTool", () => {
 
       expect(client.search).not.toHaveBeenCalled();
       expect(result.isError).toBe(true);
-      expect(result.text).toContain("active vault identity is missing");
-      expect(result.text).toContain("Do not retry or run an unrestricted search");
+      expect(result.text).toContain("vault identity is missing");
+      expect(result.text).toContain("Do not retry or search unrestricted");
     });
 
     it("searches the configured remote Miyo URL", async () => {
@@ -200,7 +229,7 @@ describe("miyoSearchTool", () => {
         "https://miyo.example.com/base",
         "step-1",
         "q",
-        10,
+        1000,
         expect.any(Object)
       );
     });
@@ -214,7 +243,7 @@ describe("miyoSearchTool", () => {
         BASE_URL,
         "step-1",
         "q",
-        10,
+        1000,
         expect.objectContaining({ variants: ["one", "two"] })
       );
     });
@@ -230,7 +259,7 @@ describe("miyoSearchTool", () => {
         BASE_URL,
         "step-1",
         "q",
-        10,
+        1000,
         expect.objectContaining({ variants: [] })
       );
       expect(client.search).toHaveBeenNthCalledWith(
@@ -238,7 +267,7 @@ describe("miyoSearchTool", () => {
         BASE_URL,
         "step-1",
         "q",
-        10,
+        1000,
         expect.objectContaining({ variants: ["one"] })
       );
     });

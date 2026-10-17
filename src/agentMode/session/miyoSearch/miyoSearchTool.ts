@@ -1,17 +1,23 @@
-import { logWarn } from "@/logger";
-import { MiyoRequestError, type MiyoClient, type MiyoSearchResult } from "@/miyo/MiyoClient";
+import type { MiyoClient, MiyoSearchResult } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl } from "@/miyo/miyoRuntimePolicy";
+import {
+  MIYO_SEARCH_CANDIDATE_LIMIT,
+  searchWithoutMissingFolders,
+} from "@/miyo/searchWithoutMissingFolders";
 import type { CopilotSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 
 export const MIYO_SEARCH_TOOL_NAME = "miyo_search";
 
-const RESULT_LIMIT = 10;
+const NOTE_LIMIT = 20;
 const MAX_VARIANTS = 2;
+// Stays below Claude Code's default 25K-token cap on MCP tool output.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/734
+const OUTPUT_BUDGET_CHARS = 80_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
-  description: `Semantic search over the user's notes through Miyo: finds notes by meaning, not only exact words. Searches the active vault plus any extra Miyo folders the user enabled in Copilot settings. Returns up to ${RESULT_LIMIT} notes as { path, content }.`,
+  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Searches the active vault plus the extra Miyo folders enabled in Copilot settings. Returns up to ${NOTE_LIMIT} notes as { path, content }.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -71,7 +77,7 @@ export async function runMiyoSearch(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
   if (!unrestricted && !vaultName) {
     return failure(
-      "Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search."
+      "The active vault identity is missing, so Current vault scope can't be enforced. Do not retry or search unrestricted."
     );
   }
   // Ticked folders widen only Current vault scope.
@@ -82,40 +88,35 @@ export async function runMiyoSearch(
 
   try {
     const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const search = (folders: readonly string[]) =>
-      client.search(baseUrl, unrestricted ? undefined : vaultName, query, RESULT_LIMIT, {
-        variants,
-        // folder_name stays the vault, so a Miyo without multi-folder search still searches only the vault.
-        // https://github.com/logancyang/obsidian-copilot/issues/3508
-        folderNames: folders.length > 0 ? [vaultName, ...folders] : undefined,
-      });
-
-    let note: string | undefined;
-    let response;
-    try {
-      response = await search(extraFolders);
-    } catch (error) {
-      const missing =
-        error instanceof MiyoRequestError && error.status === 404
-          ? /^Folder not registered: (.+)$/.exec(error.detail)?.[1]
-          : undefined;
-      // A ticked folder this Miyo lacks, such as one synced from another device, fails the whole search.
-      // https://github.com/logancyang/obsidian-copilot/issues/3508
-      if (missing === undefined || !extraFolders.includes(missing)) throw error;
-      note = `Miyo has no folder "${missing}" that is ticked in Copilot settings, so only the active vault was searched.`;
-      response = await search([]);
-    }
-
-    const results = toFileResults(response.results ?? []);
+    const searched = await searchWithoutMissingFolders(
+      (folders) =>
+        client.search(
+          baseUrl,
+          unrestricted ? undefined : vaultName,
+          query,
+          MIYO_SEARCH_CANDIDATE_LIMIT,
+          {
+            variants,
+            // folder_name stays the vault, so a Miyo without multi-folder search still searches only the vault.
+            // https://github.com/logancyang/obsidian-copilot/issues/3508
+            folderNames: folders.length > 0 ? [vaultName, ...folders] : undefined,
+          }
+        ),
+      extraFolders
+    );
+    const skipped = extraFolders.filter((name) => !searched.extraFolders.includes(name));
     return {
-      text: JSON.stringify({ results, count: results.length, ...(note ? { note } : {}) }),
+      text: serialize(
+        toNotes(searched.response.results ?? []),
+        skipped.length > 0
+          ? `Miyo has no folder ${skipped.map((name) => `"${name}"`).join(", ")} ticked in Copilot settings, so it was not searched.`
+          : undefined
+      ),
       isError: false,
     };
   } catch (error) {
-    const details = err2String(error);
-    logWarn(`[MiyoSearchTool] search failed: ${details}`);
     return failure(
-      `Miyo search failed. Continue with keyword search and tell the user to open Miyo. Details: ${details}`
+      `Miyo search failed. Continue with keyword search and tell the user to open Miyo. Details: ${err2String(error)}`
     );
   }
 }
@@ -124,21 +125,31 @@ function failure(text: string): MiyoSearchToolResult {
   return { text, isError: true };
 }
 
-// Mirrors the grouping `miyo search --json` prints: one entry per file in Miyo's ranking, with each file's excerpts in note order.
+// Miyo ranks chunks, so one long note can fill them all; grouping by note keeps the other notes visible.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
-function toFileResults(chunks: readonly MiyoSearchResult[]): FileResult[] {
-  const excerptsByPath = new Map<string, { index: number; text: string }[]>();
-  for (const { path, chunk_index, chunk_text } of chunks) {
+function toNotes(chunks: readonly MiyoSearchResult[]): FileResult[] {
+  const excerptsByPath = new Map<string, string[]>();
+  for (const { path, chunk_text } of chunks) {
     const text = (chunk_text ?? "").replace(/^[\s\S]*?NOTE BLOCK CONTENT:/, "").trim();
-    const excerpts = excerptsByPath.get(path) ?? [];
-    if (text) excerpts.push({ index: chunk_index ?? 0, text });
-    excerptsByPath.set(path, excerpts);
+    excerptsByPath.set(path, [...(excerptsByPath.get(path) ?? []), ...(text ? [text] : [])]);
   }
-  return [...excerptsByPath].slice(0, RESULT_LIMIT).map(([path, excerpts]) => ({
-    path,
-    content: excerpts
-      .sort((a, b) => a.index - b.index)
-      .map(({ text }) => `NOTE BLOCK CONTENT:\n${text}`)
-      .join("\n\n"),
-  }));
+  return [...excerptsByPath]
+    .slice(0, NOTE_LIMIT)
+    .map(([path, excerpts]) => ({ path, content: excerpts.join("\n\n") }));
+}
+
+// Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/734
+function serialize(notes: readonly FileResult[], note: string | undefined): string {
+  let contentCap = Math.floor(OUTPUT_BUDGET_CHARS / notes.length);
+  let text: string;
+  do {
+    const results = notes.map(({ path, content }) => ({
+      path,
+      content: content.slice(0, contentCap),
+    }));
+    text = JSON.stringify({ results, count: results.length, ...(note ? { note } : {}) });
+    contentCap = Math.floor(contentCap * 0.8);
+  } while (text.length > OUTPUT_BUDGET_CHARS && contentCap > 0);
+  return text;
 }
