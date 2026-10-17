@@ -32,6 +32,11 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
+
+function flattened(markdown: string): string {
+  return markdown.replace(/\s+/g, " ");
+}
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -396,12 +401,27 @@ describe("builtinSkills", () => {
       expect(miyoScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
     });
 
-    it("documents concrete triggers for when to call it", () => {
-      const md = MIYO_SEARCH_SKILL.skillMd;
-      expect(md).toMatch(/description:[^\n]*too slow/i);
-      expect(md).toMatch(/description:[^\n]*explicitly asks for Miyo search/i);
-      expect(md).toMatch(/When to use it/);
-      expect(md).toMatch(/doesn't surface enough relevant notes/i);
+    it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).toMatch(
+        /description:[^\n]*Use it for every request that might be answered from the user's notes, alongside grep for exact terms\./
+      );
+      expect(md).toContain(
+        "When to use it: for every request that might be answered from the user's notes, alongside `grep`/glob for any exact names, terms, tags or quoted phrases in the request."
+      );
+    });
+
+    it(`no longer limits it to when grep falls short or to a single search step (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).not.toMatch(/too slow|doesn't surface enough relevant notes/i);
+      expect(md).not.toMatch(/single search step|do not fall back to other search tools/i);
+    });
+
+    it(`has the agent combine Miyo and keyword results by note path and continue with keyword search when Miyo is unavailable (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).toContain(
+        "Combine its results with your keyword search results by note path. If Miyo reports that it is unavailable, continue with keyword search."
+      );
     });
 
     it("runs one deterministic `miyo search ... --json` in each script", () => {

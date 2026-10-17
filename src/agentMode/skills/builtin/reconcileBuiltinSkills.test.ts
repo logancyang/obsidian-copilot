@@ -2,8 +2,10 @@ import { DEFAULT_SETTINGS } from "@/constants";
 import {
   ALL_MANAGED_SKILLS,
   BUILTIN_SKILLS,
+  MIYO_SEARCH_SKILL,
   RETIRED_BUILTIN_SKILLS,
 } from "@/builtinSkills/builtinSkills";
+import { getBuiltinSkillVersion } from "./builtinOwnership";
 import {
   availableBuiltinAgents,
   reconcileBuiltinSkills,
@@ -15,6 +17,7 @@ import type { BuiltinSeedFs } from "./seedBuiltinSkills";
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
+const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const INSTALLED_PLUS_READ_PDF_MD = `---
 name: copilot-read-pdf
@@ -255,6 +258,57 @@ describe("reconcileBuiltinSkills", () => {
         catalog.pop();
         (BUILTIN_SKILLS as (typeof added)[]).pop();
       }
+    });
+    it(`upgrades an installed version 5 miyo-search to the bundled version, replacing its scripts and keeping the per-agent opt-outs ${ISSUE_717}`, async () => {
+      const f = fixture({ "miyo-search": { disabledAgents: ["codex"] } });
+      f.options.settings.enableMiyo = true;
+      f.options.settings.enableMiyoSearchSkill = true;
+      f.options.availableAgents = ["claude", "codex", "opencode"];
+      const dir = `${folder}/miyo-search`;
+      const installedV5 = MIYO_SEARCH_SKILL.skillMd
+        .replace(
+          `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`,
+          'copilot-builtin-version: "5"'
+        )
+        .replace(/^description:.*$/m, "description: Earlier miyo-search wording.")
+        .replace(/^ {2}copilot-enabled-agents:.*$/m, "  copilot-enabled-agents: claude, opencode");
+      f.files.set(f.path("miyo-search"), installedV5);
+      f.files.set(`${dir}/miyo-search.sh`, "# earlier script");
+      f.files.set(`${dir}/stale-note.md`, "removed on upgrade");
+      expect(getBuiltinSkillVersion(f.files.get(f.path("miyo-search"))!)).toBe(5);
+
+      await reconcileBuiltinSkills(f.options);
+
+      const upgraded = f.files.get(f.path("miyo-search"))!;
+      expect(getBuiltinSkillVersion(upgraded)).toBe(MIYO_SEARCH_SKILL.version);
+      expect(MIYO_SEARCH_SKILL.version).toBeGreaterThan(5);
+      const { frontmatter } = parseSkillFile(upgraded, "miyo-search");
+      expect(frontmatter.description).toBe(
+        parseSkillFile(MIYO_SEARCH_SKILL.skillMd, "miyo-search").frontmatter.description
+      );
+      expect(frontmatter.enabledAgents).toEqual(["claude", "opencode"]);
+      expect(f.files.get(`${dir}/miyo-search.sh`)).toBe(
+        MIYO_SEARCH_SKILL.files.find((file) => file.path === "miyo-search.sh")!.content
+      );
+      expect(f.files.has(`${dir}/stale-note.md`)).toBe(false);
+      expect(f.options.settings.agentMode.skills.builtinPreferences).toEqual({
+        "miyo-search": { disabledAgents: ["codex"] },
+      });
+    });
+    it(`removes an installed version 5 miyo-search instead of upgrading it when the user turned the search skill off ${ISSUE_717}`, async () => {
+      const f = fixture();
+      f.options.settings.enableMiyo = true;
+      f.options.settings.enableMiyoSearchSkill = false;
+      f.options.availableAgents = ["claude"];
+      f.files.set(
+        f.path("miyo-search"),
+        MIYO_SEARCH_SKILL.skillMd.replace(
+          `copilot-builtin-version: "${MIYO_SEARCH_SKILL.version}"`,
+          'copilot-builtin-version: "5"'
+        )
+      );
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path("miyo-search"))).toBe(false);
     });
     it(`deletes disabled managed copies but preserves user-owned name collisions ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];

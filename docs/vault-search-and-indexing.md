@@ -20,6 +20,8 @@ Agent Chat can combine three kinds of search:
 
 You can ask naturally, such as “Find everything I have written about memory consolidation,” or say “Use Miyo” when you want semantic search explicitly. Search results become context for the model you selected, so the model still receives the excerpts Agent Chat uses in its answer.
 
+With **Semantic search for agents** on, agents search your notes with Miyo and file search for any question your notes might answer before turning to the web.
+
 ## Connect Miyo
 
 Open **Settings → Copilot → Miyo** and choose one connection:
