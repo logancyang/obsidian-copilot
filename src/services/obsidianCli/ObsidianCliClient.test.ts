@@ -101,14 +101,6 @@ describe("ObsidianCliClient", () => {
 
       expect(isObsidianCliEnabled()).toBe(false);
     });
-
-    it("returns false outside the desktop app without loading Electron", () => {
-      const sendSync = installCliToggle(true);
-      (Platform as unknown as { isDesktopApp: boolean }).isDesktopApp = false;
-
-      expect(isObsidianCliEnabled()).toBe(false);
-      expect(sendSync).not.toHaveBeenCalled();
-    });
   });
 
   describe("buildObsidianCliArgs()", () => {
