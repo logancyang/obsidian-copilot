@@ -30,8 +30,6 @@ import {
 } from "./OpencodeBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import {
-  MIYO_SEARCH_FOLDER_ENV,
-  MIYO_SEARCH_SCOPE_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
@@ -1041,15 +1039,9 @@ describe("OpencodeBackend", () => {
         expect(desc.env.COPILOT_CLIENT_VERSION).toBe("4.0.0-preview-260802");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 exports no Miyo search scope to global or Project sessions, because miyo_search reads the scope when it runs", async () => {
         setSettings({ miyoSearchAll: false });
-        setOpencodeSettings({
-          binaryPath: "/path/to/opencode",
-          envOverrides: {
-            [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
-            [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
-          },
-        });
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
 
         const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
           vaultBasePath: "/active-vault",
@@ -1058,8 +1050,9 @@ describe("OpencodeBackend", () => {
 
         expect(desc.args).toEqual(["acp", "--print-logs"]);
         expect(desc.cwd).toBe("/active-vault");
-        expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
-        expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
+        expect(
+          Object.keys(desc.env).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))
+        ).toEqual([]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/558 ends top-level and every agent permission override with web denies in Self-Host Mode", async () => {

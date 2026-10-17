@@ -1,6 +1,7 @@
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import type { BackendId } from "@/agentMode/session/types";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
+import { isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
@@ -25,9 +26,9 @@ export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locall
 
 export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have.`;
 
-// Running miyo-search and grep for every request that may be answered from notes, even external-sounding ones, keeps the agent from skipping the vault; merging by path and opening matches keeps it from trusting a list it never read.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/717
-export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, run miyo-search and also grep/glob for any exact names, terms, tags or quoted phrases in the request. Merge the results by note path and open the strongest matches before answering. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
+// Running miyo_search and grep for every request that may be answered from notes, even external-sounding ones, keeps the agent from skipping the vault; merging by path and opening matches keeps it from trusting a list it never read; naming the tool over the CLI keeps agents off a Miyo skill outside Copilot.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/736
+export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 
@@ -69,7 +70,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
     if (enabled("miyo-parse")) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
-    if (enabled("miyo-search")) parts.push(COPILOT_MIYO_SEARCH_STEERING);
+    if (isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 
   parts.push(buildFileEditPolicy(backendId));

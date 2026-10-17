@@ -149,14 +149,14 @@ describe("SkillsSettings", () => {
       expect(Icon).not.toHaveBeenCalled();
     });
 
-    it.each<[boolean, boolean, boolean, boolean]>([
-      [false, false, false, false],
-      [true, false, true, false],
-      [false, true, false, true],
-      [true, true, true, true],
+    it.each<[boolean, boolean]>([
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
     ])(
-      "shows Miyo tools only for enabled feature settings (%s, %s) for https://github.com/logancyang/obsidian-copilot/issues/3022",
-      async (search, documents, showSearch, showParse) => {
+      "lists miyo-parse only while document processing is on and never lists miyo-search (search switch %s, documents %s) for https://github.com/Brevilabs/obsidian-copilot-private/issues/736",
+      async (search, documents) => {
         const initial = settingsStore.get(settingsAtom);
         settingsStore.set(settingsAtom, {
           ...initial,
@@ -167,15 +167,10 @@ describe("SkillsSettings", () => {
         await act(async () => {
           renderSettings();
         });
-        expect(
-          Boolean(screen.queryByRole("button", { name: "More actions for miyo-search" }))
-        ).toBe(showSearch);
+        expect(screen.queryByRole("button", { name: "More actions for miyo-search" })).toBeNull();
         expect(Boolean(screen.queryByRole("button", { name: "More actions for miyo-parse" }))).toBe(
-          showParse
+          documents
         );
-        expect(
-          screen.queryByText("Unavailable with your current Miyo search or document settings.")
-        ).toBeNull();
       }
     );
 

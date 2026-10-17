@@ -18,7 +18,7 @@ const OUTPUT_BUDGET_BYTES = 32_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
-  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Searches the active vault plus the extra Miyo folders enabled in Copilot settings. Returns up to ${NOTE_LIMIT} notes as { path, content }. A path is relative to the active vault, so you can open and link it as is; a note from another Miyo folder starts with that folder's name.`,
+  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Use it for any request the notes might answer, alongside grep for exact names and terms, with the user's full question as query. Searches the active vault plus the extra Miyo folders enabled in Copilot settings, or everything Miyo has when Copilot's search scope is Unrestricted. Returns up to ${NOTE_LIMIT} notes as { path, content } excerpts. A path is relative to the active vault, so you can open and link it as is; a note from another Miyo folder starts with that folder's name. Cite the path of any note you use. If the search fails, continue with keyword search and don't retry in a loop.`,
   inputSchema: {
     type: "object",
     properties: {

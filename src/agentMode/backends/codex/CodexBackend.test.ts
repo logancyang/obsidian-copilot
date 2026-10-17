@@ -1,7 +1,6 @@
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
-import { MIYO_SEARCH_FOLDER_ENV, MIYO_SEARCH_SCOPE_ENV } from "@/builtinSkills/builtinSkills";
 import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
@@ -158,23 +157,18 @@ describe("CodexBackend", () => {
         expect(config.developer_instructions).not.toContain("drop Copilot prompt");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 gives global and Project sessions the same protected active-vault Miyo identity", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 exports no Miyo search scope to global or Project sessions, because miyo_search reads the scope when it runs", async () => {
         setSettings({ miyoSearchAll: false });
-        useCodexSettings({
-          binaryPath: "/usr/local/bin/codex-acp",
-          envOverrides: {
-            [MIYO_SEARCH_SCOPE_ENV]: "unrestricted",
-            [MIYO_SEARCH_FOLDER_ENV]: "other-vault",
-          },
-        });
+        useCodexSettings({ binaryPath: "/usr/local/bin/codex-acp" });
 
         const desc = await new CodexBackend().buildSpawnDescriptor({
           vaultBasePath: "/active-vault",
           vaultName: "active-vault",
         });
 
-        expect(desc.env[MIYO_SEARCH_SCOPE_ENV]).toBe("current");
-        expect(desc.env[MIYO_SEARCH_FOLDER_ENV]).toBe("active-vault");
+        expect(
+          Object.keys(desc.env).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))
+        ).toEqual([]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for Codex", async () => {

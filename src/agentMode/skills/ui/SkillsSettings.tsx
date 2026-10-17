@@ -1,10 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import {
-  ALL_MANAGED_SKILLS,
-  isMiyoSearchSkillActive,
-  planManagedBuiltins,
-} from "@/builtinSkills/builtinSkills";
+import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -94,7 +90,6 @@ export const SkillsSettings: React.FC = () => {
   const availableAgents = availableBuiltinAgents(installStates, lastAvailableAgents.current);
   lastAvailableAgents.current = availableAgents;
   const eligibleBuiltins = planManagedBuiltins({
-    search: isMiyoSearchSkillActive(settings),
     documents: settings.enableMiyoDocumentProcessing,
   }).seed;
   const unavailableReasons: Record<string, string> = {};

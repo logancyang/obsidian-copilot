@@ -51,6 +51,20 @@ describe("miyoSearchTool", () => {
         _meta: { "anthropic/alwaysLoad": true },
       });
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 tells the agent when to use it, how to read a result and what to do when it fails, without naming a skill or script", () => {
+      const { description } = MIYO_SEARCH_TOOL;
+
+      expect(description).toContain(
+        "Use it for any request the notes might answer, alongside grep"
+      );
+      expect(description).toContain(
+        "or everything Miyo has when Copilot's search scope is Unrestricted"
+      );
+      expect(description).toContain("Cite the path of any note you use");
+      expect(description).toContain("If the search fails, continue with keyword search");
+      expect(description).not.toMatch(/miyo-search|\.sh\b|skill/i);
+    });
   });
 
   describe("runMiyoSearch()", () => {
