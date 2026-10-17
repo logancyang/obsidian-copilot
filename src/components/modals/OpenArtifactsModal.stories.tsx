@@ -104,18 +104,6 @@ export const PublishPrivate: StoryObj<OpenArtifactsModalContentProps> = {
   render: () => <AfterSwitch access={fakeAccessPort(PRIVATE_ACCESS)} docId={null} />,
 };
 
-// Two invitees and one pending request, with Approve and Decline.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-export const ManageWithInviteesAndRequest: StoryObj<OpenArtifactsModalContentProps> = {
-  args: { docId: DOC_ID, access: fakeAccessPort(PRIVATE_ACCESS) },
-};
-
-// Invitees when the server sends no email: the owner shares the link.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-export const ManageWithoutInviteEmail: StoryObj<OpenArtifactsModalContentProps> = {
-  args: { docId: DOC_ID, access: fakeAccessPort({ ...PRIVATE_ACCESS, email: false }) },
-};
-
 // A public page, so switching to Only those invited shows the copy notice.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const ManageAfterSwitchToPrivate: StoryObj<OpenArtifactsModalContentProps> = {
