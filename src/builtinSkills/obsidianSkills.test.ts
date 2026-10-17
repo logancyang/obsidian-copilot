@@ -9,12 +9,12 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("ships the four approved skills for every Agent Mode backend", () => {
-      expect(OBSIDIAN_SKILLS.map((skill) => skill.name)).toEqual([
-        "obsidian-markdown",
-        "obsidian-bases",
-        "json-canvas",
-        "obsidian-cli",
+    it("offers the four skills to every agent but defaults them to OpenCode, and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultDisabledAgents])).toEqual([
+        ["obsidian-markdown", ["claude", "codex"]],
+        ["obsidian-bases", ["claude"]],
+        ["json-canvas", ["claude", "codex"]],
+        ["obsidian-cli", ["claude", "codex"]],
       ]);
       for (const skill of OBSIDIAN_SKILLS) {
         expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);

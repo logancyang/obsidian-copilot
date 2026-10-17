@@ -7,6 +7,7 @@ import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
@@ -125,6 +126,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
+  let seededWithCli = false;
   const availableSkillAgents = (): readonly string[] => {
     const states = Object.fromEntries(
       listBackendDescriptors()
@@ -152,6 +154,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const initializing = new Map<BackendId, Promise<void>>();
   const beforeBackendStart = async (id: BackendId): Promise<void> => {
     await initializing.get(id);
+    // Obsidian announces no change to its CLI toggle, so each agent start re-checks it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+    if (isObsidianCliEnabled() === seededWithCli) return;
+    await seedManagedBuiltins();
+    refreshSystemPromptAffected();
   };
   const preloader = new AgentModelPreloader(
     app,
@@ -303,6 +310,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   });
   const seedManagedBuiltins = async (): Promise<void> => {
+    seededWithCli = isObsidianCliEnabled();
     await skillManager.refresh(true);
   };
   subscribeToSettingsChange((prev, next) => {

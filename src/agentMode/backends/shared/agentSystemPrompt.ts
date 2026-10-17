@@ -1,5 +1,8 @@
 import type { BackendId } from "@/agentMode/session/types";
-import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
+import {
+  builtinSkillUnavailableReason,
+  isBuiltinSkillEnabledFor,
+} from "@/builtinSkills/builtinSkills";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
@@ -73,7 +76,9 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
-    builtinPrompt && isBuiltinSkillEnabledFor(settings, skill, backendId);
+    builtinPrompt &&
+    !builtinSkillUnavailableReason(skill) &&
+    isBuiltinSkillEnabledFor(settings, skill, backendId);
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);

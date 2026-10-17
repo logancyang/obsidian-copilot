@@ -1,7 +1,9 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import {
   BUILTIN_SKILLS,
+  builtinSkillUnavailableReason,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
   PLUS_ENV,
@@ -15,6 +17,12 @@ import {
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
+
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(() => true),
+}));
+
+const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   const skill = BUILTIN_SKILLS.find((s) => s.name === name);
@@ -394,13 +402,44 @@ describe("builtinSkills", () => {
 
   describe("DEFAULT_BUILTIN_PREFERENCES", () => {
     it("stores web search and web fetch as opt-outs so older releases keep them https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
-      expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
+      expect(DEFAULT_BUILTIN_PREFERENCES).toMatchObject({
         "copilot-web-search": { disabled: true },
         "copilot-web-fetch": { disabled: true },
       });
       expect(DEFAULT_SETTINGS.agentMode.skills.builtinPreferences).toBe(
         DEFAULT_BUILTIN_PREFERENCES
       );
+    });
+
+    it("stores each skill's default-off agents as opt-outs (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabled: true },
+        "obsidian-markdown": { disabledAgents: ["claude", "codex"] },
+        "obsidian-bases": { disabledAgents: ["claude"] },
+        "json-canvas": { disabledAgents: ["claude", "codex"] },
+        "obsidian-cli": { disabledAgents: ["claude", "codex"] },
+      });
+    });
+  });
+
+  describe("builtinSkillUnavailableReason()", () => {
+    it("leaves every skill available while Obsidian's command line interface is on", () => {
+      mockIsObsidianCliEnabled.mockReturnValue(true);
+      for (const skill of BUILTIN_SKILLS) {
+        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
+      }
+    });
+
+    it("makes only obsidian-cli unavailable, naming the Obsidian setting, while the command line interface is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      mockIsObsidianCliEnabled.mockReturnValue(false);
+      expect(builtinSkillUnavailableReason("obsidian-cli")).toBe(
+        "Turn on Command line interface in Obsidian's Settings → General to use this skill."
+      );
+      for (const skill of BUILTIN_SKILLS.filter((skill) => skill.name !== "obsidian-cli")) {
+        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
+      }
+      mockIsObsidianCliEnabled.mockReturnValue(true);
     });
   });
 
@@ -414,7 +453,7 @@ describe("builtinSkills", () => {
 
     it("keeps default-off skills off for every agent in a fresh install https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
       for (const agent of ["claude", "codex", "opencode"]) {
-        for (const name of Object.keys(DEFAULT_BUILTIN_PREFERENCES)) {
+        for (const name of ["copilot-web-search", "copilot-web-fetch"]) {
           expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, name, agent)).toBe(false);
         }
         expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(true);

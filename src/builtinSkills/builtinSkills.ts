@@ -12,6 +12,7 @@ import {
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 import { howToRunSection, SHELL_TOOL_SENTENCE } from "./howToRunSection";
 
@@ -20,6 +21,7 @@ export interface BuiltinSkill {
   readonly version: number;
   readonly enabledAgents: readonly BackendId[];
   readonly defaultDisabled?: boolean;
+  readonly defaultDisabledAgents?: readonly BackendId[];
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -1053,16 +1055,32 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/629
+type BuiltinPreference = NonNullable<
+  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
+>[string];
+
 export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
   CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
 > = Object.freeze(
   Object.fromEntries(
-    BUILTIN_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
-      skill.name,
-      Object.freeze({ disabled: true }),
-    ])
+    BUILTIN_SKILLS.flatMap(
+      (skill): Array<[string, BuiltinPreference]> =>
+        skill.defaultDisabled
+          ? [[skill.name, Object.freeze({ disabled: true })]]
+          : skill.defaultDisabledAgents
+            ? [[skill.name, Object.freeze({ disabledAgents: [...skill.defaultDisabledAgents] })]]
+            : []
+    )
   )
 );
+
+// The CLI toggle is per device, so an unavailable skill keeps its synced files and loses only its
+// agent links and steering here. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+export function builtinSkillUnavailableReason(skillName: string): string | undefined {
+  return skillName === "obsidian-cli" && !isObsidianCliEnabled()
+    ? "Turn on Command line interface in Obsidian's Settings → General to use this skill."
+    : undefined;
+}
 
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,

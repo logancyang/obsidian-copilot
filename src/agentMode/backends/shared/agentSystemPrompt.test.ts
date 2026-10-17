@@ -1,4 +1,5 @@
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import {
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
@@ -24,6 +25,11 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(),
+}));
+
+const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
 function makePrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
@@ -62,6 +68,7 @@ describe("agentSystemPrompt", () => {
       resetSettings();
       updateSetting("enableMiyoDocumentProcessing", false);
       resetPromptState();
+      mockIsObsidianCliEnabled.mockReturnValue(true);
     });
 
     it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
@@ -260,6 +267,17 @@ describe("agentSystemPrompt", () => {
       }
     });
 
+    it(`steers OpenCode to every Obsidian skill, Codex to Bases and Claude to none under default settings (${ISSUE_726})`, () => {
+      expect(buildAgentSystemPrompt("opencode")).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+      expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("codex")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-bases for .base files.`
+      );
+      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    });
+
     it(`names only the format skills enabled for the agent and drops the line when none is (${ISSUE_726})`, () => {
       setBuiltinPreferences({
         "obsidian-markdown": { disabledAgents: ["codex"] },
@@ -289,6 +307,16 @@ describe("agentSystemPrompt", () => {
       setBuiltinPreferences({ "obsidian-cli": { disabledAgents: [AGENT] } });
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    });
+
+    it(`drops the obsidian-cli line while Obsidian's command line interface is off, keeping the format skills (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      mockIsObsidianCliEnabled.mockReturnValue(false);
+
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(prompt).not.toContain("obsidian-cli");
+      expect(prompt).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
     });
 
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {
