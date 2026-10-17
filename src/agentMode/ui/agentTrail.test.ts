@@ -183,15 +183,14 @@ describe("agentTrail", () => {
         }
       });
 
-      it("drops the miyo-search skill load but keeps the script run and other skill loads (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+      it("keeps skill loads, including miyo-search, saved before miyo_search replaced the skill (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
         const parts = [
           tool("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
-          tool("other", { vendorToolName: "Skill", input: { skill: "obsidian-bases" } }),
           tool("run", { vendorToolName: "Bash", input: { command: "sh miyo-search.sh q" } }),
         ];
         const tree = buildAgentTrail(parts);
         expect(tree.map((n) => (n.type === "action" ? n.part.id : n.type))).toEqual([
-          "other",
+          "load",
           "run",
         ]);
       });

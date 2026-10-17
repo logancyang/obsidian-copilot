@@ -175,6 +175,19 @@ function toolCallContentFromAcp(
   return out.length > 0 ? out : undefined;
 }
 
+// codex-acp reports an MCP tool's result text only in rawOutput.result.content.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+function mcpResultContent(rawOutput: unknown): ToolCallContent[] | undefined {
+  const parts = (rawOutput as { result?: { content?: unknown } } | null)?.result?.content;
+  if (!Array.isArray(parts)) return undefined;
+  const out = parts.flatMap((part: { type?: unknown; text?: unknown } | null): ToolCallContent[] =>
+    part?.type === "text" && typeof part.text === "string"
+      ? [{ type: "content", content: { type: "text", text: part.text } }]
+      : []
+  );
+  return out.length > 0 ? out : undefined;
+}
+
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
@@ -185,7 +198,7 @@ function toolCallSnapshotFromAcp(
     kind: toolKindFromAcp(call.kind),
     status: toolStatusFromAcp(call.status),
     rawInput: call.rawInput,
-    content: toolCallContentFromAcp(call.content),
+    content: toolCallContentFromAcp(call.content) ?? mcpResultContent(call.rawOutput),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     mcpServer,
   };
@@ -214,13 +227,17 @@ function toolCallDeltaFromAcp(
 ): ToolCallDelta {
   const resolved = upd.title != null ? resolveToolName(upd.title) : null;
   const originalFiles = copilotOriginalFiles(upd.rawOutput);
+  const mcpResult = mcpResultContent(upd.rawOutput);
   return {
     toolCallId: upd.toolCallId,
     title: resolved?.tool,
     kind: toolKindFromAcp(upd.kind ?? undefined),
     status: toolStatusFromAcp(upd.status as string | undefined),
     rawInput: upd.rawInput,
-    content: mapNullable(upd.content, toolCallContentFromAcp),
+    content:
+      upd.content == null && mcpResult
+        ? mcpResult
+        : mapNullable(upd.content, toolCallContentFromAcp),
     locations: mapNullable(upd.locations, (locs) =>
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
