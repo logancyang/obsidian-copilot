@@ -324,7 +324,7 @@ describe("MiyoSettings", () => {
       currentSettings = { ...currentSettings, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
       await act(async () => {});
-      expect(screen.queryByLabelText("Enable Miyo semantic search skill")).toBeNull();
+      expect(screen.queryByLabelText("Enable Miyo semantic search for agents")).toBeNull();
       expect(screen.queryByText("Semantic search for agents")).toBeNull();
     });
 
