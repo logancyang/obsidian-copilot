@@ -65,12 +65,12 @@ describe("miyoLinkBadges", () => {
       ]).toEqual(["copilot-test-vault/edit-eval/a.md"]);
     });
 
-    it("under Unrestricted scope, drops a relative path without the vault prefix because it may come from any Miyo folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+    it("under Unrestricted scope, keeps a relative path without the vault prefix, the form the search tool returns for the vault's notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
       setSettings({ miyoSearchAll: true });
       try {
         expect([
-          ...miyoVaultPaths(app, ["Work/meeting.md", "step-2/notes/Standing desk setup.md"]),
-        ]).toEqual(["notes/Standing desk setup.md"]);
+          ...miyoVaultPaths(app, ["notes/Standing desk setup.md", "step-2/notes/Reading list.md"]),
+        ]).toEqual(["notes/Standing desk setup.md", "notes/Reading list.md"]);
       } finally {
         setSettings({ miyoSearchAll: false });
       }

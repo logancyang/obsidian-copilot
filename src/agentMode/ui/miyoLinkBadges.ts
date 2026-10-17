@@ -3,10 +3,11 @@ import { getSettings } from "@/settings/model";
 import { getVaultBase, isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 import type { App } from "obsidian";
 
-// Miyo prefixes each path with the name of the Miyo folder it came from, or returns an absolute
-// path, so only paths that land inside this vault may badge a link. Unrestricted scope can return
-// any folder, so there only the vault prefix proves a relative path is local.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/719
+// Search results name the active vault's notes by vault-relative path and other Miyo folders' notes
+// by a path starting with the folder's name; saved chats still hold paths prefixed with the vault's
+// name or absolute. Ticked extra folders can be told apart by name, but any other Miyo folder can't,
+// so a link only gets a badge when it resolves to a note in this vault.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 function miyoVaultPath(app: App, raw: string): string | null {
   if (isAbsolutePath(raw)) {
     const relative = toVaultRelative(raw, getVaultBase(app));
@@ -14,9 +15,7 @@ function miyoVaultPath(app: App, raw: string): string | null {
   }
   const relative = getVaultRelativeMiyoPath(app, raw);
   if (isCurrentVaultMiyoPath(app, raw)) return relative;
-  const settings = getSettings();
-  if (settings.miyoSearchAll) return null;
-  return settings.miyoExtraSearchFolders.includes(relative.split("/")[0]) ? null : relative;
+  return getSettings().miyoExtraSearchFolders.includes(relative.split("/")[0]) ? null : relative;
 }
 
 export function miyoVaultPaths(app: App, resultPaths: readonly string[]): Set<string> {

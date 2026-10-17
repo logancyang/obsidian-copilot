@@ -18,7 +18,7 @@ const OUTPUT_BUDGET_BYTES = 32_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
-  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Searches the active vault plus the extra Miyo folders enabled in Copilot settings. Returns up to ${NOTE_LIMIT} notes as { path, content }.`,
+  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Searches the active vault plus the extra Miyo folders enabled in Copilot settings. Returns up to ${NOTE_LIMIT} notes as { path, content }. A path is relative to the active vault, so you can open and link it as is; a note from another Miyo folder starts with that folder's name.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -108,7 +108,7 @@ export async function runMiyoSearch(
     const skipped = extraFolders.filter((name) => !searched.extraFolders.includes(name));
     return {
       text: serialize(
-        toNotes(searched.response.results ?? []),
+        toNotes(searched.response.results ?? [], vaultName),
         skipped.length > 0
           ? `Miyo has no folder ${skipped.map((name) => `"${name}"`).join(", ")} ticked in Copilot settings, so it was not searched.`
           : undefined
@@ -128,15 +128,23 @@ function failure(text: string): MiyoSearchToolResult {
 
 // Miyo ranks chunks, so one long note can fill them all; grouping by note keeps the other notes visible.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
-function toNotes(chunks: readonly MiyoSearchResult[]): FileResult[] {
+function toNotes(chunks: readonly MiyoSearchResult[], vaultName: string): FileResult[] {
   const excerptsByPath = new Map<string, string[]>();
   for (const { path, chunk_text } of chunks) {
     const text = (chunk_text ?? "").replace(/^[\s\S]*?NOTE BLOCK CONTENT:/, "").trim();
     excerptsByPath.set(path, [...(excerptsByPath.get(path) ?? []), ...(text ? [text] : [])]);
   }
-  return [...excerptsByPath]
-    .slice(0, NOTE_LIMIT)
-    .map(([path, excerpts]) => ({ path, content: excerpts.join("\n\n") }));
+  return [...excerptsByPath].slice(0, NOTE_LIMIT).map(([path, excerpts]) => ({
+    path: vaultRelative(path, vaultName),
+    content: excerpts.join("\n\n"),
+  }));
+}
+
+// Miyo prefixes each path with its folder's name, which names no folder inside the vault, so the agent could not open or link the note.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+function vaultRelative(path: string, vaultName: string): string {
+  const prefix = `${vaultName}/`;
+  return vaultName && path.startsWith(prefix) ? path.slice(prefix.length) : path;
 }
 
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
