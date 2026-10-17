@@ -57,6 +57,10 @@ interface ApiFake {
   api: ModelManagementApi;
   agentProviders: Array<{ providerId: string; origin: { kind: string; agentType: string } }>;
   configuredModels: Array<{ configuredModelId: string; info: { id: string } }>;
+  configuredModelsByProvider: Map<
+    string,
+    Array<{ configuredModelId: string; info: { id: string } }>
+  >;
   enabledModelIds: string[];
   byok: Array<{ origin: { kind: string; catalogProviderId?: string } }>;
   plus: Array<{ origin: { kind: string } }>;
@@ -67,6 +71,7 @@ interface ApiFake {
 function makeApiFake(): ApiFake {
   const agentProviders: ApiFake["agentProviders"] = [];
   const configuredModels: ApiFake["configuredModels"] = [];
+  const configuredModelsByProvider: ApiFake["configuredModelsByProvider"] = new Map();
   const enabledModelIds: ApiFake["enabledModelIds"] = [];
   const byok: ApiFake["byok"] = [];
   const plus: ApiFake["plus"] = [];
@@ -93,7 +98,8 @@ function makeApiFake(): ApiFake {
       },
     },
     configuredModelRegistry: {
-      listByProvider: () => configuredModels,
+      listByProvider: (providerId: string) =>
+        configuredModelsByProvider.get(providerId) ?? configuredModels,
     },
     backendConfigRegistry: {
       get: () => ({ enabledModels: enabledModelIds }),
@@ -105,6 +111,7 @@ function makeApiFake(): ApiFake {
     api,
     agentProviders,
     configuredModels,
+    configuredModelsByProvider,
     enabledModelIds,
     byok,
     plus,
@@ -318,6 +325,42 @@ describe("agentModelDiscovery", () => {
         "opencode",
         catalogWithModels(["anthropic/claude-sonnet-4-5", "opencode/big-pickle"])
       );
+
+      const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+      await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));
+
+      expect(a.syncAgentModels.mock.calls[0][0]).toMatchObject({
+        agentType: "opencode",
+        wireModelIds: ["opencode/big-pickle", "local/qwen3"],
+      });
+      unsub();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3569 retains enabled missing models from every matching OpenCode provider", async () => {
+      mockDescriptors = [makeDescriptor({ id: "opencode" })];
+      const m = makeManagerFake();
+      const a = makeApiFake();
+      a.agentProviders.push(
+        {
+          providerId: "prov-opencode-primary",
+          origin: { kind: "agent", agentType: "opencode" },
+        },
+        {
+          providerId: "prov-opencode-secondary",
+          origin: { kind: "agent", agentType: "opencode" },
+        }
+      );
+      a.configuredModelsByProvider.set("prov-opencode-primary", [
+        {
+          configuredModelId: "cm-disabled-legacy-model",
+          info: { id: "old/disabled-model" },
+        },
+      ]);
+      a.configuredModelsByProvider.set("prov-opencode-secondary", [
+        { configuredModelId: "cm-local-qwen3", info: { id: "local/qwen3" } },
+      ]);
+      a.enabledModelIds.push("cm-local-qwen3");
+      m.setCatalog("opencode", catalogWithModels(["opencode/big-pickle"]));
 
       const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
       await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));

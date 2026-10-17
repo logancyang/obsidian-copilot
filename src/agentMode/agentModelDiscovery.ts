@@ -96,16 +96,23 @@ async function enrollBackend(
 
   const existing = api.providerRegistry
     .listByOrigin("agent")
-    .find((p) => p.origin.kind === "agent" && p.origin.agentType === agentType);
+    .filter((p) => p.origin.kind === "agent" && p.origin.agentType === agentType);
 
-  if (existing) {
+  if (existing.length > 0) {
     const syncWireModelIds = [...wireModelIds];
     if (descriptor.id === "opencode") {
       const enabledModelIds = new Set(api.backendConfigRegistry.get("opencode").enabledModels);
-      const reportedWireIdSet = new Set(reportedWireIds);
-      for (const model of api.configuredModelRegistry.listByProvider(existing.providerId)) {
-        if (enabledModelIds.has(model.configuredModelId) && !reportedWireIdSet.has(model.info.id)) {
-          syncWireModelIds.push(model.info.id);
+      const syncWireModelIdSet = new Set(syncWireModelIds);
+      // Preserve enabled saved models from every matching provider because partial local discovery can otherwise remove them. https://github.com/logancyang/obsidian-copilot/issues/3569
+      for (const provider of existing) {
+        for (const model of api.configuredModelRegistry.listByProvider(provider.providerId)) {
+          if (
+            enabledModelIds.has(model.configuredModelId) &&
+            !syncWireModelIdSet.has(model.info.id)
+          ) {
+            syncWireModelIds.push(model.info.id);
+            syncWireModelIdSet.add(model.info.id);
+          }
         }
       }
     }
