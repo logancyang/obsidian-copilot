@@ -5,6 +5,7 @@ import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
 import { act, renderHook } from "@testing-library/react";
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { discoverManagedSkills } from "./discoverManagedSkills";
 import { reconcile } from "./reconcile";
 import {
@@ -22,6 +23,9 @@ jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
+}));
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(() => true),
 }));
 
 let skillsFolder = "copilot/skills";
@@ -209,6 +213,22 @@ describe("SkillManager", () => {
         f.prepare.mockRejectedValue(new Error("seed failed"));
         await f.manager.refresh();
         expect(getManagedSkills()[0].enabledAgents).toEqual(["claude", "opencode"]);
+      });
+      it("links a synced obsidian-cli copy to no agent and denies it to OpenCode while Obsidian's command line interface is off https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+        const f = builtinFixture();
+        mockedDiscoverManagedSkills.mockResolvedValue(
+          discoveryResult([builtinSkill, { ...builtinSkill, name: "obsidian-cli" }])
+        );
+        jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
+        await f.manager.refresh();
+        jest.mocked(isObsidianCliEnabled).mockReturnValue(true);
+        expect(getManagedSkills().map((skill) => [skill.name, skill.enabledAgents])).toEqual([
+          [builtinSkill.name, ["claude", "opencode"]],
+          ["obsidian-cli", []],
+        ]);
+        expect(composeDenyList(getManagedSkills(), "opencode", ["claude", "codex"])).toEqual([
+          "obsidian-cli",
+        ]);
       });
       it(`applies durable opt-outs even when cleanup fails ${ISSUE}`, async () => {
         const f = builtinFixture();

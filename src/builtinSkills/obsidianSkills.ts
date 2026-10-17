@@ -3,8 +3,11 @@ import type { BuiltinSkill } from "./builtinSkills";
 export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf5822214c6eb1202";
 
 const ENABLED_AGENTS = ["claude", "codex", "opencode"] as const;
-const FORMAT_SKILL_VERSION = 1;
-const OBSIDIAN_CLI_VERSION = 2;
+// In the Obsidian skills eval Claude and Codex wrote this syntax as well without the skills, except
+// Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+const DEFAULT_DISABLED_AGENTS = ["claude", "codex"] as const;
+const FORMAT_SKILL_VERSION = 2;
+const OBSIDIAN_CLI_VERSION = 3;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
 
@@ -31,7 +34,7 @@ SOFTWARE.
 
 const OBSIDIAN_MARKDOWN_SKILL_MD = String.raw`---
 name: obsidian-markdown
-description: Create and edit Obsidian-specific Markdown syntax, including wikilinks, embeds, block references, callouts, properties, tags, and comments. Use for Obsidian notes when these extensions matter; ordinary Markdown is assumed knowledge.
+description: Create and edit Obsidian-specific Markdown syntax, including wikilinks, embeds, block references and block IDs, callouts, properties, tags, aliases, and comments. Load before adding or changing any of these in a note.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
@@ -65,7 +68,8 @@ CommonMark or GFM unless the user asks.
 This paragraph is addressable. ^block-id
 ~~~
 
-Put a block ID on its own line after a list or quote block.
+Put a block ID on its own line after a list or quote block, with a blank line
+before it; without the blank line it marks only the last item.
 
 ## Embeds
 
@@ -195,7 +199,11 @@ Properties are YAML frontmatter at the very start of a note.
 | Date | <code>date: 2026-07-21</code> |
 | Date and time | <code>due: 2026-07-21T14:30:00</code> |
 | List | <code>tags: [one, two]</code> or a YAML list |
-| Link | <code>related: "[[Other Note]]"</code> |
+| Link | A quoted wikilink, as below |
+
+~~~yaml
+related: "[[Other Note]]"
+~~~
 
 Obsidian reserves <code>tags</code>, <code>aliases</code>, and
 <code>cssclasses</code> for their built-in behaviors. Tags may contain letters,
@@ -233,7 +241,7 @@ filters:
     - 'status != "archived"'
 
 formulas:
-  days_until_due: 'if(due, (date(due) - today()).days, "")'
+  days_until_due: 'if(due, (date(due) - today()).days.round(), "")'
 
 properties:
   status:
@@ -254,7 +262,11 @@ views:
     order:
       - file.name
       - status
+      - due
       - formula.days_until_due
+    sort:
+      - property: due
+        direction: ASC
     groupBy:
       property: status
       direction: ASC
@@ -264,6 +276,11 @@ views:
 
 Views may be <code>table</code>, <code>cards</code>, or <code>list</code>.
 A <code>map</code> view depends on compatible map support.
+
+<code>order</code> sets which properties a view shows; <code>sort</code> sets
+row order, one <code>property</code>/<code>direction</code> entry per key,
+applied in turn. Obsidian sorts only by properties that are also listed in
+<code>order</code>, so include every sort property there.
 
 ## Filters and properties
 
@@ -287,7 +304,8 @@ embedding note, or the active file depending on where the Base is rendered.
 - Guard optional properties with <code>if()</code>.
 - Date subtraction returns a Duration, not a number. Access
   <code>.days</code>, <code>.hours</code>, or another numeric field before
-  calling number methods such as <code>.round()</code>.
+  calling number methods such as <code>.round()</code>. Round day counts:
+  across a daylight-saving change <code>.days</code> can be fractional.
 - Every <code>formula.X</code> used by a view or property configuration must
   have a matching <code>X</code> entry under <code>formulas</code>.
 - Wrap formulas containing double quotes in YAML single quotes.
@@ -304,7 +322,12 @@ task-tracker and daily-notes Bases.
 - View <code>order</code>, <code>groupBy</code>, and summaries reference defined
   note, file, or formula properties.
 - Formula quoting is balanced and duration math accesses a numeric field.
-- Embedded view names match exactly: <code>![[My Base.base#View Name]]</code>.
+- Every <code>sort</code> property also appears in that view's <code>order</code>.
+- An embed names the view exactly as its <code>name</code>:
+
+~~~markdown
+![[My Base.base#View Name]]
+~~~
 
 ## Attribution
 
@@ -366,7 +389,7 @@ filters:
     - 'file.ext == "md"'
 
 formulas:
-  days_until_due: 'if(due, (date(due) - today()).days, "")'
+  days_until_due: 'if(due, (date(due) - today()).days.round(), "")'
   is_overdue: 'if(due, date(due) < today() && status != "done", false)'
 
 properties:
@@ -675,8 +698,12 @@ meaning beyond raw files:
 - Bases: <code>bases</code>, <code>base:views</code>, and
   <code>base:query</code>. Prefer <code>format=json</code> for structured agent
   consumption.
-- Templates: <code>templates</code> and <code>template:read ... resolve</code>
-  when configured template resolution is required.
+- Templates: <code>create path=&lt;new note&gt; template=&lt;name&gt;</code>
+  creates a note the way Obsidian's template insertion fills it:
+  <code>{{title}}</code> becomes the new note's full file name without
+  extension, and <code>{{date}}</code> and <code>{{time}}</code> become the
+  current date and time. Use <code>templates</code> and
+  <code>template:read ... resolve title=&lt;file name&gt;</code> to preview.
 - Live workspace state: <code>tabs ids</code> lists the currently open tabs and
   their IDs, while <code>workspace ids</code> shows the workspace tree and its
   item IDs.
@@ -812,6 +839,7 @@ const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
   version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
+  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,
   files: [
     { path: "references/CALLOUTS.md", content: MARKDOWN_CALLOUTS_REFERENCE },
@@ -825,6 +853,7 @@ const OBSIDIAN_BASES: BuiltinSkill = {
   name: "obsidian-bases",
   version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
+  defaultDisabledAgents: ["claude"],
   skillMd: OBSIDIAN_BASES_SKILL_MD,
   files: [
     { path: "references/FUNCTIONS_REFERENCE.md", content: BASES_FUNCTIONS_REFERENCE },
@@ -837,6 +866,7 @@ const JSON_CANVAS: BuiltinSkill = {
   name: "json-canvas",
   version: FORMAT_SKILL_VERSION,
   enabledAgents: ENABLED_AGENTS,
+  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
   skillMd: JSON_CANVAS_SKILL_MD,
   files: [{ path: "references/EXAMPLES.md", content: JSON_CANVAS_EXAMPLES }, LICENSE_FILE],
 };
@@ -845,6 +875,7 @@ const OBSIDIAN_CLI: BuiltinSkill = {
   name: "obsidian-cli",
   version: OBSIDIAN_CLI_VERSION,
   enabledAgents: ENABLED_AGENTS,
+  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
   skillMd: OBSIDIAN_CLI_SKILL_MD,
   files: [LICENSE_FILE],
 };

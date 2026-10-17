@@ -6,6 +6,8 @@ import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager } from "./index";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import { AgentSessionManager } from "./session/AgentSessionManager";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -64,6 +66,9 @@ jest.mock("./skills/builtin/reconcileBuiltinSkills", () => ({
   reconcileBuiltinSkills: jest.fn(),
 }));
 jest.mock("./skills/builtin/miyoSearchSeed", () => ({ buildBuiltinSeedFs: jest.fn() }));
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(),
+}));
 jest.mock("./ui/permissionPrompter", () => ({
   createDefaultPermissionPrompter: jest.fn(),
   createDefaultAskUserQuestionPrompter: jest.fn(),
@@ -154,6 +159,7 @@ describe("agentMode", () => {
       mockStates.claude = { kind: "ready", source: "custom" };
       mockStates.opencode = { kind: "absent" };
       reconcile.mockResolvedValue(undefined);
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
       mockRefresh.mockImplementation(() => mockRuntime.prepare("copilot/skills"));
       mockSettingsSubscribers.length = 0;
       mockSettings = settingsWith({ reasoning: true });
@@ -229,6 +235,27 @@ describe("agentMode", () => {
         expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
       }
     );
+
+    it("re-reconciles skills before an agent starts only when Obsidian's command line interface toggle changed since the last pass, and still starts the agent if that pass fails https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const passes = reconcile.mock.calls.length;
+
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes);
+
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(true);
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes + 1);
+
+      await beforeBackendStart!("opencode");
+      expect(reconcile).toHaveBeenCalledTimes(passes + 1);
+
+      mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
+      await expect(beforeBackendStart!("opencode")).resolves.toBeUndefined();
+    });
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
       createAgentSessionManager({} as App, plugin);

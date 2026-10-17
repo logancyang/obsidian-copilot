@@ -2,6 +2,7 @@ import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuil
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
 import {
   ALL_MANAGED_SKILLS,
+  builtinSkillUnavailableReason,
   isMiyoSearchSkillActive,
   planManagedBuiltins,
 } from "@/builtinSkills/builtinSkills";
@@ -107,10 +108,10 @@ export const SkillsSettings: React.FC = () => {
         (rejected) =>
           toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
       );
-    if (collision) {
-      unavailableReasons[skill.name] =
-        "A skill with this name already exists in Your Skills. Your file is kept unchanged.";
-    }
+    const reason = collision
+      ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
+      : builtinSkillUnavailableReason(skill.name);
+    if (reason) unavailableReasons[skill.name] = reason;
   }
   const builtinRows = BUILTIN_ROWS.filter(
     (skill) =>

@@ -49,6 +49,9 @@ jest.mock("./OpencodeBinaryManager", () => ({
   verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.21" }),
 }));
 
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: () => true,
+}));
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
