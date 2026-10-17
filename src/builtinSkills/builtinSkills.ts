@@ -581,12 +581,23 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For an existing HTML file on Windows, replace the handoff path with the original absolute
 \`.html\` path and omit the \`docId\`.
 
-Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`). For a Markdown
-note, set its \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter
-block if needed, keep every other property), remove a \`symposium\`
-property whose link has the same document id, and delete the generated HTML file from
-\`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. For an existing HTML file, leave the source file
-unchanged. Then report the URL. Publishing the same Markdown note again updates the same page.
+Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`).
+
+### Record the page in the note
+
+For a Markdown note, do this right after a successful publish, before any \`share\` call and
+before you reply. Never skip it: it is what makes the next publish of this note update the same
+page instead of creating a new one.
+
+1. Set the note's \`openartifacts\` frontmatter property to the receipt's \`url\`. Create the
+   frontmatter block if the note has none, and keep every other property.
+2. Remove a \`symposium\` property whose link has the same document id.
+3. Delete the generated HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`.
+
+Then read the note's frontmatter again and check that \`openartifacts\` is the url. For an
+existing HTML file, leave the source file unchanged and skip this.
+
+### Report
 
 Report a private publish as:
 

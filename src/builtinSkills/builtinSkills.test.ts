@@ -212,6 +212,17 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-fetch-x", ".ps1")).toContain('Invoke-Relay "/twitter4llm"');
     });
 
+    it("records the page in the Markdown note as its own step, before the report", () => {
+      const md = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!.skillMd;
+      const record = md.indexOf("### Record the page in the note");
+      const report = md.indexOf("### Report");
+      expect(record).toBeGreaterThan(md.indexOf("## 3. Publish"));
+      expect(report).toBeGreaterThan(record);
+      expect(md.slice(record, report)).toContain(
+        "`openartifacts` frontmatter property to the receipt's `url`"
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
