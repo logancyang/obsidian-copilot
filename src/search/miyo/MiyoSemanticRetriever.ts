@@ -16,12 +16,14 @@ import {
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
 } from "@/miyo/miyoUtils";
+import {
+  MIYO_SEARCH_CANDIDATE_LIMIT,
+  searchWithoutMissingFolders,
+} from "@/miyo/searchWithoutMissingFolders";
 import { createCopilotPatternFilter } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 
 const DEFAULT_FINAL_K = 20;
-
-const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -167,34 +169,16 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     query: string,
     filters: MiyoSearchFilter[] | undefined
   ): Promise<{ response: MiyoSearchResponse; extraFolders: string[] }> {
-    try {
-      const response = await this.client.search(
-        baseUrl,
-        folderName,
-        query,
-        MIYO_SEARCH_CANDIDATE_LIMIT,
-        {
+    return searchWithoutMissingFolders(
+      (folders) =>
+        this.client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
           filters,
           // folder_name stays the vault, so a Miyo without multi-folder search falls back to
           // the vault alone instead of every folder. https://github.com/logancyang/obsidian-copilot/issues/3508
-          folderNames:
-            folderName && extraFolders.length > 0 ? [folderName, ...extraFolders] : undefined,
-        }
-      );
-      return { response, extraFolders };
-    } catch (error) {
-      const missing =
-        error instanceof MiyoRequestError && error.status === 404
-          ? /^Folder not registered: (.+)$/.exec(error.detail)?.[1]
-          : undefined;
-      // A ticked folder this Miyo lacks, such as one synced from another device, is
-      // dropped so the rest of the scope is still searched.
-      // https://github.com/logancyang/obsidian-copilot/issues/3508
-      if (missing === undefined || !extraFolders.includes(missing)) throw error;
-      logWarn(`MiyoSemanticRetriever: Miyo has no folder "${missing}"; searching without it`);
-      const remaining = extraFolders.filter((name) => name !== missing);
-      return this.searchFolders(baseUrl, folderName, remaining, query, filters);
-    }
+          folderNames: folderName && folders.length > 0 ? [folderName, ...folders] : undefined,
+        }),
+      extraFolders
+    );
   }
 
   private buildSearchFilters(): MiyoSearchFilter[] | undefined {

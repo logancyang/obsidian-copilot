@@ -10,6 +10,8 @@ import { BackendConfigRegistry } from "@/modelManagement";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
+jest.mock("@/miyo/MiyoClient", () => ({ MiyoClient: jest.fn() }));
+jest.mock("@/utils", () => ({ err2String: jest.fn() }));
 jest.mock("@/modelManagement", () => ({
   BackendConfigRegistry: jest.requireActual("@/modelManagement/backends/BackendConfigRegistry")
     .BackendConfigRegistry,
