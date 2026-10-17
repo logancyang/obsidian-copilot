@@ -214,6 +214,55 @@ function getPromptQueryCalls(): unknown[][] {
   });
 }
 
+type StateBearingRecord = {
+  kind: string;
+  method: string;
+  payload: Record<string, unknown>;
+};
+
+function stateBearingRecords(): StateBearingRecord[] {
+  return (frameSink.append as jest.Mock).mock.calls
+    .map(([record]) => record as StateBearingRecord)
+    .filter(({ kind, method, payload }) => {
+      const update = payload.update as Record<string, unknown> | undefined;
+      const hasModelOrMode =
+        typeof payload.modelId === "string" || typeof payload.modeId === "string";
+      return (
+        (kind === "result" && hasModelOrMode) ||
+        (kind === "notif" &&
+          method === "session/update" &&
+          update?.sessionUpdate === "current_mode_update")
+      );
+    });
+}
+
+function summarizeStateRecords(records: StateBearingRecord[]) {
+  return records.map(({ kind, method, payload }) => {
+    const update = payload.update as Record<string, unknown> | undefined;
+    return {
+      kind,
+      method,
+      ...(typeof payload.modelId === "string" && { modelId: payload.modelId }),
+      ...(typeof payload.modeId === "string" && { modeId: payload.modeId }),
+      ...(typeof update?.currentModeId === "string" && { modeId: update.currentModeId }),
+    };
+  });
+}
+
+function finalRecordedState(records: StateBearingRecord[]): {
+  modelId?: string;
+  modeId?: string;
+} {
+  const state: { modelId?: string; modeId?: string } = {};
+  for (const { payload } of records) {
+    const update = payload.update as Record<string, unknown> | undefined;
+    if (typeof payload.modelId === "string") state.modelId = payload.modelId;
+    if (typeof payload.modeId === "string") state.modeId = payload.modeId;
+    if (typeof update?.currentModeId === "string") state.modeId = update.currentModeId;
+  }
+  return state;
+}
+
 function makeProc(extra: Partial<ClaudeSdkBackendProcessOptions> = {}): ClaudeSdkBackendProcess {
   return new ClaudeSdkBackendProcess({
     pathToClaudeCodeExecutable: "/usr/local/bin/claude",
@@ -574,42 +623,48 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("prompt()", () => {
-      it("records deferred model and mode changes when the next prompt applies them (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+      it("keeps successful live model and mode changes as the final state after prompt completion (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
         mockDebugFullFrames = true;
         (frameSink.append as jest.Mock).mockClear();
         try {
-          queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+          const active = makeControlledQuery();
+          let markStarted!: () => void;
+          const started = new Promise<void>((resolve) => {
+            markStarted = resolve;
+          });
+          queryMock.mockImplementation(() => {
+            markStarted();
+            return active.query;
+          });
           const proc = makeProc();
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const prompt = proc.prompt({ sessionId, prompt: [] });
+          await started;
+
           await proc.setSessionModel({ sessionId, modelId: "claude-fake-mini" });
           await proc.setSessionMode({ sessionId, modeId: "plan" });
-          expect(
-            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
-          ).not.toContainEqual(
-            expect.objectContaining({
-              kind: "result",
-              method: "prompt",
-              payload: expect.objectContaining({ modelId: "claude-fake-mini" }),
-            })
-          );
+          active.finish();
+          await prompt;
 
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-          expect(
-            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
-          ).toContainEqual(
-            expect.objectContaining({
-              kind: "result",
-              method: "prompt",
-              payload: expect.objectContaining({ modelId: "claude-fake-mini", modeId: "plan" }),
-            })
+          const records = stateBearingRecords();
+          expect(summarizeStateRecords(records)).toEqual([
+            { kind: "result", method: "prompt", modelId: "claude-fake-pro" },
+            { kind: "result", method: "setModel", modelId: "claude-fake-mini" },
+            { kind: "result", method: "setMode", modeId: "plan" },
+          ]);
+          expect(finalRecordedState(records)).toEqual({
+            modelId: "claude-fake-mini",
+            modeId: "plan",
+          });
+          expect((frameSink.append as jest.Mock).mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ method: "prompt", payload: { stopReason: "end_turn" } })
           );
         } finally {
           mockDebugFullFrames = false;
         }
       });
 
-      it("records the translated plan-mode update when EnterPlanMode changes the session mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+      it("keeps EnterPlanMode as the final mode after an explicit default start (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
         mockDebugFullFrames = true;
         (frameSink.append as jest.Mock).mockClear();
         try {
@@ -630,24 +685,69 @@ describe("ClaudeSdkBackendProcess", () => {
           );
           const proc = makeProc();
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          await proc.setSessionMode({ sessionId, modeId: "default" });
+          (frameSink.append as jest.Mock).mockClear();
 
           await proc.prompt({ sessionId, prompt: [{ type: "text", text: "plan this" }] });
 
-          expect(
-            (frameSink.append as jest.Mock).mock.calls.map(([record]) => record)
-          ).toContainEqual(
-            expect.objectContaining({
-              dir: "←",
-              method: "session/update",
-              id: sessionId,
-              payload: expect.objectContaining({
-                update: {
-                  sessionUpdate: "current_mode_update",
-                  currentModeId: "plan",
-                },
-              }),
-            })
+          const records = stateBearingRecords();
+          expect(summarizeStateRecords(records)).toEqual([
+            { kind: "result", method: "prompt", modelId: "claude-fake-pro", modeId: "default" },
+            { kind: "notif", method: "session/update", modeId: "plan" },
+          ]);
+          expect(finalRecordedState(records)).toEqual({
+            modelId: "claude-fake-pro",
+            modeId: "plan",
+          });
+          expect((frameSink.append as jest.Mock).mock.calls.at(-1)?.[0]).toEqual(
+            expect.objectContaining({ method: "prompt", payload: { stopReason: "end_turn" } })
           );
+        } finally {
+          mockDebugFullFrames = false;
+        }
+      });
+
+      it("records deferred settings before streamed output reports them (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        mockDebugFullFrames = true;
+        (frameSink.append as jest.Mock).mockClear();
+        try {
+          queryMock.mockImplementation(() =>
+            makeQuery([
+              streamEvent({
+                type: "content_block_delta",
+                index: 0,
+                delta: { type: "text_delta", text: "hello" },
+              }),
+              resultMessage(),
+            ])
+          );
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          await proc.setSessionModel({ sessionId, modelId: "claude-fake-mini" });
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const records = stateBearingRecords();
+          expect(summarizeStateRecords(records)).toEqual([
+            { kind: "result", method: "prompt", modelId: "claude-fake-mini", modeId: "plan" },
+          ]);
+          expect(finalRecordedState(records)).toEqual({
+            modelId: "claude-fake-mini",
+            modeId: "plan",
+          });
+          const allRecords = (frameSink.append as jest.Mock).mock.calls.map(([record]) => record);
+          const stateIndex = allRecords.findIndex(
+            (record) =>
+              record.kind === "result" &&
+              record.method === "prompt" &&
+              record.payload.modelId === "claude-fake-mini"
+          );
+          const outputIndex = allRecords.findIndex(
+            (record) => record.method === "stream_event:content_block_delta"
+          );
+          expect(stateIndex).toBeGreaterThanOrEqual(0);
+          expect(stateIndex).toBeLessThan(outputIndex);
         } finally {
           mockDebugFullFrames = false;
         }
