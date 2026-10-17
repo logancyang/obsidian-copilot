@@ -236,7 +236,7 @@ describe("agentMode", () => {
       }
     );
 
-    it("re-reconciles skills before an agent starts only when Obsidian's command line interface toggle changed since the last pass https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+    it("re-reconciles skills before an agent starts only when Obsidian's command line interface toggle changed since the last pass, and still starts the agent if that pass fails https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];
       const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
@@ -251,6 +251,10 @@ describe("agentMode", () => {
 
       await beforeBackendStart!("opencode");
       expect(reconcile).toHaveBeenCalledTimes(passes + 1);
+
+      mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
+      await expect(beforeBackendStart!("opencode")).resolves.toBeUndefined();
     });
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {

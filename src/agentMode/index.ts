@@ -138,7 +138,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // Obsidian announces no change to its CLI toggle, so each agent start re-checks it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
     if (isObsidianCliEnabled() === seededWithCli) return;
-    await seedManagedBuiltins();
+    await seedManagedBuiltins().catch((error) =>
+      logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
+    );
     refreshSystemPromptAffected();
   };
   const preloader = new AgentModelPreloader(
