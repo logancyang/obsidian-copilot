@@ -2,6 +2,7 @@ import { BREVILABS_API_BASE_URL } from "@/constants";
 import { type CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import {
+  isMiyoSearchSkillActive,
   MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV,
   MIYO_SEARCH_EXTRA_FOLDERS_ENV,
   MIYO_SEARCH_FOLDER_ENV,
@@ -123,8 +124,7 @@ export function getBuiltinSkillEnvRestartPolicy(
   // Scope changes only affect a currently enabled skill. Tightening an active
   // boundary must cancel the current turn; widening can wait until it is idle.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-  const activeMiyoSkill =
-    prev.enableMiyoSearchSkill === true && next.enableMiyoSearchSkill === true;
+  const activeMiyoSkill = isMiyoSearchSkillActive(prev) && isMiyoSearchSkillActive(next);
   const activeMiyoScopeChanged = activeMiyoSkill && prev.miyoSearchAll !== next.miyoSearchAll;
   // Ticked folders widen only Current vault scope, so unticking one tightens the boundary.
   // https://github.com/logancyang/obsidian-copilot/issues/3508

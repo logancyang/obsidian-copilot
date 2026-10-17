@@ -28,6 +28,7 @@ import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
   CancelInput,
+  CompactionTrigger,
   ListSessionsInput,
   ListSessionsOutput,
   LoadSessionInput,
@@ -45,6 +46,7 @@ import type {
   SessionUpdateHandler as DomainSessionUpdateHandler,
   SessionUsage,
 } from "@/agentMode/session/types";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { wrapStreamsForDebug } from "./debugTap";
 import { formToQuestionPrompt } from "./elicitation";
 import { deliverSessionUpdatesInWireOrder } from "./sessionUpdateWireOrder";
@@ -110,6 +112,8 @@ export class AcpBackendProcess implements BackendProcess {
   private capabilities = new Map<AcpCapability, boolean>();
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
+  private readonly manualCompactSessions = new Set<SessionId>();
+  private readonly loadingSessions = new Set<SessionId>();
   private readonly sawLiveUsage = new Set<SessionId>();
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
@@ -195,6 +199,8 @@ export class AcpBackendProcess implements BackendProcess {
           // Without this, codex-acp also streams the plan body as chat text, duplicating the
           // plan-approval card. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
           plan: {},
+          // Without this, codex-acp reports compaction as a "Compact conversation" tool card. https://github.com/Brevilabs/obsidian-copilot-private/issues/636
+          session: { compaction: {} },
           ...(this.backend.clientCapabilitiesMeta
             ? { _meta: this.backend.clientCapabilitiesMeta }
             : {}),
@@ -276,7 +282,11 @@ export class AcpBackendProcess implements BackendProcess {
             });
             continue;
           }
-          for (const event of acpNotificationToEvents(wire, this.todoToolCallIdsFor(sessionId)))
+          for (const event of acpNotificationToEvents(
+            wire,
+            this.todoToolCallIdsFor(sessionId),
+            this.compactionTriggerFor(sessionId)
+          ))
             handler(event);
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
@@ -327,14 +337,20 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const resp = await this.requireConnection()
-      .agent.request("session/prompt", {
+    const connection = this.requireConnection();
+    const [first] = params.prompt;
+    if (first?.type === "text" && isCompactCommand(first.text)) {
+      this.manualCompactSessions.add(params.sessionId);
+    }
+    const resp = await connection.agent
+      .request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
         prompt: promptContentToAcp(params.prompt),
       })
       .catch(async (err: unknown) => {
         throw await this.serviceStoppedOr(err);
-      });
+      })
+      .finally(() => this.manualCompactSessions.delete(params.sessionId));
     this.hasServedSession = true;
     const usage = resp.usage;
     if (usage && !this.sawLiveUsage.has(params.sessionId)) {
@@ -580,6 +596,7 @@ export class AcpBackendProcess implements BackendProcess {
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
     const sessionId = params.sessionId;
+    this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
       "session/load",
       (c) =>
@@ -589,7 +606,7 @@ export class AcpBackendProcess implements BackendProcess {
           mcpServers: this.mcpServersField(params.mcpServers),
         }),
       { mustBeAdvertised: true }
-    );
+    ).finally(() => this.loadingSessions.delete(sessionId));
     this.hasServedSession = true;
     this.recordWireState(sessionIdToAcp(sessionId), {
       modes: wireResp.modes ?? null,
@@ -672,6 +689,13 @@ export class AcpBackendProcess implements BackendProcess {
     return ids;
   }
 
+  // A replayed compaction carries no trigger, and "manual" is the label that does not claim it ran by itself. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
+  private compactionTriggerFor(sessionId: SessionId): CompactionTrigger {
+    return this.manualCompactSessions.has(sessionId) || this.loadingSessions.has(sessionId)
+      ? "manual"
+      : "auto";
+  }
+
   private computeState(sessionId: AcpSessionId): BackendState {
     const wire = this.sessionWireState.get(sessionIdFromAcp(sessionId)) ?? {
       modes: null,
@@ -725,7 +749,11 @@ export class AcpBackendProcess implements BackendProcess {
       return;
     }
 
-    for (const event of acpNotificationToEvents(update, this.todoToolCallIdsFor(sessionId)))
+    for (const event of acpNotificationToEvents(
+      update,
+      this.todoToolCallIdsFor(sessionId),
+      this.compactionTriggerFor(sessionId)
+    ))
       handler(this.withBackendContextWindow(event));
   }
 

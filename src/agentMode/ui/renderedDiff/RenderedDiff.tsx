@@ -1,4 +1,8 @@
-import { applySentinels } from "@/agentMode/ui/renderedDiff/applySentinels";
+import {
+  applySentinels,
+  type Change,
+  frameMedia,
+} from "@/agentMode/ui/renderedDiff/applySentinels";
 import type { CodeDiffLine, DiffSegment } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { buildRenderedDiffPlan, isMarkdownPath } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { Markdown } from "@/components/Markdown";
@@ -70,11 +74,25 @@ function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactEl
             : "tw-bg-success"
         )}
       >
-        <Markdown onRendered={disableTaskCheckboxes} sourcePath={path} text={segment.markdown} />
+        <Markdown
+          onRendered={BLOCK_DECORATORS[segment.change]}
+          sourcePath={path}
+          text={segment.markdown}
+        />
       </div>
     );
   }
   return <Markdown onRendered={decorateMarkdown} sourcePath={path} text={segment.markdown} />;
+}
+
+const BLOCK_DECORATORS: Record<Change, (container: HTMLElement) => void> = {
+  inserted: (container) => decorateBlock(container, "inserted"),
+  deleted: (container) => decorateBlock(container, "deleted"),
+};
+
+function decorateBlock(container: HTMLElement, change: Change): void {
+  frameMedia(container, change);
+  disableTaskCheckboxes(container);
 }
 
 function decorateMarkdown(container: HTMLElement): void {

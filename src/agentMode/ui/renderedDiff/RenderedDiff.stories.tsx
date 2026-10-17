@@ -8,6 +8,7 @@ import {
   FRONTMATTER_TAG_ADDED,
   FRONTMATTER_UNCHANGED_BODY_EDIT,
   HEADING_LEVEL_CHANGE,
+  IMAGE_REMOVED_AND_ADDED,
   IMAGE_REPLACED,
   LINK_HREF_CHANGE,
   LIST_ITEM_WITH_CODE_EDIT,
@@ -62,6 +63,8 @@ export const NestedTasksEdited: StoryObj<RenderedDiffProps> = story(NESTED_TASKS
 export const LinkHrefChange: StoryObj<RenderedDiffProps> = story(LINK_HREF_CHANGE);
 
 export const ImageReplaced: StoryObj<RenderedDiffProps> = story(IMAGE_REPLACED);
+
+export const ImageRemovedAndAdded: StoryObj<RenderedDiffProps> = story(IMAGE_REMOVED_AND_ADDED);
 
 export const WikilinkRename: StoryObj<RenderedDiffProps> = story(WIKILINK_RENAME);
 

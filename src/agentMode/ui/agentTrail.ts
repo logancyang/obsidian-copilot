@@ -1,17 +1,20 @@
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import { cleanMessageForCopy } from "@/utils";
+import { isMiyoSkillLoad } from "@/agentMode/ui/toolSummaries";
 
 export type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
 export type ThoughtPart = Extract<AgentMessagePart, { kind: "thought" }>;
 export type TextPart = Extract<AgentMessagePart, { kind: "text" }>;
 export type PlanPart = Extract<AgentMessagePart, { kind: "plan" }>;
+export type CompactionPart = Extract<AgentMessagePart, { kind: "compaction" }>;
 
 export type RenderNode =
   | { type: "action"; part: ToolCallPart }
   | { type: "subagent"; parent: ToolCallPart; children: RenderNode[]; truncated?: boolean }
   | { type: "reasoning"; part: ThoughtPart }
   | { type: "text"; part: TextPart }
-  | { type: "plan"; part: PlanPart };
+  | { type: "plan"; part: PlanPart }
+  | { type: "compaction"; part: CompactionPart };
 
 export interface BuildAgentTrailOptions {
   maxDepth?: number;
@@ -26,7 +29,11 @@ export function agentResponseText(parts: AgentMessagePart[]): string {
 }
 
 function isHiddenTool(part: AgentMessagePart): boolean {
-  return part.kind === "tool_call" && part.vendorToolName === "ToolSearch";
+  // The Miyo card carries the search, so the skill load that precedes it adds nothing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
+  return (
+    part.kind === "tool_call" && (part.vendorToolName === "ToolSearch" || isMiyoSkillLoad(part))
+  );
 }
 
 function isSubAgentLaunch(part: ToolCallPart): boolean {
@@ -88,6 +95,10 @@ function foldNodes(
     }
     if (p.kind === "plan") {
       out.push({ type: "plan", part: p });
+      continue;
+    }
+    if (p.kind === "compaction") {
+      out.push({ type: "compaction", part: p });
       continue;
     }
     const children = childrenByParent.get(p.id);

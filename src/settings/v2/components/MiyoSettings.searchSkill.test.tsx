@@ -736,9 +736,9 @@ describe("MiyoSettings", () => {
       expect(updateSetting).not.toHaveBeenCalledWith("enableMiyoSearchSkill", true);
     });
 
-    it("ALLOWS disabling an already-installed skill while Miyo is disconnected", async () => {
+    it("ALLOWS disabling an already-installed skill while the connected Miyo is offline", async () => {
       mockMiyoBackend = "unavailable";
-      currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: true };
+      currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: true, enableMiyoSearchSkill: true };
       render(<MiyoSettings />);
 
       const control = toggle();
@@ -747,6 +747,15 @@ describe("MiyoSettings", () => {
 
       await waitFor(() => expect(refreshSkills).toHaveBeenCalledTimes(1));
       expect(updateSetting).toHaveBeenCalledWith("enableMiyoSearchSkill", false);
+    });
+
+    it("locks the default-on toggle and hides the search scope until Miyo is connected (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
+      mockMiyoBackend = "unavailable";
+      currentSettings = { ...DEFAULT_SETTINGS, enableMiyo: false, enableMiyoSearchSkill: true };
+      render(<MiyoSettings />);
+
+      expect(toggle().getAttribute("aria-disabled")).toBe("true");
+      expect(screen.queryByText("Search scope")).toBeNull();
     });
 
     it("keeps the skill toggle operable while the status snapshot is stale", async () => {

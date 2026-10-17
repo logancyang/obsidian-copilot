@@ -155,6 +155,20 @@ describe("agentTrail", () => {
       expect(tree.map((n) => n.type)).toEqual(["reasoning", "action", "text"]);
     });
 
+    it("keeps a compaction part as its own node at its position in the turn", () => {
+      const compaction: AgentMessagePart = {
+        kind: "compaction",
+        id: "c1",
+        status: "completed",
+        trigger: "manual",
+        startedAtMs: 0,
+      };
+      const tree = buildAgentTrail([text("before"), compaction, text("after")]);
+
+      expect(tree.map((n) => n.type)).toEqual(["text", "compaction", "text"]);
+      expect(tree[1]).toEqual({ type: "compaction", part: compaction });
+    });
+
     describe("hidden tools", () => {
       it("drops ToolSearch entirely, leaving the surrounding tool", () => {
         const parts = [
@@ -167,6 +181,19 @@ describe("agentTrail", () => {
         if (tree[0].type === "action") {
           expect(tree[0].part.id).toBe("epm");
         }
+      });
+
+      it("drops the miyo-search skill load but keeps the script run and other skill loads (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+        const parts = [
+          tool("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
+          tool("other", { vendorToolName: "Skill", input: { skill: "obsidian-bases" } }),
+          tool("run", { vendorToolName: "Bash", input: { command: "sh miyo-search.sh q" } }),
+        ];
+        const tree = buildAgentTrail(parts);
+        expect(tree.map((n) => (n.type === "action" ? n.part.id : n.type))).toEqual([
+          "other",
+          "run",
+        ]);
       });
 
       it("leaves the tools that flank a hidden one adjacent", () => {

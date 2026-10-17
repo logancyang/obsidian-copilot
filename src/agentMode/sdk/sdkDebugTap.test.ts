@@ -120,6 +120,12 @@ describe("sdkDebugTap", () => {
       expect(describeSdkMessage({ type: "result", subtype: "success" })).toBe("result:success");
     });
 
+    it("annotates a system message with its subtype", () => {
+      expect(describeSdkMessage({ type: "system", subtype: "compact_boundary" })).toBe(
+        "system:compact_boundary"
+      );
+    });
+
     it("returns the bare type for assistant and user messages", () => {
       expect(describeSdkMessage({ type: "assistant" })).toBe("assistant");
       expect(describeSdkMessage({ type: "user" })).toBe("user");

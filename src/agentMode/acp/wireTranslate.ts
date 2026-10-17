@@ -25,6 +25,8 @@ import type {
   RawModeState,
   BackendState,
   CancelInput,
+  CompactionStatus,
+  CompactionTrigger,
   ListedSessionInfo,
   PermissionDecision,
   PermissionOption,
@@ -229,14 +231,17 @@ function toolCallDeltaFromAcp(
 
 export function acpNotificationToEvents(
   n: SessionNotification,
-  todoToolCallIds?: Set<string>
+  todoToolCallIds?: Set<string>,
+  compactionTrigger: CompactionTrigger = "auto"
 ): SessionEvent[] {
   const kind = n.update.sessionUpdate;
   if (kind === "plan_update" || kind === "plan_removed") {
     return [];
   }
   const sessionId = sessionIdFromAcp(n.sessionId);
-  const events: SessionEvent[] = [{ sessionId, update: acpUpdateToSessionUpdate(n.update) }];
+  const update = acpUpdateToSessionUpdate(n.update, compactionTrigger);
+  if (!update) return [];
+  const events: SessionEvent[] = [{ sessionId, update }];
   const todoPlan = todoToolPlanFromAcp(n.update, todoToolCallIds);
   if (todoPlan) events.push({ sessionId, update: todoPlan });
   return events;
@@ -285,7 +290,53 @@ function todoToolPlanFromAcp(
   return { sessionUpdate: "plan", entries };
 }
 
-function acpUpdateToSessionUpdate(update: SessionNotification["update"]): SessionUpdate {
+const ACP_COMPACTION_STATUSES: readonly CompactionStatus[] = [
+  "in_progress",
+  "completed",
+  "failed",
+  "cancelled",
+];
+
+function isCompactionStatus(status: string): status is CompactionStatus {
+  return (ACP_COMPACTION_STATUSES as readonly string[]).includes(status);
+}
+
+interface OpencodeCompactionMarker {
+  status?: string;
+  messageId?: string;
+  reason?: string;
+  error?: { type?: string; message?: string };
+}
+
+// opencode reports compaction as a session_info_update marker; markers from a subagent belong to #639. https://github.com/Brevilabs/obsidian-copilot-private/issues/637
+function opencodeCompactionFromMeta(meta: Record<string, unknown>): SessionUpdate | null {
+  if (meta["opencode/child-session"]) return null;
+  const marker = meta["opencode/compaction"] as OpencodeCompactionMarker;
+  if (!marker.messageId) return null;
+  const trigger: CompactionTrigger = marker.reason === "manual" ? "manual" : "auto";
+  const base = { sessionUpdate: "compaction" as const, id: marker.messageId, trigger };
+  if (marker.status === "started") return { ...base, status: "in_progress" };
+  if (marker.status === "completed") return { ...base, status: "completed" };
+  if (marker.status !== "failed") return null;
+  switch (marker.error?.type) {
+    case "aborted":
+      return { ...base, status: "cancelled" };
+    // opencode returns this only for a history with no text, and an automatic compaction always runs inside a prompt that has a user message, so it never fires for auto. https://github.com/Brevilabs/obsidian-copilot-private/issues/637
+    case "compaction.unavailable":
+      return { ...base, status: "skipped" };
+    default:
+      return {
+        ...base,
+        status: "failed",
+        ...(marker.error?.message ? { error: marker.error.message } : {}),
+      };
+  }
+}
+
+function acpUpdateToSessionUpdate(
+  update: SessionNotification["update"],
+  compactionTrigger: CompactionTrigger
+): SessionUpdate | null {
   switch (update.sessionUpdate) {
     case "user_message_chunk":
     case "agent_message_chunk":
@@ -314,11 +365,22 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
           status: e.status,
         })),
       };
-    case "session_info_update":
+    case "compaction_update": {
+      // ACP leaves the status set open, so an unrecognised value is dropped rather than guessed. https://github.com/Brevilabs/obsidian-copilot-private/issues/636
+      if (!isCompactionStatus(update.status)) return null;
       return {
-        sessionUpdate: "session_info_update",
-        title: (update as { title?: string | null }).title ?? null,
+        sessionUpdate: "compaction",
+        id: update.compactionId,
+        status: update.status,
+        trigger: compactionTrigger,
+        ...(update.error ? { error: update.error } : {}),
       };
+    }
+    case "session_info_update": {
+      const meta = update._meta;
+      if (meta?.["opencode/compaction"]) return opencodeCompactionFromMeta(meta);
+      return { sessionUpdate: "session_info_update", title: update.title };
+    }
     case "current_mode_update":
       return {
         sessionUpdate: "current_mode_update",
@@ -341,7 +403,8 @@ function acpUpdateToSessionUpdate(update: SessionNotification["update"]): Sessio
       };
     }
     default:
-      return { sessionUpdate: "session_info_update", title: null };
+      // Mapping unknown update kinds to a title-less session_info_update cleared the chat title. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      return null;
   }
 }
 

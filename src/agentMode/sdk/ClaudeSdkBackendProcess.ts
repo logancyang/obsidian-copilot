@@ -1,3 +1,4 @@
+import { isCompactCommand } from "@/commands/compactCommand";
 import { logError, logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import {
@@ -355,7 +356,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
     });
 
-    const translatorState = createTranslatorState(session.claudeTaskPlan, session.backgroundTasks);
+    const translatorState = createTranslatorState(
+      session.claudeTaskPlan,
+      session.backgroundTasks,
+      typeof messageContent === "string" && isCompactCommand(messageContent) ? "manual" : "auto"
+    );
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
@@ -538,6 +543,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    // Resuming a transcript this device lacks fails every later prompt, so the chat must start fresh.
+    // https://github.com/logancyang/obsidian-copilot/issues/3643
+    if (!(await this.sessionExistsLocally(params))) {
+      throw new Error(`Claude transcript not found for session ${params.sessionId}`);
+    }
     const claudeTaskPlan = createClaudeTaskPlanState();
     const opened = await this.reopenSession("loadSession", params, claudeTaskPlan);
     const transcript = await this.readTranscript(params.sessionId, params.cwd);

@@ -5,6 +5,7 @@ import {
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
+  isMiyoSearchSkillActive,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
@@ -31,6 +32,11 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
+
+function flattened(markdown: string): string {
+  return markdown.replace(/\s+/g, " ");
+}
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -209,7 +215,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(6);
+      expect(skill!.version).toBe(8);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -224,6 +230,8 @@ describe("builtinSkills", () => {
         `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
       );
       expect(md).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
+      expect(md).toContain("clickable Markdown link to the exact HTML file");
+      expect(md).toContain("`[page name.html](/.openartifacts/handoffs/page%20name.html)`");
       expect(md).toContain("Then end your turn");
       expect(md).toContain("Never publish in the same turn that generated the HTML");
       expect(md).toContain("Never simulate the user's approval");
@@ -267,6 +275,38 @@ describe("builtinSkills", () => {
       expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
         '-File "%~dp0openartifacts-publish.ps1"'
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 asks who can open a new page, shares through the wrapper, and never sends linkAccess on create", () => {
+      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
+      expect(skill).toBeDefined();
+      expect(skill!.version).toBe(8);
+
+      const md = skill!.skillMd;
+      expect(md).toContain(
+        "Who should be able to open it? Reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them."
+      );
+      expect(md).toContain("share <docId> add");
+      expect(md).toContain("share <docId> decline");
+      expect(md).toContain("share <docId> link invited");
+      expect(md).toContain("People who opened it while it was public may have kept a copy.");
+      expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
+      expect(md).toContain("Manage who can open it: {manageUrl}");
+      expect(md).toContain("Nothing was published.");
+      expect(md).toContain('Report an update as "Updated: {url}."');
+      expect(md).not.toContain("Report a public publish as");
+      expect(md).toContain("After `link invited` makes a public page private");
+      expect(md).not.toContain("removes the new page");
+      expect(md).not.toContain("Share dialog");
+
+      for (const path of ["openartifacts-publish.sh", "openartifacts-publish.ps1"]) {
+        const script = skill!.files.find((file) => file.path === path)!.content;
+        expect(script).toContain("/api/v1/private-docs");
+        expect(script).toContain("Nothing was published.");
+        expect(script).toContain("Not found, or this server does not support private documents.");
+        expect(script).not.toContain('linkAccess":"invited');
+        expect(script).not.toContain("linkAccess = 'invited'");
+      }
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
@@ -361,12 +401,27 @@ describe("builtinSkills", () => {
       expect(miyoScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
     });
 
-    it("documents concrete triggers for when to call it", () => {
-      const md = MIYO_SEARCH_SKILL.skillMd;
-      expect(md).toMatch(/description:[^\n]*too slow/i);
-      expect(md).toMatch(/description:[^\n]*explicitly asks for Miyo search/i);
-      expect(md).toMatch(/When to use it/);
-      expect(md).toMatch(/doesn't surface enough relevant notes/i);
+    it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).toMatch(
+        /description:[^\n]*Use it for every request that might be answered from the user's notes, alongside grep for exact terms\./
+      );
+      expect(md).toContain(
+        "When to use it: for every request that might be answered from the user's notes, alongside `grep`/glob for any exact names, terms, tags or quoted phrases in the request."
+      );
+    });
+
+    it(`no longer limits it to when grep falls short or to a single search step (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).not.toMatch(/too slow|doesn't surface enough relevant notes/i);
+      expect(md).not.toMatch(/single search step|do not fall back to other search tools/i);
+    });
+
+    it(`has the agent combine Miyo and keyword results by note path and continue with keyword search when Miyo is unavailable (${ISSUE_717})`, () => {
+      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
+      expect(md).toContain(
+        "Combine its results with your keyword search results by note path. If Miyo reports that it is unavailable, continue with keyword search."
+      );
     });
 
     it("runs one deterministic `miyo search ... --json` in each script", () => {
@@ -587,6 +642,22 @@ describe("builtinSkills", () => {
     });
   });
 
+  describe("isMiyoSearchSkillActive()", () => {
+    const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/716";
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      `with Miyo connected=%s and the switch=%s the skill is active=%s ${issue}`,
+      (enableMiyo, enableMiyoSearchSkill, active) => {
+        expect(isMiyoSearchSkillActive({ enableMiyo, enableMiyoSearchSkill })).toBe(active);
+      }
+    );
+  });
+
   describe("isBuiltinSkillEnabledFor()", () => {
     it("enables every seeded builtin for every agent when no preference is stored", () => {
       const settings = settingsWith({}, { enableMiyoDocumentProcessing: false });
@@ -618,16 +689,24 @@ describe("builtinSkills", () => {
     });
 
     it("follows the Miyo gates: each Miyo skill needs its setting", () => {
-      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
+      const off = settingsWith(
+        {},
+        { enableMiyo: true, enableMiyoSearchSkill: false, enableMiyoDocumentProcessing: false }
+      );
       expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
 
       const on = settingsWith(
         {},
-        { enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
+        { enableMiyo: true, enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
       );
       expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
+    });
+
+    it("keeps miyo-search off while Miyo is disconnected even though its switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
+      const disconnected = settingsWith({}, { enableMiyo: false, enableMiyoSearchSkill: true });
+      expect(isBuiltinSkillEnabledFor(disconnected, "miyo-search", "claude")).toBe(false);
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

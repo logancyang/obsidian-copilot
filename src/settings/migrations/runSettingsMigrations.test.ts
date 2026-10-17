@@ -201,16 +201,6 @@ describe("settingsMigrations", () => {
       expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
     });
 
-    it("v7: leaves the Miyo search skill flag untouched when Miyo was never enabled", async () => {
-      seedVault({ settingsVersion: 6, enableMiyo: false, enableMiyoSearchSkill: undefined });
-      const { api } = makeApi();
-
-      await runSettingsMigrations(api);
-
-      expect(getSettings().enableMiyoSearchSkill).toBeUndefined();
-      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
-    });
-
     it("v7: keys off persisted enableMiyo, not the mobile-sensitive search backend", async () => {
       (Platform as { isMobile: boolean }).isMobile = true;
       try {
@@ -223,6 +213,59 @@ describe("settingsMigrations", () => {
       } finally {
         (Platform as { isMobile: boolean }).isMobile = false;
       }
+    });
+
+    it.each([true, false])(
+      "v16: keeps a connected v15 install's Miyo search switch at %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)",
+      async (enableMiyoSearchSkill) => {
+        seedVault({ settingsVersion: 15, enableMiyo: true, enableMiyoSearchSkill });
+        const { api } = makeApi();
+
+        await runSettingsMigrations(api);
+
+        expect(getSettings().enableMiyoSearchSkill).toBe(enableMiyoSearchSkill);
+        expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
+      }
+    );
+
+    it("v16: turns the switch on for a v15 install that is not connected and persisted it off (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
+      seedVault({ settingsVersion: 15, enableMiyo: false, enableMiyoSearchSkill: false });
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().enableMiyoSearchSkill).toBe(true);
+      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
+    });
+
+    it.each([true, false])(
+      "v16: leaves the switch off for a vault already on v16 with enableMiyo=%s (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)",
+      async (enableMiyo) => {
+        seedVault({ settingsVersion: 16, enableMiyo, enableMiyoSearchSkill: false });
+        const { api } = makeApi();
+
+        await runSettingsMigrations(api);
+
+        expect(getSettings().enableMiyoSearchSkill).toBe(false);
+      }
+    );
+
+    it("v16: turns the switch on for a pre-v7 install that is not connected and never stored it (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
+      seedVault({ settingsVersion: 6, enableMiyo: false, enableMiyoSearchSkill: undefined });
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().enableMiyoSearchSkill).toBe(true);
+    });
+
+    it("v7 then v16: leaves a pre-v7 connected install with the switch on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", async () => {
+      seedVault({ settingsVersion: 6, enableMiyo: true, enableMiyoSearchSkill: false });
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().enableMiyoSearchSkill).toBe(true);
     });
 
     it.each([7, undefined])(

@@ -1,5 +1,7 @@
+import { mockTFile } from "@/__tests__/mockObsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
+import { logWarn } from "@/logger";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
@@ -23,6 +25,7 @@ import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
 import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
 import type {
+  AgentChatMessage,
   AgentToolCallOutput,
   BackendDescriptor,
   BackendProcess,
@@ -719,6 +722,119 @@ describe("AgentSession", () => {
         expect(ai.parts?.map((p) => p.kind)).toEqual(["thought", "tool_call", "plan", "text"]);
         const tool = ai.parts?.find((p) => p.kind === "tool_call");
         expect(tool).toMatchObject({ id: "t1", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 attaches a replayed compaction to the reply it followed, ahead of the next user message, without a dropped-update warning", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        jest.mocked(logWarn).mockClear();
+
+        mock.emitUpdate(replayText("user_message_chunk", "first", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "one", "a1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        mock.emitUpdate(replayText("user_message_chunk", "second", "u2"));
+        mock.emitUpdate(replayText("agent_message_chunk", "two", "a2"));
+        session.completeResume(emptyState());
+
+        const [, firstReply, , secondReply] = session.store.getDisplayMessages();
+        expect(session.store.getDisplayMessages()).toHaveLength(4);
+        expect(firstReply.parts?.map((p) => p.kind)).toEqual(["text", "compaction"]);
+        expect(firstReply.parts?.[1]).toMatchObject({
+          kind: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        expect(secondReply.parts?.map((p) => p.kind)).toEqual(["text"]);
+        expect(logWarn).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 opens a reply bubble for a replayed compaction that no reply precedes", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "auto",
+        });
+        session.completeResume(emptyState());
+
+        const [user, reply] = session.store.getDisplayMessages();
+        expect(user.sender).toBe(USER_SENDER);
+        expect(reply.sender).toBe(AI_SENDER);
+        expect(reply.parts?.map((p) => p.kind)).toEqual(["compaction"]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 upserts a replayed compaction's later status over its earlier one", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "auto",
+        });
+        session.completeResume(emptyState());
+
+        const parts = session.store.getDisplayMessages()[1].parts;
+        expect(parts).toHaveLength(1);
+        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 settles a replayed compaction that never reports an end as cancelled so no spinner shows", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+        session.completeResume(emptyState());
+
+        const parts = session.store.getDisplayMessages()[1].parts;
+        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "cancelled" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the meter reading a replayed compaction's post-compaction tokens would otherwise overwrite", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+        mock.emitUpdate({
+          sessionUpdate: "usage_update",
+          usage: { usedTokens: 90_000, contextWindow: 200_000, updatedAt: 1 },
+        });
+
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+          postTokens: 4_000,
+        });
+
+        expect(session.getSessionUsage()).toEqual({
+          usedTokens: 90_000,
+          contextWindow: 200_000,
+          updatedAt: 1,
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 dates replayed bubbles from their frames' times and times the agent's turn from its prompt to its last frame", () => {
@@ -1648,6 +1764,166 @@ describe("AgentSession", () => {
         expect(markDelivered).not.toHaveBeenCalled();
       });
 
+      const PROJECT_CONTEXT =
+        "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
+      const UPDATES = {
+        epoch: 7,
+        block: "<project_context_updates>changed</project_context_updates>",
+      };
+      const noteFile = mockTFile({ path: "Notes/Active.md", basename: "Active" });
+      const richContext = {
+        notes: [noteFile],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "sel-1",
+            sourceType: "web" as const,
+            title: "Page",
+            url: "https://example.com",
+            content: "selected words",
+          },
+        ],
+        webTabs: [{ url: "https://example.com/tab", title: "Tab" }],
+      };
+      const imageBlock = { type: "image" as const, mimeType: "image/png", data: "aGVsbG8=" };
+
+      const promptBlocks = (mock: MockBackend, call: number) =>
+        (mock.prompt.mock.calls[call][0] as { prompt: unknown[] }).prompt;
+
+      async function startProjectSession(
+        mock: MockBackend,
+        overrides: Partial<AgentSessionStartOptions> = {}
+      ): Promise<AgentSession> {
+        const session = startSession(mock, {
+          cwd: "/vault/Projects/p",
+          projectId: "proj-7",
+          getProjectContextBlock: () => PROJECT_CONTEXT,
+          getProjectContextUpdates: () => UPDATES,
+          ...overrides,
+        });
+        await session.ready;
+        return session;
+      }
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 sends /compact as the whole prompt even with every context source present`, async () => {
+        const processContextWebTabs = jest.fn().mockResolvedValue("<active_web_tab />");
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
+          const mock = makeMockBackend();
+          const session = await startProjectSession(mock);
+
+          await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
+
+          expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+          expect(processContextWebTabs).not.toHaveBeenCalled();
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 shows the /compact message without the attachments that were not sent`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        await session.sendPrompt("/compact", richContext, [imageBlock]).turn;
+
+        const [userMessage] = session.store.getDisplayMessages();
+        expect(userMessage.message).toBe("/compact");
+        expect(userMessage.context).toBeUndefined();
+        expect(userMessage.content).toBeUndefined();
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 passes arguments after /compact through unchanged on the trimmed text`, async () => {
+        const mock = makeMockBackend();
+        const session = await startProjectSession(mock);
+
+        await session.sendPrompt("  /compact keep the API shapes \n", richContext).turn;
+
+        expect(promptBlocks(mock, 0)).toEqual([
+          { type: "text", text: "/compact keep the API shapes" },
+        ]);
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 leaves project context and project-context updates for the next normal turn`, async () => {
+        const mock = makeMockBackend();
+        const markDelivered = jest.fn();
+        const session = await startProjectSession(mock, {
+          markProjectContextUpdatesDelivered: markDelivered,
+        });
+
+        await session.sendPrompt("/compact").turn;
+        expect(markDelivered).not.toHaveBeenCalled();
+
+        await session.sendPrompt("now continue").turn;
+        const nextText = (promptBlocks(mock, 1)[0] as { text: string }).text;
+        expect(nextText).toContain("<project_context>");
+        expect(nextText).toContain("<project_context_updates>changed</project_context_updates>");
+        expect(markDelivered).toHaveBeenCalledWith(7);
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 keeps buffered fan-out context for the next normal turn`, async () => {
+        const mock = makeMockBackend();
+        const fanoutTurn: FanoutTurn = {
+          answers: {
+            opencode: { backendId: "opencode", status: "done", text: "a" },
+            claude: { backendId: "claude", status: "done", text: "b" },
+          },
+          summary: { status: "done", text: "the fan-out summary", complete: true },
+        };
+        const runFanoutTurn = jest.fn(async (input: FanoutRunInput) => {
+          input.onChange(fanoutTurn);
+          return fanoutTurn;
+        });
+        const session = makeSession(mock, { runFanoutTurn });
+        await session.sendPrompt("compare X and Y", undefined, undefined, ["opencode", "claude"])
+          .turn;
+
+        await session.sendPrompt("/compact").turn;
+        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+
+        await session.sendPrompt("now expand").turn;
+        expect((promptBlocks(mock, 1)[0] as { text: string }).text).toContain(
+          "the fan-out summary"
+        );
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 compacts only this chat's agent when other agents are @mentioned`, async () => {
+        const mock = makeMockBackend();
+        const runFanoutTurn = jest.fn();
+        const session = makeSession(mock, { runFanoutTurn });
+        jest.mocked(ensureMultiAgentEntitlement).mockClear();
+
+        await session.sendPrompt("/compact", undefined, undefined, ["opencode", "claude"]).turn;
+
+        expect(ensureMultiAgentEntitlement).not.toHaveBeenCalled();
+        expect(runFanoutTurn).not.toHaveBeenCalled();
+        expect(promptBlocks(mock, 0)).toEqual([{ type: "text", text: "/compact" }]);
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 does not title a chat from its /compact message`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { getDescriptor: nonSummarizingDescriptor });
+
+        await session.sendPrompt("/compact").turn;
+        expect(session.getLabel()).toBeNull();
+
+        await session.sendPrompt("Plan the migration").turn;
+        expect(session.getLabel()).toBe("Plan the migration");
+      });
+
+      it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/634 wraps text that only mentions /compact like any other message`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+
+        await session.sendPrompt("please /compact", { notes: [noteFile], urls: [] }).turn;
+
+        const text = (promptBlocks(mock, 0)[0] as { text: string }).text;
+        expect(text).toContain("<copilot-context>");
+        expect(text).toContain("<user-message>\nplease /compact\n</user-message>");
+      });
+
       it("marks an empty completed turn as a visible error message", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
@@ -1659,6 +1935,126 @@ describe("AgentSession", () => {
         expect(placeholder?.message).toMatch(
           /without returning any assistant text or tool activity/
         );
+      });
+
+      it("replaces the compaction row in the in-flight reply as its status advances, keeping when it started", async () => {
+        jest.useFakeTimers();
+        try {
+          jest.setSystemTime(10_000);
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "in_progress",
+            trigger: "manual",
+          });
+          jest.advanceTimersByTime(7_000);
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 182_000,
+            postTokens: 24_000,
+          });
+
+          expect(aiMessage(session)?.parts).toEqual([
+            {
+              kind: "compaction",
+              id: "c1",
+              status: "completed",
+              trigger: "manual",
+              preTokens: 182_000,
+              postTokens: 24_000,
+              startedAtMs: 10_000,
+            },
+          ]);
+
+          finishPrompt();
+          await turn;
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 finishes a turn whose only activity is a compaction without the empty-turn error", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+
+        finishPrompt();
+        await turn;
+
+        const reply = aiMessage(session);
+        expect(reply?.isErrorMessage).toBeFalsy();
+        expect(reply?.message).toBe("");
+        expect(reply?.turnStopReason).toBe("end_turn");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress when the turn ends to cancelled", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("keep going");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "auto-1",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Done." },
+        });
+
+        finishPrompt();
+        await turn;
+
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "compaction", id: "auto-1", status: "cancelled" }),
+          { kind: "text", text: "Done." },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles a compaction still in progress to failed and reports the prompt's error once, on the turn, when the prompt rejects", async () => {
+        const mock = makeMockBackend();
+        let rejectPrompt: (error: Error) => void = () => {};
+        mock.prompt.mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectPrompt = reject;
+            })
+        );
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+
+        rejectPrompt(new Error("stream error"));
+        await expect(turn).rejects.toThrow("stream error");
+
+        const message = aiMessage(session);
+        expect(message?.parts?.[0]).toMatchObject({
+          kind: "compaction",
+          status: "failed",
+          error: undefined,
+        });
+        expect(message?.message).toContain("stream error");
       });
 
       it("shows the nested provider error on the placeholder when the prompt rejects", async () => {
@@ -2781,6 +3177,39 @@ describe("AgentSession", () => {
         expect(await turn).toBe("cancelled");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 drops compaction updates that arrive after a cancel and settles the open row to cancelled", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("/compact");
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "in_progress",
+          trigger: "manual",
+        });
+
+        await session.cancel();
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "manual",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "compaction",
+          id: "late",
+          status: "in_progress",
+          trigger: "auto",
+        });
+        finishPrompt("cancelled");
+        await turn;
+
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "compaction", id: "c1", status: "cancelled" }),
+        ]);
+      });
+
       it("settles locally and drops retry output when backend cancellation fails", async () => {
         const mock = makeMockBackend();
         let resolveBackingPrompt: ((value: { stopReason: "cancelled" }) => void) | null = null;
@@ -3043,6 +3472,72 @@ describe("AgentSession", () => {
           "earlier prompt",
           "earlier reply",
         ]);
+      });
+    });
+
+    describe("resendSavedHistoryOnNextTurn()", () => {
+      const ISSUE_3643 = "https://github.com/logancyang/obsidian-copilot/issues/3643";
+      const savedChat: AgentChatMessage[] = [
+        {
+          id: "m0",
+          sender: USER_SENDER,
+          message: "my secret word is PELICAN",
+          isVisible: true,
+          timestamp: null,
+        },
+        {
+          id: "m1",
+          sender: AI_SENDER,
+          message: "Noted: PELICAN",
+          isVisible: true,
+          timestamp: null,
+        },
+      ];
+      const promptTexts = (mock: MockBackend): string[] =>
+        mock.prompt.mock.calls.map(
+          (call) => (call[0] as { prompt: Array<{ text: string }> }).prompt[0].text
+        );
+
+      it(`${ISSUE_3643} sends the saved turns as conversation_history ahead of the next prompt, then never again`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("what is my secret word?").turn;
+        await session.sendPrompt("and backwards?").turn;
+
+        const [first, second] = promptTexts(mock);
+        expect(first).toContain("<conversation_history>");
+        expect(first).toContain('<turn role="user">\nmy secret word is PELICAN\n</turn>');
+        expect(first).toContain('<turn role="assistant">\nNoted: PELICAN\n</turn>');
+        expect(first).toContain("<user-message>\nwhat is my secret word?\n</user-message>");
+        expect(second).toBe("and backwards?");
+      });
+
+      it(`${ISSUE_3643} keeps the saved turns for the following prompt when the first turn is cancelled`, async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("what is my secret word?").turn;
+        await session.sendPrompt("what is my secret word?").turn;
+
+        const [, retry] = promptTexts(mock);
+        expect(retry).toContain("<conversation_history>");
+        expect(retry).toContain("my secret word is PELICAN");
+      });
+
+      it("sends no conversation_history when no saved history is queued", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+
+        await session.sendPrompt("what is my secret word?").turn;
+
+        expect(promptTexts(mock)).toEqual(["what is my secret word?"]);
       });
     });
 
@@ -3403,6 +3898,76 @@ describe("AgentSession", () => {
         expect(onMessagesChanged).toHaveBeenCalled();
       });
 
+      it.each([
+        ["without a prior reading", undefined],
+        ["keeping the held context window", 200_000],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 sets the meter to a completed compaction's post-compaction tokens %s",
+        async (_label, contextWindow) => {
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          if (contextWindow) {
+            mock.emitUpdate({
+              sessionUpdate: "usage_update",
+              usage: { usedTokens: 103_000, contextWindow, updatedAt: 1 },
+            });
+          }
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            status: "completed",
+            trigger: "manual",
+            preTokens: 103_249,
+            postTokens: 4_046,
+          });
+
+          expect(session.getSessionUsage()).toEqual({
+            usedTokens: 4_046,
+            contextWindow,
+            updatedAt: expect.any(Number),
+          });
+          finishPrompt();
+          await turn;
+        }
+      );
+
+      it.each([
+        ["still running", { status: "in_progress" as const }],
+        ["skipped", { status: "skipped" as const }],
+        ["failed", { status: "failed" as const, error: "boom" }],
+        ["completed without a post-compaction count", { status: "completed" as const }],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 leaves the meter alone for a compaction that is %s",
+        async (_label, snapshot) => {
+          const mock = makeMockBackend();
+          const finishPrompt = holdPrompt(mock);
+          const session = makeSession(mock);
+          mock.emitUpdate({
+            sessionUpdate: "usage_update",
+            usage: { usedTokens: 103_000, contextWindow: 200_000, updatedAt: 1 },
+          });
+          const { turn } = session.sendPrompt("/compact");
+
+          mock.emitUpdate({
+            sessionUpdate: "compaction",
+            id: "c1",
+            trigger: "manual",
+            ...snapshot,
+          });
+
+          expect(session.getSessionUsage()).toEqual({
+            usedTokens: 103_000,
+            contextWindow: 200_000,
+            updatedAt: 1,
+          });
+          finishPrompt();
+          await turn;
+        }
+      );
+
       it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
@@ -3702,6 +4267,19 @@ describe("AgentSession", () => {
 
           mock.emitUpdate({ sessionUpdate: "session_info_update", title: "Second" });
           expect(session.getLabel()).toBe("Second");
+        });
+
+        it("keeps the agent title when an update omits the title, such as an opencode compaction marker (https://github.com/Brevilabs/obsidian-copilot-private/issues/632)", () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          const onLabelChanged = jest.fn();
+          mock.emitUpdate({ sessionUpdate: "session_info_update", title: "Autumn leaves" });
+          subscribeTo(session, { onLabelChanged });
+
+          mock.emitUpdate({ sessionUpdate: "session_info_update" });
+
+          expect(session.getLabel()).toBe("Autumn leaves");
+          expect(onLabelChanged).not.toHaveBeenCalled();
         });
       });
 

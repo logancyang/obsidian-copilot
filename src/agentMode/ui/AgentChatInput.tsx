@@ -9,6 +9,7 @@ import {
   removeSelectedTextContext,
   useSelectedTextContexts,
 } from "@/aiParams";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, {
@@ -115,6 +116,16 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   };
 };
 
+// Agents only compact when /compact is the whole prompt, so a queued one never merges with neighbours.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+const takeNextQueuedBatch = (
+  items: QueuedAgentMessage[]
+): { batch: QueuedAgentMessage[]; rest: QueuedAgentMessage[] } => {
+  const nextCompact = items.findIndex((item) => isCompactCommand(item.text));
+  const end = nextCompact === 0 ? 1 : nextCompact === -1 ? items.length : nextCompact;
+  return { batch: items.slice(0, end), rest: items.slice(end) };
+};
+
 async function fileToImageBlock(file: File): Promise<PromptContent | null> {
   try {
     const buf = await file.arrayBuffer();
@@ -211,7 +222,10 @@ export const AgentChatInput = memo(function AgentChatInput({
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
     setQueuedMessages([]);
     if (queuedMessages.length > 0) {
-      const restored = combineQueuedMessages(queuedMessages);
+      // Merged into one draft, /compact would swallow the queued messages as compaction input.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const nonCompact = queuedMessages.filter((item) => !isCompactCommand(item.text));
+      const restored = combineQueuedMessages(nonCompact.length > 0 ? nonCompact : queuedMessages);
       // A fixed copy of the current page would duplicate its Active Web Tab badge and outlive
       // that badge's removal. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const activeUrl = activeWebTabForMentions?.url;
@@ -311,7 +325,10 @@ export const AgentChatInput = memo(function AgentChatInput({
         shouldIncludeActiveWebTab
       );
 
-      if (selectedImages.length > 0 && unsupportedImageModelLabel) {
+      // /compact drops attachments, so an image the model can't read must not block it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const images = isCompactCommand(resolvedText) ? [] : selectedImages;
+      if (images.length > 0 && unsupportedImageModelLabel) {
         new Notice(
           `${unsupportedImageModelLabel} doesn't support images. Switch to a vision-capable model to send images.`
         );
@@ -332,14 +349,14 @@ export const AgentChatInput = memo(function AgentChatInput({
       clearSelectedTextContexts();
 
       const content: PromptContent[] = [];
-      for (const image of selectedImages) {
+      for (const image of images) {
         const block = await fileToImageBlock(image);
         if (block) content.push(block);
       }
 
       // Failed image reads must not turn an image-only message into an empty request.
       // https://github.com/logancyang/obsidian-copilot/issues/2850
-      if (selectedImages.length > 0 && !resolvedText && content.length === 0) {
+      if (images.length > 0 && !resolvedText && content.length === 0) {
         new Notice("Could not read the attached images. Please attach them again.");
         return;
       }
@@ -382,7 +399,8 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   useEffect(() => {
     if (disabled || loading || isStarting || queuedMessages.length === 0) return;
-    const combined = combineQueuedMessages(queuedMessages);
+    const { batch, rest } = takeNextQueuedBatch(queuedMessages);
+    const combined = combineQueuedMessages(batch);
     if (
       combined.promptContent?.some((content) => content.type === "image") &&
       unsupportedImageModelLabel
@@ -392,7 +410,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       );
       return;
     }
-    setQueuedMessages([]);
+    setQueuedMessages(rest);
     void runSend(combined);
   }, [
     disabled,

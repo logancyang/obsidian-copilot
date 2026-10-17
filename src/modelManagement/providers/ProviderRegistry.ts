@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import { logError } from "@/logger";
-import { KeychainService } from "@/services/keychainService";
+import { KeychainService, providerKeychainName } from "@/services/keychainService";
 import { getSettings, setSettings } from "@/settings/model";
 import { frozenOr, sliceMemo, sliceMemoByKey } from "@/utils/sliceCache";
 
@@ -12,10 +12,6 @@ import type { VerificationResult } from "@/modelManagement/types/runtime";
 import type { ProviderAdapterRegistry } from "./adapters/ProviderAdapterRegistry";
 
 const EMPTY_LIST: readonly Provider[] = Object.freeze([]);
-
-function providerKeychainId(vaultId: string, providerId: string): string {
-  return `copilot-v${vaultId}-provider-${providerId}`;
-}
 
 export class ProviderRegistry {
   readonly #app: App;
@@ -163,7 +159,8 @@ export class ProviderRegistry {
     }
     const keychain = KeychainService.getInstance(this.#app);
     const keychainId =
-      row.apiKeyKeychainId ?? providerKeychainId(keychain.getVaultId(), providerId);
+      row.apiKeyKeychainId ??
+      providerKeychainName(keychain.getVaultId(), row, getSettings().providers);
     // Re-registering with the key already stored is not a change, and emitting
     // one restarts every backend that bakes provider config into its spawn
     // (Plus reconciliation replays the license key on every sign-in and load).

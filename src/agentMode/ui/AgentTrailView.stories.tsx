@@ -99,13 +99,93 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
+const MIYO_SEARCH_COMMAND =
+  'sh ".claude/skills/miyo-search/miyo-search.sh" "back pain standing desk"';
+const MIYO_RESULTS = JSON.stringify({
+  results: [{ path: "notes/Standing desk setup.md" }, { path: "notes/Untitled 3.md" }],
+});
+
+const MIYO_SEARCH: AgentMessagePart[] = [
+  tool("miyo-load", "Skill", { input: { skill: "miyo-search" } }),
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    input: { command: MIYO_SEARCH_COMMAND },
+    output: [{ type: "text", text: MIYO_RESULTS }],
+  }),
+  tool("grep-1", "Grep", { input: { pattern: "standing desk|back pain" } }),
+  tool("read-1", "Read", { locations: [{ path: "notes/Standing desk setup.md" }] }),
+  say("You wrote that a monitor arm and a sit-stand rhythm fixed it. See [[Standing desk setup]]."),
+];
+
+const MIYO_LINK_NOTES: Record<string, string> = {
+  "Standing desk setup": "notes/Standing desk setup.md",
+  "Untitled 3": "notes/Untitled 3.md",
+  "Reading list": "notes/Reading list.md",
+  "Trip planning": "notes/Trip planning.md",
+};
+
+const MIYO_LINKS: AgentMessagePart[] = [
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    input: { command: MIYO_SEARCH_COMMAND },
+    output: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          results: [
+            { path: "step-2/notes/Standing desk setup.md" },
+            { path: "step-2/notes/Untitled 3.md" },
+          ],
+        }),
+      },
+    ],
+  }),
+  tool("grep-1", "Grep", { input: { pattern: "ZX-4471" } }),
+  say(
+    "Miyo found [[Standing desk setup]] (see [[Standing desk setup#Fixes]]) and your scratch note, [[Untitled 3|desk scratchpad]]. A keyword search added [[Reading list]] and [Trip planning](notes/Trip%20planning.md)."
+  ),
+];
+
+const MIYO_SEARCH_RUNNING: AgentMessagePart[] = [
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    status: "in_progress",
+    input: { command: MIYO_SEARCH_COMMAND },
+  }),
+];
+
+type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
+
+const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
+  kind: "compaction",
+  id: "compaction-1",
+  status: "completed",
+  trigger: "manual",
+  startedAtMs: Date.now() - 12_000,
+  ...overrides,
+});
+
 const TrailDemo: React.FC<{
   parts: AgentMessagePart[];
   isStreaming?: boolean;
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
-}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges }) => {
-  const app = useApp();
+  linkNotes?: Record<string, string>;
+}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges, linkNotes }) => {
+  const contextApp = useApp();
+  const app = linkNotes
+    ? Object.create(contextApp, {
+        vault: { value: Object.create(contextApp.vault, { getName: { value: () => "step-2" } }) },
+        metadataCache: {
+          value: {
+            getFirstLinkpathDest: (linkpath: string) => {
+              const path = linkNotes[linkpath] ?? linkpath;
+              return Object.values(linkNotes).includes(path) ? { path } : null;
+            },
+          },
+        },
+      })
+    : contextApp;
   return (
     <TooltipProvider>
       <AgentTrail
@@ -145,6 +225,18 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
 };
 
+export const MiyoSearch: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_SEARCH} />,
+};
+
+export const MiyoLinkBadges: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_LINKS} linkNotes={MIYO_LINK_NOTES} />,
+};
+
+export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_SEARCH_RUNNING} isStreaming />,
+};
+
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={UNIFIED_CARDS} showCompletedDuration={false} />,
 };
@@ -170,4 +262,69 @@ const EDITED_FILES: TurnFileChange[] = [
 
 export const WithFilesChanged: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={TURN} fileChanges={EDITED_FILES} />,
+};
+
+export const CompactionRunningManual: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={[compaction({ status: "in_progress" })]} isStreaming />,
+};
+
+export const CompactionRunningAuto: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        say("Reading the remaining notes before I summarize them."),
+        compaction({ status: "in_progress", trigger: "auto" }),
+      ]}
+      isStreaming
+    />
+  ),
+};
+
+export const CompactionCompletedWithTokens: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[compaction({ preTokens: 182_340, postTokens: 24_100 })]}
+      showCompletedDuration={false}
+    />
+  ),
+};
+
+export const CompactionCompletedWithoutTokens: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={[compaction()]} showCompletedDuration={false} />,
+};
+
+export const CompactionCompletedAutomatically: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        tool("b1", "Bash", { input: { description: "Search the vault" } }),
+        tool("b2", "Bash", { input: { description: "Read the matching notes" } }),
+        compaction({ trigger: "auto", preTokens: 910_000, postTokens: 31_000 }),
+        tool("b3", "Bash", { input: { description: "Draft the summary" } }),
+        tool("b4", "Bash", { input: { description: "Save it to the vault" } }),
+        say("Saved the summary to [[Weekly review]]."),
+      ]}
+    />
+  ),
+};
+
+export const CompactionFailed: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[compaction({ status: "failed", error: "The summarization request timed out." })]}
+      showCompletedDuration={false}
+    />
+  ),
+};
+
+export const CompactionCancelled: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo parts={[compaction({ status: "cancelled" })]} showCompletedDuration={false} />
+  ),
+};
+
+export const CompactionSkipped: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo parts={[compaction({ status: "skipped" })]} showCompletedDuration={false} />
+  ),
 };

@@ -271,6 +271,14 @@ module.exports = {
         "icon-xl": "var(--icon-xl)",
         checkbox: "var(--checkbox-size)",
       },
+      keyframes: {
+        twinkle: {
+          "50%": { transform: "scale(0.6) rotate(45deg)", opacity: "0.45" },
+        },
+      },
+      animation: {
+        twinkle: "twinkle 1.4s ease-in-out infinite",
+      },
       opacity: {
         icon: "var(--icon-opacity)",
         "icon-hover": "var(--icon-opacity-hover)",

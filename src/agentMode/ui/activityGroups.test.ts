@@ -54,6 +54,42 @@ describe("activityGroups", () => {
       expect(groupAt(grouped, 0).members).toHaveLength(3);
     });
 
+    it("keeps a Miyo search out of the group so its card stays visible (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
+      const grouped = foldActivityGroups([
+        action("a", { vendorToolName: "Read" }),
+        action("b", { vendorToolName: "Grep" }),
+        action("miyo", { vendorToolName: "Bash", input: { command: 'sh miyo-search.sh "desk"' } }),
+        action("c", { vendorToolName: "Read" }),
+        action("d", { vendorToolName: "Read" }),
+      ]);
+      expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup"]);
+    });
+
+    it("never folds a compaction row into a group and splits the groups around it", () => {
+      const compaction: RenderNode = {
+        type: "compaction",
+        part: {
+          kind: "compaction",
+          id: "c1",
+          status: "completed",
+          trigger: "auto",
+          startedAtMs: 0,
+        },
+      };
+      const grouped = foldActivityGroups([
+        action("a", { vendorToolName: "Read" }),
+        action("b", { vendorToolName: "Bash" }),
+        compaction,
+        action("c", { vendorToolName: "Edit" }),
+        action("d", { vendorToolName: "Bash" }),
+      ]);
+
+      expect(types(grouped)).toEqual(["activityGroup", "compaction", "activityGroup"]);
+      expect(grouped[1]).toBe(compaction);
+      expect(groupAt(grouped, 0).members).toHaveLength(2);
+      expect(groupAt(grouped, 2).members).toHaveLength(2);
+    });
+
     it("folds reasoning together with the tool calls around it", () => {
       const grouped = foldActivityGroups([
         reasoning(),

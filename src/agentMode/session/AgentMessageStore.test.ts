@@ -23,6 +23,17 @@ describe("AgentMessageStore", () => {
     parts: [] as AgentMessagePart[],
   });
 
+  const compaction = (
+    overrides: Partial<Extract<AgentMessagePart, { kind: "compaction" }>> = {}
+  ): AgentMessagePart => ({
+    kind: "compaction",
+    id: "c1",
+    status: "in_progress",
+    trigger: "manual",
+    startedAtMs: 1_000,
+    ...overrides,
+  });
+
   const liveTurn = (summaryText = "the summary"): FanoutTurn => ({
     answers: {
       opencode: { backendId: "opencode", status: "done", text: "opencode answer" },
@@ -362,6 +373,114 @@ describe("AgentMessageStore", () => {
 
       expect(store.upsertAgentPart(id, { ...plan })).toBe(true);
       expect(store.getMessage(id)?.parts?.[1]).toMatchObject({ durationMs: 3_000 });
+    });
+
+    it("replaces the compaction row holding the same id as its status advances", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction());
+
+      const changed = store.upsertAgentPart(
+        id,
+        compaction({ status: "completed", preTokens: 182_000, postTokens: 24_000 })
+      );
+
+      expect(changed).toBe(true);
+      expect(store.getMessage(id)?.parts).toEqual([
+        compaction({ status: "completed", preTokens: 182_000, postTokens: 24_000 }),
+      ]);
+    });
+
+    it("keeps compaction rows with different ids apart, in arrival order", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction({ id: "first", status: "completed" }));
+      store.appendAgentText(id, "between");
+      store.upsertAgentPart(id, compaction({ id: "second", trigger: "auto" }));
+
+      expect(store.getMessage(id)?.parts?.map((p) => p.kind)).toEqual([
+        "compaction",
+        "text",
+        "compaction",
+      ]);
+    });
+
+    it("reports no change and keeps the message identity when an identical compaction status repeats", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction());
+      const before = store.getMessage(id);
+
+      expect(store.upsertAgentPart(id, compaction())).toBe(false);
+      expect(store.getMessage(id)).toBe(before);
+    });
+
+    it.each([
+      ["error", { status: "failed" as const, error: "overloaded" }],
+      ["trigger", { trigger: "auto" as const }],
+      ["preTokens", { preTokens: 10 }],
+      ["postTokens", { postTokens: 5 }],
+    ])("treats a changed compaction %s as a new status for the row", (_field, change) => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction());
+
+      expect(store.upsertAgentPart(id, compaction(change))).toBe(true);
+    });
+  });
+
+  describe("hasAssistantActivity()", () => {
+    it("is false for a placeholder that has received nothing", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      expect(store.hasAssistantActivity(id)).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 counts a compaction row as activity so a compaction-only turn is not an empty turn", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.upsertAgentPart(id, compaction({ status: "completed" }));
+
+      expect(store.hasAssistantActivity(id)).toBe(true);
+    });
+  });
+
+  describe("settleOpenCompactions()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 settles every in-progress compaction to the given status and leaves settled rows alone", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      const done = compaction({ id: "done", status: "completed", postTokens: 5 });
+      store.upsertAgentPart(id, done);
+      store.upsertAgentPart(id, compaction({ id: "open", trigger: "auto" }));
+
+      expect(store.settleOpenCompactions(id)).toBe(true);
+
+      const parts = store.getMessage(id)?.parts ?? [];
+      expect(parts[0]).toBe(done);
+      expect(parts[1]).toEqual(compaction({ id: "open", trigger: "auto", status: "cancelled" }));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 fails an in-progress compaction without a reason of its own", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction());
+
+      store.settleOpenCompactions(id, "failed");
+
+      expect(store.getMessage(id)?.parts?.[0]).toEqual(compaction({ status: "failed" }));
+    });
+
+    it("reports no change for a message with no in-progress compaction", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, compaction({ status: "skipped" }));
+      const before = store.getMessage(id);
+
+      expect(store.settleOpenCompactions(id)).toBe(false);
+      expect(store.getMessage(id)).toBe(before);
+      expect(store.settleOpenCompactions("missing")).toBe(false);
     });
   });
 

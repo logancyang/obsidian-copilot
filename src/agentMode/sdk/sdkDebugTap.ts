@@ -84,8 +84,8 @@ export function describeSdkMessage(msg: unknown): string {
     const evType = ev && typeof ev.type === "string" ? ev.type : "?";
     return `stream_event:${evType}`;
   }
-  if (m.type === "result" && typeof m.subtype === "string") {
-    return `result:${m.subtype}`;
+  if ((m.type === "result" || m.type === "system") && typeof m.subtype === "string") {
+    return `${m.type}:${m.subtype}`;
   }
   return m.type;
 }

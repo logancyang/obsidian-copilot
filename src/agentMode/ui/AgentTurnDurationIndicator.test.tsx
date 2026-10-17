@@ -78,5 +78,34 @@ describe("AgentTurnDurationIndicator", () => {
 
       expect(screen.getByText("2m 18s")).toBeTruthy();
     });
+
+    it("shows and announces the given label in place of the turn wording while running", () => {
+      render(
+        <AgentTurnDurationIndicator
+          status="running"
+          startedAtMs={62_000}
+          label="Compacting conversation…"
+        />
+      );
+
+      expect(screen.getAllByText("Compacting conversation…")).toHaveLength(2);
+      expect(screen.getByText("2m 18s")).toBeTruthy();
+      expect(screen.getByRole("status").textContent).toBe("Compacting conversation…");
+      expect(screen.queryByText("Worked for")).toBeNull();
+    });
+
+    it("shows the given icon in place of the animated spinner while running", () => {
+      const { container } = render(
+        <AgentTurnDurationIndicator
+          status="running"
+          startedAtMs={62_000}
+          icon={<svg data-testid="custom-icon" />}
+        />
+      );
+
+      expect(screen.getByTestId("custom-icon")).toBeTruthy();
+      expect(container.querySelector(".copilot-spinner")).toBeNull();
+      expect(screen.getByText("2m 18s")).toBeTruthy();
+    });
   });
 });

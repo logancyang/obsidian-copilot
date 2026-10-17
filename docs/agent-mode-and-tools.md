@@ -163,6 +163,28 @@ Uploaded images are embedded in saved conversation notes. Copilot stores the ima
 
 Type `/` to insert an enabled Skill or [Copilot command](custom-commands.md). For a quick question or rewrite beside the current selection, use [Quick Ask](custom-commands.md#quick-ask).
 
+### Compact a long chat
+
+When a conversation grows long, choose **/compact** at the start of an empty message to have the agent summarize it and free up room in its context window. The `/` menu offers **/compact** only at the start of a message, and it replaces any Skill or command named exactly `compact`. Anything you type after `/compact` is sent with it, so an agent that accepts compaction instructions, such as Claude, can use them.
+
+- Attached notes, web pages, images, and agent mentions are not sent with `/compact`. Project context waits for your next regular message.
+- A queued `/compact` runs as its own turn instead of joining other queued messages. If you stop the current turn, the other queued messages return to the message box without it.
+
+Agents also compact on their own when the context window fills up. Either way, the chat shows the progress in line with the conversation:
+
+| Status                                                       | Meaning                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| **Compacting conversation…**                                 | The agent is summarizing the chat after **/compact**                                                 |
+| **Context is full, compacting…**                             | The agent started compacting on its own                                                              |
+| **Context compacted** or **Context compacted automatically** | The summary is done. When the agent reports them, the token counts before and after follow the label |
+| **Couldn't compact**                                         | Compaction failed. The reason appears with the row or below it                                       |
+| **Compaction cancelled**                                     | You stopped the turn before compaction finished                                                      |
+| **Nothing to compact yet**                                   | The chat is too short to summarize                                                                   |
+
+When a finished compaction reports its new size, the context ring drops to that size instead of keeping the reading from before it.
+
+Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
@@ -238,9 +260,28 @@ Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Ho
 
 Copilot ships an `openartifacts-publish` skill to Claude Code, Codex, and OpenCode. Publishing needs a Copilot Plus license key in Copilot settings. Copilot passes that key to the agent process, and the skill's bundled wrapper script sends it to `api.openartifacts.ai` over HTTPS. The wrapper needs only the shell tools already on your system: `sh`, `curl`, and `awk` on macOS and Linux, PowerShell on Windows.
 
-Ask the agent to publish a Markdown note or an existing HTML file. For Markdown, it renders the note to HTML, using the note's file name without `.md`, converted to title case, as both the browser title and a visible heading above the note body. If the note already starts with the same heading, Copilot keeps that heading instead of adding a duplicate. If you explicitly ask for no title, Copilot does not add the visible heading but keeps the browser title. Long titles wrap on narrow screens instead of being cut off. Copilot writes the complete page under `.openartifacts/handoffs/` in your vault, tells you the path, and stops. For HTML, it preserves the existing file and passes that exact file to OpenArtifacts without converting, rewriting, copying, or deleting it; because only that file is uploaded, the agent warns before publishing if any relative local resource in an HTML attribute or CSS URL will not load. Open the HTML file in your browser to see the page as it will be uploaded; OpenArtifacts adds its own header and footer bylines when it serves the page. Reply that it should publish, or describe changes and the agent revises the generated Markdown handoff or waits for you to update and review the original HTML again. The agent never publishes in the same turn that produced the HTML.
+Ask the agent to publish a Markdown note or an existing HTML file. For Markdown, it renders the note to HTML, using the note's file name without `.md`, converted to title case, as both the browser title and a visible heading above the note body. If the note already starts with the same heading, Copilot keeps that heading instead of adding a duplicate. If you explicitly ask for no title, Copilot does not add the visible heading but keeps the browser title. Long titles wrap on narrow screens instead of being cut off. Copilot writes the complete page under `.openartifacts/handoffs/` in your vault, gives you a clickable link to it (or the plain path when a link cannot be made), and stops. For HTML, it preserves the existing file and passes that exact file to OpenArtifacts without converting, rewriting, copying, or deleting it; because only that file is uploaded, the agent warns before publishing if any relative local resource in an HTML attribute or CSS URL will not load. Click the link to open the HTML file in your browser and see the page as it will be uploaded; OpenArtifacts adds its own top bar, with a Share button, and a footer byline when it serves the page. For a new page, Markdown or HTML, the review message also asks who should be able to open it: reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them. If your request already said who, the agent confirms that instead of asking. It never guesses an email address, and updating a page that is already published never asks and keeps who can open it. Reply that it should publish, or describe changes and the agent revises the generated Markdown handoff or waits for you to update and review the original HTML again. The agent never publishes in the same turn that produced the HTML.
 
-After publishing a Markdown note, the agent saves the public link in the note's `openartifacts` property, so publishing the note again updates the same page and the regular **Publish file to OpenArtifacts** command recognizes it as published. Notes published under the older `symposium` property keep working and move to `openartifacts` the next time they are published. If a property already holds something other than an OpenArtifacts link, the agent asks before touching it. Ask the agent to withdraw a page to take it down; it confirms first and removes only note properties whose links match the withdrawn page afterwards. For HTML, keep and supply the returned OpenArtifacts link when asking the agent to withdraw the page later; republishing the HTML creates a new link.
+After publishing a Markdown note, the agent saves the link in the note's `openartifacts` property, so publishing the note again updates the same page and the regular **Publish file to OpenArtifacts** command recognizes it as published. Notes published under the older `symposium` property keep working and move to `openartifacts` the next time they are published. If a property already holds something other than an OpenArtifacts link, the agent asks before touching it. Ask the agent to withdraw a page to take it down; it confirms first and removes only note properties whose links match the withdrawn page afterwards. For HTML, keep and supply the returned OpenArtifacts link when asking the agent to withdraw the page later; republishing the HTML creates a new link.
+
+### Sharing a page with only some people
+
+Private sharing is included with every plan that can publish to OpenArtifacts: Plus and Supporter, including existing Believer licenses. If your plan cannot publish, nothing is published, public or private, and the agent points you to Copilot Settings. If your plan lapses after you share a page, private pages stay private and invited people keep access. You can still see who has access, remove people, decline requests, and make a page public, but making a page private or adding a person tells you private sharing needs a paid plan, and nothing is changed.
+
+When you name people, the agent publishes the page privately and adds each address. Only you and those people can open it, and they sign in with the address that was invited. When OpenArtifacts sends invite emails, the agent says the invitation was emailed; otherwise it asks you to send them the link. It ends with a **Manage who can open it** link to a page where you can change who has access. Sign in there with the OpenArtifacts account linked to your Copilot account. **Open** in the Share with OpenArtifacts dialog opens your page without signing in. If the server does not support private documents, the agent tells you and does not publish the page publicly.
+
+You can also ask the agent later to make a page private or public, add or remove a person, or show who has access and who has asked to open it. It changes one address at a time, and approves or declines a request only when you say so. Making a public page private warns that people who opened it while it was public may have kept a copy. Switching back to **Anyone with the link** keeps the list of invited people.
+
+### The Share with OpenArtifacts dialog
+
+The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifacts** dialog.
+
+- **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. A published note's dialog shows who can open the page above **Update** and **Delete**.
+- **Add people** invites one email address at a time. Each person appears under **Who has access** with **Invited · email sent**, or **Invited · send them the link** when the server sends no email, and has a **Remove** button.
+- **Requests** lists addresses that asked to open the page, each with **Approve** and **Decline**. The section is hidden when nobody has asked.
+- **Copy link** (**Copy** right after you publish or update) copies the page link, and **Open** opens the page for you without a sign-in.
+
+If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited**, **Add**, or **Approve** shows the plan message with an **Upgrade** link and changes nothing; **Remove**, **Decline**, and **Anyone with the link** keep working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
 
 Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 

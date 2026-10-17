@@ -1,3 +1,4 @@
+import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
 import type {
   FeedbackMcpServer,
@@ -1832,8 +1833,9 @@ export class AgentSessionManager {
     const scopeSeq = this.setActiveScope(projectId);
 
     let session: AgentSession;
+    let resumed: AgentSession | null;
     try {
-      const resumed = loaded.sessionId
+      resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
       session = resumed ?? (await this.createSession(loaded.backendId, projectId));
@@ -1846,13 +1848,18 @@ export class AgentSessionManager {
     const replayedUserTurns = session.store
       .getDisplayMessages()
       .filter((m) => m.sender === USER_SENDER).length;
+    // Claude's transcript keeps /compact only as command bookkeeping, which its replay drops.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
     const savedUserTurns = loaded.messages.filter(
-      (m) => m.isVisible && m.sender === USER_SENDER
+      (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
       session.store.fillMissingTimestamps(loaded.messages);
     } else {
       session.loadDisplayMessages(loaded.messages);
+      // The agent never saw this note's turns when its saved session is gone from this device.
+      // https://github.com/logancyang/obsidian-copilot/issues/3643
+      if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
     if (loaded.label) session.setLabel(loaded.label);

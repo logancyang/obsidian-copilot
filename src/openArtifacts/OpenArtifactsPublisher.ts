@@ -1,5 +1,6 @@
 import {
   OpenArtifactsModal,
+  type OpenArtifactsAccessPort,
   type OpenArtifactsFailureResult,
   type OpenArtifactsModalOptions,
   type OpenArtifactsModalResult,
@@ -11,6 +12,7 @@ import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/O
 import {
   OpenArtifactsFrontmatterParseError,
   getOpenArtifactsDocId,
+  getOpenArtifactsSavedLink,
   removeOpenArtifactsDocId,
   saveOpenArtifactsLink,
   OpenArtifactsPropertyConflictError,
@@ -24,21 +26,37 @@ import {
   type OpenArtifactsLedgerEntry,
 } from "@/openArtifacts/openArtifactsLedger";
 import type {
+  OpenArtifactsAccess,
   OpenArtifactsAction,
   OpenArtifactsDocument,
+  OpenArtifactsLinkAccess,
   OpenArtifactsReceipt,
 } from "@/openArtifacts/types";
 import { sha256 } from "@/utils/hash";
 import { App, Component, TFile } from "obsidian";
 
 interface OpenArtifactsClientPort {
-  publish(document: OpenArtifactsDocument, licenseKey: string): Promise<OpenArtifactsReceipt>;
+  publish(
+    document: OpenArtifactsDocument,
+    licenseKey: string,
+    linkAccess?: OpenArtifactsLinkAccess
+  ): Promise<OpenArtifactsReceipt>;
   update(
     docId: string,
     document: OpenArtifactsDocument,
     licenseKey: string
   ): Promise<OpenArtifactsReceipt>;
   delete(docId: string, licenseKey: string): Promise<void>;
+  getAccess(docId: string, licenseKey: string): Promise<OpenArtifactsAccess>;
+  setLinkAccess(
+    docId: string,
+    linkAccess: OpenArtifactsLinkAccess,
+    licenseKey: string
+  ): Promise<OpenArtifactsAccess>;
+  addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
+  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
+  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess>;
+  openAsOwner(docId: string, licenseKey: string): Promise<string>;
 }
 
 interface OpenArtifactsModalPort {
@@ -105,6 +123,9 @@ function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArti
       message: error.message,
       accessNotice: error.status === 401 && error.code === "unauthorized",
       retryable: error.retryable,
+      // A 402 on the first private publish goes through onConfirm and never reaches AccessPanel.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+      ...(error.upgradeUrl && { upgradeUrl: error.upgradeUrl }),
     };
   }
 
@@ -166,11 +187,14 @@ export class OpenArtifactsPublisher {
       return;
     }
     let docId: string | null = null;
+    let docUrl: string | null = null;
     let initialResult: OpenArtifactsFailureResult | OpenArtifactsPersistenceResult | undefined =
       this.blockedPublishResults.get(file);
     if (!initialResult) {
       try {
-        docId = await getOpenArtifactsDocId(this.app, file);
+        const saved = await getOpenArtifactsSavedLink(this.app, file);
+        docId = saved?.docId ?? null;
+        docUrl = saved?.url ?? null;
       } catch (error) {
         if (
           !(error instanceof OpenArtifactsFrontmatterParseError) &&
@@ -189,10 +213,13 @@ export class OpenArtifactsPublisher {
     modal = this.createModal({
       fileName: file.basename,
       docId,
+      docUrl,
       initialResult: openingResult,
+      access: this.accessPort(file),
       onConfirm: openingResult
         ? () => Promise.resolve(openingResult)
-        : (action, ownerDocument) => this.execute(file, docId, action, ownerDocument),
+        : (action, ownerDocument, linkAccess) =>
+            this.execute(file, docId, action, ownerDocument, linkAccess),
       onClosed: () => this.modals.delete(modal),
     });
     this.modals.add(modal);
@@ -202,6 +229,41 @@ export class OpenArtifactsPublisher {
       this.modals.delete(modal);
       throw error;
     }
+  }
+
+  private accessPort(file: TFile): OpenArtifactsAccessPort {
+    const withKey = async <T>(call: (licenseKey: string) => Promise<T>): Promise<T> => {
+      const licenseKey = await this.loadLicenseKey().catch(() => "");
+      if (!licenseKey) {
+        throw new OpenArtifactsClientError(MISSING_LICENSE_MESSAGE, "unauthorized", 401, false);
+      }
+      return call(licenseKey);
+    };
+    const mutate = <T>(docId: string, call: (licenseKey: string) => Promise<T>): Promise<T> =>
+      withKey(async (key) => {
+        // Sync can replace the saved document while the Share dialog stays open.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+        if ((await getOpenArtifactsDocId(this.app, file)) !== docId) {
+          throw new OpenArtifactsClientError(
+            identityChangedFailure("update").message,
+            "identity_changed",
+            null,
+            false
+          );
+        }
+        return call(key);
+      });
+    return {
+      load: (docId) => withKey((key) => this.client.getAccess(docId, key)),
+      setLinkAccess: (docId, linkAccess) =>
+        mutate(docId, (key) => this.client.setLinkAccess(docId, linkAccess, key)),
+      addPerson: (docId, email) => mutate(docId, (key) => this.client.addPerson(docId, email, key)),
+      removePerson: (docId, email) =>
+        mutate(docId, (key) => this.client.removePerson(docId, email, key)),
+      declineRequest: (docId, email) =>
+        mutate(docId, (key) => this.client.declineRequest(docId, email, key)),
+      open: (docId) => withKey((key) => this.client.openAsOwner(docId, key)),
+    };
   }
 
   dispose(): void {
@@ -217,7 +279,8 @@ export class OpenArtifactsPublisher {
     file: TFile,
     expectedDocId: string | null,
     action: OpenArtifactsAction,
-    ownerDocument: Document
+    ownerDocument: Document,
+    linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsModalResult> {
     const expectedAction: OpenArtifactsAction = expectedDocId ? "update" : "publish";
     const deleteRequested = action === "delete";
@@ -301,7 +364,11 @@ export class OpenArtifactsPublisher {
           return identityChangedFailure(resolvedAction);
         }
         if (!docId) {
-          const receipt = await this.client.publish(document, licenseKey);
+          const receipt = await this.client.publish(
+            document,
+            licenseKey,
+            ...(linkAccess === "invited" ? (["invited"] as const) : [])
+          );
           await this.recordPublishedReceipt(file, document, receipt);
           return await this.savePublishedIdentity(file, receipt);
         }
@@ -377,7 +444,7 @@ export class OpenArtifactsPublisher {
           kind: "persistence",
           action: "publish",
           message:
-            "The page is public, but this note’s OpenArtifacts identity changed or could not be verified. Its current frontmatter was left unchanged.",
+            "The page is published, but this note’s OpenArtifacts identity changed or could not be verified. Its current frontmatter was left unchanged.",
           receipt,
         };
         let currentDocId: string | null | undefined;
@@ -408,7 +475,7 @@ export class OpenArtifactsPublisher {
       kind: "persistence",
       action: "publish",
       message:
-        "The page is already public. Retry saving its link to this note; this will not publish again.",
+        "The page is already published. Retry saving its link to this note; this will not publish again.",
       receipt,
       retrySave: () =>
         this.withFileLock(file, "publish", async () => this.savePublishedIdentity(file, receipt)),
@@ -447,7 +514,7 @@ export class OpenArtifactsPublisher {
       kind: "persistence",
       action: "delete",
       message:
-        "The public page is already deleted. Retry removing its link from this note; this will not contact OpenArtifacts again.",
+        "The page is already deleted. Retry removing its link from this note; this will not contact OpenArtifacts again.",
       retrySave: () =>
         this.withFileLock(file, "delete", async () =>
           this.removeLocalIdentity(file, expectedDocId)

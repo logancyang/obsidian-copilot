@@ -720,6 +720,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               currentChain={currentChain}
               onEscape={onEscape}
               onShiftTab={onShiftTab}
+              isAgentMode={isAgentMode}
             />
           </div>
         </div>

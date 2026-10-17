@@ -10,12 +10,18 @@ import {
   type GroupedTrailNode,
 } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep, isReasoningActive } from "@/agentMode/ui/activityLiveStep";
+import { CompactionRow } from "@/agentMode/ui/CompactionRow";
 import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
-import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import {
+  miyoResultPaths,
+  miyoSearchRun,
+  type ToolSummaryContext,
+} from "@/agentMode/ui/toolSummaries";
+import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
@@ -31,6 +37,7 @@ interface AgentTrailProps {
   timestamp?: string;
   app: App;
   turnStopReason?: StopReason;
+  errorText?: string;
   fileChanges?: TurnFileChange[];
   onOpenFileChange?: (change: TurnFileChange) => void;
 }
@@ -45,11 +52,17 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   timestamp,
   app,
   turnStopReason,
+  errorText,
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
 }) => {
   const answer = agentResponseText(parts);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
+  // A compaction row reports its own progress and is not a reply to time or copy.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+  const trailNodes = buildAgentTrail(parts);
+  const compactionOnly =
+    trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
   const footer =
     !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
       <AgentMessageActions
@@ -71,13 +84,20 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      {errorText && answer.length === 0 ? (
+        // A failed turn's error is stored as message text, which a reply with parts never shows.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        <div className="tw-text-error">
+          <AgentMarkdownText text={errorText} app={app} />
+        </div>
+      ) : null}
       {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}
-      {hasRunningDuration ? (
+      {hasRunningDuration && !compactionOnly ? (
         <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
       ) : null}
-      {footer}
+      {compactionOnly ? null : footer}
     </div>
   );
 };
@@ -87,6 +107,7 @@ interface TrailContext {
   lastPart: AgentMessagePart | undefined;
   expansion: TrailExpansion;
   summaryCtx: ToolSummaryContext;
+  miyoPaths: readonly string[];
 }
 
 const LinearTrail: React.FC<{
@@ -102,6 +123,7 @@ const LinearTrail: React.FC<{
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
     expansion,
     summaryCtx,
+    miyoPaths: miyoResultPaths(parts),
   };
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
@@ -121,6 +143,10 @@ function renderNode(
 ): React.ReactNode {
   switch (node.type) {
     case "action": {
+      const miyoSearch = miyoSearchRun(node.part);
+      if (miyoSearch) {
+        return <MiyoSearchCard key={key} status={node.part.status} {...miyoSearch} />;
+      }
       const expansionId = actionExpansionId(trailId, node.part.id);
       return (
         <ActionCard
@@ -165,9 +191,18 @@ function renderNode(
       return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
     }
     case "text":
-      return <AgentMarkdownText key={key} text={node.part.text} app={ctx.app} />;
+      return (
+        <AgentMarkdownText
+          key={key}
+          text={node.part.text}
+          app={ctx.app}
+          miyoPaths={ctx.miyoPaths}
+        />
+      );
     case "plan":
       return <PlanPill key={key} entries={node.part.entries} />;
+    case "compaction":
+      return <CompactionRow key={key} part={node.part} />;
   }
 }
 

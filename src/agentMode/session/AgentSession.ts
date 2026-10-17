@@ -17,6 +17,7 @@ import {
   BackendProcess,
   BackendState,
   CopilotMode,
+  CompactionSnapshot,
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
@@ -65,14 +66,17 @@ import {
 } from "@/agentMode/session/turnFileChanges";
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
+  CONVERSATION_HISTORY_MAX_CHARS,
+} from "@/agentMode/session/conversationHistory";
+import {
   buildPriorFanoutContextBlock,
-  FANOUT_HISTORY_MAX_CHARS,
   FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
   renderFanoutComposite,
@@ -221,6 +225,7 @@ export class AgentSession {
   private lastTurnError = false;
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
+  private resendSavedHistory = false;
   private placeholderId: string | null = null;
   private turnFiles = new Map<string, TurnFileCapture>();
   private currentTurnHadRoutedToolActivity = false;
@@ -602,6 +607,10 @@ export class AgentSession {
     this.notifyMessages();
   }
 
+  resendSavedHistoryOnNextTurn(): void {
+    this.resendSavedHistory = true;
+  }
+
   getLabel(): string | null {
     return this.label;
   }
@@ -657,6 +666,15 @@ export class AgentSession {
     promptContent?: PromptContent[],
     mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+    const sendsCompact = isCompactCommand(displayText);
+    if (sendsCompact) {
+      displayText = displayText.trim();
+      context = undefined;
+      promptContent = undefined;
+      mentionedAgents = undefined;
+    }
     const status = this.getStatus();
     if (status === "starting") {
       throw new Error("Session is still starting");
@@ -703,7 +721,14 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, turnStartedAtMs, promptContent);
+    const turn = this.runTurn(
+      displayText,
+      userMessageId,
+      context,
+      turnStartedAtMs,
+      promptContent,
+      sendsCompact
+    );
     return { userMessageId, turn };
   }
 
@@ -712,7 +737,8 @@ export class AgentSession {
     userMessageId: string,
     context: MessageContext | undefined,
     turnStartedAtMs: number,
-    promptContent?: PromptContent[]
+    promptContent?: PromptContent[],
+    sendsCompact = false
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
@@ -737,9 +763,13 @@ export class AgentSession {
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
-      const isFirstTurn = !this.firstPromptSent;
+      // Project context, its updates and fanout history ride the next normal turn.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
+      const isFirstTurn = !this.firstPromptSent && !sendsCompact;
       const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
-      const projectContextUpdates = this.getProjectContextUpdatesFn?.() ?? null;
+      const projectContextUpdates = sendsCompact
+        ? null
+        : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       if (
@@ -758,7 +788,7 @@ export class AgentSession {
 
         const historyBlock = buildConversationHistoryBlock(
           this.priorDisplayMessages(userMessageId, placeholderId),
-          FANOUT_HISTORY_MAX_CHARS
+          CONVERSATION_HISTORY_MAX_CHARS
         );
         const promptBlocks = buildPromptBlocks(
           displayText,
@@ -772,7 +802,20 @@ export class AgentSession {
         return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
       }
 
-      const leadingContextBlock = buildPriorFanoutContextBlock(this.pendingFanoutContext);
+      // A reopened chat whose agent session is gone from this device sends its saved turns once.
+      // https://github.com/logancyang/obsidian-copilot/issues/3643
+      const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
+      const historyBlock = sendsSavedHistory
+        ? buildConversationHistoryBlock(
+            this.priorDisplayMessages(userMessageId, placeholderId),
+            CONVERSATION_HISTORY_MAX_CHARS
+          )
+        : null;
+      const leadingContextBlock = sendsCompact
+        ? null
+        : [historyBlock, buildPriorFanoutContextBlock(this.pendingFanoutContext)]
+            .filter(Boolean)
+            .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
@@ -826,6 +869,9 @@ export class AgentSession {
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
       }
+      if (sendsSavedHistory && resp.stopReason !== "cancelled") {
+        this.resendSavedHistory = false;
+      }
       if (isFirstTurn && promptStarted) this.firstPromptSent = true;
       if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
       if (projectContextUpdates && promptStarted) {
@@ -843,6 +889,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
+      if (placeholderId) this.store.settleOpenCompactions(placeholderId);
       if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
@@ -866,11 +913,11 @@ export class AgentSession {
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
-        this.store.markMessageError(
-          placeholderId,
-          formatPromptFailure(err),
-          Date.now() - turnStartedAtMs
-        );
+        const failure = formatPromptFailure(err);
+        // The turn's error already shows the failure, so the row must not repeat it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+        this.store.settleOpenCompactions(placeholderId, "failed");
+        this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }
       this.lastTurnError = true;
@@ -950,7 +997,7 @@ export class AgentSession {
 
   private priorDisplayMessages(
     userMessageId: string,
-    placeholderId: string
+    placeholderId: string | null
   ): readonly AgentChatMessage[] {
     return this.store
       .getDisplayMessages()
@@ -1158,6 +1205,18 @@ export class AgentSession {
     }
     this.currentUsage = usage;
     this.notifyMessages();
+  }
+
+  // Compaction reports the new context size directly, so it bypasses applyUsageUpdate's guards.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+  private applyCompactedUsage(compaction: CompactionSnapshot): boolean {
+    if (compaction.status !== "completed" || compaction.postTokens === undefined) return false;
+    this.currentUsage = {
+      usedTokens: compaction.postTokens,
+      contextWindow: this.currentUsage?.contextWindow,
+      updatedAt: Date.now(),
+    };
+    return true;
   }
 
   /**
@@ -1382,6 +1441,7 @@ export class AgentSession {
           return;
         case "tool_call":
         case "plan":
+        case "compaction":
           this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1402,7 +1462,10 @@ export class AgentSession {
     }
 
     if (update.sessionUpdate === "session_info_update") {
-      if (this.backendSummarizesTitle()) this.applyAgentLabel(update.title);
+      // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
+      if (update.title !== undefined && this.backendSummarizesTitle()) {
+        this.applyAgentLabel(update.title);
+      }
       return;
     }
     if (update.sessionUpdate === "state_changed") {
@@ -1517,6 +1580,12 @@ export class AgentSession {
         }
         return;
       }
+      case "compaction": {
+        const upserted = this.upsertCompactionPart(targetMessageId, update);
+        const metered = this.applyCompactedUsage(update);
+        if (upserted || metered) this.scheduleNotifyMessages();
+        return;
+      }
       default:
         logInfo(
           `[AgentMode] ignoring session/update kind=${(update as { sessionUpdate: string }).sessionUpdate}`
@@ -1576,9 +1645,26 @@ export class AgentSession {
         // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
         if (this.applyCurrentTodoList(update.entries)) this.notifyCurrentTodoListChanged();
         return true;
+      case "compaction": {
+        // A replayed compaction is already over, so one that never reports an end settles as cancelled rather than spinning. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
+        const settled: CompactionSnapshot =
+          update.status === "in_progress" ? { ...update, status: "cancelled" } : update;
+        if (this.upsertCompactionPart(this.historyAiBubbleId(occurredAt), settled)) {
+          this.scheduleNotifyMessages();
+        }
+        return true;
+      }
       default:
         return false;
     }
+  }
+
+  private upsertCompactionPart(messageId: string, update: CompactionSnapshot): boolean {
+    const existing = this.store
+      .getMessage(messageId)
+      ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
+    const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
+    return this.store.upsertAgentPart(messageId, compactionToPart(update, startedAtMs));
   }
 
   // A prompt's context envelope stays hidden until its wrapper is complete, so a user bubble waits for the message to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
@@ -2154,6 +2240,19 @@ function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessag
       priority: e.priority,
       status: e.status,
     })),
+  };
+}
+
+function compactionToPart(update: CompactionSnapshot, startedAtMs: number): AgentMessagePart {
+  return {
+    kind: "compaction",
+    id: update.id,
+    status: update.status,
+    trigger: update.trigger,
+    error: update.error,
+    preTokens: update.preTokens,
+    postTokens: update.postTokens,
+    startedAtMs,
   };
 }
 

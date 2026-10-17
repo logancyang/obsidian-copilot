@@ -226,6 +226,7 @@ function makeMockSession(overrides: {
       hasUserVisibleMessages = messages.length > 0;
     }),
     seedSessionUsage: jest.fn(),
+    resendSavedHistoryOnNextTurn: jest.fn(),
     offerFeedback: jest.fn(() => "shown"),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
@@ -4438,6 +4439,38 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/3643 opens a fresh session that sends the note's turns to the agent when the backend's store does not know the saved session", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new Error("Invalid params: session not found: native-1");
+          }),
+        });
+
+        const session = await openSavedChat(replay);
+
+        expect(session.getBackendSessionId()).not.toBe("native-1");
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "saved question"],
+          [AI_SENDER, "saved answer"],
+        ]);
+        expect(session.resendSavedHistoryOnNextTurn).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3643 does not resend the note's turns when the saved session reattaches", async () => {
+        const resend = jest.spyOn(AgentSession.prototype, "resendSavedHistoryOnNextTurn");
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/load");
+          }),
+        });
+
+        const session = await openSavedChat(replay);
+
+        expect(session.getBackendSessionId()).toBe("native-1");
+        expect(resend).not.toHaveBeenCalled();
+        resend.mockRestore();
+      });
+
       it("reattaches a project chat to its project scope", async () => {
         seedProjects("proj-ctx");
         const replay = buildReplayingBackend();
@@ -4457,6 +4490,36 @@ describe("AgentSessionManager", () => {
         expect(replay.backend.loadSession).toHaveBeenCalledWith(
           expect.objectContaining({ sessionId: "native-1", projectId: "proj-ctx" })
         );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 keeps the replayed chat when the note also holds a /compact turn that the agent's replay omits", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit({
+              sessionUpdate: "tool_call",
+              toolCallId: "tool-read",
+              title: "Read note.md",
+              kind: "read",
+              status: "completed",
+            });
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+          },
+        });
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "/compact", isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
+        ]);
+        expect(session.store.getDisplayMessages()[1].parts?.map((p) => p.kind)).toEqual([
+          "tool_call",
+          "text",
+        ]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the reattached session replays nothing", async () => {
@@ -4501,6 +4564,33 @@ describe("AgentSessionManager", () => {
           [USER_SENDER, "ask both"],
           [AI_SENDER, fanoutBody],
         ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the replayed chat and its compaction row when the note also holds the /compact turn the replay never repeats", async () => {
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
+            emit({ sessionUpdate: "compaction", id: "c1", status: "completed", trigger: "manual" });
+          },
+        });
+
+        const session = await openSavedChat(replay, [
+          ...savedTurn,
+          { id: "s3", sender: USER_SENDER, message: "/compact", isVisible: true, timestamp: null },
+          { id: "s4", sender: AI_SENDER, message: "", isVisible: true, timestamp: null },
+        ]);
+
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "replayed question"],
+          [AI_SENDER, "replayed answer"],
+        ]);
+        expect(
+          session.store
+            .getDisplayMessages()
+            .flatMap((m) => m.parts ?? [])
+            .filter((p) => p.kind === "compaction")
+        ).toHaveLength(1);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the note's messages when the note holds a refused turn that never reached the agent", async () => {

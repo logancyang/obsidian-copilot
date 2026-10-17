@@ -35,7 +35,13 @@ import { FileSystemAdapter, Notice, type App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import type { CustomModel } from "@/aiParams";
-import { KeychainService, isSecretKey } from "./keychainService";
+import type { Provider } from "@/modelManagement";
+import {
+  KeychainService,
+  isCopilotOwnedSecret,
+  isSecretKey,
+  providerKeychainName,
+} from "./keychainService";
 
 function makeSettings(overrides: Partial<CopilotSettings> = {}): CopilotSettings {
   return {
@@ -62,6 +68,36 @@ function makeSecretStorage() {
   };
 }
 
+function makeMapStorage(entries: Record<string, string>) {
+  const secrets = new Map(Object.entries(entries));
+  return {
+    secrets,
+    getSecret: (id: string) => (secrets.has(id) ? secrets.get(id)! : null),
+    setSecret: (id: string, value: string) => {
+      secrets.set(id, value);
+    },
+    deleteSecret: (id: string) => {
+      secrets.delete(id);
+    },
+    listSecrets: () => Array.from(secrets.keys()),
+  };
+}
+
+function makeProvider(overrides: Partial<Provider> = {}): Provider {
+  return {
+    providerId: "row-1",
+    providerType: "anthropic",
+    displayName: "Anthropic",
+    origin: { kind: "byok", catalogProviderId: "anthropic" },
+    addedAt: 0,
+    apiKeyKeychainId: null,
+    ...overrides,
+  };
+}
+
+const VAULT_ID = "1234abcd";
+const OTHER_VAULT_ID = "0a1b2c3d";
+
 function makeAdapter(basePath: string) {
   const adapter = new FileSystemAdapter();
   (adapter as unknown as { _basePath: string })._basePath = basePath;
@@ -71,7 +107,7 @@ function makeAdapter(basePath: string) {
 function makeApp(options?: {
   basePath?: string;
   adapter?: unknown;
-  secretStorage?: ReturnType<typeof makeSecretStorage> | null;
+  secretStorage?: object | null;
 }) {
   const basePath = options?.basePath ?? "/Users/test/MyVault";
   const hasExplicitStorage = options !== undefined && "secretStorage" in options;
@@ -102,7 +138,188 @@ describe("keychainService", () => {
     });
   });
 
+  describe("providerKeychainName()", () => {
+    it("names a catalog provider after its catalog id, so every device mints the same name for the vault", () => {
+      const provider = makeProvider({ displayName: "My Claude" });
+
+      expect(providerKeychainName(VAULT_ID, provider, { [provider.providerId]: provider })).toBe(
+        `copilot-v${VAULT_ID}-provider-anthropic-api-key`
+      );
+    });
+
+    it("gives the same provider a different name in another vault, so vaults sharing a phone's Keychain keep separate keys", () => {
+      const provider = makeProvider();
+
+      expect(providerKeychainName(OTHER_VAULT_ID, provider, {})).not.toBe(
+        providerKeychainName(VAULT_ID, provider, {})
+      );
+    });
+
+    it("names a custom provider after its display name", () => {
+      const provider = makeProvider({
+        providerType: "openai-compatible",
+        displayName: "My Local LLM",
+        origin: { kind: "byok" },
+      });
+
+      expect(providerKeychainName(VAULT_ID, provider, {})).toBe(
+        `copilot-v${VAULT_ID}-provider-my-local-llm-api-key`
+      );
+    });
+
+    it("names the Copilot Plus provider after plus", () => {
+      const provider = makeProvider({ displayName: "Copilot", origin: { kind: "copilot-plus" } });
+
+      expect(providerKeychainName(VAULT_ID, provider, {})).toBe(
+        `copilot-v${VAULT_ID}-provider-plus-api-key`
+      );
+    });
+
+    it("suffixes a name another provider holds but not the provider's own current name", () => {
+      const name = `copilot-v${VAULT_ID}-provider-anthropic-api-key`;
+      const holder = makeProvider({ providerId: "holder", apiKeyKeychainId: name });
+      const candidate = makeProvider({ providerId: "candidate" });
+
+      expect(providerKeychainName(VAULT_ID, candidate, { holder, candidate })).toBe(`${name}-2`);
+      expect(providerKeychainName(VAULT_ID, holder, { holder, candidate })).toBe(name);
+    });
+
+    it("keeps a collision suffix of any width within Obsidian's 64-character secret id limit", () => {
+      const providers: Record<string, Provider> = {};
+      for (let i = 0; i < 100; i++) {
+        const row = makeProvider({
+          providerId: `row-${i}`,
+          displayName: "A Very Long Self Hosted Gateway Name That Goes On And On Forever",
+          origin: { kind: "byok" },
+        });
+        row.apiKeyKeychainId = providerKeychainName(VAULT_ID, row, providers);
+        providers[row.providerId] = row;
+      }
+
+      const names = Object.values(providers).map((row) => row.apiKeyKeychainId!);
+
+      expect(new Set(names).size).toBe(100);
+      expect(names[0]).toMatch(
+        /^copilot-v1234abcd-provider-a-very-long-[a-z0-9-]*[a-z0-9]-api-key$/
+      );
+      expect(names[99]).toMatch(/-api-key-100$/);
+      expect(Math.max(...names.map((name) => name.length))).toBeLessThanOrEqual(64);
+    });
+  });
+
+  describe("isCopilotOwnedSecret()", () => {
+    it("treats a copilot- name as Copilot-owned", () => {
+      expect(isCopilotOwnedSecret(`copilot-v${VAULT_ID}-provider-anthropic-api-key`)).toBe(true);
+    });
+
+    it("treats a secret another plugin named as not Copilot-owned", () => {
+      expect(isCopilotOwnedSecret("anthropic-api-key")).toBe(false);
+    });
+  });
+
   describe("KeychainService", () => {
+    describe("migrateProviderNames()", () => {
+      function migrate(entries: Record<string, string>, settings: CopilotSettings) {
+        const storage = makeMapStorage(entries);
+        const service = KeychainService.getInstance(makeApp({ secretStorage: storage }));
+        service.setVaultId(VAULT_ID);
+        return { storage, service, migrated: service.migrateProviderNames(settings) };
+      }
+
+      const legacyPointer = `copilot-v${VAULT_ID}-provider-row-1`;
+      const stableName = `copilot-v${VAULT_ID}-provider-anthropic-api-key`;
+
+      it("moves a key from its random-id name to its stable name and rewrites the pointer (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const { storage, migrated } = migrate(
+          { [legacyPointer]: "sk-ant" },
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
+        );
+
+        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe(stableName);
+        expect(storage.secrets.get(stableName)).toBe("sk-ant");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
+      });
+
+      it("rewrites a legacy pointer this device never held, so a re-entered key lands on the stable name", () => {
+        const { storage, migrated } = migrate(
+          {},
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
+        );
+
+        expect(migrated.providers["row-1"].apiKeyKeychainId).toBe(stableName);
+        expect(storage.secrets.has(stableName)).toBe(false);
+      });
+
+      it("fills a stable pointer synced from another device with this device's legacy key for the same provider (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const settings = makeSettings({
+          providers: { "row-1": makeProvider({ apiKeyKeychainId: stableName }) },
+        });
+
+        const { storage, migrated } = migrate({ [legacyPointer]: "sk-ant-local" }, settings);
+
+        expect(storage.secrets.get(stableName)).toBe("sk-ant-local");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
+        expect(migrated).toBe(settings);
+      });
+
+      it("leaves an existing stable entry untouched, so a key changed after migration is not reverted", () => {
+        const { storage } = migrate(
+          { [stableName]: "sk-new", [legacyPointer]: "sk-old" },
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
+        );
+
+        expect(storage.secrets.get(stableName)).toBe("sk-new");
+        expect(storage.secrets.has(legacyPointer)).toBe(false);
+      });
+
+      it("does not restore a key deleted from its stable name after migration (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const { storage, service, migrated } = migrate(
+          { [legacyPointer]: "sk-ant" },
+          makeSettings({
+            providers: { "row-1": makeProvider({ apiKeyKeychainId: legacyPointer }) },
+          })
+        );
+
+        storage.deleteSecret(stableName);
+        service.migrateProviderNames(migrated);
+
+        expect(storage.secrets.size).toBe(0);
+      });
+
+      it("leaves another vault's provider entries alone on a Keychain shared between vaults", () => {
+        const otherVaultEntry = `copilot-v${OTHER_VAULT_ID}-provider-row-1`;
+
+        const { storage } = migrate(
+          { [otherVaultEntry]: "sk-other-vault" },
+          makeSettings({ providers: { "row-1": makeProvider({ apiKeyKeychainId: stableName }) } })
+        );
+
+        expect(storage.secrets.get(otherVaultEntry)).toBe("sk-other-vault");
+        expect(storage.secrets.has(stableName)).toBe(false);
+      });
+
+      it("leaves a pointer to another plugin's secret and this vault's legacy entry alone (https://github.com/logancyang/obsidian-copilot/issues/3618)", () => {
+        const settings = makeSettings({
+          providers: { "row-1": makeProvider({ apiKeyKeychainId: "anthropic-api-key" }) },
+        });
+
+        const { storage, migrated } = migrate(
+          { "anthropic-api-key": "sk-plugin", [legacyPointer]: "sk-legacy" },
+          settings
+        );
+
+        expect(migrated).toBe(settings);
+        expect(storage.secrets.get("anthropic-api-key")).toBe("sk-plugin");
+        expect(storage.secrets.get(legacyPointer)).toBe("sk-legacy");
+      });
+    });
+
     describe("getVaultId()", () => {
       it("derives an 8-character hex ID from the desktop vault path", () => {
         const service = KeychainService.getInstance(makeApp({ basePath: "/Users/test/MyVault" }));

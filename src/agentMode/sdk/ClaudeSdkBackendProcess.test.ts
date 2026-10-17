@@ -588,6 +588,37 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it.each([
+        ["/compact", "manual"],
+        ["/compact keep the file names", "manual"],
+        ["write a poem", "auto"],
+      ])(
+        "labels the compaction a %j turn reports as %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/635)",
+        async (text, trigger) => {
+          queryMock.mockImplementation(() =>
+            makeQuery([
+              {
+                type: "system",
+                subtype: "status",
+                status: "compacting",
+                uuid: "compaction-1",
+                session_id: "irrelevant",
+              } as unknown as SDKMessage,
+              resultMessage(),
+            ])
+          );
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          const events = registerCollector(proc, sessionId);
+
+          await proc.prompt({ sessionId, prompt: [{ type: "text", text }] });
+
+          expect(events.map((e) => e.update)).toEqual([
+            { sessionUpdate: "compaction", id: "compaction-1", status: "in_progress", trigger },
+          ]);
+        }
+      );
+
       it("starts the first query with the claude_code preset, the tool deny list, the foreground hook, and a fresh session id", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();
@@ -1187,7 +1218,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("loadSession()", () => {
-      const ISSUE_643 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/643";
       const cwd = "/vault";
       const sessionId = "11111111-2222-3333-4444-555555555555";
       let configDir: string;
@@ -1336,15 +1366,18 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
-      it(`reopens the session with no replayed history when its transcript is missing (${ISSUE_643})`, async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3643 rejects, and sends no later prompt as a resume, when the session's transcript is not on this machine", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProcWithConfigDir();
         const events = registerCollector(proc, sessionId);
 
-        const loaded = await proc.loadSession({ sessionId, cwd });
+        await expect(proc.loadSession({ sessionId, cwd })).rejects.toThrow(sessionId);
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] })
+        ).rejects.toThrow();
 
-        expect(loaded.sessionId).toBe(sessionId);
-        expect(loaded.state.model?.current.baseModelId).toBe("claude-fake-pro");
         expect(events).toEqual([]);
+        expect(getPromptQueryCalls()).toEqual([]);
       });
     });
 

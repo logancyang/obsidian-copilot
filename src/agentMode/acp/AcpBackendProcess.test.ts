@@ -384,6 +384,16 @@ describe("AcpBackendProcess", () => {
         );
       });
 
+      it("advertises compaction updates so an agent reports compaction as status instead of a tool card (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+        await startBackend();
+
+        expect(mockInitializeRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clientCapabilities: expect.objectContaining({ session: { compaction: {} } }),
+          })
+        );
+      });
+
       it("sends the backend's client capability metadata so it can opt into agent extensions https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),
@@ -1319,6 +1329,26 @@ describe("AcpBackendProcess", () => {
           "agent_message_chunk",
         ]);
       });
+
+      it("labels a replayed compaction that carries no trigger as manual, the label that does not claim it was automatic (https://github.com/Brevilabs/obsidian-copilot-private/issues/638)", async () => {
+        const backend = await startLoadCapableBackend();
+        const handler = jest.fn();
+        backend.registerSessionHandler("ses_load", handler);
+        mockLoadSession.mockImplementationOnce(async () => {
+          replayer(backend)({
+            sessionUpdate: "compaction_update",
+            compactionId: "past",
+            status: "completed",
+          });
+          return {};
+        });
+
+        await backend.loadSession({ sessionId: "ses_load", cwd: "/vault" });
+
+        expect(handler.mock.calls.map(([e]) => [e.update.id, e.update.trigger])).toEqual([
+          ["past", "manual"],
+        ]);
+      });
     });
 
     describe("prompt()", () => {
@@ -1364,6 +1394,114 @@ describe("AcpBackendProcess", () => {
         expect(result).toEqual({
           stopReason: "end_turn",
           turnDiff: { root: "/repo", unifiedDiff: "diff --git a/x b/x\n" },
+        });
+      });
+
+      describe("compaction trigger", () => {
+        async function compactionTriggersDuring(
+          promptText: string,
+          compactionIds: string[]
+        ): Promise<string[]> {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockImplementationOnce(async () => {
+            for (const compactionId of compactionIds) {
+              await client.sessionUpdate({
+                sessionId: "s1",
+                update: { sessionUpdate: "compaction_update", compactionId, status: "in_progress" },
+              } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+            }
+            return { stopReason: "end_turn" };
+          });
+
+          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: promptText }] });
+
+          return handler.mock.calls
+            .map(([e]) => e.update)
+            .filter((u) => u.sessionUpdate === "compaction")
+            .map((u) => u.trigger);
+        }
+
+        it("labels a compaction manual when the turn is a bare /compact (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+          await expect(compactionTriggersDuring("/compact", ["c1"])).resolves.toEqual(["manual"]);
+        });
+
+        it("labels a compaction auto when the turn is an ordinary prompt because codex sends no trigger (https://github.com/Brevilabs/obsidian-copilot-private/issues/636)", async () => {
+          await expect(compactionTriggersDuring("summarize my note", ["c1"])).resolves.toEqual([
+            "auto",
+          ]);
+        });
+
+        it("labels a compaction auto after a manual /compact turn has ended", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockResolvedValueOnce({ stopReason: "end_turn" });
+          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] });
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
+        });
+
+        it("labels a compaction auto after a /compact prompt is rejected because the subprocess is gone", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          (backend as unknown as { connection: null }).connection = null;
+          await expect(
+            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+          ).rejects.toThrow();
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
+        });
+
+        it("labels a compaction auto after a manual /compact turn fails", async () => {
+          const backend = await makeBackend();
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          const client = getVaultClient(backend);
+          promptMock(backend).mockRejectedValueOnce(new Error("agent exited"));
+          await expect(
+            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+          ).rejects.toThrow();
+
+          await client.sessionUpdate({
+            sessionId: "s1",
+            update: {
+              sessionUpdate: "compaction_update",
+              compactionId: "c2",
+              status: "in_progress",
+            },
+          } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+
+          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+            expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
+          ]);
         });
       });
 
