@@ -117,6 +117,35 @@ const MIYO_SEARCH: AgentMessagePart[] = [
   say("You wrote that a monitor arm and a sit-stand rhythm fixed it. See [[Standing desk setup]]."),
 ];
 
+const MIYO_LINK_NOTES: Record<string, string> = {
+  "Standing desk setup": "notes/Standing desk setup.md",
+  "Untitled 3": "notes/Untitled 3.md",
+  "Reading list": "notes/Reading list.md",
+  "Trip planning": "notes/Trip planning.md",
+};
+
+const MIYO_LINKS: AgentMessagePart[] = [
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    input: { command: MIYO_SEARCH_COMMAND },
+    output: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          results: [
+            { path: "step-2/notes/Standing desk setup.md" },
+            { path: "step-2/notes/Untitled 3.md" },
+          ],
+        }),
+      },
+    ],
+  }),
+  tool("grep-1", "Grep", { input: { pattern: "ZX-4471" } }),
+  say(
+    "Miyo found [[Standing desk setup]] (see [[Standing desk setup#Fixes]]) and your scratch note, [[Untitled 3|desk scratchpad]]. A keyword search added [[Reading list]] and [Trip planning](notes/Trip%20planning.md)."
+  ),
+];
+
 const MIYO_SEARCH_RUNNING: AgentMessagePart[] = [
   tool("miyo-run", "Bash", {
     toolKind: "execute",
@@ -141,8 +170,22 @@ const TrailDemo: React.FC<{
   isStreaming?: boolean;
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
-}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges }) => {
-  const app = useApp();
+  linkNotes?: Record<string, string>;
+}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges, linkNotes }) => {
+  const contextApp = useApp();
+  const app = linkNotes
+    ? Object.create(contextApp, {
+        vault: { value: Object.create(contextApp.vault, { getName: { value: () => "step-2" } }) },
+        metadataCache: {
+          value: {
+            getFirstLinkpathDest: (linkpath: string) => {
+              const path = linkNotes[linkpath] ?? linkpath;
+              return Object.values(linkNotes).includes(path) ? { path } : null;
+            },
+          },
+        },
+      })
+    : contextApp;
   return (
     <TooltipProvider>
       <AgentTrail
@@ -184,6 +227,10 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
 
 export const MiyoSearch: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH} />,
+};
+
+export const MiyoLinkBadges: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_LINKS} linkNotes={MIYO_LINK_NOTES} />,
 };
 
 export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {

@@ -24,6 +24,8 @@ With **Semantic search for agents** on, agents search your notes with Miyo and f
 
 Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found.
 
+Links in the answer to notes Miyo found get a small Miyo logo. Codex answers don't show it.
+
 ## Connect Miyo
 
 Open **Settings → Copilot → Miyo** and choose one connection:

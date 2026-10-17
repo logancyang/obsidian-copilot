@@ -16,7 +16,11 @@ import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
-import { miyoSearchRun, type ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import {
+  miyoResultPaths,
+  miyoSearchRun,
+  type ToolSummaryContext,
+} from "@/agentMode/ui/toolSummaries";
 import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
@@ -103,6 +107,7 @@ interface TrailContext {
   lastPart: AgentMessagePart | undefined;
   expansion: TrailExpansion;
   summaryCtx: ToolSummaryContext;
+  miyoPaths: readonly string[];
 }
 
 const LinearTrail: React.FC<{
@@ -118,6 +123,7 @@ const LinearTrail: React.FC<{
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
     expansion,
     summaryCtx,
+    miyoPaths: miyoResultPaths(parts),
   };
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
@@ -185,7 +191,14 @@ function renderNode(
       return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
     }
     case "text":
-      return <AgentMarkdownText key={key} text={node.part.text} app={ctx.app} />;
+      return (
+        <AgentMarkdownText
+          key={key}
+          text={node.part.text}
+          app={ctx.app}
+          miyoPaths={ctx.miyoPaths}
+        />
+      );
     case "plan":
       return <PlanPill key={key} entries={node.part.entries} />;
     case "compaction":

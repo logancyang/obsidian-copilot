@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import type { AgentMessagePart } from "@/agentMode/session/types";
 import { formatDuration } from "@/lib/duration";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
@@ -445,9 +446,12 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   return result;
 }
 
+export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
+
 export interface MiyoSearchRun {
   query: string | null;
   noteCount: number | null;
+  notePaths: readonly string[];
 }
 
 const MIYO_SEARCH_SCRIPTS: ReadonlySet<string> = new Set(
@@ -488,12 +492,13 @@ function miyoSearchQuery(command: string): string | null | undefined {
   return undefined;
 }
 
-function miyoNoteCount(part: ToolCallPart): number | null {
+function miyoNotePaths(part: ToolCallPart): string[] | null {
   const stdout = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
   try {
     const results = (JSON.parse(stdout) as { results?: unknown }).results;
     if (!Array.isArray(results)) return null;
-    return new Set(results.map((r: { path?: unknown } | null, i) => r?.path ?? i)).size;
+    const paths = results.map((r: { path?: unknown } | null) => r?.path);
+    return [...new Set(paths.filter((path): path is string => typeof path === "string"))];
   } catch {
     return null;
   }
@@ -503,7 +508,16 @@ export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
   const command = (part.input as { command?: unknown } | null | undefined)?.command;
   if (typeof command !== "string") return null;
   const query = miyoSearchQuery(command);
-  return query === undefined ? null : { query, noteCount: miyoNoteCount(part) };
+  if (query === undefined) return null;
+  const paths = miyoNotePaths(part);
+  return { query, noteCount: paths?.length ?? null, notePaths: paths ?? EMPTY_MIYO_PATHS };
+}
+
+export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly string[] {
+  const paths = parts.flatMap((part) =>
+    part.kind === "tool_call" ? (miyoSearchRun(part)?.notePaths ?? []) : []
+  );
+  return paths.length > 0 ? paths : EMPTY_MIYO_PATHS;
 }
 
 export function isMiyoSkillLoad(part: ToolCallPart): boolean {
