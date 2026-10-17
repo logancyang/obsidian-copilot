@@ -431,7 +431,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 8;
+const OPENARTIFACTS_PUBLISH_VERSION = 9;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -601,7 +601,7 @@ report with this line, using the \`manageUrl\` the wrapper printed:
 
 Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
 
-If a create receipt has a \`guidance\` object, end the report with one line, whatever else it says: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
+If a create receipt has a \`guidance\` object, add one more line as the very last line of the report, after the "Manage who can open it" line on a private publish: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
 
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
 it, and the failed address with the wrapper's message.
@@ -881,8 +881,9 @@ case "$STATUS" in
       printf '\n'
     fi
     # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
+    # touch, not a redirection: a failed redirection on a special built-in exits a POSIX shell.
     if [ -n "$OFFER_ASKED" ] && grep -q '"guidance"' "$RESPONSE"; then
-      mkdir -p "$(dirname "$OFFER_MARKER")" && : > "$OFFER_MARKER"
+      { mkdir -p "$(dirname "$OFFER_MARKER")" && touch "$OFFER_MARKER"; } 2>/dev/null || :
     fi
     exit 0
     ;;
@@ -1032,8 +1033,8 @@ try {
     # The receipt is already printed, so a marker that cannot be written costs only a repeat offer.
     if ($OFFER_ASKED -and ([string]$response.Content) -match '"guidance"') {
       try {
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) | Out-Null
-        New-Item -ItemType File -Force -Path $OFFER_MARKER | Out-Null
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) -ErrorAction Stop | Out-Null
+        New-Item -ItemType File -Force -Path $OFFER_MARKER -ErrorAction Stop | Out-Null
       } catch {}
     }
   }

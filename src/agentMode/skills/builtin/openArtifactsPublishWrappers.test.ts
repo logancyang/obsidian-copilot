@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -245,6 +245,23 @@ describe("openArtifactsPublishWrappers", () => {
       expect(result.status).toBe(0);
       expect(requests[0].client).toBeUndefined();
       expect(existsSync(markerPath())).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 still succeeds quietly when the marker cannot be written", async () => {
+      const folder = path.join(root, ".openartifacts");
+      mkdirSync(folder);
+      chmodSync(folder, 0o555);
+      canned = { status: 201, body: GUIDANCE_BODY };
+      try {
+        const result = await run(["publish", htmlFile, "Note"]);
+
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout).guidance).toBeDefined();
+        expect(result.stderr).toBe("");
+        expect(existsSync(markerPath())).toBe(false);
+      } finally {
+        chmodSync(folder, 0o755);
+      }
     });
 
     it("https://github.com/Brevilabs/OpenArtifacts/issues/94 never asks, and still publishes, without a workspace root", async () => {
