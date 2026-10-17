@@ -35,6 +35,10 @@ function logSdkFrame(args: LogSdkFrameArgs, sink: SdkFrameSinkLike = frameSink):
     method: args.method,
     id,
     payload: args.payload,
+    sessionId: id,
+    ...(args.dir === "→" && (args.kind ?? "request") === "request" && args.method === "prompt"
+      ? { startsConversation: true as const }
+      : {}),
   });
 }
 

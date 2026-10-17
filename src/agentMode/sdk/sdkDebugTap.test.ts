@@ -2,6 +2,8 @@ import {
   describeSdkMessage,
   logSdkInbound,
   logSdkOutbound,
+  logSdkOutboundResult,
+  logSdkError,
   SDK_FRAME_TAG,
   type SdkFrameSinkLike,
 } from "./sdkDebugTap";
@@ -32,10 +34,12 @@ beforeEach(() => {
 describe("sdkDebugTap", () => {
   describe("logSdkOutbound()", () => {
     it("logs one claude-sdk tagged line with the method, session id, and JSON payload", () => {
-      const { sink } = fakeSink();
+      const { sink, records } = fakeSink();
+      debugFullFrames = true;
 
       logSdkOutbound("prompt", { hi: "there" }, "session-1", sink);
 
+      expect(records[0]).toMatchObject({ sessionId: "session-1", startsConversation: true });
       expect(mockLogInfo).toHaveBeenCalledTimes(1);
       const line = mockLogInfo.mock.calls[0][0] as string;
       expect(line).toContain(`[ACP →][${SDK_FRAME_TAG}]`);
@@ -87,6 +91,7 @@ describe("sdkDebugTap", () => {
         kind: "notif",
         method: "stream_event:content_block_delta",
         id: "s",
+        sessionId: "s",
         payload: { x: 1 },
       });
     });
@@ -105,6 +110,30 @@ describe("sdkDebugTap", () => {
       logSdkInbound("acp_notify:plan", {}, null, sink);
 
       expect(mockLogInfo.mock.calls[0][0]).toContain("(notif)");
+    });
+  });
+
+  describe("logSdkOutboundResult()", () => {
+    it("preserves the prompt result and session without making it conversation-eligible", () => {
+      const { sink, records } = fakeSink();
+      debugFullFrames = true;
+      logSdkOutboundResult("prompt", {}, "session-1", sink);
+      expect(records[0]).toMatchObject({ kind: "result", sessionId: "session-1", payload: {} });
+      expect(records[0]).not.toHaveProperty("startsConversation");
+    });
+  });
+
+  describe("logSdkError()", () => {
+    it("preserves a prompt error and session without making it conversation-eligible", () => {
+      const { sink, records } = fakeSink();
+      debugFullFrames = true;
+      logSdkError("→", "prompt", { message: "failed" }, "session-1", sink);
+      expect(records[0]).toMatchObject({
+        kind: "error",
+        sessionId: "session-1",
+        payload: { message: "failed" },
+      });
+      expect(records[0]).not.toHaveProperty("startsConversation");
     });
   });
 

@@ -18,7 +18,6 @@ import type { ReportInput } from "@/utils/issueReport";
 import { ReportUploadError, type ReportUploader } from "@/utils/reportUpload";
 import { unzipSync } from "fflate";
 import { Modal, Notice, type App, type PluginManifest } from "obsidian";
-import nodeOs from "node:os";
 import nodePath from "node:path";
 
 const realFs = jest.requireActual<typeof import("node:fs/promises")>("node:fs/promises");
@@ -47,11 +46,11 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-const getValidatedPath = jest.fn<Promise<string | null>, []>();
+const readConversations = jest.fn<Promise<string | null>, []>();
 const exportLogText = jest.fn<string, []>();
 
 jest.mock("@/agentMode/session/debugSink", () => ({
-  frameSink: { getValidatedPath: () => getValidatedPath() },
+  frameSink: { readConversations: () => readConversations() },
 }));
 
 jest.mock("@/logFileManager", () => ({
@@ -120,8 +119,8 @@ beforeEach(() => {
   buildReportBundle.mockImplementation(realIssueReport.buildReportBundle);
   captureWindowBehindDialogs.mockReset();
   captureWindowBehindDialogs.mockResolvedValue(null);
-  getValidatedPath.mockReset();
-  getValidatedPath.mockResolvedValue(null);
+  readConversations.mockReset();
+  readConversations.mockResolvedValue(null);
   exportLogText.mockReset();
   exportLogText.mockReturnValue("");
 });
@@ -480,13 +479,10 @@ describe("ReportIssueModal", () => {
       });
 
       it("packs the activity log and the Copilot log it was asked for into the zip (https://github.com/Brevilabs/obsidian-copilot-private/issues/202)", async () => {
-        const frameDir = await realFs.mkdtemp(nodePath.join(nodeOs.tmpdir(), "acp-frames-"));
-        created.push(frameDir);
-        const framePath = nodePath.join(frameDir, "acp-frames.ndjson");
-        const frames = '{"dir":"out","method":"session/prompt"}\n';
+        const frames =
+          '{"frameSink":"conversation","file":"background.ndjson"}\n{"method":"startup"}\n';
         const chatLog = "2026-06-15 10:15:00 INFO chain ran\n";
-        await realFs.writeFile(framePath, frames);
-        getValidatedPath.mockResolvedValue(framePath);
+        readConversations.mockResolvedValue(frames);
         exportLogText.mockReturnValue(chatLog);
 
         const report = await prepare(new Set(["activityLog", "chatLog"]));
@@ -494,6 +490,10 @@ describe("ReportIssueModal", () => {
         const entries = unzipSync(new Uint8Array(await realFs.readFile(report.zipPath)));
         const entryText = (name: string) => new TextDecoder().decode(entries[name]);
         expect(entryText("acp-frames.ndjson.txt")).toBe(frames);
+        expect(bundleInput().logs.find((log) => log.id === "activityLog")).toMatchObject({
+          preserveConversations: true,
+          text: frames,
+        });
         expect(entryText("copilot-log.md")).toBe(chatLog);
       });
 
@@ -516,11 +516,11 @@ describe("ReportIssueModal", () => {
           setSettings({ agentMode });
         }
 
-        expect(getValidatedPath).not.toHaveBeenCalled();
+        expect(readConversations).not.toHaveBeenCalled();
         const [request] = bundleInput().logs;
         expect(request.id).toBe("activityLog");
         expect(request.path).toBeUndefined();
-        expect(request.unavailableReason).toContain("turned off");
+        expect(request.unavailableReason).toBe("The Agent Mode activity log is turned off.");
       });
     });
 

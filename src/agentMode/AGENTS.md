@@ -123,47 +123,17 @@ descriptor will keep growing; that's by design.
 
 ### Inspect full Agent Mode frames
 
-The default debug log truncates each frame's payload to 400 chars. For
-diagnostic frame logs with larger payload summaries, turn on
-**Settings → Advanced → Log Full Agent Mode Frames**.
+The **Agent Mode activity log** is on by default. Find it under **Settings → Copilot → Advanced → Debugging & support**. It stores full diagnostic payloads outside the vault, under the OS temporary directory, in per-session `session-*.ndjson` files and a shared `background.ndjson` file.
 
-When enabled, every parsed frame is appended as one NDJSON line outside the
-vault, under the OS temp directory:
+Each record keeps raw request, notification, result, error, or unparsed data. `sessionId` associates frames when known; `startsConversation` marks only an outgoing user prompt. A session file begins on the first prompt, so empty chats and model-catalog refreshes do not claim a slot. Up to five most recently active prompted sessions are retained alongside startup/background evidence. No guarantee is made that middle frames or every model/mode change will survive.
 
-```text
-<tmp>/obsidian-copilot/acp-frames/<vault-hash>/acp-frames.ndjson
-```
+Each managed file is capped at 4 MiB and compacts to 3 MiB, retaining opening and newest complete frames with omission markers. Legacy `acp-frames.ndjson` and `acp-frames.old.ndjson` files are preserved and permission-narrowed. Before any new prompted session exists, a report may include the old current log; the rotated log is available locally through Open.
 
-Each line is a `FrameRecord` (`src/agentMode/session/debugSink.ts`):
-
-```ts
-{ ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",
-  method, id, payload }
-```
-
-`dir` is from the plugin's perspective: `→` = sent to the agent,
-`←` = received from the agent. `tag` is the backend id (e.g. `claude-sdk`,
-`opencode`, `codex`). The ACP runtime (`acp/debugTap`) and the Claude SDK
-adapter (`sdk/sdkDebugTap`) both feed the shared sink, so JSON-RPC and
-SDK turns appear in the same file.
-
-Useful queries:
+Use **Open** to open the folder. To inspect a log, choose a file inside it:
 
 ```bash
-LOG="<path shown in Settings → Advanced → Agent Mode Frame Log>"
-
-# count frames by method
+LOG="<path to a file inside the folder opened by Settings → Copilot → Advanced → Debugging & support → Agent Mode activity log>"
 jq -r .method "$LOG" | sort | uniq -c | sort -rn
-
-# inspect every session/update payload
-jq -c 'select(.method=="session/update") | .payload' "$LOG"
-
-# only frames for one backend
-jq -c 'select(.tag=="claude-sdk")' "$LOG"
 ```
 
-The file is append-only and bounded. Oversized individual frames are replaced
-with a `__truncated` summary, and at 50 MB the file rotates to
-`acp-frames.old.ndjson` (overwriting any prior `.old`) in the same temp
-folder. Use the **Open** / **Clear** buttons in the same settings section, or
-delete the files directly. Disable the toggle when not actively debugging.
+**Clear** removes only managed diagnostic files and those two exact legacy files, not chats, notes, unrelated files, or the folder itself. Turning logging off stops capture and excludes the log from reports with an explanation; it does not erase existing files.

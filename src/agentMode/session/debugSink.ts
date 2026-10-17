@@ -1,5 +1,8 @@
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { byteLength } from "@/utils/logTail";
+import { fitConversationFrames } from "@/utils/frameLogBudget";
+import { MAX_REDACTABLE_LOG_BYTES } from "@/utils/issueReport";
 
 export interface FrameRecord {
   ts: string;
@@ -9,6 +12,8 @@ export interface FrameRecord {
   method: string;
   id: string | null;
   payload: unknown;
+  sessionId?: string | null;
+  startsConversation?: true;
 }
 
 const LOG_FILE_NAME = "acp-frames.ndjson";
@@ -20,11 +25,15 @@ const LOG_DIR_PREFIX = ["obsidian-copilot", "acp-frames"] as const;
 // https://github.com/logancyang/obsidian-copilot-preview/issues/250
 const LOG_DIR_MODE = 0o700;
 const LOG_FILE_MODE = 0o600;
-const ROTATE_BYTES = 50 * 1024 * 1024;
+const SESSION_FILE_PREFIX = "session-";
+const FILE_SUFFIX = ".ndjson";
+const BACKGROUND_FILE_NAME = "background.ndjson";
+const MAX_CONVERSATIONS = 5;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const RETAINED_FILE_BYTES = 3 * 1024 * 1024;
 const MAX_LINE_BYTES = 64 * 1024;
 const MAX_QUEUE_FRAMES = 32;
 const MAX_QUEUE_BYTES = 8 * 1024 * 1024;
-const ROTATE_CHECK_EVERY = 25;
 const MAX_PAYLOAD_CHARS = 400;
 
 export interface FrameLogPaths {
@@ -56,8 +65,9 @@ export interface NodeRuntime {
     opts: { encoding: "utf8"; mode: number }
   ) => Promise<void>;
   rm: (path: string, opts: { force: boolean; recursive?: boolean }) => Promise<void>;
-  stat: (path: string) => Promise<{ size: number }>;
-  rename: (oldPath: string, newPath: string) => Promise<void>;
+  stat: (path: string) => Promise<{ size: number; mtimeMs: number }>;
+  readdir: (path: string) => Promise<string[]>;
+  readFile: (path: string, encoding: "utf8") => Promise<string>;
   chmod: (path: string, mode: number) => Promise<void>;
   lstat: (path: string) => Promise<RuntimeLstat>;
   getuid?: () => number;
@@ -79,7 +89,7 @@ export function setFrameSinkVaultBasePath(basePath: string | null): void {
 export class FrameSink {
   private writeChain: Promise<void> = Promise.resolve();
   private ensuredDirPath: string | null = null;
-  private writeCount = 0;
+  private readonly fileBytes = new Map<string, number>();
   private pendingFrames = 0;
   private pendingBytes = 0;
   private droppedSinceLastWrite = 0;
@@ -87,7 +97,7 @@ export class FrameSink {
   constructor(private readonly options: FrameSinkOptions = {}) {}
 
   getPath(): string {
-    return this.resolvePaths()?.logPath ?? DESKTOP_UNAVAILABLE_PATH;
+    return this.resolvePaths()?.dirPath ?? DESKTOP_UNAVAILABLE_PATH;
   }
 
   append(record: FrameRecord): void {
@@ -98,18 +108,18 @@ export class FrameSink {
 
     if (
       this.pendingFrames >= MAX_QUEUE_FRAMES ||
-      this.pendingBytes + line.length > MAX_QUEUE_BYTES
+      this.pendingBytes + byteLength(line) > MAX_QUEUE_BYTES
     ) {
       this.droppedSinceLastWrite++;
       return;
     }
 
-    const lineBytes = line.length;
+    const lineBytes = byteLength(line);
     this.pendingFrames++;
     this.pendingBytes += lineBytes;
 
     this.writeChain = this.writeChain
-      .then(() => this.doAppend(paths, line))
+      .then(() => this.doAppend(paths, line, record))
       .then(
         () => {
           this.pendingFrames--;
@@ -132,8 +142,11 @@ export class FrameSink {
       // delete files at an attacker-chosen location.
       // https://github.com/logancyang/obsidian-copilot-preview/issues/250
       await this.ensureFolder(runtime, paths);
-      await removeIfExists(runtime, paths.logPath);
-      await removeIfExists(runtime, paths.rotatedPath);
+      const files = await listLogFiles(runtime, paths.dirPath);
+      for (const name of [...files, LOG_FILE_NAME, ROTATED_FILE_NAME]) {
+        await removeIfExists(runtime, runtime.join(paths.dirPath, name));
+      }
+      this.fileBytes.clear();
     });
     this.writeChain = task.catch(() => {});
     return task;
@@ -146,7 +159,6 @@ export class FrameSink {
       const runtime = this.getRuntime();
       if (!runtime) return;
       await this.ensureFolder(runtime, paths);
-      await ensureFileExists(runtime, paths.logPath);
     });
     this.writeChain = task.catch(() => {});
     await task;
@@ -155,14 +167,14 @@ export class FrameSink {
     const runtime = this.getRuntime();
     if (!runtime) return;
     if (runtime.openPath) {
-      const errorMessage = await runtime.openPath(paths.logPath);
+      const errorMessage = await runtime.openPath(paths.dirPath);
       if (typeof errorMessage === "string" && errorMessage.length > 0) {
         throw new Error(errorMessage);
       }
       return;
     }
     if (runtime.showItemInFolder) {
-      runtime.showItemInFolder(paths.logPath);
+      runtime.showItemInFolder(paths.dirPath);
       return;
     }
     throw new Error("No OS file opener is available.");
@@ -172,21 +184,84 @@ export class FrameSink {
     await this.writeChain;
   }
 
-  /**
-   * Runs the owner and mode checks of `ensureFolder()` so a reader cannot be handed a path
-   * another account planted on a shared temp root; null when the path cannot be vouched for.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/250
-   */
-  async getValidatedPath(): Promise<string | null> {
+  // Whole snapshots let report redaction run before any frame is omitted.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+  async readConversations(): Promise<string | null> {
     const task = this.writeChain.then(async () => {
       const paths = this.resolvePaths();
-      if (!paths) return null;
       const runtime = this.getRuntime();
-      if (!runtime) return null;
+      if (!paths || !runtime) return null;
       await this.ensureFolder(runtime, paths);
-      return paths.logPath;
+      const sessions = (await newestConversationFiles(runtime, paths.dirPath))
+        .slice(0, MAX_CONVERSATIONS)
+        .reverse();
+      let names: string[];
+      try {
+        names = await runtime.readdir(paths.dirPath);
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
+        names = [];
+      }
+      const sections: string[] = [];
+      if (sessions.length === 0 && names.includes(LOG_FILE_NAME)) {
+        await narrowExistingFile(runtime, paths.logPath, getPosixOwnerUid(runtime));
+        const legacyStat = await runtime.stat(paths.logPath);
+        const backgroundPath = runtime.join(paths.dirPath, BACKGROUND_FILE_NAME);
+        let bgSize = 0;
+        try {
+          await narrowExistingFile(runtime, backgroundPath, getPosixOwnerUid(runtime));
+          bgSize = (await runtime.stat(backgroundPath)).size;
+        } catch (error) {
+          if (!isNotFoundError(error)) throw error;
+        }
+        const headerBytes =
+          byteLength(sectionHeader(LOG_FILE_NAME)) +
+          (bgSize ? byteLength(sectionHeader(BACKGROUND_FILE_NAME)) + 1 : 0);
+        if (
+          legacyStat.size > 0 &&
+          legacyStat.size + bgSize + headerBytes > MAX_REDACTABLE_LOG_BYTES
+        ) {
+          sections.push(
+            sectionHeader(LOG_FILE_NAME) +
+              JSON.stringify({
+                frameSink: "omitted",
+                reason: "legacy log exceeds the report read limit; available through Open",
+              }) +
+              "\n"
+          );
+        } else if (legacyStat.size > 0) {
+          sections.push(
+            sectionHeader(LOG_FILE_NAME) + (await runtime.readFile(paths.logPath, "utf8"))
+          );
+        }
+      }
+      for (const file of sessions) {
+        const name = file.split(/[\\/]/).pop()!;
+        await narrowExistingFile(runtime, file, getPosixOwnerUid(runtime));
+        const text = await runtime.readFile(file, "utf8");
+        if (text) sections.push(sectionHeader(name) + text);
+      }
+      const background = runtime.join(paths.dirPath, BACKGROUND_FILE_NAME);
+      await narrowExistingFile(runtime, background, getPosixOwnerUid(runtime));
+      try {
+        const text = await runtime.readFile(background, "utf8");
+        if (text) sections.push(sectionHeader(BACKGROUND_FILE_NAME) + text);
+      } catch (error) {
+        if (!isNotFoundError(error)) throw error;
+      }
+      return sections.length
+        ? sections
+            .map((section, index) =>
+              index < sections.length - 1 && !section.endsWith("\n") ? section + "\n" : section
+            )
+            .join("")
+        : null;
     });
-    const settled = task.catch(() => null);
+    const settled = task.catch(() => {
+      this.ensuredDirPath = null;
+      this.fileBytes.clear();
+      return null;
+    });
     this.writeChain = settled.then(() => {});
     return settled;
   }
@@ -259,11 +334,11 @@ export class FrameSink {
       );
     }
 
-    if (line.length <= MAX_LINE_BYTES) return line;
+    if (byteLength(line) <= MAX_LINE_BYTES) return line;
 
     let payloadBytes = 0;
     try {
-      payloadBytes = JSON.stringify(record.payload).length;
+      payloadBytes = byteLength(JSON.stringify(record.payload));
     } catch {
       payloadBytes = 0;
     }
@@ -279,58 +354,156 @@ export class FrameSink {
     );
   }
 
-  private async doAppend(paths: FrameLogPaths, line: string): Promise<void> {
+  private async doAppend(paths: FrameLogPaths, line: string, record: FrameRecord): Promise<void> {
     const runtime = this.getRuntime();
     if (!runtime) return;
-
-    let payload = line;
-    if (this.droppedSinceLastWrite > 0) {
-      const dropped = this.droppedSinceLastWrite;
-      this.droppedSinceLastWrite = 0;
-      const note =
-        JSON.stringify({
-          ts: new Date().toISOString(),
-          dir: "→",
-          tag: "frameSink",
-          kind: "raw",
-          method: "frameSink.dropped",
-          id: null,
-          payload: { dropped },
-        }) + "\n";
-      payload = note + line;
-    }
-
     try {
       await this.ensureFolder(runtime, paths);
-      await runtime.appendFile(paths.logPath, payload, {
-        encoding: "utf8",
-        mode: LOG_FILE_MODE,
-      });
+      const sessionPath = record.sessionId
+        ? runtime.join(paths.dirPath, conversationFileName(record.sessionId))
+        : null;
+      const startsConversation = !!sessionPath && record.startsConversation === true;
+      let destination = runtime.join(paths.dirPath, BACKGROUND_FILE_NAME);
+      let prelude = "";
+      if (sessionPath) {
+        await narrowExistingFile(runtime, sessionPath, getPosixOwnerUid(runtime));
+        try {
+          const stat = await runtime.stat(sessionPath);
+          destination = sessionPath;
+          this.fileBytes.set(sessionPath, stat.size);
+        } catch (error) {
+          if (!isNotFoundError(error)) throw error;
+          if (startsConversation) {
+            destination = sessionPath;
+            const background = runtime.join(paths.dirPath, BACKGROUND_FILE_NAME);
+            await narrowExistingFile(runtime, background, getPosixOwnerUid(runtime));
+            try {
+              prelude = matchingPrelude(await runtime.readFile(background, "utf8"), record);
+            } catch (readError) {
+              if (!isNotFoundError(readError)) throw readError;
+            }
+          }
+        }
+      }
+      await narrowExistingFile(runtime, destination, getPosixOwnerUid(runtime));
+      let size = this.fileBytes.get(destination);
+      if (size === undefined) {
+        try {
+          size = (await runtime.stat(destination)).size;
+        } catch (error) {
+          if (!isNotFoundError(error)) throw error;
+          size = 0;
+        }
+      }
+      let payload = prelude;
+      // Queue drops during a pending disk write must remain visible on the following record.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+      const dropped = this.droppedSinceLastWrite;
+      if (dropped > 0) {
+        this.droppedSinceLastWrite = 0;
+        const note =
+          JSON.stringify({
+            ts: new Date().toISOString(),
+            dir: "→",
+            tag: "frameSink",
+            kind: "raw",
+            method: "frameSink.dropped",
+            id: null,
+            payload: { dropped },
+          }) + "\n";
+        payload += note;
+      }
+      payload += line;
+      try {
+        await runtime.appendFile(destination, payload, { encoding: "utf8", mode: LOG_FILE_MODE });
+      } catch (error) {
+        this.droppedSinceLastWrite += dropped;
+        throw error;
+      }
+      size += byteLength(payload);
+      this.fileBytes.set(destination, size);
+      if (size > MAX_FILE_BYTES) await this.trimFile(runtime, destination);
+      if (startsConversation) await pruneConversations(runtime, paths.dirPath, this.fileBytes);
     } catch {
-      // Drop the frame and forget the validated directory, so the next frame
-      // re-runs the full safety check (and recreates a deleted folder). A
-      // recovery write here would bypass the validation that just failed and
-      // could land the log outside the owner-only directory.
-      // https://github.com/logancyang/obsidian-copilot-preview/issues/250
       this.ensuredDirPath = null;
-      return;
-    }
-
-    this.writeCount++;
-    if (this.writeCount % ROTATE_CHECK_EVERY === 0) {
-      await this.maybeRotate(runtime, paths);
+      this.fileBytes.clear();
     }
   }
 
-  private async maybeRotate(runtime: NodeRuntime, paths: FrameLogPaths): Promise<void> {
+  private async trimFile(runtime: NodeRuntime, filePath: string): Promise<void> {
+    await narrowExistingFile(runtime, filePath, getPosixOwnerUid(runtime));
+    const text = await runtime.readFile(filePath, "utf8");
+    const compacted = fitConversationFrames(text, RETAINED_FILE_BYTES);
+    await runtime.writeFile(filePath, compacted, { encoding: "utf8", mode: LOG_FILE_MODE });
+    this.fileBytes.set(filePath, byteLength(compacted));
+  }
+}
+
+function conversationFileName(sessionId: string): string {
+  return `${SESSION_FILE_PREFIX}${sessionId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)}${FILE_SUFFIX}`;
+}
+
+function sectionHeader(file: string): string {
+  return JSON.stringify({ frameSink: "conversation", file }) + "\n";
+}
+
+function matchingPrelude(text: string, record: FrameRecord): string {
+  return text
+    .split("\n")
+    .slice(0, -1)
+    .filter((line) => {
+      if (!line) return false;
+      try {
+        const parsed = JSON.parse(line) as { tag?: unknown; sessionId?: unknown };
+        return parsed.tag === record.tag && parsed.sessionId === record.sessionId;
+      } catch {
+        return false;
+      }
+    })
+    .map((line) => line + "\n")
+    .join("");
+}
+
+async function listLogFiles(runtime: NodeRuntime, dirPath: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await runtime.readdir(dirPath);
+  } catch (error) {
+    if (isNotFoundError(error)) return [];
+    throw error;
+  }
+  return names.filter(
+    (name) =>
+      name === BACKGROUND_FILE_NAME ||
+      (name.startsWith(SESSION_FILE_PREFIX) && name.endsWith(FILE_SUFFIX))
+  );
+}
+
+async function newestConversationFiles(runtime: NodeRuntime, dirPath: string): Promise<string[]> {
+  const files: { path: string; name: string; mtimeMs: number }[] = [];
+  for (const name of await listLogFiles(runtime, dirPath)) {
+    if (name === BACKGROUND_FILE_NAME) continue;
+    const path = runtime.join(dirPath, name);
+    await narrowExistingFile(runtime, path, getPosixOwnerUid(runtime));
     try {
-      const stat = await runtime.stat(paths.logPath);
-      if (stat.size < ROTATE_BYTES) return;
-      await removeIfExists(runtime, paths.rotatedPath);
-      await runtime.rename(paths.logPath, paths.rotatedPath);
+      files.push({ path, name, mtimeMs: (await runtime.stat(path)).mtimeMs });
     } catch (error) {
-      logWarn("[AgentMode] Could not rotate the debug log", error);
+      if (!isNotFoundError(error)) throw error;
     }
+  }
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return files.map((file) => file.path);
+}
+
+async function pruneConversations(
+  runtime: NodeRuntime,
+  dirPath: string,
+  byteMap: Map<string, number>
+): Promise<void> {
+  for (const path of (await newestConversationFiles(runtime, dirPath)).slice(MAX_CONVERSATIONS)) {
+    await narrowExistingFile(runtime, path, getPosixOwnerUid(runtime));
+    await removeIfExists(runtime, path);
+    byteMap.delete(path);
   }
 }
 
@@ -373,8 +546,12 @@ function getNodeRuntime(): NodeRuntime | null {
       appendFile: fs.appendFile,
       writeFile: fs.writeFile,
       rm: fs.rm,
-      stat: fs.stat,
-      rename: fs.rename,
+      stat: async (p) => {
+        const st = await fs.stat(p);
+        return { size: st.size, mtimeMs: st.mtimeMs };
+      },
+      readdir: fs.readdir,
+      readFile: fs.readFile,
       chmod: fs.chmod,
       lstat: async (p) => {
         const st = await fs.lstat(p);
@@ -399,15 +576,6 @@ function getNodeRuntime(): NodeRuntime | null {
  * a fresh file at an unvalidated location.
  * https://github.com/logancyang/obsidian-copilot-preview/issues/250
  */
-async function ensureFileExists(runtime: NodeRuntime, path: string): Promise<void> {
-  try {
-    await runtime.lstat(path);
-  } catch (error) {
-    if (!isNotFoundError(error)) throw error;
-    await runtime.writeFile(path, "", { encoding: "utf8", mode: LOG_FILE_MODE });
-  }
-}
-
 /**
  * `null` on win32, where per-user %TEMP% already isolates; a POSIX runtime that cannot
  * report its uid fails closed.

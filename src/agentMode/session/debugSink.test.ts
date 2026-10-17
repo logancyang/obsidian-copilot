@@ -4,6 +4,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { FrameRecord, FrameSink, getFrameLogPaths, NodeRuntime } from "./debugSink";
 
+function bgPath(runtime: NodeRuntime, vault = "/vault"): string {
+  return runtime.join(getFrameLogPaths(vault, runtime).dirPath, "background.ndjson");
+}
+
+function sessionPath(runtime: NodeRuntime, sessionId: string, vault = "/vault"): string {
+  return runtime.join(getFrameLogPaths(vault, runtime).dirPath, `session-${sessionId}.ndjson`);
+}
+
 function makeFrame(overrides: Partial<FrameRecord> = {}): FrameRecord {
   return {
     ts: "2026-05-12T00:00:00.000Z",
@@ -27,17 +35,21 @@ interface FakeRuntime extends NodeRuntime {
   files: Map<string, string>;
   directories: Set<string>;
   removedPaths: string[];
+  mtimes: Map<string, number>;
 }
 
 function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
   const files = new Map<string, string>();
   const directories = new Set<string>();
   const removedPaths: string[] = [];
+  const mtimes = new Map<string, number>();
+  let clock = 0;
   const join = (...parts: string[]) => parts.join("/").replace(/\/+/g, "/");
   return {
     files,
     directories,
     removedPaths,
+    mtimes,
     tmpdir: () => tmpDir,
     join,
     dirname: (path) => path.slice(0, path.lastIndexOf("/")) || "/",
@@ -46,9 +58,11 @@ function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
     }),
     appendFile: jest.fn(async (path, data) => {
       files.set(path, (files.get(path) ?? "") + data);
+      mtimes.set(path, ++clock);
     }),
     writeFile: jest.fn(async (path, data) => {
       files.set(path, data);
+      mtimes.set(path, ++clock);
     }),
     rm: jest.fn(async (path) => {
       removedPaths.push(path);
@@ -58,13 +72,17 @@ function makeRuntime(tmpDir = "/tmp", tempRootMode = 0o1755): FakeRuntime {
     stat: jest.fn(async (path) => {
       const data = files.get(path);
       if (data === undefined) throw errno("ENOENT");
-      return { size: data.length };
+      return { size: Buffer.byteLength(data, "utf8"), mtimeMs: mtimes.get(path) ?? 0 };
     }),
-    rename: jest.fn(async (oldPath, newPath) => {
-      const data = files.get(oldPath);
+    readdir: jest.fn(async (path) =>
+      [...files.keys()]
+        .filter((file) => file.startsWith(`${path}/`))
+        .map((file) => file.slice(path.length + 1))
+    ),
+    readFile: jest.fn(async (path) => {
+      const data = files.get(path);
       if (data === undefined) throw errno("ENOENT");
-      files.set(newPath, data);
-      files.delete(oldPath);
+      return data;
     }),
     chmod: jest.fn(async () => undefined),
     lstat: jest.fn(async (path: string) => {
@@ -98,8 +116,12 @@ function makeRealRuntime(tmpBase: string): NodeRuntime {
     appendFile: fs.appendFile,
     writeFile: fs.writeFile,
     rm: fs.rm,
-    stat: fs.stat,
-    rename: fs.rename,
+    stat: async (p) => {
+      const stat = await fs.stat(p);
+      return { size: stat.size, mtimeMs: stat.mtimeMs };
+    },
+    readdir: fs.readdir,
+    readFile: fs.readFile,
     chmod: fs.chmod,
     lstat: async (p) => {
       const st = await fs.lstat(p);
@@ -135,6 +157,130 @@ describe("debugSink", () => {
 
   describe("FrameSink", () => {
     describe("append()", () => {
+      it("retains five recently active prompted sessions and matching startup prelude across restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        const runtime = makeRuntime();
+        const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+        for (let index = 0; index < 5; index++) {
+          sink.append(
+            makeFrame({
+              sessionId: `chat-${index}`,
+              method: "session/prompt",
+              kind: "request",
+              startsConversation: true,
+              payload: index === 1 ? { oldOpening: true } : { ok: true },
+            })
+          );
+          await sink.flush();
+        }
+        sink.append(makeFrame({ sessionId: "chat-0", method: "session/update" }));
+        await sink.flush();
+        sink.append(
+          makeFrame({
+            sessionId: "chat-5",
+            method: "session/new",
+            kind: "result",
+            payload: { model: "startup" },
+          })
+        );
+        sink.append(
+          makeFrame({ sessionId: null, method: "initialize", payload: { startup: true } })
+        );
+        sink.append(
+          makeFrame({
+            sessionId: "chat-5",
+            tag: "other",
+            method: "session/set_model",
+            payload: { model: "wrong-tag" },
+          })
+        );
+        sink.append(
+          makeFrame({
+            sessionId: "chat-5",
+            tag: "codex",
+            method: "session/set_model",
+            payload: { model: "selected" },
+          })
+        );
+        sink.append(
+          makeFrame({
+            sessionId: "chat-5",
+            method: "session/prompt",
+            kind: "request",
+            startsConversation: true,
+            payload: { prompt: [] },
+          })
+        );
+        await sink.flush();
+        const snapshot = await new FrameSink({
+          vaultBasePath: "/vault",
+          runtime,
+        }).readConversations();
+        expect(snapshot).toContain('"file":"session-chat-0.ndjson"');
+        expect(snapshot).toContain('"file":"session-chat-5.ndjson"');
+        expect(snapshot).not.toContain('"file":"session-chat-1.ndjson"');
+        expect(snapshot).toContain('{"model":"selected"}');
+        const chatFive = snapshot
+          ?.split('{"frameSink":"conversation","file":"session-chat-5.ndjson"}\n')[1]
+          .split('{"frameSink":"conversation"')[0];
+        expect(chatFive).not.toContain("wrong-tag");
+        expect(snapshot).toContain("wrong-tag");
+        expect(snapshot).toContain('{"startup":true}');
+        expect(runtime.files.has(sessionPath(runtime, "chat-1"))).toBe(false);
+        expect(runtime.files.has(bgPath(runtime))).toBe(true);
+        sink.append(
+          makeFrame({ sessionId: "chat-1", method: "session/update", payload: { returned: true } })
+        );
+        await sink.flush();
+        expect(runtime.files.has(sessionPath(runtime, "chat-1"))).toBe(false);
+        sink.append(
+          makeFrame({
+            sessionId: "chat-1",
+            method: "session/prompt",
+            kind: "request",
+            startsConversation: true,
+          })
+        );
+        await sink.flush();
+        expect(runtime.files.get(sessionPath(runtime, "chat-1"))).not.toContain("oldOpening");
+        expect(runtime.files.get(sessionPath(runtime, "chat-1"))).toContain('"returned":true');
+      });
+
+      it("does not let a prompt dropped at the queue cap create a session slot (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+        const runtime = makeRuntime();
+        const write = runtime.appendFile;
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        runtime.appendFile = async (...args) => {
+          entered();
+          await held;
+          await write(...args);
+        };
+        const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+        sink.append(makeFrame({ id: "held" }));
+        await started;
+        for (let index = 0; index < 31; index++) sink.append(makeFrame({ id: `queued-${index}` }));
+        sink.append(
+          makeFrame({
+            sessionId: "dropped",
+            method: "session/prompt",
+            kind: "request",
+            startsConversation: true,
+          })
+        );
+        release();
+        await sink.flush();
+        sink.append(makeFrame({ id: "after-drop" }));
+        await sink.flush();
+        expect(runtime.files.has(sessionPath(runtime, "dropped"))).toBe(false);
+        expect(runtime.files.get(bgPath(runtime))).toContain('"method":"frameSink.dropped"');
+      });
+
       it("summarizes oversized frames before appending", async () => {
         const runtime = makeRuntime();
         const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
@@ -154,12 +300,27 @@ describe("debugSink", () => {
         );
         await sink.flush();
 
-        const log = runtime.files.get(paths.logPath) ?? "";
+        const log = runtime.files.get(runtime.join(paths.dirPath, "background.ndjson")) ?? "";
         expect(log.length).toBeLessThan(5_000);
         expect(log).toContain('"__truncated":true');
         expect(log).toContain("sessionUpdate=tool_call_update");
         expect(log).toContain("toolCallId=call-1");
       });
+
+      it.each(["background", "session"] as const)(
+        "compacts an oversized %s file to the retained byte limit (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)",
+        async (kind) => {
+          const runtime = makeRuntime();
+          const file = kind === "background" ? bgPath(runtime) : sessionPath(runtime, "bounded");
+          runtime.files.set(file, "x".repeat(4 * 1024 * 1024 + 1));
+          const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+          sink.append(makeFrame(kind === "session" ? { sessionId: "bounded" } : {}));
+          await sink.flush();
+          expect(Buffer.byteLength(runtime.files.get(file)!, "utf8")).toBeLessThanOrEqual(
+            3 * 1024 * 1024
+          );
+        }
+      );
 
       describePosix("temp root validation", () => {
         it.each([
@@ -202,7 +363,9 @@ describe("debugSink", () => {
             lstat.mockImplementation(safeLstat);
             sink.append(makeFrame({ id: "third" }));
             await sink.flush();
-            expect(runtime.files.get(paths.logPath)).toContain('"id":"third"');
+            expect(runtime.files.get(runtime.join(paths.dirPath, "background.ndjson"))).toContain(
+              '"id":"third"'
+            );
           }
         );
 
@@ -221,7 +384,9 @@ describe("debugSink", () => {
           sink.append(makeFrame({ id: "linux-tmp" }));
           await sink.flush();
 
-          expect(runtime.files.get(paths.logPath)).toContain('"id":"linux-tmp"');
+          expect(runtime.files.get(runtime.join(paths.dirPath, "background.ndjson"))).toContain(
+            '"id":"linux-tmp"'
+          );
         });
       });
 
@@ -277,25 +442,25 @@ describe("debugSink", () => {
 
         sink.append(makeFrame({ id: "second" }));
         await sink.flush();
-        expect(runtime.files.get(paths.logPath)).toContain('"id":"second"');
+        expect(runtime.files.get(runtime.join(paths.dirPath, "background.ndjson"))).toContain(
+          '"id":"second"'
+        );
       });
     });
 
-    describe("getValidatedPath()", () => {
-      it("returns the log path once the location passes the sink's own checks", async () => {
+    describe("readConversations()", () => {
+      it("returns null when no conversation or background evidence exists", async () => {
         const runtime = makeRuntime();
         const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
 
-        await expect(sink.getValidatedPath()).resolves.toBe(
-          getFrameLogPaths("/vault", runtime).logPath
-        );
+        await expect(sink.readConversations()).resolves.toBeNull();
       });
 
       it("returns null when there is no vault to key the location off (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
         const runtime = makeRuntime();
         const sink = new FrameSink({ runtime });
 
-        await expect(sink.getValidatedPath()).resolves.toBeNull();
+        await expect(sink.readConversations()).resolves.toBeNull();
       });
 
       it("returns null rather than throwing when the temp root cannot be trusted (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
@@ -305,45 +470,46 @@ describe("debugSink", () => {
           const runtime = makeRuntime("/tmp", 0o0777);
           const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
 
-          await expect(sink.getValidatedPath()).resolves.toBeNull();
+          await expect(sink.readConversations()).resolves.toBeNull();
         } finally {
           Object.defineProperty(process, "platform", platform);
         }
       });
 
-      it("resolves only once frames queued before the call have landed in the log", async () => {
+      it("snapshots earlier queued writes but excludes later appends until the next read (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
         const runtime = makeRuntime();
-        const paths = getFrameLogPaths("/vault", runtime);
+        let enterWrite!: () => void;
         let releaseWrite!: () => void;
+        const entered = new Promise<void>((resolve) => {
+          enterWrite = resolve;
+        });
         const held = new Promise<void>((resolve) => {
           releaseWrite = resolve;
         });
         const queuedWrite = runtime.appendFile;
         runtime.appendFile = async (target, data, opts) => {
+          enterWrite();
           await held;
           await queuedWrite(target, data, opts);
         };
         const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
-
-        sink.append(makeFrame({ id: "queued" }));
-        let resolvedEarly = true;
-        const pending = sink.getValidatedPath().then((value) => {
-          resolvedEarly = false;
-          return value;
-        });
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-        expect(resolvedEarly).toBe(true);
-
+        sink.append(makeFrame({ id: "before" }));
+        await entered;
+        const snapshot = sink.readConversations();
+        sink.append(makeFrame({ id: "after" }));
         releaseWrite();
-        await expect(pending).resolves.toBe(paths.logPath);
-        expect(runtime.files.get(paths.logPath)).toContain('"id":"queued"');
+        const text = await snapshot;
+        expect(text).toContain('"id":"before"');
+        expect(text).not.toContain('"id":"after"');
+        await sink.flush();
+        await expect(sink.readConversations()).resolves.toContain('"id":"after"');
       });
 
       it("leaves the sink usable after refusing a location, so a later flush still settles", async () => {
         const runtime = makeRuntime("/tmp", 0o0777);
         const sink = new FrameSink({ runtime, vaultBasePath: "/vault" });
 
-        await sink.getValidatedPath();
+        await sink.readConversations();
 
         await expect(sink.flush()).resolves.toBeUndefined();
       });
@@ -356,11 +522,48 @@ describe("debugSink", () => {
         const paths = getFrameLogPaths("/vault", runtime);
         runtime.files.set(paths.logPath, "active");
         runtime.files.set(paths.rotatedPath, "old");
-
-        await sink.clear();
+        runtime.files.set(bgPath(runtime), "background");
+        runtime.files.set(sessionPath(runtime, "chat"), "session");
+        const unrelated = runtime.join(paths.dirPath, "notes.txt");
+        runtime.files.set(unrelated, "keep");
+        let entered!: () => void;
+        let release!: () => void;
+        const started = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const appendFile = runtime.appendFile;
+        runtime.appendFile = async (...args) => {
+          entered();
+          await held;
+          await appendFile(...args);
+        };
+        sink.append(makeFrame({ sessionId: "chat", id: "before-clear" }));
+        await started;
+        const clearing = sink.clear();
+        sink.append(makeFrame({ sessionId: "chat", id: "after-clear" }));
+        release();
+        await clearing;
+        await sink.flush();
 
         expect(runtime.files.has(paths.logPath)).toBe(false);
         expect(runtime.files.has(paths.rotatedPath)).toBe(false);
+        expect(runtime.files.get(bgPath(runtime))).toContain('"id":"after-clear"');
+        expect(runtime.files.has(sessionPath(runtime, "chat"))).toBe(false);
+        expect(runtime.files.get(unrelated)).toBe("keep");
+        sink.append(
+          makeFrame({
+            sessionId: "chat",
+            method: "session/prompt",
+            kind: "request",
+            startsConversation: true,
+          })
+        );
+        await sink.flush();
+        expect(runtime.files.get(sessionPath(runtime, "chat"))).toContain('"id":"after-clear"');
+        expect(runtime.files.get(sessionPath(runtime, "chat"))).not.toContain("before-clear");
         expect(runtime.removedPaths).toEqual(
           expect.arrayContaining([paths.logPath, paths.rotatedPath])
         );
@@ -410,11 +613,11 @@ describe("debugSink", () => {
             sink.append(makeFrame());
             await sink.flush();
 
-            expect(exists(paths.logPath)).toBe(true);
+            expect(exists(path.join(paths.dirPath, "background.ndjson"))).toBe(true);
             expect(modeOf(paths.dirPath)).toBe(0o700);
             expect(modeOf(path.dirname(paths.dirPath))).toBe(0o700);
             expect(modeOf(path.dirname(path.dirname(paths.dirPath)))).toBe(0o700);
-            expect(modeOf(paths.logPath)).toBe(0o600);
+            expect(modeOf(path.join(paths.dirPath, "background.ndjson"))).toBe(0o600);
           }
         );
 
@@ -432,11 +635,14 @@ describe("debugSink", () => {
           await sink.flush();
 
           expect(modeOf(paths.dirPath)).toBe(0o700);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(modeOf(path.join(paths.dirPath, "background.ndjson"))).toBe(0o600);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
           const content = await fs.readFile(paths.logPath, "utf8");
-          expect(content).toContain("old-active");
-          expect(content).toContain('"session/update"');
+          expect(content).toBe("old-active\n");
+          expect(await fs.readFile(paths.rotatedPath, "utf8")).toBe("old-rotated\n");
+          expect(
+            await fs.readFile(path.join(paths.dirPath, "background.ndjson"), "utf8")
+          ).toContain('"session/update"');
         });
 
         it("removes a symlink squatting the leaf directory and never writes through it (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
@@ -456,7 +662,7 @@ describe("debugSink", () => {
           expect(leaf.isSymbolicLink()).toBe(false);
           expect(leaf.isDirectory()).toBe(true);
           expect(modeOf(paths.dirPath)).toBe(0o700);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(modeOf(path.join(paths.dirPath, "background.ndjson"))).toBe(0o600);
         });
 
         it("refuses a plain file squatting a directory level without deleting it (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
@@ -490,16 +696,17 @@ describe("debugSink", () => {
           expect(leaf.isSymbolicLink()).toBe(false);
           expect(leaf.isDirectory()).toBe(true);
           expect(modeOf(paths.dirPath)).toBe(0o700);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(modeOf(path.join(paths.dirPath, "background.ndjson"))).toBe(0o600);
         });
 
         it("removes a symlink squatting the log file itself and leaves its target untouched (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           const victimFile = path.join(tmpBase, "victim.txt");
+          const managedPath = path.join(paths.dirPath, "background.ndjson");
           await fs.writeFile(victimFile, "victim-content", { mode: 0o644 });
           await fs.mkdir(paths.dirPath, { recursive: true });
-          await fs.symlink(victimFile, paths.logPath);
+          await fs.symlink(victimFile, managedPath);
 
           const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
           sink.append(makeFrame());
@@ -507,9 +714,9 @@ describe("debugSink", () => {
 
           expect(await fs.readFile(victimFile, "utf8")).toBe("victim-content");
           expect(modeOf(victimFile)).toBe(0o644);
-          const log = await fs.lstat(paths.logPath);
+          const log = await fs.lstat(managedPath);
           expect(log.isSymbolicLink()).toBe(false);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(modeOf(managedPath)).toBe(0o600);
         });
 
         it("refuses to write into a directory owned by another user instead of falling back (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
@@ -526,8 +733,7 @@ describe("debugSink", () => {
           sink.append(makeFrame());
           await sink.flush();
 
-          expect(exists(paths.logPath)).toBe(false);
-          expect(exists(paths.rotatedPath)).toBe(false);
+          expect(exists(path.join(paths.dirPath, "background.ndjson"))).toBe(false);
         });
 
         it("leaves a log file owned by another user unread and unnarrowed (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
@@ -538,7 +744,7 @@ describe("debugSink", () => {
           const realLstat = runtime.lstat;
           runtime.lstat = async (target: string) => {
             const entry = await realLstat(target);
-            return target === paths.logPath ? { ...entry, uid: entry.uid + 1 } : entry;
+            return target === paths.dirPath ? { ...entry, uid: entry.uid + 1 } : entry;
           };
 
           const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
@@ -549,24 +755,82 @@ describe("debugSink", () => {
           expect(modeOf(paths.logPath)).toBe(0o644);
         });
 
-        it("creates the fresh post-rotation file 0600 (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
+        it("keeps legacy logs unchanged while managed files remain private (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
           await fs.mkdir(paths.dirPath, { recursive: true });
-          await fs.writeFile(paths.logPath, "", { mode: 0o644 });
-          await fs.truncate(paths.logPath, 51 * 1024 * 1024);
-
+          await fs.writeFile(paths.logPath, "legacy-current", { mode: 0o644 });
+          await fs.writeFile(paths.rotatedPath, "legacy-old", { mode: 0o644 });
           const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
-          for (let i = 0; i < 26; i++) sink.append(makeFrame({ id: String(i) }));
+          sink.append(makeFrame({ id: "managed" }));
           await sink.flush();
-
-          expect(exists(paths.rotatedPath)).toBe(true);
-          expect(modeOf(paths.rotatedPath)).toBe(0o600);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(await fs.readFile(paths.logPath, "utf8")).toBe("legacy-current");
+          expect(await fs.readFile(paths.rotatedPath, "utf8")).toBe("legacy-old");
+          expect(modeOf(path.join(paths.dirPath, "background.ndjson"))).toBe(0o600);
         });
       });
 
-      describe("getValidatedPath()", () => {
+      describe("readConversations()", () => {
+        it("selects equal-mtime sessions by ascending filename (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+          const runtime = makeRuntime();
+          const paths = getFrameLogPaths("/vault", runtime);
+          for (let index = 0; index < 6; index++) {
+            const name = `session-chat-${index}.ndjson`;
+            runtime.files.set(
+              runtime.join(paths.dirPath, name),
+              JSON.stringify(makeFrame({ sessionId: `chat-${index}` })) + "\\n"
+            );
+            runtime.mtimes.set(runtime.join(paths.dirPath, name), 5);
+          }
+          const snapshot = await new FrameSink({
+            vaultBasePath: "/vault",
+            runtime,
+          }).readConversations();
+          expect(snapshot).toContain('"file":"session-chat-0.ndjson"');
+          expect(snapshot).not.toContain('"file":"session-chat-5.ndjson"');
+        });
+
+        it("includes useful background-only evidence without requiring a prompted session", async () => {
+          const runtime = makeRuntime();
+          const sink = new FrameSink({ vaultBasePath: "/vault", runtime });
+          sink.append(makeFrame({ sessionId: null, method: "initialize" }));
+          await sink.flush();
+          await expect(sink.readConversations()).resolves.toContain('"file":"background.ndjson"');
+        });
+
+        it("uses the current legacy log before any new conversation and leaves rotated content out (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+          const runtime = makeRuntime();
+          const paths = getFrameLogPaths("/vault", runtime);
+          runtime.files.set(paths.logPath, "legacy-current\\n");
+          runtime.files.set(paths.rotatedPath, "legacy-old\\n");
+          const text = await new FrameSink({
+            vaultBasePath: "/vault",
+            runtime,
+          }).readConversations();
+          expect(text).toContain('"file":"acp-frames.ndjson"');
+          expect(text).toContain("legacy-current");
+          expect(text).not.toContain("legacy-old");
+        });
+
+        it("omits an oversized legacy log without reading its contents (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+          const runtime = makeRuntime();
+          const paths = getFrameLogPaths("/vault", runtime);
+          runtime.files.set(paths.logPath, "small fake legacy");
+          const stat = runtime.stat as jest.MockedFunction<NodeRuntime["stat"]>;
+          const originalStat = stat.getMockImplementation()!;
+          stat.mockImplementation(async (target) =>
+            target === paths.logPath
+              ? { size: 64 * 1024 * 1024 + 1, mtimeMs: 1 }
+              : originalStat(target)
+          );
+          const snapshot = await new FrameSink({
+            vaultBasePath: "/vault",
+            runtime,
+          }).readConversations();
+          expect(snapshot).toContain("legacy log exceeds the report read limit");
+          expect(runtime.readFile).not.toHaveBeenCalledWith(paths.logPath, "utf8");
+        });
+
         it("unlinks a same-name symlink planted at the log path instead of vouching for its target (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {
           const runtime = makeRealRuntime(tmpBase);
           const paths = getFrameLogPaths("/vault", runtime);
@@ -580,9 +844,9 @@ describe("debugSink", () => {
           const resolved = await new FrameSink({
             vaultBasePath: "/vault",
             runtime,
-          }).getValidatedPath();
+          }).readConversations();
 
-          expect(resolved).toBe(paths.logPath);
+          expect(resolved).toBeNull();
           expect(fsSync.lstatSync(decoy).isFile()).toBe(true);
           expect(await fs.readFile(decoy, "utf8")).toBe("planted\n");
           expect(exists(paths.logPath)).toBe(false);
@@ -604,7 +868,7 @@ describe("debugSink", () => {
           const resolved = await new FrameSink({
             vaultBasePath: "/vault",
             runtime: foreign,
-          }).getValidatedPath();
+          }).readConversations();
 
           expect(resolved).toBeNull();
         });
@@ -618,8 +882,10 @@ describe("debugSink", () => {
 
           await sink.open();
 
-          expect(exists(paths.logPath)).toBe(true);
-          expect(modeOf(paths.logPath)).toBe(0o600);
+          expect(sink.getPath()).toBe(paths.dirPath);
+          expect(exists(paths.logPath)).toBe(false);
+          expect(exists(paths.rotatedPath)).toBe(false);
+          expect(exists(path.join(paths.dirPath, "background.ndjson"))).toBe(false);
           expect(modeOf(paths.dirPath)).toBe(0o700);
         });
       });
@@ -637,6 +903,7 @@ describe("debugSink", () => {
           expect(modeOf(paths.logPath)).toBe(0o600);
           expect(modeOf(paths.rotatedPath)).toBe(0o600);
           expect(await fs.readFile(paths.logPath, "utf8")).toBe("old prompts\n");
+          expect(await fs.readFile(paths.rotatedPath, "utf8")).toBe("older prompts\n");
         });
 
         it("creates nothing when no log was ever written (https://github.com/logancyang/obsidian-copilot-preview/issues/250)", async () => {

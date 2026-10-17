@@ -99,7 +99,10 @@ const baseInput: ReportInput = {
 const build = (overrides: Partial<ReportInput>, rt: ReportRuntime = runtime) =>
   buildReportBundle({ ...baseInput, ...overrides }, rt);
 
-function withRoom(budget: number, source: Pick<ReportLogRequest, "text" | "path">) {
+function withRoom(
+  budget: number,
+  source: Pick<ReportLogRequest, "text" | "path" | "preserveConversations">
+) {
   return {
     screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - budget),
     logs: [{ id: "activityLog", name: ACTIVITY_NAME, ...source }],
@@ -116,7 +119,7 @@ function attachment(bundle: ReportBundle, id: string): AttachmentResult {
 }
 
 async function packedLog(
-  source: Pick<ReportLogRequest, "text" | "path">,
+  source: Pick<ReportLogRequest, "text" | "path" | "preserveConversations">,
   budget: number,
   rt: ReportRuntime = runtime
 ) {
@@ -373,6 +376,50 @@ describe("issueReport", () => {
       }
     );
 
+    it("keeps each conversation's opening and newest raw frames after whole-text redaction (https://github.com/Brevilabs/obsidian-copilot-private/issues/658) (https://github.com/logancyang/obsidian-copilot/issues/3625)", async () => {
+      const header = (name: string) =>
+        JSON.stringify({ frameSink: "conversation", file: name }) + "\n";
+      const chat = (name: string) =>
+        header(name) +
+        JSON.stringify({
+          method: "session/set_model",
+          payload: { model: "opening", token: "sk-abcdef0123456789" },
+        }) +
+        "\n" +
+        filler(200_000) +
+        JSON.stringify({ method: "session/prompt", payload: { result: name } }) +
+        "\n";
+      const source = {
+        text:
+          ["chat-a", "chat-b", "chat-c", "chat-d", "chat-e"].map(chat).join("") +
+          header("background.ndjson") +
+          '{"method":"startup"}\n',
+        preserveConversations: true,
+      };
+      const competingLog = filler(2 * 1024 * 1024);
+      const bundle = await build({
+        screenshotPng: new Uint8Array(Math.floor(22.5 * 1024 * 1024)),
+        logs: [
+          { id: "activityLog", name: ACTIVITY_NAME, ...source },
+          { id: "chatLog", name: "copilot-log.md", text: competingLog },
+          { id: "opencodeLog", name: "opencode.log", text: competingLog },
+        ],
+      });
+      const result = attachment(bundle, "activityLog");
+      const packed = entryText(bundle, ACTIVITY_NAME);
+      expect(result.included).toBe(true);
+      expect(packed).toContain('"file":"background.ndjson"');
+      for (const name of ["chat-a", "chat-b", "chat-c", "chat-d", "chat-e"]) {
+        expect(packed).toContain(`"file":"${name}"`);
+        expect(packed).toContain(`"result":"${name}"`);
+      }
+      expect(packed).toContain('{"frameSink":"elided"}');
+      expect(packed).not.toContain("sk-abcdef0123456789");
+      expect(result.note).toContain("truncated to each conversation's first/newest frames of");
+      expect(encode(packed).length).toBeLessThanOrEqual(result.bytes);
+      expect(result.bytes).toBeLessThan(encode(source.text).length);
+    });
+
     it.each([
       {
         behaviour: `keeps only the newest slice of an oversized log and names the original size in its note (${ISSUE_URL})`,
@@ -586,6 +633,23 @@ describe("issueReport", () => {
         bytes: 0,
         note: "log is 89 B, over the 84 B left",
       });
+    });
+
+    it("omits a conversation source when its required header cannot fit, without losing the report (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+      const header =
+        JSON.stringify({ frameSink: "conversation", file: "x".repeat(66 * 1024) }) + "\n";
+      const { result, packed } = await packedLog(
+        { text: header + '{"method":"prompt"}\n', preserveConversations: true },
+        66 * 1024
+      );
+      expect(result.included).toBe(false);
+      expect(result.note).toContain("failed:");
+      expect(packed).toBe("");
+      expect(
+        entries(await build(withRoom(66 * 1024, { text: header, preserveConversations: true })))[
+          "report.md"
+        ]
+      ).toBeDefined();
     });
 
     it(`still packs report.md alone when every source is left out, and says so in it (${ISSUE_URL})`, async () => {

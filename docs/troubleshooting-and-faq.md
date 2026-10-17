@@ -108,7 +108,7 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 ## Logs and bug reports
 
-Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. Turn on **Debug Mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
+Use **Settings → Copilot → Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. The Agent Mode activity log is on by default; reproduce the problem before preparing a report so the log contains it. Turning logging off stops new capture but does not erase existing files.
 
 ### Filing a report
 
@@ -133,7 +133,7 @@ Before anything is written into the zip, Copilot cleans every log and your own d
 
 **The screenshot is not cleaned at all.** It is a picture, so nothing can be found and removed in it. Look at it before you upload.
 
-A log too large for the report keeps its newest entries rather than being dropped, and the file itself opens with a banner identifying it as a truncated log and naming the original size. Cleaning always runs over the whole log before anything is cut, so a log too large to clean whole (over 64 MB) is left out and listed with that reason.
+The Agent Mode activity log includes up to five recently active chats that received prompts, plus separate startup and background activity. Long sections keep their first and newest raw frames with visible omission markers; the middle may be missing. This log remains `acp-frames.ndjson.txt` in the report. Other large logs keep their newest entries. Cleaning runs over the whole log before anything is cut, so a log too large to clean whole (over 64 MB) is left out and listed with that reason.
 
 The zip is uploaded only to Brevilabs. The upload reuses the random device identifier already used for this vault to group reports and limit uploads. It does not create a separate identifier for bug reports or use your Copilot account identity. If Copilot cannot read a valid saved device identifier, it refuses the upload; you can still save the zip and open the issue to attach it manually. The upload carries no license key or account identity. The public GitHub issue carries the report ID and nothing else — there is no download link on it, and nothing on that page can fetch the bundle.
 
@@ -156,7 +156,7 @@ That deletion covers the uploaded copy only. The zip on your own computer is you
 
 ### Collecting logs by hand
 
-Run **Copilot: Create log file** from the command palette to save the Copilot log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
+Run **Copilot: Create log file** from the command palette to save the Copilot log into your vault as a note and open it. **Open** beside Agent Mode activity log opens its folder; **Clear** removes only its diagnostic files, including the two older log files, not chats or notes. New logs survive plugin restarts unless the operating system cleans its temporary files. The older current and rotated files are preserved unchanged and available from the folder; before a new prompted chat is recorded, a report can include the older current file.
 
 Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 
