@@ -56,6 +56,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
+      updateSetting("enableMiyo", true);
       for (const enableMiyoDocumentProcessing of [false, true]) {
         updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
         for (const enableMiyoSearchSkill of [false, true]) {
@@ -207,12 +208,22 @@ describe("agentSystemPrompt", () => {
     });
 
     it("appends the Miyo steering only when the search skill is enabled", () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
     });
 
+    it("omits the Miyo steering while Miyo is disconnected even though the search switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
+      updateSetting("enableMiyo", false);
+      updateSetting("enableMiyoSearchSkill", true);
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
+      expect(prompt).not.toContain("miyo-search");
+    });
+
     it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setBuiltinPreferences({ "miyo-search": { disabledAgents: ["codex"] } });
 

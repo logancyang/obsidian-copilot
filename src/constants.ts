@@ -723,7 +723,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableCustomPromptTemplating: true,
   enableSelfHostMode: false,
   enableMiyo: false,
-  enableMiyoSearchSkill: false,
+  enableMiyoSearchSkill: true,
   miyoSearchAll: false,
   miyoExtraSearchFolders: [],
   relevantNotesLiveUpdate: true,

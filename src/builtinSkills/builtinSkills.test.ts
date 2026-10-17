@@ -5,6 +5,7 @@ import {
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
+  isMiyoSearchSkillActive,
   MIYO_PARSE_SKILL,
   MIYO_SEARCH_SKILL,
   planManagedBuiltins,
@@ -621,6 +622,22 @@ describe("builtinSkills", () => {
     });
   });
 
+  describe("isMiyoSearchSkillActive()", () => {
+    const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/716";
+
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      `with Miyo connected=%s and the switch=%s the skill is active=%s ${issue}`,
+      (enableMiyo, enableMiyoSearchSkill, active) => {
+        expect(isMiyoSearchSkillActive({ enableMiyo, enableMiyoSearchSkill })).toBe(active);
+      }
+    );
+  });
+
   describe("isBuiltinSkillEnabledFor()", () => {
     it("enables every seeded builtin for every agent when no preference is stored", () => {
       const settings = settingsWith({}, { enableMiyoDocumentProcessing: false });
@@ -652,16 +669,24 @@ describe("builtinSkills", () => {
     });
 
     it("follows the Miyo gates: each Miyo skill needs its setting", () => {
-      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
+      const off = settingsWith(
+        {},
+        { enableMiyo: true, enableMiyoSearchSkill: false, enableMiyoDocumentProcessing: false }
+      );
       expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
 
       const on = settingsWith(
         {},
-        { enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
+        { enableMiyo: true, enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
       );
       expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
+    });
+
+    it("keeps miyo-search off while Miyo is disconnected even though its switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
+      const disconnected = settingsWith({}, { enableMiyo: false, enableMiyoSearchSkill: true });
+      expect(isBuiltinSkillEnabledFor(disconnected, "miyo-search", "claude")).toBe(false);
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

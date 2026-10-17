@@ -292,12 +292,16 @@ describe("builtinSkillEnv", () => {
     );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 immediately refreshes an enabled skill when scope tightens", () => {
-      const prev = { enableMiyoSearchSkill: true, miyoSearchAll: true } as ReturnType<
-        typeof getSettings
-      >;
-      const next = { enableMiyoSearchSkill: true, miyoSearchAll: false } as ReturnType<
-        typeof getSettings
-      >;
+      const prev = {
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: true,
+      } as ReturnType<typeof getSettings>;
+      const next = {
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: false,
+      } as ReturnType<typeof getSettings>;
 
       expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("immediate");
     });
@@ -336,12 +340,16 @@ describe("builtinSkillEnv", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 defers an enabled skill refresh when scope widens", () => {
-      const prev = { enableMiyoSearchSkill: true, miyoSearchAll: false } as ReturnType<
-        typeof getSettings
-      >;
-      const next = { enableMiyoSearchSkill: true, miyoSearchAll: true } as ReturnType<
-        typeof getSettings
-      >;
+      const prev = {
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: false,
+      } as ReturnType<typeof getSettings>;
+      const next = {
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: true,
+      } as ReturnType<typeof getSettings>;
 
       expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("deferred");
     });
@@ -357,6 +365,17 @@ describe("builtinSkillEnv", () => {
       expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/716 skips scope refreshes while Miyo is disconnected even though the switch is on", () => {
+      const prev = {
+        enableMiyo: false,
+        enableMiyoSearchSkill: true,
+        miyoSearchAll: true,
+      } as ReturnType<typeof getSettings>;
+      const next = { ...prev, miyoSearchAll: false };
+
+      expect(getBuiltinSkillEnvRestartPolicy(prev, next, "opencode")).toBe("none");
+    });
+
     it.each([
       ["unticked", ["Research", "Chats"], ["Research"]],
       ["swapped for another", ["Research"], ["Chats"]],
@@ -364,6 +383,7 @@ describe("builtinSkillEnv", () => {
       "https://github.com/logancyang/obsidian-copilot/issues/3508 immediately refreshes an enabled Current vault skill when a ticked folder is %s",
       (_change, before, after) => {
         const prev = {
+          enableMiyo: true,
           enableMiyoSearchSkill: true,
           miyoSearchAll: false,
           miyoExtraSearchFolders: before,
@@ -376,6 +396,7 @@ describe("builtinSkillEnv", () => {
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3508 defers the refresh when Current vault search only gains ticked folders", () => {
       const prev = {
+        enableMiyo: true,
         enableMiyoSearchSkill: true,
         miyoSearchAll: false,
         miyoExtraSearchFolders: ["Research"],
@@ -388,12 +409,18 @@ describe("builtinSkillEnv", () => {
     it.each([
       [
         "Search scope stays Unrestricted",
-        { enableMiyoSearchSkill: true, miyoSearchAll: true, miyoExtraSearchFolders: ["Research"] },
+        {
+          enableMiyo: true,
+          enableMiyoSearchSkill: true,
+          miyoSearchAll: true,
+          miyoExtraSearchFolders: ["Research"],
+        },
         [],
       ],
       [
         "the same folders are ticked in another order",
         {
+          enableMiyo: true,
           enableMiyoSearchSkill: true,
           miyoSearchAll: false,
           miyoExtraSearchFolders: ["Research", "Chats"],

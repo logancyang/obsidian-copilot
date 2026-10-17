@@ -80,7 +80,7 @@ The highlighted areas show the Remote server selection and server address. The p
 
 ## 4. Check a search
 
-In Copilot's Miyo settings, turn on **Semantic search for agents**. Keep **Search scope → Current vault** when searching the vault open in Obsidian. This switch is desktop-only; on mobile, check the search in Copilot Plus chat or Relevant Notes.
+In Copilot's Miyo settings, check that **Semantic search for agents** is on. Keep **Search scope → Current vault** when searching the vault open in Obsidian. This switch is desktop-only; on mobile, check the search in Copilot Plus chat or Relevant Notes.
 
 ![Semantic search enabled and Current vault selected, with both settings highlighted](https://raw.githubusercontent.com/logancyang/obsidian-copilot/14d33de58ed71cc69b82493bfd4f3cc0b593b70a/tutorial-media/remote-miyo/remote-search-settings-highlight.svg)
 

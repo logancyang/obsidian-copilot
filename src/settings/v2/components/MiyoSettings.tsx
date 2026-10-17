@@ -1,3 +1,4 @@
+import { isMiyoSearchSkillActive } from "@/builtinSkills/builtinSkills";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
@@ -451,11 +452,12 @@ export const MiyoSettings: React.FC = () => {
   };
 
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
-  const skillToggleUsable = settings.enableMiyoSearchSkill || capabilitiesEnabled;
+  const skillActive = isMiyoSearchSkillActive(settings);
+  const skillToggleUsable = skillActive || capabilitiesEnabled;
   const connectedRemote = activeMode === "remote";
   const hasPendingConnection =
     mode !== activeMode || (mode === "remote" && urlDraft.trim() !== activeUrl);
-  const searchSkillShown = pendingSkillEnabled ?? settings.enableMiyoSearchSkill;
+  const searchSkillShown = pendingSkillEnabled ?? skillActive;
   const showSearchFolders = searchSkillShown && capabilitiesEnabled && !settings.miyoSearchAll;
   const searchFoldersKey = showSearchFolders ? settingsKey : null;
   const vaultFolderName = getMiyoFolderName(app);

@@ -160,6 +160,7 @@ describe("SkillsSettings", () => {
         const initial = settingsStore.get(settingsAtom);
         settingsStore.set(settingsAtom, {
           ...initial,
+          enableMiyo: true,
           enableMiyoSearchSkill: search,
           enableMiyoDocumentProcessing: documents,
         });
