@@ -1,6 +1,5 @@
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import { cleanMessageForCopy } from "@/utils";
-import { isMiyoSkillLoad } from "@/agentMode/ui/toolSummaries";
 
 export type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
 export type ThoughtPart = Extract<AgentMessagePart, { kind: "thought" }>;
@@ -29,11 +28,7 @@ export function agentResponseText(parts: AgentMessagePart[]): string {
 }
 
 function isHiddenTool(part: AgentMessagePart): boolean {
-  // The Miyo card carries the search, so the skill load that precedes it adds nothing.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-  return (
-    part.kind === "tool_call" && (part.vendorToolName === "ToolSearch" || isMiyoSkillLoad(part))
-  );
+  return part.kind === "tool_call" && part.vendorToolName === "ToolSearch";
 }
 
 function isSubAgentLaunch(part: ToolCallPart): boolean {
