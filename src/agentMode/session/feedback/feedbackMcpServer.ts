@@ -80,7 +80,7 @@ const HOSTED_TOOLS = Object.freeze([
   Object.freeze({ definition: SEND_FEEDBACK_TOOL, turnedOffText: OFFER_RESULT_TEXT.turned_off }),
 ]);
 
-export type ToolSwitch = (toolName: string) => boolean;
+type ToolSwitch = (toolName: string) => boolean;
 
 export interface FeedbackMcpServer {
   hasEnabledTools(): boolean;
