@@ -6,7 +6,7 @@ Run Miyo on one computer and connect Copilot on your other devices to that same 
 
 - Choose a host computer that can stay awake with Miyo running. Add the folders you want to search and let indexing finish. The [local Miyo setup guide](miyo-setup.md) explains folder registration and indexing.
 - Install [Tailscale](https://tailscale.com/download) on **every participating device**, including the Miyo host, and connect them to the same Tailscale network. Your network's access rules must allow clients to reach the host.
-- Use Copilot on each client. For Miyo searches in Agent Chat, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client too: Copilot uses its local command-line tool to contact the remote server. Only the host needs to run the server and maintain an index.
+- Use Copilot on each client. Agent Chat searches the remote server directly. Only the host needs to run the server and maintain an index. To have Agent Chat read PDFs and EPUBs, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client.
 
 Tailscale gives the devices a private connection. It does not copy your notes or synchronize Miyo indexes. Keep your vault files synchronized separately if you want the same notes available in Obsidian on each device.
 

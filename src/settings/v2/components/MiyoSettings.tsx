@@ -1,4 +1,3 @@
-import { isMiyoSearchSkillActive } from "@/builtinSkills/builtinSkills";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
@@ -16,6 +15,7 @@ import {
   getMiyoCustomUrl,
   getMiyoFolderName,
   isLocalMiyoUrl,
+  isMiyoSearchActive,
   type MiyoSearchFolderOption,
   MIYO_CHATS_DEEPLINK_URL,
   MIYO_CONNECT_DEEPLINK_URL,
@@ -94,7 +94,7 @@ export const MiyoSettings: React.FC = () => {
   } | null>(null);
   // Two Miyo controls are desktop-only for different reasons: local discovery
   // has no mobile equivalent (MiyoServiceDiscovery resolves to null off the
-  // desktop runtime), and the search skill only runs inside Agent mode. Offering
+  // desktop runtime), and agent search only runs inside Agent mode. Offering
   // either on a phone yields a Connect that cannot succeed and a switch that
   // cannot do anything.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/471
@@ -123,8 +123,6 @@ export const MiyoSettings: React.FC = () => {
   const connectModalRef = useRef<MiyoConnectModal | null>(null);
   const connectAttemptRef = useRef(0);
   const enableTxnRef = useRef(0);
-  const skillAttemptRef = useRef(0);
-  const [pendingSkillEnabled, setPendingSkillEnabled] = useState<boolean | null>(null);
   const inFlightRef = useRef(0);
 
   const beginBusy = useCallback(() => {
@@ -380,39 +378,6 @@ export const MiyoSettings: React.FC = () => {
     await refresh(true);
   }, [refresh]);
 
-  // The feature gate shares built-in reconciliation so this tab cannot recreate
-  // skills the user disabled, or create directories for unconfigured agents.
-  // https://github.com/logancyang/obsidian-copilot/issues/3022
-  const handleToggleSearchSkill = useCallback(async (next: boolean) => {
-    const attempt = ++skillAttemptRef.current;
-    setPendingSkillEnabled(next);
-    const previous = getSettings().enableMiyoSearchSkill;
-    try {
-      const { SkillManager } = await import("@/agentMode");
-      if (skillAttemptRef.current !== attempt || !mountedRef.current) return;
-      updateSetting("enableMiyoSearchSkill", next);
-      const result = await SkillManager.getInstance().refresh(true);
-      if (!result.ok || result.reconcileErrorCount > 0) {
-        throw new Error("Could not reconcile Miyo search skill files.");
-      }
-    } catch {
-      // Failed enables must not leave the system prompt advertising an uninstalled skill.
-      // Disable intent survives cleanup failures. https://github.com/logancyang/obsidian-copilot/issues/3022
-      if (next && skillAttemptRef.current === attempt) {
-        updateSetting("enableMiyoSearchSkill", previous);
-      }
-      if (mountedRef.current && skillAttemptRef.current === attempt) {
-        new Notice(
-          next
-            ? "Couldn't update the Miyo search skill. Please try again."
-            : "Miyo search preference saved, but skill files could not be updated. Check Skills settings and try again."
-        );
-      }
-    } finally {
-      if (mountedRef.current && skillAttemptRef.current === attempt) setPendingSkillEnabled(null);
-    }
-  }, []);
-
   const changeConnection = (nextMode: "local" | "remote", address = urlDraft) => {
     setConnectionError(null);
     setDraft({ mode: nextMode, address, source: settingsKey });
@@ -452,13 +417,12 @@ export const MiyoSettings: React.FC = () => {
   };
 
   const capabilitiesEnabled = status.backend === "available" || status.backend === "stale";
-  const skillActive = isMiyoSearchSkillActive(settings);
-  const skillToggleUsable = skillActive || capabilitiesEnabled;
+  const searchActive = isMiyoSearchActive(settings);
+  const searchToggleUsable = searchActive || capabilitiesEnabled;
   const connectedRemote = activeMode === "remote";
   const hasPendingConnection =
     mode !== activeMode || (mode === "remote" && urlDraft.trim() !== activeUrl);
-  const searchSkillShown = pendingSkillEnabled ?? skillActive;
-  const showSearchFolders = searchSkillShown && capabilitiesEnabled && !settings.miyoSearchAll;
+  const showSearchFolders = searchActive && capabilitiesEnabled && !settings.miyoSearchAll;
   const searchFoldersKey = showSearchFolders ? settingsKey : null;
   const vaultFolderName = getMiyoFolderName(app);
   const [searchFolders, setSearchFolders] = useState<{
@@ -538,24 +502,24 @@ export const MiyoSettings: React.FC = () => {
 
         <div className="tw-overflow-hidden tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-sm">
           <div className="tw-divide-y tw-divide-border">
-            {/* ENABLING is connection-gated, but DISABLING an installed skill must stay available offline: https://github.com/Brevilabs/obsidian-copilot-private/issues/471 */}
+            {/* ENABLING is connection-gated, but DISABLING agent search must stay available offline: https://github.com/Brevilabs/obsidian-copilot-private/issues/471 */}
             {onDesktop && (
               <div
                 className={cn(
                   "tw-px-4",
-                  !skillToggleUsable && "tw-pointer-events-none tw-opacity-45"
+                  !searchToggleUsable && "tw-pointer-events-none tw-opacity-45"
                 )}
-                aria-disabled={!skillToggleUsable}
+                aria-disabled={!searchToggleUsable}
               >
                 <CapabilityRow
                   title="Semantic search for agents"
-                  description="Lets Copilot agents find notes by meaning, not just keywords, through Miyo."
+                  description="Gives Copilot agents a Miyo search tool to find notes by meaning, not just keywords."
                   control={
                     <SettingSwitch
-                      checked={pendingSkillEnabled ?? settings.enableMiyoSearchSkill}
-                      onCheckedChange={(next) => void handleToggleSearchSkill(next)}
-                      disabled={!skillToggleUsable || pendingSkillEnabled !== null}
-                      aria-label="Enable Miyo semantic search skill"
+                      checked={settings.enableMiyoSearchSkill}
+                      onCheckedChange={(next) => updateSetting("enableMiyoSearchSkill", next)}
+                      disabled={!searchToggleUsable}
+                      aria-label="Enable Miyo semantic search for agents"
                     />
                   }
                 />
@@ -569,7 +533,7 @@ export const MiyoSettings: React.FC = () => {
               )}
               aria-disabled={!capabilitiesEnabled}
             >
-              {searchSkillShown && (
+              {searchActive && (
                 <div>
                   <CapabilityRow
                     title="Search scope"
