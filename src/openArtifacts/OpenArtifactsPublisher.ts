@@ -372,6 +372,8 @@ export class OpenArtifactsPublisher {
             linkAccess === "invited" ? "invited" : undefined,
             await this.isLinkOfferPending()
           );
+          // The marker stops every later create from asking, so the offer shows once per vault.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/696
           if (receipt.guidance) {
             await this.markLinkOfferShown().catch((error) =>
               logWarn(

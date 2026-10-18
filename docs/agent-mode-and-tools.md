@@ -281,6 +281,8 @@ The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifac
 
 If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited** shows the plan message with an **Upgrade** link and changes nothing; **Anyone with the link** keeps working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
 
+If your Copilot license is not linked to an OpenArtifacts account, the first new page you publish, from the dialog or the agent, adds one line offering to link it, with a **Link account** link. Linking gets you an email when people you share with comment or ask for access. Copilot shows this once per vault, whichever way you publish, and records that in `.openartifacts/link-offer-shown`; delete that file to see the offer again.
+
 Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 
 ### Upgrading an agent
