@@ -180,6 +180,62 @@ describe("OpenArtifactsClient", () => {
         }
       );
 
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 sends the client header only on a create that asks for the account-link offer", async () => {
+        const receipt = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          version: 1,
+        };
+        mockedRequestUrl.mockResolvedValue(response(201, receipt));
+        const client = new OpenArtifactsClient();
+
+        await client.publish(DOCUMENT, "decrypted-license", undefined, true);
+        await client.publish(DOCUMENT, "decrypted-license", "invited", true);
+        await client.publish(DOCUMENT, "decrypted-license", "invited");
+        mockedRequestUrl.mockResolvedValue(response(200, { ...receipt, version: 2 }));
+        await client.update(DOC_ID, DOCUMENT, "decrypted-license");
+
+        const headers = mockedRequestUrl.mock.calls.map(([options]) => [
+          (options as RequestUrlParam).url,
+          (options as RequestUrlParam).headers,
+        ]);
+        const authorization = { Authorization: "Bearer decrypted-license" };
+        const offer = { ...authorization, "x-openartifacts-client": "obsidian-copilot" };
+        expect(headers).toEqual([
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/docs`, offer],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`, offer],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`, authorization],
+          [`${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}`, authorization],
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 returns the server's guidance and drops it when malformed", async () => {
+        const receipt = {
+          docId: DOC_ID,
+          url: `https://openartifacts.site/d/${DOC_ID}`,
+          version: 1,
+        };
+        const guidance = { message: "Link your account.", url: "https://openartifacts.ai/account" };
+        const client = new OpenArtifactsClient();
+
+        mockedRequestUrl.mockResolvedValue(response(201, { ...receipt, guidance }));
+        await expect(client.publish(DOCUMENT, "decrypted-license")).resolves.toEqual({
+          ...receipt,
+          guidance,
+        });
+
+        for (const malformed of [
+          { message: "", url: guidance.url },
+          { message: guidance.message, url: "http://openartifacts.ai/account" },
+          { message: guidance.message },
+          { url: guidance.url },
+          "Link your account.",
+        ]) {
+          mockedRequestUrl.mockResolvedValue(response(201, { ...receipt, guidance: malformed }));
+          await expect(client.publish(DOCUMENT, "decrypted-license")).resolves.toEqual(receipt);
+        }
+      });
+
       it("treats an unexpected successful POST status as ambiguous", async () => {
         mockedRequestUrl.mockResolvedValue(response(200));
 
@@ -468,26 +524,21 @@ describe("OpenArtifactsClient", () => {
       });
 
       describe("access calls", () => {
-        it("changes access one address at a time", async () => {
+        it("reads and changes the link access on the access route", async () => {
           const client = new OpenArtifactsClient();
           mockedRequestUrl.mockResolvedValue(response(200, ACCESS));
 
+          await client.getAccess(DOC_ID, "k");
           await client.setLinkAccess(DOC_ID, "invited", "k");
-          await client.addPerson(DOC_ID, "a+b@c.co", "k");
-          await client.removePerson(DOC_ID, "a+b@c.co", "k");
-          await client.declineRequest(DOC_ID, "a+b@c.co", "k");
 
           const base = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/access`;
           expect(
             mockedRequestUrl.mock.calls.map((_call, i) => [sent(i).method, sent(i).url])
           ).toEqual([
+            ["GET", base],
             ["PUT", base],
-            ["PUT", `${base}/people/a%2Bb%40c.co`],
-            ["DELETE", `${base}/people/a%2Bb%40c.co`],
-            ["DELETE", `${base}/requests/a%2Bb%40c.co`],
           ]);
-          expect(JSON.parse(sent(0).body as string)).toEqual({ linkAccess: "invited" });
-          expect(sent(1).body).toBeUndefined();
+          expect(JSON.parse(sent(1).body as string)).toEqual({ linkAccess: "invited" });
         });
 
         it(`${ISSUE} rejects with private_unavailable when any access route answers 404`, async () => {
@@ -502,9 +553,6 @@ describe("OpenArtifactsClient", () => {
 
           await expectClientError(client.getAccess(DOC_ID, "k"), expected);
           await expectClientError(client.setLinkAccess(DOC_ID, "invited", "k"), expected);
-          await expectClientError(client.addPerson(DOC_ID, "a@b.co", "k"), expected);
-          await expectClientError(client.removePerson(DOC_ID, "a@b.co", "k"), expected);
-          await expectClientError(client.declineRequest(DOC_ID, "a@b.co", "k"), expected);
         });
 
         it("returns the Access the server answered", async () => {
@@ -586,7 +634,7 @@ describe("OpenArtifactsClient", () => {
           );
 
           await expect(
-            new OpenArtifactsClient().addPerson(DOC_ID, "a@b.co", "k")
+            new OpenArtifactsClient().setLinkAccess(DOC_ID, "invited", "k")
           ).rejects.toMatchObject({ status: 402, upgradeUrl: "https://openartifacts.ai/account" });
         });
 
@@ -626,7 +674,7 @@ describe("OpenArtifactsClient", () => {
             })
           );
           const insecure = await new OpenArtifactsClient()
-            .addPerson(DOC_ID, "a@b.co", "k")
+            .setLinkAccess(DOC_ID, "invited", "k")
             .catch((caught: unknown) => caught);
           expect((insecure as OpenArtifactsClientError).upgradeUrl).toContain(
             "utm_medium=openartifacts_private_sharing"
@@ -638,7 +686,7 @@ describe("OpenArtifactsClient", () => {
             })
           );
           const other = await new OpenArtifactsClient()
-            .addPerson(DOC_ID, "a@b.co", "k")
+            .setLinkAccess(DOC_ID, "invited", "k")
             .catch((caught: unknown) => caught);
           expect((other as OpenArtifactsClientError).upgradeUrl).toBeUndefined();
         });

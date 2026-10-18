@@ -212,10 +212,21 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-fetch-x", ".ps1")).toContain('Invoke-Relay "/twitter4llm"');
     });
 
+    it("records the page in the Markdown note as its own step, before the report", () => {
+      const md = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!.skillMd;
+      const record = md.indexOf("### Record the page in the note");
+      const report = md.indexOf("### Report");
+      expect(record).toBeGreaterThan(md.indexOf("## 3. Publish"));
+      expect(report).toBeGreaterThan(record);
+      expect(md.slice(record, report)).toContain(
+        "`openartifacts` frontmatter property to the receipt's `url`"
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(8);
+      expect(skill!.version).toBe(9);
 
       expect(skill!.files.map((file) => file.path)).toEqual([
         "themes/research-memo.md",
@@ -280,7 +291,7 @@ describe("builtinSkills", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 asks who can open a new page, shares through the wrapper, and never sends linkAccess on create", () => {
       const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
       expect(skill).toBeDefined();
-      expect(skill!.version).toBe(8);
+      expect(skill!.version).toBe(9);
 
       const md = skill!.skillMd;
       expect(md).toContain(

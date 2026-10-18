@@ -5,6 +5,9 @@ import {
   OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_THEMES_DIR,
+  OPENARTIFACTS_CLIENT_HEADER,
+  OPENARTIFACTS_CLIENT_ID,
+  OPENARTIFACTS_LINK_OFFER_MARKER,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
@@ -428,7 +431,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 8;
+const OPENARTIFACTS_PUBLISH_VERSION = 9;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -578,12 +581,23 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For an existing HTML file on Windows, replace the handoff path with the original absolute
 \`.html\` path and omit the \`docId\`.
 
-Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`). For a Markdown
-note, set its \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter
-block if needed, keep every other property), remove a \`symposium\`
-property whose link has the same document id, and delete the generated HTML file from
-\`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. For an existing HTML file, leave the source file
-unchanged. Then report the URL. Publishing the same Markdown note again updates the same page.
+Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`).
+
+### Record the page in the note
+
+For a Markdown note, do this right after a successful publish, before any \`share\` call and
+before you reply. Never skip it: it is what makes the next publish of this note update the same
+page instead of creating a new one.
+
+1. Set the note's \`openartifacts\` frontmatter property to the receipt's \`url\`. Create the
+   frontmatter block if the note has none, and keep every other property.
+2. Remove a \`symposium\` property whose link has the same document id.
+3. Delete the generated HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`.
+
+Then read the note's frontmatter again and check that \`openartifacts\` is the url. For an
+existing HTML file, leave the source file unchanged and skip this.
+
+### Report
 
 Report a private publish as:
 
@@ -597,6 +611,8 @@ report with this line, using the \`manageUrl\` the wrapper printed:
 "Manage who can open it: {manageUrl}"
 
 Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
+
+If a create receipt has a \`guidance\` object, add one more line as the very last line of the report, after the "Manage who can open it" line on a private publish: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
 
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
 it, and the failed address with the wrapper's message.
@@ -778,6 +794,13 @@ BODY=$(mktemp) || exit 1
 RESPONSE=$(mktemp) || exit 1
 trap 'rm -f "$HEADERS" "$BODY" "$RESPONSE"' EXIT
 printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
+WORKSPACE_ROOT=$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}
+OFFER_MARKER="$WORKSPACE_ROOT/${OPENARTIFACTS_LINK_OFFER_MARKER}"
+OFFER_ASKED=
+if [ "$COMMAND" = publish ] && [ -z "$DOC_ID" ] && [ -n "$WORKSPACE_ROOT" ] && [ ! -e "$OFFER_MARKER" ]; then
+  OFFER_ASKED=1
+  printf '${OPENARTIFACTS_CLIENT_HEADER}: ${OPENARTIFACTS_CLIENT_ID}\n' >> "$HEADERS"
+fi
 
 if [ "$COMMAND" = unshare ]; then
   STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$DOC_ID")
@@ -864,6 +887,10 @@ case "$STATUS" in
     else
       cat "$RESPONSE"
       printf '\n'
+    fi
+    # touch, not a redirection: a failed redirection on a special built-in exits a POSIX shell.
+    if [ -n "$OFFER_ASKED" ] && grep -q '"guidance"' "$RESPONSE"; then
+      { mkdir -p "$(dirname "$OFFER_MARKER")" && touch "$OFFER_MARKER"; } 2>/dev/null || :
     fi
     exit 0
     ;;
@@ -970,6 +997,10 @@ function Add-ManageUrl([string]$Json) {
 }
 
 $headers = @{ Authorization = "Bearer $KEY" }
+$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
+$OFFER_MARKER = if ($WORKSPACE_ROOT) { Join-Path $WORKSPACE_ROOT '${OPENARTIFACTS_LINK_OFFER_MARKER}' } else { '' }
+$OFFER_ASKED = $COMMAND -eq 'publish' -and -not $DOC_ID -and $OFFER_MARKER -and -not (Test-Path -LiteralPath $OFFER_MARKER)
+if ($OFFER_ASKED) { $headers['${OPENARTIFACTS_CLIENT_HEADER}'] = '${OPENARTIFACTS_CLIENT_ID}' }
 try {
   if ($COMMAND -eq 'share') {
     $accessUri = "$API_HOST/api/v1/docs/$DOC_ID/access"
@@ -1002,6 +1033,12 @@ try {
       [Console]::Out.WriteLine((Add-ManageUrl ([string]$response.Content)))
     } else {
       [Console]::Out.WriteLine([string]$response.Content)
+    }
+    if ($OFFER_ASKED -and ([string]$response.Content) -match '"guidance"') {
+      try {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) -ErrorAction Stop | Out-Null
+        New-Item -ItemType File -Force -Path $OFFER_MARKER -ErrorAction Stop | Out-Null
+      } catch {}
     }
   }
 } catch {
