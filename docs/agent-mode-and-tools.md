@@ -276,12 +276,12 @@ You can also ask the agent later to make a page private or public, add or remove
 
 The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifacts** dialog.
 
-- **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. A published note's dialog shows who can open the page above **Update** and **Delete**.
-- **Add people** invites one email address at a time. Each person appears under **Who has access** with **Invited · email sent**, or **Invited · send them the link** when the server sends no email, and has a **Remove** button.
-- **Requests** lists addresses that asked to open the page, each with **Approve** and **Decline**. The section is hidden when nobody has asked.
+- **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. To invite people or answer requests, use the **Share** button on the published page.
 - **Copy link** (**Copy** right after you publish or update) copies the page link, and **Open** opens the page for you without a sign-in.
 
-If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited**, **Add**, or **Approve** shows the plan message with an **Upgrade** link and changes nothing; **Remove**, **Decline**, and **Anyone with the link** keep working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
+If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited** shows the plan message with an **Upgrade** link and changes nothing; **Anyone with the link** keeps working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
+
+If your Copilot license is not linked to an OpenArtifacts account, the first new page you publish, from the dialog or the agent, adds one line offering to link it, with a **Link account** link. Linking gets you an email when people you share with comment or ask for access. Copilot shows this once per vault, whichever way you publish, and records that in `.openartifacts/link-offer-shown`; delete that file to see the offer again.
 
 Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 

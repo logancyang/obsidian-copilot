@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +13,7 @@ interface CapturedRequest {
   url: string | undefined;
   authorization: string | undefined;
   contentType: string | undefined;
+  client: string | undefined;
   body: string;
 }
 
@@ -57,6 +58,7 @@ describe("openArtifactsPublishWrappers", () => {
           url: request.url,
           authorization: request.headers.authorization,
           contentType: request.headers["content-type"],
+          client: request.headers["x-openartifacts-client"] as string | undefined,
           body,
         });
         response.writeHead(canned.status, { "content-type": "application/json" });
@@ -200,6 +202,68 @@ describe("openArtifactsPublishWrappers", () => {
     expect(result.stderr).toContain("HTTP 402");
     expect(result.stderr).toContain("privateSharing");
     expect(requests).toHaveLength(1);
+  });
+
+  describe("account-link offer", () => {
+    const GUIDANCE_BODY =
+      '{"docId":"9f2k4mvq7t0xbz3n","url":"https://x/d/9f","version":1,"guidance":{"message":"Link your account.","url":"https://openartifacts.ai/account"}}';
+    const markerPath = () => path.join(root, ".openartifacts", "link-offer-shown");
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 asks for the offer on public and private creates while the marker is absent, and records it only when the receipt carries guidance", async () => {
+      const plain = await run(["publish", htmlFile, "Note"]);
+      expect(plain.status).toBe(0);
+      expect(requests[0].client).toBe("obsidian-copilot");
+      expect(existsSync(markerPath())).toBe(false);
+
+      canned = { status: 201, body: GUIDANCE_BODY };
+      const offered = await run(["publish", "--private", htmlFile, "Note"]);
+      expect(offered.status).toBe(0);
+      expect(requests[1].url).toBe("/api/v1/private-docs");
+      expect(requests[1].client).toBe("obsidian-copilot");
+      expect(JSON.parse(offered.stdout).guidance).toEqual({
+        message: "Link your account.",
+        url: "https://openartifacts.ai/account",
+      });
+      expect(existsSync(markerPath())).toBe(true);
+    });
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 does not ask again once the marker exists, whether the app or an earlier run wrote it", async () => {
+      mkdirSync(path.join(root, ".openartifacts"));
+      writeFileSync(markerPath(), "");
+
+      const result = await run(["publish", htmlFile, "Note"]);
+
+      expect(result.status).toBe(0);
+      expect(requests[0].client).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 never asks on an update", async () => {
+      canned = { status: 200, body: GUIDANCE_BODY };
+
+      const result = await run(["publish", htmlFile, "Note", "9f2k4mvq7t0xbz3n"]);
+
+      expect(result.status).toBe(0);
+      expect(requests[0].client).toBeUndefined();
+      expect(existsSync(markerPath())).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 still succeeds quietly when the marker cannot be written", async () => {
+      writeFileSync(path.join(root, ".openartifacts"), "");
+      canned = { status: 201, body: GUIDANCE_BODY };
+      const result = await run(["publish", htmlFile, "Note"]);
+
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout).guidance).toBeDefined();
+      expect(result.stderr).toBe("");
+      expect(existsSync(markerPath())).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/OpenArtifacts/issues/94 never asks, and still publishes, without a workspace root", async () => {
+      const result = await run(["publish", htmlFile, "Note"], { OPENARTIFACTS_WORKSPACE_ROOT: "" });
+
+      expect(result.status).toBe(0);
+      expect(requests[0].client).toBeUndefined();
+    });
   });
 
   describe("share", () => {
