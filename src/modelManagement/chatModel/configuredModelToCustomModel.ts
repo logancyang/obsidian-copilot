@@ -11,7 +11,6 @@ import type { ConfiguredModel, Provider } from "@/modelManagement/types/persiste
 
 export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   openai: ChatModelProviders.OPENAI,
-  groq: ChatModelProviders.GROQ,
   mistral: ChatModelProviders.MISTRAL,
   openrouter: ChatModelProviders.OPENROUTERAI,
   deepseek: ChatModelProviders.DEEPSEEK,

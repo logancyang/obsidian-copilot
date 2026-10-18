@@ -15,6 +15,7 @@ import { planCodexModelIdCollapse } from "./codexModelIdMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
+import { planGroqOpenAICompatibility } from "./groqCompatibilityMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
 export { CURRENT_SETTINGS_VERSION } from "./version";
@@ -101,6 +102,11 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/716
   if (fromVersion < 16 && getSettings().enableMiyo !== true) {
     setSettings({ enableMiyoSearchSkill: true });
+  }
+
+  if (fromVersion < 17) {
+    const groqCompatibility = planGroqOpenAICompatibility(getSettings());
+    if (groqCompatibility) setSettings(groqCompatibility);
   }
 
   setSettings({ settingsVersion: CURRENT_SETTINGS_VERSION });

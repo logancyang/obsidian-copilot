@@ -158,6 +158,13 @@ describe("descriptor", () => {
         });
       });
 
+      it("preserves Groq wire identity and effort while decoding", () => {
+        expect(decode("groq/llama-3.3-70b-versatile/high")).toEqual({
+          selection: { baseModelId: "groq/llama-3.3-70b-versatile", effort: "high" },
+          provider: "groq",
+        });
+      });
+
       it("decodes a single-segment id or an unknown trailing segment as a base model id with no effort", () => {
         expect(decode("just-a-name")).toEqual({
           selection: { baseModelId: "just-a-name", effort: null },
@@ -194,6 +201,7 @@ describe("descriptor", () => {
           "anthropic/claude-sonnet-4-5",
           "anthropic/claude-sonnet-4-5/low",
           "openai/gpt-5/high",
+          "groq/llama-3.3-70b-versatile/high",
           "anthropic/claude-opus-4-7/max",
           "openrouter/anthropic/claude-sonnet-4.5",
           "openrouter/anthropic/claude-sonnet-4.5/none",

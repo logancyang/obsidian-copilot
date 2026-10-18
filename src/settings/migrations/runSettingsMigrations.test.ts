@@ -129,6 +129,30 @@ describe("settingsMigrations", () => {
       expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
     });
 
+    it("v16: upgrades saved Groq endpoints in place without changing provider identity", async () => {
+      const original = {
+        providerId: "groq-provider",
+        providerType: "openai-compatible" as const,
+        displayName: "Groq",
+        baseUrl: "https://gateway.example/tenant/v1",
+        apiKeyKeychainId: "keychain-groq",
+        origin: { kind: "byok" as const, catalogProviderId: "groq" },
+        addedAt: 0,
+      };
+      seedVault({ settingsVersion: 16, providers: { groq: original } });
+      const { api, setupProvider } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().providers.groq).toEqual({
+        ...original,
+        baseUrl: "https://gateway.example/tenant/openai/v1",
+      });
+      expect(getSettings().providers.groq).not.toBe(original);
+      expect(setupProvider).not.toHaveBeenCalled();
+      expect(getSettings().settingsVersion).toBe(17);
+    });
+
     it.each([CURRENT_SETTINGS_VERSION, CURRENT_SETTINGS_VERSION + 1])(
       "leaves a v%s vault untouched even when it still holds retired provider, model, and Codex data",
       async (settingsVersion) => {

@@ -60,7 +60,6 @@ export interface ModelConfig {
   cohereApiKey?: string;
   apiKey?: string;
   openAIProxyBaseUrl?: string;
-  groqApiKey?: string;
   mistralApiKey?: string;
   enableCors?: boolean;
 }

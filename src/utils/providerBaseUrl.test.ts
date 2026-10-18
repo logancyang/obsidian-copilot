@@ -1,8 +1,4 @@
-import {
-  googleHostBaseUrl,
-  groqHostBaseUrl,
-  isCatalogProviderDefaultEndpoint,
-} from "./providerBaseUrl";
+import { googleHostBaseUrl, isCatalogProviderDefaultEndpoint } from "./providerBaseUrl";
 
 describe("providerBaseUrl", () => {
   describe("googleHostBaseUrl()", () => {
@@ -46,29 +42,6 @@ describe("providerBaseUrl", () => {
       expect(googleHostBaseUrl(undefined)).toBeUndefined();
       expect(googleHostBaseUrl("")).toBeUndefined();
       expect(googleHostBaseUrl("   ")).toBeUndefined();
-    });
-  });
-
-  describe("groqHostBaseUrl()", () => {
-    it("strips a trailing /openai/v1 (the models.dev form the dialog seeds)", () => {
-      expect(groqHostBaseUrl("https://api.groq.com/openai/v1")).toBe("https://api.groq.com");
-    });
-
-    it("strips a trailing /openai", () => {
-      expect(groqHostBaseUrl("https://api.groq.com/openai")).toBe("https://api.groq.com");
-    });
-
-    it("strips a trailing /v1", () => {
-      expect(groqHostBaseUrl("https://api.groq.com/v1")).toBe("https://api.groq.com");
-    });
-
-    it("leaves a host-only URL unchanged", () => {
-      expect(groqHostBaseUrl("https://api.groq.com")).toBe("https://api.groq.com");
-    });
-
-    it("returns undefined for blank input", () => {
-      expect(groqHostBaseUrl(undefined)).toBeUndefined();
-      expect(groqHostBaseUrl("")).toBeUndefined();
     });
   });
 

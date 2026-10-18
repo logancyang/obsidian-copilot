@@ -42,7 +42,6 @@ describe("configuredModelToCustomModel", () => {
     it("maps an openai-compatible BYOK provider to the chat provider of its catalog id", () => {
       const cases: Array<[string, ChatModelProviders]> = [
         ["openai", ChatModelProviders.OPENAI],
-        ["groq", ChatModelProviders.GROQ],
         ["mistral", ChatModelProviders.MISTRAL],
         ["openrouter", ChatModelProviders.OPENROUTERAI],
         ["deepseek", ChatModelProviders.DEEPSEEK],
@@ -57,6 +56,26 @@ describe("configuredModelToCustomModel", () => {
           )
         ).toBe(expected);
       }
+    });
+
+    it("routes a Groq catalog provider through OPENAI_FORMAT while preserving its endpoint", () => {
+      const groq = provider({
+        baseUrl: "https://api.groq.com/openai/v1",
+        origin: { kind: "byok", catalogProviderId: "groq" },
+      });
+      expect(mapProviderTypeToChatModelProvider(groq)).toBe(ChatModelProviders.OPENAI_FORMAT);
+      expect(
+        configuredModelToCustomModel({
+          provider: groq,
+          configuredModel: configuredModel(),
+          apiKey: "test-groq-key",
+        })
+      ).toMatchObject({
+        provider: ChatModelProviders.OPENAI_FORMAT,
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKey: "test-groq-key",
+        configuredModelId: "cm1",
+      });
     });
 
     it("maps an openai-compatible provider with an unknown or missing catalog id to OPENAI_FORMAT", () => {

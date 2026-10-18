@@ -55,6 +55,29 @@ describe("resolveChatBackendModel", () => {
       }
     });
 
+    it("resolves a saved Groq model with its unchanged provider key and full API base", async () => {
+      const groq = provider("groq-provider", {
+        providerType: "openai-compatible",
+        displayName: "Groq",
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKeyKeychainId: "groq-key-pointer",
+        origin: { kind: "byok", catalogProviderId: "groq" },
+      });
+      const api = makeApi([okEntry("groq-model", groq)], { "groq-provider": "test-groq-key" });
+
+      const result = await resolveChatBackendModel(api, "groq-model");
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.configuredModelId).toBe("groq-model");
+        expect(result.customModel).toMatchObject({
+          apiKey: "test-groq-key",
+          baseUrl: "https://api.groq.com/openai/v1",
+          provider: "3rd party (openai-format)",
+        });
+      }
+    });
+
     it("falls back to the first enabled model when the preferred id is no longer enabled", async () => {
       const p = provider("p1");
       const api = makeApi([okEntry("a", p), okEntry("b", p)], { p1: "key" });

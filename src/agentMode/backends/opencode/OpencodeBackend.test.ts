@@ -238,6 +238,41 @@ describe("OpencodeBackend", () => {
       expect(cfg.providers.anthropic.models).toEqual({ "claude-sonnet-4-6": {} });
     });
 
+    it("keeps the Groq OpenCode provider identity, resolved key, and default endpoint", async () => {
+      const provider = makeProvider(
+        "p-groq",
+        { kind: "byok", catalogProviderId: "groq" },
+        { providerType: "openai-compatible", baseUrl: "https://api.groq.com/openai/v1" }
+      );
+      const model = makeModel("p-groq", "llama-3.3-70b-versatile");
+      const deps = makeDeps({
+        resolved: [okEntry(provider, model)],
+        keys: { "p-groq": "test-groq-key" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers.groq.settings).toEqual({ apiKey: "test-groq-key" });
+      expect(cfg.providers.groq.models).toEqual({ "llama-3.3-70b-versatile": {} });
+      expect(cfg.providers.groq.settings).not.toHaveProperty("baseURL");
+    });
+
+    it("preserves a custom endpoint override for a Groq OpenCode provider", async () => {
+      const provider = makeProvider(
+        "p-groq",
+        { kind: "byok", catalogProviderId: "groq" },
+        { providerType: "openai-compatible", baseUrl: "https://gateway.example/groq/v1" }
+      );
+      const deps = makeDeps({
+        resolved: [okEntry(provider, makeModel("p-groq", "llama-3.3-70b-versatile"))],
+        keys: { "p-groq": "test-groq-key" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers.groq.settings?.baseURL).toBe("https://gateway.example/groq/v1");
+    });
+
     it("injects multiple models under the same provider", async () => {
       const provider = makeProvider("p-anthropic", {
         kind: "byok",

@@ -6,6 +6,19 @@ import * as obsidianModule from "obsidian";
 
 import ChatModelManager from "./chatModelManager";
 
+jest.mock("@langchain/openai", () => {
+  const actual = jest.requireActual<typeof import("@langchain/openai")>("@langchain/openai");
+  const BaseChatOpenAI = actual.ChatOpenAI;
+  class ChatOpenAI extends BaseChatOpenAI {
+    static configs: unknown[] = [];
+    constructor(config: ConstructorParameters<typeof BaseChatOpenAI>[0]) {
+      ChatOpenAI.configs.push(config);
+      super(config);
+    }
+  }
+  return { ...actual, ChatOpenAI };
+});
+
 jest.mock("@langchain/anthropic", () => {
   class ChatAnthropic {
     static configs: unknown[] = [];
@@ -14,15 +27,6 @@ jest.mock("@langchain/anthropic", () => {
     }
   }
   return { ChatAnthropic };
-});
-jest.mock("@langchain/groq", () => {
-  class ChatGroq {
-    static configs: unknown[] = [];
-    constructor(config: unknown) {
-      ChatGroq.configs.push(config);
-    }
-  }
-  return { ChatGroq };
 });
 jest.mock("@langchain/google-genai", () => {
   class ChatGoogleGenerativeAI {
@@ -240,36 +244,36 @@ describe("chatModelManager", () => {
       });
 
       it("sends no output cap for a model that carries no limit of its own (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
+        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
           configs: Array<Record<string, unknown>>;
         };
 
         await ChatModelManager.getInstance().createModelInstanceFromBridged(
           bridgedModel({
             name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.GROQ,
+            provider: ChatModelProviders.OPENAI_FORMAT,
             apiKey: "gq-key",
           })
         );
 
-        expect("maxTokens" in (GroqMock.configs.at(-1) ?? {})).toBe(false);
+        expect("maxTokens" in (OpenAIMock.configs.at(-1) ?? {})).toBe(false);
       });
 
       it("honors an explicit per-model output limit when one is set (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
+        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
           configs: Array<{ maxTokens?: number }>;
         };
 
         await ChatModelManager.getInstance().createModelInstanceFromBridged(
           bridgedModel({
             name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.GROQ,
+            provider: ChatModelProviders.OPENAI_FORMAT,
             apiKey: "gq-key",
             maxTokens: 8192,
           })
         );
 
-        expect(GroqMock.configs.at(-1)?.maxTokens).toBe(8192);
+        expect(OpenAIMock.configs.at(-1)?.maxTokens).toBe(8192);
       });
 
       it("leaves an Anthropic model with no resolved ceiling to the client's own per-model default (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
@@ -288,20 +292,22 @@ describe("chatModelManager", () => {
         expect(AnthropicMock.configs.at(-1)?.maxTokens).toBeUndefined();
       });
 
-      it("strips a versioned Groq base URL because the client appends /openai/v1 itself", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
-          configs: Array<{ baseUrl?: string }>;
+      it("preserves a Groq provider's complete OpenAI-compatible API base", async () => {
+        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
+          configs: Array<{ configuration?: { baseURL?: string } }>;
         };
         const model = bridgedModel({
           name: "llama-3.3-70b-versatile",
-          provider: ChatModelProviders.GROQ,
+          provider: ChatModelProviders.OPENAI_FORMAT,
           apiKey: "gq-key",
           baseUrl: "https://api.groq.com/openai/v1",
         });
 
         await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
 
-        expect(GroqMock.configs.at(-1)?.baseUrl).toBe("https://api.groq.com");
+        expect(OpenAIMock.configs.at(-1)?.configuration?.baseURL).toBe(
+          "https://api.groq.com/openai/v1"
+        );
       });
     });
 

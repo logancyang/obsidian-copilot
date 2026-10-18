@@ -16,6 +16,7 @@ import type {
   SetupProviderInput,
 } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
+import { groqOpenAICompatibleBaseUrl } from "./groqCompatibilityMigration";
 
 const EMBEDDING_ID = /(^|[-_/.\s])embed(ding)?($|[-_/.\s])/i;
 
@@ -52,7 +53,7 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
     catalogProviderId: "xai",
     opencodeRoutable: true,
   },
-  [ChatModelProviders.GROQ]: {
+  groq: {
     providerType: "openai-compatible",
     catalogProviderId: "groq",
     opencodeRoutable: true,
@@ -93,8 +94,18 @@ function normalizeUrl(url: string | undefined): string {
   return (url ?? "").trim().replace(/\/+$/, "").toLowerCase();
 }
 
-function providerMetaFor(provider: string): ProviderMetadata | undefined {
-  return (ProviderInfo as unknown as Record<string, ProviderMetadata | undefined>)[provider];
+function providerMetaFor(
+  provider: string
+): Pick<ProviderMetadata, "label" | "curlBaseURL"> | undefined {
+  if (provider === "groq") {
+    return { label: "Groq", curlBaseURL: "https://api.groq.com/openai/v1" };
+  }
+  return (
+    ProviderInfo as unknown as Record<
+      string,
+      Pick<ProviderMetadata, "label" | "curlBaseURL"> | undefined
+    >
+  )[provider];
 }
 
 function defaultBaseUrlFor(provider: string): string | undefined {
@@ -133,7 +144,10 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
   if (!model.enabled) return null;
   if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null;
 
-  const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
+  const keyField =
+    model.provider === "groq"
+      ? "groqApiKey"
+      : ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;
   const topLevelKey = typeof rawKey === "string" ? rawKey.trim() : "";
   const apiKey = model.apiKey?.trim() || topLevelKey || undefined;
@@ -146,6 +160,7 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
     if (!apiKey) return null;
   }
+  if (model.provider === "groq") baseUrl = groqOpenAICompatibleBaseUrl(baseUrl);
 
   return {
     mapping,
@@ -218,7 +233,11 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
   return (
     provider.providerType === descriptor.providerType &&
     (provider.origin.catalogProviderId ?? "") === (descriptor.catalogProviderId ?? "") &&
-    normalizeUrl(provider.baseUrl) === normalizeUrl(descriptor.baseUrl)
+    normalizeUrl(
+      descriptor.catalogProviderId === "groq"
+        ? groqOpenAICompatibleBaseUrl(provider.baseUrl)
+        : provider.baseUrl
+    ) === normalizeUrl(descriptor.baseUrl)
   );
 }
 
