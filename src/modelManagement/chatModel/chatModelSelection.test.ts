@@ -70,29 +70,6 @@ describe("chatModelSelection", () => {
       }
     );
 
-    it("keeps a historical Groq selection on its configured model with an unrelated first entry", () => {
-      const groq = provider("groq-provider", {
-        displayName: "Groq",
-        origin: { kind: "byok", catalogProviderId: "groq" },
-      });
-      const entries = [
-        entry("other", "gpt-4o", provider("openai")),
-        entry("groq-model", "llama-3.3-70b-versatile", groq),
-      ];
-
-      expect(findChatBackendEntry(entries, "llama-3.3-70b-versatile|groq")?.configuredModelId).toBe(
-        "groq-model"
-      );
-      expect(
-        findChatBackendEntry(entries, "llama-3.3-70b-versatile|groq", false)?.configuredModelId
-      ).toBe("groq-model");
-      expect(
-        findChatBackendEntry(entries, "llama-3.3-70b-versatile|3rd party (openai-format)")
-          ?.configuredModelId
-      ).toBe("groq-model");
-      expect(findChatBackendEntry(entries, "groq-model")?.configuredModelId).toBe("groq-model");
-    });
-
     it("maps a legacy selection when first-entry fallback is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
       expect(
         findChatBackendEntry([entry("a", "gpt-4o", provider("p1"))], "gpt-4o|openai", false)

@@ -94,43 +94,6 @@ describe("chatModelManager", () => {
         expect(body()).not.toHaveProperty("max_completion_tokens");
       });
 
-      it("sends a Groq-compatible request to its saved full API base with its own key and model", async () => {
-        let request: { url?: string; headers?: Record<string, string>; body?: string } = {};
-        const parsedResponse = JSON.parse(OPENAI_RESPONSE) as Record<string, unknown>;
-        setRequestUrlImpl((input: typeof request) => {
-          request = input;
-          return Promise.resolve({
-            status: 200,
-            text: OPENAI_RESPONSE,
-            json: parsedResponse,
-            arrayBuffer: new ArrayBuffer(0),
-            headers: { "content-type": "application/json" },
-          });
-        });
-
-        await send(
-          wireModel({
-            name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.OPENAI_FORMAT,
-            apiKey: "test-groq-key",
-            baseUrl: "https://api.groq.com/openai/v1",
-          })
-        );
-
-        expect(request.url).toBe("https://api.groq.com/openai/v1/chat/completions");
-        expect(request.headers?.Authorization ?? request.headers?.authorization).toBe(
-          "Bearer test-groq-key"
-        );
-        expect(JSON.parse(request.body ?? "{}")).toMatchObject({
-          model: "llama-3.3-70b-versatile",
-        });
-        expect(JSON.parse(request.body ?? "{}")).not.toHaveProperty("prompt_cache_key");
-        expect(JSON.parse(request.body ?? "{}")).not.toHaveProperty("max_tokens");
-        for (const parameter of RETIRED_SAMPLING_PARAMS) {
-          expect(JSON.parse(request.body ?? "{}")).not.toHaveProperty(parameter);
-        }
-      });
-
       it("sends no sampling parameters, so the provider applies its own defaults (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
         const body = captureRequestBody(OPENAI_RESPONSE);
 

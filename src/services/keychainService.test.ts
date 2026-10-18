@@ -36,7 +36,6 @@ import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import type { CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
-import { planByokMigration } from "@/settings/migrations/byokMigration";
 import {
   KeychainService,
   isCopilotOwnedSecret,
@@ -451,30 +450,6 @@ describe("keychainService", () => {
           "sk-recovered"
         );
         expect(secretStorage.setSecret).not.toHaveBeenCalled();
-      });
-
-      it("hydrates a historical Groq setting and model credential without changing the Groq model identity", async () => {
-        const secretStorage = makeSecretStorage();
-        secretStorage.getSecret.mockReturnValue("test-groq-key");
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        const legacy = {
-          activeModels: [makeModel({ name: "llama-3.3-70b-versatile", provider: "groq" })],
-        } as unknown as CopilotSettings;
-
-        const result = await service.hydrateFromKeychain(legacy);
-        const descriptors = planByokMigration(result.settings);
-
-        expect(result.settings.groqApiKey).toBe("test-groq-key");
-        expect(result.settings.activeModels[0]).toMatchObject({
-          name: "llama-3.3-70b-versatile",
-          provider: "groq",
-          apiKey: "test-groq-key",
-        });
-        expect(descriptors[0]).toMatchObject({
-          catalogProviderId: "groq",
-          apiKey: "test-groq-key",
-          baseUrl: "https://api.groq.com/openai/v1",
-        });
       });
 
       it("still hydrates legacy secret keys present on input but not in DEFAULT_SETTINGS", async () => {

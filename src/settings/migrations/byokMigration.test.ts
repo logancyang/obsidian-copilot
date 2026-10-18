@@ -48,11 +48,7 @@ describe("byokMigration", () => {
             model({ name: "gemini-2.5-pro", provider: ChatModelProviders.GOOGLE }),
             model({ name: "x-ai/grok-4.3", provider: ChatModelProviders.OPENROUTERAI }),
             model({ name: "grok-4", provider: ChatModelProviders.XAI }),
-            model({
-              name: "llama-3.3-70b",
-              provider: "groq",
-              baseUrl: "https://api.groq.com/openai",
-            }),
+            model({ name: "llama-3.3-70b", provider: "groq" }),
             model({ name: "mistral-large", provider: ChatModelProviders.MISTRAL }),
             model({ name: "deepseek-chat", provider: ChatModelProviders.DEEPSEEK }),
           ],
@@ -74,14 +70,7 @@ describe("byokMigration", () => {
       expect(byCatalog(plan, "google")).toMatchObject({ providerType: "google" });
       expect(byCatalog(plan, "openrouter")).toMatchObject({ providerType: "openai-compatible" });
       expect(byCatalog(plan, "xai")).toMatchObject({ providerType: "openai-compatible" });
-      expect(byCatalog(plan, "groq")).toMatchObject({
-        providerType: "openai-compatible",
-        displayName: "Groq",
-        catalogProviderId: "groq",
-        baseUrl: "https://api.groq.com/openai/v1",
-        apiKey: "k",
-        autoEnrollIn: ["chat", "opencode"],
-      });
+      expect(byCatalog(plan, "groq")).toMatchObject({ providerType: "openai-compatible" });
       expect(byCatalog(plan, "mistral")).toMatchObject({ providerType: "openai-compatible" });
       expect(byCatalog(plan, "deepseek")).toMatchObject({ providerType: "openai-compatible" });
     });
@@ -125,23 +114,6 @@ describe("byokMigration", () => {
         "qwen/qwen-2.5",
         "x-ai/grok-4.3",
       ]);
-    });
-
-    it("prefers a per-model Groq key and never borrows the OpenAI key", () => {
-      const plan = planByokMigration(
-        settingsWith(
-          [
-            model({
-              name: "llama",
-              provider: "groq",
-              apiKey: "per-model",
-              baseUrl: "https://gateway.example",
-            }),
-          ],
-          { groqApiKey: "top-level", openAIApiKey: "openai-key" }
-        )
-      );
-      expect(byCatalog(plan, "groq")?.apiKey).toBe("per-model");
     });
 
     it("prefers a per-model apiKey over the top-level provider key", () => {
@@ -394,23 +366,6 @@ describe("byokMigration", () => {
       );
       expect(setupProvider).toHaveBeenCalledTimes(1);
       expect(setupProvider.mock.calls[0][0]).toMatchObject({ catalogProviderId: "openai" });
-    });
-
-    it("deduplicates a historical host-only Groq provider against its full API base", async () => {
-      const existing = byokProvider({
-        providerType: "openai-compatible",
-        baseUrl: "https://api.groq.com",
-        origin: { kind: "byok", catalogProviderId: "groq" },
-      });
-      const { api, setupProvider } = makeApi([existing]);
-      await executeByokMigration(
-        api,
-        settingsWith(
-          [model({ name: "llama", provider: "groq", baseUrl: "https://api.groq.com/openai/v1" })],
-          { groqApiKey: "key" }
-        )
-      );
-      expect(setupProvider).not.toHaveBeenCalled();
     });
 
     it("continues after a per-provider failure", async () => {

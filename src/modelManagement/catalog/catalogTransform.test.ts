@@ -29,24 +29,6 @@ describe("catalogTransform", () => {
       });
     });
 
-    it("keeps the Groq models.dev entry as an OpenAI-compatible catalog provider", () => {
-      const [groq] = transformWireToCatalog({
-        groq: {
-          id: "groq",
-          name: "Groq",
-          npm: "@ai-sdk/groq",
-          api: "https://api.groq.com/openai/v1",
-          models: { "llama-3.3-70b-versatile": { id: "llama-3.3-70b-versatile", name: "Llama" } },
-        },
-      });
-      expect(groq).toMatchObject({
-        id: "groq",
-        providerType: "openai-compatible",
-        defaultBaseUrl: "https://api.groq.com/openai/v1",
-        models: { "llama-3.3-70b-versatile": { id: "llama-3.3-70b-versatile" } },
-      });
-    });
-
     it("falls back to wire.id for displayName when name is missing, omits defaultBaseUrl when api absent", () => {
       const wire = makeWire({ ghost: { id: "ghost" } });
       const [provider] = transformWireToCatalog(wire);

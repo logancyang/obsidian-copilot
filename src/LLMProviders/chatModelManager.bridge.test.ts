@@ -6,19 +6,6 @@ import * as obsidianModule from "obsidian";
 
 import ChatModelManager from "./chatModelManager";
 
-jest.mock("@langchain/openai", () => {
-  const actual = jest.requireActual<typeof import("@langchain/openai")>("@langchain/openai");
-  const BaseChatOpenAI = actual.ChatOpenAI;
-  class ChatOpenAI extends BaseChatOpenAI {
-    static configs: unknown[] = [];
-    constructor(config: ConstructorParameters<typeof BaseChatOpenAI>[0]) {
-      ChatOpenAI.configs.push(config);
-      super(config);
-    }
-  }
-  return { ...actual, ChatOpenAI };
-});
-
 jest.mock("@langchain/anthropic", () => {
   class ChatAnthropic {
     static configs: unknown[] = [];
@@ -243,39 +230,6 @@ describe("chatModelManager", () => {
         );
       });
 
-      it("sends no output cap for a model that carries no limit of its own (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
-          configs: Array<Record<string, unknown>>;
-        };
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(
-          bridgedModel({
-            name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.OPENAI_FORMAT,
-            apiKey: "gq-key",
-          })
-        );
-
-        expect("maxTokens" in (OpenAIMock.configs.at(-1) ?? {})).toBe(false);
-      });
-
-      it("honors an explicit per-model output limit when one is set (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
-          configs: Array<{ maxTokens?: number }>;
-        };
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(
-          bridgedModel({
-            name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.OPENAI_FORMAT,
-            apiKey: "gq-key",
-            maxTokens: 8192,
-          })
-        );
-
-        expect(OpenAIMock.configs.at(-1)?.maxTokens).toBe(8192);
-      });
-
       it("leaves an Anthropic model with no resolved ceiling to the client's own per-model default (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
         const AnthropicMock = jest.requireMock("@langchain/anthropic").ChatAnthropic as {
           configs: Array<{ maxTokens?: number }>;
@@ -290,24 +244,6 @@ describe("chatModelManager", () => {
         );
 
         expect(AnthropicMock.configs.at(-1)?.maxTokens).toBeUndefined();
-      });
-
-      it("preserves a Groq provider's complete OpenAI-compatible API base", async () => {
-        const OpenAIMock = jest.requireMock("@langchain/openai").ChatOpenAI as {
-          configs: Array<{ configuration?: { baseURL?: string } }>;
-        };
-        const model = bridgedModel({
-          name: "llama-3.3-70b-versatile",
-          provider: ChatModelProviders.OPENAI_FORMAT,
-          apiKey: "gq-key",
-          baseUrl: "https://api.groq.com/openai/v1",
-        });
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
-
-        expect(OpenAIMock.configs.at(-1)?.configuration?.baseURL).toBe(
-          "https://api.groq.com/openai/v1"
-        );
       });
     });
 

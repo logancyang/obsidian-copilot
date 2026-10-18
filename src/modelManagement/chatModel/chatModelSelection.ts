@@ -8,11 +8,6 @@ import {
 
 export type ResolvedChatBackendEntry = Extract<EnabledBackendEntry, { state: "ok" }>;
 
-const HISTORICAL_CATALOG_ID_TO_CHAT_PROVIDER: Record<string, string> = {
-  ...CATALOG_ID_TO_CHAT_PROVIDER,
-  groq: "groq",
-};
-
 const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
   ollama: ChatModelProviders.OLLAMA,
   "lm studio": ChatModelProviders.LM_STUDIO,
@@ -28,7 +23,9 @@ function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly strin
   }
   if (entry.provider.origin.kind === "byok" && entry.provider.origin.catalogProviderId) {
     const catalogProvider =
-      HISTORICAL_CATALOG_ID_TO_CHAT_PROVIDER[entry.provider.origin.catalogProviderId];
+      entry.provider.origin.catalogProviderId === "groq"
+        ? "groq"
+        : CATALOG_ID_TO_CHAT_PROVIDER[entry.provider.origin.catalogProviderId];
     if (catalogProvider) providers.add(catalogProvider);
   }
   const displayProvider = DISPLAY_NAME_TO_LEGACY_PROVIDER[entry.provider.displayName.toLowerCase()];

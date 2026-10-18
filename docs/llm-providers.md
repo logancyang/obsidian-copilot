@@ -99,10 +99,6 @@ model ID. The API key is optional; add one when the endpoint requires
 authentication. Model discovery uses the endpoint's `/v1/models` response, but
 you can always enter an exact model ID before searching the discovered list.
 
-Groq uses OpenAI-compatible access. Add a Groq provider with the base URL
-`https://api.groq.com/openai/v1` and your Groq API key. Existing configured Groq
-providers keep their models and key; you do not need to add them again.
-
 If **Test** succeeds but Quick Chat cannot send a message, edit the provider
 and turn on **Enable CORS**. Responses then appear after completion instead of
 streaming token by token. For LM Studio, you can enable CORS in LM Studio to

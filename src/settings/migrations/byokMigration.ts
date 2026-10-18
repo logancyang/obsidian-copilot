@@ -16,7 +16,6 @@ import type {
   SetupProviderInput,
 } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
-import { groqOpenAICompatibleBaseUrl } from "./groqCompatibilityMigration";
 
 const EMBEDDING_ID = /(^|[-_/.\s])embed(ding)?($|[-_/.\s])/i;
 
@@ -94,28 +93,19 @@ function normalizeUrl(url: string | undefined): string {
   return (url ?? "").trim().replace(/\/+$/, "").toLowerCase();
 }
 
-function providerMetaFor(
-  provider: string
-): Pick<ProviderMetadata, "label" | "curlBaseURL"> | undefined {
-  if (provider === "groq") {
-    return { label: "Groq", curlBaseURL: "https://api.groq.com/openai/v1" };
-  }
-  return (
-    ProviderInfo as unknown as Record<
-      string,
-      Pick<ProviderMetadata, "label" | "curlBaseURL"> | undefined
-    >
-  )[provider];
+function providerMetaFor(provider: string): ProviderMetadata | undefined {
+  return (ProviderInfo as unknown as Record<string, ProviderMetadata | undefined>)[provider];
 }
 
 function defaultBaseUrlFor(provider: string): string | undefined {
+  if (provider === "groq") return "https://api.groq.com/openai/v1";
   const url = providerMetaFor(provider)?.curlBaseURL;
   if (!url || url.includes("<") || url.includes("{")) return undefined;
   return url;
 }
 
 function displayNameFor(provider: string): string {
-  return providerMetaFor(provider)?.label ?? provider;
+  return provider === "groq" ? "Groq" : (providerMetaFor(provider)?.label ?? provider);
 }
 
 function buildExtras(
@@ -160,7 +150,6 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
     if (!apiKey) return null;
   }
-  if (model.provider === "groq") baseUrl = groqOpenAICompatibleBaseUrl(baseUrl);
 
   return {
     mapping,
@@ -233,11 +222,7 @@ function isDuplicateByok(provider: Provider, descriptor: SetupProviderInput): bo
   return (
     provider.providerType === descriptor.providerType &&
     (provider.origin.catalogProviderId ?? "") === (descriptor.catalogProviderId ?? "") &&
-    normalizeUrl(
-      descriptor.catalogProviderId === "groq"
-        ? groqOpenAICompatibleBaseUrl(provider.baseUrl)
-        : provider.baseUrl
-    ) === normalizeUrl(descriptor.baseUrl)
+    normalizeUrl(provider.baseUrl) === normalizeUrl(descriptor.baseUrl)
   );
 }
 

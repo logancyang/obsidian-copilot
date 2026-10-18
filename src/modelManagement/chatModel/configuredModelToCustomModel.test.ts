@@ -58,26 +58,6 @@ describe("configuredModelToCustomModel", () => {
       }
     });
 
-    it("routes a Groq catalog provider through OPENAI_FORMAT while preserving its endpoint", () => {
-      const groq = provider({
-        baseUrl: "https://api.groq.com/openai/v1",
-        origin: { kind: "byok", catalogProviderId: "groq" },
-      });
-      expect(mapProviderTypeToChatModelProvider(groq)).toBe(ChatModelProviders.OPENAI_FORMAT);
-      expect(
-        configuredModelToCustomModel({
-          provider: groq,
-          configuredModel: configuredModel(),
-          apiKey: "test-groq-key",
-        })
-      ).toMatchObject({
-        provider: ChatModelProviders.OPENAI_FORMAT,
-        baseUrl: "https://api.groq.com/openai/v1",
-        apiKey: "test-groq-key",
-        configuredModelId: "cm1",
-      });
-    });
-
     it("maps an openai-compatible provider with an unknown or missing catalog id to OPENAI_FORMAT", () => {
       expect(
         mapProviderTypeToChatModelProvider(
@@ -112,6 +92,22 @@ describe("configuredModelToCustomModel", () => {
   });
 
   describe("configuredModelToCustomModel()", () => {
+    it("routes a saved host-only Groq provider through the compatible API (https://github.com/logancyang/obsidian-copilot-preview/issues/152)", () => {
+      const custom = configuredModelToCustomModel({
+        provider: provider({
+          baseUrl: "https://api.groq.com",
+          origin: { kind: "byok", catalogProviderId: "groq" },
+        }),
+        configuredModel: configuredModel(),
+        apiKey: "fake-key",
+      });
+
+      expect(custom).toMatchObject({
+        provider: ChatModelProviders.OPENAI_FORMAT,
+        baseUrl: "https://api.groq.com/openai/v1",
+      });
+    });
+
     it("uses the wire id as the model name and the stored display name", () => {
       const custom = configuredModelToCustomModel({
         provider: provider({ providerType: "anthropic" }),
