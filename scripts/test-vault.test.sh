@@ -10,6 +10,7 @@ VAULT_ROOT="$TEST_ROOT/vault"
 FAKE_BIN="$TEST_ROOT/bin"
 mkdir -p "$FIXTURE_ROOT/scripts" "$VAULT_ROOT/.obsidian" "$FAKE_BIN"
 cp "$REPO_ROOT/scripts/test-vault.sh" "$FIXTURE_ROOT/scripts/test-vault.sh"
+cp "$REPO_ROOT/scripts/obsidian-vault.sh" "$FIXTURE_ROOT/scripts/obsidian-vault.sh"
 
 cat >"$FIXTURE_ROOT/manifest.json" <<'EOF'
 {
@@ -30,18 +31,30 @@ cat >"$FAKE_BIN/npm" <<'EOF'
 echo "npm $*" >>"$DEPLOY_CALL_LOG"
 exit 0
 EOF
+REGISTRY="$TEST_ROOT/registry.tsv"
+printf 'vault\t%s\n' "$VAULT_ROOT" >"$REGISTRY"
 cat >"$FAKE_BIN/obsidian" <<'EOF'
 #!/usr/bin/env bash
 echo "obsidian $*" >>"$DEPLOY_CALL_LOG"
+if [[ "$1" == "vaults" ]]; then
+  cat "$REGISTRY"
+elif [[ "$1" == vault=* && "${2:-}" == "vault" && -z "${RENDERER_CLOSED:-}" ]]; then
+  awk -F'\t' -v name="${1#vault=}" \
+    '$1 == name { print "name\t" $1; print "path\t" $2; exit }' "$REGISTRY"
+elif [[ "$1" == "eval" && "$2" == *vault-open* && -z "${REFUSE_REGISTER:-}" ]]; then
+  path="$(printf '%s' "$2" | sed -E "s/.*'vault-open', \"([^\"]*)\".*/\1/")"
+  printf '%s\t%s\n' "${path##*/}" "$path" >>"$REGISTRY"
+fi
 exit 0
 EOF
-chmod +x "$FAKE_BIN/npm" "$FAKE_BIN/obsidian"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$FAKE_BIN/sleep"
+chmod +x "$FAKE_BIN/npm" "$FAKE_BIN/obsidian" "$FAKE_BIN/sleep"
 
 git -C "$FIXTURE_ROOT" init -q
 git -C "$FIXTURE_ROOT" config user.email "test@example.com"
 git -C "$FIXTURE_ROOT" config user.name "Test"
 git -C "$FIXTURE_ROOT" config commit.gpgsign false
-git -C "$FIXTURE_ROOT" add .gitignore manifest.json scripts/test-vault.sh source.txt
+git -C "$FIXTURE_ROOT" add .gitignore manifest.json scripts/obsidian-vault.sh scripts/test-vault.sh source.txt
 git -C "$FIXTURE_ROOT" commit -qm "fixture"
 
 DEPLOY_STDERR="$TEST_ROOT/deploy-stderr.log"
@@ -51,6 +64,7 @@ run_deploy() {
     COPILOT_TEST_VAULT_PATH="$VAULT_ROOT" \
     OBSIDIAN_BIN="$FAKE_BIN/obsidian" \
     DEPLOY_CALL_LOG="$DEPLOY_CALL_LOG" \
+    REGISTRY="$REGISTRY" \
     bash "$FIXTURE_ROOT/scripts/test-vault.sh" >/dev/null 2>"$DEPLOY_STDERR"
 }
 
@@ -97,6 +111,23 @@ ln -s "$FIXTURE_ROOT/main.js" "$VAULT_ROOT/.obsidian/plugins/copilot/main.js"
 ln -s "$FIXTURE_ROOT/styles.css" "$VAULT_ROOT/.obsidian/plugins/copilot/styles.css"
 run_deploy
 assert_manifest clean
+
+for action in plugin:disable plugin:enable; do
+  if ! grep -qxF "obsidian vault=vault $action id=copilot" "$DEPLOY_CALL_LOG"; then
+    echo "expected $action to name the registered test vault" >&2
+    exit 1
+  fi
+done
+if grep -q "setEnable" "$DEPLOY_CALL_LOG"; then
+  echo "changed restricted mode in a vault it did not register" >&2
+  exit 1
+fi
+MANIFESTS_LINE="$(grep -n -m1 -xF "obsidian vault=vault eval code=app.plugins.loadManifests()" "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+ENABLE_LINE="$(grep -n -m1 -xF "obsidian vault=vault plugin:enable id=copilot" "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+if [[ -z "$MANIFESTS_LINE" || "$MANIFESTS_LINE" -ge "$ENABLE_LINE" ]]; then
+  echo "enabled the plugin before rescanning plugin manifests" >&2
+  exit 1
+fi
 
 for artifact in main.js styles.css; do
   if [[ -L "$VAULT_ROOT/.obsidian/plugins/copilot/$artifact" ]]; then
@@ -155,7 +186,7 @@ if ! grep -q "npm run gallery:vault" "$DEPLOY_CALL_LOG"; then
   exit 1
 fi
 GALLERY_DEPLOY_LINE="$(grep -n -m1 '^npm run gallery:vault$' "$DEPLOY_CALL_LOG" | cut -d: -f1)"
-FIRST_RELOAD_LINE="$(grep -n -m1 '^obsidian ' "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+FIRST_RELOAD_LINE="$(grep -n -m1 '^obsidian .*plugin:' "$DEPLOY_CALL_LOG" | cut -d: -f1)"
 if [[ -z "$GALLERY_DEPLOY_LINE" || -z "$FIRST_RELOAD_LINE" || "$FIRST_RELOAD_LINE" -le "$GALLERY_DEPLOY_LINE" ]]; then
   echo "reloaded Obsidian before both plugins were deployed" >&2
   exit 1
@@ -175,6 +206,79 @@ rm -r "$FOREIGN_GALLERY"
 run_deploy
 if ! grep -q "npm run gallery:vault" "$DEPLOY_CALL_LOG"; then
   echo "did not take over a gallery whose worktree no longer exists" >&2
+  exit 1
+fi
+
+if ! RENDERER_CLOSED=1 run_deploy; then
+  echo "refused a registered vault whose window is not open yet" >&2
+  exit 1
+fi
+if grep -q "vault-open" "$DEPLOY_CALL_LOG" ||
+  ! grep -qxF "obsidian vault=vault plugin:enable id=copilot" "$DEPLOY_CALL_LOG"; then
+  echo "expected a registered vault with no open window to deploy without re-registering" >&2
+  exit 1
+fi
+
+mkdir -p "$TEST_ROOT/other-vault"
+printf 'other\t%s\n' "$TEST_ROOT/other-vault" >"$REGISTRY"
+run_deploy
+if ! grep -q "vault-open" "$DEPLOY_CALL_LOG"; then
+  echo "did not register the unregistered vault" >&2
+  exit 1
+fi
+if ! grep -qxF "obsidian vault=vault eval code=app.plugins.setEnable(true)" "$DEPLOY_CALL_LOG"; then
+  echo "did not enable plugins in the newly registered vault" >&2
+  exit 1
+fi
+for action in plugin:disable plugin:enable; do
+  if ! grep -qxF "obsidian vault=vault $action id=copilot" "$DEPLOY_CALL_LOG"; then
+    echo "expected $action to name the newly registered vault" >&2
+    exit 1
+  fi
+done
+
+DEPLOYED_BEFORE="$(cat "$DEPLOYED_MAIN")"
+printf 'other\t%s\n' "$TEST_ROOT/other-vault" >"$REGISTRY"
+if REFUSE_REGISTER=1 run_deploy; then
+  echo "deployed into a vault Obsidian would not register" >&2
+  exit 1
+fi
+if ! grep -q "could not register $VAULT_ROOT" "$DEPLOY_STDERR"; then
+  echo "expected the refusal to name the unregistered vault" >&2
+  exit 1
+fi
+if grep -q "plugin:" "$DEPLOY_CALL_LOG" || grep -q "^npm " "$DEPLOY_CALL_LOG"; then
+  echo "built or reloaded after failing to register the vault" >&2
+  exit 1
+fi
+if [[ "$(cat "$DEPLOYED_MAIN")" != "$DEPLOYED_BEFORE" ]]; then
+  echo "changed the plugin files of a vault it could not register" >&2
+  exit 1
+fi
+
+mkdir -p "$TEST_ROOT/elsewhere/vault"
+printf 'vault\t%s\n' "$TEST_ROOT/elsewhere/vault" >"$REGISTRY"
+if run_deploy; then
+  echo "deployed into a vault whose name another vault already uses" >&2
+  exit 1
+fi
+if ! grep -q 'already named "vault"' "$DEPLOY_STDERR"; then
+  echo "expected the refusal to name the taken vault name" >&2
+  exit 1
+fi
+if grep -q "vault-open" "$DEPLOY_CALL_LOG" || grep -q "^npm " "$DEPLOY_CALL_LOG"; then
+  echo "registered or built a vault whose name is taken" >&2
+  exit 1
+fi
+
+: >"$REGISTRY"
+run_deploy
+if grep -q "plugin:" "$DEPLOY_CALL_LOG"; then
+  echo "reloaded although the CLI listed no vaults" >&2
+  exit 1
+fi
+if ! grep -q "could not reach Obsidian" "$DEPLOY_STDERR"; then
+  echo "expected a warning when the CLI lists no vaults" >&2
   exit 1
 fi
 
