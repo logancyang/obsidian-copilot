@@ -142,7 +142,7 @@ function toNotes(chunks: readonly MiyoSearchResult[]): FileResult[] {
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
 function serialize(notes: readonly FileResult[], note: string | undefined): string {
-  let contentCap = Math.floor(OUTPUT_BUDGET_BYTES / notes.length);
+  let contentCap = Math.floor(OUTPUT_BUDGET_BYTES / Math.max(notes.length, 1));
   let text: string;
   do {
     const results = notes.map(({ path, content }) => ({

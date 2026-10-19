@@ -185,6 +185,21 @@ describe("miyoSearchTool", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/734 returns no notes when the skipped-folder note alone overflows the budget", async () => {
+      const missing = Array.from({ length: 40 }, (_, i) => `${i}-${"x".repeat(1_000)}`);
+      const { client, deps } = setup({ miyoExtraSearchFolders: missing });
+      for (const name of missing) {
+        client.search.mockRejectedValueOnce(
+          new MiyoRequestError(404, `Folder not registered: ${name}`)
+        );
+      }
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(result.isError).toBe(false);
+      expect(JSON.parse(result.text)).toMatchObject({ results: [], count: 0 });
+    });
+
     it("https://github.com/logancyang/obsidian-copilot/issues/3508 reports an error without widening when the vault itself is missing from Miyo", async () => {
       const { client, deps } = setup({ miyoExtraSearchFolders: ["Research"] });
       client.search.mockRejectedValue(new MiyoRequestError(404, "Folder not registered: step-1"));
