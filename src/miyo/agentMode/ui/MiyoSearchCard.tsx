@@ -1,5 +1,5 @@
 import React from "react";
-import { MiyoLogo } from "@/components/ui/MiyoLogo";
+import { MiyoLogo } from "@/miyo/ui/MiyoLogo";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { cn } from "@/lib/utils";

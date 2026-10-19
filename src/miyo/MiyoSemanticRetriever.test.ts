@@ -1,7 +1,7 @@
 import { type App, TFile } from "obsidian";
 import { logWarn } from "@/logger";
 import { MiyoRequestError } from "@/miyo/MiyoClient";
-import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
+import { MiyoSemanticRetriever } from "@/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 
 const mockResolveBaseUrl = jest.fn();

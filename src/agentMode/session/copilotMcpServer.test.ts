@@ -4,7 +4,7 @@ import {
   SEND_FEEDBACK_TOOL,
   type CopilotMcpServer,
 } from "./copilotMcpServer";
-import { MIYO_SEARCH_TOOL } from "@/agentMode/session/miyoSearch/miyoSearchTool";
+import { MIYO_SEARCH_TOOL } from "@/miyo/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));

@@ -1,4 +1,4 @@
-import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
+import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import { render, screen } from "@testing-library/react";
 import React from "react";
 

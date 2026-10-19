@@ -94,7 +94,7 @@ let lastModalOptions: {
   onClose: () => void;
   onAddVault?: () => Promise<unknown>;
 } | null = null;
-jest.mock("@/settings/v2/components/MiyoConnectModal", () => ({
+jest.mock("@/miyo/settings/MiyoConnectModal", () => ({
   MiyoConnectModal: class {
     constructor(
       _app: unknown,

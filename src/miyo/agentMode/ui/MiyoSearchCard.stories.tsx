@@ -1,4 +1,4 @@
-import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
+import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 

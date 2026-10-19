@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () => null }));
-jest.mock("@/settings/v2/components/MiyoSettings", () => ({
+jest.mock("@/miyo/settings/MiyoSettings", () => ({
   MiyoSettings: () => <div>Miyo settings content</div>,
 }));
 jest.mock("@/settings/v2/components/SelfHostSettings", () => ({ SelfHostSettings: () => null }));

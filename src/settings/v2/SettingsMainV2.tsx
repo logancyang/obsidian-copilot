@@ -1,6 +1,6 @@
 import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 import { Button } from "@/components/ui/button";
-import { MiyoLogo } from "@/components/ui/MiyoLogo";
+import { MiyoLogo } from "@/miyo/ui/MiyoLogo";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
@@ -17,7 +17,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
-import { MiyoSettings } from "./components/MiyoSettings";
+import { MiyoSettings } from "@/miyo/settings/MiyoSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
 
 const LazySkillsSettings = React.lazy(() =>
