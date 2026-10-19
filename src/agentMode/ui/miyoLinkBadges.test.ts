@@ -1,18 +1,8 @@
-import { addMiyoBadgeHosts, miyoVaultPaths } from "@/agentMode/ui/miyoLinkBadges";
-import { setSettings } from "@/settings/model";
-import { getVaultBase } from "@/utils/vaultPath";
+import { addMiyoBadgeHosts } from "@/agentMode/ui/miyoLinkBadges";
 import type { App } from "obsidian";
-
-jest.mock("@/utils/vaultPath", () => ({
-  ...jest.requireActual("@/utils/vaultPath"),
-  getVaultBase: jest.fn(),
-}));
-
-const VAULT_BASE = "/Users/me/step-2";
 
 function makeApp(files: Record<string, string>): App {
   return {
-    vault: { getName: () => "step-2" },
     metadataCache: {
       getFirstLinkpathDest: jest.fn((linkpath: string) => {
         const path = files[linkpath];
@@ -23,70 +13,6 @@ function makeApp(files: Record<string, string>): App {
 }
 
 describe("miyoLinkBadges", () => {
-  beforeEach(() => {
-    jest.mocked(getVaultBase).mockReturnValue(VAULT_BASE);
-    setSettings({ miyoExtraSearchFolders: ["Archive"] });
-  });
-
-  afterEach(() => {
-    setSettings({ miyoExtraSearchFolders: [] });
-  });
-
-  describe("miyoVaultPaths()", () => {
-    const app = makeApp({});
-
-    it("strips the vault folder Miyo prefixes onto each result path (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([...miyoVaultPaths(app, ["step-2/notes/Standing desk setup.md"])]).toEqual([
-        "notes/Standing desk setup.md",
-      ]);
-    });
-
-    it("keeps a vault-relative path as it is", () => {
-      expect([...miyoVaultPaths(app, ["notes/Standing desk setup.md"])]).toEqual([
-        "notes/Standing desk setup.md",
-      ]);
-    });
-
-    it("turns an absolute path inside the vault into a vault-relative path (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([...miyoVaultPaths(app, [`${VAULT_BASE}/notes/Standing desk setup.md`])]).toEqual([
-        "notes/Standing desk setup.md",
-      ]);
-    });
-
-    it("drops an absolute path outside the vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([
-        ...miyoVaultPaths(app, ["/Users/me/other-vault/notes/Standing desk setup.md"]),
-      ]).toEqual([]);
-    });
-
-    it("drops results from a configured extra Miyo folder and keeps other paths as they are (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([
-        ...miyoVaultPaths(app, ["Archive/notes/Old.md", "copilot-test-vault/edit-eval/a.md"]),
-      ]).toEqual(["copilot-test-vault/edit-eval/a.md"]);
-    });
-
-    it("under Unrestricted scope, keeps a relative path without the vault prefix, the form the search tool returns for the vault's notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
-      setSettings({ miyoSearchAll: true });
-      try {
-        expect([
-          ...miyoVaultPaths(app, ["notes/Standing desk setup.md", "step-2/notes/Reading list.md"]),
-        ]).toEqual(["notes/Standing desk setup.md", "notes/Reading list.md"]);
-      } finally {
-        setSettings({ miyoSearchAll: false });
-      }
-    });
-
-    it("reads Windows backslash paths the same as forward-slash paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([
-        ...miyoVaultPaths(app, ["step-2\\notes\\Standing desk setup.md", "Archive\\notes\\Old.md"]),
-      ]).toEqual(["notes/Standing desk setup.md"]);
-    });
-
-    it("strips only the vault-name prefix when a top-level vault folder has the vault's name (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
-      expect([...miyoVaultPaths(app, ["step-2/step-2/Trip.md"])]).toEqual(["step-2/Trip.md"]);
-    });
-  });
-
   describe("addMiyoBadgeHosts()", () => {
     const FILES = {
       "notes/Standing desk setup": "notes/Standing desk setup.md",

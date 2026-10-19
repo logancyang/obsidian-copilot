@@ -130,8 +130,9 @@ function toNotes(chunks: readonly MiyoSearchResult[], vaultName: string): FileRe
 // Miyo prefixes each path with its folder's name, which names no folder inside the vault, so the agent could not open or link the note.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 function vaultRelative(path: string, vaultName: string): string {
+  const normalized = path.replace(/\\/g, "/");
   const prefix = `${vaultName}/`;
-  return vaultName && path.startsWith(prefix) ? path.slice(prefix.length) : path;
+  return vaultName && normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized;
 }
 
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.

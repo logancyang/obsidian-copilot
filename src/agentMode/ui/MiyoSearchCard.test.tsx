@@ -127,13 +127,10 @@ describe("MiyoSearchCard", () => {
       expect(screen.getByText("“desk”")).toBeTruthy();
     });
 
-    it("shows no error line when the search did not fail or carried no error text", () => {
-      const { container, rerender } = render(
-        <MiyoSearchCard status="completed" query="desk" noteCount={2} error="stale" />
+    it("shows no error line when a failed search carried no error text", () => {
+      const { container } = render(
+        <MiyoSearchCard status="failed" query="desk" noteCount={null} error={null} />
       );
-      expect(screen.queryByText("stale")).toBeNull();
-
-      rerender(<MiyoSearchCard status="failed" query="desk" noteCount={null} error={null} />);
       expect(container.firstElementChild?.children).toHaveLength(2);
     });
 

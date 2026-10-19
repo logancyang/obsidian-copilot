@@ -120,28 +120,6 @@ const claudeMiyo = (overrides: ToolCallOverrides = {}, query = MIYO_QUERY): Agen
   ...overrides,
 });
 
-const codexMiyo = (overrides: ToolCallOverrides = {}): AgentMessagePart => ({
-  kind: "tool_call",
-  id: "miyo-run",
-  title: "mcp.obsidian-copilot.miyo_search",
-  toolKind: "execute",
-  status: "completed",
-  input: { server: "obsidian-copilot", tool: "miyo_search", arguments: { query: MIYO_QUERY } },
-  ...overrides,
-});
-
-const opencodeMiyo = (overrides: ToolCallOverrides = {}): AgentMessagePart => ({
-  kind: "tool_call",
-  id: "miyo-run",
-  title: "execute",
-  toolKind: "other",
-  status: "completed",
-  input: {
-    code: `const r = await tools["obsidian-copilot"].miyo_search({ query: "${MIYO_QUERY}" });\nreturn r;`,
-  },
-  ...overrides,
-});
-
 const MIYO_FOLLOW_UP: AgentMessagePart[] = [
   tool("grep-1", "Grep", { input: { pattern: "standing desk|back pain" } }),
   tool("read-1", "Read", { locations: [{ path: "notes/Standing desk setup.md" }] }),
@@ -149,16 +127,6 @@ const MIYO_FOLLOW_UP: AgentMessagePart[] = [
 ];
 
 const MIYO_SEARCH: AgentMessagePart[] = [claudeMiyo({ output: MIYO_NOTES }), ...MIYO_FOLLOW_UP];
-
-const MIYO_SEARCH_CODEX: AgentMessagePart[] = [
-  codexMiyo({ output: MIYO_NOTES }),
-  ...MIYO_FOLLOW_UP,
-];
-
-const MIYO_SEARCH_OPENCODE: AgentMessagePart[] = [
-  opencodeMiyo({ output: MIYO_NOTES }),
-  ...MIYO_FOLLOW_UP,
-];
 
 const MIYO_LONG_QUERY =
   "what did I decide about the migration plan for the shared calendar service and who owns the rollout checklist";
@@ -176,9 +144,7 @@ const MIYO_LINK_NOTES: Record<string, string> = {
 };
 
 const MIYO_LINKS: AgentMessagePart[] = [
-  claudeMiyo({
-    output: miyoResults(["step-2/notes/Standing desk setup.md", "step-2/notes/Untitled 3.md"]),
-  }),
+  claudeMiyo({ output: MIYO_NOTES }),
   tool("grep-1", "Grep", { input: { pattern: "ZX-4471" } }),
   say(
     "Miyo found [[Standing desk setup]] (see [[Standing desk setup#Fixes]]) and your scratch note, [[Untitled 3|desk scratchpad]]. A keyword search added [[Reading list]] and [Trip planning](notes/Trip%20planning.md)."
@@ -189,11 +155,6 @@ const MIYO_SEARCH_RUNNING: AgentMessagePart[] = [claudeMiyo({ status: "in_progre
 
 const MIYO_SEARCH_FAILED: AgentMessagePart[] = [
   claudeMiyo({ status: "failed", output: [{ type: "text", text: MIYO_ERROR }] }),
-  say("Miyo is not running, so I could not search your notes. Open Miyo and ask again."),
-];
-
-const MIYO_SEARCH_FAILED_OPENCODE: AgentMessagePart[] = [
-  opencodeMiyo({ status: "failed", output: [{ type: "text", text: MIYO_ERROR }] }),
   say("Miyo is not running, so I could not search your notes. Open Miyo and ask again."),
 ];
 
@@ -272,14 +233,6 @@ export const MiyoSearch: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH} />,
 };
 
-export const MiyoSearchCodex: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_SEARCH_CODEX} />,
-};
-
-export const MiyoSearchOpenCode: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_SEARCH_OPENCODE} />,
-};
-
 export const MiyoSearchLongQuery: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH_LONG_QUERY} />,
 };
@@ -294,10 +247,6 @@ export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {
 
 export const MiyoSearchFailed: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH_FAILED} />,
-};
-
-export const MiyoSearchFailedOpenCode: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_SEARCH_FAILED_OPENCODE} />,
 };
 
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {

@@ -55,7 +55,7 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({
         {query ? <span className="tw-min-w-0 tw-truncate tw-text-muted">“{query}”</span> : null}
       </div>
       {outcome ? <span className="tw-shrink-0 tw-text-xs tw-text-muted">{outcome}</span> : null}
-      {failed && error ? (
+      {error ? (
         <div className="tw-line-clamp-2 tw-basis-full tw-pl-6 tw-text-xs tw-text-muted">
           {error}
         </div>

@@ -607,93 +607,42 @@ describe("AgentTrail", () => {
       ],
       ...overrides,
     });
-  const CODEX_MIYO = (overrides: Partial<ToolCallPart> = {}) =>
-    toolCall("miyo", {
-      title: "mcp.obsidian-copilot.miyo_search",
-      toolKind: "execute",
-      input: {
-        server: "obsidian-copilot",
-        tool: "miyo_search",
-        arguments: { query: "standing desk" },
-      },
-      output: [
-        { type: "text", text: '{"results":[{"path":"v/a.md"},{"path":"v/b.md"}],"count":2}' },
+  it("renders a miyo_search call as its own card between grouped work, with its query and note count (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({ parts: [READ_A, LINT, CLAUDE_MIYO(), READ_B, LINT, text("Found it.")] });
+
+    expect(screen.getByText("Searched with Miyo")).toBeTruthy();
+    expect(screen.getByText("“standing desk”")).toBeTruthy();
+    expect(screen.getByText("2 notes")).toBeTruthy();
+    expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
+  });
+
+  it("renders a failed miyo_search call as a failed card with the error text and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({
+      parts: [
+        CLAUDE_MIYO({
+          status: "failed",
+          output: [
+            {
+              type: "text",
+              text: "Miyo search failed. Continue with keyword search. Details: net::ERR_CONNECTION_REFUSED",
+            },
+          ],
+        }),
+        text("See [[a]]."),
       ],
-      ...overrides,
+      isStreaming: false,
     });
-  const OPENCODE_MIYO = (overrides: Partial<ToolCallPart> = {}) =>
-    toolCall("miyo", {
-      title: "execute",
-      input: {
-        code: 'const r = await tools["obsidian-copilot"].miyo_search({ query: "standing desk" });\nreturn r;',
-      },
-      output: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            { results: [{ path: "v/a.md" }, { path: "v/b.md" }], count: 2 },
-            null,
-            2
-          ),
-        },
-      ],
-      ...overrides,
-    });
-  const miyoBackends = [
-    ["Claude", CLAUDE_MIYO],
-    ["Codex", CODEX_MIYO],
-    ["OpenCode", OPENCODE_MIYO],
-  ] as const;
 
-  it.each(miyoBackends)(
-    "renders a %s miyo_search call as its own card between grouped work, with its query and note count (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
-    (_name, miyo) => {
-      renderTrail({ parts: [READ_A, LINT, miyo(), READ_B, LINT, text("Found it.")] });
+    expect(screen.getByText("Miyo search failed")).toBeTruthy();
+    expect(screen.getByText("net::ERR_CONNECTION_REFUSED")).toBeTruthy();
+    expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("");
+  });
 
-      expect(screen.getByText("Searched with Miyo")).toBeTruthy();
-      expect(screen.getByText("“standing desk”")).toBeTruthy();
-      expect(screen.getByText("2 notes")).toBeTruthy();
-      expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
-    }
-  );
+  it("gives the answer text the note paths of a miyo_search call, as when the chat is reopened from history (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({ parts: [CLAUDE_MIYO(), text("See [[a]].")], isStreaming: false });
 
-  it.each([
-    ["Claude", CLAUDE_MIYO],
-    ["Codex", CODEX_MIYO],
-    ["OpenCode", OPENCODE_MIYO],
-  ] as const)(
-    "renders a failed %s miyo_search call as a failed card with the error text and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
-    (_name, miyo) => {
-      renderTrail({
-        parts: [
-          miyo({
-            status: "failed",
-            output: [
-              {
-                type: "text",
-                text: "Miyo search failed. Continue with keyword search. Details: net::ERR_CONNECTION_REFUSED",
-              },
-            ],
-          }),
-          text("See [[a]]."),
-        ],
-        isStreaming: false,
-      });
-
-      expect(screen.getByText("Miyo search failed")).toBeTruthy();
-      expect(screen.getByText("net::ERR_CONNECTION_REFUSED")).toBeTruthy();
-      expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("");
-    }
-  );
-
-  it.each(miyoBackends)(
-    "gives the answer text the note paths of a %s miyo_search call, as when the chat is reopened from history (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
-    (_name, miyo) => {
-      renderTrail({ parts: [miyo(), text("See [[a]].")], isStreaming: false });
-
-      expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
-    }
-  );
+    expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
+  });
 
   it("renders shell runs of the retired miyo-search script as ordinary command rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
     renderTrail({

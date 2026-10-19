@@ -487,9 +487,15 @@ function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
   const code = typeof input.code === "string" ? input.code : "";
   const call = OPENCODE_MIYO_CALL.exec(code);
   if (!call) return undefined;
-  const literal = /\bquery["']?:\s*("(?:[^"\\]|\\.)*")/.exec(code.slice(call.index));
+  const literal = /\bquery["']?:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/.exec(
+    code.slice(call.index)
+  );
+  if (!literal) return null;
+  // Generated JavaScript often single-quotes the query, which JSON cannot parse until its quotes are swapped.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+  const body = literal[1] ?? literal[2].replace(/\\'/g, "'").replace(/\\?"/g, '\\"');
   try {
-    return literal ? stringOrNull(JSON.parse(literal[1])) : null;
+    return stringOrNull(JSON.parse(`"${body}"`));
   } catch {
     return null;
   }

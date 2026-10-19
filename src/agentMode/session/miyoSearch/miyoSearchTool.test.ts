@@ -108,6 +108,25 @@ describe("miyoSearchTool", () => {
       ]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 turns a Windows path into a forward-slash path before stripping the vault folder", async () => {
+      const { deps } = setup(
+        {},
+        {
+          chunks: [
+            chunk({ path: "step-1\\notes\\Trip planning.md" }),
+            chunk({ path: "Research\\Sleep.md" }),
+          ],
+        }
+      );
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(JSON.parse(result.text).results.map((r: { path: string }) => r.path)).toEqual([
+        "notes/Trip planning.md",
+        "Research/Sleep.md",
+      ]);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 strips the vault folder in Unrestricted scope too", async () => {
       const { deps } = setup(
         { miyoSearchAll: true },

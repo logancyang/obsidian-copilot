@@ -733,6 +733,15 @@ describe("toolSummaries", () => {
       expect(miyoSearchRun(t)?.query).toBe('say "hi"');
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads an OpenCode query written as a single-quoted literal", () => {
+      const t = opencodeCall({
+        input: {
+          code: `return tools["obsidian-copilot"].miyo_search({ query: 'Sam\\'s "standing" desk' });`,
+        },
+      });
+      expect(miyoSearchRun(t)?.query).toBe('Sam\'s "standing" desk');
+    });
+
     it.each([
       ["a miyo_search tool on another MCP server", claudeCall({ mcpServer: "other" })],
       ["another tool on the Copilot server", claudeCall({ vendorToolName: "send_feedback" })],
