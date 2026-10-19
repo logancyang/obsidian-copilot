@@ -187,7 +187,7 @@ describe("copilotMcpServer", () => {
       expect(result.body).toMatchObject({ result: { content: [{ text }], isError: false } });
     });
 
-    it("answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/733 answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
       let on = true;
       server.dispose();
       server = createCopilotMcpServer(() => on);

@@ -221,6 +221,8 @@ function callTool(
 ) {
   const tool = HOSTED_TOOLS.find((hosted) => hosted.definition.name === params.name);
   if (!tool) return toolText(`Unknown tool: ${String(params.name)}`, true);
+  // Agents read tools/list once per session, so a tool switched off mid-session still gets called; answering without an error stops the agent from retrying it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
   const draft = parseDraft(params.arguments);
   if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);
