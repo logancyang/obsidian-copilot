@@ -38,7 +38,7 @@ cat >"$FAKE_BIN/obsidian" <<'EOF'
 echo "obsidian $*" >>"$DEPLOY_CALL_LOG"
 if [[ "$1" == "vaults" ]]; then
   cat "$REGISTRY"
-elif [[ "$1" == vault=* && "${2:-}" == "vault" ]]; then
+elif [[ "$1" == vault=* && "${2:-}" == "vault" && -z "${RENDERER_CLOSED:-}" ]]; then
   awk -F'\t' -v name="${1#vault=}" \
     '$1 == name { print "name\t" $1; print "path\t" $2; exit }' "$REGISTRY"
 elif [[ "$1" == "eval" && "$2" == *vault-open* && -z "${REFUSE_REGISTER:-}" ]]; then
@@ -206,6 +206,16 @@ rm -r "$FOREIGN_GALLERY"
 run_deploy
 if ! grep -q "npm run gallery:vault" "$DEPLOY_CALL_LOG"; then
   echo "did not take over a gallery whose worktree no longer exists" >&2
+  exit 1
+fi
+
+if ! RENDERER_CLOSED=1 run_deploy; then
+  echo "refused a registered vault whose window is not open yet" >&2
+  exit 1
+fi
+if grep -q "vault-open" "$DEPLOY_CALL_LOG" ||
+  ! grep -qxF "obsidian vault=vault plugin:enable id=copilot" "$DEPLOY_CALL_LOG"; then
+  echo "expected a registered vault with no open window to deploy without re-registering" >&2
   exit 1
 fi
 

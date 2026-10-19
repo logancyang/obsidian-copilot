@@ -13,7 +13,7 @@
 # CLI gives no listing (Obsidian not running or unreachable).
 resolve_obsidian_vault_name() {
   local vault_real="$1"
-  local listing name path info_path
+  local listing name path
 
   listing="$("$OBSIDIAN_BIN" vaults verbose 2>/dev/null)" || return 2
   [[ -n "$listing" ]] || return 2
@@ -21,15 +21,11 @@ resolve_obsidian_vault_name() {
   while IFS=$'\t' read -r name path; do
     [[ -n "$name" && -n "$path" && -d "$path" ]] || continue
     [[ "$(cd "$path" && pwd -P)" == "$vault_real" ]] || continue
-    # Two registered vaults can share a folder name; only use a name that
-    # resolves back to this path.
-    info_path="$("$OBSIDIAN_BIN" vault="$name" vault 2>/dev/null |
-      awk -F'\t' '$1 == "path" { print $2 }')"
-    if [[ -n "$info_path" && -d "$info_path" &&
-      "$(cd "$info_path" && pwd -P)" == "$vault_real" ]]; then
-      printf '%s' "$name"
-      return 0
-    fi
+    # Two registered vaults can share a folder name, and `vault=` cannot tell
+    # them apart. Only a name no other vault uses targets this path.
+    [[ "$(cut -f1 <<<"$listing" | grep -cxF -- "$name")" -eq 1 ]] || return 1
+    printf '%s' "$name"
+    return 0
   done <<<"$listing"
   return 1
 }
@@ -93,7 +89,9 @@ EOF
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
     status=0
     OBSIDIAN_VAULT_NAME="$(resolve_obsidian_vault_name "$vault_real")" || status=$?
-    if [[ "$status" -eq 0 ]]; then
+    # The new vault's window answers CLI calls only once it has loaded, and
+    # trusting it any earlier is silently dropped.
+    if [[ "$status" -eq 0 && -n "$("$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" vault 2>/dev/null)" ]]; then
       echo "==> Trusting the new vault's plugins"
       trust_obsidian_vault "$OBSIDIAN_VAULT_NAME" || true
       return 0
