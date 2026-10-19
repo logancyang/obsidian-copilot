@@ -8,7 +8,7 @@ set -euo pipefail
 #   npm run test:reset-data                 # uses the bundled clean-onboarding fixture
 #   npm run test:reset-data -- <path>       # uses an arbitrary data.json
 
-OBSIDIAN_BIN="/Applications/Obsidian.app/Contents/MacOS/obsidian"
+OBSIDIAN_BIN="${OBSIDIAN_BIN:-/Applications/Obsidian.app/Contents/MacOS/obsidian}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEFAULT_FIXTURE="$SCRIPT_DIR/test-fixtures/data.clean-onboarding.json"
