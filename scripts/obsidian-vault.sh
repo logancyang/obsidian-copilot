@@ -76,6 +76,18 @@ require_obsidian_vault() {
     2) OBSIDIAN_VAULT_NAME="" && return 0 ;;
   esac
 
+  # The CLI addresses vaults by folder name, so a second vault with a taken
+  # name could never be targeted. Check before registering it.
+  if "$OBSIDIAN_BIN" vaults verbose 2>/dev/null |
+    awk -F'\t' -v name="${vault_real##*/}" '$1 == name { found = 1 } END { exit !found }'; then
+    cat >&2 <<EOF
+error: another registered Obsidian vault is already named "${vault_real##*/}",
+so the CLI could not target $vault_path. Nothing was changed. Rename the
+folder, then re-run.
+EOF
+    exit 1
+  fi
+
   echo "==> Registering $vault_path as an Obsidian vault"
   register_obsidian_vault "$vault_real" || true
   for attempt in 1 2 3 4 5 6 7 8 9 10; do
@@ -90,10 +102,9 @@ require_obsidian_vault() {
   done
 
   cat >&2 <<EOF
-error: could not register $vault_path as an Obsidian vault, or another
-registered vault shares its folder name. A reload aimed at it would reach
-another vault instead, so nothing was changed. Rename the folder if its name
-is taken, or open it in Obsidian with "Open folder as vault", then re-run.
+error: could not register $vault_path as an Obsidian vault. A reload aimed at
+it would reach another vault instead, so nothing was deployed. Open it in
+Obsidian with "Open folder as vault", then re-run.
 EOF
   exit 1
 }

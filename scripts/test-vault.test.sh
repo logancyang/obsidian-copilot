@@ -246,6 +246,21 @@ if [[ "$(cat "$DEPLOYED_MAIN")" != "$DEPLOYED_BEFORE" ]]; then
   exit 1
 fi
 
+mkdir -p "$TEST_ROOT/elsewhere/vault"
+printf 'vault\t%s\n' "$TEST_ROOT/elsewhere/vault" >"$REGISTRY"
+if run_deploy; then
+  echo "deployed into a vault whose name another vault already uses" >&2
+  exit 1
+fi
+if ! grep -q 'already named "vault"' "$DEPLOY_STDERR"; then
+  echo "expected the refusal to name the taken vault name" >&2
+  exit 1
+fi
+if grep -q "vault-open" "$DEPLOY_CALL_LOG" || grep -q "^npm " "$DEPLOY_CALL_LOG"; then
+  echo "registered or built a vault whose name is taken" >&2
+  exit 1
+fi
+
 : >"$REGISTRY"
 run_deploy
 if grep -q "plugin:" "$DEPLOY_CALL_LOG"; then
