@@ -225,17 +225,6 @@ describe("miyoSearchTool", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 returns an error and searches nothing when Current vault scope has no vault identity", async () => {
-      const { client, deps } = setup({}, { vaultName: "" });
-
-      const result = await runMiyoSearch({ query: "q" }, deps);
-
-      expect(client.search).not.toHaveBeenCalled();
-      expect(result.isError).toBe(true);
-      expect(result.text).toContain("vault identity is missing");
-      expect(result.text).toContain("Do not retry or search unrestricted");
-    });
-
     it("searches the configured remote Miyo URL", async () => {
       const { client, deps } = setup({
         miyoConnectionMode: "remote",

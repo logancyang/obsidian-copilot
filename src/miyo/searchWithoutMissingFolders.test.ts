@@ -11,10 +11,10 @@ describe("searchWithoutMissingFolders", () => {
     it("searches every ticked folder when Miyo knows them all", async () => {
       const search = jest.fn().mockResolvedValue(RESPONSE);
 
-      const searched = await searchWithoutMissingFolders(search, ["Research", "Archive"]);
+      const searched = await searchWithoutMissingFolders(search, "step-1", ["Research", "Archive"]);
 
       expect(search).toHaveBeenCalledTimes(1);
-      expect(search).toHaveBeenCalledWith(["Research", "Archive"]);
+      expect(search).toHaveBeenCalledWith(["step-1", "Research", "Archive"]);
       expect(searched).toEqual({ response: RESPONSE, extraFolders: ["Research", "Archive"] });
     });
 
@@ -25,15 +25,33 @@ describe("searchWithoutMissingFolders", () => {
         .mockRejectedValueOnce(notRegistered("Research"))
         .mockResolvedValue(RESPONSE);
 
-      const searched = await searchWithoutMissingFolders(search, ["Research", "Archive", "Notes"]);
+      const searched = await searchWithoutMissingFolders(search, "step-1", [
+        "Research",
+        "Archive",
+        "Notes",
+      ]);
 
       expect(search.mock.calls).toEqual([
-        [["Research", "Archive", "Notes"]],
-        [["Research", "Notes"]],
-        [["Notes"]],
+        [["step-1", "Research", "Archive", "Notes"]],
+        [["step-1", "Research", "Notes"]],
+        [["step-1", "Notes"]],
       ]);
       expect(searched.extraFolders).toEqual(["Notes"]);
     });
+
+    it.each([
+      ["no ticked folder is left", "step-1", []],
+      ["the search is unrestricted", undefined, []],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/3508 sends no folder list when %s, so Miyo searches folder_name alone",
+      async (_label, folderName, extraFolders) => {
+        const search = jest.fn().mockResolvedValue(RESPONSE);
+
+        await searchWithoutMissingFolders(search, folderName, extraFolders);
+
+        expect(search).toHaveBeenCalledWith(undefined);
+      }
+    );
 
     it.each([
       ["a folder that was not ticked", notRegistered("step-1")],
@@ -42,7 +60,7 @@ describe("searchWithoutMissingFolders", () => {
     ])("rethrows %s without retrying", async (_label, error) => {
       const search = jest.fn().mockRejectedValue(error);
 
-      await expect(searchWithoutMissingFolders(search, ["Research"])).rejects.toBe(error);
+      await expect(searchWithoutMissingFolders(search, "step-1", ["Research"])).rejects.toBe(error);
       expect(search).toHaveBeenCalledTimes(1);
     });
   });

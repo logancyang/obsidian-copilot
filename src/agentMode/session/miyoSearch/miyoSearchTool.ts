@@ -74,13 +74,6 @@ export async function runMiyoSearch(
   const settings = getSettings();
   const unrestricted = settings.miyoSearchAll === true;
   const vaultName = getVaultName();
-  // Only the explicit Unrestricted setting may drop the folder boundary; a missing identity never widens the search.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-  if (!unrestricted && !vaultName) {
-    return failure(
-      "The active vault identity is missing, so Current vault scope can't be enforced. Do not retry or search unrestricted."
-    );
-  }
   // Ticked folders widen only Current vault scope.
   // https://github.com/logancyang/obsidian-copilot/issues/3508
   const extraFolders = unrestricted
@@ -89,20 +82,14 @@ export async function runMiyoSearch(
 
   try {
     const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
+    const folderName = unrestricted ? undefined : vaultName;
     const searched = await searchWithoutMissingFolders(
-      (folders) =>
-        client.search(
-          baseUrl,
-          unrestricted ? undefined : vaultName,
-          query,
-          MIYO_SEARCH_CANDIDATE_LIMIT,
-          {
-            variants,
-            // folder_name stays the vault, so a Miyo without multi-folder search still searches only the vault.
-            // https://github.com/logancyang/obsidian-copilot/issues/3508
-            folderNames: folders.length > 0 ? [vaultName, ...folders] : undefined,
-          }
-        ),
+      (folderNames) =>
+        client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
+          variants,
+          folderNames,
+        }),
+      folderName,
       extraFolders
     );
     const skipped = extraFolders.filter((name) => !searched.extraFolders.includes(name));

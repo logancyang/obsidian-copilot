@@ -4,11 +4,16 @@ import { MiyoRequestError, type MiyoSearchResponse } from "@/miyo/MiyoClient";
 export const MIYO_SEARCH_CANDIDATE_LIMIT = 1000;
 
 export async function searchWithoutMissingFolders(
-  search: (extraFolders: string[]) => Promise<MiyoSearchResponse>,
+  search: (folderNames: string[] | undefined) => Promise<MiyoSearchResponse>,
+  folderName: string | undefined,
   extraFolders: string[]
 ): Promise<{ response: MiyoSearchResponse; extraFolders: string[] }> {
   try {
-    return { response: await search(extraFolders), extraFolders };
+    // folder_name stays the vault, so a Miyo without multi-folder search falls back to the vault alone instead of every folder.
+    // https://github.com/logancyang/obsidian-copilot/issues/3508
+    const folderNames =
+      folderName && extraFolders.length > 0 ? [folderName, ...extraFolders] : undefined;
+    return { response: await search(folderNames), extraFolders };
   } catch (error) {
     const missing =
       error instanceof MiyoRequestError && error.status === 404
@@ -21,6 +26,7 @@ export async function searchWithoutMissingFolders(
     logWarn(`Miyo has no folder "${missing}"; searching without it`);
     return searchWithoutMissingFolders(
       search,
+      folderName,
       extraFolders.filter((name) => name !== missing)
     );
   }

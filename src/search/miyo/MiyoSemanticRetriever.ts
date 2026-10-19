@@ -7,7 +7,6 @@ import {
   MiyoClient,
   MiyoRequestError,
   MiyoSearchFilter,
-  MiyoSearchResponse,
   MiyoSearchResult,
 } from "@/miyo/MiyoClient";
 import {
@@ -128,7 +127,15 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const searched = await this.searchFolders(baseUrl, folderName, extraFolders, query, filters);
+      const searched = await searchWithoutMissingFolders(
+        (folderNames) =>
+          this.client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
+            filters,
+            folderNames,
+          }),
+        folderName,
+        extraFolders
+      );
 
       const rawResults = searched.response.results || [];
       const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));
@@ -160,25 +167,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         cause: error,
       });
     }
-  }
-
-  private async searchFolders(
-    baseUrl: string,
-    folderName: string | undefined,
-    extraFolders: string[],
-    query: string,
-    filters: MiyoSearchFilter[] | undefined
-  ): Promise<{ response: MiyoSearchResponse; extraFolders: string[] }> {
-    return searchWithoutMissingFolders(
-      (folders) =>
-        this.client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
-          filters,
-          // folder_name stays the vault, so a Miyo without multi-folder search falls back to
-          // the vault alone instead of every folder. https://github.com/logancyang/obsidian-copilot/issues/3508
-          folderNames: folderName && folders.length > 0 ? [folderName, ...folders] : undefined,
-        }),
-      extraFolders
-    );
   }
 
   private buildSearchFilters(): MiyoSearchFilter[] | undefined {
