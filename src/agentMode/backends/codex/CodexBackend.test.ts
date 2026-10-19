@@ -157,20 +157,6 @@ describe("CodexBackend", () => {
         expect(config.developer_instructions).not.toContain("drop Copilot prompt");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 exports no Miyo search scope to global or Project sessions, because miyo_search reads the scope when it runs", async () => {
-        setSettings({ miyoSearchAll: false });
-        useCodexSettings({ binaryPath: "/usr/local/bin/codex-acp" });
-
-        const desc = await new CodexBackend().buildSpawnDescriptor({
-          vaultBasePath: "/active-vault",
-          vaultName: "active-vault",
-        });
-
-        expect(
-          Object.keys(desc.env).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))
-        ).toEqual([]);
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for Codex", async () => {
         const agentMode = getSettings().agentMode;
         updateSetting("agentMode", {

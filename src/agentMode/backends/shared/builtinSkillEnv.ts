@@ -65,8 +65,6 @@ export async function buildBuiltinSkillEnv(
   return Object.keys(env).length === 0 ? EMPTY_MANAGED_ENV : env;
 }
 
-// An override replacing `current` with `unrestricted` would silently widen the user's Miyo privacy boundary.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/121
 export function sanitizeBuiltinSkillEnvOverrides(
   envOverrides?: Readonly<Record<string, string>>
 ): Record<string, string> {

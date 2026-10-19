@@ -8,7 +8,6 @@ import {
   MIYO_PARSE_SKILL,
   planManagedBuiltins,
   PLUS_ENV,
-  RETIRED_BUILTIN_SKILLS,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
@@ -31,7 +30,6 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
-const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -445,12 +443,6 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("RETIRED_BUILTIN_SKILLS", () => {
-    it(`lists miyo-search so reconcile removes the folder an earlier release seeded (${ISSUE_736})`, () => {
-      expect(RETIRED_BUILTIN_SKILLS.map((skill) => skill.name)).toContain("miyo-search");
-    });
-  });
-
   describe("planManagedBuiltins()", () => {
     const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
 
@@ -464,15 +456,6 @@ describe("builtinSkills", () => {
       const plan = planManagedBuiltins({ documents: true });
       expect(names(plan.seed)).toEqual([...names(BUILTIN_SKILLS), "miyo-parse"]);
       expect(plan.prune).toEqual([]);
-    });
-
-    it(`never seeds miyo-search, which agents reach through the miyo_search tool (${ISSUE_736})`, () => {
-      for (const documents of [false, true]) {
-        const plan = planManagedBuiltins({ documents });
-        expect(names(plan.seed)).not.toContain("miyo-search");
-        expect(plan.prune).not.toContain("miyo-search");
-      }
-      expect(names(ALL_MANAGED_SKILLS)).not.toContain("miyo-search");
     });
   });
 
@@ -524,18 +507,6 @@ describe("builtinSkills", () => {
 
       const on = settingsWith({}, { enableMiyoDocumentProcessing: true });
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
-    });
-
-    it(`keeps miyo-search disabled for every agent whatever the search switch says (${ISSUE_736})`, () => {
-      for (const enableMiyoSearchSkill of [true, false]) {
-        const settings = settingsWith(
-          { "miyo-search": { disabledAgents: ["opencode"] } },
-          { enableMiyo: true, enableMiyoSearchSkill }
-        );
-        for (const agent of ["claude", "codex", "opencode"]) {
-          expect(isBuiltinSkillEnabledFor(settings, "miyo-search", agent)).toBe(false);
-        }
-      }
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

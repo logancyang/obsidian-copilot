@@ -32,10 +32,7 @@ export class CodexBackend implements AcpBackend {
 
   constructor(private readonly clientVersion = "") {}
 
-  async buildSpawnDescriptor(ctx: {
-    vaultBasePath: string;
-    vaultName?: string;
-  }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const descriptor = buildSimpleSpawnDescriptor(
       settings.agentMode?.backends?.codex?.binaryPath,

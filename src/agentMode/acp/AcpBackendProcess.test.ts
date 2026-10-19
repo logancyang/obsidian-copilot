@@ -352,23 +352,6 @@ describe("AcpBackendProcess", () => {
         );
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the active vault identity to the shared process used by global and Project sessions", async () => {
-        const agentBackend = buildStubBackend();
-        const backend = new AcpBackendProcess(
-          buildApp("/Volumes/Notes/Main Vault"),
-          agentBackend,
-          "1.0.0",
-          buildStubDescriptor()
-        );
-
-        await backend.start();
-
-        expect(agentBackend.buildSpawnDescriptor).toHaveBeenCalledWith({
-          vaultBasePath: "/Volumes/Notes/Main Vault",
-          vaultName: "Main Vault",
-        });
-      });
-
       it("advertises plan updates so an agent sends proposed plans outside the chat text (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),

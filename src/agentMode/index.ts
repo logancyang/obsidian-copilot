@@ -276,10 +276,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     for (const descriptor of listBackendDescriptors()) {
       const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next, descriptor.id);
       if (managedEnvRestartPolicy === "none") continue;
-      // Applying a new search boundary cannot wait for a running turn to finish,
-      // let alone for the user to accept a Reload: cancel the turn before it can
-      // start another search with the prior scope.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+      // Turning Self-Host Mode on cannot wait for a running turn or a Reload, or that turn could still search the web through a hosted path.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
       const applied =
         managedEnvRestartPolicy === "immediate"
           ? manager.restartBackend(descriptor.id, "managed agent env changed", {

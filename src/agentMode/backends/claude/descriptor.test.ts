@@ -228,7 +228,7 @@ describe("descriptor", () => {
       __resetVaultBaseCache();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 exports no Miyo search scope to global or Project sessions, because miyo_search reads the scope when it runs", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 hands global and Project sessions only the active vault's managed env, with no Miyo search scope", async () => {
       resetSettings();
       __resetVaultBaseCache();
       mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
@@ -263,9 +263,7 @@ describe("descriptor", () => {
       };
 
       const env = await process.opts.getManagedEnv?.();
-      expect(Object.keys(env ?? {}).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))).toEqual(
-        []
-      );
+      expect(env).toEqual({ OPENARTIFACTS_WORKSPACE_ROOT: "/active-vault" });
     });
   });
 
