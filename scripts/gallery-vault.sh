@@ -128,7 +128,7 @@ elif [[ -z "$OBSIDIAN_VAULT_NAME" ]]; then
   echo "warning: could not reach Obsidian through the CLI; skipping reload. The plugin will load on next open." >&2
 else
   RELOAD_CODE="(async()=>{const id=$PLUGIN_ID_JSON;await app.plugins.loadManifests();if(app.plugins.plugins[id])await app.plugins.disablePlugin(id);await app.plugins.enablePluginAndSave(id);const state={manifest:!!app.plugins.manifests[id],loaded:!!app.plugins.plugins[id],enabled:app.plugins.enabledPlugins.has(id)};if(!state.manifest||!state.loaded||!state.enabled)throw new Error('Gallery plugin failed to load: '+JSON.stringify(state));return JSON.stringify(state);})()"
-  if (cd "$VAULT_PATH" && "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" eval code="$RELOAD_CODE" >/dev/null 2>&1); then
+  if "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" eval code="$RELOAD_CODE" >/dev/null 2>&1; then
     echo "    reloaded"
   else
     echo "warning: could not reload via the CLI. Is Obsidian running with this vault open? The plugin will load on next open." >&2

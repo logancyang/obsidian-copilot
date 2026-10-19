@@ -33,8 +33,6 @@ if [[ "$1" == "vaults" ]]; then
   for vault in "$TEST_ROOT"/*-vault; do
     printf '%s\t%s\n' "${vault##*/}" "$vault"
   done
-elif [[ "$1" == vault=* && "${2:-}" == "vault" ]]; then
-  printf 'name\t%s\npath\t%s\n' "${1#vault=}" "$TEST_ROOT/${1#vault=}"
 fi
 exit 0
 EOF
