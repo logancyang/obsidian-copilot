@@ -505,12 +505,20 @@ function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 const MIYO_FAILURE_REASON = /Details: ([\s\S]*)$/;
 
-function miyoNotePaths(text: string): string[] | null {
+// Only notes without a folder are in the active vault, so only their paths can match a link in the answer.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+function miyoNotes(text: string): { count: number; vaultPaths: string[] } | null {
   try {
     const results = (JSON.parse(text) as { results?: unknown }).results;
     if (!Array.isArray(results)) return null;
-    const paths = results.map((r: { path?: unknown } | null) => r?.path);
-    return [...new Set(paths.filter((path): path is string => typeof path === "string"))];
+    const notes = results.filter(
+      (r: { path?: unknown } | null): r is { folder?: string; path: string } =>
+        typeof r?.path === "string"
+    );
+    return {
+      count: new Set(notes.map((r) => JSON.stringify([r.folder, r.path]))).size,
+      vaultPaths: [...new Set(notes.filter((r) => r.folder === undefined).map((r) => r.path))],
+    };
   } catch {
     return null;
   }
@@ -520,12 +528,12 @@ export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
   const query = miyoSearchQuery(part);
   if (query === undefined) return null;
   const text = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
-  const paths = miyoNotePaths(text);
+  const notes = miyoNotes(text);
   return {
     status: part.status,
     query,
-    noteCount: paths?.length ?? null,
-    notePaths: paths ?? EMPTY_MIYO_PATHS,
+    noteCount: notes?.count ?? null,
+    notePaths: notes?.vaultPaths ?? EMPTY_MIYO_PATHS,
     error:
       part.status === "failed" ? stringOrNull(MIYO_FAILURE_REASON.exec(text)?.[1] ?? text) : null,
   };

@@ -18,7 +18,7 @@ const OUTPUT_BUDGET_BYTES = 32_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
-  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Use it for any request the notes might answer, alongside grep for exact names and terms, with the user's full question as query. Searches the active vault plus the extra Miyo folders enabled in Copilot settings, or everything Miyo has when Copilot's search scope is Unrestricted. Returns up to ${NOTE_LIMIT} notes as { path, content } excerpts. A path is relative to the active vault, so you can open and link it as is; a note from another Miyo folder starts with that folder's name. Cite the path of any note you use. If the search fails, continue with keyword search and don't retry in a loop.`,
+  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Use it for any request the notes might answer, alongside grep for exact names and terms, with the user's full question as query. Searches the active vault plus the extra Miyo folders enabled in Copilot settings, or everything Miyo has when Copilot's search scope is Unrestricted. Returns up to ${NOTE_LIMIT} notes as { path, content } excerpts. A path is relative to the active vault, so you can open and link it as is. A note with a folder field lives in that Miyo folder outside the vault and its path is relative to that folder: use its content, cite it as folder and path in plain text, and don't open or link it. Cite the path of any note you use. If the search fails, continue with keyword search and don't retry in a loop.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -56,6 +56,7 @@ export interface MiyoSearchDeps {
 }
 
 interface FileResult {
+  folder?: string;
   path: string;
   content: string;
 }
@@ -122,17 +123,17 @@ function toNotes(chunks: readonly MiyoSearchResult[], vaultName: string): FileRe
     excerptsByPath.set(path, [...(excerptsByPath.get(path) ?? []), ...(text ? [text] : [])]);
   }
   return [...excerptsByPath].slice(0, NOTE_LIMIT).map(([path, excerpts]) => ({
-    path: vaultRelative(path, vaultName),
+    ...locate(path, vaultName),
     content: excerpts.join("\n\n"),
   }));
 }
 
-// Miyo prefixes each path with its folder's name, which names no folder inside the vault, so the agent could not open or link the note.
+// Miyo prefixes each path with its folder's name, which names no folder inside the vault, so the agent could not open or link the
+// note; a note from another Miyo folder names that folder apart, or a ticked folder named like a vault folder reads as a vault note.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-function vaultRelative(path: string, vaultName: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const prefix = `${vaultName}/`;
-  return vaultName && normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized;
+function locate(path: string, vaultName: string): Pick<FileResult, "folder" | "path"> {
+  const [folder, ...rest] = path.replace(/\\/g, "/").split("/");
+  return folder === vaultName ? { path: rest.join("/") } : { folder, path: rest.join("/") };
 }
 
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
@@ -141,10 +142,7 @@ function serialize(notes: readonly FileResult[], note: string | undefined): stri
   let contentCap = Math.floor(OUTPUT_BUDGET_BYTES / Math.max(notes.length, 1));
   let text: string;
   do {
-    const results = notes.map(({ path, content }) => ({
-      path,
-      content: content.slice(0, contentCap),
-    }));
+    const results = notes.map((note) => ({ ...note, content: note.content.slice(0, contentCap) }));
     text = JSON.stringify({ results, count: results.length, ...(note ? { note } : {}) });
     contentCap = Math.floor(contentCap * 0.8);
   } while (new TextEncoder().encode(text).length > OUTPUT_BUDGET_BYTES && contentCap > 0);

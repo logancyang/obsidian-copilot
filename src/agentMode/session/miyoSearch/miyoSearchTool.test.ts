@@ -62,6 +62,9 @@ describe("miyoSearchTool", () => {
         "or everything Miyo has when Copilot's search scope is Unrestricted"
       );
       expect(description).toContain("Cite the path of any note you use");
+      expect(description).toContain(
+        "A note with a folder field lives in that Miyo folder outside the vault"
+      );
       expect(description).toContain("If the search fails, continue with keyword search");
       expect(description).not.toMatch(/miyo-search|\.sh\b|skill/i);
     });
@@ -101,7 +104,7 @@ describe("miyoSearchTool", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 names the active vault's notes by vault-relative path and keeps the folder name on notes from other Miyo folders", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 names the active vault's notes by vault-relative path and gives notes from other Miyo folders their folder apart", async () => {
       const { deps } = setup(
         { miyoExtraSearchFolders: ["Research"] },
         {
@@ -115,14 +118,46 @@ describe("miyoSearchTool", () => {
 
       const result = await runMiyoSearch({ query: "q" }, deps);
 
-      expect(JSON.parse(result.text).results.map((r: { path: string }) => r.path)).toEqual([
-        "notes/Trip planning.md",
-        "Research/papers/Sleep.md",
-        "step-10/Other.md",
+      expect(JSON.parse(result.text).results).toEqual([
+        { path: "notes/Trip planning.md", content: "body of step-1/notes/Trip planning.md" },
+        {
+          folder: "Research",
+          path: "papers/Sleep.md",
+          content: "body of Research/papers/Sleep.md",
+        },
+        { folder: "step-10", path: "Other.md", content: "body of step-10/Other.md" },
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 turns a Windows path into a forward-slash path before stripping the vault folder", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps a ticked folder's note apart from a vault folder of the same name", async () => {
+      const { deps } = setup(
+        { miyoExtraSearchFolders: ["Research"] },
+        {
+          chunks: [
+            chunk({ path: "step-1/Research/Sleep.md" }),
+            chunk({ path: "Research/Interview.md" }),
+            chunk({ path: "step-1/step-1/Nested.md" }),
+          ],
+        }
+      );
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(
+        JSON.parse(result.text).results.map(
+          ({ folder, path }: { folder?: string; path: string }) => ({
+            folder,
+            path,
+          })
+        )
+      ).toEqual([
+        { folder: undefined, path: "Research/Sleep.md" },
+        { folder: "Research", path: "Interview.md" },
+        { folder: undefined, path: "step-1/Nested.md" },
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 turns a Windows path into a forward-slash path before splitting off the folder", async () => {
       const { deps } = setup(
         {},
         {
@@ -135,9 +170,16 @@ describe("miyoSearchTool", () => {
 
       const result = await runMiyoSearch({ query: "q" }, deps);
 
-      expect(JSON.parse(result.text).results.map((r: { path: string }) => r.path)).toEqual([
-        "notes/Trip planning.md",
-        "Research/Sleep.md",
+      expect(
+        JSON.parse(result.text).results.map(
+          ({ folder, path }: { folder?: string; path: string }) => ({
+            folder,
+            path,
+          })
+        )
+      ).toEqual([
+        { folder: undefined, path: "notes/Trip planning.md" },
+        { folder: "Research", path: "Sleep.md" },
       ]);
     });
 
