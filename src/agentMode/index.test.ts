@@ -301,11 +301,11 @@ describe("agentMode", () => {
       });
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
-      const { feedbackServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
 
-      expect(feedbackServer?.hasEnabledTools()).toBe(true);
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
       mockSettings = withCards(false);
-      expect(feedbackServer?.hasEnabledTools()).toBe(false);
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {

@@ -1,9 +1,9 @@
 import {
-  createFeedbackMcpServer,
-  FEEDBACK_MCP_SERVER_NAME,
+  createCopilotMcpServer,
+  COPILOT_MCP_SERVER_NAME,
   SEND_FEEDBACK_TOOL,
-  type FeedbackMcpServer,
-} from "./feedbackMcpServer";
+  type CopilotMcpServer,
+} from "./copilotMcpServer";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -52,12 +52,12 @@ const COMPLAINT = {
   repro: "1. Type a garbled 'commit and push'. 2. Observe a Swedish reply.",
 };
 
-describe("feedbackMcpServer", () => {
-  describe("createFeedbackMcpServer()", () => {
-    let server: FeedbackMcpServer;
+describe("copilotMcpServer", () => {
+  describe("createCopilotMcpServer()", () => {
+    let server: CopilotMcpServer;
 
     beforeEach(() => {
-      server = createFeedbackMcpServer(() => true);
+      server = createCopilotMcpServer(() => true);
     });
 
     afterEach(() => server.dispose());
@@ -65,7 +65,7 @@ describe("feedbackMcpServer", () => {
     it("reports whether any hosted tool is switched on, following the switch as it changes", () => {
       let on = true;
       server.dispose();
-      server = createFeedbackMcpServer((toolName) => toolName === "send_feedback" && on);
+      server = createCopilotMcpServer((toolName) => toolName === "send_feedback" && on);
 
       expect(server.hasEnabledTools()).toBe(true);
       on = false;
@@ -76,7 +76,7 @@ describe("feedbackMcpServer", () => {
       const first = await server.connect("session-a", jest.fn());
       const second = await server.connect("session-b", jest.fn());
 
-      expect(first.name).toBe(FEEDBACK_MCP_SERVER_NAME);
+      expect(first.name).toBe(COPILOT_MCP_SERVER_NAME);
       expect(first.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
       expect(second.url).toBe(first.url);
       expect(first.headers.Authorization).toMatch(/^Bearer [0-9a-f]{64}$/);
@@ -96,7 +96,7 @@ describe("feedbackMcpServer", () => {
           result: {
             protocolVersion: "2025-03-26",
             capabilities: { tools: {} },
-            serverInfo: { name: FEEDBACK_MCP_SERVER_NAME, version: "1.0.0" },
+            serverInfo: { name: COPILOT_MCP_SERVER_NAME, version: "1.0.0" },
           },
         },
       });
@@ -128,7 +128,7 @@ describe("feedbackMcpServer", () => {
 
     it("lists no tools while send_feedback is switched off", async () => {
       server.dispose();
-      server = createFeedbackMcpServer(() => false);
+      server = createCopilotMcpServer(() => false);
       const channel = await server.connect("session-a", jest.fn());
 
       const result = await post(channel, rpc(2, "tools/list"));
@@ -190,7 +190,7 @@ describe("feedbackMcpServer", () => {
     it("answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
       let on = true;
       server.dispose();
-      server = createFeedbackMcpServer(() => on);
+      server = createCopilotMcpServer(() => on);
       const handler = jest.fn().mockReturnValue("shown");
       const channel = await server.connect("session-a", handler);
 
@@ -365,14 +365,14 @@ describe("feedbackMcpServer", () => {
 
       server.dispose();
 
-      await expect(pending).rejects.toThrow("The feedback MCP server is closed.");
+      await expect(pending).rejects.toThrow("The Copilot MCP server is closed.");
     });
 
     it("refuses new sessions after dispose", async () => {
       server.dispose();
 
       await expect(server.connect("session-a", jest.fn())).rejects.toThrow(
-        "The feedback MCP server is closed."
+        "The Copilot MCP server is closed."
       );
     });
   });

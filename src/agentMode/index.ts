@@ -16,9 +16,9 @@ import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import {
-  createFeedbackMcpServer,
+  createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
-} from "@/agentMode/session/feedback/feedbackMcpServer";
+} from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -168,7 +168,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    feedbackServer: createFeedbackMcpServer(
+    copilotMcpServer: createCopilotMcpServer(
       (toolName) =>
         toolName === SEND_FEEDBACK_TOOL_NAME && getSettings().agentMode.offerFeedbackCards
     ),

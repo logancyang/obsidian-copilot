@@ -1,8 +1,8 @@
 import {
   CALLER_SESSION_ARGUMENT,
-  FEEDBACK_MCP_SERVER_NAME,
+  COPILOT_MCP_SERVER_NAME,
   SEND_FEEDBACK_TOOL_NAME,
-} from "@/agentMode/session/feedback/feedbackMcpServer";
+} from "@/agentMode/session/copilotMcpServer";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
@@ -96,7 +96,7 @@ function captureOriginals(ctx) {
 }
 
 function stampFeedbackCaller(event) {
-  if (event.tool !== ${JSON.stringify(`${FEEDBACK_MCP_SERVER_NAME}_${SEND_FEEDBACK_TOOL_NAME}`)}) return;
+  if (event.tool !== ${JSON.stringify(`${COPILOT_MCP_SERVER_NAME}_${SEND_FEEDBACK_TOOL_NAME}`)}) return;
   event.input = { ...event.input, ${JSON.stringify(CALLER_SESSION_ARGUMENT)}: event.sessionID };
 }
 

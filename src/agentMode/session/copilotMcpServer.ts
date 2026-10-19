@@ -10,7 +10,7 @@ import {
 type IncomingMessage = import("node:http").IncomingMessage;
 type ServerResponse = import("node:http").ServerResponse;
 
-export const FEEDBACK_MCP_SERVER_NAME = "obsidian-copilot";
+export const COPILOT_MCP_SERVER_NAME = "obsidian-copilot";
 export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
 export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 
@@ -82,7 +82,7 @@ const HOSTED_TOOLS = Object.freeze([
 
 type ToolSwitch = (toolName: string) => boolean;
 
-export interface FeedbackMcpServer {
+export interface CopilotMcpServer {
   hasEnabledTools(): boolean;
   connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer>;
   disconnect(sessionKey: string): void;
@@ -98,7 +98,7 @@ interface JsonRpcRequest {
 
 type JsonRpcReply = { result: unknown } | { error: { code: number; message: string } };
 
-export function createFeedbackMcpServer(isToolOn: ToolSwitch): FeedbackMcpServer {
+export function createCopilotMcpServer(isToolOn: ToolSwitch): CopilotMcpServer {
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
@@ -109,8 +109,8 @@ export function createFeedbackMcpServer(isToolOn: ToolSwitch): FeedbackMcpServer
       return HOSTED_TOOLS.some((tool) => isToolOn(tool.definition.name));
     },
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
-      if (disposed) throw new Error("The feedback MCP server is closed.");
-      server ??= startLoopbackServer("feedback MCP server", (request, response) =>
+      if (disposed) throw new Error("The Copilot MCP server is closed.");
+      server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
         handleHttpRequest(request, response, handlersByToken, isToolOn)
       );
       const url = `${await server.origin}${MCP_PATH}`;
@@ -121,7 +121,7 @@ export function createFeedbackMcpServer(isToolOn: ToolSwitch): FeedbackMcpServer
       tokensBySession.set(sessionKey, token);
       handlersByToken.set(token, onOffer);
       return Object.freeze({
-        name: FEEDBACK_MCP_SERVER_NAME,
+        name: COPILOT_MCP_SERVER_NAME,
         url,
         headers: Object.freeze({ Authorization: `Bearer ${token}` }),
       });
@@ -193,7 +193,7 @@ function reply(
               ? requested
               : LATEST_PROTOCOL_VERSION,
           capabilities: { tools: {} },
-          serverInfo: { name: FEEDBACK_MCP_SERVER_NAME, version: "1.0.0" },
+          serverInfo: { name: COPILOT_MCP_SERVER_NAME, version: "1.0.0" },
         },
       };
     }
