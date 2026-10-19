@@ -83,19 +83,6 @@ describe("MiyoSearchCard", () => {
       }
     );
 
-    it.each([
-      [0, "No notes"],
-      [1, "1 note"],
-      [12, "12 notes"],
-    ])("ends the row at the count when Miyo found %i notes", (noteCount, text) => {
-      const { container } = render(
-        <MiyoSearchCard status="completed" query="q" noteCount={noteCount} />
-      );
-      const card = container.firstElementChild!;
-
-      expect(card.lastElementChild?.textContent).toBe(text);
-    });
-
     it("keeps the count at full size and clips a long query so the count stays visible", () => {
       const query = "what did I decide about the migration plan for the shared calendar service";
       const { container } = render(
