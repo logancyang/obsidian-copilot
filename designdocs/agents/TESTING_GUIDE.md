@@ -89,7 +89,15 @@ macOS only. Installs deps, builds, and copies `main.js` / `manifest.json` /
 `styles.css` from the current worktree into
 `$COPILOT_TEST_VAULT_PATH/.obsidian/plugins/copilot/`, then reloads the plugin
 via the Obsidian CLI. Requires `$COPILOT_TEST_VAULT_PATH` (user-level env var)
-pointing at a vault that has been opened in Obsidian at least once.
+pointing at a vault Obsidian has registered, meaning `obsidian vaults verbose`
+lists it. A copied or freshly created folder is not registered until a human
+opens it with "Open folder as vault". `test:vault`, `test:reset-data`, and
+`gallery:vault` refuse an unregistered vault before changing anything, because
+the CLI would send the reload to another vault instead.
+
+Never open an unregistered folder with an `obsidian://open?path=` URL. Obsidian
+answers with a native "Vault not found" dialog, and every CLI call to every
+vault hangs until someone dismisses it.
 
 This is the canonical "get my changes running" step — don't hand-roll `npm run
 build && cp main.js …`. If the user has multiple Conductor worktrees, whichever
