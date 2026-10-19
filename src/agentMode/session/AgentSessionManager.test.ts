@@ -430,20 +430,16 @@ const FEEDBACK_CHANNEL = Object.freeze({
   headers: Object.freeze({ Authorization: "Bearer t0k3n" }),
 });
 
-function buildCopilotMcpServer(connect: jest.Mock = jest.fn(async () => FEEDBACK_CHANNEL)) {
+function buildCopilotMcpServer({
+  toolsOn = true,
+  connect = jest.fn(async () => FEEDBACK_CHANNEL),
+}: { toolsOn?: boolean; connect?: jest.Mock } = {}) {
   return {
-    hasEnabledTools: jest.fn(() => getSettingsMock().agentMode.offerFeedbackCards === true),
+    hasEnabledTools: jest.fn(() => toolsOn),
     connect,
     disconnect: jest.fn(),
     dispose: jest.fn(),
   };
-}
-
-function offerFeedbackCards(enabled: boolean): void {
-  getSettingsMock.mockReturnValue({
-    ...mockDefaultSettings(),
-    agentMode: { ...mockDefaultSettings().agentMode, offerFeedbackCards: enabled },
-  });
 }
 
 const FEEDBACK_DRAFT = { title: "t", whatHappened: "w", userSaid: "u", repro: "r" };
@@ -917,7 +913,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("attaches the Copilot MCP server to a new session and routes its cards to that session", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({ copilotMcpServer });
 
@@ -935,9 +930,8 @@ describe("AgentSessionManager", () => {
         expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
       });
 
-      it("starts a session without the feedback server while feedback cards are turned off", async () => {
-        offerFeedbackCards(false);
-        const copilotMcpServer = buildCopilotMcpServer();
+      it("starts a session without Copilot's MCP server while no hosted tool is on", async () => {
+        const copilotMcpServer = buildCopilotMcpServer({ toolsOn: false });
         const mgr = buildManager({ copilotMcpServer });
 
         await mgr.createSession();
@@ -949,7 +943,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({
           copilotMcpServer,
@@ -965,7 +958,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows a shared connection's card in the chat whose backend session the agent stamped on the call", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({
           copilotMcpServer,
@@ -989,7 +981,6 @@ describe("AgentSessionManager", () => {
       ])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows no card when a shared connection's call %s",
         async (_label, callerSessionId) => {
-          offerFeedbackCards(true);
           const copilotMcpServer = buildCopilotMcpServer();
           const mgr = buildManager({
             copilotMcpServer,
@@ -1007,12 +998,11 @@ describe("AgentSessionManager", () => {
       );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still starts the chat when the feedback server cannot start", async () => {
-        offerFeedbackCards(true);
-        const copilotMcpServer = buildCopilotMcpServer(
-          jest.fn(async () => {
+        const copilotMcpServer = buildCopilotMcpServer({
+          connect: jest.fn(async () => {
             throw new Error("EADDRINUSE");
-          })
-        );
+          }),
+        });
         const mgr = buildManager({ copilotMcpServer });
 
         const session = await mgr.createSession();
@@ -1565,7 +1555,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("revokes the closed session's feedback server token", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({ copilotMcpServer });
         const a = await mgr.createSession();
@@ -1598,7 +1587,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a folder's shared feedback key when one of its chats closes", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({
           copilotMcpServer,
@@ -2631,7 +2619,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("re-attaches the Copilot MCP server when it reloads the replaced tab", async () => {
-        offerFeedbackCards(true);
         const loadSession = jest.fn(async ({ sessionId }: { sessionId: string }) => ({
           sessionId,
           state: { model: null, mode: null },
@@ -2647,7 +2634,6 @@ describe("AgentSessionManager", () => {
       });
 
       it("revokes the feedback token it handed a replaced tab that fails to reload", async () => {
-        offerFeedbackCards(true);
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManagerWithReplay(
           {

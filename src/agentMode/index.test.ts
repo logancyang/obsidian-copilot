@@ -111,6 +111,9 @@ const mockManager = {
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
+function withCards(offerFeedbackCards: boolean): CopilotSettings {
+  return { ...mockSettings, agentMode: { ...mockSettings.agentMode, offerFeedbackCards } };
+}
 function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
   return {
     agentMode: { skills: {} },
@@ -278,10 +281,6 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
-      const withCards = (offerFeedbackCards: boolean) => ({
-        ...mockSettings,
-        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
-      });
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
 
@@ -295,10 +294,6 @@ describe("agentMode", () => {
     });
 
     it("hands sessions Copilot's MCP server only while feedback cards are on, following the setting as it changes", () => {
-      const withCards = (offerFeedbackCards: boolean) => ({
-        ...mockSettings,
-        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
-      });
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
       const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
