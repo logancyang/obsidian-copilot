@@ -41,10 +41,14 @@ if [[ "$1" == "vaults" ]]; then
 elif [[ "$1" == vault=* && "${2:-}" == "vault" ]]; then
   awk -F'\t' -v name="${1#vault=}" \
     '$1 == name { print "name\t" $1; print "path\t" $2; exit }' "$REGISTRY"
+elif [[ "$1" == "eval" && "$2" == *vault-open* && -z "${REFUSE_REGISTER:-}" ]]; then
+  path="$(printf '%s' "$2" | sed -E "s/.*'vault-open', \"([^\"]*)\".*/\1/")"
+  printf '%s\t%s\n' "${path##*/}" "$path" >>"$REGISTRY"
 fi
 exit 0
 EOF
-chmod +x "$FAKE_BIN/npm" "$FAKE_BIN/obsidian"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$FAKE_BIN/sleep"
+chmod +x "$FAKE_BIN/npm" "$FAKE_BIN/obsidian" "$FAKE_BIN/sleep"
 
 git -C "$FIXTURE_ROOT" init -q
 git -C "$FIXTURE_ROOT" config user.email "test@example.com"
@@ -114,6 +118,16 @@ for action in plugin:disable plugin:enable; do
     exit 1
   fi
 done
+if grep -q "setEnable" "$DEPLOY_CALL_LOG"; then
+  echo "changed restricted mode in a vault it did not register" >&2
+  exit 1
+fi
+MANIFESTS_LINE="$(grep -n -m1 -xF "obsidian vault=vault eval code=app.plugins.loadManifests()" "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+ENABLE_LINE="$(grep -n -m1 -xF "obsidian vault=vault plugin:enable id=copilot" "$DEPLOY_CALL_LOG" | cut -d: -f1)"
+if [[ -z "$MANIFESTS_LINE" || "$MANIFESTS_LINE" -ge "$ENABLE_LINE" ]]; then
+  echo "enabled the plugin before rescanning plugin manifests" >&2
+  exit 1
+fi
 
 for artifact in main.js styles.css; do
   if [[ -L "$VAULT_ROOT/.obsidian/plugins/copilot/$artifact" ]]; then
@@ -195,23 +209,40 @@ if ! grep -q "npm run gallery:vault" "$DEPLOY_CALL_LOG"; then
   exit 1
 fi
 
-DEPLOYED_BEFORE="$(cat "$DEPLOYED_MAIN")"
 mkdir -p "$TEST_ROOT/other-vault"
 printf 'other\t%s\n' "$TEST_ROOT/other-vault" >"$REGISTRY"
-if run_deploy; then
-  echo "deployed into a vault Obsidian has not registered" >&2
+run_deploy
+if ! grep -q "vault-open" "$DEPLOY_CALL_LOG"; then
+  echo "did not register the unregistered vault" >&2
   exit 1
 fi
-if ! grep -q "no vault registered at $VAULT_ROOT" "$DEPLOY_STDERR"; then
+if ! grep -qxF "obsidian vault=vault eval code=app.plugins.setEnable(true)" "$DEPLOY_CALL_LOG"; then
+  echo "did not enable plugins in the newly registered vault" >&2
+  exit 1
+fi
+for action in plugin:disable plugin:enable; do
+  if ! grep -qxF "obsidian vault=vault $action id=copilot" "$DEPLOY_CALL_LOG"; then
+    echo "expected $action to name the newly registered vault" >&2
+    exit 1
+  fi
+done
+
+DEPLOYED_BEFORE="$(cat "$DEPLOYED_MAIN")"
+printf 'other\t%s\n' "$TEST_ROOT/other-vault" >"$REGISTRY"
+if REFUSE_REGISTER=1 run_deploy; then
+  echo "deployed into a vault Obsidian would not register" >&2
+  exit 1
+fi
+if ! grep -q "could not register $VAULT_ROOT" "$DEPLOY_STDERR"; then
   echo "expected the refusal to name the unregistered vault" >&2
   exit 1
 fi
 if grep -q "plugin:" "$DEPLOY_CALL_LOG" || grep -q "^npm " "$DEPLOY_CALL_LOG"; then
-  echo "built or reloaded after finding the vault unregistered" >&2
+  echo "built or reloaded after failing to register the vault" >&2
   exit 1
 fi
 if [[ "$(cat "$DEPLOYED_MAIN")" != "$DEPLOYED_BEFORE" ]]; then
-  echo "changed the unregistered vault's plugin files" >&2
+  echo "changed the plugin files of a vault it could not register" >&2
   exit 1
 fi
 

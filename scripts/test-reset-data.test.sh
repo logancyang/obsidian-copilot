@@ -25,15 +25,20 @@ if [[ "$1" == "vaults" ]]; then
 elif [[ "$1" == vault=* && "${2:-}" == "vault" ]]; then
   awk -F'\t' -v name="${1#vault=}" \
     '$1 == name { print "name\t" $1; print "path\t" $2; exit }' "$REGISTRY"
+elif [[ "$1" == "eval" && "$2" == *vault-open* && -z "${REFUSE_REGISTER:-}" ]]; then
+  path="$(printf '%s' "$2" | sed -E "s/.*'vault-open', \"([^\"]*)\".*/\1/")"
+  printf '%s\t%s\n' "${path##*/}" "$path" >>"$REGISTRY"
 fi
 exit 0
 FAKE
-chmod +x "$FAKE_BIN/obsidian"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$FAKE_BIN/sleep"
+chmod +x "$FAKE_BIN/obsidian" "$FAKE_BIN/sleep"
 
 STDERR="$TEST_ROOT/stderr.log"
 run_reset() {
   : >"$CALL_LOG"
-  COPILOT_TEST_VAULT_PATH="$VAULT_ROOT" \
+  PATH="$FAKE_BIN:$PATH" \
+    COPILOT_TEST_VAULT_PATH="$VAULT_ROOT" \
     OBSIDIAN_BIN="$FAKE_BIN/obsidian" \
     CALL_LOG="$CALL_LOG" \
     REGISTRY="$REGISTRY" \
@@ -43,21 +48,24 @@ run_reset() {
 mkdir -p "$TEST_ROOT/other-vault"
 printf 'other\t%s\n' "$TEST_ROOT/other-vault" >"$REGISTRY"
 printf 'settings that must survive\n' >"$TARGET"
-if run_reset; then
-  echo "reset the data of a vault Obsidian has not registered" >&2
+if REFUSE_REGISTER=1 run_reset; then
+  echo "reset the data of a vault Obsidian would not register" >&2
   exit 1
 fi
 if [[ "$(cat "$TARGET")" != "settings that must survive" ]]; then
-  echo "overwrote data.json in an unregistered vault" >&2
+  echo "overwrote data.json in a vault it could not register" >&2
   exit 1
 fi
 if grep -q "plugin:" "$CALL_LOG"; then
-  echo "reloaded a plugin after finding the vault unregistered" >&2
+  echo "reloaded a plugin after failing to register the vault" >&2
   exit 1
 fi
 
-printf 'vault\t%s\n' "$VAULT_ROOT" >"$REGISTRY"
 run_reset
+if ! grep -q "vault-open" "$CALL_LOG"; then
+  echo "did not register the unregistered vault" >&2
+  exit 1
+fi
 if ! cmp -s "$TEST_ROOT/data.json" "$TARGET"; then
   echo "did not write the fixture into the registered vault" >&2
   exit 1
