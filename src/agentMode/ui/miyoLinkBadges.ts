@@ -1,32 +1,4 @@
-import { getVaultRelativeMiyoPath, isCurrentVaultMiyoPath } from "@/miyo/miyoUtils";
-import { getSettings } from "@/settings/model";
-import { getVaultBase, isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
 import type { App } from "obsidian";
-
-// Miyo prefixes each path with the name of the Miyo folder it came from, or returns an absolute
-// path, so only paths that land inside this vault may badge a link. Unrestricted scope can return
-// any folder, so there only the vault prefix proves a relative path is local.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/719
-function miyoVaultPath(app: App, raw: string): string | null {
-  if (isAbsolutePath(raw)) {
-    const relative = toVaultRelative(raw, getVaultBase(app));
-    return relative === raw ? null : relative;
-  }
-  const relative = getVaultRelativeMiyoPath(app, raw);
-  if (isCurrentVaultMiyoPath(app, raw)) return relative;
-  const settings = getSettings();
-  if (settings.miyoSearchAll) return null;
-  return settings.miyoExtraSearchFolders.includes(relative.split("/")[0]) ? null : relative;
-}
-
-export function miyoVaultPaths(app: App, resultPaths: readonly string[]): Set<string> {
-  const paths = new Set<string>();
-  for (const raw of resultPaths) {
-    const path = miyoVaultPath(app, raw);
-    if (path) paths.add(path);
-  }
-  return paths;
-}
 
 export const EMPTY_BADGE_HOSTS: readonly HTMLElement[] = Object.freeze([]);
 

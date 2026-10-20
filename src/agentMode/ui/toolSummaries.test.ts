@@ -3,7 +3,6 @@ import {
   lookupToolSummary,
   extractSubAgentInputPrompt,
   extractSubAgentReturnText,
-  isMiyoSkillLoad,
   miyoResultPaths,
   miyoSearchRun,
 } from "@/agentMode/ui/toolSummaries";
@@ -571,7 +570,6 @@ describe("toolSummaries", () => {
   });
 
   describe("miyoSearchRun()", () => {
-    const SCRIPT = "/Users/me/vault/.claude/skills/miyo-search/miyo-search.sh";
     const miyoJson = (paths: string[]) =>
       JSON.stringify({
         results: paths.map((path) => ({ path, content: "…" })),
@@ -580,156 +578,232 @@ describe("toolSummaries", () => {
     const stdout = (text: string): Pick<ToolCallPart, "output"> => ({
       output: [{ type: "text", text }],
     });
-
-    it("reads the query and the note count from a Claude Bash run of the managed script", () => {
-      const t = tool({
-        vendorToolName: "Bash",
+    const NOTES = ["step-1/notes/Trip planning.md", "step-1/notes/Sourdough starter.md"];
+    const DOWN =
+      "Miyo search failed. Continue with keyword search. Details: net::ERR_CONNECTION_REFUSED";
+    const claudeCall = (overrides: Partial<ToolCallPart> = {}) =>
+      tool({
+        title: "miyo_search",
+        toolKind: "other",
+        mcpServer: "obsidian-copilot",
+        vendorToolName: "miyo_search",
+        input: { query: "hiking trip", variants: ["hike"] },
+        ...overrides,
+      });
+    const codexCall = (overrides: Partial<ToolCallPart> = {}) =>
+      tool({
+        title: "mcp.obsidian-copilot.miyo_search",
         toolKind: "execute",
-        input: { command: `sh "${SCRIPT}" "back pain standing desk"` },
-        ...stdout(miyoJson(["notes/Standing desk setup.md", "notes/Untitled 3.md"])),
-      });
-      expect(miyoSearchRun(t)).toEqual({
-        query: "back pain standing desk",
-        noteCount: 2,
-        notePaths: ["notes/Standing desk setup.md", "notes/Untitled 3.md"],
-      });
-    });
-
-    it("recognizes a script path with spaces and joins unquoted query words", () => {
-      const t = tool({
-        input: { command: `sh "/Users/me/My Vault/skills/miyo-search/miyo-search.sh" tariff code` },
-        ...stdout(miyoJson([])),
-      });
-      expect(miyoSearchRun(t)).toMatchObject({ query: "tariff code", noteCount: 0 });
-    });
-
-    it("recognizes the Windows .cmd wrapper run through PowerShell", () => {
-      const t = tool({
         input: {
-          command: `& "C:/Users/me/vault/.claude/skills/miyo-search/miyo-search.cmd" "sourdough"`,
+          server: "obsidian-copilot",
+          tool: "miyo_search",
+          arguments: { query: "hiking trip", variants: ["hike"] },
         },
-        ...stdout(miyoJson(["a.md"])),
+        ...overrides,
       });
-      expect(miyoSearchRun(t)).toMatchObject({ query: "sourdough", noteCount: 1 });
-    });
-
-    it("recognizes a direct miyo CLI search and skips its flags and their values", () => {
-      const t = tool({
-        vendorToolName: "Bash",
+    const opencodeCall = (overrides: Partial<ToolCallPart> = {}) =>
+      tool({
+        title: "execute",
+        toolKind: "other",
         input: {
-          command:
-            '~/.miyo/bin/miyo search --json -n 15 "back pain and standing desk" --variant "lower back ache" --folder "My Vault"',
+          code: 'const r = await tools["obsidian-copilot"].miyo_search({ query: "hiking trip", variants: ["hike"] });\nreturn r;',
         },
-        ...stdout(miyoJson(["a.md", "b.md", "c.md"])),
+        ...overrides,
       });
-      expect(miyoSearchRun(t)).toMatchObject({
-        query: "back pain and standing desk",
-        noteCount: 3,
-      });
-    });
+    const backends = [
+      ["Claude", claudeCall],
+      ["Codex", codexCall],
+      ["OpenCode", opencodeCall],
+    ] as const;
 
-    it("recognizes a Codex shell run with no captured stdout and reports an unknown count", () => {
-      const t = tool({
-        toolKind: "execute",
-        title: `"${SCRIPT}" "What did I write about my back pain?"`,
-        input: {
-          command: `sh "${SCRIPT}" "What did I write about my back pain?"`,
-          cwd: "/Users/me/vault",
-        },
-      });
-      expect(miyoSearchRun(t)).toEqual({
-        query: "What did I write about my back pain?",
-        noteCount: null,
-        notePaths: [],
-      });
-    });
-
-    it("unwraps a Codex zsh -lc command whose inner quotes are escaped (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
-      const t = tool({
-        toolKind: "execute",
-        input: { command: `/bin/zsh -lc "sh \\"${SCRIPT}\\" \\"tariff code ZX-4471\\""` },
-      });
-      expect(miyoSearchRun(t)?.query).toBe("tariff code ZX-4471");
-    });
-
-    it("recognizes an OpenCode bash tool call by its command input", () => {
-      const t = tool({
-        toolKind: "execute",
-        title: "bash",
-        input: { command: `sh ${SCRIPT} 'node lts'`, description: "Search the vault with Miyo" },
-        ...stdout(miyoJson(["notes/Node upgrade.md"])),
-      });
-      expect(miyoSearchRun(t)).toMatchObject({ query: "node lts", noteCount: 1 });
-    });
-
-    it("counts each note once when Miyo returns several chunks of it", () => {
-      const t = tool({
-        input: { command: `sh ${SCRIPT} "desk"` },
-        ...stdout(miyoJson(["a.md", "a.md", "b.md"])),
-      });
-      expect(miyoSearchRun(t)?.noteCount).toBe(2);
-    });
-
-    it("reports a null query when the script is run without one", () => {
-      expect(miyoSearchRun(tool({ input: { command: `sh ${SCRIPT}` } }))?.query).toBeNull();
-    });
-
-    it.each([
-      ["truncated JSON", '{ "results": [ { "path": "a.md"'],
-      ["a plain error message", "Miyo search failed — the Miyo app may not be running."],
-      ["JSON without a results list", '{"error":"nope"}'],
-      ["empty output", ""],
-    ])("reports an unknown count for %s", (_name, text) => {
-      const t = tool({ input: { command: `sh ${SCRIPT} "desk"` }, ...stdout(text) });
-      expect(miyoSearchRun(t)).toMatchObject({ query: "desk", noteCount: null });
-    });
-
-    it("ends the query at a redirection and recognizes a run chained after cd (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
-      const t = tool({ input: { command: `cd /Users/me/vault && sh ${SCRIPT} "desk" 2>&1` } });
-      expect(miyoSearchRun(t)?.query).toBe("desk");
-    });
-
-    it.each([
-      ["cat of the script", { command: `cat ${SCRIPT}` }],
-      ["listing the script", { command: `ls -l ${SCRIPT}` }],
-      ["sed over the script", { command: `sed -n '1,40p' ${SCRIPT}` }],
-      ["grep inside the script", { command: `grep -n MIYO ${SCRIPT}` }],
-      ["a quoted mention of the script", { command: `echo "run miyo-search.sh next"` }],
-      ["reading the miyo CLI help", { command: "cat ~/.miyo/bin/miyo search" }],
-    ])(
-      "returns null when a command only names the script: %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)",
-      (_name, input) => {
-        expect(miyoSearchRun(tool({ input }))).toBeNull();
+    it.each(backends)(
+      "reads the query, the note count and the note paths from a completed %s miyo_search call (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
+      (_name, call) => {
+        expect(miyoSearchRun(call(stdout(miyoJson(NOTES))))).toEqual({
+          status: "completed",
+          query: "hiking trip",
+          noteCount: 2,
+          notePaths: NOTES,
+          error: null,
+        });
       }
     );
 
-    it.each([
-      ["another shell command", { command: "rg -n 'back pain' notes" }],
-      ["reading the skill file", { command: "cat .agents/skills/miyo-search/SKILL.md" }],
-      ["another Miyo subcommand", { command: "~/.miyo/bin/miyo files --json" }],
-      ["the miyo-parse script", { command: `sh /skills/miyo-parse/miyo-parse.sh "a.pdf"` }],
-      ["a tool call without a command", { pattern: "miyo-search.sh" }],
-      ["a call without input", undefined],
-    ])("returns null for %s", (_name, input) => {
-      expect(miyoSearchRun(tool({ input }))).toBeNull();
+    it("reads the notes from the pretty-printed JSON OpenCode returns", () => {
+      const t = opencodeCall(
+        stdout(JSON.stringify({ results: [{ path: "a.md" }], count: 1 }, null, 2))
+      );
+      expect(miyoSearchRun(t)).toMatchObject({ noteCount: 1, notePaths: ["a.md"] });
     });
+
+    it.each(backends)(
+      "shows a %s call with no result yet as running with its query and no count",
+      (_name, call) => {
+        expect(miyoSearchRun(call({ status: "in_progress" }))).toEqual({
+          status: "in_progress",
+          query: "hiking trip",
+          noteCount: null,
+          notePaths: [],
+          error: null,
+        });
+      }
+    );
+
+    it.each(backends)(
+      "reports no notes for a completed %s call whose search matched nothing",
+      (_name, call) => {
+        expect(miyoSearchRun(call(stdout(miyoJson([]))))).toMatchObject({
+          noteCount: 0,
+          notePaths: [],
+        });
+      }
+    );
+
+    it("counts each note once when a result lists it more than once", () => {
+      const t = claudeCall(stdout(miyoJson(["a.md", "a.md", "b.md"])));
+      expect(miyoSearchRun(t)?.noteCount).toBe(2);
+    });
+
+    it.each(backends)(
+      "reports a failed %s call with the error text the tool returned",
+      (_name, call) => {
+        expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }))).toEqual({
+          status: "failed",
+          query: "hiking trip",
+          noteCount: null,
+          notePaths: [],
+          error: "net::ERR_CONNECTION_REFUSED",
+        });
+      }
+    );
+
+    it("reports the whole failure text when it has no Details part (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+      const text = "query must be a non-empty string.";
+      expect(miyoSearchRun(claudeCall({ status: "failed", ...stdout(text) }))?.error).toBe(text);
+    });
+
+    it("reports a failed call without output as failed with no error text", () => {
+      expect(miyoSearchRun(codexCall({ status: "failed" }))).toMatchObject({
+        status: "failed",
+        error: null,
+      });
+    });
+
+    it("keeps an OpenCode call completed when its code returned something other than the raw result list (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+      const t = opencodeCall(stdout(JSON.stringify({ len: 1200, count: 3 }, null, 2)));
+      expect(miyoSearchRun(t)).toEqual({
+        status: "completed",
+        query: "hiking trip",
+        noteCount: null,
+        notePaths: [],
+        error: null,
+      });
+    });
+
+    it("reports a completed call with no output as completed with an unknown count", () => {
+      expect(miyoSearchRun(codexCall())).toMatchObject({
+        status: "completed",
+        noteCount: null,
+        error: null,
+      });
+    });
+
+    it.each([
+      ["a Claude call without a query", claudeCall({ input: {} })],
+      [
+        "a Codex call without arguments",
+        codexCall({ input: { server: "obsidian-copilot", tool: "miyo_search" } }),
+      ],
+      [
+        "an OpenCode call whose query is not a string literal",
+        opencodeCall({
+          input: { code: 'return tools["obsidian-copilot"].miyo_search({ query: q });' },
+        }),
+      ],
+    ])("shows the card without a query for %s", (_name, call) => {
+      expect(miyoSearchRun(call)?.query).toBeNull();
+    });
+
+    it("reads an OpenCode query written with escapes and single-quoted tool access", () => {
+      const t = opencodeCall({
+        input: {
+          code: 'return tools[\'obsidian-copilot\'].miyo_search({ "query": "say \\"hi\\"" });',
+        },
+      });
+      expect(miyoSearchRun(t)?.query).toBe('say "hi"');
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads an OpenCode query written as a single-quoted literal", () => {
+      const t = opencodeCall({
+        input: {
+          code: `return tools["obsidian-copilot"].miyo_search({ query: 'Sam\\'s "standing" desk' });`,
+        },
+      });
+      expect(miyoSearchRun(t)?.query).toBe('Sam\'s "standing" desk');
+    });
+
+    it.each([
+      ["a miyo_search tool on another MCP server", claudeCall({ mcpServer: "other" })],
+      ["another tool on the Copilot server", claudeCall({ vendorToolName: "send_feedback" })],
+      [
+        "a Codex call to another tool",
+        codexCall({ input: { server: "obsidian-copilot", tool: "send_feedback", arguments: {} } }),
+      ],
+      [
+        "an OpenCode execute call to another tool",
+        opencodeCall({ input: { code: 'return tools["obsidian-copilot"].send_feedback({});' } }),
+      ],
+      [
+        "an OpenCode execute call that only mentions the tool",
+        opencodeCall({ input: { code: "// miyo_search" } }),
+      ],
+      ["a call without input", tool({ input: undefined })],
+    ])("returns null for %s", (_name, call) => {
+      expect(miyoSearchRun(call)).toBeNull();
+    });
+
+    it.each([
+      [
+        "a shell run of the miyo-search script",
+        tool({
+          vendorToolName: "Bash",
+          input: { command: 'sh ".claude/skills/miyo-search/miyo-search.sh" "desk"' },
+          ...stdout(miyoJson(["a.md"])),
+        }),
+      ],
+      [
+        "a direct miyo CLI search",
+        tool({ toolKind: "execute", input: { command: 'miyo search --json "desk"' } }),
+      ],
+      [
+        "a load of the miyo-search skill",
+        tool({ vendorToolName: "Skill", input: { skill: "miyo-search" } }),
+      ],
+    ])(
+      "returns null for %s saved by an earlier Copilot version so it renders as an ordinary row (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
+      (_name, call) => {
+        expect(miyoSearchRun(call)).toBeNull();
+      }
+    );
   });
 
   describe("miyoResultPaths()", () => {
-    const SCRIPT = "/Users/me/vault/.claude/skills/miyo-search/miyo-search.sh";
-    const search = (query: string, paths: string[]) =>
+    const search = (call: Partial<ToolCallPart>, paths: string[]) =>
       tool({
-        input: { command: `sh ${SCRIPT} "${query}"` },
+        mcpServer: "obsidian-copilot",
+        vendorToolName: "miyo_search",
+        input: { query: "q" },
         output: [
           { type: "text", text: JSON.stringify({ results: paths.map((path) => ({ path })) }) },
         ],
+        ...call,
       });
 
-    it("collects each note path once across every Miyo search in the turn", () => {
+    it("collects each note path once across every miyo_search call in the turn", () => {
       const parts: AgentMessagePart[] = [
-        search("desk", ["v/notes/A.md", "v/notes/B.md"]),
+        search({}, ["v/notes/A.md", "v/notes/B.md"]),
         { kind: "text", text: "Checking more." },
-        search("back", ["v/notes/B.md", "v/notes/C.md"]),
+        search({}, ["v/notes/B.md", "v/notes/C.md"]),
       ];
       expect([...new Set(miyoResultPaths(parts))]).toEqual([
         "v/notes/A.md",
@@ -738,29 +812,37 @@ describe("toolSummaries", () => {
       ]);
     });
 
-    it("ignores other tool calls and Miyo runs with no readable output", () => {
+    it("collects the notes of Claude, Codex and OpenCode calls alike", () => {
+      const parts: AgentMessagePart[] = [
+        search({}, ["v/claude.md"]),
+        search(
+          {
+            mcpServer: undefined,
+            vendorToolName: undefined,
+            input: { server: "obsidian-copilot", tool: "miyo_search", arguments: { query: "q" } },
+          },
+          ["v/codex.md"]
+        ),
+        search(
+          {
+            mcpServer: undefined,
+            vendorToolName: undefined,
+            input: { code: 'return tools["obsidian-copilot"].miyo_search({ query: "q" });' },
+          },
+          ["v/opencode.md"]
+        ),
+      ];
+      expect(miyoResultPaths(parts)).toEqual(["v/claude.md", "v/codex.md", "v/opencode.md"]);
+    });
+
+    it("ignores other tool calls, failed searches and searches with no readable output", () => {
       const parts: AgentMessagePart[] = [
         tool({ vendorToolName: "Grep", input: { pattern: "desk" } }),
-        tool({ input: { command: `sh ${SCRIPT} "desk"` } }),
+        search({ status: "failed", output: [{ type: "text", text: "Miyo search failed." }] }, []),
+        search({ output: undefined }, []),
         { kind: "text", text: "Nothing found." },
       ];
       expect(miyoResultPaths(parts)).toEqual([]);
-    });
-  });
-
-  describe("isMiyoSkillLoad()", () => {
-    it("is true for Claude's Skill tool loading miyo-search (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
-      const t = tool({ vendorToolName: "Skill", input: { skill: "miyo-search" } });
-      expect(isMiyoSkillLoad(t)).toBe(true);
-    });
-
-    it("is false for other skills and for non-Skill tools", () => {
-      expect(
-        isMiyoSkillLoad(tool({ vendorToolName: "Skill", input: { skill: "miyo-parse" } }))
-      ).toBe(false);
-      expect(
-        isMiyoSkillLoad(tool({ vendorToolName: "Bash", input: { skill: "miyo-search" } }))
-      ).toBe(false);
     });
   });
 });

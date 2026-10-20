@@ -75,16 +75,67 @@ describe("miyoSearchTool", () => {
       expect(JSON.parse(result.text)).toEqual({
         results: [
           {
-            path: "step-1/notes/Trip planning.md",
+            path: "notes/Trip planning.md",
             content: "body of step-1/notes/Trip planning.md",
           },
           {
-            path: "step-1/notes/Sourdough starter.md",
+            path: "notes/Sourdough starter.md",
             content: "body of step-1/notes/Sourdough starter.md",
           },
         ],
         count: 2,
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 names the active vault's notes by vault-relative path and keeps the folder name on notes from other Miyo folders", async () => {
+      const { deps } = setup(
+        { miyoExtraSearchFolders: ["Research"] },
+        {
+          chunks: [
+            chunk({ path: "step-1/notes/Trip planning.md" }),
+            chunk({ path: "Research/papers/Sleep.md" }),
+            chunk({ path: "step-10/Other.md" }),
+          ],
+        }
+      );
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(JSON.parse(result.text).results.map((r: { path: string }) => r.path)).toEqual([
+        "notes/Trip planning.md",
+        "Research/papers/Sleep.md",
+        "step-10/Other.md",
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 turns a Windows path into a forward-slash path before stripping the vault folder", async () => {
+      const { deps } = setup(
+        {},
+        {
+          chunks: [
+            chunk({ path: "step-1\\notes\\Trip planning.md" }),
+            chunk({ path: "Research\\Sleep.md" }),
+          ],
+        }
+      );
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(JSON.parse(result.text).results.map((r: { path: string }) => r.path)).toEqual([
+        "notes/Trip planning.md",
+        "Research/Sleep.md",
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 strips the vault folder in Unrestricted scope too", async () => {
+      const { deps } = setup(
+        { miyoSearchAll: true },
+        { chunks: [chunk({ path: "step-1/notes/Trip planning.md" })] }
+      );
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      expect(JSON.parse(result.text).results[0].path).toBe("notes/Trip planning.md");
     });
 
     it("returns an empty result list when Miyo finds nothing", async () => {
@@ -110,8 +161,8 @@ describe("miyoSearchTool", () => {
       const result = await runMiyoSearch({ query: "q" }, deps);
 
       expect(JSON.parse(result.text).results).toEqual([
-        { path: "step-1/b.md", content: "only" },
-        { path: "step-1/a.md", content: "better\n\nworse" },
+        { path: "b.md", content: "only" },
+        { path: "a.md", content: "better\n\nworse" },
       ]);
     });
 
@@ -125,9 +176,9 @@ describe("miyoSearchTool", () => {
       const { results, count } = JSON.parse((await runMiyoSearch({ query: "q" }, deps)).text);
 
       expect(count).toBe(20);
-      expect(results[0].path).toBe("step-1/transcript.md");
-      expect(results[1].path).toBe("step-1/other-0.md");
-      expect(results[19].path).toBe("step-1/other-18.md");
+      expect(results[0].path).toBe("transcript.md");
+      expect(results[1].path).toBe("other-0.md");
+      expect(results[19].path).toBe("other-18.md");
     });
 
     it.each([
@@ -147,7 +198,7 @@ describe("miyoSearchTool", () => {
         expect(new TextEncoder().encode(result.text).length).toBeLessThanOrEqual(32_000);
         expect(result.isError).toBe(false);
         expect(parsed.results.map((r: { path: string }) => r.path)).toEqual(
-          chunks.map((c) => c.path)
+          chunks.map((c) => c.path.replace("step-1/", ""))
         );
         expect(parsed.results[0].content.length).toBeGreaterThan(100);
       }

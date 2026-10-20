@@ -111,6 +111,29 @@ describe("MiyoSearchCard", () => {
       expect(container.querySelector(SHIMMER)).toBeNull();
     });
 
+    it("shows the error text under the failed label (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+      render(
+        <MiyoSearchCard
+          status="failed"
+          query="desk"
+          noteCount={null}
+          error="Miyo search failed. Details: net::ERR_CONNECTION_REFUSED"
+        />
+      );
+
+      expect(
+        screen.getByText("Miyo search failed. Details: net::ERR_CONNECTION_REFUSED")
+      ).toBeTruthy();
+      expect(screen.getByText("“desk”")).toBeTruthy();
+    });
+
+    it("shows no error line when a failed search carried no error text", () => {
+      const { container } = render(
+        <MiyoSearchCard status="failed" query="desk" noteCount={null} error={null} />
+      );
+      expect(container.firstElementChild?.children).toHaveLength(2);
+    });
+
     it("omits the count when the backend gave no parsable output", () => {
       render(<MiyoSearchCard status="completed" query="desk" noteCount={null} />);
 

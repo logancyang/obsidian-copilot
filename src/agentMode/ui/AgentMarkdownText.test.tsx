@@ -23,7 +23,6 @@ describe("AgentMarkdownText", () => {
     function renderLinks(miyoPaths: string[]) {
       const app = Object.assign(new App(), {
         workspace: { getActiveFile: jest.fn(() => null) },
-        vault: { getName: () => "step-2" },
         metadataCache: {
           getFirstLinkpathDest: (linkpath: string) => ({ path: `${linkpath}.md` }),
         },
@@ -47,7 +46,7 @@ describe("AgentMarkdownText", () => {
     }
 
     it("labels only the links to notes in the turn's Miyo results as found by Miyo", async () => {
-      renderLinks(["step-2/notes/Standing desk setup.md"]);
+      renderLinks(["notes/Standing desk setup.md"]);
 
       const badge = await screen.findByRole("img", { name: "Found by Miyo" });
       expect(screen.getAllByRole("img", { name: "Found by Miyo" })).toHaveLength(1);
@@ -55,7 +54,7 @@ describe("AgentMarkdownText", () => {
     });
 
     it("keeps one badge per Miyo-found link when the text re-renders as the answer streams", async () => {
-      const { rerender, tree } = renderLinks(["step-2/notes/Standing desk setup.md"]);
+      const { rerender, tree } = renderLinks(["notes/Standing desk setup.md"]);
       await screen.findByRole("img", { name: "Found by Miyo" });
 
       rerender(tree("[[Standing desk setup]] [[Reading list]] and more words"));
