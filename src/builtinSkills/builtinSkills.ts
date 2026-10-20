@@ -30,6 +30,8 @@ export interface BuiltinSkill {
 export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "symposium-publish" },
   { name: "copilot-read-pdf" },
+  // Search moved to the miyo_search tool. https://github.com/Brevilabs/obsidian-copilot-private/issues/736
+  { name: "miyo-search" },
 ];
 
 export const PLUS_ENV = {
@@ -39,10 +41,6 @@ export const PLUS_ENV = {
   clientVersion: "COPILOT_CLIENT_VERSION",
 } as const;
 
-export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
-export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
-export const MIYO_SEARCH_EXTRA_FOLDERS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDERS";
-export const MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS";
 export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
 export const SELF_HOST_WEB_SEARCH_URL_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_URL";
 export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKEN";
@@ -1090,9 +1088,6 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-const MIYO_SEARCH_VERSION = 6;
-const MIYO_SEARCH_SH_FILE = "miyo-search.sh";
-const MIYO_SEARCH_CMD_FILE = "miyo-search.cmd";
 const MIYO_PARSE_VERSION = 3;
 
 const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
@@ -1113,102 +1108,6 @@ if not defined MIYO (
   echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install Miyo, then retry. Do not retry in a loop. 1>&2
   exit /b 3
 )`;
-
-const MIYO_SEARCH_SH = `#!/bin/sh
-# Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-# Resolves the miyo binary so the agent never has to deal with PATH.
-die() {
-  printf '%s\\n' "$1" >&2
-  exit "\${2:-2}"
-}
-
-QUERY="$*"
-[ -n "$QUERY" ] || die "Usage: sh ${MIYO_SEARCH_SH_FILE} <query>" 1
-
-${MIYO_POSIX_RESOLVER}
-
-# Default closed: only the explicit Unrestricted value may omit Miyo's exact
-# pre-retrieval folder boundary.
-# https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-case "\${${MIYO_SEARCH_SCOPE_ENV}:-current}" in
-  unrestricted)
-    OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
-    ;;
-  current)
-    [ -n "\${${MIYO_SEARCH_FOLDER_ENV}:-}" ] || die "Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search." 4
-    # Ticked folders go first and the vault last, because a Miyo that searches one
-    # folder keeps only the last --folder. No folder name contains "/".
-    # https://github.com/logancyang/obsidian-copilot/issues/3508
-    set -f
-    IFS=/
-    set --
-    for NAME in \${${MIYO_SEARCH_EXTRA_FOLDERS_ENV}:-}; do
-      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"
-    done
-    unset IFS
-    set +f
-    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
-    STATUS=$?
-    # A ticked folder this Miyo lacks fails the whole search, so retry with the vault alone.
-    # https://github.com/logancyang/obsidian-copilot/issues/3508
-    if [ "$STATUS" -ne 0 ] && [ $# -gt 0 ]; then
-      SKIPPED=$OUT
-      OUT=$("$MIYO" search "$QUERY" -n 10 --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
-      STATUS=$?
-      [ "$STATUS" -ne 0 ] || printf '%s\n' "Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. Details: $SKIPPED" >&2
-    fi
-    [ "$STATUS" -eq 0 ] || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
-    ;;
-  *)
-    die "Miyo search received an invalid Search scope. Do not retry or run an unrestricted search." 4
-    ;;
-esac
-printf '%s\\n' "$OUT"
-`;
-
-const MIYO_SEARCH_CMD = `@echo off
-setlocal enableextensions disabledelayedexpansion
-rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-if "%~1"=="" (
-  echo Usage: ${MIYO_SEARCH_CMD_FILE} "query" 1>&2
-  exit /b 1
-)
-${MIYO_WINDOWS_RESOLVER}
-rem Default closed: only the explicit Unrestricted value may omit Miyo's exact
-rem pre-retrieval folder boundary.
-rem https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-if /I "%${MIYO_SEARCH_SCOPE_ENV}%"=="unrestricted" (
-  "%MIYO%" search %* -n 10 --json
-  if errorlevel 1 exit /b 1
-  exit /b 0
-)
-if not "%${MIYO_SEARCH_SCOPE_ENV}%"=="" if /I not "%${MIYO_SEARCH_SCOPE_ENV}%"=="current" (
-  echo Miyo search received an invalid Search scope. Do not retry or run an unrestricted search. 1>&2
-  exit /b 4
-)
-if not defined ${MIYO_SEARCH_FOLDER_ENV} (
-  echo Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search. 1>&2
-  exit /b 4
-)
-rem Copilot quotes the ticked folders, which go before the vault because a Miyo that
-rem searches one folder keeps only the last --folder. The agent's words follow --, so
-rem they stay query text and cannot add a --folder. A ticked folder this Miyo lacks
-rem fails the whole search, so a failure retries with the vault alone.
-rem https://github.com/logancyang/obsidian-copilot/issues/3508
-"%MIYO%" search -n 10 %${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV}% --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
-if not errorlevel 1 exit /b 0
-if not defined ${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV} (
-  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
-  exit /b 1
-)
-"%MIYO%" search -n 10 --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
-if errorlevel 1 (
-  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
-  exit /b 1
-)
-echo Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. 1>&2
-exit /b 0
-`;
 
 const MIYO_PARSE_SH = `#!/bin/sh
 # Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
@@ -1235,70 +1134,6 @@ if "%~1"=="" (
 ${MIYO_WINDOWS_RESOLVER}
 "%MIYO%" parse "%~1"
 `;
-
-export const MIYO_SEARCH_SKILL: BuiltinSkill = {
-  name: "miyo-search",
-  version: MIYO_SEARCH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
-  skillMd: `---
-name: miyo-search
-description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. Use it for every request that might be answered from the user's notes, alongside grep for exact terms. Needs the Miyo desktop app installed and running.
-metadata:
-  copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
----
-
-# Miyo vault search
-
-Search the user's indexed Obsidian vault through Miyo, the user's own companion
-app for semantic search over their notes. It finds relevant notes by meaning
-(not just filename). Searches go only to the user's own Miyo service — the local
-app by default, or the remote Miyo server they configured in settings — never a
-third-party API, and no API key.
-
-When to use it: for every request that might be answered from the user's
-notes, alongside \`grep\`/glob for any exact names, terms, tags or quoted
-phrases in the request. Miyo finds notes that match by meaning even when the
-wording or title differs; grep finds exact strings.
-
-${howToRunSection({
-  shFile: MIYO_SEARCH_SH_FILE,
-  cmdFile: MIYO_SEARCH_CMD_FILE,
-  argPlaceholder: "<the user's question>",
-  extraNote: "Pass the user's full question as the query.",
-})}
-
-The script locates the Miyo binary itself — you do not need to know where Miyo
-is installed or which shell you are in. Combine its results with your keyword
-search results by note path. If Miyo reports that it is unavailable, continue
-with keyword search.
-
-Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
-folder boundary for the active vault and any other Miyo folders ticked in Copilot
-settings, including from Project chats.
-**Unrestricted** searches every folder registered with Miyo.
-
-## Reading the results
-
-The script prints \`{ "results": [ { "path": ..., "content": ... } ], "count": N }\`.
-Cite the \`path\` of any note you use so the user can open it.
-
-## If it reports a problem
-
-The script exits with a clear message when Miyo can't be used:
-
-- **Not installed** (CLI not found): the Miyo desktop app isn't installed on
-  this machine. Tell the user to install and open Miyo, then try again. Do not
-  retry in a loop.
-- **Not running** (search failed / can't reach the service): the app is
-  installed but not running. Tell the user to open Miyo, then continue without
-  vault search if they can't.
-`,
-  files: [
-    { path: MIYO_SEARCH_SH_FILE, content: MIYO_SEARCH_SH },
-    { path: MIYO_SEARCH_CMD_FILE, content: MIYO_SEARCH_CMD },
-  ],
-};
 
 export const MIYO_PARSE_SKILL: BuiltinSkill = {
   name: "miyo-parse",
@@ -1336,24 +1171,15 @@ have. Do not run \`miyo parse\` again on that file.
   ],
 };
 
-export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
-  ...BUILTIN_SKILLS,
-  MIYO_SEARCH_SKILL,
-  MIYO_PARSE_SKILL,
-];
+export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [...BUILTIN_SKILLS, MIYO_PARSE_SKILL];
 
-export function planManagedBuiltins(gates: { search: boolean; documents: boolean }): {
+export function planManagedBuiltins(gates: { documents: boolean }): {
   seed: readonly BuiltinSkill[];
   prune: readonly string[];
 } {
-  const seed: readonly BuiltinSkill[] =
-    !gates.search && !gates.documents
-      ? BUILTIN_SKILLS
-      : [
-          ...BUILTIN_SKILLS,
-          ...(gates.search ? [MIYO_SEARCH_SKILL] : []),
-          ...(gates.documents ? [MIYO_PARSE_SKILL] : []),
-        ];
+  const seed: readonly BuiltinSkill[] = gates.documents
+    ? [...BUILTIN_SKILLS, MIYO_PARSE_SKILL]
+    : BUILTIN_SKILLS;
   return {
     seed,
     prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
@@ -1374,14 +1200,6 @@ export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
   )
 );
 
-// The switch defaults on, so it only takes effect while Miyo is connected.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/716
-export function isMiyoSearchSkillActive(
-  settings: Pick<CopilotSettings, "enableMiyo" | "enableMiyoSearchSkill">
-): boolean {
-  return settings.enableMiyo === true && settings.enableMiyoSearchSkill === true;
-}
-
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
   skillName: string,
@@ -1390,7 +1208,6 @@ export function isBuiltinSkillEnabledFor(
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
   return planManagedBuiltins({
-    search: isMiyoSearchSkillActive(settings),
     documents: settings.enableMiyoDocumentProcessing,
   }).seed.some((skill) => skill.name === skillName);
 }

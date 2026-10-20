@@ -32,17 +32,14 @@ export class CodexBackend implements AcpBackend {
 
   constructor(private readonly clientVersion = "") {}
 
-  async buildSpawnDescriptor(ctx: {
-    vaultBasePath: string;
-    vaultName?: string;
-  }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const descriptor = buildSimpleSpawnDescriptor(
       settings.agentMode?.backends?.codex?.binaryPath,
       "Codex adapter path not configured. Open Agent Mode settings and install or detect @agentclientprotocol/codex-acp.",
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
-        ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath, ctx.vaultName)),
+        ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath)),
         // The supported adapter derives its initial ACP mode from this variable.
         // User env overrides still win.
         // The adapter's "read-only" mode asks before each workspace edit, like

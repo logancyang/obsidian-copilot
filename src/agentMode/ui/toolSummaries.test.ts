@@ -664,6 +664,21 @@ describe("toolSummaries", () => {
       expect(miyoSearchRun(t)?.noteCount).toBe(2);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 counts notes from other Miyo folders but offers only the vault's notes for link badges", () => {
+      const text = JSON.stringify({
+        results: [
+          { path: "Research/Sleep.md" },
+          { folder: "Research", path: "Interview.md" },
+          { folder: "Reading Notes", path: "Research/Sleep.md" },
+        ],
+        count: 3,
+      });
+      expect(miyoSearchRun(claudeCall(stdout(text)))).toMatchObject({
+        noteCount: 3,
+        notePaths: ["Research/Sleep.md"],
+      });
+    });
+
     it.each(backends)(
       "reports a failed %s call with the error text the tool returned",
       (_name, call) => {

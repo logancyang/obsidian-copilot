@@ -6,7 +6,7 @@ Run Miyo on one computer and connect Copilot on your other devices to that same 
 
 - Choose a host computer that can stay awake with Miyo running. Add the folders you want to search and let indexing finish. The [local Miyo setup guide](miyo-setup.md) explains folder registration and indexing.
 - Install [Tailscale](https://tailscale.com/download) on **every participating device**, including the Miyo host, and connect them to the same Tailscale network. Your network's access rules must allow clients to reach the host.
-- Use Copilot on each client. For Miyo searches in Agent Chat, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client too: Copilot uses its local command-line tool to contact the remote server. Only the host needs to run the server and maintain an index.
+- Use Copilot on each client. Agent Chat searches the remote server directly. Only the host needs to run the server and maintain an index. To have Agent Chat read PDFs and EPUBs, install the [Miyo desktop app](https://www.miyo.md/) on each desktop client.
 
 Tailscale gives the devices a private connection. It does not copy your notes or synchronize Miyo indexes. Keep your vault files synchronized separately if you want the same notes available in Obsidian on each device.
 
@@ -98,15 +98,14 @@ In this example, a Miyo search returns **Better team meetings.md** and the expec
 
 ## If the connection or search fails
 
-| What you see                                             | What to check                                                                                                                                                           |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Copilot cannot connect                                   | Confirm that both devices are connected to Tailscale, the host is awake, and Miyo is running.                                                                           |
-| The address opens the wrong service                      | Copy the full HTTPS address with `/miyo`; check `tailscale serve status` on the host.                                                                                   |
-| Serve cannot reach Miyo                                  | Check the host's actual Miyo port and update the Serve target if it changed.                                                                                            |
-| Connected, but the vault is missing                      | Add the corresponding folder in Miyo on the host and check that its name matches the Obsidian vault.                                                                    |
-| Connected, but a note is missing or stale                | Check the host's copy of the note, indexing status, and exclusions. File synchronization is separate from this connection.                                              |
-| A returned note cannot open locally                      | Confirm the note exists in the client's vault at the same relative path.                                                                                                |
-| Agent Chat reports that the Miyo CLI is missing          | Install the Miyo desktop app on that client, then retry. The server address alone does not install the command-line tool.                                               |
-| Settings says Connected, but the agent cannot reach Miyo | Check the agent's network permissions. An agent sandbox can block the request even when Copilot can reach the server; use the available approval flow for that request. |
+| What you see                              | What to check                                                                                                              |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Copilot cannot connect                    | Confirm that both devices are connected to Tailscale, the host is awake, and Miyo is running.                              |
+| The address opens the wrong service       | Copy the full HTTPS address with `/miyo`; check `tailscale serve status` on the host.                                      |
+| Serve cannot reach Miyo                   | Check the host's actual Miyo port and update the Serve target if it changed.                                               |
+| Connected, but the vault is missing       | Add the corresponding folder in Miyo on the host and check that its name matches the Obsidian vault.                       |
+| Connected, but a note is missing or stale | Check the host's copy of the note, indexing status, and exclusions. File synchronization is separate from this connection. |
+| A returned note cannot open locally       | Confirm the note exists in the client's vault at the same relative path.                                                   |
+| Agent Chat cannot read a PDF or EPUB      | Install the Miyo desktop app on that client, then retry. The server address alone does not install the command-line tool.  |
 
 When the host is asleep, offline, or no longer running Miyo, remote searches are unavailable. Keep using your existing vault synchronization method to deliver note changes to the host for indexing.

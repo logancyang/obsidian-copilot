@@ -15,6 +15,7 @@ import {
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
   isLocalMiyoUrl,
+  isMiyoSearchActive,
 } from "@/miyo/miyoUtils";
 import {
   getMiyoStatusSnapshot,
@@ -187,6 +188,20 @@ describe("miyoUtils", () => {
         getSearchBackend(capSettings({ enableMiyo: true, miyoServerUrl: "http://host:8742" }))
       ).toBe("miyo");
     });
+  });
+
+  describe("isMiyoSearchActive()", () => {
+    it.each([
+      [true, true, true],
+      [true, false, false],
+      [false, true, false],
+      [false, false, false],
+    ])(
+      "with Miyo connected=%s and the agent search switch=%s the miyo_search tool is active=%s https://github.com/Brevilabs/obsidian-copilot-private/issues/716",
+      (enableMiyo, enableMiyoSearchSkill, active) => {
+        expect(isMiyoSearchActive({ enableMiyo, enableMiyoSearchSkill })).toBe(active);
+      }
+    );
   });
 
   describe("canProcessDocumentsWithMiyo()", () => {
