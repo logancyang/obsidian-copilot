@@ -2690,12 +2690,17 @@ describe("AgentSessionManager", () => {
           { sender: AI_SENDER, message: "Two notes.", isVisible: true, timestamp: answered },
         ] as AgentChatMessage[];
 
-        async function restartSavedChat(replay: ReturnType<typeof buildReplayingBackend>) {
+        async function restartSavedChat(
+          replay: ReturnType<typeof buildReplayingBackend>,
+          opts: { onScreen?: AgentChatMessage[]; failed?: boolean; saveFirst?: boolean } = {}
+        ) {
           jest.useFakeTimers();
           getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
           const note = mockTFile({ path: "chats/agent__list_the_notes@20261012_214533.md" });
           const app = buildApp();
-          jest.mocked(app.vault.getAbstractFileByPath).mockReturnValue(note);
+          jest
+            .mocked(app.vault.getAbstractFileByPath)
+            .mockImplementation((path) => (path === note.path ? note : null));
           const saveSession = jest.fn(async () => ({ path: note.path }));
           const mgr = buildManager({
             app,
@@ -2711,8 +2716,9 @@ describe("AgentSessionManager", () => {
             descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
           });
           const first = await mgr.createSession();
-          getSessionTestHandle(first).setMessages(noteTurns, true);
-          await jest.advanceTimersByTimeAsync(2000);
+          getSessionTestHandle(first).setMessages(opts.onScreen ?? noteTurns, true);
+          if (opts.failed) getSessionTestHandle(first).setStatus("error");
+          if (opts.saveFirst ?? true) await jest.advanceTimersByTimeAsync(2000);
 
           await mgr.restartBackend("opencode", "managed skills changed");
           return { mgr, first, note, saveSession, rebuilt: mgr.getActiveSession()! };
@@ -2740,6 +2746,54 @@ describe("AgentSessionManager", () => {
           ];
           expect(options.existingPath).toBe(note.path);
           expect(messages.map((m) => m.timestamp)).toEqual([asked, answered]);
+          await mgr.shutdown();
+        });
+
+        it("keeps saving to the note that a pending autosave creates when the restart runs right after the chat's first reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/742)", async () => {
+          const { mgr, note, rebuilt, saveSession } = await restartSavedChat(
+            buildReplayingBackend(),
+            { saveFirst: false }
+          );
+
+          expect(saveSession).toHaveBeenCalledTimes(1);
+          expect(mgr.getSessionSourcePath(rebuilt.internalId)).toBe(note.path);
+          await mgr.shutdown();
+        });
+
+        it("still shows a failed turn and its error after the restart while keeping the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/742)", async () => {
+          const failedTurn = [
+            {
+              sender: USER_SENDER,
+              message: "Summarize this note",
+              isVisible: true,
+              timestamp: asked,
+            },
+            {
+              sender: AI_SENDER,
+              message: "OpenCode's internal service stopped. Please try again.",
+              isVisible: true,
+              isErrorMessage: true,
+              timestamp: answered,
+            },
+          ] as AgentChatMessage[];
+          const replay = buildReplayingBackend({
+            onLoad: (emit) => {
+              emit(replayChunk("user_message_chunk", "list the notes", "u1"));
+              emit(replayChunk("agent_message_chunk", "Two notes.", "a1"));
+            },
+          });
+          const { mgr, note, rebuilt } = await restartSavedChat(replay, {
+            onScreen: [...noteTurns, ...failedTurn],
+            failed: true,
+          });
+
+          expect(rebuilt.store.getDisplayMessages().map((m) => m.message)).toEqual([
+            "list the notes",
+            "Two notes.",
+            "Summarize this note",
+            "OpenCode's internal service stopped. Please try again.",
+          ]);
+          expect(mgr.getSessionSourcePath(rebuilt.internalId)).toBe(note.path);
           await mgr.shutdown();
         });
 

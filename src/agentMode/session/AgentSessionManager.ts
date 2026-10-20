@@ -2561,6 +2561,9 @@ export class AgentSessionManager {
     const retainedChatInputIds: string[] = [];
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      // A chat's first save can still be pending, and its note must exist before the note is read below.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
+      for (const session of affected) await this.drainAutoSave(session);
       const activeSessionId = this.activeSessionId;
       const activeProjectId = this.activeProjectId;
       // Every affected composer must stay owned across the gap, including tabs
@@ -2619,7 +2622,8 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
               const loaded = await this.opts.persistenceManager.loadFile(note);
               this.restoreFromNote(rebuilt, resumed, note, loaded);
-            } else if (resumed && replacement.recoveryMessages?.length) {
+            }
+            if (resumed && replacement.recoveryMessages?.length) {
               // A fresh fallback has no backend history for these messages;
               // displaying them there would imply the agent can see that context.
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
