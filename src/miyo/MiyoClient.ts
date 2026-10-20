@@ -335,7 +335,13 @@ export class MiyoClient {
       filters,
       paths,
       folderNames,
-    }: { filters?: MiyoSearchFilter[]; paths?: string[]; folderNames?: string[] } = {}
+      variants,
+    }: {
+      filters?: MiyoSearchFilter[];
+      paths?: string[];
+      folderNames?: string[];
+      variants?: string[];
+    } = {}
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
@@ -346,6 +352,9 @@ export class MiyoClient {
       // An empty list is omitted so a call with no path filter sends the same body as before.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/527
       ...(paths && paths.length > 0 ? { paths } : {}),
+      // Miyo searches alongside the query at most two other phrasings and fuses them into one ranking.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
+      ...(variants && variants.length > 0 ? { expanded_queries: variants } : {}),
     };
     if (getSettings().debug) {
       logInfo("Miyo search request:", { baseUrl, payload });

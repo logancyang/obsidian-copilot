@@ -1,6 +1,8 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -20,6 +22,7 @@ import {
   SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
+import { runMiyoSearch } from "./session/miyoSearch/miyoSearchTool";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -169,8 +172,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     persistenceManager,
     sessionIndex,
     copilotMcpServer: createCopilotMcpServer(
+      // miyo_search stays off until agents are switched from the miyo-search skill to it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/736
       (toolName) =>
-        toolName === SEND_FEEDBACK_TOOL_NAME && getSettings().agentMode.offerFeedbackCards
+        toolName === SEND_FEEDBACK_TOOL_NAME && getSettings().agentMode.offerFeedbackCards,
+      (args) =>
+        runMiyoSearch(args, {
+          client: new MiyoClient(),
+          getSettings,
+          getVaultName: () => getMiyoFolderName(app),
+        })
     ),
   });
   managerRef = manager;

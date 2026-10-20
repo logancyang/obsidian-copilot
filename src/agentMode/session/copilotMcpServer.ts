@@ -1,3 +1,9 @@
+import {
+  MIYO_SEARCH_TOOL,
+  MIYO_SEARCH_TOOL_NAME,
+  MIYO_SEARCH_TURNED_OFF_TEXT,
+  type MiyoSearchRunner,
+} from "@/agentMode/session/miyoSearch/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
@@ -78,6 +84,7 @@ const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.
 
 const HOSTED_TOOLS = Object.freeze([
   Object.freeze({ definition: SEND_FEEDBACK_TOOL, turnedOffText: OFFER_RESULT_TEXT.turned_off }),
+  Object.freeze({ definition: MIYO_SEARCH_TOOL, turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT }),
 ]);
 
 type ToolSwitch = (toolName: string) => boolean;
@@ -98,7 +105,10 @@ interface JsonRpcRequest {
 
 type JsonRpcReply = { result: unknown } | { error: { code: number; message: string } };
 
-export function createCopilotMcpServer(isToolOn: ToolSwitch): CopilotMcpServer {
+export function createCopilotMcpServer(
+  isToolOn: ToolSwitch,
+  searchMiyo: MiyoSearchRunner
+): CopilotMcpServer {
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
@@ -111,7 +121,7 @@ export function createCopilotMcpServer(isToolOn: ToolSwitch): CopilotMcpServer {
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
-        handleHttpRequest(request, response, handlersByToken, isToolOn)
+        handleHttpRequest(request, response, handlersByToken, isToolOn, searchMiyo)
       );
       const url = `${await server.origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
@@ -146,7 +156,8 @@ async function handleHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
   handlersByToken: ReadonlyMap<string, FeedbackOfferHandler>,
-  isToolOn: ToolSwitch
+  isToolOn: ToolSwitch,
+  searchMiyo: MiyoSearchRunner
 ): Promise<void> {
   if (request.url !== MCP_PATH) return writeJson(response, 404, { error: "Not found." });
   // Each session's token selects its own chat, so another vault, session or local page cannot raise a card in it.
@@ -174,15 +185,16 @@ async function handleHttpRequest(
   writeJson(response, 200, {
     jsonrpc: "2.0",
     id: message.id,
-    ...reply(message, onOffer, isToolOn),
+    ...(await reply(message, onOffer, isToolOn, searchMiyo)),
   });
 }
 
-function reply(
+async function reply(
   message: JsonRpcRequest,
   onOffer: FeedbackOfferHandler,
-  isToolOn: ToolSwitch
-): JsonRpcReply {
+  isToolOn: ToolSwitch,
+  searchMiyo: MiyoSearchRunner
+): Promise<JsonRpcReply> {
   switch (message.method) {
     case "initialize": {
       const requested = message.params?.protocolVersion;
@@ -208,22 +220,27 @@ function reply(
         },
       };
     case "tools/call":
-      return { result: callTool(message.params ?? {}, onOffer, isToolOn) };
+      return { result: await callTool(message.params ?? {}, onOffer, isToolOn, searchMiyo) };
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
   }
 }
 
-function callTool(
+async function callTool(
   params: Record<string, unknown>,
   onOffer: FeedbackOfferHandler,
-  isToolOn: ToolSwitch
+  isToolOn: ToolSwitch,
+  searchMiyo: MiyoSearchRunner
 ) {
   const tool = HOSTED_TOOLS.find((hosted) => hosted.definition.name === params.name);
   if (!tool) return toolText(`Unknown tool: ${String(params.name)}`, true);
   // Agents read tools/list once per session, so a tool switched off mid-session still gets called; answering without an error stops the agent from retrying it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
+  if (tool.definition.name === MIYO_SEARCH_TOOL_NAME) {
+    const result = await searchMiyo(params.arguments);
+    return toolText(result.text, result.isError);
+  }
   const draft = parseDraft(params.arguments);
   if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);
   return toolText(OFFER_RESULT_TEXT[onOffer(draft, callerSessionId(params.arguments))], false);
