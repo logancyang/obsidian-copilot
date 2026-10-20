@@ -12,7 +12,7 @@ const PART_BUDGET_BYTES = 32_000;
 
 export const MIYO_PARSE_TOOL = Object.freeze({
   name: MIYO_PARSE_TOOL_NAME,
-  description: `Convert one PDF or EPUB into Markdown/text with Miyo. The file doesn't need to be in the vault. A long document comes back in parts: when a part names a next offset, call again with that offset to read on. If it fails, tell the user, then read the file with any other tool you have; don't call it again for that file.`,
+  description: `Convert one PDF or EPUB into Markdown/text with Miyo. A long document comes back in parts: when a part names a next offset, call again with that offset to read on. If it fails, tell the user, then read the file with any other tool you have; don't call it again for that file.`,
   inputSchema: {
     type: "object",
     properties: {
