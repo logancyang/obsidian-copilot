@@ -38,6 +38,11 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
 
+function parseLinkableEpoch(raw: string | undefined): number | undefined {
+  const epoch = Number(raw);
+  return Number.isSafeInteger(epoch) && epoch > 0 ? epoch : undefined;
+}
+
 function parseUsageJson(raw: unknown): SessionUsage | undefined {
   if (typeof raw !== "string" || raw.trim().length === 0) return undefined;
   try {
@@ -130,8 +135,13 @@ export class AgentChatPersistenceManager {
         projectId: options?.projectId,
         usage: options?.usage,
       });
-      const renderNote = (current: string) =>
-        `${mergeFrontmatter(current, updates)}\n\n${chatContent}`;
+      // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
+      const renderNote = (current: string) => {
+        const existingEpoch = parseLinkableEpoch(this.splitFrontmatter(current).frontmatter.epoch);
+        const owned = existingEpoch ? updates.filter(([key]) => key !== "epoch") : updates;
+        return `${mergeFrontmatter(current, owned)}\n\n${chatContent}`;
+      };
       // Autosave rewrites only the keys it owns, from the note as it is at write time, so renames, pins, and user properties survive; a new chat colliding with another note's name must not inherit its session.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/698
       const rewriteNote = (path: string) =>
@@ -188,11 +198,7 @@ export class AgentChatPersistenceManager {
     const sessionId = frontmatter.sessionId?.trim() || undefined;
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
-    const epoch = Number(frontmatter.epoch);
-    const messages = this.parseChatBody(
-      body,
-      Number.isSafeInteger(epoch) && epoch > 0 ? epoch : undefined
-    );
+    const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
