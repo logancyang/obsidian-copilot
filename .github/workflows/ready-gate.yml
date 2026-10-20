@@ -1,0 +1,43 @@
+# Reports the `ready-gate` commit status: whether a PR's Ready gate comment
+# (e2e1, Codex, simplify, e2e2) holds up against what GitHub can show.
+# Report-only: it never blocks merging and stays pending when gates are missing.
+# https://github.com/Brevilabs/obsidian-copilot-private/issues/614
+
+name: Ready gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  statuses: write
+  pull-requests: read
+  contents: read
+  issues: read
+
+jobs:
+  check:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ready-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    steps:
+      # The script always comes from the default branch. Never check out or
+      # execute the PR head: this job holds a token that can write statuses.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/ready-gate-check.mjs
+          persist-credentials: false
+      - name: Post ready-gate status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        run: node scripts/ready-gate-check.mjs

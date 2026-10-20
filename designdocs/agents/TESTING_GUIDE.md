@@ -79,6 +79,10 @@ plugin loaded into a real vault. The CLI lives at
 `/Applications/Obsidian.app/Contents/MacOS/obsidian` — use the full path; the
 `obsidian` shim is not always on `PATH`.
 
+## The `ready-gate` commit status
+
+The `ready-gate` workflow posts a commit status on every PR head. It reads the latest `Ready gate` comment (the one containing the hidden `<!-- ready-gate:v1 ... -->` JSON block) and checks the four gates it claims (`e2e1`, `codex`, `simplify`, `e2e2`) against what GitHub can show: attachment-only evidence URLs, `src/` changes since each e2e SHA, Codex reviews and replies, and the production-line delta of the simplify commits. The status is `success` when all four verify, `pending` while any gate is missing or stale (the description names them), and `failure` only when the comment records a failed gate. It is report-only and never blocks merging. To preview a verdict locally, run `GITHUB_TOKEN=$(gh auth token) node scripts/ready-gate-check.mjs --repo OWNER/NAME --pr N --dry-run`.
+
 ## Get a fresh build into the test vault
 
 ```bash
