@@ -185,6 +185,14 @@ When a finished compaction reports its new size, the context ring drops to that 
 
 Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
 
+### When a reply stops early
+
+A model can only write so much in one reply. When a reply runs out of room partway through a step, such as writing a long note, that step never runs. Its row shows as failed instead of spinning, and Copilot asks the agent once, in the same reply, to continue in smaller steps. Copilot never continues a turn you stopped or one the model refused, and it continues only once per message.
+
+If the reply still stops early, it ends with a **Stopped early** notice that names the cause: the model hit its output limit, the agent hit its step limit, or the model's safety system stopped it. The last step may not have run. Send another message to continue.
+
+Any step the agent left unfinished when its turn ended shows as failed, including in chats you reopen from history.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
