@@ -2682,6 +2682,49 @@ describe("AgentSessionManager", () => {
         ]);
       });
 
+      it("keeps saving the replaced tab to its original note with its original timestamps (https://github.com/Brevilabs/obsidian-copilot-private/issues/742)", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+        const saveSession = jest.fn(async (_messages: unknown, _backendId: unknown, options) => ({
+          path: options?.existingPath ?? "chats/agent__list_the_notes@20261012_214533.md",
+        }));
+        const replay = buildReplayingBackend({
+          onLoad: (emit) => {
+            emit(replayChunk("user_message_chunk", "list the notes", "u1"));
+            emit(replayChunk("agent_message_chunk", "Two notes.", "a1"));
+          },
+        });
+        const mgr = buildManager({
+          persistence: { saveSession },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        });
+        const first = await mgr.createSession();
+        const asked = { epoch: 1791866733161, display: "2026/10/12 21:45:33", fileName: "" };
+        const answered = { epoch: 1791866740000, display: "2026/10/12 21:45:40", fileName: "" };
+        getSessionTestHandle(first).setMessages(
+          [
+            { sender: USER_SENDER, message: "list the notes", isVisible: true, timestamp: asked },
+            { sender: AI_SENDER, message: "Two notes.", isVisible: true, timestamp: answered },
+          ] as AgentChatMessage[],
+          true
+        );
+        await jest.advanceTimersByTimeAsync(2000);
+
+        await mgr.restartBackend("opencode", "managed skills changed");
+        replay.emit(
+          first.getBackendSessionId()!,
+          replayChunk("agent_message_chunk", " Both are drafts.", "a1")
+        );
+        await jest.advanceTimersByTimeAsync(2000);
+
+        const [messages, , options] = saveSession.mock.calls.at(-1)!;
+        expect(options).toMatchObject({
+          existingPath: "chats/agent__list_the_notes@20261012_214533.md",
+        });
+        expect((messages as AgentChatMessage[]).map((m) => m.timestamp)).toEqual([asked, answered]);
+        await mgr.shutdown();
+      });
+
       it("keeps the replaced tab's title across the restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
         const mgr = buildManagerWithReplay();
         const first = await mgr.createSession();

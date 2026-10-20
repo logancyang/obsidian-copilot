@@ -2569,8 +2569,9 @@ export class AgentSessionManager {
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
             detached: this.detachedFromTabIds.has(session.internalId),
-            recoveryMessages:
-              session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            messages: session.store.getDisplayMessages(),
+            failed: session.getStatus() === "error",
+            source: this.sessionState.get(session.internalId)?.source,
           }))
         : [];
       for (const replacement of replacements) {
@@ -2605,11 +2606,15 @@ export class AgentSessionManager {
             // A fresh fallback has no backend history for these messages;
             // displaying them there would imply the agent can see that context.
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-            if (
-              rebuilt.getBackendSessionId() === replacement.resumableSessionId &&
-              replacement.recoveryMessages?.length
-            ) {
-              rebuilt.loadDisplayMessages(replacement.recoveryMessages);
+            if (rebuilt.getBackendSessionId() === replacement.resumableSessionId) {
+              // Without its note and the original timestamps the replay lacks, the next autosave writes a duplicate note stamped with the replay time.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
+              this.getSessionState(rebuilt.internalId).source = replacement.source;
+              if (replacement.failed && replacement.messages.length > 0) {
+                rebuilt.loadDisplayMessages(replacement.messages);
+              } else {
+                rebuilt.store.fillMissingTimestamps(replacement.messages);
+              }
             }
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
