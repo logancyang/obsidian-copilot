@@ -14,7 +14,6 @@ import {
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
-  COPILOT_STEP_FAILURE_POLICY,
   COPILOT_WEB_RESEARCH_STEERING,
 } from "./agentSystemPrompt";
 
@@ -113,14 +112,10 @@ describe("agentSystemPrompt", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 tells every agent, even with the builtin prompt disabled, to write long content in small blocks and to finish the task around a cut-off, blocked or failed step", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/741 leaves the 200-line write cap out of every agent's shared prompt, so skills' own write instructions stand", () => {
       for (const backendId of ["claude", "codex", "opencode"] as const) {
-        expect(buildAgentSystemPrompt(backendId)).toContain(COPILOT_STEP_FAILURE_POLICY);
+        expect(buildAgentSystemPrompt(backendId)).not.toContain("200 lines");
       }
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_STEP_FAILURE_POLICY);
-      expect(COPILOT_STEP_FAILURE_POLICY).toContain("even if a skill says otherwise");
-      expect(COPILOT_STEP_FAILURE_POLICY).toContain("skip blocked content, noting it");
     });
 
     it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {

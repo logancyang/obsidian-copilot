@@ -6,6 +6,10 @@ import {
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
+import { COPILOT_PLUS_OPENCODE_PROVIDER_ID } from "./opencodeModelResolve";
+
+// A Copilot Plus model's output cap cut off a skill's one huge write, and an agent stopped to ask after one blocked step instead of finishing the job; other agents and models keep their skills' write instructions. https://github.com/Brevilabs/obsidian-copilot-private/issues/739 https://github.com/Brevilabs/obsidian-copilot-private/issues/741
+export const COPILOT_PLUS_STEP_FAILURE_POLICY = `Write at most 200 lines per write/edit, even if a skill says otherwise. If a step is cut off, blocked or fails, finish without asking: redo cut-off steps smaller; skip blocked content, noting it.`;
 
 // OpenCode's coding-harness steering sent a user's draft to OpenCode's temp
 // folder, outside the vault; its config cannot drop that text, but a plugin can.
@@ -100,12 +104,19 @@ function stampFeedbackCaller(event) {
   event.input = { ...event.input, ${JSON.stringify(CALLER_SESSION_ARGUMENT)}: event.sessionID };
 }
 
+function addPlusStepFailurePolicy(event) {
+  event.system.push({ type: "text", text: ${JSON.stringify(COPILOT_PLUS_STEP_FAILURE_POLICY)} });
+}
+
 module.exports = {
   id: "copilot",
   setup: async (ctx) => {
     for (const hook of ["context", "compaction", "generate"]) {
       await ctx.session.hook(hook, trimRequest);
     }
+    await ctx.session.hook("context", addPlusStepFailurePolicy, {
+      providerID: ${JSON.stringify(COPILOT_PLUS_OPENCODE_PROVIDER_ID)},
+    });
     await ctx.skill.transform((skills) => skills.remove("report"));
     const originals = captureOriginals(ctx);
     await ctx.tool.hook("execute.before", async (event) => {
