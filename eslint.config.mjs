@@ -205,7 +205,7 @@ export default [
       "dev/gallery/main.js",
       "dev/gallery/styles.css",
       "data.json",
-      "designdocs/**",
+      "internal-docs/**",
       "docs/**",
       ".claude/**",
     ],
@@ -287,7 +287,7 @@ export default [
         {
           name: "app",
           message:
-            "Don't use the global `app` (footgun in popouts). Thread `app` via useApp() or a parameter. See designdocs/agents/PLUGIN_DEV_GUIDE.md.",
+            "Don't use the global `app` (footgun in popouts). Thread `app` via useApp() or a parameter. See internal-docs/PLUGIN_DEV_GUIDE.md.",
         },
       ],
 
