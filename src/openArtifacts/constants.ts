@@ -1,4 +1,7 @@
 export const OPENARTIFACTS_API_ORIGIN = "https://api.openartifacts.ai";
+// The agent skill runs this CLI release, the same as the `openartifacts` dependency it takes its
+// theme from. https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+export const OPENARTIFACTS_CLI_VERSION = "0.2.6";
 export const OPENARTIFACTS_DOCUMENT_ORIGIN = "https://openartifacts.site";
 export const OPENARTIFACTS_WORKSPACE_ROOT_ENV = "OPENARTIFACTS_WORKSPACE_ROOT";
 export const OPENARTIFACTS_VAULT_FOLDER = ".openartifacts";
