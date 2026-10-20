@@ -634,6 +634,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     const handleAbortStream = (event: CustomEvent<{ reason?: ABORT_REASON }>) => {
       const reason = event.detail?.reason || ABORT_REASON.NEW_CHAT;
       handleStopGenerating(reason);
+      // The New Copilot Quick Chat command starts over without remounting this composer. https://github.com/logancyang/obsidian-copilot/issues/3663
+      if (reason === ABORT_REASON.NEW_CHAT) {
+        setIncludeActiveNote(settings.autoAttachActiveNote);
+        setIncludeActiveWebTab(true);
+      }
     };
 
     eventTarget?.addEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
@@ -641,7 +646,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
     };
-  }, [eventTarget, handleStopGenerating]);
+  }, [eventTarget, handleStopGenerating, settings.autoAttachActiveNote]);
 
   const [prevChain, setPrevChain] = useState(selectedChain);
   if (prevChain !== selectedChain) {

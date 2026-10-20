@@ -63,7 +63,7 @@ After a response, the token counter in the top bar shows the context used for th
 
 ## Start or reopen a chat
 
-Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and attaches the active note and active web tab again.
+Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and attaches the active web tab again, plus the active note unless **Auto-attach active note** is off.
 
 Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
 

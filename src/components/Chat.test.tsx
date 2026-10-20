@@ -1,7 +1,8 @@
 import Chat from "@/components/Chat";
-import { USER_SENDER } from "@/constants";
+import { ABORT_REASON, EVENT_NAMES, USER_SENDER } from "@/constants";
+import { EventTargetContext } from "@/context";
 import type { NoteSelectedTextContext } from "@/types/message";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const mockSelection: NoteSelectedTextContext = {
@@ -114,8 +115,13 @@ function renderChat(savedPath = "") {
       chatSelectionHighlightController: { clearIfNoNoteContexts: jest.fn() },
     },
   } as unknown as React.ComponentProps<typeof Chat>;
-  render(<Chat {...props} />);
-  return { chatUIState, copyChatLink: props.plugin.copyChatLink as jest.Mock };
+  const eventTarget = new EventTarget();
+  render(
+    <EventTargetContext.Provider value={eventTarget}>
+      <Chat {...props} />
+    </EventTargetContext.Provider>
+  );
+  return { chatUIState, copyChatLink: props.plugin.copyChatLink as jest.Mock, eventTarget };
 }
 
 describe("Chat", () => {
@@ -178,6 +184,26 @@ describe("Chat", () => {
         );
       }
     );
+  });
+
+  describe("handleAbortStream()", () => {
+    it("resets the active-note badge to the current setting when the new-chat command starts over https://github.com/logancyang/obsidian-copilot/issues/3663", async () => {
+      const { chatUIState, eventTarget } = renderChat();
+      mockSettings.autoAttachActiveNote = false;
+
+      act(() => {
+        eventTarget.dispatchEvent(
+          new CustomEvent(EVENT_NAMES.ABORT_STREAM, { detail: { reason: ABORT_REASON.NEW_CHAT } })
+        );
+      });
+      fireEvent.change(screen.getByLabelText("Message"), {
+        target: { value: "Compare findings" },
+      });
+      fireEvent.click(screen.getByText("Send"));
+
+      await waitFor(() => expect(chatUIState.sendMessage).toHaveBeenCalledTimes(1));
+      expect(chatUIState.sendMessage.mock.calls[0][3]).toBe(false);
+    });
   });
 
   describe("handleCopyChatLink()", () => {

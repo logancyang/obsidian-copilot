@@ -640,6 +640,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autosaveChat = DEFAULT_SETTINGS.autosaveChat;
   }
 
+  // Settings saved before this switch existed must keep auto-attaching the active note. https://github.com/logancyang/obsidian-copilot/issues/3663
   if (typeof sanitizedSettings.autoAttachActiveNote !== "boolean") {
     sanitizedSettings.autoAttachActiveNote = DEFAULT_SETTINGS.autoAttachActiveNote;
   }
