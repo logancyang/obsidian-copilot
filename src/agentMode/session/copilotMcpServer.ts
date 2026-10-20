@@ -1,9 +1,3 @@
-import {
-  MIYO_SEARCH_TOOL,
-  MIYO_SEARCH_TOOL_NAME,
-  MIYO_SEARCH_TURNED_OFF_TEXT,
-  type MiyoSearchRunner,
-} from "@/miyo/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
@@ -82,10 +76,18 @@ const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.
   unattributed: `Copilot couldn't tell which chat this came from, so nothing was shown. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
 });
 
-const HOSTED_TOOLS = Object.freeze([
-  Object.freeze({ definition: SEND_FEEDBACK_TOOL, turnedOffText: OFFER_RESULT_TEXT.turned_off }),
-  Object.freeze({ definition: MIYO_SEARCH_TOOL, turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT }),
-]);
+export interface HostedTool {
+  definition: { readonly name: string };
+  turnedOffText: string;
+  call: (args: unknown) => Promise<{ text: string; isError: boolean }>;
+}
+
+type ServerTool = Omit<HostedTool, "call"> & Partial<Pick<HostedTool, "call">>;
+
+const SEND_FEEDBACK_HOSTED_TOOL: ServerTool = Object.freeze({
+  definition: SEND_FEEDBACK_TOOL,
+  turnedOffText: OFFER_RESULT_TEXT.turned_off,
+});
 
 type ToolSwitch = (toolName: string) => boolean;
 
@@ -107,8 +109,9 @@ type JsonRpcReply = { result: unknown } | { error: { code: number; message: stri
 
 export function createCopilotMcpServer(
   isToolOn: ToolSwitch,
-  searchMiyo: MiyoSearchRunner
+  tools: readonly HostedTool[]
 ): CopilotMcpServer {
+  const hostedTools: readonly ServerTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
@@ -116,12 +119,12 @@ export function createCopilotMcpServer(
 
   return Object.freeze({
     hasEnabledTools(): boolean {
-      return HOSTED_TOOLS.some((tool) => isToolOn(tool.definition.name));
+      return hostedTools.some((tool) => isToolOn(tool.definition.name));
     },
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
-        handleHttpRequest(request, response, handlersByToken, isToolOn, searchMiyo)
+        handleHttpRequest(request, response, handlersByToken, isToolOn, hostedTools)
       );
       const url = `${await server.origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
@@ -157,7 +160,7 @@ async function handleHttpRequest(
   response: ServerResponse,
   handlersByToken: ReadonlyMap<string, FeedbackOfferHandler>,
   isToolOn: ToolSwitch,
-  searchMiyo: MiyoSearchRunner
+  hostedTools: readonly ServerTool[]
 ): Promise<void> {
   if (request.url !== MCP_PATH) return writeJson(response, 404, { error: "Not found." });
   // Each session's token selects its own chat, so another vault, session or local page cannot raise a card in it.
@@ -185,7 +188,7 @@ async function handleHttpRequest(
   writeJson(response, 200, {
     jsonrpc: "2.0",
     id: message.id,
-    ...(await reply(message, onOffer, isToolOn, searchMiyo)),
+    ...(await reply(message, onOffer, isToolOn, hostedTools)),
   });
 }
 
@@ -193,7 +196,7 @@ async function reply(
   message: JsonRpcRequest,
   onOffer: FeedbackOfferHandler,
   isToolOn: ToolSwitch,
-  searchMiyo: MiyoSearchRunner
+  hostedTools: readonly ServerTool[]
 ): Promise<JsonRpcReply> {
   switch (message.method) {
     case "initialize": {
@@ -214,13 +217,13 @@ async function reply(
     case "tools/list":
       return {
         result: {
-          tools: HOSTED_TOOLS.filter((tool) => isToolOn(tool.definition.name)).map(
-            (tool) => tool.definition
-          ),
+          tools: hostedTools
+            .filter((tool) => isToolOn(tool.definition.name))
+            .map((tool) => tool.definition),
         },
       };
     case "tools/call":
-      return { result: await callTool(message.params ?? {}, onOffer, isToolOn, searchMiyo) };
+      return { result: await callTool(message.params ?? {}, onOffer, isToolOn, hostedTools) };
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
   }
@@ -230,15 +233,15 @@ async function callTool(
   params: Record<string, unknown>,
   onOffer: FeedbackOfferHandler,
   isToolOn: ToolSwitch,
-  searchMiyo: MiyoSearchRunner
+  hostedTools: readonly ServerTool[]
 ) {
-  const tool = HOSTED_TOOLS.find((hosted) => hosted.definition.name === params.name);
+  const tool = hostedTools.find((hosted) => hosted.definition.name === params.name);
   if (!tool) return toolText(`Unknown tool: ${String(params.name)}`, true);
   // Agents read tools/list once per session, so a tool switched off mid-session still gets called; answering without an error stops the agent from retrying it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
-  if (tool.definition.name === MIYO_SEARCH_TOOL_NAME) {
-    const result = await searchMiyo(params.arguments);
+  if (tool.call) {
+    const result = await tool.call(params.arguments);
     return toolText(result.text, result.isError);
   }
   const draft = parseDraft(params.arguments);

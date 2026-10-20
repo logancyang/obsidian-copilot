@@ -47,8 +47,6 @@ export interface MiyoSearchToolResult {
   isError: boolean;
 }
 
-export type MiyoSearchRunner = (args: unknown) => Promise<MiyoSearchToolResult>;
-
 export interface MiyoSearchDeps {
   client: Pick<MiyoClient, "resolveBaseUrl" | "search">;
   getSettings: () => CopilotSettings;
