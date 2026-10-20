@@ -1,6 +1,6 @@
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
-import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
-import type { RelevantNotesResult } from "@/search/findRelevantNotes";
+import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
+import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
 import { App } from "obsidian";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 

@@ -6,7 +6,7 @@ import {
 import { useRelevantNoteRowTransitions } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
 import { AppContext, useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import type { RelevantNoteEntry } from "@/miyo/findRelevantNotes";
 import { App, TFile } from "obsidian";
 import React, { useMemo, useState } from "react";
 

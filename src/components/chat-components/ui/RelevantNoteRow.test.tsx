@@ -1,6 +1,6 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
 import { RelevantNoteRow } from "@/components/chat-components/ui/RelevantNoteRow";
-import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import type { RelevantNoteEntry } from "@/miyo/findRelevantNotes";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { TFile } from "obsidian";
