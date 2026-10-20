@@ -11,7 +11,6 @@ const agentsFileIsUninitialized = jest.fn(async (): Promise<boolean> => true);
 const captureInstructionFiles = jest.fn(
   async (_app: unknown, _folder: string): Promise<InstructionFilesSnapshot> => ({
     agents: null,
-    claude: null,
   })
 );
 const restoreInstructionFiles = jest.fn(
@@ -79,7 +78,7 @@ describe("AddProjectModal", () => {
     jest.clearAllMocks();
     readAgentsFile.mockResolvedValue("");
     agentsFileIsUninitialized.mockResolvedValue(true);
-    captureInstructionFiles.mockResolvedValue({ agents: null, claude: null });
+    captureInstructionFiles.mockResolvedValue({ agents: null });
     writeAgentsFile.mockResolvedValue(undefined);
     getCachedProjectRecordById.mockReturnValue({
       folderName: "proj-1",
@@ -146,7 +145,7 @@ describe("AddProjectModal", () => {
     it("restores the folder's instruction files when the project update is rejected", async () => {
       readAgentsFile.mockResolvedValue("Old rules");
       agentsFileIsUninitialized.mockResolvedValue(false);
-      const snapshot = { agents: "Old rules", claude: "@AGENTS.md\n" };
+      const snapshot = { agents: "Old rules" };
       captureInstructionFiles.mockResolvedValue(snapshot);
       const onSave = jest.fn().mockRejectedValue(new Error("A project with that name exists"));
       renderModal({ onSave });

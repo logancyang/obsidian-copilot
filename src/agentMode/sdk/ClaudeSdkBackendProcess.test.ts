@@ -654,6 +654,21 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(options.allowedTools).toEqual(["Read", "Glob", "Grep", "LS"]);
       });
 
+      it("has Claude load every AGENTS.md beside any CLAUDE.md, so vault and project instructions apply without a generated CLAUDE.md (https://github.com/logancyang/obsidian-copilot/issues/3662)", async () => {
+        queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault/Projects/Research" });
+
+        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
+        expect(options.settings).toEqual({
+          pluginConfigs: {
+            "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
+          },
+        });
+      });
+
       it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
         queryMock.mockImplementation(() =>
           makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
