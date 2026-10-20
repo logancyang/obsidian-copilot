@@ -1,9 +1,6 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type {
-  FeedbackMcpServer,
-  FeedbackOfferHandler,
-} from "@/agentMode/session/feedback/feedbackMcpServer";
+import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -153,7 +150,7 @@ export interface AgentSessionManagerOptions {
   beforeBackendStart?: (id: BackendId) => Promise<void>;
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
-  feedbackServer?: FeedbackMcpServer;
+  copilotMcpServer?: CopilotMcpServer;
 }
 
 export class AgentSessionManager {
@@ -818,7 +815,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectFeedbackServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
 
     if (this.disposed) {
       this.finishPendingCreate();
@@ -1516,7 +1513,7 @@ export class AgentSessionManager {
       logWarn(`[AgentMode] dispose during closeSession failed`, e);
     }
     this.detachAutoSave(id);
-    this.opts.feedbackServer?.disconnect(id);
+    this.opts.copilotMcpServer?.disconnect(id);
     this.sessions.delete(id);
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
@@ -1699,13 +1696,13 @@ export class AgentSessionManager {
 
   // Feedback cards are optional, so a server that cannot start leaves the chat running without them.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  private async connectFeedbackServer(
+  private async connectCopilotMcpServer(
     internalId: string,
     descriptor: BackendDescriptor,
     cwd: string
   ): Promise<ReadonlyArray<AgentMcpServer>> {
-    const server = this.opts.feedbackServer;
-    if (!server || !getSettings().agentMode.offerFeedbackCards) return EMPTY_MCP_SERVERS;
+    const server = this.opts.copilotMcpServer;
+    if (!server?.hasEnabledTools()) return EMPTY_MCP_SERVERS;
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
@@ -1715,13 +1712,9 @@ export class AgentSessionManager {
           "unattributed"
       : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
     try {
-      return [
-        await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, (draft, caller) =>
-          getSettings().agentMode.offerFeedbackCards ? offer(draft, caller) : "turned_off"
-        ),
-      ];
+      return [await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer)];
     } catch (err) {
-      logWarn("[AgentMode] feedback MCP server unavailable; continuing without it", err);
+      logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
     }
   }
@@ -1771,7 +1764,7 @@ export class AgentSessionManager {
         }
       })
     );
-    this.opts.feedbackServer?.dispose();
+    this.opts.copilotMcpServer?.dispose();
     this.sessions.clear();
     this.chatUIStates.clear();
     this.landingCaptureSignatures.clear();
@@ -2014,7 +2007,7 @@ export class AgentSessionManager {
     }
 
     const internalId = uuidv4();
-    const mcpServers = await this.connectFeedbackServer(internalId, descriptor, cwd);
+    const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
     if (this.disposed) {
       this.finishPendingCreate();
       return null;
@@ -2052,7 +2045,7 @@ export class AgentSessionManager {
       if (!(err instanceof MethodUnsupportedError)) {
         logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
         await session.dispose();
-        this.opts.feedbackServer?.disconnect(internalId);
+        this.opts.copilotMcpServer?.disconnect(internalId);
         this.finishPendingCreate();
         return null;
       }
@@ -2070,7 +2063,7 @@ export class AgentSessionManager {
           logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
         }
         await session.dispose();
-        this.opts.feedbackServer?.disconnect(internalId);
+        this.opts.copilotMcpServer?.disconnect(internalId);
         this.finishPendingCreate();
         return null;
       }
@@ -2438,7 +2431,7 @@ export class AgentSessionManager {
       if (dead.length === 0) return;
       for (const s of dead) {
         this.detachAutoSave(s.internalId);
-        this.opts.feedbackServer?.disconnect(s.internalId);
+        this.opts.copilotMcpServer?.disconnect(s.internalId);
         this.sessions.delete(s.internalId);
         this.chatUIStates.delete(s.internalId);
         this.landingCaptureSignatures.delete(s.internalId);

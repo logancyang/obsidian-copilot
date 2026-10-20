@@ -30,6 +30,15 @@ export const Failed: StoryObj<MiyoSearchCardProps> = {
   args: { status: "failed", noteCount: null },
 };
 
+export const FailedWithError: StoryObj<MiyoSearchCardProps> = {
+  args: {
+    status: "failed",
+    noteCount: null,
+    error:
+      "Miyo search failed. Continue with keyword search and tell the user to open Miyo. Details: net::ERR_CONNECTION_REFUSED",
+  },
+};
+
 export const CountUnavailable: StoryObj<MiyoSearchCardProps> = {
   args: { noteCount: null },
 };

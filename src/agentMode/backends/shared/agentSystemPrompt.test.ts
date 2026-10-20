@@ -28,6 +28,7 @@ function makePrompt(title: string, content: string): UserSystemPrompt {
 }
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const AGENT = "opencode";
@@ -201,18 +202,20 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it("omits the Miyo steering when the search skill is not installed", () => {
+    it(`omits the Miyo steering and any mention of miyo_search when the search switch is off (${ISSUE_736})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", false);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
-      expect(prompt).not.toContain("miyo-search");
+      expect(prompt).not.toContain("miyo_search");
     });
 
-    it("appends the Miyo steering only when the search skill is enabled", () => {
+    it(`appends the Miyo steering for every agent when the search switch is on (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
-      const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      for (const agent of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(agent)).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      }
     });
 
     it("omits the Miyo steering while Miyo is disconnected even though the search switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
@@ -220,17 +223,26 @@ describe("agentSystemPrompt", () => {
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
-      expect(prompt).not.toContain("miyo-search");
+      expect(prompt).not.toContain("miyo_search");
     });
 
-    it(`steers every request the notes might answer, even an external-sounding one, to miyo-search plus grep/glob for exact terms (${ISSUE_717})`, () => {
+    it(`names the obsidian-copilot miyo_search tool and grep/glob for exact terms, for every request the notes might answer, even an external-sounding one (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
-        "For any request that may be answered from the user's notes, even one that sounds external or current, run miyo-search and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
+        "For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
       );
+      expect(prompt).not.toContain("miyo-search");
       expect(prompt).not.toContain("when grep is too slow");
+    });
+
+    it(`tells the agent to search the vault with miyo_search, not the miyo CLI or another Miyo skill (${ISSUE_736})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Search the vault with miyo_search, not the miyo CLI or another Miyo skill."
+      );
     });
 
     it(`merges both result sets by note path and opens the strongest matches before answering (${ISSUE_717})`, () => {
@@ -251,16 +263,16 @@ describe("agentSystemPrompt", () => {
       );
     });
 
-    it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {
+    it(`ignores a saved per-agent miyo-search opt-out, because the switch alone controls Miyo search (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setBuiltinPreferences({ "miyo-search": { disabledAgents: ["codex"] } });
 
-      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
+      expect(buildAgentSystemPrompt("codex")).toContain(COPILOT_MIYO_SEARCH_STEERING);
       expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_SEARCH_STEERING);
     });
 
-    it("suppresses the Miyo steering when the builtin prompt is disabled, even if the skill is enabled", () => {
+    it("suppresses the Miyo steering when the builtin prompt is disabled, even if the search switch is on", () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setDisableBuiltinSystemPrompt(true);

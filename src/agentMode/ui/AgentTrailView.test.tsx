@@ -596,45 +596,71 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Running `npm run root`")).toBeTruthy();
   });
 
-  it("renders a Miyo search as its own card between grouped work, without the skill load row (https://github.com/Brevilabs/obsidian-copilot-private/issues/718)", () => {
-    renderTrail({
-      parts: [
-        READ_A,
-        LINT,
-        toolCall("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
-        toolCall("miyo", {
-          vendorToolName: "Bash",
-          toolKind: "execute",
-          input: { command: 'sh "/v/.claude/skills/miyo-search/miyo-search.sh" "standing desk"' },
-          output: [{ type: "text", text: '{"results":[{"path":"a.md"},{"path":"b.md"}]}' }],
-        }),
-        READ_B,
-        LINT,
-        text("Found it."),
+  const CLAUDE_MIYO = (overrides: Partial<ToolCallPart> = {}) =>
+    toolCall("miyo", {
+      title: "miyo_search",
+      mcpServer: "obsidian-copilot",
+      vendorToolName: "miyo_search",
+      input: { query: "standing desk" },
+      output: [
+        { type: "text", text: '{"results":[{"path":"v/a.md"},{"path":"v/b.md"}],"count":2}' },
       ],
+      ...overrides,
     });
+  it("renders a miyo_search call as its own card between grouped work, with its query and note count (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({ parts: [READ_A, LINT, CLAUDE_MIYO(), READ_B, LINT, text("Found it.")] });
 
     expect(screen.getByText("Searched with Miyo")).toBeTruthy();
     expect(screen.getByText("“standing desk”")).toBeTruthy();
     expect(screen.getByText("2 notes")).toBeTruthy();
-    expect(screen.queryByText("Ran skill miyo-search")).toBeNull();
     expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
   });
 
-  it("gives the answer text the note paths from the turn's saved Miyo output (https://github.com/Brevilabs/obsidian-copilot-private/issues/719)", () => {
+  it("renders a failed miyo_search call as a failed card with the error text and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
     renderTrail({
       parts: [
-        toolCall("miyo", {
-          vendorToolName: "Bash",
-          toolKind: "execute",
-          input: { command: 'sh "/v/.claude/skills/miyo-search/miyo-search.sh" "standing desk"' },
-          output: [{ type: "text", text: '{"results":[{"path":"v/a.md"},{"path":"v/b.md"}]}' }],
+        CLAUDE_MIYO({
+          status: "failed",
+          output: [
+            {
+              type: "text",
+              text: "Miyo search failed. Continue with keyword search. Details: net::ERR_CONNECTION_REFUSED",
+            },
+          ],
         }),
         text("See [[a]]."),
       ],
       isStreaming: false,
     });
 
+    expect(screen.getByText("Miyo search failed")).toBeTruthy();
+    expect(screen.getByText("net::ERR_CONNECTION_REFUSED")).toBeTruthy();
+    expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("");
+  });
+
+  it("gives the answer text the note paths of a miyo_search call, as when the chat is reopened from history (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({ parts: [CLAUDE_MIYO(), text("See [[a]].")], isStreaming: false });
+
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
+  });
+
+  it("renders shell runs of the retired miyo-search script as ordinary command rows (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
+    renderTrail({
+      parts: [
+        toolCall("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
+        toolCall("run", {
+          vendorToolName: "Bash",
+          toolKind: "execute",
+          input: { command: 'sh "/v/.claude/skills/miyo-search/miyo-search.sh" "standing desk"' },
+          output: [{ type: "text", text: '{"results":[{"path":"v/a.md"}]}' }],
+        }),
+        text("Found it."),
+      ],
+      isStreaming: false,
+    });
+
+    expect(screen.queryByText("Searched with Miyo")).toBeNull();
+    expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("");
+    expect(screen.getByText("Ran 2 commands")).toBeTruthy();
   });
 });

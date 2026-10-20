@@ -5,9 +5,7 @@ import {
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
-  isMiyoSearchSkillActive,
   MIYO_PARSE_SKILL,
-  MIYO_SEARCH_SKILL,
   planManagedBuiltins,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
@@ -32,11 +30,6 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
 const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
-const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
-
-function flattened(markdown: string): string {
-  return markdown.replace(/\s+/g, " ");
-}
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -377,165 +370,6 @@ describe("builtinSkills", () => {
     });
   });
 
-  describe("MIYO_SEARCH_SKILL", () => {
-    it("is a separate, Miyo-gated skill — not one of the always-seeded Plus skills", () => {
-      expect(BUILTIN_SKILLS.map((s) => s.name)).not.toContain("miyo-search");
-      expect(MIYO_SEARCH_SKILL.name).toBe("miyo-search");
-      expect(MIYO_SEARCH_SKILL.enabledAgents).toEqual(["claude", "codex", "opencode"]);
-    });
-
-    const miyoScript = (ext: ".sh" | ".cmd"): string => {
-      const file = MIYO_SEARCH_SKILL.files.find((f) => f.path.endsWith(ext));
-      if (!file) throw new Error(`miyo-search ships no ${ext} script`);
-      return file.content;
-    };
-
-    it("ships exactly two OS wrappers — POSIX sh + Windows cmd, no Node", () => {
-      expect(MIYO_SEARCH_SKILL.files.map((f) => f.path)).toEqual([
-        "miyo-search.sh",
-        "miyo-search.cmd",
-      ]);
-      expect(MIYO_SEARCH_SKILL.skillMd).toContain(
-        `sh "/absolute/path/to/this/skill/directory/miyo-search.sh"`
-      );
-      expect(MIYO_SEARCH_SKILL.skillMd).toContain(
-        `& "/absolute/path/to/this/skill/directory/miyo-search.cmd"`
-      );
-      expect(MIYO_SEARCH_SKILL.files.some((f) => f.path.endsWith(".mjs"))).toBe(false);
-      expect(MIYO_SEARCH_SKILL.skillMd).not.toContain("node ");
-    });
-
-    it("embeds no Plus license env — Miyo is a local loopback CLI", () => {
-      expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.licenseKey);
-      expect(MIYO_SEARCH_SKILL.skillMd).not.toContain(PLUS_ENV.baseUrl);
-      expect(miyoScript(".sh")).not.toContain(PLUS_ENV.licenseKey);
-      expect(miyoScript(".cmd")).not.toContain(PLUS_ENV.licenseKey);
-    });
-
-    it(`tells the agent to use it for every request the notes might answer, alongside grep for exact terms (${ISSUE_717})`, () => {
-      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
-      expect(md).toMatch(
-        /description:[^\n]*Use it for every request that might be answered from the user's notes, alongside grep for exact terms\./
-      );
-      expect(md).toContain(
-        "When to use it: for every request that might be answered from the user's notes, alongside `grep`/glob for any exact names, terms, tags or quoted phrases in the request."
-      );
-    });
-
-    it(`no longer limits it to when grep falls short or to a single search step (${ISSUE_717})`, () => {
-      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
-      expect(md).not.toMatch(/too slow|doesn't surface enough relevant notes/i);
-      expect(md).not.toMatch(/single search step|do not fall back to other search tools/i);
-    });
-
-    it(`has the agent combine Miyo and keyword results by note path and continue with keyword search when Miyo is unavailable (${ISSUE_717})`, () => {
-      const md = flattened(MIYO_SEARCH_SKILL.skillMd);
-      expect(md).toContain(
-        "Combine its results with your keyword search results by note path. If Miyo reports that it is unavailable, continue with keyword search."
-      );
-    });
-
-    it("runs one deterministic `miyo search ... --json` in each script", () => {
-      expect(miyoScript(".sh")).toContain('search "$QUERY"');
-      expect(miyoScript(".sh")).toContain("--json");
-      expect(miyoScript(".cmd")).toContain("search %* -n 10 --json");
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 passes the exact active-vault identity in Current vault mode on POSIX and Windows", () => {
-      const sh = miyoScript(".sh");
-      const cmd = miyoScript(".cmd");
-
-      expect(sh).toContain('case "${COPILOT_MIYO_SEARCH_SCOPE:-current}"');
-      expect(sh).toContain('--folder "$COPILOT_MIYO_SEARCH_FOLDER"');
-      expect(cmd).toContain('if /I "%COPILOT_MIYO_SEARCH_SCOPE%"=="unrestricted"');
-      expect(cmd).toContain('--folder "%COPILOT_MIYO_SEARCH_FOLDER%"');
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3508 passes ticked folders before the vault on POSIX, splitting the list on slashes without globbing or eval", () => {
-      const sh = miyoScript(".sh");
-
-      expect(sh).toContain(
-        [
-          "    set -f",
-          "    IFS=/",
-          "    set --",
-          "    for NAME in ${COPILOT_MIYO_SEARCH_EXTRA_FOLDERS:-}; do",
-          '      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"',
-          "    done",
-          "    unset IFS",
-          "    set +f",
-          '    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$COPILOT_MIYO_SEARCH_FOLDER" --json 2>&1)',
-        ].join("\n")
-      );
-      expect(sh).not.toMatch(/\beval\b/);
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3508 puts the agent's words last on Windows, after --, so they stay query text and cannot add a --folder", () => {
-      const cmd = miyoScript(".cmd");
-
-      expect(cmd).toContain("setlocal enableextensions disabledelayedexpansion\n");
-      expect(cmd).not.toMatch(/enabledelayedexpansion|\bcall\b|!/i);
-      expect(cmd.match(/^.*%\*.*$/gm)).toEqual([
-        '  "%MIYO%" search %* -n 10 --json',
-        '"%MIYO%" search -n 10 %COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS% --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
-        '"%MIYO%" search -n 10 --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
-      ]);
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3508 retries a failed Windows search with the vault alone only when folders are ticked, without labels or the agent's words inside a block", () => {
-      const cmd = miyoScript(".cmd");
-      const scopeFailed =
-        "  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2\n  exit /b 1\n)";
-
-      expect(cmd).toContain(
-        [
-          '"%MIYO%" search -n 10 %COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS% --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
-          "if not errorlevel 1 exit /b 0",
-          "if not defined COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS (",
-          scopeFailed,
-          '"%MIYO%" search -n 10 --folder "%COPILOT_MIYO_SEARCH_FOLDER%" --json -- %*',
-          "if errorlevel 1 (",
-          scopeFailed,
-          "echo Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. 1>&2",
-          "exit /b 0",
-        ].join("\n")
-      );
-      expect(cmd).not.toMatch(/\bgoto\b|^:/m);
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 omits the folder boundary only for explicit Unrestricted mode on POSIX and Windows", () => {
-      const sh = miyoScript(".sh");
-      const cmd = miyoScript(".cmd");
-
-      expect(sh).toContain('unrestricted)\n    OUT=$("$MIYO" search "$QUERY" -n 10 --json');
-      expect(cmd).toContain(
-        'if /I "%COPILOT_MIYO_SEARCH_SCOPE%"=="unrestricted" (\n  "%MIYO%" search %* -n 10 --json'
-      );
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 fails closed when Current vault scope is missing, invalid, or unsupported", () => {
-      for (const script of [miyoScript(".sh"), miyoScript(".cmd")]) {
-        expect(script).toMatch(/active vault identity is missing/i);
-        expect(script).toMatch(/invalid Search scope/i);
-        expect(script).toMatch(/Do not (retry or )?run an unrestricted search/i);
-        expect(script).toMatch(/Update Miyo/i);
-      }
-    });
-
-    it("resolves the binary absolute-path-first with a PATH fallback, per OS", () => {
-      expect(miyoScript(".sh")).toContain("$HOME/.miyo/bin/miyo");
-      expect(miyoScript(".sh")).toContain("command -v miyo");
-      expect(miyoScript(".cmd")).toContain("%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe");
-      expect(miyoScript(".cmd")).toContain("where miyo");
-    });
-
-    it("degrades clearly when Miyo is not installed (both scripts)", () => {
-      expect(miyoScript(".sh")).toMatch(/not installed/i);
-      expect(miyoScript(".sh")).toMatch(/may not be running/i);
-      expect(miyoScript(".cmd")).toMatch(/not installed/i);
-    });
-  });
-
   describe("MIYO_PARSE_SKILL", () => {
     const miyoParseScript = (ext: ".sh" | ".cmd"): string => {
       const file = MIYO_PARSE_SKILL.files.find((candidate) => candidate.path.endsWith(ext));
@@ -598,7 +432,6 @@ describe("builtinSkills", () => {
         "copilot-youtube-transcript",
         "copilot-fetch-x",
         "openartifacts-publish",
-        "miyo-search",
         "miyo-parse",
       ]);
       for (const skill of scripted) {
@@ -613,30 +446,15 @@ describe("builtinSkills", () => {
   describe("planManagedBuiltins()", () => {
     const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
 
-    it("seeds only the always-on builtins when both Miyo gates are off", () => {
-      const plan = planManagedBuiltins({ search: false, documents: false });
+    it("seeds only the always-on builtins when document processing is off", () => {
+      const plan = planManagedBuiltins({ documents: false });
       expect(plan.seed).toBe(BUILTIN_SKILLS);
-      expect(plan.prune).toEqual(["miyo-search", "miyo-parse"]);
+      expect(plan.prune).toEqual(["miyo-parse"]);
     });
 
-    it("gates search and document parsing independently", () => {
-      expect(names(planManagedBuiltins({ search: true, documents: false }).seed)).toEqual([
-        ...names(BUILTIN_SKILLS),
-        "miyo-search",
-      ]);
-      expect(planManagedBuiltins({ search: true, documents: false }).prune).toEqual(["miyo-parse"]);
-      expect(names(planManagedBuiltins({ search: false, documents: true }).seed)).toEqual([
-        ...names(BUILTIN_SKILLS),
-        "miyo-parse",
-      ]);
-      expect(planManagedBuiltins({ search: false, documents: true }).prune).toEqual([
-        "miyo-search",
-      ]);
-    });
-
-    it("seeds both Miyo skills and prunes nothing when both gates are on", () => {
-      const plan = planManagedBuiltins({ search: true, documents: true });
-      expect(names(plan.seed)).toEqual([...names(BUILTIN_SKILLS), "miyo-search", "miyo-parse"]);
+    it("adds miyo-parse and prunes nothing when document processing is on", () => {
+      const plan = planManagedBuiltins({ documents: true });
+      expect(names(plan.seed)).toEqual([...names(BUILTIN_SKILLS), "miyo-parse"]);
       expect(plan.prune).toEqual([]);
     });
   });
@@ -651,22 +469,6 @@ describe("builtinSkills", () => {
         DEFAULT_BUILTIN_PREFERENCES
       );
     });
-  });
-
-  describe("isMiyoSearchSkillActive()", () => {
-    const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/716";
-
-    it.each([
-      [true, true, true],
-      [true, false, false],
-      [false, true, false],
-      [false, false, false],
-    ])(
-      `with Miyo connected=%s and the switch=%s the skill is active=%s ${issue}`,
-      (enableMiyo, enableMiyoSearchSkill, active) => {
-        expect(isMiyoSearchSkillActive({ enableMiyo, enableMiyoSearchSkill })).toBe(active);
-      }
-    );
   });
 
   describe("isBuiltinSkillEnabledFor()", () => {
@@ -699,25 +501,12 @@ describe("builtinSkills", () => {
       }
     });
 
-    it("follows the Miyo gates: each Miyo skill needs its setting", () => {
-      const off = settingsWith(
-        {},
-        { enableMiyo: true, enableMiyoSearchSkill: false, enableMiyoDocumentProcessing: false }
-      );
-      expect(isBuiltinSkillEnabledFor(off, "miyo-search", "claude")).toBe(false);
+    it("follows the document-processing gate for miyo-parse", () => {
+      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
       expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
 
-      const on = settingsWith(
-        {},
-        { enableMiyo: true, enableMiyoSearchSkill: true, enableMiyoDocumentProcessing: true }
-      );
-      expect(isBuiltinSkillEnabledFor(on, "miyo-search", "claude")).toBe(true);
+      const on = settingsWith({}, { enableMiyoDocumentProcessing: true });
       expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
-    });
-
-    it("keeps miyo-search off while Miyo is disconnected even though its switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
-      const disconnected = settingsWith({}, { enableMiyo: false, enableMiyoSearchSkill: true });
-      expect(isBuiltinSkillEnabledFor(disconnected, "miyo-search", "claude")).toBe(false);
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

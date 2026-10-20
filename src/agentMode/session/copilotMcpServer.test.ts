@@ -1,9 +1,10 @@
 import {
-  createFeedbackMcpServer,
-  FEEDBACK_MCP_SERVER_NAME,
+  createCopilotMcpServer,
+  COPILOT_MCP_SERVER_NAME,
   SEND_FEEDBACK_TOOL,
-  type FeedbackMcpServer,
-} from "./feedbackMcpServer";
+  type CopilotMcpServer,
+} from "./copilotMcpServer";
+import { MIYO_SEARCH_TOOL } from "@/agentMode/session/miyoSearch/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -52,21 +53,31 @@ const COMPLAINT = {
   repro: "1. Type a garbled 'commit and push'. 2. Observe a Swedish reply.",
 };
 
-describe("feedbackMcpServer", () => {
-  describe("createFeedbackMcpServer()", () => {
-    let server: FeedbackMcpServer;
+describe("copilotMcpServer", () => {
+  describe("createCopilotMcpServer()", () => {
+    let server: CopilotMcpServer;
 
     beforeEach(() => {
-      server = createFeedbackMcpServer();
+      server = createCopilotMcpServer((toolName) => toolName === "send_feedback", jest.fn());
     });
 
     afterEach(() => server.dispose());
+
+    it("reports whether any hosted tool is switched on, following the switch as it changes", () => {
+      let on = true;
+      server.dispose();
+      server = createCopilotMcpServer((toolName) => toolName === "send_feedback" && on, jest.fn());
+
+      expect(server.hasEnabledTools()).toBe(true);
+      on = false;
+      expect(server.hasEnabledTools()).toBe(false);
+    });
 
     it("hands each session a loopback MCP server named obsidian-copilot with its own bearer token", async () => {
       const first = await server.connect("session-a", jest.fn());
       const second = await server.connect("session-b", jest.fn());
 
-      expect(first.name).toBe(FEEDBACK_MCP_SERVER_NAME);
+      expect(first.name).toBe(COPILOT_MCP_SERVER_NAME);
       expect(first.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
       expect(second.url).toBe(first.url);
       expect(first.headers.Authorization).toMatch(/^Bearer [0-9a-f]{64}$/);
@@ -86,7 +97,7 @@ describe("feedbackMcpServer", () => {
           result: {
             protocolVersion: "2025-03-26",
             capabilities: { tools: {} },
-            serverInfo: { name: FEEDBACK_MCP_SERVER_NAME, version: "1.0.0" },
+            serverInfo: { name: COPILOT_MCP_SERVER_NAME, version: "1.0.0" },
           },
         },
       });
@@ -114,6 +125,113 @@ describe("feedbackMcpServer", () => {
         annotations: { readOnlyHint: true },
         _meta: { "anthropic/alwaysLoad": true },
       });
+    });
+
+    it("lists miyo_search beside send_feedback when both are on, read-only and always loaded", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(() => true, jest.fn());
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toEqual({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { tools: [SEND_FEEDBACK_TOOL, MIYO_SEARCH_TOOL] },
+      });
+      expect(MIYO_SEARCH_TOOL).toMatchObject({
+        annotations: { readOnlyHint: true },
+        _meta: { "anthropic/alwaysLoad": true },
+      });
+    });
+
+    it("lists only miyo_search and reports tools enabled when send_feedback is off", async () => {
+      server.dispose();
+      server = createCopilotMcpServer((toolName) => toolName === "miyo_search", jest.fn());
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(server.hasEnabledTools()).toBe(true);
+      expect(result.body).toEqual({ jsonrpc: "2.0", id: 2, result: { tools: [MIYO_SEARCH_TOOL] } });
+    });
+
+    it("hands a miyo_search call's arguments to the search and returns its text, raising no feedback card", async () => {
+      const searchMiyo = jest
+        .fn()
+        .mockResolvedValue({ text: '{"results":[],"count":0}', isError: false });
+      server.dispose();
+      server = createCopilotMcpServer(() => true, searchMiyo);
+      const offer = jest.fn();
+      const channel = await server.connect("session-a", offer);
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", {
+          name: "miyo_search",
+          arguments: { query: "sourdough", variants: ["bread starter"] },
+        })
+      );
+
+      expect(searchMiyo).toHaveBeenCalledWith({ query: "sourdough", variants: ["bread starter"] });
+      expect(offer).not.toHaveBeenCalled();
+      expect(result.body).toEqual({
+        jsonrpc: "2.0",
+        id: 3,
+        result: { content: [{ type: "text", text: '{"results":[],"count":0}' }], isError: false },
+      });
+    });
+
+    it("marks a failed miyo_search call as an error result", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        jest.fn().mockResolvedValue({ text: "Miyo search failed.", isError: true })
+      );
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", { name: "miyo_search", arguments: { query: "x" } })
+      );
+
+      expect(result.body).toMatchObject({
+        result: { content: [{ text: "Miyo search failed." }], isError: true },
+      });
+    });
+
+    it("answers a call to a switched-off miyo_search with the turned-off result and runs no search", async () => {
+      const searchMiyo = jest.fn();
+      server.dispose();
+      server = createCopilotMcpServer((toolName) => toolName === "send_feedback", searchMiyo);
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", { name: "miyo_search", arguments: { query: "x" } })
+      );
+
+      expect(searchMiyo).not.toHaveBeenCalled();
+      expect(result.body).toMatchObject({
+        result: {
+          content: [
+            {
+              text: "miyo_search is not available in this chat. Don't call it again.",
+            },
+          ],
+          isError: false,
+        },
+      });
+    });
+
+    it("lists no tools while send_feedback is switched off", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(() => false, jest.fn());
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toEqual({ jsonrpc: "2.0", id: 2, result: { tools: [] } });
     });
 
     it("forwards a send_feedback call to its own session and tells the agent the card was shown", async () => {
@@ -165,6 +283,30 @@ describe("feedbackMcpServer", () => {
       );
 
       expect(result.body).toMatchObject({ result: { content: [{ text }], isError: false } });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/733 answers a call to a switched-off send_feedback with the turned-off result and raises no card", async () => {
+      let on = true;
+      server.dispose();
+      server = createCopilotMcpServer(() => on, jest.fn());
+      const handler = jest.fn().mockReturnValue("shown");
+      const channel = await server.connect("session-a", handler);
+
+      on = false;
+      const result = await post(
+        channel,
+        rpc(4, "tools/call", { name: "send_feedback", arguments: COMPLAINT })
+      );
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(result.body).toMatchObject({
+        result: {
+          content: [
+            { text: "The user turned off feedback reports. Don't call send_feedback again." },
+          ],
+          isError: false,
+        },
+      });
     });
 
     it("treats a missing user_said as an agent-noticed problem and trims every field", async () => {
@@ -321,14 +463,14 @@ describe("feedbackMcpServer", () => {
 
       server.dispose();
 
-      await expect(pending).rejects.toThrow("The feedback MCP server is closed.");
+      await expect(pending).rejects.toThrow("The Copilot MCP server is closed.");
     });
 
     it("refuses new sessions after dispose", async () => {
       server.dispose();
 
       await expect(server.connect("session-a", jest.fn())).rejects.toThrow(
-        "The feedback MCP server is closed."
+        "The Copilot MCP server is closed."
       );
     });
   });

@@ -79,10 +79,7 @@ export class OpencodeBackend implements AcpBackend {
     return this.#copilotPlus.readContextWindow(copilotPlusModelId(wireModelId));
   }
 
-  async buildSpawnDescriptor(ctx: {
-    vaultBasePath: string;
-    vaultName?: string;
-  }): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const binaryPath = settings.agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
@@ -154,7 +151,6 @@ export class OpencodeBackend implements AcpBackend {
     const builtinSkillEnv = await buildBuiltinSkillEnv(
       this.#deps.clientVersion,
       ctx.vaultBasePath,
-      ctx.vaultName,
       selfHostSearchChannel
     );
 

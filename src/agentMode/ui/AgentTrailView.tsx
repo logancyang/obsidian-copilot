@@ -145,7 +145,7 @@ function renderNode(
     case "action": {
       const miyoSearch = miyoSearchRun(node.part);
       if (miyoSearch) {
-        return <MiyoSearchCard key={key} status={node.part.status} {...miyoSearch} />;
+        return <MiyoSearchCard key={key} {...miyoSearch} />;
       }
       const expansionId = actionExpansionId(trailId, node.part.id);
       return (

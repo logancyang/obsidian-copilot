@@ -134,7 +134,18 @@ function toolKindFromAcp(kind: AcpToolKind | undefined): AgentToolKind | undefin
   return kind;
 }
 
-function toolStatusFromAcp(status: string | undefined): AgentToolStatus | undefined {
+function toolStatusFromAcp(
+  status: string | undefined,
+  rawOutput?: unknown
+): AgentToolStatus | undefined {
+  // OpenCode marks a failed tool call completed and flags the error in the result's metadata.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+  if (
+    status === "completed" &&
+    (rawOutput as { metadata?: { error?: unknown } } | null)?.metadata?.error === true
+  ) {
+    return "failed";
+  }
   if (!status) return undefined;
   return status as AgentToolStatus;
 }
@@ -175,6 +186,19 @@ function toolCallContentFromAcp(
   return out.length > 0 ? out : undefined;
 }
 
+// codex-acp reports an MCP tool's result text only in rawOutput.result.content.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+function mcpResultContent(rawOutput: unknown): ToolCallContent[] | undefined {
+  const parts = (rawOutput as { result?: { content?: unknown } } | null)?.result?.content;
+  if (!Array.isArray(parts)) return undefined;
+  const out = parts.flatMap((part: { type?: unknown; text?: unknown } | null): ToolCallContent[] =>
+    part?.type === "text" && typeof part.text === "string"
+      ? [{ type: "content", content: { type: "text", text: part.text } }]
+      : []
+  );
+  return out.length > 0 ? out : undefined;
+}
+
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
@@ -183,9 +207,9 @@ function toolCallSnapshotFromAcp(
     toolCallId: call.toolCallId,
     title,
     kind: toolKindFromAcp(call.kind),
-    status: toolStatusFromAcp(call.status),
+    status: toolStatusFromAcp(call.status, call.rawOutput),
     rawInput: call.rawInput,
-    content: toolCallContentFromAcp(call.content),
+    content: toolCallContentFromAcp(call.content) ?? mcpResultContent(call.rawOutput),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     mcpServer,
   };
@@ -214,13 +238,17 @@ function toolCallDeltaFromAcp(
 ): ToolCallDelta {
   const resolved = upd.title != null ? resolveToolName(upd.title) : null;
   const originalFiles = copilotOriginalFiles(upd.rawOutput);
+  const mcpResult = mcpResultContent(upd.rawOutput);
   return {
     toolCallId: upd.toolCallId,
     title: resolved?.tool,
     kind: toolKindFromAcp(upd.kind ?? undefined),
-    status: toolStatusFromAcp(upd.status as string | undefined),
+    status: toolStatusFromAcp(upd.status as string | undefined, upd.rawOutput),
     rawInput: upd.rawInput,
-    content: mapNullable(upd.content, toolCallContentFromAcp),
+    content:
+      upd.content == null && mcpResult
+        ? mcpResult
+        : mapNullable(upd.content, toolCallContentFromAcp),
     locations: mapNullable(upd.locations, (locs) =>
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),

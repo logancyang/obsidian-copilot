@@ -1,6 +1,8 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoFolderName, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -15,8 +17,12 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
-import { createFeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
+import {
+  createCopilotMcpServer,
+  SEND_FEEDBACK_TOOL_NAME,
+} from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
+import { MIYO_SEARCH_TOOL_NAME, runMiyoSearch } from "./session/miyoSearch/miyoSearchTool";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -165,7 +171,18 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    feedbackServer: createFeedbackMcpServer(),
+    copilotMcpServer: createCopilotMcpServer(
+      (toolName) =>
+        toolName === SEND_FEEDBACK_TOOL_NAME
+          ? getSettings().agentMode.offerFeedbackCards
+          : toolName === MIYO_SEARCH_TOOL_NAME && isMiyoSearchActive(getSettings()),
+      (args) =>
+        runMiyoSearch(args, {
+          client: new MiyoClient(),
+          getSettings,
+          getVaultName: () => getMiyoFolderName(app),
+        })
+    ),
   });
   managerRef = manager;
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
@@ -259,10 +276,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     for (const descriptor of listBackendDescriptors()) {
       const managedEnvRestartPolicy = getBuiltinSkillEnvRestartPolicy(prev, next, descriptor.id);
       if (managedEnvRestartPolicy === "none") continue;
-      // Applying a new search boundary cannot wait for a running turn to finish,
-      // let alone for the user to accept a Reload: cancel the turn before it can
-      // start another search with the prior scope.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/121
+      // Turning Self-Host Mode on cannot wait for a running turn or a Reload, or that turn could still search the web through a hosted path.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
       const applied =
         managedEnvRestartPolicy === "immediate"
           ? manager.restartBackend(descriptor.id, "managed agent env changed", {

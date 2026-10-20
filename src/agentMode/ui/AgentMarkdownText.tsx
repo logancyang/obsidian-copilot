@@ -1,8 +1,4 @@
-import {
-  addMiyoBadgeHosts,
-  EMPTY_BADGE_HOSTS,
-  miyoVaultPaths,
-} from "@/agentMode/ui/miyoLinkBadges";
+import { addMiyoBadgeHosts, EMPTY_BADGE_HOSTS } from "@/agentMode/ui/miyoLinkBadges";
 import { MiyoLinkBadge } from "@/agentMode/ui/MiyoLinkBadge";
 import { EMPTY_MIYO_PATHS } from "@/agentMode/ui/toolSummaries";
 import { Markdown } from "@/components/Markdown";
@@ -28,12 +24,7 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({
     (container: HTMLElement) => {
       setBadgeHosts(
         miyoPathsKey
-          ? addMiyoBadgeHosts(
-              app,
-              container,
-              sourcePath,
-              miyoVaultPaths(app, miyoPathsKey.split("\n"))
-            )
+          ? addMiyoBadgeHosts(app, container, sourcePath, new Set(miyoPathsKey.split("\n")))
           : EMPTY_BADGE_HOSTS
       );
     },

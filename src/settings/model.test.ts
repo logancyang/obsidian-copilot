@@ -819,12 +819,12 @@ describe("model", () => {
       }
     );
 
-    it("drops retired names and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022", () => {
+    it("drops retired names, including a saved miyo-search opt-out, and malformed entries while preserving sparse overrides for known skills and absent agents https://github.com/logancyang/obsidian-copilot/issues/3022 https://github.com/Brevilabs/obsidian-copilot-private/issues/736", () => {
       expect(
         sanitizeBuiltinPreferences({
           "copilot-web-search": { disabled: true },
           "copilot-web-fetch": { disabled: false, disabledAgents: ["uninstalled-agent", 3] },
-          "miyo-search": { disabled: true, disabledAgents: [] },
+          "miyo-search": { disabled: true, disabledAgents: ["codex"] },
           "copilot-read-pdf": null,
           "miyo-parse": [],
           "retired-skill": { disabled: true },
@@ -832,7 +832,6 @@ describe("model", () => {
       ).toEqual({
         "copilot-web-search": { disabled: true },
         "copilot-web-fetch": { disabledAgents: ["uninstalled-agent"] },
-        "miyo-search": { disabled: true },
       });
     });
   });

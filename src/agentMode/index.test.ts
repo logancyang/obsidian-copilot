@@ -4,11 +4,14 @@ import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager } from "./index";
+import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
+jest.mock("@/miyo/MiyoClient", () => ({ MiyoClient: jest.fn() }));
+jest.mock("@/utils", () => ({ err2String: jest.fn() }));
 jest.mock("@/modelManagement", () => ({
   BackendConfigRegistry: jest.requireActual("@/modelManagement/backends/BackendConfigRegistry")
     .BackendConfigRegistry,
@@ -32,7 +35,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -110,6 +113,9 @@ const mockManager = {
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
+function withCards(offerFeedbackCards: boolean): CopilotSettings {
+  return { ...mockSettings, agentMode: { ...mockSettings.agentMode, offerFeedbackCards } };
+}
 function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
   return {
     agentMode: { skills: {} },
@@ -276,11 +282,25 @@ describe("agentMode", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 offers an OpenCode reload once the search switch changes, so new chats gain or drop the Miyo steering", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const noted = deferred();
+      mockManager.noteSpawnConfigChanged.mockImplementationOnce(async () => noted.resolve());
+      const withSearch = (enableMiyoSearchSkill: boolean) =>
+        ({ ...mockSettings, enableMiyo: true, enableMiyoSearchSkill }) as CopilotSettings;
+
+      mockSettings = withSearch(true);
+      emitSettingsChange(withSearch(false), mockSettings);
+      await noted.promise;
+
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
-      const withCards = (offerFeedbackCards: boolean) => ({
-        ...mockSettings,
-        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
-      });
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
 
@@ -291,6 +311,51 @@ describe("agentMode", () => {
         "opencode",
         "system prompt changed"
       );
+    });
+
+    it("hands sessions Copilot's MCP server only while feedback cards are on, following the setting as it changes", () => {
+      mockSettings = withCards(true);
+      createAgentSessionManager({} as App, plugin);
+      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
+      mockSettings = withCards(false);
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
+    });
+
+    it.each([
+      ["Miyo is connected and the search switch is on", true, true, true],
+      ["the search switch is off", true, false, false],
+      ["Miyo is disconnected even though the switch defaults on", false, true, false],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/736 hands sessions miyo_search through Copilot's MCP server when %s, with feedback cards off",
+      (_state, enableMiyo, enableMiyoSearchSkill, hasTools) => {
+        mockSettings = {
+          ...mockSettings,
+          agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
+          enableMiyo,
+          enableMiyoSearchSkill,
+        };
+        createAgentSessionManager({} as App, plugin);
+        const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+        expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 follows the search switch as it changes", () => {
+      mockSettings = {
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
+        enableMiyo: true,
+        enableMiyoSearchSkill: true,
+      };
+      createAgentSessionManager({} as App, plugin);
+      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
+      mockSettings = { ...mockSettings, enableMiyoSearchSkill: false };
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {

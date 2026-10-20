@@ -43,6 +43,14 @@ export function getSearchBackend(settings: CopilotSettings = getSettings()): "ke
   return shouldUseMiyo(settings) ? "miyo" : "keyword";
 }
 
+// The switch defaults on, so it only takes effect while Miyo is connected.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/716
+export function isMiyoSearchActive(
+  settings: Pick<CopilotSettings, "enableMiyo" | "enableMiyoSearchSkill">
+): boolean {
+  return settings.enableMiyo === true && settings.enableMiyoSearchSkill === true;
+}
+
 export async function canProcessDocumentsWithMiyo(
   settings: CopilotSettings = getSettings()
 ): Promise<boolean> {

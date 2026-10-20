@@ -52,6 +52,10 @@ EOF
     ;;
 esac
 
+# shellcheck source=scripts/obsidian-vault.sh
+source "$WORKTREE_ROOT/scripts/obsidian-vault.sh"
+require_obsidian_vault "$VAULT_PATH"
+
 echo "==> Installing dependencies"
 npm install --prefer-offline --no-audit --no-fund
 
@@ -173,18 +177,18 @@ fi
 # Reload by toggling disable -> enable, NOT `plugin:reload`. On this setup
 # `plugin:reload` returns success but does NOT re-run the plugin's onload, so the
 # freshly deployed main.js never executes. A disable+enable cycle re-runs onload.
-#
-# CRITICAL: the Obsidian CLI picks its TARGET VAULT from the current working
-# directory (it resolves the vault enclosing $PWD; `vault=` does NOT override
-# this). So we MUST run the CLI from inside the target vault's directory, or the
-# reload silently hits whatever vault the caller's cwd sits in (e.g. the
-# repo/worktree vault) instead of the deploy target. Hence the `cd "$VAULT_PATH"`.
-echo "==> Reloading plugin in Obsidian (vault dir: $VAULT_PATH)"
+# Every CLI call names the vault resolved above; see scripts/obsidian-vault.sh.
+# `plugin:enable` does not rescan the plugins folder, so a vault receiving its
+# first deploy needs loadManifests() before Obsidian knows the plugin exists.
+echo "==> Reloading plugin in Obsidian (vault: $VAULT_PATH)"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
   echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
+elif [[ -z "$OBSIDIAN_VAULT_NAME" ]]; then
+  echo "warning: could not reach Obsidian through the CLI; skipping reload. The plugin will load on next open." >&2
 else
-  ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 ) || true
-  if ( cd "$VAULT_PATH" && "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 ); then
+  "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" eval code="app.plugins.loadManifests()" >/dev/null 2>&1 || true
+  "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" plugin:disable id="$PLUGIN_ID" >/dev/null 2>&1 || true
+  if "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1; then
     echo "    reloaded (onload re-ran). Note: the sidebar manifest label only"
     echo "    refreshes on a full Obsidian restart; use a dev-console marker to"
     echo "    confirm the loaded build, not the label."
