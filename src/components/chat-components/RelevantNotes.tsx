@@ -22,7 +22,7 @@ import {
   findRelevantNotes,
   isSameRelevantNotesResult,
   type RelevantNoteEntry,
-} from "@/search/findRelevantNotes";
+} from "@/miyo/findRelevantNotes";
 import { onMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { updateSetting, useSettingsValue } from "@/settings/model";

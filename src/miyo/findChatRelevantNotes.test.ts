@@ -1,4 +1,4 @@
-import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
+import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { App, TFile } from "obsidian";
 jest.mock("@/settings/model", () => ({ getSettings: () => ({ plusLicenseKey: "key" }) }));

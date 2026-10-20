@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import type {
   RelevantNotesSearchStatus,
   RelevantNotesStatusDetails,
-} from "@/search/findRelevantNotes";
+} from "@/miyo/findRelevantNotes";
 import { Download, Loader2 } from "lucide-react";
 import React from "react";
 

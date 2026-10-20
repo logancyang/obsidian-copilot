@@ -3,11 +3,11 @@ import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
-import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
-import type { RelevantNotesResult } from "@/search/findRelevantNotes";
+import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
+import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
 import { act, renderHook } from "@testing-library/react";
 import type { App } from "obsidian";
-jest.mock("@/search/findChatRelevantNotes", () => ({ findChatRelevantNotes: jest.fn() }));
+jest.mock("@/miyo/findChatRelevantNotes", () => ({ findChatRelevantNotes: jest.fn() }));
 const find = jest.mocked(findChatRelevantNotes);
 const context = (id: string, draft: string): ChatRelevantNotesContext => ({
   id,

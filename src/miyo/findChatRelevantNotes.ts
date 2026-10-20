@@ -1,7 +1,7 @@
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
-import type { RelevantNotesResult } from "@/search/findRelevantNotes";
+import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
 import { getSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";

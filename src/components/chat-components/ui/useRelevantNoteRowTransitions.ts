@@ -1,4 +1,4 @@
-import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import type { RelevantNoteEntry } from "@/miyo/findRelevantNotes";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export const ROW_EXIT_MS = 200;

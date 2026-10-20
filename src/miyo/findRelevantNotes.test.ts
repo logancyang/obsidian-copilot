@@ -5,7 +5,7 @@ import {
   findRelevantNotes,
   isSameRelevantNotesResult,
   type RelevantNoteEntry,
-} from "@/search/findRelevantNotes";
+} from "@/miyo/findRelevantNotes";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import { TFile } from "obsidian";
 
