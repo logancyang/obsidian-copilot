@@ -55,44 +55,46 @@ describe("MiyoSearchCard", () => {
     );
 
     it.each(["pending", "in_progress", "completed"] as const)(
-      "tints the border with the accent and ends the row with a sparkle when the status is %s",
+      "tints the border with the accent when the status is %s",
       (status) => {
         const { container } = render(<MiyoSearchCard status={status} query="q" noteCount={2} />);
         const card = container.firstElementChild!;
 
         expect(card.className).toContain(ACCENT_BORDER);
         expect(card.className).toContain("tw-border-solid");
-        expect(card.lastElementChild?.matches(SPARKLE)).toBe(true);
-        expect(card.lastElementChild?.getAttribute("aria-hidden")).toBe("true");
       }
     );
 
-    it("keeps the sparkle after the count for an empty result", () => {
-      const { container } = render(<MiyoSearchCard status="completed" query="q" noteCount={0} />);
-      const card = container.firstElementChild!;
-
-      expect(card.lastElementChild?.matches(SPARKLE)).toBe(true);
-      expect(card.lastElementChild?.previousElementSibling?.textContent).toBe("No notes");
-    });
-
-    it("twinkles the sparkle only while the search is running and only when motion is allowed", () => {
-      const running = render(<MiyoSearchCard status="in_progress" query="q" noteCount={null} />);
-      expect(running.container.querySelector(SPARKLE)?.getAttribute("class")).toContain(
-        "motion-safe:tw-animate-twinkle"
-      );
-      running.unmount();
-
-      const done = render(<MiyoSearchCard status="completed" query="q" noteCount={1} />);
-      expect(done.container.querySelector(SPARKLE)?.getAttribute("class")).not.toContain("animate");
-    });
-
-    it("uses a plain border and no sparkle when the search failed", () => {
+    it("uses a plain border when the search failed", () => {
       const { container } = render(<MiyoSearchCard status="failed" query="q" noteCount={null} />);
       const card = container.firstElementChild!;
 
       expect(card.className).toContain("tw-border-border");
       expect(card.className).not.toContain(ACCENT_BORDER);
-      expect(container.querySelector(SPARKLE)).toBeNull();
+    });
+
+    it.each(["pending", "in_progress", "completed", "failed"] as const)(
+      "draws no star after the logo, label and query when the status is %s",
+      (status) => {
+        const { container } = render(<MiyoSearchCard status={status} query="q" noteCount={3} />);
+
+        expect(container.querySelector(SPARKLE)).toBeNull();
+        expect(container.querySelectorAll("svg")).toHaveLength(1);
+      }
+    );
+
+    it("keeps the count at full size and clips a long query so the count stays visible", () => {
+      const query = "what did I decide about the migration plan for the shared calendar service";
+      const { container } = render(
+        <MiyoSearchCard status="completed" query={query} noteCount={12} />
+      );
+
+      expect(screen.getByText("12 notes").className).toContain("tw-shrink-0");
+      expect(screen.getByText(`“${query}”`).className).toContain("tw-truncate");
+      expect(screen.getByText("Searched with Miyo").parentElement?.className).toContain(
+        "tw-overflow-hidden"
+      );
+      expect(container.firstElementChild?.lastElementChild?.textContent).toBe("12 notes");
     });
 
     it("says No notes when Miyo returned nothing", () => {

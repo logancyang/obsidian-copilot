@@ -1,4 +1,3 @@
-import { Sparkle } from "lucide-react";
 import React from "react";
 import { MiyoLogo } from "@/components/ui/MiyoLogo";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
@@ -34,7 +33,7 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({ status, query, n
       )}
     >
       <MiyoLogo className="tw-size-4 tw-text-normal" />
-      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-baseline tw-gap-1.5">
+      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-baseline tw-gap-1.5 tw-overflow-hidden">
         <span
           className={cn(
             "tw-shrink-0 tw-font-medium",
@@ -50,15 +49,6 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({ status, query, n
         {query ? <span className="tw-min-w-0 tw-truncate tw-text-muted">“{query}”</span> : null}
       </div>
       {outcome ? <span className="tw-shrink-0 tw-text-xs tw-text-muted">{outcome}</span> : null}
-      {failed ? null : (
-        <Sparkle
-          aria-hidden="true"
-          className={cn(
-            "tw-size-3 tw-shrink-0 tw-text-accent",
-            running && "motion-safe:tw-animate-twinkle"
-          )}
-        />
-      )}
     </div>
   );
 };

@@ -117,6 +117,18 @@ const MIYO_SEARCH: AgentMessagePart[] = [
   say("You wrote that a monitor arm and a sit-stand rhythm fixed it. See [[Standing desk setup]]."),
 ];
 
+const MIYO_LONG_QUERY =
+  "what did I decide about the migration plan for the shared calendar service and who owns the rollout checklist";
+
+const MIYO_SEARCH_LONG_QUERY: AgentMessagePart[] = [
+  tool("miyo-run", "Bash", {
+    toolKind: "execute",
+    input: { command: `sh ".claude/skills/miyo-search/miyo-search.sh" "${MIYO_LONG_QUERY}"` },
+    output: [{ type: "text", text: MIYO_RESULTS }],
+  }),
+  say("You decided to move the rollout to the platform team. See [[Standing desk setup]]."),
+];
+
 const MIYO_LINK_NOTES: Record<string, string> = {
   "Standing desk setup": "notes/Standing desk setup.md",
   "Untitled 3": "notes/Untitled 3.md",
@@ -227,6 +239,10 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
 
 export const MiyoSearch: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH} />,
+};
+
+export const MiyoSearchLongQuery: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={MIYO_SEARCH_LONG_QUERY} />,
 };
 
 export const MiyoLinkBadges: StoryObj<AgentTrailProps> = {
