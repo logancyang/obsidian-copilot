@@ -51,7 +51,7 @@ export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vaul
 
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-export const COPILOT_FEEDBACK_POINTER = `When the user complains about you or Copilot, or you notice your own mistake, call the obsidian-copilot send_feedback tool once, even if you also retry or fix it.`;
+export const COPILOT_FEEDBACK_POINTER = `When the user is clearly frustrated with you or Copilot, call the obsidian-copilot send_feedback tool once, even if you also retry or fix it. A question or correction alone, or your own mistake, is not a reason to call it.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, working in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
 
