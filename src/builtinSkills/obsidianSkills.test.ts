@@ -82,14 +82,14 @@ describe("obsidianSkills", () => {
       );
     });
 
-    it("names the Markdown syntax that should trigger the skill and puts a list's block ID after a blank line (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("names the Markdown syntax that should trigger the skill and puts a list's block ID between blank lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
       const md = skillMd("obsidian-markdown");
       expect(md).toMatch(
         /description:[^\n]*block IDs[^\n]*Load before adding or changing any of these in a note\./
       );
       expect(md).not.toContain("ordinary Markdown is assumed knowledge");
       expect(md).toContain(
-        "Put a block ID on its own line after a list or quote block, with a blank line\nbefore it; without the blank line it marks only the last item."
+        "Put a block ID on its own line after a list or quote block, with a blank line\nbefore and after it; without the line before it marks only the last item."
       );
     });
 

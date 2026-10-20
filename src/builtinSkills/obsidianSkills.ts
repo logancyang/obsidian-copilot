@@ -69,7 +69,7 @@ This paragraph is addressable. ^block-id
 ~~~
 
 Put a block ID on its own line after a list or quote block, with a blank line
-before it; without the blank line it marks only the last item.
+before and after it; without the line before it marks only the last item.
 
 ## Embeds
 
