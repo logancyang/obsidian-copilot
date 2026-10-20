@@ -839,7 +839,9 @@ export class AgentSession {
         resp = await this.promptBackend(req, signal);
         // An agent cut off at its output limit gets the cause and one chance to continue in smaller steps. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
         if (resp.stopReason === "max_tokens") {
-          if (placeholderId) this.store.settleOpenParts(placeholderId, "failed");
+          if (placeholderId && this.store.settleOpenParts(placeholderId, "failed")) {
+            this.notifyMessages();
+          }
           resp = await this.promptBackend(
             { sessionId, prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }] },
             signal

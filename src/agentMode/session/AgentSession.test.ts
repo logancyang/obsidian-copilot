@@ -2000,6 +2000,37 @@ describe("AgentSession", () => {
         expect(aiMessage(session)?.turnStopReason).toBe("end_turn");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 shows the cut-off tool call as failed before the continuation runs", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const notifiedToolCalls: unknown[] = [];
+        subscribeTo(session, {
+          onMessagesChanged: () => notifiedToolCalls.push(aiMessage(session)?.parts?.[0]),
+        });
+        let toolCallsSeenByContinuation: unknown[] = [];
+        mock.prompt
+          .mockImplementationOnce(async () => {
+            mock.emitUpdate({
+              sessionUpdate: "tool_call",
+              toolCallId: "w1",
+              title: "write",
+              kind: "edit",
+              status: "pending",
+            });
+            return { stopReason: "max_tokens" as const };
+          })
+          .mockImplementationOnce(async () => {
+            toolCallsSeenByContinuation = [...notifiedToolCalls];
+            return { stopReason: "end_turn" as const };
+          });
+
+        await session.sendPrompt("Write the meeting note").turn;
+
+        expect(toolCallsSeenByContinuation).toContainEqual(
+          expect.objectContaining({ kind: "tool_call", id: "w1", status: "failed" })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 continues at most once, leaving the reply at max_tokens when the agent is cut off again", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
