@@ -22,7 +22,12 @@ import {
   SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
-import { MIYO_SEARCH_TOOL_NAME, runMiyoSearch } from "@/miyo/miyoSearchTool";
+import {
+  MIYO_SEARCH_TOOL,
+  MIYO_SEARCH_TOOL_NAME,
+  MIYO_SEARCH_TURNED_OFF_TEXT,
+  runMiyoSearch,
+} from "@/miyo/miyoSearchTool";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -176,12 +181,18 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         toolName === SEND_FEEDBACK_TOOL_NAME
           ? getSettings().agentMode.offerFeedbackCards
           : toolName === MIYO_SEARCH_TOOL_NAME && isMiyoSearchActive(getSettings()),
-      (args) =>
-        runMiyoSearch(args, {
-          client: new MiyoClient(),
-          getSettings,
-          getVaultName: () => getMiyoFolderName(app),
-        })
+      [
+        {
+          definition: MIYO_SEARCH_TOOL,
+          turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT,
+          call: (args) =>
+            runMiyoSearch(args, {
+              client: new MiyoClient(),
+              getSettings,
+              getVaultName: () => getMiyoFolderName(app),
+            }),
+        },
+      ]
     ),
   });
   managerRef = manager;
