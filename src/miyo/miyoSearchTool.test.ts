@@ -66,7 +66,10 @@ describe("miyoSearchTool", () => {
         "A note with a folder field lives in that Miyo folder outside the vault"
       );
       expect(description).toContain("If the search fails, continue with keyword search");
-      expect(description).not.toMatch(/miyo-search|\.sh\b|skill/i);
+      expect(description).toContain(
+        "when the message is a command, a skill invocation or pasted text rather than a question, the question you need the notes to answer"
+      );
+      expect(description).not.toMatch(/miyo-search|\.sh\b|miyo skill/i);
     });
   });
 
