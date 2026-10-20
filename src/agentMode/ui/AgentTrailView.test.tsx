@@ -337,6 +337,41 @@ describe("AgentTrail", () => {
     ]);
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 says the turn stopped at the output limit under a reply that already has answer text, rendering the answer once", () => {
+    renderTrail({
+      parts: [
+        text("I'll load the meeting note skill first."),
+        toolCall("w1", { status: "failed" }),
+      ],
+      turnStopReason: "max_tokens",
+    });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "I'll load the meeting note skill first.",
+      "**Stopped early:** the model hit its output limit, so its last step may not have run. Send another message to continue.",
+    ]);
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 says why the turn stopped at the agent's step limit or a safety stop", () => {
+    const { rerenderTrail } = renderTrail({ turnStopReason: "max_turn_requests" });
+    expect(screen.getAllByTestId("agent-md")[1].textContent).toBe(
+      "**Stopped early:** the agent hit its step limit, so its last step may not have run. Send another message to continue."
+    );
+
+    rerenderTrail({ turnStopReason: "refusal" });
+    expect(screen.getAllByTestId("agent-md")[1].textContent).toBe(
+      "**Stopped early:** the model's safety system stopped it, so its last step may not have run. Send another message to continue."
+    );
+  });
+
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 shows no stop notice for a reply that ended normally or was cancelled", () => {
+    const { rerenderTrail } = renderTrail({ turnStopReason: "end_turn" });
+    expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
+
+    rerenderTrail({ turnStopReason: "cancelled" });
+    expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
+  });
+
   it("uses one aligned folding header for reasoning and every tool-card family", () => {
     const { container } = renderTrail({
       parts: [

@@ -20,6 +20,7 @@ import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plus
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
@@ -812,6 +813,47 @@ describe("AgentSession", () => {
 
         const parts = session.store.getDisplayMessages()[1].parts;
         expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "cancelled" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 fails a replayed tool call that never finished once its turn closes", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "Write the note", "u1"));
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "w1",
+          title: "write",
+          status: "pending",
+        });
+        mock.emitUpdate(replayText("user_message_chunk", "Try again", "u2"));
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "w2",
+          title: "write",
+          status: "pending",
+        });
+        session.completeResume(emptyState());
+
+        expect(aiMessages(session).map((m) => m.parts)).toEqual([
+          [expect.objectContaining({ id: "w1", status: "failed" })],
+          [expect.objectContaining({ id: "w2", status: "failed" })],
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 shows no user bubble for the plugin's own output-limit continuation in a replayed chat", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "Write the note", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "Writing.", "a1"));
+        mock.emitUpdate(replayText("user_message_chunk", OUTPUT_LIMIT_CONTINUATION_PROMPT, "u2"));
+        mock.emitUpdate(replayText("agent_message_chunk", "Done.", "a2"));
+        session.completeResume(emptyState());
+
+        expect(bubbles(session).filter((b) => b.sender === USER_SENDER)).toEqual([
+          { sender: USER_SENDER, message: "Write the note" },
+        ]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the meter reading a replayed compaction's post-compaction tokens would otherwise overwrite", () => {
@@ -1922,6 +1964,117 @@ describe("AgentSession", () => {
         const text = (promptBlocks(mock, 0)[0] as { text: string }).text;
         expect(text).toContain("<copilot-context>");
         expect(text).toContain("<user-message>\nplease /compact\n</user-message>");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 hands the cause back once in the same reply when the agent stops at its output limit, failing the cut-off tool call first", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.prompt
+          .mockImplementationOnce(async () => {
+            mock.emitUpdate({
+              sessionUpdate: "tool_call",
+              toolCallId: "w1",
+              title: "write",
+              kind: "edit",
+              status: "pending",
+            });
+            return { stopReason: "max_tokens" as const };
+          })
+          .mockImplementationOnce(async () => {
+            mock.emitUpdate(replayText("agent_message_chunk", "Saved the note in blocks."));
+            return { stopReason: "end_turn" as const };
+          });
+
+        expect(await session.sendPrompt("Write the meeting note").turn).toBe("end_turn");
+
+        expect(mock.prompt).toHaveBeenCalledTimes(2);
+        expect(mock.prompt.mock.calls[1][0]).toEqual({
+          sessionId: "acp-1",
+          prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
+        });
+        expect(bubbles(session).map((b) => b.sender)).toEqual([USER_SENDER, AI_SENDER]);
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "tool_call", id: "w1", status: "failed" }),
+          { kind: "text", text: "Saved the note in blocks." },
+        ]);
+        expect(aiMessage(session)?.turnStopReason).toBe("end_turn");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 shows the cut-off tool call as failed before the continuation runs", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const notifiedToolCalls: unknown[] = [];
+        subscribeTo(session, {
+          onMessagesChanged: () => notifiedToolCalls.push(aiMessage(session)?.parts?.[0]),
+        });
+        let toolCallsSeenByContinuation: unknown[] = [];
+        mock.prompt
+          .mockImplementationOnce(async () => {
+            mock.emitUpdate({
+              sessionUpdate: "tool_call",
+              toolCallId: "w1",
+              title: "write",
+              kind: "edit",
+              status: "pending",
+            });
+            return { stopReason: "max_tokens" as const };
+          })
+          .mockImplementationOnce(async () => {
+            toolCallsSeenByContinuation = [...notifiedToolCalls];
+            return { stopReason: "end_turn" as const };
+          });
+
+        await session.sendPrompt("Write the meeting note").turn;
+
+        expect(toolCallsSeenByContinuation).toContainEqual(
+          expect.objectContaining({ kind: "tool_call", id: "w1", status: "failed" })
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 continues at most once, leaving the reply at max_tokens when the agent is cut off again", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.prompt.mockResolvedValue({ stopReason: "max_tokens" });
+
+        expect(await session.sendPrompt("Write the meeting note").turn).toBe("max_tokens");
+
+        expect(mock.prompt).toHaveBeenCalledTimes(2);
+        expect(aiMessage(session)?.turnStopReason).toBe("max_tokens");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 never continues a turn the user cancelled or the model refused", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("Write the meeting note");
+        await session.cancel();
+        finishPrompt("max_tokens");
+        expect(await turn).toBe("cancelled");
+
+        mock.prompt.mockResolvedValueOnce({ stopReason: "refusal" });
+        expect(await session.sendPrompt("Write the meeting note").turn).toBe("refusal");
+
+        expect(mock.prompt).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 fails a tool call the agent left pending when its turn ends", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        mock.prompt.mockImplementationOnce(async () => {
+          mock.emitUpdate({
+            sessionUpdate: "tool_call",
+            toolCallId: "e1",
+            title: "edit",
+            status: "pending",
+          });
+          return { stopReason: "end_turn" as const };
+        });
+
+        await session.sendPrompt("Write the meeting note").turn;
+
+        expect(aiMessage(session)?.parts).toEqual([
+          expect.objectContaining({ kind: "tool_call", id: "e1", status: "failed" }),
+        ]);
       });
 
       it("marks an empty completed turn as a visible error message", async () => {
@@ -3528,6 +3681,23 @@ describe("AgentSession", () => {
         const [, retry] = promptTexts(mock);
         expect(retry).toContain("<conversation_history>");
         expect(retry).toContain("my secret word is PELICAN");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 never resends the saved turns after a prompt cut off at its output limit delivered them, even when the continuation fails", async () => {
+        const mock = makeMockBackend();
+        mock.prompt
+          .mockResolvedValueOnce({ stopReason: "max_tokens" })
+          .mockRejectedValueOnce(new Error("connection dropped"));
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await expect(session.sendPrompt("what is my secret word?").turn).rejects.toThrow(
+          "connection dropped"
+        );
+        await session.sendPrompt("and backwards?").turn;
+
+        expect(promptTexts(mock)[2]).toBe("and backwards?");
       });
 
       it("sends no conversation_history when no saved history is queued", async () => {

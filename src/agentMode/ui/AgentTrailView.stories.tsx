@@ -1,6 +1,6 @@
 import { useApp } from "@/context";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
+import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -175,7 +175,15 @@ const TrailDemo: React.FC<{
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
   linkNotes?: Record<string, string>;
-}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges, linkNotes }) => {
+  stopReason?: StopReason;
+}> = ({
+  parts,
+  isStreaming = false,
+  showCompletedDuration = true,
+  fileChanges,
+  linkNotes,
+  stopReason = "end_turn",
+}) => {
   const contextApp = useApp();
   const app = linkNotes
     ? Object.create(contextApp, {
@@ -199,7 +207,7 @@ const TrailDemo: React.FC<{
         turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
         timestamp="2026/08/07 20:31:10"
         app={app}
-        turnStopReason={isStreaming ? undefined : "end_turn"}
+        turnStopReason={isStreaming ? undefined : stopReason}
         fileChanges={fileChanges}
       />
     </TooltipProvider>
@@ -247,6 +255,24 @@ export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {
 
 export const MiyoSearchFailed: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={MIYO_SEARCH_FAILED} />,
+};
+
+export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        say("I'll load the meeting note skill first."),
+        tool("s1", "Skill", { input: { skill: "meeting-note" } }),
+        tool("r1", "Read", { locations: [{ path: "Meetings/2026-10-12 Weekly sync.md" }] }),
+        tool("w1", "Write", {
+          toolKind: "edit",
+          status: "failed",
+          input: { file_path: "Meetings/2026-10-19 Weekly sync.md" },
+        }),
+      ]}
+      stopReason="max_tokens"
+    />
+  ),
 };
 
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {

@@ -37,6 +37,13 @@ const MAX_COMPARE_JSON_CHARS = 8_000;
 const MAX_COMPARE_EDGE_CHARS = 512;
 const MAX_COMPARE_TEXT_EDGE_CHARS = 128;
 
+// A pending tool call never started, while an in-progress one may be a background task that reports after its turn.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+function isOpenPart(part: AgentMessagePart): boolean {
+  if (part.kind === "compaction") return part.status === "in_progress";
+  return part.kind === "tool_call" && part.status === "pending";
+}
+
 function agentPartId(part: AgentMessagePart): string | undefined {
   if (part.kind === "tool_call") return `tool:${part.id}`;
   if (part.kind === "plan") return "plan";
@@ -366,13 +373,16 @@ export class AgentMessageStore {
 
   // A spinner must not outlive the turn that started it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  settleOpenCompactions(id: string, status: "cancelled" | "failed" = "cancelled"): boolean {
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+  settleOpenParts(id: string, status: "cancelled" | "failed" = "cancelled"): boolean {
     const msg = this.messages.find((m) => m.id === id);
-    if (!msg?.parts?.some((p) => p.kind === "compaction" && p.status === "in_progress")) {
-      return false;
-    }
+    if (!msg?.parts?.some(isOpenPart)) return false;
     msg.parts = msg.parts.map((p) =>
-      p.kind === "compaction" && p.status === "in_progress" ? { ...p, status } : p
+      !isOpenPart(p)
+        ? p
+        : p.kind === "compaction"
+          ? { ...p, status }
+          : { ...p, status: "failed" as const }
     );
     this.touch(msg);
     return true;
