@@ -2,7 +2,7 @@ import { logInfo } from "@/logger";
 import { getSearchBackend } from "@/miyo/miyoUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
-import { MiyoSemanticRetriever } from "./miyo/MiyoSemanticRetriever";
+import { MiyoSemanticRetriever } from "@/miyo/MiyoSemanticRetriever";
 import { TieredLexicalRetriever } from "./v3/TieredLexicalRetriever";
 
 export interface RetrieverOptions {

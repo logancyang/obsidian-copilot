@@ -21,7 +21,7 @@ import {
   miyoSearchRun,
   type ToolSummaryContext,
 } from "@/agentMode/ui/toolSummaries";
-import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
+import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";

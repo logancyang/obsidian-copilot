@@ -22,9 +22,9 @@ import {
 } from "@/miyo/miyoUtils";
 import { getMiyoConnectionMode } from "@/miyo/miyoRuntimePolicy";
 import { CapabilityRow } from "@/settings/v2/components/CapabilityRow";
-import { MiyoDocumentProcessingRow } from "@/settings/v2/components/MiyoDocumentProcessingRow";
-import { MiyoConnectionPanel } from "@/settings/v2/components/ui/MiyoConnectionPanel";
-import { MiyoSearchFoldersPicker } from "@/settings/v2/components/ui/MiyoSearchFoldersPicker";
+import { MiyoDocumentProcessingRow } from "@/miyo/settings/MiyoDocumentProcessingRow";
+import { MiyoConnectionPanel } from "@/miyo/ui/MiyoConnectionPanel";
+import { MiyoSearchFoldersPicker } from "@/miyo/ui/MiyoSearchFoldersPicker";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
@@ -39,12 +39,9 @@ import {
   type ConnectOutcome,
   type ConnectStep,
   MiyoConnectModal,
-} from "@/settings/v2/components/MiyoConnectModal";
-import { MiyoStatusRow } from "@/settings/v2/components/MiyoStatusRow";
-import {
-  MiyoAvailabilityNotice,
-  MiyoConnectionControl,
-} from "@/settings/v2/components/ui/MiyoConnectionControl";
+} from "@/miyo/settings/MiyoConnectModal";
+import { MiyoStatusRow } from "@/miyo/settings/MiyoStatusRow";
+import { MiyoAvailabilityNotice, MiyoConnectionControl } from "@/miyo/ui/MiyoConnectionControl";
 import { err2String } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getVaultBase } from "@/utils/vaultPath";

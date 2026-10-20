@@ -229,7 +229,10 @@ describe("miyoSearchTool", () => {
       const others = Array.from({ length: 25 }, (_, i) => chunk({ path: `step-1/other-${i}.md` }));
       const { deps } = setup({}, { chunks: [...crowded, ...others] });
 
-      const { results, count } = JSON.parse((await runMiyoSearch({ query: "q" }, deps)).text);
+      const { results, count } = JSON.parse((await runMiyoSearch({ query: "q" }, deps)).text) as {
+        results: { path: string }[];
+        count: number;
+      };
 
       expect(count).toBe(20);
       expect(results[0].path).toBe("transcript.md");
@@ -250,7 +253,7 @@ describe("miyoSearchTool", () => {
 
         const result = await runMiyoSearch({ query: "q" }, deps);
 
-        const parsed = JSON.parse(result.text);
+        const parsed = JSON.parse(result.text) as { results: { path: string; content: string }[] };
         expect(new TextEncoder().encode(result.text).length).toBeLessThanOrEqual(32_000);
         expect(result.isError).toBe(false);
         expect(parsed.results.map((r: { path: string }) => r.path)).toEqual(

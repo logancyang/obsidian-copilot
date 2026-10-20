@@ -1,4 +1,4 @@
-import { addMiyoBadgeHosts } from "@/agentMode/ui/miyoLinkBadges";
+import { addMiyoBadgeHosts } from "@/miyo/miyoLinkBadges";
 import type { App } from "obsidian";
 
 function makeApp(files: Record<string, string>): App {

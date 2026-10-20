@@ -516,6 +516,7 @@ export default [
         { type: "ui", pattern: "src/agentMode/ui" },
         { type: "skills", pattern: "src/agentMode/skills" },
         { type: "modelmgmt", pattern: "src/modelManagement" },
+        { type: "miyoAgent", pattern: "src/miyo/agentMode" },
         { type: "host", pattern: "src/**" },
       ],
     },
@@ -540,8 +541,12 @@ export default [
             {
               from: { type: "ui" },
               allow: {
-                to: { type: ["ui", "session", "registry", "skills", "host"] },
+                to: { type: ["ui", "session", "registry", "skills", "miyoAgent", "host"] },
               },
+            },
+            {
+              from: { type: "miyoAgent" },
+              allow: { to: { type: ["miyoAgent", "ui", "session", "host"] } },
             },
             {
               from: { type: "skills" },

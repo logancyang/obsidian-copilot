@@ -1,4 +1,4 @@
-import { MiyoLogo } from "@/components/ui/MiyoLogo";
+import { MiyoLogo } from "@/miyo/ui/MiyoLogo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import React from "react";
 

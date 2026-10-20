@@ -3,7 +3,7 @@ import {
   MIYO_SEARCH_TOOL_NAME,
   MIYO_SEARCH_TURNED_OFF_TEXT,
   type MiyoSearchRunner,
-} from "@/agentMode/session/miyoSearch/miyoSearchTool";
+} from "@/miyo/miyoSearchTool";
 import type { AgentMcpServer } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import {

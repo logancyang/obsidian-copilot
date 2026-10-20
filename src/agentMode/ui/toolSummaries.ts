@@ -7,7 +7,7 @@ import { formatDuration } from "@/lib/duration";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
-import { MIYO_SEARCH_TOOL_NAME } from "@/agentMode/session/miyoSearch/miyoSearchTool";
+import { MIYO_SEARCH_TOOL_NAME } from "@/miyo/miyoSearchTool";
 
 export interface ToolSummaryContext {
   vaultBase: string | null;

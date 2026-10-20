@@ -1,5 +1,5 @@
-import { addMiyoBadgeHosts, EMPTY_BADGE_HOSTS } from "@/agentMode/ui/miyoLinkBadges";
-import { MiyoLinkBadge } from "@/agentMode/ui/MiyoLinkBadge";
+import { addMiyoBadgeHosts, EMPTY_BADGE_HOSTS } from "@/miyo/miyoLinkBadges";
+import { MiyoLinkBadge } from "@/miyo/ui/MiyoLinkBadge";
 import { EMPTY_MIYO_PATHS } from "@/agentMode/ui/toolSummaries";
 import { Markdown } from "@/components/Markdown";
 import type { App } from "obsidian";

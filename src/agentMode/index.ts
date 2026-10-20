@@ -22,7 +22,7 @@ import {
   SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
-import { MIYO_SEARCH_TOOL_NAME, runMiyoSearch } from "./session/miyoSearch/miyoSearchTool";
+import { MIYO_SEARCH_TOOL_NAME, runMiyoSearch } from "@/miyo/miyoSearchTool";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
