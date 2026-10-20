@@ -12,7 +12,6 @@ export function howToRunSection(opts: {
   shFile: string;
   cmdFile: string;
   argPlaceholder: string;
-  extraNote?: string;
 }): string {
   const dir = "/absolute/path/to/this/skill/directory";
   return `## How to run
@@ -35,6 +34,6 @@ won't run it); from cmd, run the quoted path without the \`&\`:
 \`\`\`powershell
 & "${dir}/${opts.cmdFile}" "${opts.argPlaceholder}"
 \`\`\`
-${opts.extraNote ? `\n${opts.extraNote}\n` : ""}
+
 Both print the result to stdout.`;
 }

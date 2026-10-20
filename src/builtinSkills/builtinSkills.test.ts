@@ -1,11 +1,9 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
 import {
-  ALL_MANAGED_SKILLS,
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
-  planManagedBuiltins,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -367,17 +365,15 @@ describe("builtinSkills", () => {
         /remove each `openartifacts` or `symposium` property\s+only when that property's own link has the same document id/
       );
     });
-  });
 
-  describe("ALL_MANAGED_SKILLS", () => {
     it("keeps every SKILL.md frontmatter version in sync with the numeric version", () => {
-      for (const skill of ALL_MANAGED_SKILLS) {
+      for (const skill of BUILTIN_SKILLS) {
         expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
       }
     });
 
     it(`tells every script-backed skill to run through the agent's shell tool, never as code-execution code (${ISSUE_599})`, () => {
-      const scripted = ALL_MANAGED_SKILLS.filter((skill) =>
+      const scripted = BUILTIN_SKILLS.filter((skill) =>
         skill.files.some((file) => file.path.endsWith(".sh"))
       );
       expect(scripted.map((skill) => skill.name)).toEqual([
@@ -386,7 +382,6 @@ describe("builtinSkills", () => {
         "copilot-youtube-transcript",
         "copilot-fetch-x",
         "openartifacts-publish",
-        "miyo-parse",
       ]);
       for (const skill of scripted) {
         expect(skill.skillMd).toContain(
@@ -394,22 +389,6 @@ describe("builtinSkills", () => {
         );
         expect(skill.skillMd).toContain("never pass it as the code of a\ncode-execution tool");
       }
-    });
-  });
-
-  describe("planManagedBuiltins()", () => {
-    const names = (skills: readonly { name: string }[]): string[] => skills.map((s) => s.name);
-
-    it("seeds only the always-on builtins when document processing is off", () => {
-      const plan = planManagedBuiltins({ documents: false });
-      expect(plan.seed).toBe(BUILTIN_SKILLS);
-      expect(plan.prune).toEqual(["miyo-parse"]);
-    });
-
-    it("adds miyo-parse and prunes nothing when document processing is on", () => {
-      const plan = planManagedBuiltins({ documents: true });
-      expect(names(plan.seed)).toEqual([...names(BUILTIN_SKILLS), "miyo-parse"]);
-      expect(plan.prune).toEqual([]);
     });
   });
 
@@ -427,7 +406,7 @@ describe("builtinSkills", () => {
 
   describe("isBuiltinSkillEnabledFor()", () => {
     it("enables every seeded builtin for every agent when no preference is stored", () => {
-      const settings = settingsWith({}, { enableMiyoDocumentProcessing: false });
+      const settings = settingsWith({});
       for (const agent of ["claude", "codex", "opencode"]) {
         expect(isBuiltinSkillEnabledFor(settings, "copilot-web-search", agent)).toBe(true);
       }
@@ -453,14 +432,6 @@ describe("builtinSkills", () => {
       for (const agent of ["claude", "codex", "opencode"]) {
         expect(isBuiltinSkillEnabledFor(settings, "copilot-fetch-x", agent)).toBe(false);
       }
-    });
-
-    it("follows the document-processing gate for miyo-parse", () => {
-      const off = settingsWith({}, { enableMiyoDocumentProcessing: false });
-      expect(isBuiltinSkillEnabledFor(off, "miyo-parse", "claude")).toBe(false);
-
-      const on = settingsWith({}, { enableMiyoDocumentProcessing: true });
-      expect(isBuiltinSkillEnabledFor(on, "miyo-parse", "claude")).toBe(true);
     });
 
     it("reports a name that is not a managed builtin as disabled", () => {

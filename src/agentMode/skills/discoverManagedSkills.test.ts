@@ -1,4 +1,4 @@
-import { ALL_MANAGED_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { logWarn } from "@/logger";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
 
@@ -237,7 +237,7 @@ describe("discoverManagedSkills", () => {
       }
     });
     it("marks only catalog skills with YAML metadata read-only, preserving renamed copies and body examples https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
-      const [managed, bodyExample, markerless] = ALL_MANAGED_SKILLS;
+      const [managed, bodyExample, markerless] = BUILTIN_SKILLS;
       const result = await discoverManagedSkills({
         skillsFolderRelPath: SKILLS_ROOT,
         skillsFolderAbsPath: null,

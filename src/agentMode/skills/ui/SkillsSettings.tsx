@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { ALL_MANAGED_SKILLS, planManagedBuiltins } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -52,7 +52,7 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
   { substr: "dropbox", brand: "Dropbox" },
 ];
 
-const BUILTIN_ROWS = ALL_MANAGED_SKILLS.map((skill) => ({
+const BUILTIN_ROWS = BUILTIN_SKILLS.map((skill) => ({
   name: skill.name,
   description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
   content: skill.skillMd,
@@ -89,11 +89,8 @@ export const SkillsSettings: React.FC = () => {
   );
   const availableAgents = availableBuiltinAgents(installStates, lastAvailableAgents.current);
   lastAvailableAgents.current = availableAgents;
-  const eligibleBuiltins = planManagedBuiltins({
-    documents: settings.enableMiyoDocumentProcessing,
-  }).seed;
   const unavailableReasons: Record<string, string> = {};
-  for (const skill of eligibleBuiltins) {
+  for (const skill of BUILTIN_SKILLS) {
     const collision =
       userSkills.some(
         (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
@@ -107,10 +104,8 @@ export const SkillsSettings: React.FC = () => {
         "A skill with this name already exists in Your Skills. Your file is kept unchanged.";
     }
   }
-  const builtinRows = BUILTIN_ROWS.filter(
-    (skill) =>
-      eligibleBuiltins.some((builtin) => builtin.name === skill.name) &&
-      `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
+  const builtinRows = BUILTIN_ROWS.filter((skill) =>
+    `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
   );
 
   const handleBuiltinChange = useCallback(

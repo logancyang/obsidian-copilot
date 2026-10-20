@@ -1,7 +1,7 @@
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import type { BackendId } from "@/agentMode/session/types";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
-import { isMiyoSearchActive } from "@/miyo/miyoUtils";
+import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
@@ -24,7 +24,7 @@ export const COPILOT_SKILL_FALLBACK = `Follow each skill's run instructions. Cal
 
 export const COPILOT_WEB_RESEARCH_STEERING = `For vault questions, search locally first. Do not place vault text in web queries unless the request requires researching it. Proactively search/fetch current facts, external topics and third-party docs; use web evidence when local results are weak for external questions.`;
 
-export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have.`;
+export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with the obsidian-copilot miyo_parse tool first. If it is unavailable or fails, say so, then read the file with any other tool you have.`;
 
 // Running miyo_search and grep for every request that may be answered from notes, even external-sounding ones, keeps the agent from skipping the vault; merging by path and opening matches keeps it from trusting a list it never read; naming the tool over the CLI keeps agents off a Miyo skill outside Copilot.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/736
@@ -69,7 +69,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
       parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
-    if (enabled("miyo-parse")) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+    if (isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
     if (isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 

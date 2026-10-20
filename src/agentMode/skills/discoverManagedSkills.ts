@@ -1,7 +1,7 @@
 import { logWarn } from "@/logger";
 import { basename, joinPosix } from "@/utils/pathUtils";
 import { getBuiltinSkillVersion } from "./builtin/builtinOwnership";
-import { ALL_MANAGED_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { mapWithConcurrency } from "./concurrency";
 import { parseSkillFile, SkillFormatError } from "./skillFormat";
 import type { RejectedSkill, Skill, SkillDiscoveryResult } from "./types";
@@ -9,7 +9,7 @@ import type { RejectedSkill, Skill, SkillDiscoveryResult } from "./types";
 const DISCOVERY_CONCURRENCY = 16;
 // Retired files stay owned during cleanup retries so they are not rediscovered as custom skills. https://github.com/logancyang/obsidian-copilot/issues/3022
 const BUILTIN_NAMES = new Set(
-  [...ALL_MANAGED_SKILLS, ...RETIRED_BUILTIN_SKILLS].map((skill) => skill.name)
+  [...BUILTIN_SKILLS, ...RETIRED_BUILTIN_SKILLS].map((skill) => skill.name)
 );
 
 export interface SkillsFsAdapter {

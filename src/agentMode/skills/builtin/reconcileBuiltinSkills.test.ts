@@ -1,9 +1,5 @@
 import { DEFAULT_SETTINGS } from "@/constants";
-import {
-  ALL_MANAGED_SKILLS,
-  BUILTIN_SKILLS,
-  RETIRED_BUILTIN_SKILLS,
-} from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, RETIRED_BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import {
   availableBuiltinAgents,
   reconcileBuiltinSkills,
@@ -17,6 +13,7 @@ jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn:
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
+const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 const INSTALLED_PLUS_READ_PDF_MD = `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus.
@@ -37,6 +34,16 @@ metadata:
 ---
 
 # Miyo vault search
+`;
+const INSTALLED_MIYO_PARSE_MD = `---
+name: miyo-parse
+description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI.
+metadata:
+  copilot-enabled-agents: claude, codex, opencode
+  copilot-builtin-version: "3"
+---
+
+# Parse a document locally with Miyo
 `;
 const folder = "copilot/skills";
 function fixture(preferences?: BuiltinPreferences) {
@@ -164,9 +171,7 @@ describe("reconcileBuiltinSkills", () => {
     });
     it(`starts a replacement with defaults and retires its predecessor independently of old preferences ${ISSUE}`, async () => {
       const retired = RETIRED_BUILTIN_SKILLS[0];
-      const replacement = ALL_MANAGED_SKILLS.find(
-        (skill) => skill.name === "openartifacts-publish"
-      )!;
+      const replacement = BUILTIN_SKILLS.find((skill) => skill.name === "openartifacts-publish")!;
       const f = fixture({ [retired.name]: { disabled: true, disabledAgents: ["codex"] } });
       f.files.set(
         f.path(retired.name),
@@ -253,8 +258,6 @@ describe("reconcileBuiltinSkills", () => {
         name: "new-bundled-skill",
         skillMd: first.skillMd.replaceAll(first.name, "new-bundled-skill"),
       };
-      const catalog = ALL_MANAGED_SKILLS as (typeof added)[];
-      catalog.push(added);
       try {
         (BUILTIN_SKILLS as (typeof added)[]).push(added);
         f.options.availableAgents = ["claude"];
@@ -263,7 +266,6 @@ describe("reconcileBuiltinSkills", () => {
         expect(f.options.settings.agentMode.skills.builtinPreferences).toBe(preferences);
         expect(preferences).toEqual({ [first.name]: { disabledAgents: ["opencode"] } });
       } finally {
-        catalog.pop();
         (BUILTIN_SKILLS as (typeof added)[]).pop();
       }
     });
@@ -292,6 +294,31 @@ describe("reconcileBuiltinSkills", () => {
       await expect(reconcileBuiltinSkills(f.options)).resolves.toBeUndefined();
 
       expect(f.files.get(f.path("miyo-search"))).toBe("user-owned content");
+    });
+    it.each([true, false])(
+      `removes the miyo-parse folder an earlier release seeded, scripts included, when Miyo document processing is %s ${ISSUE_740}`,
+      async (enableMiyoDocumentProcessing) => {
+        const f = fixture();
+        f.options.settings.enableMiyoDocumentProcessing = enableMiyoDocumentProcessing;
+        f.options.availableAgents = ["claude", "codex", "opencode"];
+        const dir = `${folder}/miyo-parse`;
+        f.files.set(f.path("miyo-parse"), INSTALLED_MIYO_PARSE_MD);
+        f.files.set(`${dir}/miyo-parse.sh`, "# earlier script");
+        f.files.set(`${dir}/miyo-parse.cmd`, "rem earlier script");
+
+        await reconcileBuiltinSkills(f.options);
+
+        expect([...f.files.keys()].filter((path) => path.startsWith(`${dir}/`))).toEqual([]);
+      }
+    );
+    it(`keeps a user-authored miyo-parse skill that carries no Copilot ownership marker ${ISSUE_740}`, async () => {
+      const f = fixture();
+      f.options.availableAgents = ["claude"];
+      f.files.set(f.path("miyo-parse"), "user-owned content");
+
+      await expect(reconcileBuiltinSkills(f.options)).resolves.toBeUndefined();
+
+      expect(f.files.get(f.path("miyo-parse"))).toBe("user-owned content");
     });
     it(`deletes disabled managed copies but preserves user-owned name collisions ${ISSUE}`, async () => {
       const skill = BUILTIN_SKILLS[0];
@@ -341,22 +368,17 @@ describe("reconcileBuiltinSkills", () => {
         true
       );
     });
-    it.each([false, true])(
-      `removes an installed Plus copilot-read-pdf and keeps miyo-parse as the only document skill (Miyo document processing on: %s) ${ISSUE_656}`,
-      async (enableMiyoDocumentProcessing) => {
-        const f = fixture({ "copilot-read-pdf": { disabled: true } });
-        f.options.settings.enableMiyoDocumentProcessing = enableMiyoDocumentProcessing;
-        f.options.availableAgents = ["claude"];
-        f.files.set(f.path("copilot-read-pdf"), INSTALLED_PLUS_READ_PDF_MD);
-        f.files.set(`${folder}/copilot-read-pdf/read-pdf.sh`, "legacy Plus relay script");
+    it(`removes an installed Plus copilot-read-pdf, relay script included ${ISSUE_656}`, async () => {
+      const f = fixture({ "copilot-read-pdf": { disabled: true } });
+      f.options.availableAgents = ["claude"];
+      f.files.set(f.path("copilot-read-pdf"), INSTALLED_PLUS_READ_PDF_MD);
+      f.files.set(`${folder}/copilot-read-pdf/read-pdf.sh`, "legacy Plus relay script");
 
-        await reconcileBuiltinSkills(f.options);
+      await reconcileBuiltinSkills(f.options);
 
-        expect(
-          [...f.files.keys()].filter((path) => path.startsWith(`${folder}/copilot-read-pdf/`))
-        ).toEqual([]);
-        expect(f.files.has(f.path("miyo-parse"))).toBe(enableMiyoDocumentProcessing);
-      }
-    );
+      expect(
+        [...f.files.keys()].filter((path) => path.startsWith(`${folder}/copilot-read-pdf/`))
+      ).toEqual([]);
+    });
   });
 });

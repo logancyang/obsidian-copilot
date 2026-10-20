@@ -1,5 +1,5 @@
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
-import { ALL_MANAGED_SKILLS, isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
@@ -344,7 +344,7 @@ export class SkillManager {
   ): Promise<SkillOperationResult<"fs-error">> {
     const operation = this.builtinMutation.then(
       async (): Promise<SkillOperationResult<"fs-error">> => {
-        if (!this.builtinRuntime || !ALL_MANAGED_SKILLS.some((skill) => skill.name === name))
+        if (!this.builtinRuntime || !BUILTIN_SKILLS.some((skill) => skill.name === name))
           return fsFailure("Unknown built-in skill.");
         try {
           await this.inFlight;
