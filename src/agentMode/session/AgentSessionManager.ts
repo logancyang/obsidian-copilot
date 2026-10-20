@@ -24,7 +24,7 @@ import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
-import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
+import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
@@ -1837,6 +1837,25 @@ export class AgentSessionManager {
       throw err;
     }
 
+    this.restoreFromNote(session, resumed !== null, file, loaded);
+    if (loaded.label) session.setLabel(loaded.label);
+    if (loaded.sessionId) {
+      void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
+    }
+    if (requestId === this.latestHistoryLoadRequestId) {
+      this.setActiveSession(session.internalId);
+      this.absorbIntoEmptyActiveTab(session, previousActiveId);
+      this.notify();
+    }
+    return session;
+  }
+
+  private restoreFromNote(
+    session: AgentSession,
+    resumed: boolean,
+    file: TFile,
+    loaded: LoadedAgentChat
+  ): void {
     // A reattached session replays the chat with its tool calls and thinking, which the note's text-only copy lacks; turns that never reach the agent (fanout, local refusals) live only in the note, so a replay with fewer user turns leaves the note as the source. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
     const replayedUserTurns = session.store
       .getDisplayMessages()
@@ -1855,17 +1874,7 @@ export class AgentSessionManager {
       if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
-    if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).source = file;
-    if (loaded.sessionId) {
-      void this.opts.sessionIndex?.touch(loaded.backendId, loaded.sessionId);
-    }
-    if (requestId === this.latestHistoryLoadRequestId) {
-      this.setActiveSession(session.internalId);
-      this.absorbIntoEmptyActiveTab(session, previousActiveId);
-      this.notify();
-    }
-    return session;
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2569,9 +2578,9 @@ export class AgentSessionManager {
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
             detached: this.detachedFromTabIds.has(session.internalId),
-            messages: session.store.getDisplayMessages(),
-            failed: session.getStatus() === "error",
-            source: this.sessionState.get(session.internalId)?.source,
+            recoveryMessages:
+              session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
       for (const replacement of replacements) {
@@ -2603,18 +2612,18 @@ export class AgentSessionManager {
               replacement.labelSource,
               replacement.seedSelection
             );
-            // A fresh fallback has no backend history for these messages;
-            // displaying them there would imply the agent can see that context.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
-            if (rebuilt.getBackendSessionId() === replacement.resumableSessionId) {
-              // Without its note and the original timestamps the replay lacks, the next autosave writes a duplicate note stamped with the replay time.
+            const resumed = rebuilt.getBackendSessionId() === replacement.resumableSessionId;
+            const note = this.app.vault.getAbstractFileByPath(replacement.notePath);
+            if (note instanceof TFile && this.opts.persistenceManager) {
+              // A saved chat comes back the way Recent Chats reopens it, or the next autosave writes a duplicate note stamped with the replay time.
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
-              this.getSessionState(rebuilt.internalId).source = replacement.source;
-              if (replacement.failed && replacement.messages.length > 0) {
-                rebuilt.loadDisplayMessages(replacement.messages);
-              } else {
-                rebuilt.store.fillMissingTimestamps(replacement.messages);
-              }
+              const loaded = await this.opts.persistenceManager.loadFile(note);
+              this.restoreFromNote(rebuilt, resumed, note, loaded);
+            } else if (resumed && replacement.recoveryMessages?.length) {
+              // A fresh fallback has no backend history for these messages;
+              // displaying them there would imply the agent can see that context.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
+              rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
