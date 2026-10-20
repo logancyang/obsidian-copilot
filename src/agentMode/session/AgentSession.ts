@@ -94,10 +94,7 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
-import type {
-  FeedbackDraft,
-  FeedbackOfferResult,
-} from "@/agentMode/session/feedback/feedbackMcpServer";
+import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;

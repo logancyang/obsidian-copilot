@@ -4,6 +4,7 @@ import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager } from "./index";
+import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 
@@ -110,6 +111,9 @@ const mockManager = {
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
+function withCards(offerFeedbackCards: boolean): CopilotSettings {
+  return { ...mockSettings, agentMode: { ...mockSettings.agentMode, offerFeedbackCards } };
+}
 function settingsWith(overrides: Record<string, unknown>): CopilotSettings {
   return {
     agentMode: { skills: {} },
@@ -277,10 +281,6 @@ describe("agentMode", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
-      const withCards = (offerFeedbackCards: boolean) => ({
-        ...mockSettings,
-        agentMode: { ...mockSettings.agentMode, offerFeedbackCards },
-      });
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
 
@@ -291,6 +291,16 @@ describe("agentMode", () => {
         "opencode",
         "system prompt changed"
       );
+    });
+
+    it("hands sessions Copilot's MCP server only while feedback cards are on, following the setting as it changes", () => {
+      mockSettings = withCards(true);
+      createAgentSessionManager({} as App, plugin);
+      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
+      mockSettings = withCards(false);
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
     });
 
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {

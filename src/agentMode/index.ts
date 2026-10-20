@@ -15,7 +15,10 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
-import { createFeedbackMcpServer } from "@/agentMode/session/feedback/feedbackMcpServer";
+import {
+  createCopilotMcpServer,
+  SEND_FEEDBACK_TOOL_NAME,
+} from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
 import { SkillManager } from "./skills";
 import {
@@ -165,7 +168,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    feedbackServer: createFeedbackMcpServer(),
+    copilotMcpServer: createCopilotMcpServer(
+      (toolName) =>
+        toolName === SEND_FEEDBACK_TOOL_NAME && getSettings().agentMode.offerFeedbackCards
+    ),
   });
   managerRef = manager;
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
