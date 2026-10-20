@@ -85,16 +85,16 @@ function makeApp(initialFiles: Record<string, string> = {}, folders: string[] = 
 
 describe("agentsFile", () => {
   describe("ensureAgentsFile()", () => {
-    it("creates root instruction files without changing the initial AGENTS content", async () => {
+    it("creates only AGENTS.md, since Claude reads it without a CLAUDE.md import (https://github.com/logancyang/obsidian-copilot/issues/3662)", async () => {
       const { app, state } = makeApp();
 
       await ensureAgentsFile(app, "", "");
 
       expect(state.files.get("AGENTS.md")).toBe("");
-      expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
+      expect(state.files.has("CLAUDE.md")).toBe(false);
     });
 
-    it("preserves existing files and appends only the missing Claude reference", async () => {
+    it("leaves an existing AGENTS.md and CLAUDE.md exactly as the user wrote them", async () => {
       const { app, state } = makeApp({
         "AGENTS.md": "User rules",
         "CLAUDE.md": "# Claude rules\n",
@@ -104,7 +104,7 @@ describe("agentsFile", () => {
       await ensureAgentsFile(app, "", "Different fallback");
 
       expect(state.files.get("AGENTS.md")).toBe("User rules");
-      expect(state.files.get("CLAUDE.md")).toBe("# Claude rules\n\n@AGENTS.md\n");
+      expect(state.files.get("CLAUDE.md")).toBe("# Claude rules\n");
     });
 
     it("initializes a missing project AGENTS file from the supplied compatibility body", async () => {
@@ -113,7 +113,6 @@ describe("agentsFile", () => {
       await ensureAgentsFile(app, "copilot/projects/Research", "Legacy project rules");
 
       expect(state.files.get("copilot/projects/Research/AGENTS.md")).toBe("Legacy project rules");
-      expect(state.files.get("copilot/projects/Research/CLAUDE.md")).toBe("@AGENTS.md\n");
     });
 
     it("converts a generated mirror back to the current project.md instruction body", async () => {
@@ -184,13 +183,12 @@ describe("agentsFile", () => {
   });
 
   describe("writeAgentsFile()", () => {
-    it("creates the instruction files for a folder that had none", async () => {
+    it("creates AGENTS.md for a folder that had none", async () => {
       const { app, state } = makeApp();
 
       await writeAgentsFile(app, "", "Cite every source.");
 
       expect(state.files.get("AGENTS.md")).toBe("Cite every source.");
-      expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
     });
 
     it("replaces the body of a file the user already had", async () => {
@@ -337,37 +335,23 @@ describe("agentsFile", () => {
       expect(state.files.size).toBe(0);
     });
 
-    it("adds the Claude import next to a user-authored AGENTS.md without a legacy body", async () => {
+    it("leaves a user-authored AGENTS.md as it is and adds no CLAUDE.md beside it", async () => {
       const { app, state } = makeApp({ "AGENTS.md": "My vault rules" });
 
       await ensureAgentsFileForDiscovery(app, "");
 
       expect(state.files.get("AGENTS.md")).toBe("My vault rules");
-      expect(state.files.get("CLAUDE.md")).toBe("@AGENTS.md\n");
+      expect(state.files.has("CLAUDE.md")).toBe(false);
     });
 
-    it("never rejects when the vault write fails", async () => {
+    it("never rejects when the vault cannot read the file", async () => {
       const { app } = makeApp({ "copilot/projects/Research/AGENTS.md": "rules" });
-      (app.vault.create as jest.Mock).mockRejectedValue(new Error("disk full"));
+      (app.vault.read as jest.Mock).mockRejectedValue(new Error("disk error"));
 
       await expect(
         ensureAgentsFileForDiscovery(app, "copilot/projects/Research")
       ).resolves.toBeUndefined();
     });
-  });
-
-  describe("claude import detection", () => {
-    it.each(["@AGENTS.md", "@./AGENTS.md", "# Rules\n\n@AGENTS.md\n\nmore"])(
-      "does not duplicate the import for %p",
-      async (claudeContent) => {
-        const { app, state } = makeApp({ "AGENTS.md": "rules", "CLAUDE.md": claudeContent });
-
-        await ensureAgentsFile(app, "", "");
-        await ensureAgentsFile(app, "", "");
-
-        expect(state.files.get("CLAUDE.md")).toBe(claudeContent);
-      }
-    );
   });
 
   describe("openAgentsFile()", () => {

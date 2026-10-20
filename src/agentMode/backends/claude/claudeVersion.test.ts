@@ -9,7 +9,7 @@ import {
 describe("claudeVersion", () => {
   describe("parseClaudeVersionOutput()", () => {
     it("returns the semantic version from Claude Code output", () => {
-      expect(parseClaudeVersionOutput("2.1.206 (Claude Code)\n")).toBe("2.1.206");
+      expect(parseClaudeVersionOutput("2.1.281 (Claude Code)\n")).toBe("2.1.281");
     });
   });
 
@@ -42,14 +42,14 @@ describe("claudeVersion", () => {
     });
 
     it("returns incompatible metadata for an older Claude Code version", async () => {
-      const run = jest.fn().mockResolvedValue({ stdout: "2.1.205 (Claude Code)" });
+      const run = jest.fn().mockResolvedValue({ stdout: "2.1.280 (Claude Code)" });
 
       await expect(probeClaudeVersion("/usr/local/bin/claude", process.env, run)).resolves.toEqual({
         kind: "incompatible",
-        currentVersion: "2.1.205",
+        currentVersion: "2.1.280",
         minVersion: CLAUDE_MIN_VERSION,
         message:
-          "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer.",
+          "Claude Code 2.1.280 is not supported. Copilot requires Claude Code 2.1.281 or newer.",
       });
     });
   });
@@ -68,12 +68,12 @@ describe("claudeVersion", () => {
     });
 
     it("throws for an older version without embedding install instructions", async () => {
-      const run = jest.fn().mockResolvedValue({ stdout: "2.1.205 (Claude Code)" });
+      const run = jest.fn().mockResolvedValue({ stdout: "2.1.280 (Claude Code)" });
 
       await expect(
         assertClaudeVersionSupported("/usr/local/bin/claude", process.env, run)
       ).rejects.toThrow(
-        "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer."
+        "Claude Code 2.1.280 is not supported. Copilot requires Claude Code 2.1.281 or newer."
       );
       await expect(
         assertClaudeVersionSupported("/usr/local/bin/claude", process.env, run)

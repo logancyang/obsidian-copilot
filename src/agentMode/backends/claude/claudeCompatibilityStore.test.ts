@@ -29,16 +29,16 @@ describe("claudeCompatibilityStore", () => {
         const store = new ClaudeCompatibilityStore();
         const listener = jest.fn();
         store.subscribe(listener);
-        const run = jest.fn().mockResolvedValue({ stdout: "2.1.205 (Claude Code)" });
+        const run = jest.fn().mockResolvedValue({ stdout: "2.1.280 (Claude Code)" });
 
         expect(store.get(input())).toEqual({ kind: "checking", source: "custom" });
         await expect(store.refresh(input(), { run })).resolves.toEqual({
           kind: "incompatible",
           source: "custom",
-          currentVersion: "2.1.205",
-          minVersion: "2.1.206",
+          currentVersion: "2.1.280",
+          minVersion: "2.1.281",
           message:
-            "Claude Code 2.1.205 is not supported. Copilot requires Claude Code 2.1.206 or newer.",
+            "Claude Code 2.1.280 is not supported. Copilot requires Claude Code 2.1.281 or newer.",
         });
         expect(listener).toHaveBeenCalledTimes(2);
       });
@@ -55,14 +55,14 @@ describe("claudeCompatibilityStore", () => {
         expect(first).toBe(second);
         expect(run).toHaveBeenCalledTimes(1);
 
-        resolveRun({ stdout: "2.1.206 (Claude Code)" });
+        resolveRun({ stdout: "2.1.281 (Claude Code)" });
         await expect(first).resolves.toEqual({ kind: "ready", source: "custom" });
       });
 
       it("keeps states independent across runtime cache keys", async () => {
         const store = new ClaudeCompatibilityStore();
-        const oldRun = jest.fn().mockResolvedValue({ stdout: "2.1.205 (Claude Code)" });
-        const newRun = jest.fn().mockResolvedValue({ stdout: "2.1.206 (Claude Code)" });
+        const oldRun = jest.fn().mockResolvedValue({ stdout: "2.1.280 (Claude Code)" });
+        const newRun = jest.fn().mockResolvedValue({ stdout: "2.1.281 (Claude Code)" });
 
         await store.refresh(input("old-path"), { run: oldRun });
         await store.refresh(input("new-path-or-env"), { run: newRun });

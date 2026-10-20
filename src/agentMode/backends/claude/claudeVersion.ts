@@ -3,7 +3,8 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 
 const VERSION_TIMEOUT_MS = 10_000;
 
-export const CLAUDE_MIN_VERSION = "2.1.206";
+// First release that loads AGENTS.md on every provider, including Bedrock and gateways. https://github.com/logancyang/obsidian-copilot/issues/3662
+export const CLAUDE_MIN_VERSION = "2.1.281";
 
 export type ClaudeVersionRunner = (
   claudePath: string,
