@@ -1,5 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
-import { ALL_MANAGED_SKILLS } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
@@ -885,7 +885,7 @@ export function sanitizeBuiltinPreferences(raw: unknown): BuiltinPreferences {
     return EMPTY_BUILTIN_PREFERENCES;
   }
   const preferences: BuiltinPreferences = {};
-  for (const { name } of ALL_MANAGED_SKILLS) {
+  for (const { name } of BUILTIN_SKILLS) {
     const value = (raw as Record<string, unknown>)[name];
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const pref = value as Record<string, unknown>;

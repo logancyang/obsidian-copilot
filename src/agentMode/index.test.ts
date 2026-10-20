@@ -35,7 +35,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -300,6 +300,25 @@ describe("agentMode", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/740 offers only OpenCode a reload once Miyo document processing changes, so new chats gain or drop the miyo_parse steering", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const noted = deferred();
+      mockManager.noteSpawnConfigChanged.mockImplementationOnce(async () => noted.resolve());
+      const withDocuments = (enableMiyoDocumentProcessing: boolean) => ({
+        ...mockSettings,
+        enableMiyoDocumentProcessing,
+      });
+
+      mockSettings = withDocuments(true);
+      emitSettingsChange(withDocuments(false), mockSettings);
+      await noted.promise;
+
+      expect(mockManager.noteSpawnConfigChanged.mock.calls).toEqual([
+        ["opencode", "system prompt changed"],
+      ]);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 offers an OpenCode reload when feedback cards are turned off, so new chats drop the feedback prompt line", () => {
       mockSettings = withCards(true);
       createAgentSessionManager({} as App, plugin);
@@ -342,6 +361,21 @@ describe("agentMode", () => {
         expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/740 hands sessions miyo_parse through Copilot's MCP server only while Miyo document processing is on, following the switch as it changes, even with Miyo disconnected", () => {
+      mockSettings = {
+        ...mockSettings,
+        agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
+        enableMiyo: false,
+        enableMiyoDocumentProcessing: true,
+      };
+      createAgentSessionManager({} as App, plugin);
+      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
+      mockSettings = { ...mockSettings, enableMiyoDocumentProcessing: false };
+      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
+    });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 follows the search switch as it changes", () => {
       mockSettings = {

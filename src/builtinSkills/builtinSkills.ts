@@ -14,7 +14,6 @@ import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/resear
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 import { howToRunSection, SHELL_TOOL_SENTENCE } from "./howToRunSection";
-import { MIYO_PARSE_SKILL } from "@/miyo/miyoParseSkill";
 
 export interface BuiltinSkill {
   readonly name: string;
@@ -34,6 +33,8 @@ export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "copilot-read-pdf" },
   // Search moved to the miyo_search tool. https://github.com/Brevilabs/obsidian-copilot-private/issues/736
   { name: "miyo-search" },
+  // Parsing moved to the miyo_parse tool. https://github.com/Brevilabs/obsidian-copilot-private/issues/740
+  { name: "miyo-parse" },
 ];
 
 export const PLUS_ENV = {
@@ -1049,21 +1050,6 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [...BUILTIN_SKILLS, MIYO_PARSE_SKILL];
-
-export function planManagedBuiltins(gates: { documents: boolean }): {
-  seed: readonly BuiltinSkill[];
-  prune: readonly string[];
-} {
-  const seed: readonly BuiltinSkill[] = gates.documents
-    ? [...BUILTIN_SKILLS, MIYO_PARSE_SKILL]
-    : BUILTIN_SKILLS;
-  return {
-    seed,
-    prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
-  };
-}
-
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/629
@@ -1071,7 +1057,7 @@ export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
   CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
 > = Object.freeze(
   Object.fromEntries(
-    ALL_MANAGED_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
+    BUILTIN_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
       skill.name,
       Object.freeze({ disabled: true }),
     ])
@@ -1085,7 +1071,5 @@ export function isBuiltinSkillEnabledFor(
 ): boolean {
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
-  return planManagedBuiltins({
-    documents: settings.enableMiyoDocumentProcessing,
-  }).seed.some((skill) => skill.name === skillName);
+  return BUILTIN_SKILLS.some((skill) => skill.name === skillName);
 }

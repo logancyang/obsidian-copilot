@@ -116,9 +116,9 @@ Miyo can also index supported ChatGPT and Claude chat histories. Configure those
 
 The **Miyo document processing** switch is on by default and affects more than one chat surface, so check the route you use:
 
-- In **Agent Chat**, it installs the `miyo-parse` Skill, which runs the local Miyo CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable or cannot parse a file, the agent reports the error and reads the file with any other tool it has.
+- In **Agent Chat**, it gives agents Copilot's Miyo parse tool, which runs the local Miyo CLI for PDF and EPUB files. This stays on the current computer even when semantic search uses a remote Miyo server. If the local CLI is unavailable or cannot parse a file, the agent reports the error and reads the file with any other tool it has.
 - In **Quick Chat**, it asks the connected Miyo service to parse PDF and EPUB files. A local connection stays local; a configured remote connection processes them on that server and requires the server to have access to the registered vault files.
-- With the switch off, Agent Chat does not install the Skill and the agent reads documents with its own tools. Quick Chat cannot read PDFs and tells you to turn the switch on and connect Miyo, or to use Agent Chat, where your agent can read them directly. The same message appears when the switch is on but Miyo is not connected. Copilot never sends a PDF to a hosted parser in Quick Chat.
+- With the switch off, Agent Chat does not offer the tool and the agent reads documents with its own tools. Quick Chat cannot read PDFs and tells you to turn the switch on and connect Miyo, or to use Agent Chat, where your agent can read them directly. The same message appears when the switch is on but Miyo is not connected. Copilot never sends a PDF to a hosted parser in Quick Chat.
 
 Outside the Miyo route, EPUB and ordinary non-PDF formats such as DOCX are not processed by this switch in regular chat context. Projects give the agent the path of each binary file to read itself. See [Copilot Paid Plans and Data Routes](copilot-plus-and-self-host.md) before using sensitive documents.
 

@@ -31,6 +31,7 @@ const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
+const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 const AGENT = "opencode";
 const ALL_RELAY_SKILLS_LINE =
   "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
@@ -64,7 +65,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3700);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3800);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -173,15 +174,16 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it(`steers documents to miyo-parse first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656})`, () => {
+    it(`steers documents to the miyo_parse tool first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656} ${ISSUE_740})`, () => {
       updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
       updateSetting("enableMiyoDocumentProcessing", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
-        "Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have."
+        "Read PDFs/EPUBs with the obsidian-copilot miyo_parse tool first. If it is unavailable or fails, say so, then read the file with any other tool you have."
       );
+      expect(prompt).not.toContain("miyo-parse");
       expect(prompt).not.toMatch(/stay local|no cloud parsers/);
     });
 
@@ -193,12 +195,11 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`omits the miyo-parse steering for an agent whose miyo-parse skill is disabled (${ISSUE_656})`, () => {
+    it(`ignores a saved per-agent miyo-parse opt-out, because the document processing switch alone controls Miyo parsing (${ISSUE_740})`, () => {
       updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 
-      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
-      expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
     });
 
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {

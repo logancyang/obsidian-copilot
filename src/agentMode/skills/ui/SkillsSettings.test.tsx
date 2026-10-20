@@ -155,7 +155,7 @@ describe("SkillsSettings", () => {
       [false, true],
       [true, true],
     ])(
-      "lists miyo-parse only while document processing is on and never lists miyo-search (search switch %s, documents %s) for https://github.com/Brevilabs/obsidian-copilot-private/issues/736",
+      "never lists miyo-search or miyo-parse (search switch %s, documents %s) for https://github.com/Brevilabs/obsidian-copilot-private/issues/736 https://github.com/Brevilabs/obsidian-copilot-private/issues/740",
       async (search, documents) => {
         const initial = settingsStore.get(settingsAtom);
         settingsStore.set(settingsAtom, {
@@ -168,9 +168,7 @@ describe("SkillsSettings", () => {
           renderSettings();
         });
         expect(screen.queryByRole("button", { name: "More actions for miyo-search" })).toBeNull();
-        expect(Boolean(screen.queryByRole("button", { name: "More actions for miyo-parse" }))).toBe(
-          documents
-        );
+        expect(screen.queryByRole("button", { name: "More actions for miyo-parse" })).toBeNull();
       }
     );
 

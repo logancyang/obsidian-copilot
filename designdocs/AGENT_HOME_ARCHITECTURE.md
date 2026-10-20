@@ -220,7 +220,7 @@ The block lists:
 - **Document files** (PDFs, Office docs, e-books, images — the extensions in
   `DOCUMENT_EXTENSIONS`) by the absolute path of the original vault file.
   Claude Code reads PDFs and images natively; with Miyo document processing on,
-  the `miyo-parse` Skill parses PDFs and EPUBs for any agent.
+  Copilot's `miyo_parse` MCP tool parses PDFs and EPUBs for any agent.
 - **Tags and file-type patterns** as labels for the agent to search.
 - **Web and YouTube links** as plain links. The agent fetches one when a
   question needs it, with its own web tool or the `copilot-web-fetch` /
