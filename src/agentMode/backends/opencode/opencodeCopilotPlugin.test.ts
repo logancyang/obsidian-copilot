@@ -4,6 +4,7 @@ import * as path from "path";
 import * as vm from "vm";
 import { logWarn } from "@/logger";
 import {
+  COPILOT_PLUS_STEP_FAILURE_POLICY,
   installOpencodeCopilotPlugin,
   OPENCODE_COPILOT_PLUGIN_SOURCE,
   opencodeCopilotPluginDir,
@@ -17,6 +18,12 @@ jest.mock("@/logger", () => ({
 
 type Hook = (event: unknown) => void;
 type ToolHook = (event: Record<string, unknown>) => Promise<void> | void;
+
+interface ProviderHook {
+  name: string;
+  hook: Hook;
+  providerID: string;
+}
 
 interface LoadedPlugin {
   id: string;
@@ -51,13 +58,19 @@ const WORKTREE_HINT =
 
 async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
   const hooks = new Map<string, Hook>();
+  const providerHooks: ProviderHook[] = [];
   const toolHooks = new Map<string, ToolHook>();
   const skills = new Map([
     ["opencode", {}],
     ["report", {}],
   ]);
   await plugin.setup({
-    session: { hook: async (name: string, hook: Hook) => void hooks.set(name, hook) },
+    session: {
+      hook: async (name: string, hook: Hook, options?: { providerID: string }) =>
+        void (options
+          ? providerHooks.push({ name, hook, providerID: options.providerID })
+          : hooks.set(name, hook)),
+    },
     skill: {
       transform: async (edit: (editor: { remove: (id: string) => void }) => void) =>
         edit({ remove: (id) => void skills.delete(id) }),
@@ -65,7 +78,7 @@ async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
     tool: { hook: async (name: string, hook: ToolHook) => void toolHooks.set(name, hook) },
     location: { directory },
   });
-  return { hooks, toolHooks, skills };
+  return { hooks, providerHooks, toolHooks, skills };
 }
 
 describe("opencodeCopilotPlugin", () => {
@@ -150,6 +163,23 @@ describe("opencodeCopilotPlugin", () => {
       const hook = await contextHook();
 
       expect(() => hook({ system: "not a list", messages: null })).not.toThrow();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/741 appends the 200-line write cap to each request only for Copilot Plus models, leaving the rest of the system prompt as it was", async () => {
+      const { providerHooks } = await setUpPlugin(plugin);
+      const copilotPrompt = { type: "text", text: "You are Obsidian Copilot.\n" };
+      const event = { system: [copilotPrompt], messages: [] };
+
+      expect(providerHooks.map(({ name, providerID }) => ({ name, providerID }))).toEqual([
+        { name: "context", providerID: "copilot-plus" },
+      ]);
+      providerHooks[0].hook(event);
+
+      expect(event.system).toEqual([
+        copilotPrompt,
+        { type: "text", text: COPILOT_PLUS_STEP_FAILURE_POLICY },
+      ]);
+      expect(COPILOT_PLUS_STEP_FAILURE_POLICY).toContain("Write at most 200 lines per write/edit");
     });
 
     describe("write-time originals", () => {

@@ -1,21 +1,25 @@
-import type { BackendId } from "@/agentMode";
+import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import {
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
   OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_MAX_HTML_BYTES,
   OPENARTIFACTS_THEMES_DIR,
+  OPENARTIFACTS_CLIENT_HEADER,
+  OPENARTIFACTS_CLIENT_ID,
+  OPENARTIFACTS_LINK_OFFER_MARKER,
   OPENARTIFACTS_WORKSPACE_ROOT_ENV,
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
+import { howToRunSection, SHELL_TOOL_SENTENCE } from "./howToRunSection";
 
 export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
-  readonly enabledAgents: readonly BackendId[];
-  readonly defaultDisabled?: boolean;
+  readonly defaultPreference?: BuiltinPreferences[string];
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -27,6 +31,10 @@ export interface BuiltinSkill {
 export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "symposium-publish" },
   { name: "copilot-read-pdf" },
+  // Search moved to the miyo_search tool. https://github.com/Brevilabs/obsidian-copilot-private/issues/736
+  { name: "miyo-search" },
+  // Parsing moved to the miyo_parse tool. https://github.com/Brevilabs/obsidian-copilot-private/issues/740
+  { name: "miyo-parse" },
 ];
 
 export const PLUS_ENV = {
@@ -36,10 +44,6 @@ export const PLUS_ENV = {
   clientVersion: "COPILOT_CLIENT_VERSION",
 } as const;
 
-export const MIYO_SEARCH_SCOPE_ENV = "COPILOT_MIYO_SEARCH_SCOPE";
-export const MIYO_SEARCH_FOLDER_ENV = "COPILOT_MIYO_SEARCH_FOLDER";
-export const MIYO_SEARCH_EXTRA_FOLDERS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDERS";
-export const MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV = "COPILOT_MIYO_SEARCH_EXTRA_FOLDER_ARGS";
 export const SELF_HOST_WEB_SEARCH_ENV = "COPILOT_SELF_HOST_WEB_SEARCH";
 export const SELF_HOST_WEB_SEARCH_URL_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_URL";
 export const SELF_HOST_WEB_SEARCH_TOKEN_ENV = "COPILOT_SELF_HOST_WEB_SEARCH_TOKEN";
@@ -211,47 +215,6 @@ exit /b %errorlevel%
 `;
 }
 
-/**
- * OpenCode exposes a code-execution tool (`execute`) beside its shell tool, and a model handed
- * the bare command passes it there as code, which fails to parse.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/599
- */
-const SHELL_TOOL_SENTENCE = `Run it as a shell command with your shell command tool (for example
-\`Bash\` in Claude Code, \`shell\` in OpenCode, \`exec_command\` in Codex). The command
-is shell syntax, not JavaScript or TypeScript: never pass it as the code of a
-code-execution tool.`;
-
-function howToRunSection(opts: {
-  shFile: string;
-  cmdFile: string;
-  argPlaceholder: string;
-  extraNote?: string;
-}): string {
-  const dir = "/absolute/path/to/this/skill/directory";
-  return `## How to run
-
-Find the absolute path to this SKILL.md file on disk, then run the script next
-to it that matches the operating system. ${SHELL_TOOL_SENTENCE}
-No extra runtime is needed — \`sh\` (macOS/Linux) and \`cmd\`/PowerShell (Windows)
-are always present.
-
-On macOS or Linux:
-
-\`\`\`bash
-sh "${dir}/${opts.shFile}" "${opts.argPlaceholder}"
-\`\`\`
-
-On Windows, run the \`.cmd\` wrapper. In PowerShell you must prefix it with the
-call operator \`&\` (PowerShell treats a quoted path on its own as a string and
-won't run it); from cmd, run the quoted path without the \`&\`:
-
-\`\`\`powershell
-& "${dir}/${opts.cmdFile}" "${opts.argPlaceholder}"
-\`\`\`
-${opts.extraNote ? `\n${opts.extraNote}\n` : ""}
-Both print the result to stdout.`;
-}
-
 const LICENSE_PROBLEM_SECTION = `## If Copilot Plus is not active
 
 If the script exits saying Copilot Plus is unavailable, do NOT retry it. Do what
@@ -272,7 +235,7 @@ function relaySkill(opts: {
   license?: string;
   selfHostMode?: "search" | "deny";
   extraInstructions?: string;
-  defaultDisabled?: boolean;
+  defaultPreference?: BuiltinPreferences[string];
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
@@ -326,8 +289,7 @@ fi
   return {
     name: opts.name,
     version,
-    enabledAgents: ["claude", "codex", "opencode"],
-    defaultDisabled: opts.defaultDisabled,
+    defaultPreference: opts.defaultPreference,
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
@@ -384,7 +346,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
   license: "Copilot Plus or Self-Host",
   selfHostMode: "search",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
 });
 
 const WEB_FETCH = relaySkill({
@@ -397,7 +359,7 @@ const WEB_FETCH = relaySkill({
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
   selfHostMode: "deny",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
   extraInstructions: `## Self-Host mode
 
 Self-Host search providers do not provide a common full-page fetch contract. If
@@ -428,7 +390,7 @@ const FETCH_X = relaySkill({
   scriptFile: "fetch-x.sh",
 });
 
-const OPENARTIFACTS_PUBLISH_VERSION = 8;
+const OPENARTIFACTS_PUBLISH_VERSION = 9;
 const OPENARTIFACTS_PUBLISH_USAGE = "openartifacts-publish";
 const OPENARTIFACTS_API_HOST_ENV = "OPENARTIFACTS_API_HOST";
 const OPENARTIFACTS_DEFAULT_THEME = "research-memo";
@@ -437,7 +399,6 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   version: OPENARTIFACTS_PUBLISH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: openartifacts-publish
 description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Also make a page private or public, add or remove the people who can open it, and see and answer access requests. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page, or to change who can open one.
@@ -578,12 +539,23 @@ On Windows, use the \`.cmd\` wrapper (prefix with \`&\` in PowerShell):
 For an existing HTML file on Windows, replace the handoff path with the original absolute
 \`.html\` path and omit the \`docId\`.
 
-Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`). For a Markdown
-note, set its \`openartifacts\` frontmatter property to that \`url\` (create the frontmatter
-block if needed, keep every other property), remove a \`symposium\`
-property whose link has the same document id, and delete the generated HTML file from
-\`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. For an existing HTML file, leave the source file
-unchanged. Then report the URL. Publishing the same Markdown note again updates the same page.
+Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`).
+
+### Record the page in the note
+
+For a Markdown note, do this right after a successful publish, before any \`share\` call and
+before you reply. Never skip it: it is what makes the next publish of this note update the same
+page instead of creating a new one.
+
+1. Set the note's \`openartifacts\` frontmatter property to the receipt's \`url\`. Create the
+   frontmatter block if the note has none, and keep every other property.
+2. Remove a \`symposium\` property whose link has the same document id.
+3. Delete the generated HTML file from \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`.
+
+Then read the note's frontmatter again and check that \`openartifacts\` is the url. For an
+existing HTML file, leave the source file unchanged and skip this.
+
+### Report
 
 Report a private publish as:
 
@@ -597,6 +569,8 @@ report with this line, using the \`manageUrl\` the wrapper printed:
 "Manage who can open it: {manageUrl}"
 
 Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
+
+If a create receipt has a \`guidance\` object, add one more line as the very last line of the report, after the "Manage who can open it" line on a private publish: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
 
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
 it, and the failed address with the wrapper's message.
@@ -778,6 +752,13 @@ BODY=$(mktemp) || exit 1
 RESPONSE=$(mktemp) || exit 1
 trap 'rm -f "$HEADERS" "$BODY" "$RESPONSE"' EXIT
 printf 'Authorization: Bearer %s\n' "$KEY" > "$HEADERS"
+WORKSPACE_ROOT=$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}
+OFFER_MARKER="$WORKSPACE_ROOT/${OPENARTIFACTS_LINK_OFFER_MARKER}"
+OFFER_ASKED=
+if [ "$COMMAND" = publish ] && [ -z "$DOC_ID" ] && [ -n "$WORKSPACE_ROOT" ] && [ ! -e "$OFFER_MARKER" ]; then
+  OFFER_ASKED=1
+  printf '${OPENARTIFACTS_CLIENT_HEADER}: ${OPENARTIFACTS_CLIENT_ID}\n' >> "$HEADERS"
+fi
 
 if [ "$COMMAND" = unshare ]; then
   STATUS=$(curl -sS -o "$RESPONSE" -w '%{http_code}' -X DELETE -H "@$HEADERS" "$API_HOST/api/v1/docs/$DOC_ID")
@@ -864,6 +845,10 @@ case "$STATUS" in
     else
       cat "$RESPONSE"
       printf '\n'
+    fi
+    # touch, not a redirection: a failed redirection on a special built-in exits a POSIX shell.
+    if [ -n "$OFFER_ASKED" ] && grep -q '"guidance"' "$RESPONSE"; then
+      { mkdir -p "$(dirname "$OFFER_MARKER")" && touch "$OFFER_MARKER"; } 2>/dev/null || :
     fi
     exit 0
     ;;
@@ -970,6 +955,10 @@ function Add-ManageUrl([string]$Json) {
 }
 
 $headers = @{ Authorization = "Bearer $KEY" }
+$WORKSPACE_ROOT = [Environment]::GetEnvironmentVariable('${OPENARTIFACTS_WORKSPACE_ROOT_ENV}')
+$OFFER_MARKER = if ($WORKSPACE_ROOT) { Join-Path $WORKSPACE_ROOT '${OPENARTIFACTS_LINK_OFFER_MARKER}' } else { '' }
+$OFFER_ASKED = $COMMAND -eq 'publish' -and -not $DOC_ID -and $OFFER_MARKER -and -not (Test-Path -LiteralPath $OFFER_MARKER)
+if ($OFFER_ASKED) { $headers['${OPENARTIFACTS_CLIENT_HEADER}'] = '${OPENARTIFACTS_CLIENT_ID}' }
 try {
   if ($COMMAND -eq 'share') {
     $accessUri = "$API_HOST/api/v1/docs/$DOC_ID/access"
@@ -1002,6 +991,12 @@ try {
       [Console]::Out.WriteLine((Add-ManageUrl ([string]$response.Content)))
     } else {
       [Console]::Out.WriteLine([string]$response.Content)
+    }
+    if ($OFFER_ASKED -and ([string]$response.Content) -match '"guidance"') {
+      try {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OFFER_MARKER) -ErrorAction Stop | Out-Null
+        New-Item -ItemType File -Force -Path $OFFER_MARKER -ErrorAction Stop | Out-Null
+      } catch {}
     }
   }
 } catch {
@@ -1053,296 +1048,23 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   ...OBSIDIAN_SKILLS,
 ];
 
-const MIYO_SEARCH_VERSION = 6;
-const MIYO_SEARCH_SH_FILE = "miyo-search.sh";
-const MIYO_SEARCH_CMD_FILE = "miyo-search.cmd";
-const MIYO_PARSE_VERSION = 3;
-
-const MIYO_POSIX_RESOLVER = `# Absolute install path first (Obsidian shells often miss Miyo's bin on PATH).
-if [ -x "$HOME/.miyo/bin/miyo" ]; then
-  MIYO="$HOME/.miyo/bin/miyo"
-elif command -v miyo >/dev/null 2>&1; then
-  MIYO=miyo
-else
-  die "Miyo CLI not found (no ~/.miyo/bin/miyo and 'miyo' not on PATH). The Miyo desktop app is not installed — tell the user to install Miyo, then retry. Do not retry in a loop." 3
-fi`;
-
-const MIYO_WINDOWS_RESOLVER = `set "MIYO=%LOCALAPPDATA%\\Miyo\\bin\\miyo\\miyo.exe"
-if not exist "%MIYO%" (
-  set "MIYO="
-  where miyo >nul 2>&1 && set "MIYO=miyo"
-)
-if not defined MIYO (
-  echo Miyo CLI not found. The Miyo desktop app is not installed - tell the user to install Miyo, then retry. Do not retry in a loop. 1>&2
-  exit /b 3
-)`;
-
-const MIYO_SEARCH_SH = `#!/bin/sh
-# Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-# Resolves the miyo binary so the agent never has to deal with PATH.
-die() {
-  printf '%s\\n' "$1" >&2
-  exit "\${2:-2}"
-}
-
-QUERY="$*"
-[ -n "$QUERY" ] || die "Usage: sh ${MIYO_SEARCH_SH_FILE} <query>" 1
-
-${MIYO_POSIX_RESOLVER}
-
-# Default closed: only the explicit Unrestricted value may omit Miyo's exact
-# pre-retrieval folder boundary.
-# https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-case "\${${MIYO_SEARCH_SCOPE_ENV}:-current}" in
-  unrestricted)
-    OUT=$("$MIYO" search "$QUERY" -n 10 --json 2>&1) || die "Miyo search failed — the Miyo app may not be running. Tell the user to open Miyo, then continue without vault search if they can't. Details: $OUT" 1
-    ;;
-  current)
-    [ -n "\${${MIYO_SEARCH_FOLDER_ENV}:-}" ] || die "Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search." 4
-    # Ticked folders go first and the vault last, because a Miyo that searches one
-    # folder keeps only the last --folder. No folder name contains "/".
-    # https://github.com/logancyang/obsidian-copilot/issues/3508
-    set -f
-    IFS=/
-    set --
-    for NAME in \${${MIYO_SEARCH_EXTRA_FOLDERS_ENV}:-}; do
-      [ -z "$NAME" ] || set -- "$@" --folder "$NAME"
-    done
-    unset IFS
-    set +f
-    OUT=$("$MIYO" search "$QUERY" -n 10 "$@" --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
-    STATUS=$?
-    # A ticked folder this Miyo lacks fails the whole search, so retry with the vault alone.
-    # https://github.com/logancyang/obsidian-copilot/issues/3508
-    if [ "$STATUS" -ne 0 ] && [ $# -gt 0 ]; then
-      SKIPPED=$OUT
-      OUT=$("$MIYO" search "$QUERY" -n 10 --folder "$${MIYO_SEARCH_FOLDER_ENV}" --json 2>&1)
-      STATUS=$?
-      [ "$STATUS" -ne 0 ] || printf '%s\n' "Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. Details: $SKIPPED" >&2
-    fi
-    [ "$STATUS" -eq 0 ] || die "Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. Details: $OUT" 1
-    ;;
-  *)
-    die "Miyo search received an invalid Search scope. Do not retry or run an unrestricted search." 4
-    ;;
-esac
-printf '%s\\n' "$OUT"
-`;
-
-const MIYO_SEARCH_CMD = `@echo off
-setlocal enableextensions disabledelayedexpansion
-rem Semantic vault search via the local Miyo CLI; prints Miyo's JSON to stdout.
-if "%~1"=="" (
-  echo Usage: ${MIYO_SEARCH_CMD_FILE} "query" 1>&2
-  exit /b 1
-)
-${MIYO_WINDOWS_RESOLVER}
-rem Default closed: only the explicit Unrestricted value may omit Miyo's exact
-rem pre-retrieval folder boundary.
-rem https://github.com/Brevilabs/obsidian-copilot-private/issues/121
-if /I "%${MIYO_SEARCH_SCOPE_ENV}%"=="unrestricted" (
-  "%MIYO%" search %* -n 10 --json
-  if errorlevel 1 exit /b 1
-  exit /b 0
-)
-if not "%${MIYO_SEARCH_SCOPE_ENV}%"=="" if /I not "%${MIYO_SEARCH_SCOPE_ENV}%"=="current" (
-  echo Miyo search received an invalid Search scope. Do not retry or run an unrestricted search. 1>&2
-  exit /b 4
-)
-if not defined ${MIYO_SEARCH_FOLDER_ENV} (
-  echo Miyo search could not enforce Current vault scope because the active vault identity is missing. Do not retry or run an unrestricted search. 1>&2
-  exit /b 4
-)
-rem Copilot quotes the ticked folders, which go before the vault because a Miyo that
-rem searches one folder keeps only the last --folder. The agent's words follow --, so
-rem they stay query text and cannot add a --folder. A ticked folder this Miyo lacks
-rem fails the whole search, so a failure retries with the vault alone.
-rem https://github.com/logancyang/obsidian-copilot/issues/3508
-"%MIYO%" search -n 10 %${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV}% --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
-if not errorlevel 1 exit /b 0
-if not defined ${MIYO_SEARCH_EXTRA_FOLDER_ARGS_ENV} (
-  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
-  exit /b 1
-)
-"%MIYO%" search -n 10 --folder "%${MIYO_SEARCH_FOLDER_ENV}%" --json -- %*
-if errorlevel 1 (
-  echo Miyo search could not enforce Current vault scope. Update Miyo, open it, and retry. Do not run an unrestricted search. 1>&2
-  exit /b 1
-)
-echo Miyo search skipped the extra Miyo folders ticked in Copilot settings and searched only the active vault. 1>&2
-exit /b 0
-`;
-
-const MIYO_PARSE_SH = `#!/bin/sh
-# Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
-die() {
-  printf '%s\\n' "$1" >&2
-  exit "\${2:-2}"
-}
-
-FILE="$1"
-[ -n "$FILE" ] || die "Usage: sh miyo-parse.sh <file>" 1
-
-${MIYO_POSIX_RESOLVER}
-
-"$MIYO" parse "$FILE"
-`;
-
-const MIYO_PARSE_CMD = `@echo off
-setlocal enableextensions
-rem Parse one local PDF or EPUB through the Miyo CLI and print Markdown/text.
-if "%~1"=="" (
-  echo Usage: miyo-parse.cmd "file" 1>&2
-  exit /b 1
-)
-${MIYO_WINDOWS_RESOLVER}
-"%MIYO%" parse "%~1"
-`;
-
-export const MIYO_SEARCH_SKILL: BuiltinSkill = {
-  name: "miyo-search",
-  version: MIYO_SEARCH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
-  skillMd: `---
-name: miyo-search
-description: Semantic (meaning-based) search over the user's Obsidian vault via the local Miyo app. Use it for every request that might be answered from the user's notes, alongside grep for exact terms. Needs the Miyo desktop app installed and running.
-metadata:
-  copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${MIYO_SEARCH_VERSION}"
----
-
-# Miyo vault search
-
-Search the user's indexed Obsidian vault through Miyo, the user's own companion
-app for semantic search over their notes. It finds relevant notes by meaning
-(not just filename). Searches go only to the user's own Miyo service — the local
-app by default, or the remote Miyo server they configured in settings — never a
-third-party API, and no API key.
-
-When to use it: for every request that might be answered from the user's
-notes, alongside \`grep\`/glob for any exact names, terms, tags or quoted
-phrases in the request. Miyo finds notes that match by meaning even when the
-wording or title differs; grep finds exact strings.
-
-${howToRunSection({
-  shFile: MIYO_SEARCH_SH_FILE,
-  cmdFile: MIYO_SEARCH_CMD_FILE,
-  argPlaceholder: "<the user's question>",
-  extraNote: "Pass the user's full question as the query.",
-})}
-
-The script locates the Miyo binary itself — you do not need to know where Miyo
-is installed or which shell you are in. Combine its results with your keyword
-search results by note path. If Miyo reports that it is unavailable, continue
-with keyword search.
-
-Search scope comes from Copilot settings. **Current vault** applies Miyo's exact
-folder boundary for the active vault and any other Miyo folders ticked in Copilot
-settings, including from Project chats.
-**Unrestricted** searches every folder registered with Miyo.
-
-## Reading the results
-
-The script prints \`{ "results": [ { "path": ..., "content": ... } ], "count": N }\`.
-Cite the \`path\` of any note you use so the user can open it.
-
-## If it reports a problem
-
-The script exits with a clear message when Miyo can't be used:
-
-- **Not installed** (CLI not found): the Miyo desktop app isn't installed on
-  this machine. Tell the user to install and open Miyo, then try again. Do not
-  retry in a loop.
-- **Not running** (search failed / can't reach the service): the app is
-  installed but not running. Tell the user to open Miyo, then continue without
-  vault search if they can't.
-`,
-  files: [
-    { path: MIYO_SEARCH_SH_FILE, content: MIYO_SEARCH_SH },
-    { path: MIYO_SEARCH_CMD_FILE, content: MIYO_SEARCH_CMD },
-  ],
-};
-
-export const MIYO_PARSE_SKILL: BuiltinSkill = {
-  name: "miyo-parse",
-  version: MIYO_PARSE_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
-  skillMd: `---
-name: miyo-parse
-description: Parse a local PDF or EPUB file into Markdown/text with the local Miyo CLI. Use this for document reading when Miyo document processing is on. The file can be anywhere on the filesystem and does not need to be indexed or copied into the vault.
-metadata:
-  copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${MIYO_PARSE_VERSION}"
----
-
-# Parse a document locally with Miyo
-
-Use Miyo to extract Markdown/text from one PDF or EPUB. Parsing runs locally,
-works for files anywhere on the filesystem, and does not require the Miyo
-service to be running.
-
-${howToRunSection({
-  shFile: "miyo-parse.sh",
-  cmdFile: "miyo-parse.cmd",
-  argPlaceholder: "/absolute/path/to/document.pdf",
-  extraNote: "Pass exactly one quoted path to the PDF or EPUB file.",
-})} Use that Markdown/text to answer the user's question.
-
-## If it reports a problem
-
-Report the error to the user, then read the file with any other tool you
-have. Do not run \`miyo parse\` again on that file.
-`,
-  files: [
-    { path: "miyo-parse.sh", content: MIYO_PARSE_SH },
-    { path: "miyo-parse.cmd", content: MIYO_PARSE_CMD },
-  ],
-};
-
-export const ALL_MANAGED_SKILLS: readonly BuiltinSkill[] = [
-  ...BUILTIN_SKILLS,
-  MIYO_SEARCH_SKILL,
-  MIYO_PARSE_SKILL,
-];
-
-export function planManagedBuiltins(gates: { search: boolean; documents: boolean }): {
-  seed: readonly BuiltinSkill[];
-  prune: readonly string[];
-} {
-  const seed: readonly BuiltinSkill[] =
-    !gates.search && !gates.documents
-      ? BUILTIN_SKILLS
-      : [
-          ...BUILTIN_SKILLS,
-          ...(gates.search ? [MIYO_SEARCH_SKILL] : []),
-          ...(gates.documents ? [MIYO_PARSE_SKILL] : []),
-        ];
-  return {
-    seed,
-    prune: ALL_MANAGED_SKILLS.filter((skill) => !seed.includes(skill)).map((skill) => skill.name),
-  };
-}
-
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/629
-export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
-  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
-> = Object.freeze(
+export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
   Object.fromEntries(
-    ALL_MANAGED_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
-      skill.name,
-      Object.freeze({ disabled: true }),
-    ])
+    BUILTIN_SKILLS.flatMap(({ name, defaultPreference }) =>
+      defaultPreference ? [[name, Object.freeze(defaultPreference)] as const] : []
+    )
   )
 );
 
-// The switch defaults on, so it only takes effect while Miyo is connected.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/716
-export function isMiyoSearchSkillActive(
-  settings: Pick<CopilotSettings, "enableMiyo" | "enableMiyoSearchSkill">
-): boolean {
-  return settings.enableMiyo === true && settings.enableMiyoSearchSkill === true;
+// The CLI toggle is per device, so an unavailable skill keeps its synced files and loses only its
+// agent links and steering here. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+export function builtinSkillUnavailableReason(skillName: string): string | undefined {
+  return skillName === "obsidian-cli" && !isObsidianCliEnabled()
+    ? "Turn on Command line interface in Obsidian's Settings → General to use this skill."
+    : undefined;
 }
 
 export function isBuiltinSkillEnabledFor(
@@ -1352,8 +1074,5 @@ export function isBuiltinSkillEnabledFor(
 ): boolean {
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
-  return planManagedBuiltins({
-    search: isMiyoSearchSkillActive(settings),
-    documents: settings.enableMiyoDocumentProcessing,
-  }).seed.some((skill) => skill.name === skillName);
+  return BUILTIN_SKILLS.some((skill) => skill.name === skillName);
 }

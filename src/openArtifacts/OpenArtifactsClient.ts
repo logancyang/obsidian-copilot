@@ -1,6 +1,8 @@
 import {
   OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_DOCUMENT_ORIGIN,
+  OPENARTIFACTS_CLIENT_HEADER,
+  OPENARTIFACTS_CLIENT_ID,
   OPENARTIFACTS_DOC_ID_PATTERN,
 } from "@/openArtifacts/constants";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
@@ -8,6 +10,7 @@ import type {
   OpenArtifactsAccess,
   OpenArtifactsDocument,
   OpenArtifactsErrorResponse,
+  OpenArtifactsGuidance,
   OpenArtifactsLinkAccess,
   OpenArtifactsReceipt,
 } from "@/openArtifacts/types";
@@ -48,13 +51,22 @@ export class OpenArtifactsClient {
   async publish(
     document: OpenArtifactsDocument,
     licenseKey: string,
-    linkAccess?: OpenArtifactsLinkAccess
+    linkAccess?: OpenArtifactsLinkAccess,
+    requestLinkOffer = false
   ): Promise<OpenArtifactsReceipt> {
     // Never falls back to POST /api/v1/docs, which would publish the page to anyone.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
     return linkAccess === "invited"
-      ? this.push("POST", PRIVATE_DOCS_ENDPOINT, document, licenseKey, undefined, true)
-      : this.push("POST", DOCS_ENDPOINT, document, licenseKey);
+      ? this.push(
+          "POST",
+          PRIVATE_DOCS_ENDPOINT,
+          document,
+          licenseKey,
+          undefined,
+          true,
+          requestLinkOffer
+        )
+      : this.push("POST", DOCS_ENDPOINT, document, licenseKey, undefined, false, requestLinkOffer);
   }
 
   async update(
@@ -100,18 +112,6 @@ export class OpenArtifactsClient {
     licenseKey: string
   ): Promise<OpenArtifactsAccess> {
     return this.access("PUT", docId, "", licenseKey, { linkAccess });
-  }
-
-  addPerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("PUT", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
-  }
-
-  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
-  }
-
-  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
-    return this.access("DELETE", docId, `/requests/${encodeURIComponent(email)}`, licenseKey);
   }
 
   async openAsOwner(docId: string, licenseKey: string): Promise<string> {
@@ -203,14 +203,20 @@ export class OpenArtifactsClient {
     document: OpenArtifactsDocument,
     licenseKey: string,
     expectedDocId?: string,
-    privateCreate = false
+    privateCreate = false,
+    requestLinkOffer = false
   ): Promise<OpenArtifactsReceipt> {
     let response: RequestUrlResponse;
     try {
       response = await this.request({
         url,
         method,
-        headers: authorizationHeaders(licenseKey),
+        headers: {
+          ...authorizationHeaders(licenseKey),
+          // Only a create asks for the account-link offer, and only until the vault has received it.
+          // https://github.com/Brevilabs/OpenArtifacts/issues/94
+          ...(requestLinkOffer && { [OPENARTIFACTS_CLIENT_HEADER]: OPENARTIFACTS_CLIENT_ID }),
+        },
         contentType: "application/json",
         body: JSON.stringify({
           title: document.title,
@@ -282,7 +288,7 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     throw malformedResponse(response.status);
   }
 
-  const { docId, url, version, linkAccess } = value;
+  const { docId, url, version, linkAccess, guidance } = value;
   if (
     typeof docId !== "string" ||
     !OPENARTIFACTS_DOC_ID_PATTERN.test(docId) ||
@@ -301,7 +307,18 @@ function parseReceipt(response: RequestUrlResponse, expectedDocId?: string): Ope
     url,
     version,
     ...((linkAccess === "anyone" || linkAccess === "invited") && { linkAccess }),
+    ...(isGuidance(guidance) && { guidance: { message: guidance.message, url: guidance.url } }),
   };
+}
+
+function isGuidance(value: unknown): value is OpenArtifactsGuidance {
+  return (
+    isRecord(value) &&
+    typeof value.message === "string" &&
+    value.message.length > 0 &&
+    typeof value.url === "string" &&
+    isHttpsUrl(value.url)
+  );
 }
 
 function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientError {

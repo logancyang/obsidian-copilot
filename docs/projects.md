@@ -50,7 +50,7 @@ An existing Project chat keeps the instructions and context captured when that c
 
 ### File and link support
 
-Markdown, text, and source files can be read directly by the active agent. Binary files such as PDFs, Office documents, EPUBs, spreadsheets, and common images are not converted. Copilot gives the agent the absolute path of each original file, and the agent opens it with its own tools. With **Miyo document processing** on, agents use the `miyo-parse` Skill for PDF and EPUB files. How well an agent reads a given format depends on that agent.
+Markdown, text, and source files can be read directly by the active agent. Binary files such as PDFs, Office documents, EPUBs, spreadsheets, and common images are not converted. Copilot gives the agent the absolute path of each original file, and the agent opens it with its own tools. With **Miyo document processing** on, agents use Copilot's Miyo parse tool for PDF and EPUB files. How well an agent reads a given format depends on that agent.
 
 The agent opens a saved web page with its own web tool or Copilot's web fetch Skill, and reads a YouTube video through Copilot's YouTube transcript Skill, which requires an eligible Copilot plan. An agent without its own web tool or the matching Skill cannot read a saved link.
 

@@ -230,6 +230,47 @@ describe("MiyoClient", () => {
         })
       );
     });
+
+    it("sends alternative phrasings as expanded_queries — https://github.com/Brevilabs/obsidian-copilot-private/issues/734", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { results: [] },
+        text: "",
+      } as RequestUrlResponse);
+
+      await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 10, {
+        variants: ["Marcus Aurelius", "Epictetus"],
+      });
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: JSON.stringify({
+            query: "stoicism",
+            folder_name: "Vault",
+            limit: 10,
+            expanded_queries: ["Marcus Aurelius", "Epictetus"],
+          }),
+        })
+      );
+    });
+
+    it("omits expanded_queries when no phrasing is given — https://github.com/Brevilabs/obsidian-copilot-private/issues/734", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { results: [] },
+        text: "",
+      } as RequestUrlResponse);
+
+      await new MiyoClient().search("http://127.0.0.1:8742", "Vault", "stoicism", 10, {
+        variants: [],
+      });
+
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: JSON.stringify({ query: "stoicism", folder_name: "Vault", limit: 10 }),
+        })
+      );
+    });
   });
 
   describe("listFolders()", () => {

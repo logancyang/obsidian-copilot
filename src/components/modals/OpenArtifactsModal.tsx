@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
-import { Input } from "@/components/ui/input";
 import { SegmentedControl, type SegmentedControlOption } from "@/components/ui/segmented-control";
 import {
   OpenArtifactsClientError,
@@ -50,9 +49,6 @@ export type OpenArtifactsModalResult =
 export interface OpenArtifactsAccessPort {
   load(docId: string): Promise<OpenArtifactsAccess>;
   setLinkAccess(docId: string, linkAccess: OpenArtifactsLinkAccess): Promise<OpenArtifactsAccess>;
-  addPerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
-  removePerson(docId: string, email: string): Promise<OpenArtifactsAccess>;
-  declineRequest(docId: string, email: string): Promise<OpenArtifactsAccess>;
   open(docId: string): Promise<string>;
 }
 
@@ -150,6 +146,14 @@ function OpenArtifactsReceiptView({ receipt, access, actions }: OpenArtifactsRec
       <div className="tw-text-small tw-text-muted">
         Document {receipt.docId} · Version {receipt.version}
       </div>
+      {receipt.guidance && (
+        <p className="tw-m-0 tw-text-small tw-text-muted">
+          {receipt.guidance.message}{" "}
+          <a href={receipt.guidance.url} target="_blank" rel="noopener noreferrer">
+            Link account
+          </a>
+        </p>
+      )}
       <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
         {copyMessage && <span className="tw-text-small tw-text-muted">{copyMessage}</span>}
         {actions}
@@ -174,7 +178,6 @@ function AccessPanel({
   showLinkActions?: boolean;
 }) {
   const [state, setState] = useState<OpenArtifactsAccess | null>(null);
-  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; upgradeUrl?: string } | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
@@ -208,13 +211,6 @@ function AccessPanel({
     void run(() => access.load(docId));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per document; run and access are stable enough
   }, [docId]);
-
-  const addPerson = async () => {
-    const address = email.trim();
-    if (address && (await run(() => access.addPerson(docId, address)))) {
-      setEmail("");
-    }
-  };
 
   const switchLinkAccess = async (next: OpenArtifactsLinkAccess) => {
     const previous = state?.linkAccess;
@@ -272,78 +268,6 @@ function AccessPanel({
               onChange={(next) => void switchLinkAccess(next)}
             />
             {showCopyNotice && <p className="tw-m-0 tw-text-small tw-text-muted">{COPY_NOTICE}</p>}
-          </div>
-          <form
-            className="tw-flex tw-gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addPerson();
-            }}
-          >
-            <Input
-              type="email"
-              aria-label="Add people"
-              placeholder="Add people by email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={busy}
-            />
-            <Button type="submit" variant="secondary" disabled={busy || !email.trim()}>
-              Add
-            </Button>
-          </form>
-          {state.requests.length > 0 && (
-            <div className="tw-flex tw-flex-col tw-gap-1">
-              <div className="tw-text-small tw-text-muted">Requests</div>
-              {state.requests.map((request) => (
-                <div key={request.email} className="tw-flex tw-items-center tw-justify-between">
-                  <div className="tw-flex tw-flex-col">
-                    <span className="tw-break-all">{request.email}</span>
-                    <span className="tw-text-small tw-text-muted">Asked to open it</span>
-                  </div>
-                  <div className="tw-flex tw-gap-1">
-                    <Button
-                      variant="secondary"
-                      disabled={busy}
-                      onClick={() => void run(() => access.addPerson(docId, request.email))}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => void run(() => access.declineRequest(docId, request.email))}
-                    >
-                      Decline
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="tw-flex tw-flex-col tw-gap-1">
-            <div className="tw-text-small tw-text-muted">Who has access</div>
-            <div className="tw-flex tw-items-center tw-justify-between">
-              <span>You</span>
-              <span className="tw-text-small tw-text-muted">Owner</span>
-            </div>
-            {state.people.map((person) => (
-              <div key={person.email} className="tw-flex tw-items-center tw-justify-between">
-                <div className="tw-flex tw-flex-col">
-                  <span className="tw-break-all">{person.email}</span>
-                  <span className="tw-text-small tw-text-muted">
-                    {state.email ? "Invited · email sent" : "Invited · send them the link"}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => void run(() => access.removePerson(docId, person.email))}
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
           </div>
         </>
       )}

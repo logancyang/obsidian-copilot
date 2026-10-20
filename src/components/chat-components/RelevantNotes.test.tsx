@@ -1,10 +1,10 @@
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- Mock exports must preserve production hook names. */
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
-import { findChatRelevantNotes } from "@/search/findChatRelevantNotes";
+import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { LIVE_REFRESH_INTERVAL_MS } from "@/hooks/useLiveRelevantNotesRefresh";
-import { findRelevantNotes } from "@/search/findRelevantNotes";
+import { findRelevantNotes } from "@/miyo/findRelevantNotes";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Platform, TFile } from "obsidian";
@@ -59,12 +59,12 @@ jest.mock("@/miyo/useMiyoStatus", () => ({
   useMiyoStatus: () => ({ backend: mockMiyoBackend }),
 }));
 
-jest.mock("@/search/findRelevantNotes", () => ({
-  ...jest.requireActual<typeof import("@/search/findRelevantNotes")>("@/search/findRelevantNotes"),
+jest.mock("@/miyo/findRelevantNotes", () => ({
+  ...jest.requireActual<typeof import("@/miyo/findRelevantNotes")>("@/miyo/findRelevantNotes"),
   findRelevantNotes: jest.fn(),
 }));
 
-jest.mock("@/search/findChatRelevantNotes", () => ({ findChatRelevantNotes: jest.fn() }));
+jest.mock("@/miyo/findChatRelevantNotes", () => ({ findChatRelevantNotes: jest.fn() }));
 
 jest.mock("@/miyo/miyoIndex", () => ({
   onMiyoIndexChanged: (listener: () => void) => {

@@ -10,14 +10,14 @@ jest.mock("@/miyo/miyoUtils", () => ({
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
-jest.mock("@/search/miyo/MiyoSemanticRetriever", () => ({
+jest.mock("@/miyo/MiyoSemanticRetriever", () => ({
   MiyoSemanticRetriever: jest.fn().mockImplementation(() => miyoRetriever),
 }));
 jest.mock("@/search/v3/TieredLexicalRetriever", () => ({
   TieredLexicalRetriever: jest.fn(),
 }));
 
-import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
+import { MiyoSemanticRetriever } from "@/miyo/MiyoSemanticRetriever";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 

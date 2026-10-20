@@ -290,6 +290,12 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       allowedTools: ["Read", "Glob", "Grep", "LS"],
       disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
       canUseTool: permissionBridge.canUseTool,
+      // Claude's default skips every AGENTS.md below any CLAUDE.md. https://github.com/logancyang/obsidian-copilot/issues/3662
+      settings: {
+        pluginConfigs: {
+          "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
+        },
+      },
     };
     options.systemPrompt = {
       type: "preset",

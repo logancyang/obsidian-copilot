@@ -24,6 +24,9 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    trail rendering all read session-domain types;
 7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
    and the Skills settings UI.
+8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail. It may import
+   `ui/` and `session/`, and only `ui/` imports it, so the rest of `src/miyo`
+   stays free of Agent Mode.
 
 ## Why two adapters under one session
 

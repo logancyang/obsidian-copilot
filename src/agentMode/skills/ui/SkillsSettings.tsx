@@ -1,10 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import {
-  ALL_MANAGED_SKILLS,
-  isMiyoSearchSkillActive,
-  planManagedBuiltins,
-} from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, builtinSkillUnavailableReason } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -56,11 +52,10 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
   { substr: "dropbox", brand: "Dropbox" },
 ];
 
-const BUILTIN_ROWS = ALL_MANAGED_SKILLS.map((skill) => ({
+const BUILTIN_ROWS = BUILTIN_SKILLS.map((skill) => ({
   name: skill.name,
   description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
   content: skill.skillMd,
-  enabledAgents: skill.enabledAgents,
 }));
 
 export const SkillsSettings: React.FC = () => {
@@ -93,12 +88,8 @@ export const SkillsSettings: React.FC = () => {
   );
   const availableAgents = availableBuiltinAgents(installStates, lastAvailableAgents.current);
   lastAvailableAgents.current = availableAgents;
-  const eligibleBuiltins = planManagedBuiltins({
-    search: isMiyoSearchSkillActive(settings),
-    documents: settings.enableMiyoDocumentProcessing,
-  }).seed;
   const unavailableReasons: Record<string, string> = {};
-  for (const skill of eligibleBuiltins) {
+  for (const skill of BUILTIN_SKILLS) {
     const collision =
       userSkills.some(
         (userSkill) => userSkill.name === skill.name && userSkill.location.kind === "canonical"
@@ -107,15 +98,13 @@ export const SkillsSettings: React.FC = () => {
         (rejected) =>
           toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
       );
-    if (collision) {
-      unavailableReasons[skill.name] =
-        "A skill with this name already exists in Your Skills. Your file is kept unchanged.";
-    }
+    const reason = collision
+      ? "A skill with this name already exists in Your Skills. Your file is kept unchanged."
+      : builtinSkillUnavailableReason(skill.name);
+    if (reason) unavailableReasons[skill.name] = reason;
   }
-  const builtinRows = BUILTIN_ROWS.filter(
-    (skill) =>
-      eligibleBuiltins.some((builtin) => builtin.name === skill.name) &&
-      `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
+  const builtinRows = BUILTIN_ROWS.filter((skill) =>
+    `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())
   );
 
   const handleBuiltinChange = useCallback(

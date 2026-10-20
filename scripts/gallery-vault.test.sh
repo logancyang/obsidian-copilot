@@ -11,6 +11,7 @@ LEGACY_SOURCE="$TEST_ROOT/legacy-gallery"
 FAKE_BIN="$TEST_ROOT/bin"
 mkdir -p "$CURRENT_SOURCE" "$FIXTURE_ROOT/scripts" "$LEGACY_SOURCE" "$FAKE_BIN"
 cp "$REPO_ROOT/scripts/gallery-vault.sh" "$FIXTURE_ROOT/scripts/gallery-vault.sh"
+cp "$REPO_ROOT/scripts/obsidian-vault.sh" "$FIXTURE_ROOT/scripts/obsidian-vault.sh"
 
 cat >"$CURRENT_SOURCE/manifest.json" <<'EOF'
 {
@@ -28,6 +29,11 @@ printf 'legacy source state\n' >"$LEGACY_SOURCE/source-state.txt"
 
 cat >"$FAKE_BIN/obsidian" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$1" == "vaults" ]]; then
+  for vault in "$TEST_ROOT"/*-vault; do
+    printf '%s\t%s\n' "${vault##*/}" "$vault"
+  done
+fi
 exit 0
 EOF
 chmod +x "$FAKE_BIN/obsidian"
@@ -57,6 +63,7 @@ run_deploy() {
   local vault_root="$1"
   COPILOT_TEST_VAULT_PATH="$vault_root" \
     OBSIDIAN_BIN="$FAKE_BIN/obsidian" \
+    TEST_ROOT="$TEST_ROOT" \
     bash "$FIXTURE_ROOT/scripts/gallery-vault.sh" >/dev/null
 }
 

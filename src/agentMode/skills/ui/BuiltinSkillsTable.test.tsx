@@ -11,7 +11,6 @@ function props(): BuiltinSkillsTableProps {
         name: "transcript",
         description: "Read video transcripts",
         content: "# Read a transcript",
-        enabledAgents: ["claude", "opencode"],
       },
     ],
     agents: [

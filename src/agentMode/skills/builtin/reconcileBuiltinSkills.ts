@@ -2,8 +2,9 @@ import type { InstallState } from "@/agentMode/session/types";
 import type { CopilotSettings } from "@/settings/model";
 import { joinPosix } from "@/utils/pathUtils";
 import {
-  ALL_MANAGED_SKILLS,
+  BUILTIN_SKILLS,
   RETIRED_BUILTIN_SKILLS,
+  builtinSkillUnavailableReason,
   isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
 import {
@@ -32,15 +33,17 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
     if (result === "failed") errors.push(`Could not remove retired built-in skill ${skill.name}.`);
   }
   const enabledAgents: Record<string, string[]> = {};
-  for (const skill of ALL_MANAGED_SKILLS) {
+  for (const skill of BUILTIN_SKILLS) {
     enabledAgents[skill.name] = registeredAgents.filter((agent) =>
       isBuiltinSkillEnabledFor(settings, skill.name, agent)
     );
   }
   // Canonical files sync between devices, so an unavailable device keeps them rather than
   // deleting another device's tools. https://github.com/logancyang/obsidian-copilot/issues/3022
-  const seed = ALL_MANAGED_SKILLS.filter((skill) =>
-    enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
+  const seed = BUILTIN_SKILLS.filter(
+    (skill) =>
+      !builtinSkillUnavailableReason(skill.name) &&
+      enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
   );
   await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed, enabledAgents });
   for (const skill of seed) {
@@ -59,7 +62,7 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
           : `Could not install built-in skill ${skill.name}.`
       );
   }
-  for (const skill of ALL_MANAGED_SKILLS) {
+  for (const skill of BUILTIN_SKILLS) {
     if (enabledAgents[skill.name].length > 0) continue;
     const result = await removeSeededBuiltin(folder, skill.name, fs);
     if (result === "failed") errors.push(`Could not remove disabled built-in skill ${skill.name}.`);

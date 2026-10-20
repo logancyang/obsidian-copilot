@@ -1,6 +1,6 @@
 import { useApp } from "@/context";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
+import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
@@ -99,61 +99,6 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
-const MIYO_SEARCH_COMMAND =
-  'sh ".claude/skills/miyo-search/miyo-search.sh" "back pain standing desk"';
-const MIYO_RESULTS = JSON.stringify({
-  results: [{ path: "notes/Standing desk setup.md" }, { path: "notes/Untitled 3.md" }],
-});
-
-const MIYO_SEARCH: AgentMessagePart[] = [
-  tool("miyo-load", "Skill", { input: { skill: "miyo-search" } }),
-  tool("miyo-run", "Bash", {
-    toolKind: "execute",
-    input: { command: MIYO_SEARCH_COMMAND },
-    output: [{ type: "text", text: MIYO_RESULTS }],
-  }),
-  tool("grep-1", "Grep", { input: { pattern: "standing desk|back pain" } }),
-  tool("read-1", "Read", { locations: [{ path: "notes/Standing desk setup.md" }] }),
-  say("You wrote that a monitor arm and a sit-stand rhythm fixed it. See [[Standing desk setup]]."),
-];
-
-const MIYO_LINK_NOTES: Record<string, string> = {
-  "Standing desk setup": "notes/Standing desk setup.md",
-  "Untitled 3": "notes/Untitled 3.md",
-  "Reading list": "notes/Reading list.md",
-  "Trip planning": "notes/Trip planning.md",
-};
-
-const MIYO_LINKS: AgentMessagePart[] = [
-  tool("miyo-run", "Bash", {
-    toolKind: "execute",
-    input: { command: MIYO_SEARCH_COMMAND },
-    output: [
-      {
-        type: "text",
-        text: JSON.stringify({
-          results: [
-            { path: "step-2/notes/Standing desk setup.md" },
-            { path: "step-2/notes/Untitled 3.md" },
-          ],
-        }),
-      },
-    ],
-  }),
-  tool("grep-1", "Grep", { input: { pattern: "ZX-4471" } }),
-  say(
-    "Miyo found [[Standing desk setup]] (see [[Standing desk setup#Fixes]]) and your scratch note, [[Untitled 3|desk scratchpad]]. A keyword search added [[Reading list]] and [Trip planning](notes/Trip%20planning.md)."
-  ),
-];
-
-const MIYO_SEARCH_RUNNING: AgentMessagePart[] = [
-  tool("miyo-run", "Bash", {
-    toolKind: "execute",
-    status: "in_progress",
-    input: { command: MIYO_SEARCH_COMMAND },
-  }),
-];
-
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
 const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
@@ -170,22 +115,15 @@ const TrailDemo: React.FC<{
   isStreaming?: boolean;
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
-  linkNotes?: Record<string, string>;
-}> = ({ parts, isStreaming = false, showCompletedDuration = true, fileChanges, linkNotes }) => {
-  const contextApp = useApp();
-  const app = linkNotes
-    ? Object.create(contextApp, {
-        vault: { value: Object.create(contextApp.vault, { getName: { value: () => "step-2" } }) },
-        metadataCache: {
-          value: {
-            getFirstLinkpathDest: (linkpath: string) => {
-              const path = linkNotes[linkpath] ?? linkpath;
-              return Object.values(linkNotes).includes(path) ? { path } : null;
-            },
-          },
-        },
-      })
-    : contextApp;
+  stopReason?: StopReason;
+}> = ({
+  parts,
+  isStreaming = false,
+  showCompletedDuration = true,
+  fileChanges,
+  stopReason = "end_turn",
+}) => {
+  const app = useApp();
   return (
     <TooltipProvider>
       <AgentTrail
@@ -195,7 +133,7 @@ const TrailDemo: React.FC<{
         turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
         timestamp="2026/08/07 20:31:10"
         app={app}
-        turnStopReason={isStreaming ? undefined : "end_turn"}
+        turnStopReason={isStreaming ? undefined : stopReason}
         fileChanges={fileChanges}
       />
     </TooltipProvider>
@@ -225,16 +163,22 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
 };
 
-export const MiyoSearch: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_SEARCH} />,
-};
-
-export const MiyoLinkBadges: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_LINKS} linkNotes={MIYO_LINK_NOTES} />,
-};
-
-export const MiyoSearchRunning: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={MIYO_SEARCH_RUNNING} isStreaming />,
+export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        say("I'll load the meeting note skill first."),
+        tool("s1", "Skill", { input: { skill: "meeting-note" } }),
+        tool("r1", "Read", { locations: [{ path: "Meetings/2026-10-12 Weekly sync.md" }] }),
+        tool("w1", "Write", {
+          toolKind: "edit",
+          status: "failed",
+          input: { file_path: "Meetings/2026-10-19 Weekly sync.md" },
+        }),
+      ]}
+      stopReason="max_tokens"
+    />
+  ),
 };
 
 export const CompletedWithoutDuration: StoryObj<AgentTrailProps> = {

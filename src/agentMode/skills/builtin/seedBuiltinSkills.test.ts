@@ -44,7 +44,6 @@ function skill(version: number): BuiltinSkill {
   return {
     name: "copilot-web-search",
     version,
-    enabledAgents: ["claude", "codex", "opencode"],
     skillMd: `---\nname: copilot-web-search\ndescription: d\nmetadata:\n  copilot-enabled-agents: claude, codex, opencode\n  copilot-builtin-version: "${version}"\n---\nbody v${version}`,
     files: [{ path: "web-search.sh", content: `// script v${version}` }],
   };

@@ -185,6 +185,14 @@ When a finished compaction reports its new size, the context ring drops to that 
 
 Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
 
+### When a reply stops early
+
+A model can only write so much in one reply. When a reply runs out of room partway through a step, such as writing a long note, that step never runs. Its row shows as failed instead of spinning, and Copilot asks the agent once, in the same reply, to continue in smaller steps. Copilot never continues a turn you stopped or one the model refused, and it continues only once per message.
+
+If the reply still stops early, it ends with a **Stopped early** notice that names the cause: the model hit its output limit, the agent hit its step limit, or the model's safety system stopped it. The last step may not have run. Send another message to continue.
+
+Any step the agent left unfinished when its turn ended shows as failed, including in chats you reopen from history.
+
 ## Review what a turn changed
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
@@ -227,7 +235,9 @@ Custom Skills and built-in Obsidian Skills are free. Active Plus access adds clo
 
 The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in Skills** to route those requests through Copilot instead.
 
-While **Miyo document processing** is on, which is the default, **Built-in Skills** also lists `miyo-parse`. It parses a PDF or EPUB on your computer with the local Miyo command-line tool and does not need Plus access. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. Turning **Miyo document processing** off removes the Skill, and agents read documents with their own tools.
+The Obsidian Skills (`obsidian-markdown`, `obsidian-bases`, `json-canvas`, and `obsidian-cli`) start turned on for opencode in new installs, and `obsidian-bases` also for Codex. Turn them on for other agents in **Built-in Skills**. `obsidian-cli` works only while **Command line interface** is on in Obsidian's **Settings → General**; while it is off, agents do not receive that Skill.
+
+While **Miyo document processing** is on, which is the default, agents read PDF and EPUB files through Copilot's Miyo parse tool, which asks the connected Miyo to parse them and does not need Plus access. The tool is available only while Miyo is connected. With a remote Miyo server, files in the vault parse on that server, and files outside the vault can't be parsed. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. With **Miyo document processing** off, agents read documents with their own tools.
 
 Built-in skill preferences record only the skills and agents that are turned off. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Updating a built-in skill replaces its entire folder; removing it deletes the folder. Both operations remove any files you added inside it. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults. If file permissions prevent removal, Copilot reports the failure and keeps your disabled preference. After you restore access, Copilot retries cleanup when skills refresh or the plugin reloads.
 
@@ -245,7 +255,7 @@ The notice names the agent that needs to reload. Changing Claude's enabled model
 
 Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent Chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
 
-Two changes never wait. Narrowing Miyo's **Search scope** and turning on Self-Host Mode both restart the agent straight away, so no later step in the conversation can search or browse outside the new boundary. Agents also search the other Miyo folders you tick under **Current vault**. Unticking one narrows the scope, so it also restarts the agent straight away. Ticking one waits for **Reload**.
+Turning on Self-Host Mode never waits: it restarts the agent straight away, so no later step in the conversation can browse outside the new boundary. Changes to Miyo's **Search scope** and to the Miyo folders ticked under **Current vault** apply to the agent's next search, with no reload.
 
 ## Related
 
@@ -276,12 +286,12 @@ You can also ask the agent later to make a page private or public, add or remove
 
 The **Publish file to OpenArtifacts** command opens the **Share with OpenArtifacts** dialog.
 
-- **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. A published note's dialog shows who can open the page above **Update** and **Delete**.
-- **Add people** invites one email address at a time. Each person appears under **Who has access** with **Invited · email sent**, or **Invited · send them the link** when the server sends no email, and has a **Remove** button.
-- **Requests** lists addresses that asked to open the page, each with **Approve** and **Decline**. The section is hidden when nobody has asked.
+- **Link access** chooses **Anyone with the link** or **Only those invited**. Choose it before the first publish, or change it later from a published note's dialog. To invite people or answer requests, use the **Share** button on the published page.
 - **Copy link** (**Copy** right after you publish or update) copies the page link, and **Open** opens the page for you without a sign-in.
 
-If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited**, **Add**, or **Approve** shows the plan message with an **Upgrade** link and changes nothing; **Remove**, **Decline**, and **Anyone with the link** keep working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
+If your plan cannot publish to OpenArtifacts, the dialog shows **OpenArtifacts access required** and nothing is published, whichever **Link access** you chose. If your plan has lapsed, choosing **Only those invited** shows the plan message with an **Upgrade** link and changes nothing; **Anyone with the link** keeps working. If OpenArtifacts does not support private documents yet, the dialog says so, and **Update**, **Delete**, **Copy link**, and **Open** keep working.
+
+If your Copilot license is not linked to an OpenArtifacts account, the first new page you publish, from the dialog or the agent, adds one line offering to link it, with a **Link account** link. Linking gets you an email when people you share with comment or ask for access. Copilot shows this once per vault, whichever way you publish, and records that in `.openartifacts/link-offer-shown`; delete that file to see the offer again.
 
 Copilot also includes **research-memo** as an optional theme. For a named theme, the skill checks `.openartifacts/themes/<name>.md` in your vault, then `themes/<name>.md` alongside the installed skill. If neither exists, the agent continues with readable defaults. A missing theme never blocks publishing.
 

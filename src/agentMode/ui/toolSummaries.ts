@@ -2,11 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import type { AgentMessagePart } from "@/agentMode/session/types";
 import { formatDuration } from "@/lib/duration";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
-import { MIYO_SEARCH_SKILL } from "@/builtinSkills/builtinSkills";
 
 export interface ToolSummaryContext {
   vaultBase: string | null;
@@ -444,82 +442,4 @@ export function extractSubAgentReturnText(part: ToolCallPart): string | null {
   const prompt = extractSubAgentInputPrompt(part);
   if (prompt && prompt === result) return null;
   return result;
-}
-
-export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
-
-export interface MiyoSearchRun {
-  query: string | null;
-  noteCount: number | null;
-  notePaths: readonly string[];
-}
-
-const MIYO_SEARCH_SCRIPTS: ReadonlySet<string> = new Set(
-  MIYO_SEARCH_SKILL.files.map((file) => file.path)
-);
-
-function shellWords(command: string): string[] {
-  // Codex wraps some commands as `/bin/zsh -lc "<command>"` with the inner quotes escaped.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-  const inner = command.replace(/^\S+\s+-lc\s+"([\s\S]*)"$/, (_, body: string) =>
-    body.replace(/\\"/g, '"')
-  );
-  return (inner.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((word) =>
-    word.replace(/^(["'])([\s\S]*)\1$/, "$2")
-  );
-}
-
-// Words after which the next word is the program being run, so `cat miyo-search.sh` is not a run.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-const MIYO_LAUNCHERS: ReadonlySet<string> = new Set(["sh", "bash", "zsh", "&", "&&", ";", "||"]);
-
-function miyoSearchQuery(command: string): string | null | undefined {
-  const words = shellWords(command);
-  for (let i = 0; i < words.length; i++) {
-    if (i > 0 && !MIYO_LAUNCHERS.has(words[i - 1].split("/").pop() ?? "")) continue;
-    const name = words[i].split(/[\\/]/).pop() ?? "";
-    const isScript = MIYO_SEARCH_SCRIPTS.has(name);
-    if (!isScript && !(/^miyo(\.exe)?$/.test(name) && words[i + 1] === "search")) continue;
-    const query: string[] = [];
-    for (let j = i + (isScript ? 1 : 2); j < words.length; j++) {
-      if (/^(\d?[<>]|[|&;])/.test(words[j])) break;
-      if (words[j] === "--json") continue;
-      if (words[j].startsWith("-")) j++;
-      else query.push(words[j]);
-    }
-    return query.length > 0 ? query.join(" ") : null;
-  }
-  return undefined;
-}
-
-function miyoNotePaths(part: ToolCallPart): string[] | null {
-  const stdout = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
-  try {
-    const results = (JSON.parse(stdout) as { results?: unknown }).results;
-    if (!Array.isArray(results)) return null;
-    const paths = results.map((r: { path?: unknown } | null) => r?.path);
-    return [...new Set(paths.filter((path): path is string => typeof path === "string"))];
-  } catch {
-    return null;
-  }
-}
-
-export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
-  const command = (part.input as { command?: unknown } | null | undefined)?.command;
-  if (typeof command !== "string") return null;
-  const query = miyoSearchQuery(command);
-  if (query === undefined) return null;
-  const paths = miyoNotePaths(part);
-  return { query, noteCount: paths?.length ?? null, notePaths: paths ?? EMPTY_MIYO_PATHS };
-}
-
-export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly string[] {
-  const paths = parts.flatMap((part) =>
-    part.kind === "tool_call" ? (miyoSearchRun(part)?.notePaths ?? []) : []
-  );
-  return paths.length > 0 ? paths : EMPTY_MIYO_PATHS;
-}
-
-export function isMiyoSkillLoad(part: ToolCallPart): boolean {
-  return part.vendorToolName === "Skill" && skillNameFromInput(part) === MIYO_SEARCH_SKILL.name;
 }

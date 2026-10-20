@@ -1,4 +1,5 @@
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import {
   setDisableBuiltinSystemPrompt,
   setSelectedPromptTitle,
@@ -7,10 +8,12 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_FOLDER_MENTION_DIRECTIVE,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_FEEDBACK_POINTER,
-  COPILOT_INSTRUCTION_PRECEDENCE,
+  COPILOT_OBSIDIAN_CLI_STEERING,
+  COPILOT_OBSIDIAN_FORMAT_LEAD,
   COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
@@ -22,17 +25,28 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(),
+}));
+
+const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
 function makePrompt(title: string, content: string): UserSystemPrompt {
   return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
 }
 
+const ISSUE_441 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/441";
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
+const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
+const ISSUE_726 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/726";
 const AGENT = "opencode";
+const ALL_OBSIDIAN_FORMAT_SKILLS_LINE =
+  "Before writing Obsidian syntax, load its skill and follow it over memory: obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files, json-canvas for .canvas files.";
 const ALL_RELAY_SKILLS_LINE =
-  "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
+  "Run these Copilot skills before any built-in web tool: copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
 
 function setBuiltinPreferences(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>
@@ -54,6 +68,7 @@ describe("agentSystemPrompt", () => {
       resetSettings();
       updateSetting("enableMiyoDocumentProcessing", false);
       resetPromptState();
+      mockIsObsidianCliEnabled.mockReturnValue(true);
     });
 
     it("keeps the full prompt compact without legacy agent restrictions (https://github.com/Brevilabs/obsidian-copilot-private/issues/596)", () => {
@@ -63,7 +78,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT);
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3700);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -71,20 +86,59 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it("includes the Copilot base prompt and the pill-syntax directive by default", () => {
+    it("starts with the Copilot base prompt and includes the folder-mention directive by default", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-      expect(prompt).toContain("{folder_name}");
-      expect(prompt).toContain("{activeNote}");
+      expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
       expect(prompt).not.toContain("<user_custom_instructions>");
     });
 
-    it("suppresses the base prompt when 'disable builtin' is on, keeping the pill directive", () => {
+    it("suppresses the base prompt when 'disable builtin' is on, keeping the folder-mention directive", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
       expect(prompt).not.toContain("You are Obsidian Copilot");
-      expect(prompt).toContain("{folder_name}");
+      expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
+    });
+
+    it(`places settings-dependent lines after the always-on text, so toggling them keeps the cached prefix (${ISSUE_441})`, () => {
+      updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: false });
+      updateSetting("enableMiyoSearchSkill", false);
+      setBuiltinPreferences({
+        "copilot-web-search": { disabled: true },
+        "copilot-web-fetch": { disabled: true },
+        "copilot-youtube-transcript": { disabled: true },
+        "copilot-fetch-x": { disabled: true },
+        "obsidian-markdown": { disabled: true },
+        "obsidian-bases": { disabled: true },
+        "json-canvas": { disabled: true },
+        "obsidian-cli": { disabled: true },
+      });
+      const alwaysOn = buildAgentSystemPrompt(AGENT);
+
+      updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: true });
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoDocumentProcessing", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      setBuiltinPreferences({});
+      const allOn = buildAgentSystemPrompt(AGENT);
+
+      expect(allOn.startsWith(`${alwaysOn}\n\n`)).toBe(true);
+      expect(allOn).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      expect(allOn).toContain(`${ALL_RELAY_SKILLS_LINE} ${COPILOT_SKILL_FALLBACK}`);
+      expect(allOn.endsWith(COPILOT_OBSIDIAN_CLI_STEERING)).toBe(true);
+    });
+
+    it(`places a backend's own steering after the always-on lines and before the settings-dependent ones (${ISSUE_441})`, () => {
+      const steering = "Backend-specific steering.";
+      const prompt = buildAgentSystemPrompt(AGENT, steering);
+
+      expect(prompt).toContain(
+        `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
+      );
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(steering);
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT, steering)).toContain(steering);
     });
 
     it("keeps the project workspace policy internal and always on", () => {
@@ -111,6 +165,12 @@ describe("agentSystemPrompt", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/741 leaves the 200-line write cap out of every agent's shared prompt, so skills' own write instructions stand", () => {
+      for (const backendId of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(backendId)).not.toContain("200 lines");
+      }
+    });
+
     it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(
@@ -132,7 +192,7 @@ describe("agentSystemPrompt", () => {
 
     it("omits web search and web fetch skills under default settings https://github.com/Brevilabs/obsidian-copilot-private/issues/629", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(
-        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+        "Run these Copilot skills before any built-in web tool: copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
     });
 
@@ -140,7 +200,7 @@ describe("agentSystemPrompt", () => {
       setBuiltinPreferences({ "copilot-web-search": { disabledAgents: ["opencode"] } });
 
       expect(buildAgentSystemPrompt("opencode")).toContain(
-        "For these jobs, load and run the matching Copilot skill before any built-in web tool (websearch, webfetch, WebSearch, WebFetch, web_search or similar): copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
+        "Run these Copilot skills before any built-in web tool: copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts."
       );
       expect(buildAgentSystemPrompt("opencode")).not.toContain("copilot-web-search");
       expect(buildAgentSystemPrompt("claude")).toContain(ALL_RELAY_SKILLS_LINE);
@@ -166,15 +226,21 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it(`steers documents to miyo-parse first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656})`, () => {
+    it(`steers documents to the miyo_parse tool first and lets any other tool read the file when it fails, only while Miyo is on with document processing (${ISSUE_656} ${ISSUE_740})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
+      updateSetting("enableMiyo", false);
       updateSetting("enableMiyoDocumentProcessing", true);
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+
+      updateSetting("enableMiyo", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
-        "Read PDFs/EPUBs with miyo-parse first. If it is missing or fails, say so, then read the file with any other tool you have."
+        "Read PDFs/EPUBs with the obsidian-copilot miyo_parse tool first. If it is unavailable or fails, say so, then read the file with any other tool you have."
       );
+      expect(prompt).not.toContain("miyo-parse");
       expect(prompt).not.toMatch(/stay local|no cloud parsers/);
     });
 
@@ -186,12 +252,71 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`omits the miyo-parse steering for an agent whose miyo-parse skill is disabled (${ISSUE_656})`, () => {
+    it(`ignores a saved per-agent miyo-parse opt-out, because the document processing switch alone controls Miyo parsing (${ISSUE_740})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 
-      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
-      expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+    });
+
+    it(`tells every agent to load the matching Obsidian skill before writing Obsidian Markdown, .base or .canvas files (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      for (const agent of ["claude", "codex", "opencode"]) {
+        expect(buildAgentSystemPrompt(agent)).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+      }
+    });
+
+    it(`steers OpenCode to every Obsidian skill, Codex to Bases and Claude to none under default settings (${ISSUE_726})`, () => {
+      expect(buildAgentSystemPrompt("opencode")).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+      expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("codex")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-bases for .base files.`
+      );
+      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+      expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    });
+
+    it(`names only the format skills enabled for the agent and drops the line when none is (${ISSUE_726})`, () => {
+      setBuiltinPreferences({
+        "obsidian-markdown": { disabledAgents: ["codex"] },
+        "obsidian-bases": { disabled: true },
+      });
+      expect(buildAgentSystemPrompt("codex")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} json-canvas for .canvas files.`
+      );
+      expect(buildAgentSystemPrompt("claude")).toContain(
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, json-canvas for .canvas files.`
+      );
+
+      setBuiltinPreferences({
+        "obsidian-markdown": { disabled: true },
+        "obsidian-bases": { disabled: true },
+        "json-canvas": { disabledAgents: ["codex"] },
+      });
+      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+    });
+
+    it(`tells the agent the running Obsidian app is reachable through obsidian-cli only while that skill is enabled for it (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results."
+      );
+
+      setBuiltinPreferences({ "obsidian-cli": { disabledAgents: [AGENT] } });
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    });
+
+    it(`drops the obsidian-cli line while Obsidian's command line interface is off, keeping the format skills (${ISSUE_726})`, () => {
+      setBuiltinPreferences({});
+      mockIsObsidianCliEnabled.mockReturnValue(false);
+
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+      expect(prompt).not.toContain("obsidian-cli");
+      expect(prompt).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
     });
 
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {
@@ -199,20 +324,24 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_SKILL_FALLBACK);
       expect(prompt).not.toContain(COPILOT_WEB_RESEARCH_STEERING);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
+      expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
     });
 
-    it("omits the Miyo steering when the search skill is not installed", () => {
+    it(`omits the Miyo steering and any mention of miyo_search when the search switch is off (${ISSUE_736})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", false);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
-      expect(prompt).not.toContain("miyo-search");
+      expect(prompt).not.toContain("miyo_search");
     });
 
-    it("appends the Miyo steering only when the search skill is enabled", () => {
+    it(`appends the Miyo steering for every agent when the search switch is on (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
-      const prompt = buildAgentSystemPrompt(AGENT);
-      expect(prompt).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      for (const agent of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(agent)).toContain(COPILOT_MIYO_SEARCH_STEERING);
+      }
     });
 
     it("omits the Miyo steering while Miyo is disconnected even though the search switch defaults on (https://github.com/Brevilabs/obsidian-copilot-private/issues/716)", () => {
@@ -220,17 +349,26 @@ describe("agentSystemPrompt", () => {
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
-      expect(prompt).not.toContain("miyo-search");
+      expect(prompt).not.toContain("miyo_search");
     });
 
-    it(`steers every request the notes might answer, even an external-sounding one, to miyo-search plus grep/glob for exact terms (${ISSUE_717})`, () => {
+    it(`names the obsidian-copilot miyo_search tool and grep/glob for exact terms, for every request the notes might answer, even an external-sounding one (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
-        "For any request that may be answered from the user's notes, even one that sounds external or current, run miyo-search and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
+        "For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request."
       );
+      expect(prompt).not.toContain("miyo-search");
       expect(prompt).not.toContain("when grep is too slow");
+    });
+
+    it(`tells the agent to search the vault with miyo_search, not the miyo CLI or another Miyo skill (${ISSUE_736})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Search the vault with miyo_search, not the miyo CLI or another Miyo skill."
+      );
     });
 
     it(`merges both result sets by note path and opens the strongest matches before answering (${ISSUE_717})`, () => {
@@ -251,16 +389,16 @@ describe("agentSystemPrompt", () => {
       );
     });
 
-    it(`omits the Miyo search steering for an agent whose miyo-search skill is disabled (${ISSUE_599})`, () => {
+    it(`ignores a saved per-agent miyo-search opt-out, because the switch alone controls Miyo search (${ISSUE_736})`, () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setBuiltinPreferences({ "miyo-search": { disabledAgents: ["codex"] } });
 
-      expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_MIYO_SEARCH_STEERING);
+      expect(buildAgentSystemPrompt("codex")).toContain(COPILOT_MIYO_SEARCH_STEERING);
       expect(buildAgentSystemPrompt("claude")).toContain(COPILOT_MIYO_SEARCH_STEERING);
     });
 
-    it("suppresses the Miyo steering when the builtin prompt is disabled, even if the skill is enabled", () => {
+    it("suppresses the Miyo steering when the builtin prompt is disabled, even if the search switch is on", () => {
       updateSetting("enableMiyo", true);
       updateSetting("enableMiyoSearchSkill", true);
       setDisableBuiltinSystemPrompt(true);
@@ -272,15 +410,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).not.toContain("<project_instructions>");
       expect(prompt).not.toMatch(/<project_context>[\s\S]*<\/project_context>/);
-    });
-
-    it("tells the agent that a project AGENTS.md outranks the vault one", () => {
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
-    });
-
-    it("keeps the precedence rule through the builtin toggle, like the workspace policy", () => {
-      setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_INSTRUCTION_PRECEDENCE);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 points the agent at send_feedback while feedback cards are on, even with the builtin prompt disabled", () => {

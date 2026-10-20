@@ -16,12 +16,9 @@ import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
-import {
-  miyoResultPaths,
-  miyoSearchRun,
-  type ToolSummaryContext,
-} from "@/agentMode/ui/toolSummaries";
-import { MiyoSearchCard } from "@/agentMode/ui/MiyoSearchCard";
+import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
+import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
@@ -44,6 +41,21 @@ interface AgentTrailProps {
 
 const noopOpenFileChange = () => {};
 
+// A turn that ends early without an error leaves a reply that looks finished. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+const EARLY_STOP_CAUSES: Partial<Record<StopReason, string>> = {
+  max_tokens: "the model hit its output limit",
+  max_turn_requests: "the agent hit its step limit",
+  refusal: "the model's safety system stopped it",
+};
+
+function stopReasonNotice(stopReason: StopReason | undefined): string | undefined {
+  const cause = stopReason && EARLY_STOP_CAUSES[stopReason];
+  return (
+    cause &&
+    `**Stopped early:** ${cause}, so its last step may not have run. Send another message to continue.`
+  );
+}
+
 export const AgentTrail: React.FC<AgentTrailProps> = ({
   parts,
   isStreaming,
@@ -57,6 +69,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   onOpenFileChange = noopOpenFileChange,
 }) => {
   const answer = agentResponseText(parts);
+  // A failed turn's error is stored as message text, which a reply with parts never shows.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+  const notice = errorText && answer.length === 0 ? errorText : stopReasonNotice(turnStopReason);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   // A compaction row reports its own progress and is not a reply to time or copy.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
@@ -84,11 +99,9 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
       <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
-      {errorText && answer.length === 0 ? (
-        // A failed turn's error is stored as message text, which a reply with parts never shows.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+      {notice ? (
         <div className="tw-text-error">
-          <AgentMarkdownText text={errorText} app={app} />
+          <AgentMarkdownText text={notice} app={app} />
         </div>
       ) : null}
       {turnStopReason !== undefined && fileChanges && fileChanges.length > 0 ? (
@@ -145,7 +158,7 @@ function renderNode(
     case "action": {
       const miyoSearch = miyoSearchRun(node.part);
       if (miyoSearch) {
-        return <MiyoSearchCard key={key} status={node.part.status} {...miyoSearch} />;
+        return <MiyoSearchCard key={key} {...miyoSearch} />;
       }
       const expansionId = actionExpansionId(trailId, node.part.id);
       return (

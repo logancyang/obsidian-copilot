@@ -23,11 +23,6 @@ const PUBLIC_ACCESS: OpenArtifactsAccess = {
 const PRIVATE_ACCESS: OpenArtifactsAccess = {
   ...PUBLIC_ACCESS,
   linkAccess: "invited",
-  people: [
-    { email: "alice@example.com", role: "comment", addedAt: 1785000000000 },
-    { email: "carol@example.org", role: "comment", addedAt: 1785000050000 },
-  ],
-  requests: [{ email: "bob@example.com", requestedAt: 1785000100000 }],
 };
 
 // Mounts the dialog and chooses Only those invited, so a story can show the state that follows
@@ -74,19 +69,6 @@ function fakeAccessPort(initial: OpenArtifactsAccess): OpenArtifactsAccessPort {
   return {
     load: async () => current,
     setLinkAccess: async (_docId, linkAccess) => (current = { ...current, linkAccess }),
-    addPerson: async (_docId, email) =>
-      (current = {
-        ...current,
-        people: [...current.people, { email, role: "comment", addedAt: Date.now() }],
-        requests: current.requests.filter((request) => request.email !== email),
-      }),
-    removePerson: async (_docId, email) =>
-      (current = { ...current, people: current.people.filter((person) => person.email !== email) }),
-    declineRequest: async (_docId, email) =>
-      (current = {
-        ...current,
-        requests: current.requests.filter((request) => request.email !== email),
-      }),
     open: async () => current.url,
   };
 }
@@ -120,18 +102,6 @@ export const Manage: StoryObj<OpenArtifactsModalContentProps> = {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PublishPrivate: StoryObj<OpenArtifactsModalContentProps> = {
   render: () => <AfterSwitch access={fakeAccessPort(PRIVATE_ACCESS)} docId={null} />,
-};
-
-// Two invitees and one pending request, with Approve and Decline.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-export const ManageWithInviteesAndRequest: StoryObj<OpenArtifactsModalContentProps> = {
-  args: { docId: DOC_ID, access: fakeAccessPort(PRIVATE_ACCESS) },
-};
-
-// Invitees when the server sends no email: the owner shares the link.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-export const ManageWithoutInviteEmail: StoryObj<OpenArtifactsModalContentProps> = {
-  args: { docId: DOC_ID, access: fakeAccessPort({ ...PRIVATE_ACCESS, email: false }) },
 };
 
 // A public page, so switching to Only those invited shows the copy notice.
@@ -174,7 +144,7 @@ export const PrivateSharingNeedsPaidPlan: StoryObj<OpenArtifactsModalContentProp
   },
 };
 
-// The screen after a first publish: the receipt, then the access panel with people already invited.
+// The screen after a first publish: the receipt, then the access panel.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> = {
   args: {
@@ -183,6 +153,29 @@ export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> 
       kind: "success",
       action: "publish",
       receipt: { docId: DOC_ID, url: PRIVATE_ACCESS.url, version: 1, linkAccess: "invited" },
+    },
+  },
+};
+
+// The first publish for a Copilot license that is not linked to an OpenArtifacts account: the server's one-time offer.
+// https://github.com/Brevilabs/OpenArtifacts/issues/94
+export const PublishedWithAccountLinkOffer: StoryObj<OpenArtifactsModalContentProps> = {
+  args: {
+    access: fakeAccessPort(PUBLIC_ACCESS),
+    initialResult: {
+      kind: "success",
+      action: "publish",
+      receipt: {
+        docId: DOC_ID,
+        url: PUBLIC_ACCESS.url,
+        version: 1,
+        linkAccess: "anyone",
+        guidance: {
+          message:
+            "Publish from other agents too? Link your Copilot for Obsidian account to OpenArtifacts to get an email when people you share with comment or ask for access.",
+          url: "https://example.com/link-account",
+        },
+      },
     },
   },
 };

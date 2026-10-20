@@ -54,13 +54,7 @@ Use Project instructions for details that should not affect the rest of the vaul
 
 ## Claude compatibility
 
-Claude Code normally reads `CLAUDE.md`. To keep `AGENTS.md` as the shared source of truth, Copilot adds this import to the related `CLAUDE.md`:
-
-```markdown
-@AGENTS.md
-```
-
-If `CLAUDE.md` already contains Claude-specific instructions, Copilot preserves them and adds the import. You do not need to copy shared rules into both files.
+Claude Code reads `AGENTS.md` in Copilot chats alongside any `CLAUDE.md` you keep for Claude-specific instructions. You do not need to copy shared rules into both files. This requires Claude Code 2.1.281 or newer.
 
 ## Optional Quick Chat overrides
 

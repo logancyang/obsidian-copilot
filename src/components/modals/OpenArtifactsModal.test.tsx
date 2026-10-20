@@ -61,9 +61,6 @@ function accessPort(overrides: Partial<OpenArtifactsAccessPort> = {}): OpenArtif
   return {
     load: jest.fn().mockResolvedValue(accessFixture()),
     setLinkAccess: jest.fn(),
-    addPerson: jest.fn(),
-    removePerson: jest.fn(),
-    declineRequest: jest.fn(),
     open: jest.fn(),
     ...overrides,
   };
@@ -171,32 +168,20 @@ describe("OpenArtifactsModal", () => {
 
         expect(onConfirm).toHaveBeenCalledWith("publish", activeDocument, "invited");
         expect(port.load).toHaveBeenCalledWith(DOC_ID);
-        expect(await screen.findByLabelText("Add people")).toBeTruthy();
+        expect(await screen.findByText("Publish complete")).toBeTruthy();
+        expect(
+          await screen.findByRole("radio", { name: "Only those invited", checked: true })
+        ).toBeTruthy();
       });
 
-      it("adds and removes people and opens the page through the owner route", async () => {
+      it("opens the page through the owner route", async () => {
         const open = jest.spyOn(window, "open").mockImplementation(() => null);
-        const access = accessFixture();
-        const withPerson = {
-          ...access,
-          people: [{ email: "a@b.co", role: "comment" as const, addedAt: 1785000000000 }],
-        };
         const port = accessPort({
-          load: jest.fn().mockResolvedValue(access),
-          addPerson: jest.fn().mockResolvedValue(withPerson),
-          removePerson: jest.fn().mockResolvedValue(access),
           open: jest.fn().mockResolvedValue("https://x.openartifacts.site/d/g?grant=1"),
         });
         await act(async () => {
           renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
         });
-
-        fireEvent.change(screen.getByLabelText("Add people"), { target: { value: "a@b.co" } });
-        await clickButton("Add");
-        expect(port.addPerson).toHaveBeenCalledWith(DOC_ID, "a@b.co");
-        expect(screen.getByText("a@b.co")).toBeTruthy();
-        await clickButton("Remove");
-        expect(port.removePerson).toHaveBeenCalledWith(DOC_ID, "a@b.co");
 
         await clickButton("Open");
         expect(open).toHaveBeenCalledWith(
@@ -204,68 +189,6 @@ describe("OpenArtifactsModal", () => {
           "_blank",
           "noopener,noreferrer"
         );
-      });
-
-      it(`${ISSUE} shows pending requests above who has access and lets the owner approve or decline each`, async () => {
-        const request = { email: "bob@other.com", requestedAt: 1785000100000 };
-        const pending = accessFixture({ requests: [request] });
-        const approved = accessFixture({
-          people: [{ email: "bob@other.com", role: "comment", addedAt: 1785000200000 }],
-        });
-        const port = accessPort({
-          load: jest.fn().mockResolvedValue(pending),
-          addPerson: jest.fn().mockResolvedValue(approved),
-          declineRequest: jest.fn().mockResolvedValue(accessFixture()),
-        });
-        await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
-        });
-
-        const requests = screen.getByText("Requests");
-        const whoHasAccess = screen.getByText("Who has access");
-        expect(
-          requests.compareDocumentPosition(whoHasAccess) & Node.DOCUMENT_POSITION_FOLLOWING
-        ).toBeTruthy();
-        expect(screen.getByText("bob@other.com")).toBeTruthy();
-        expect(screen.getByText("Asked to open it")).toBeTruthy();
-
-        await clickButton("Decline");
-        expect(port.declineRequest).toHaveBeenCalledWith(DOC_ID, "bob@other.com");
-        expect(screen.queryByText("Requests")).toBeNull();
-      });
-
-      it(`${ISSUE} approves a request by adding the address and moves it to who has access`, async () => {
-        const port = accessPort({
-          load: jest
-            .fn()
-            .mockResolvedValue(
-              accessFixture({ requests: [{ email: "bob@other.com", requestedAt: 1 }] })
-            ),
-          addPerson: jest.fn().mockResolvedValue(
-            accessFixture({
-              people: [{ email: "bob@other.com", role: "comment", addedAt: 2 }],
-            })
-          ),
-        });
-        await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, port);
-        });
-
-        await clickButton("Approve");
-
-        expect(port.addPerson).toHaveBeenCalledWith(DOC_ID, "bob@other.com");
-        expect(screen.queryByText("Requests")).toBeNull();
-        expect(screen.getByText("bob@other.com")).toBeTruthy();
-        expect(screen.getByRole("button", { name: "Remove" })).toBeTruthy();
-      });
-
-      it(`${ISSUE} hides the Requests section when nobody has asked`, async () => {
-        await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, accessPort());
-        });
-
-        expect(screen.getByText("Who has access")).toBeTruthy();
-        expect(screen.queryByText("Requests")).toBeNull();
       });
 
       it(`${ISSUE} shows the copy notice after a real switch to private, not for a doc loaded as private`, async () => {
@@ -317,29 +240,6 @@ describe("OpenArtifactsModal", () => {
         expect(screen.queryByText(/may have kept a copy/)).toBeNull();
       });
 
-      it(`${ISSUE} tells the owner to send the link when the server sends no invitation email`, async () => {
-        const person = { email: "a@b.co", role: "comment" as const, addedAt: 1 };
-        const quiet = accessPort({
-          load: jest.fn().mockResolvedValue(accessFixture({ email: false, people: [person] })),
-        });
-        await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, quiet);
-        });
-        expect(screen.getByText("Invited · send them the link")).toBeTruthy();
-        expect(screen.queryByText("Invited · email sent")).toBeNull();
-      });
-
-      it(`${ISSUE} says the email was sent when the server emails invitees`, async () => {
-        const person = { email: "a@b.co", role: "comment" as const, addedAt: 1 };
-        const emailing = accessPort({
-          load: jest.fn().mockResolvedValue(accessFixture({ email: true, people: [person] })),
-        });
-        await act(async () => {
-          renderModal(createConfirmMock(), DOC_ID, undefined, undefined, emailing);
-        });
-        expect(screen.getByText("Invited · email sent")).toBeTruthy();
-      });
-
       it(`${ISSUE} shows one muted line and keeps Update, Delete, Copy link and Open when the server does not support private documents`, async () => {
         const writeText = jest.fn().mockResolvedValue(undefined);
         Object.defineProperty(window.navigator, "clipboard", {
@@ -362,7 +262,6 @@ describe("OpenArtifactsModal", () => {
 
         expect(screen.getByText(message)).toBeTruthy();
         expect(screen.queryByRole("alert")).toBeNull();
-        expect(screen.queryByLabelText("Add people")).toBeNull();
         expect(screen.queryByRole("radio", { name: "Only those invited" })).toBeNull();
         expect(screen.getByRole("button", { name: "Update" })).toBeTruthy();
         expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
@@ -645,6 +544,30 @@ describe("OpenArtifactsModal", () => {
 
         expect(writeText).toHaveBeenCalledWith(RECEIPT.url);
         expect(open).toHaveBeenCalledWith(RECEIPT.url, "_blank", "noopener,noreferrer");
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 shows the server's account-link offer verbatim with a Link account link only when the receipt carries guidance", async () => {
+        const message = "Publish from other agents too? Link your account.";
+        const guidance = { message, url: "https://openartifacts.ai/account" };
+        const onConfirm = createConfirmMock()
+          .mockResolvedValueOnce({ kind: "success", action: "publish", receipt: RECEIPT })
+          .mockResolvedValueOnce({
+            kind: "success",
+            action: "publish",
+            receipt: { ...RECEIPT, guidance },
+          });
+
+        renderModal(onConfirm);
+        await clickButton("Yes, publish");
+        expect(screen.queryByText(/Link account/)).toBeNull();
+
+        renderModal(onConfirm);
+        await clickButton("Yes, publish");
+        expect(screen.getByText(message, { exact: false })).toBeTruthy();
+        const link = screen.getByRole("link", { name: "Link account" });
+        expect(link.getAttribute("href")).toBe(guidance.url);
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toBe("noopener noreferrer");
       });
     });
 

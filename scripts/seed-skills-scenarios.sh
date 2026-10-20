@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Seed the test vault with predefined skill scenarios for the
-# Skills Discovery Redesign (designdocs/SKILLS_DISCOVERY_REDESIGN.md §14).
+# Seed the test vault with predefined skill scenarios.
 #
 # Each scenario uses a unique, scenario-prefixed skill name so the Skills
 # tab makes the state obvious at a glance and so `--clean` can reliably

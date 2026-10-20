@@ -62,17 +62,9 @@ Before drafting:
    - `src/tools/`
    - `src/mcp/`
    - `src/skills/`
-2. **Read any design doc referenced by the TODO line.** Examples currently
-   present in `designdocs/todo/`:
-   - `MCP_EXTERNALLY_MANAGED_SERVERS.md`
-   - `AGENT_PLANNING_REFLECTION_V0.md`
-   - `AGENT_REASONING_BLOCK.md`
-   - `ACP_DESIGN.md`
-
-   If the TODO references a doc that does not exist
-   (e.g. `designdocs/SKILLS_DISCOVERY_REDESIGN.md` is referenced today but
-   not yet written), flag this in the issue's Open questions section and
-   proceed with the TODO text alone.
+2. **Read any design doc referenced by the TODO line.** If the TODO
+   references a doc that does not exist, flag this in the issue's Open
+   questions section and proceed with the TODO text alone.
 
 3. **Note the current behavior in one or two sentences.** This anchors the
    `## Context` section. The sentence must reference at least one real file
@@ -110,8 +102,8 @@ Exact section order. Markdown. No other top-level sections.
 ## Context
 
 <1–3 sentences anchored in the current code/behavior the investigator just
-verified. Name the user pain or the gap. Link to a design doc in
-`designdocs/todo/` if one is directly relevant. Do not link back to any
+verified. Name the user pain or the gap. Link to a design doc
+if one is directly relevant. Do not link back to any
 source TODO file.>
 
 ## Proposed behavior

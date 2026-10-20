@@ -5,7 +5,6 @@ import { App, normalizePath, TFile, TFolder } from "obsidian";
 
 export const AGENTS_FILE_NAME = "AGENTS.md";
 export const CLAUDE_FILE_NAME = "CLAUDE.md";
-const CLAUDE_AGENTS_REFERENCE = "@AGENTS.md";
 
 const CLAUDE_REFERENCE_PATTERN = /^[ \t>-]*@\.?\/?AGENTS\.md[ \t]*$/im;
 
@@ -61,7 +60,6 @@ export async function removeGeneratedInstructionFiles(app: App, folderPath: stri
 
 export interface InstructionFilesSnapshot {
   agents: string | null;
-  claude: string | null;
 }
 
 export async function captureInstructionFiles(
@@ -70,7 +68,6 @@ export async function captureInstructionFiles(
 ): Promise<InstructionFilesSnapshot> {
   return {
     agents: await readIfPresent(app, childPath(folderPath, AGENTS_FILE_NAME)),
-    claude: await readIfPresent(app, childPath(folderPath, CLAUDE_FILE_NAME)),
   };
 }
 
@@ -81,7 +78,6 @@ export async function restoreInstructionFiles(
 ): Promise<void> {
   try {
     await restoreFile(app, childPath(folderPath, AGENTS_FILE_NAME), snapshot.agents);
-    await restoreFile(app, childPath(folderPath, CLAUDE_FILE_NAME), snapshot.claude);
   } catch (error) {
     logWarn(`[Instructions] Failed to restore instruction files in "${folderPath}"`, error);
   }
@@ -115,7 +111,6 @@ export async function ensureAgentsFile(
   const agentsPath = childPath(folderPath, AGENTS_FILE_NAME);
   const agentsFile = await ensureFile(app, agentsPath, initialContent);
   await convertLegacyGeneratedFile(app, agentsFile, initialContent);
-  await ensureClaudeReference(app, childPath(folderPath, CLAUDE_FILE_NAME));
   return agentsFile;
 }
 
@@ -168,20 +163,6 @@ async function ensureFile(app: App, filePath: string, content: string): Promise<
   const folderPath = filePath.split("/").slice(0, -1).join("/");
   if (folderPath) await ensureFolderExists(app.vault, folderPath);
   return await app.vault.create(filePath, content);
-}
-
-async function ensureClaudeReference(app: App, claudePath: string): Promise<void> {
-  const file = findCachedInstructionFile(app, claudePath);
-  if (!file) {
-    await ensureFile(app, claudePath, `${CLAUDE_AGENTS_REFERENCE}\n`);
-    return;
-  }
-
-  const content = await app.vault.read(file);
-  if (CLAUDE_REFERENCE_PATTERN.test(content)) return;
-
-  const separator = content.length === 0 ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-  await app.vault.modify(file, `${content}${separator}${CLAUDE_AGENTS_REFERENCE}\n`);
 }
 
 async function convertLegacyGeneratedFile(

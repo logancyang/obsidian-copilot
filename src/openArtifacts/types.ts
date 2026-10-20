@@ -6,11 +6,19 @@ export interface OpenArtifactsDocument {
 
 export type OpenArtifactsLinkAccess = "anyone" | "invited";
 
+// The server's one-time offer to link this Copilot license to an OpenArtifacts account; its text is server-owned.
+// https://github.com/Brevilabs/OpenArtifacts/issues/94
+export interface OpenArtifactsGuidance {
+  message: string;
+  url: string;
+}
+
 export interface OpenArtifactsReceipt {
   docId: string;
   url: string;
   version: number;
   linkAccess?: OpenArtifactsLinkAccess;
+  guidance?: OpenArtifactsGuidance;
 }
 
 export interface OpenArtifactsAccess {

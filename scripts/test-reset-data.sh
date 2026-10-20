@@ -8,7 +8,7 @@ set -euo pipefail
 #   npm run test:reset-data                 # uses the bundled clean-onboarding fixture
 #   npm run test:reset-data -- <path>       # uses an arbitrary data.json
 
-OBSIDIAN_BIN="/Applications/Obsidian.app/Contents/MacOS/obsidian"
+OBSIDIAN_BIN="${OBSIDIAN_BIN:-/Applications/Obsidian.app/Contents/MacOS/obsidian}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKTREE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DEFAULT_FIXTURE="$SCRIPT_DIR/test-fixtures/data.clean-onboarding.json"
@@ -55,6 +55,10 @@ fi
 
 cd "$WORKTREE_ROOT"
 
+# shellcheck source=scripts/obsidian-vault.sh
+source "$SCRIPT_DIR/obsidian-vault.sh"
+require_obsidian_vault "$VAULT_PATH"
+
 PLUGIN_ID="$(node -p "require('./manifest.json').id")"
 if [[ -z "$PLUGIN_ID" ]]; then
   echo "error: could not read plugin id from manifest.json" >&2
@@ -68,12 +72,14 @@ TARGET="$PLUGIN_DIR/data.json"
 echo "==> Writing $SRC -> $TARGET"
 cp "$SRC" "$TARGET"
 
-echo "==> Reloading plugin in Obsidian"
+echo "==> Reloading plugin in Obsidian (vault: $VAULT_PATH)"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
   echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
+elif [[ -z "$OBSIDIAN_VAULT_NAME" ]]; then
+  echo "warning: Obsidian doesn't appear to be running. Start it and the reset data.json will load on next open." >&2
 else
-  if ! "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 \
-     || ! "$OBSIDIAN_BIN" plugin:reload id="$PLUGIN_ID" >/dev/null 2>&1; then
+  if ! "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 \
+     || ! "$OBSIDIAN_BIN" vault="$OBSIDIAN_VAULT_NAME" plugin:reload id="$PLUGIN_ID" >/dev/null 2>&1; then
     echo "warning: Obsidian doesn't appear to be running. Start it and the reset data.json will load on next open." >&2
   fi
 fi

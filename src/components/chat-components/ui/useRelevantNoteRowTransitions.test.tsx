@@ -2,7 +2,7 @@ import {
   ROW_EXIT_MS,
   useRelevantNoteRowTransitions,
 } from "@/components/chat-components/ui/useRelevantNoteRowTransitions";
-import type { RelevantNoteEntry } from "@/search/findRelevantNotes";
+import type { RelevantNoteEntry } from "@/miyo/findRelevantNotes";
 import { act, renderHook } from "@testing-library/react";
 
 function entry(path: string, score = 0.5): RelevantNoteEntry {

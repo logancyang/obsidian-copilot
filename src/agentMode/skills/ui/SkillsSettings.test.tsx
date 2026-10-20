@@ -5,6 +5,7 @@ import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
@@ -66,6 +67,9 @@ jest.mock("./SkillLoadIssues", () => {
 });
 
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  isObsidianCliEnabled: jest.fn(),
+}));
 jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 
 jest.mock("@/agentMode/backends/registry", () => ({
@@ -105,6 +109,66 @@ describe("SkillsSettings", () => {
       mockCapturedLoadIssues = [];
       mockCapturedFixAll = () => undefined;
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(true);
+    });
+
+    it("shows a new install's Obsidian skills off for Claude and Codex, except Bases for Codex, and an existing install's saved choices unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+      mockAgents = [
+        { id: "opencode", displayName: "OpenCode", Icon: Bot },
+        { id: "claude", displayName: "Claude", Icon: Bot },
+        { id: "codex", displayName: "Codex", Icon: Bot },
+      ];
+      mockInstallStates = {
+        opencode: { kind: "ready", source: "managed" },
+        claude: { kind: "ready", source: "managed" },
+        codex: { kind: "ready", source: "managed" },
+      };
+      await act(async () => {
+        renderSettings();
+      });
+      const state = (name: string) => {
+        const button = screen.getByRole("button", { name });
+        return [button.getAttribute("aria-pressed"), button.getAttribute("aria-disabled")];
+      };
+      expect(state("obsidian-markdown for OpenCode")).toEqual(["true", "false"]);
+      expect(state("obsidian-markdown for Claude")).toEqual(["false", "false"]);
+      expect(state("obsidian-markdown for Codex")).toEqual(["false", "false"]);
+      expect(state("obsidian-bases for Codex")).toEqual(["true", "false"]);
+      expect(state("obsidian-bases for Claude")).toEqual(["false", "false"]);
+
+      await act(async () => {
+        const current = settingsStore.get(settingsAtom).agentMode;
+        updateSetting("agentMode", {
+          ...current,
+          skills: { ...current.skills, builtinPreferences: {} },
+        });
+      });
+      expect(state("obsidian-markdown for Claude")).toEqual(["true", "false"]);
+      expect(state("obsidian-cli for Codex")).toEqual(["true", "false"]);
+    });
+
+    it("tells the user to turn on Obsidian's command line interface and locks the obsidian-cli agents while it is off https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+      mockAgents = [{ id: "opencode", displayName: "OpenCode", Icon: Bot }];
+      mockInstallStates = { opencode: { kind: "ready", source: "managed" } };
+      jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
+      await act(async () => {
+        renderSettings();
+      });
+      expect(
+        screen.getByLabelText(
+          "Turn on Command line interface in Obsidian's Settings → General to use this skill."
+        )
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "obsidian-cli for OpenCode" })
+          .getAttribute("aria-disabled")
+      ).toBe("true");
+      expect(
+        screen
+          .getByRole("button", { name: "obsidian-markdown for OpenCode" })
+          .getAttribute("aria-disabled")
+      ).toBe("false");
     });
 
     it("renders only the changed built-in when preferences publish and discovery reruns https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
@@ -149,14 +213,14 @@ describe("SkillsSettings", () => {
       expect(Icon).not.toHaveBeenCalled();
     });
 
-    it.each<[boolean, boolean, boolean, boolean]>([
-      [false, false, false, false],
-      [true, false, true, false],
-      [false, true, false, true],
-      [true, true, true, true],
+    it.each<[boolean, boolean]>([
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
     ])(
-      "shows Miyo tools only for enabled feature settings (%s, %s) for https://github.com/logancyang/obsidian-copilot/issues/3022",
-      async (search, documents, showSearch, showParse) => {
+      "never lists miyo-search or miyo-parse (search switch %s, documents %s) for https://github.com/Brevilabs/obsidian-copilot-private/issues/736 https://github.com/Brevilabs/obsidian-copilot-private/issues/740",
+      async (search, documents) => {
         const initial = settingsStore.get(settingsAtom);
         settingsStore.set(settingsAtom, {
           ...initial,
@@ -167,15 +231,8 @@ describe("SkillsSettings", () => {
         await act(async () => {
           renderSettings();
         });
-        expect(
-          Boolean(screen.queryByRole("button", { name: "More actions for miyo-search" }))
-        ).toBe(showSearch);
-        expect(Boolean(screen.queryByRole("button", { name: "More actions for miyo-parse" }))).toBe(
-          showParse
-        );
-        expect(
-          screen.queryByText("Unavailable with your current Miyo search or document settings.")
-        ).toBeNull();
+        expect(screen.queryByRole("button", { name: "More actions for miyo-search" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "More actions for miyo-parse" })).toBeNull();
       }
     );
 

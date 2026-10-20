@@ -33,10 +33,7 @@ interface Harness {
     publish: jest.Mock;
     update: jest.Mock;
     delete: jest.Mock;
-    declineRequest: jest.Mock;
     setLinkAccess: jest.Mock;
-    addPerson: jest.Mock;
-    removePerson: jest.Mock;
   };
   file: TFile;
   frontmatter: Record<string, unknown>;
@@ -47,6 +44,8 @@ interface Harness {
   processFrontMatter: jest.Mock;
   publisher: OpenArtifactsPublisher;
   recordLedger: jest.Mock<Promise<void>, [OpenArtifactsLedgerEntry]>;
+  isLinkOfferPending: jest.Mock<Promise<boolean>, []>;
+  markLinkOfferShown: jest.Mock<Promise<void>, []>;
 }
 
 function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
@@ -76,9 +75,6 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     delete: jest.fn().mockResolvedValue(undefined),
     getAccess: jest.fn(),
     setLinkAccess: jest.fn(),
-    addPerson: jest.fn(),
-    removePerson: jest.fn(),
-    declineRequest: jest.fn(),
     openAsOwner: jest.fn(),
   };
   const loadLicenseKey = jest.fn().mockResolvedValue("decrypted-license");
@@ -89,11 +85,15 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
   const recordLedger = jest
     .fn<Promise<void>, [OpenArtifactsLedgerEntry]>()
     .mockResolvedValue(undefined);
+  const isLinkOfferPending = jest.fn<Promise<boolean>, []>().mockResolvedValue(false);
+  const markLinkOfferShown = jest.fn<Promise<void>, []>().mockResolvedValue(undefined);
   const publisher = new OpenArtifactsPublisher(app, {
     client,
     loadLicenseKey,
     buildDocument,
     recordLedger,
+    isLinkOfferPending,
+    markLinkOfferShown,
     createModal: (options) => {
       modalOptions.push(options);
       return {
@@ -119,6 +119,8 @@ function createHarness(frontmatter: Record<string, unknown> = {}): Harness {
     processFrontMatter,
     publisher,
     recordLedger,
+    isLinkOfferPending,
+    markLinkOfferShown,
   };
 }
 
@@ -150,7 +152,12 @@ describe("OpenArtifactsPublisher", () => {
         expect(result).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
         expect(harness.loadLicenseKey).toHaveBeenCalledTimes(1);
         expect(harness.buildDocument).toHaveBeenCalledWith(harness.file, activeDocument);
-        expect(harness.client.publish).toHaveBeenCalledWith(DOCUMENT, "decrypted-license");
+        expect(harness.client.publish).toHaveBeenCalledWith(
+          DOCUMENT,
+          "decrypted-license",
+          undefined,
+          false
+        );
         const ledgerEntry = harness.recordLedger.mock.calls[0][0];
         expect(ledgerEntry).toMatchObject({
           docId: DOC_ID,
@@ -164,6 +171,54 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.recordLedger.mock.invocationCallOrder[0]).toBeLessThan(
           harness.processFrontMatter.mock.invocationCallOrder[0]
         );
+        expect(harness.frontmatter.openartifacts).toBe(DOC_URL);
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 requests the account-link offer on a create while it is pending and records it once the receipt carries guidance", async () => {
+        const harness = createHarness();
+        const guidance = { message: "Link your account.", url: "https://openartifacts.ai/account" };
+        harness.isLinkOfferPending.mockResolvedValue(true);
+        harness.client.publish.mockResolvedValue({ ...RECEIPT, guidance });
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(harness.client.publish).toHaveBeenCalledWith(
+          DOCUMENT,
+          "decrypted-license",
+          undefined,
+          true
+        );
+        expect(harness.markLinkOfferShown).toHaveBeenCalledTimes(1);
+        expect(result).toEqual({
+          kind: "success",
+          action: "publish",
+          receipt: { ...RECEIPT, guidance },
+        });
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 records nothing when a requested offer comes back without guidance, and never requests one on an update", async () => {
+        const created = createHarness();
+        created.isLinkOfferPending.mockResolvedValue(true);
+        await openAndConfirm(created, "publish");
+        expect(created.markLinkOfferShown).not.toHaveBeenCalled();
+
+        const updated = createHarness({ openartifacts: DOC_URL });
+        updated.isLinkOfferPending.mockResolvedValue(true);
+        await openAndConfirm(updated, "update");
+        expect(updated.isLinkOfferPending).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/OpenArtifacts/issues/94 keeps a successful publish when the offer marker cannot be written", async () => {
+        const harness = createHarness();
+        harness.client.publish.mockResolvedValue({
+          ...RECEIPT,
+          guidance: { message: "Link your account.", url: "https://openartifacts.ai/account" },
+        });
+        harness.markLinkOfferShown.mockRejectedValue(new Error("vault is read-only"));
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toMatchObject({ kind: "success", action: "publish" });
         expect(harness.frontmatter.openartifacts).toBe(DOC_URL);
       });
 
@@ -448,7 +503,8 @@ describe("OpenArtifactsPublisher", () => {
         expect(created.client.publish).toHaveBeenCalledWith(
           DOCUMENT,
           "decrypted-license",
-          "invited"
+          "invited",
+          false
         );
 
         const published = createHarness({ openartifacts: DOC_URL });
@@ -488,54 +544,32 @@ describe("OpenArtifactsPublisher", () => {
         });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 routes the access port's decline through the client with the license key", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 rejects a stale setLinkAccess after the note identity changes during license loading", async () => {
+        const harness = createHarness({ openartifacts: DOC_URL });
+        await harness.publisher.open(harness.file);
+        harness.loadLicenseKey.mockImplementation(async () => {
+          harness.frontmatter.openartifacts = NEW_DOC_URL;
+          return "decrypted-license";
+        });
+
+        await expect(
+          harness.modalOptions[0].access!.setLinkAccess(DOC_ID, "anyone")
+        ).rejects.toMatchObject({ code: "identity_changed" });
+        expect(harness.client.setLinkAccess).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 allows setLinkAccess for the note's current document", async () => {
         const harness = createHarness({ openartifacts: DOC_URL });
         await harness.publisher.open(harness.file);
 
-        await harness.modalOptions[0].access!.declineRequest(DOC_ID, "bob@other.com");
+        await harness.modalOptions[0].access!.setLinkAccess(DOC_ID, "anyone");
 
-        expect(harness.client.declineRequest).toHaveBeenCalledWith(
+        expect(harness.client.setLinkAccess).toHaveBeenCalledWith(
           DOC_ID,
-          "bob@other.com",
+          "anyone",
           "decrypted-license"
         );
       });
-
-      it.each(["setLinkAccess", "addPerson", "removePerson", "declineRequest"] as const)(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/707 rejects stale %s after the note identity changes during license loading",
-        async (method) => {
-          const harness = createHarness({ openartifacts: DOC_URL });
-          await harness.publisher.open(harness.file);
-          harness.loadLicenseKey.mockImplementation(async () => {
-            harness.frontmatter.openartifacts = NEW_DOC_URL;
-            return "decrypted-license";
-          });
-          const access = harness.modalOptions[0].access!;
-          const action =
-            method === "setLinkAccess"
-              ? access.setLinkAccess(DOC_ID, "anyone")
-              : access[method](DOC_ID, "bob@other.com");
-
-          await expect(action).rejects.toMatchObject({ code: "identity_changed" });
-          expect(harness.client[method]).not.toHaveBeenCalled();
-        }
-      );
-
-      it.each(["setLinkAccess", "addPerson", "removePerson", "declineRequest"] as const)(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/707 allows %s for the note's current document",
-        async (method) => {
-          const harness = createHarness({ openartifacts: DOC_URL });
-          await harness.publisher.open(harness.file);
-          const access = harness.modalOptions[0].access!;
-          if (method === "setLinkAccess") await access.setLinkAccess(DOC_ID, "anyone");
-          else await access[method](DOC_ID, "bob@other.com");
-          expect(harness.client[method]).toHaveBeenCalledWith(
-            DOC_ID,
-            method === "setLinkAccess" ? "anyone" : "bob@other.com",
-            "decrypted-license"
-          );
-        }
-      );
 
       it("blocks another POST after a publish response is lost", async () => {
         const message =

@@ -6,6 +6,7 @@ import {
 } from "@/agentMode/ui/activityGroups";
 import { buildAgentTrail, type RenderNode, type ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart } from "@/agentMode/session/types";
+import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
 
 function tool(id: string, overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   return { kind: "tool_call", id, title: id, status: "completed", ...overrides };
@@ -58,7 +59,7 @@ describe("activityGroups", () => {
       const grouped = foldActivityGroups([
         action("a", { vendorToolName: "Read" }),
         action("b", { vendorToolName: "Grep" }),
-        action("miyo", { vendorToolName: "Bash", input: { command: 'sh miyo-search.sh "desk"' } }),
+        { type: "action", part: miyoSearchCall() },
         action("c", { vendorToolName: "Read" }),
         action("d", { vendorToolName: "Read" }),
       ]);
