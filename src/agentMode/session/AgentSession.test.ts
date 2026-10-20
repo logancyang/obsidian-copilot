@@ -3683,6 +3683,23 @@ describe("AgentSession", () => {
         expect(retry).toContain("my secret word is PELICAN");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 never resends the saved turns after a prompt cut off at its output limit delivered them, even when the continuation fails", async () => {
+        const mock = makeMockBackend();
+        mock.prompt
+          .mockResolvedValueOnce({ stopReason: "max_tokens" })
+          .mockRejectedValueOnce(new Error("connection dropped"));
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.resendSavedHistoryOnNextTurn();
+
+        await expect(session.sendPrompt("what is my secret word?").turn).rejects.toThrow(
+          "connection dropped"
+        );
+        await session.sendPrompt("and backwards?").turn;
+
+        expect(promptTexts(mock)[2]).toBe("and backwards?");
+      });
+
       it("sends no conversation_history when no saved history is queued", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);

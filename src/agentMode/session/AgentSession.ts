@@ -837,6 +837,17 @@ export class AgentSession {
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
         resp = await this.promptBackend(req, signal);
+        if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
+          this.pendingFanoutContext = [];
+        }
+        if (sendsSavedHistory && resp.stopReason !== "cancelled") {
+          this.resendSavedHistory = false;
+        }
+        if (isFirstTurn) this.firstPromptSent = true;
+        if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
+        if (projectContextUpdates) {
+          this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
+        }
         // An agent cut off at its output limit gets the cause and one chance to continue in smaller steps. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
         if (resp.stopReason === "max_tokens") {
           if (placeholderId && this.store.settleOpenParts(placeholderId, "failed")) {
@@ -847,17 +858,6 @@ export class AgentSession {
             signal
           );
         }
-      }
-      if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
-        this.pendingFanoutContext = [];
-      }
-      if (sendsSavedHistory && resp.stopReason !== "cancelled") {
-        this.resendSavedHistory = false;
-      }
-      if (isFirstTurn && promptStarted) this.firstPromptSent = true;
-      if (webTabBlock && promptStarted) this.lastSentWebTabBlock = webTabBlock;
-      if (projectContextUpdates && promptStarted) {
-        this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
       if (
         placeholderId &&
