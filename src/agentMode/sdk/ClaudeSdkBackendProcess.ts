@@ -380,7 +380,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         }
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
         for (const e of events) this.dispatchEvent(e);
-        if (sdkMsg.type === "result") {
+        // A leftover background task's result arrives before the prompt's own. https://github.com/Brevilabs/obsidian-copilot-private/issues/195
+        if (sdkMsg.type === "result" && sdkMsg.origin?.kind !== "task-notification") {
           stopReason = mapStopReason(sdkMsg);
           if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
             resultErrorMessage = sdkMsg.result;

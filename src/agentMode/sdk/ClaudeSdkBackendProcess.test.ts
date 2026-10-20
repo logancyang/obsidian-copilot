@@ -555,6 +555,30 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it("keeps reading past a leftover background task's result and answers the user's prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/195)", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([
+            { ...resultMessage(), num_turns: 0, result: "", origin: { kind: "task-notification" } },
+            streamEvent({
+              type: "content_block_delta",
+              index: 0,
+              delta: { type: "text_delta", text: "PONG" },
+            }),
+            resultMessage(),
+          ] as SDKMessage[])
+        );
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const events = registerCollector(proc, sessionId);
+
+        const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] });
+
+        expect(resp.stopReason).toBe("end_turn");
+        expect(events.map((e) => e.update)).toEqual([
+          { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "PONG" } },
+        ]);
+      });
+
       it("attaches Copilot's MCP servers over HTTP and pre-approves their tools on every turn", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();
