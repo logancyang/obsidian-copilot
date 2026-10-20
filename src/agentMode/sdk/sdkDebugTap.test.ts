@@ -88,6 +88,7 @@ describe("sdkDebugTap", () => {
         method: "stream_event:content_block_delta",
         id: "s",
         payload: { x: 1 },
+        sessionId: "s",
       });
     });
 

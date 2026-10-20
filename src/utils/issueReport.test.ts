@@ -254,6 +254,52 @@ describe("issueReport", () => {
       expect(attachment(bundle, "report").included).toBe(true);
     });
 
+    it("keeps every conversation's state and head/tail when companion logs exhaust the report budget (https://github.com/Brevilabs/obsidian-copilot-private/issues/658)", async () => {
+      const conversations = Array.from(
+        { length: 5 },
+        (_, i) =>
+          [
+            JSON.stringify({ frameSink: "conversation", file: `session-${i}.ndjson` }),
+            JSON.stringify({
+              method: "frameSink.state",
+              payload: { model: `model-${i}`, mode: "default" },
+            }),
+            JSON.stringify({ id: `first-${i}` }),
+            ...Array.from({ length: 50 }, () => JSON.stringify({ payload: "漢".repeat(300) })),
+            JSON.stringify({
+              method: "frameSink.state",
+              payload: { model: `switched-${i}`, mode: "plan" },
+            }),
+            ...Array.from({ length: 50 }, () => JSON.stringify({ payload: "漢".repeat(300) })),
+            JSON.stringify({ id: `last-${i}` }),
+          ].join("\n") + "\n"
+      ).join("");
+      const input = {
+        screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 300_000),
+        logs: [
+          { id: "chatLog", name: "copilot-log.md", text: filler(200_000) },
+          { id: "opencodeLog", name: "opencode.log", text: filler(200_000) },
+          {
+            id: "activityLog",
+            name: ACTIVITY_NAME,
+            text: conversations,
+            preserveConversations: true,
+          },
+        ],
+      };
+      const bundle = await build(input);
+      const packed = entryText(bundle, ACTIVITY_NAME);
+      for (let i = 0; i < 5; i++) {
+        expect(packed).toContain(`session-${i}.ndjson`);
+        expect(packed).toContain(`"model":"model-${i}"`);
+        expect(packed).toContain(`"model":"switched-${i}"`);
+        expect(packed).toContain(`"id":"first-${i}"`);
+        expect(packed).toContain(`"id":"last-${i}"`);
+      }
+      expect(encode(packed).length).toBeLessThanOrEqual(101_000);
+      expect(packed).not.toContain("�");
+    });
+
     it(`spends the budget on the screenshot before any log (${ISSUE_URL})`, async () => {
       const bundle = await build({
         screenshotPng: new Uint8Array(LOG_BUDGET_BYTES - 1024),

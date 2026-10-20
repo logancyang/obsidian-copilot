@@ -389,9 +389,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       setFrameSinkVaultBasePath(
         adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null
       );
-      // A log left permissive by an older build is only reachable here when
-      // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
-      void acpFrameSink.narrowLegacyLogs();
+      void acpFrameSink.removeLegacyLogs();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       this.skills = SkillManager.getInstance();

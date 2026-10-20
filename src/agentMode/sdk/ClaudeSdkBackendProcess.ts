@@ -249,18 +249,26 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
 
     const state = this.computeState(sessionId);
+    // Sessions that never switch mode still need their established mode in reports.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
     logSdkOutboundResult(
       "newSession",
-      { sessionId, currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
+      {
+        sessionId,
+        currentModelId: seedModelId ?? null,
+        currentModeId: state.mode?.current ?? null,
+        hasEffort: state.model !== null,
+      },
       sessionId
     );
     return { sessionId, state };
   }
 
   async prompt(params: PromptInput): Promise<PromptOutput> {
-    const session = this.sessions.get(params.sessionId);
+    const id = params.sessionId;
+    const session = this.sessions.get(id);
     if (!session) {
-      throw new Error(`Unknown session ${params.sessionId}`);
+      throw new Error(`Unknown session ${id}`);
     }
 
     if (this.opts.checkAuth && !this.authConfirmed) {
@@ -274,8 +282,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
 
     const messageContent = promptInputToAnthropicContent(params);
-    const promptStream = makePromptStream(messageContent, params.sessionId);
-    const permissionBridge = new PermissionBridge(params.sessionId, {
+    const promptStream = makePromptStream(messageContent, id);
+    const permissionBridge = new PermissionBridge(id, {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
@@ -304,9 +312,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       append: session.systemPromptAppend || undefined,
     };
     if (session.firstPromptStarted) {
-      options.resume = params.sessionId;
+      options.resume = id;
     } else {
-      options.sessionId = params.sessionId;
+      options.sessionId = id;
     }
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
@@ -341,25 +349,26 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         prompt: summarizePromptContent(messageContent),
         resume: options.resume ?? null,
         sessionIdSeed: options.sessionId ?? null,
-        model: options.model ?? null,
-        permissionMode: options.permissionMode ?? null,
+        model: options.model || null,
+        permissionMode: options.permissionMode || null,
         effort: options.effort ?? null,
         allowedTools: options.allowedTools,
         disallowedTools: options.disallowedTools,
       },
-      params.sessionId
+      id
     );
 
     const turnAbort = new AbortController();
     options.abortController = turnAbort;
 
-    if (this.sessions.get(params.sessionId) !== session) return { stopReason: "cancelled" };
+    if (this.sessions.get(id) !== session) return { stopReason: "cancelled" };
     const q = query({ prompt: promptStream, options });
+    logSdkOutboundResult("prompt", { modelId: options.model, modeId: options.permissionMode }, id);
     session.active = q;
     session.firstPromptStarted = true;
     const stream = guardSdkStreamStall(q, {
       abortController: turnAbort,
-      onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
+      onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, id),
     });
 
     const translatorState = createTranslatorState(
@@ -373,13 +382,19 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       let planUsageRequested = false;
       for await (const sdkMsg of stream) {
         if (this.shuttingDown) break;
-        logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, params.sessionId);
+        logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, id);
         if (!planUsageRequested) {
           planUsageRequested = true;
           void this.refreshPlanUsage(q);
         }
-        const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
-        for (const e of events) this.dispatchEvent(e);
+        const events = translateSdkMessage(sdkMsg, id, translatorState);
+        for (const e of events) {
+          this.dispatchEvent(e);
+          // SDK plan-mode transitions must reach diagnostic state. https://github.com/Brevilabs/obsidian-copilot-private/issues/658
+          if (e.update.sessionUpdate === "current_mode_update") {
+            logSdkInbound("session/update", e, e.sessionId);
+          }
+        }
         if (sdkMsg.type === "result") {
           stopReason = mapStopReason(sdkMsg);
           if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
@@ -400,10 +415,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
 
     if (resultErrorMessage) {
-      logSdkError("→", "prompt", { error: resultErrorMessage }, params.sessionId);
+      logSdkError("→", "prompt", { error: resultErrorMessage }, id);
       throw new Error(resultErrorMessage);
     }
-    logSdkOutboundResult("prompt", { stopReason }, params.sessionId);
+    logSdkOutboundResult("prompt", { stopReason }, id);
     return { stopReason };
   }
 
@@ -434,6 +449,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.active) {
       try {
         await session.active.setModel(params.modelId);
+        logSdkOutboundResult("setModel", { modelId: params.modelId }, params.sessionId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setModel() threw (will apply on next turn)", e);
         logSdkError("→", "setModel", { error: err2String(e) }, params.sessionId);
@@ -460,6 +476,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.active) {
       try {
         await session.active.setPermissionMode(mode);
+        logSdkOutboundResult("setMode", { modeId: mode }, params.sessionId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setPermissionMode() threw (will apply on next turn)", e);
         logSdkError("→", "setPermissionMode", { error: err2String(e) }, params.sessionId);
@@ -591,9 +608,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     });
 
     const state = this.computeState(params.sessionId);
+    // Reopening establishes a mode even when the user never switches it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/658
     logSdkOutboundResult(
       method,
-      { currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
+      {
+        currentModelId: seedModelId ?? null,
+        currentModeId: state.mode?.current ?? null,
+        hasEffort: state.model !== null,
+      },
       params.sessionId
     );
     return { sessionId: params.sessionId, state };

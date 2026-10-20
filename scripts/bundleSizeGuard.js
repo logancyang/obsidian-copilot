@@ -27,7 +27,7 @@ function rewriteExactZodImports(source, filePath = "source.js") {
     const importClause = statement.importClause;
     const namedBindings = importClause?.namedBindings;
     if (
-      (specifier !== "zod" && specifier !== "zod/v4") ||
+      !["zod", "zod/v3", "zod/v4"].includes(specifier) ||
       importClause?.isTypeOnly ||
       importClause?.name ||
       statement.attributes ||
