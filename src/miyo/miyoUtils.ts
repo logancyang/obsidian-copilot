@@ -51,6 +51,12 @@ export function isMiyoSearchActive(
   return settings.enableMiyo === true && settings.enableMiyoSearchSkill === true;
 }
 
+export function isMiyoParseActive(
+  settings: Pick<CopilotSettings, "enableMiyo" | "enableMiyoDocumentProcessing">
+): boolean {
+  return settings.enableMiyo === true && settings.enableMiyoDocumentProcessing === true;
+}
+
 export async function canProcessDocumentsWithMiyo(
   settings: CopilotSettings = getSettings()
 ): Promise<boolean> {

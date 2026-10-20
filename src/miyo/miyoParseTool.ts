@@ -1,17 +1,18 @@
+import type { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoCustomUrl } from "@/miyo/miyoRuntimePolicy";
+import type { CopilotSettings } from "@/settings/model";
 import { err2String } from "@/utils";
-import { requireNodeModule } from "@/utils/desktopRuntime";
+import { toVaultRelative } from "@/utils/vaultPath";
 
 export const MIYO_PARSE_TOOL_NAME = "miyo_parse";
 
 // Codex cuts the middle out of any MCP output over about 40,000 UTF-8 bytes, so a long document comes back in parts the agent
 // pages through instead of one cut-off dump. https://github.com/Brevilabs/obsidian-copilot-private/issues/740
 const PART_BUDGET_BYTES = 32_000;
-const PARSE_TIMEOUT_MS = 120_000;
-const MAX_PARSED_BYTES = 256 * 1024 * 1024;
 
 export const MIYO_PARSE_TOOL = Object.freeze({
   name: MIYO_PARSE_TOOL_NAME,
-  description: `Convert one PDF or EPUB into Markdown/text with Miyo on this computer. The file can be anywhere on disk and doesn't need to be in the vault. A long document comes back in parts: when a part names a next offset, call again with that offset to read on. If it fails, tell the user, then read the file with any other tool you have; don't call it again for that file.`,
+  description: `Convert one PDF or EPUB into Markdown/text with Miyo. The file doesn't need to be in the vault. A long document comes back in parts: when a part names a next offset, call again with that offset to read on. If it fails, tell the user, then read the file with any other tool you have; don't call it again for that file.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -100,51 +101,24 @@ function partEnd(text: string, offset: number): number {
   return end < text.length && last >= 0xd800 && last <= 0xdbff ? end - 1 : end;
 }
 
-export async function parseWithMiyoCli(path: string, cwd: string | undefined): Promise<string> {
-  const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  const { promisify } = requireNodeModule<typeof import("node:util")>("util");
-  try {
-    const { stdout } = await promisify(execFile)(resolveMiyoCli(), ["parse", path], {
-      cwd,
-      timeout: PARSE_TIMEOUT_MS,
-      maxBuffer: MAX_PARSED_BYTES,
-      encoding: "utf8",
-    });
-    return stdout;
-  } catch (error) {
-    const { code, stderr } = error as { code?: unknown; stderr?: unknown };
-    if (code === "ENOENT") {
-      throw new Error(
-        "Miyo CLI not found. The Miyo desktop app is not installed on this computer."
-      );
-    }
-    throw new Error(
-      typeof stderr === "string" && stderr.trim() ? stderr.trim() : err2String(error)
-    );
-  }
+export interface MiyoParseDeps {
+  client: Pick<MiyoClient, "resolveBaseUrl" | "parseDoc">;
+  getSettings: () => CopilotSettings;
+  getVaultName: () => string;
+  getVaultBase: () => string | null;
 }
 
-// Obsidian started from the Dock or Start menu misses the shell PATH, so Miyo's own install location comes first,
-// unless a leftover there can't run and would shadow a working miyo on PATH.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/740
-function resolveMiyoCli(): string {
-  const os = requireNodeModule<typeof import("node:os")>("os");
-  const nodePath = requireNodeModule<typeof import("node:path")>("path");
-  const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  const installed =
-    process.platform === "win32"
-      ? nodePath.join(
-          process.env.LOCALAPPDATA ?? nodePath.join(os.homedir(), "AppData", "Local"),
-          "Miyo",
-          "bin",
-          "miyo",
-          "miyo.exe"
-        )
-      : nodePath.join(os.homedir(), ".miyo", "bin", "miyo");
-  try {
-    fs.accessSync(installed, fs.constants.X_OK);
-    return installed;
-  } catch {
-    return "miyo";
-  }
+export async function parseWithMiyo(
+  path: string,
+  { client, getSettings, getVaultName, getVaultBase }: MiyoParseDeps
+): Promise<string> {
+  const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
+  // A remote Miyo reads the vault from its own copy, so a vault file's absolute path on this computer is sent relative to the vault.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/740
+  const { text } = await client.parseDoc(
+    baseUrl,
+    getVaultName(),
+    toVaultRelative(path, getVaultBase())
+  );
+  return text;
 }

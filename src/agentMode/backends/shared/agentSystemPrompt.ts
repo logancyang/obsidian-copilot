@@ -1,7 +1,7 @@
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import type { BackendId } from "@/agentMode/session/types";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
-import { isMiyoSearchActive } from "@/miyo/miyoUtils";
+import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
@@ -69,7 +69,7 @@ export function buildAgentSystemPrompt(backendId: BackendId): string {
       parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
     }
     parts.push(COPILOT_WEB_RESEARCH_STEERING);
-    if (settings.enableMiyoDocumentProcessing) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
+    if (isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
     if (isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
   }
 

@@ -174,11 +174,16 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_WEB_RESEARCH_STEERING);
     });
 
-    it(`steers documents to the miyo_parse tool first and lets any other tool read the file when it fails, only when Miyo document processing is on (${ISSUE_656} ${ISSUE_740})`, () => {
+    it(`steers documents to the miyo_parse tool first and lets any other tool read the file when it fails, only while Miyo is on with document processing (${ISSUE_656} ${ISSUE_740})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoDocumentProcessing", false);
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
 
+      updateSetting("enableMiyo", false);
       updateSetting("enableMiyoDocumentProcessing", true);
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_MIYO_DOCUMENT_STEERING);
+
+      updateSetting("enableMiyo", true);
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
         "Read PDFs/EPUBs with the obsidian-copilot miyo_parse tool first. If it is unavailable or fails, say so, then read the file with any other tool you have."
@@ -196,6 +201,7 @@ describe("agentSystemPrompt", () => {
     });
 
     it(`ignores a saved per-agent miyo-parse opt-out, because the document processing switch alone controls Miyo parsing (${ISSUE_740})`, () => {
+      updateSetting("enableMiyo", true);
       updateSetting("enableMiyoDocumentProcessing", true);
       setBuiltinPreferences({ "miyo-parse": { disabledAgents: ["claude"] } });
 

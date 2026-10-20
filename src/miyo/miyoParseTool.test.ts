@@ -1,17 +1,11 @@
-const mockExecFileAsync = jest.fn<Promise<{ stdout: string }>, [string, string[], object]>();
-const mockAccessSync = jest.fn();
-jest.mock("@/utils/desktopRuntime", () => ({
-  requireNodeModule: (id: string) => {
-    if (id === "fs") return { accessSync: mockAccessSync, constants: { X_OK: 1 } };
-    if (id !== "child_process") return jest.requireActual<object>(`node:${id}`);
-    const execFile = Object.assign(jest.fn(), {
-      [jest.requireActual<typeof import("node:util")>("node:util").promisify.custom]:
-        mockExecFileAsync,
-    });
-    return { execFile };
-  },
-}));
-import { createMiyoParse, MIYO_PARSE_TOOL, parseWithMiyoCli } from "./miyoParseTool";
+import { MiyoRequestError } from "@/miyo/MiyoClient";
+import type { CopilotSettings } from "@/settings/model";
+import {
+  createMiyoParse,
+  MIYO_PARSE_TOOL,
+  parseWithMiyo,
+  type MiyoParseDeps,
+} from "./miyoParseTool";
 
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 
@@ -159,57 +153,67 @@ describe("miyoParseTool", () => {
     });
   });
 
-  describe("parseWithMiyoCli()", () => {
-    beforeEach(() => {
-      mockExecFileAsync.mockReset();
-      mockAccessSync.mockReset();
+  describe("parseWithMiyo()", () => {
+    function setup(settings: Partial<CopilotSettings> = {}) {
+      const client = {
+        resolveBaseUrl: jest.fn().mockResolvedValue("http://127.0.0.1:8742"),
+        parseDoc: jest
+          .fn()
+          .mockResolvedValue({ text: "# Report", format: "pdf", source_path: "x" }),
+      };
+      const deps: MiyoParseDeps = {
+        client,
+        getSettings: () =>
+          ({ miyoConnectionMode: "local", miyoServerUrl: "", ...settings }) as CopilotSettings,
+        getVaultName: () => "Research Vault",
+        getVaultBase: () => "/Users/me/Research Vault",
+      };
+      return { client, deps };
+    }
+
+    it("asks the connected Miyo to parse a vault path in this vault and returns its text", async () => {
+      const { client, deps } = setup();
+
+      expect(await parseWithMiyo("notes/report.pdf", deps)).toBe("# Report");
+      expect(client.parseDoc).toHaveBeenCalledWith(
+        "http://127.0.0.1:8742",
+        "Research Vault",
+        "notes/report.pdf"
+      );
     });
 
-    it(`${ISSUE_740} runs Miyo's installed CLI from the vault folder and returns its stdout`, async () => {
-      mockAccessSync.mockReturnValue(undefined);
-      mockExecFileAsync.mockResolvedValue({ stdout: "# Report\n" });
-
-      expect(await parseWithMiyoCli("notes/report.pdf", "/vault")).toBe("# Report\n");
-      const [command, args, options] = mockExecFileAsync.mock.calls[0];
-      expect(command).toMatch(/[/\\]miyo(\.exe)?$/);
-      expect(command).not.toBe("miyo");
-      expect(args).toEqual(["parse", "notes/report.pdf"]);
-      expect(options).toMatchObject({ cwd: "/vault" });
-    });
-
-    it(`${ISSUE_740} falls back to miyo on PATH when the CLI at Miyo's install location exists but can't run`, async () => {
-      mockAccessSync.mockImplementation((_path: string, mode?: number) => {
-        if (mode === 1) throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    it("sends a remote Miyo's server URL to resolve the service", async () => {
+      const { client, deps } = setup({
+        miyoConnectionMode: "remote",
+        miyoServerUrl: "https://miyo.example.com",
       });
-      mockExecFileAsync.mockResolvedValue({ stdout: "text" });
 
-      await parseWithMiyoCli("/docs/a.pdf", undefined);
+      await parseWithMiyo("notes/report.pdf", deps);
 
-      expect(mockExecFileAsync.mock.calls[0][0]).toBe("miyo");
+      expect(client.resolveBaseUrl).toHaveBeenCalledWith("https://miyo.example.com");
     });
 
-    it("says the Miyo app is not installed when no CLI can be found", async () => {
-      mockAccessSync.mockImplementation(() => {
-        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
-      });
-      mockExecFileAsync.mockRejectedValue(
-        Object.assign(new Error("spawn miyo ENOENT"), { code: "ENOENT" })
-      );
+    it(`${ISSUE_740} sends an absolute path inside the vault relative to the vault, so a remote Miyo finds it in its copy`, async () => {
+      const { client, deps } = setup();
 
-      await expect(parseWithMiyoCli("/docs/a.pdf", undefined)).rejects.toThrow(
-        "Miyo CLI not found. The Miyo desktop app is not installed on this computer."
-      );
+      await parseWithMiyo("/Users/me/Research Vault/notes/report.pdf", deps);
+
+      expect(client.parseDoc.mock.calls[0][2]).toBe("notes/report.pdf");
     });
 
-    it("rejects with the CLI's stderr when parsing fails", async () => {
-      mockAccessSync.mockReturnValue(undefined);
-      mockExecFileAsync.mockRejectedValue(
-        Object.assign(new Error("Command failed"), { code: 4, stderr: "Error: File not found\n" })
-      );
+    it("sends an absolute path outside the vault unchanged", async () => {
+      const { client, deps } = setup();
 
-      await expect(parseWithMiyoCli("/docs/missing.pdf", undefined)).rejects.toThrow(
-        /^Error: File not found$/
-      );
+      await parseWithMiyo("/Users/me/Downloads/book.epub", deps);
+
+      expect(client.parseDoc.mock.calls[0][2]).toBe("/Users/me/Downloads/book.epub");
+    });
+
+    it("rejects with Miyo's reason when it can't parse the file", async () => {
+      const { client, deps } = setup();
+      client.parseDoc.mockRejectedValue(new MiyoRequestError(404, "File not found"));
+
+      await expect(parseWithMiyo("missing.pdf", deps)).rejects.toThrow("File not found");
     });
   });
 });

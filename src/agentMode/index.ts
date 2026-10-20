@@ -2,7 +2,7 @@ import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoFolderName, isMiyoSearchActive } from "@/miyo/miyoUtils";
+import { getMiyoFolderName, isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -33,7 +33,7 @@ import {
   MIYO_PARSE_TOOL,
   MIYO_PARSE_TOOL_NAME,
   MIYO_PARSE_TURNED_OFF_TEXT,
-  parseWithMiyoCli,
+  parseWithMiyo,
 } from "@/miyo/miyoParseTool";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
@@ -189,7 +189,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         toolName === SEND_FEEDBACK_TOOL_NAME
           ? getSettings().agentMode.offerFeedbackCards
           : toolName === MIYO_PARSE_TOOL_NAME
-            ? getSettings().enableMiyoDocumentProcessing
+            ? isMiyoParseActive(getSettings())
             : toolName === MIYO_SEARCH_TOOL_NAME && isMiyoSearchActive(getSettings()),
       [
         {
@@ -205,7 +205,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         {
           definition: MIYO_PARSE_TOOL,
           turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
-          call: createMiyoParse((path) => parseWithMiyoCli(path, getVaultBase(app) ?? undefined)),
+          call: createMiyoParse((path) =>
+            parseWithMiyo(path, {
+              client: new MiyoClient(),
+              getSettings,
+              getVaultName: () => getMiyoFolderName(app),
+              getVaultBase: () => getVaultBase(app),
+            })
+          ),
         },
       ]
     ),
