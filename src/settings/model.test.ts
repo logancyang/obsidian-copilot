@@ -544,6 +544,21 @@ describe("model", () => {
       expect(sanitized.relevantNotesLiveUpdate).toBe(false);
     });
 
+    it("auto-attaches the active note for settings written before the field existed (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
+      const withoutField = { ...DEFAULT_SETTINGS } as unknown as Record<string, unknown>;
+      delete withoutField.autoAttachActiveNote;
+
+      const sanitized = sanitizeSettings(withoutField as unknown as CopilotSettings);
+
+      expect(sanitized.autoAttachActiveNote).toBe(true);
+    });
+
+    it("preserves a persisted choice to stop auto-attaching the active note (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
+      const sanitized = sanitizeSettings({ ...DEFAULT_SETTINGS, autoAttachActiveNote: false });
+
+      expect(sanitized.autoAttachActiveNote).toBe(false);
+    });
+
     it("drops a persisted global output cap so it cannot truncate answers again (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", () => {
       const withRetiredCap = {
         ...DEFAULT_SETTINGS,

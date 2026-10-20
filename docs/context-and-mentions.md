@@ -29,7 +29,7 @@ A note mention gives the agent the note's vault path so it can read the current 
 
 ### Active note and selected text
 
-A new Agent Chat starts with an **Active Note** badge, and it stays attached to every message. Each message tells the agent which note is active when you send it, so switching notes mid-chat points the agent at the new note. The agent gets the note's path and opens the note only when it needs the contents. If you remove the badge, no active note is attached to later messages in that chat until you add the **Active Note** again from **Add context** or with `@`.
+A new Agent Chat starts with an **Active Note** badge unless **Auto-attach active note** is off in settings. The badge stays attached to every message. Each message tells the agent which note is active when you send it, so switching notes mid-chat points the agent at the new note. The agent gets the note's path and opens the note only when it needs the contents. If you remove the badge, no active note is attached to later messages in that chat until you add the **Active Note** again from **Add context** or with `@`.
 
 ### Active web tab
 

@@ -31,12 +31,12 @@ Vault QA is no longer a separate mode. If it was your saved mode before upgradin
 
 Quick Chat can include the active note, selected text, other notes, folders, and images; on desktop it can also include open Web Viewer tabs. The selected model must support images. Context appears above the message box, where you can review or remove it before sending.
 
-A new Quick Chat attaches the active note and, on desktop, the page open in the Web Viewer, including pages you are signed in to. If you remove either badge, it stays off for that chat until you start a new chat or switch modes.
+A new Quick Chat attaches the active note (unless **Auto-attach active note** is off in settings) and, on desktop, the page open in the Web Viewer, including pages you are signed in to. If you remove either badge, it stays off for that chat until you start a new chat or switch modes.
 
 - Use **Add context** (`+`) or type `@` to find context.
 - Type `[[Note Title]]` to reference a note directly.
 
-By default, a new chat includes the active note. A text selection takes priority over the full active note. For all supported context types, see [Context and Mentions](context-and-mentions.md).
+A text selection takes priority over the full active note. For all supported context types, see [Context and Mentions](context-and-mentions.md).
 
 ## Run a saved command
 

@@ -1,7 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { BasicSettings } from "@/settings/v2/components/BasicSettings";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -124,6 +124,15 @@ describe("BasicSettings", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
       expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
+    });
+
+    it("turns off active-note auto-attach from its switch (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {
+      render(<BasicSettings />);
+
+      const row = screen.getByText("Auto-attach active note").parentElement!.parentElement!;
+      fireEvent.click(within(row).getByRole("switch"));
+
+      expect(settingsStore.get(settingsAtom).autoAttachActiveNote).toBe(false);
     });
 
     it("binds the Copilot folder input to the persisted root", () => {

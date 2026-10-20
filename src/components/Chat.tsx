@@ -99,7 +99,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
-  const [includeActiveNote, setIncludeActiveNote] = useState(true);
+  const [includeActiveNote, setIncludeActiveNote] = useState(settings.autoAttachActiveNote);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(true);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
@@ -552,13 +552,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     clearSelectedTextContexts();
     plugin.chatSelectionHighlightController.clearForNewChat();
     plugin.suppressCurrentWebSelection(webSelectionUrl);
-    setIncludeActiveNote(true);
+    setIncludeActiveNote(settings.autoAttachActiveNote);
     setIncludeActiveWebTab(true);
   }, [
     handleStopGenerating,
     chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
+    settings.autoAttachActiveNote,
     settings.enableRecentConversations,
     handleSaveAsNote,
     safeSet,
@@ -645,7 +646,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [prevChain, setPrevChain] = useState(selectedChain);
   if (prevChain !== selectedChain) {
     setPrevChain(selectedChain);
-    setIncludeActiveNote(true);
+    setIncludeActiveNote(settings.autoAttachActiveNote);
     setIncludeActiveWebTab(true);
   }
 

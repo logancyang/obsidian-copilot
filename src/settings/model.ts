@@ -65,6 +65,7 @@ export interface CopilotSettings {
   defaultSaveFolder: string;
   defaultConversationTag: string;
   autosaveChat: boolean;
+  autoAttachActiveNote: boolean;
   customPromptsFolder: string;
   chatNoteContextPath: string;
   chatNoteContextTags: string[];
@@ -637,6 +638,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   if (typeof sanitizedSettings.autosaveChat !== "boolean") {
     sanitizedSettings.autosaveChat = DEFAULT_SETTINGS.autosaveChat;
+  }
+
+  if (typeof sanitizedSettings.autoAttachActiveNote !== "boolean") {
+    sanitizedSettings.autoAttachActiveNote = DEFAULT_SETTINGS.autoAttachActiveNote;
   }
 
   const autoCompactThreshold = Number(settingsToSanitize.autoCompactThreshold);

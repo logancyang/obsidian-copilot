@@ -15,6 +15,7 @@ const mockSelection: NoteSelectedTextContext = {
 };
 const mockSelections = [mockSelection];
 const mockMessages = [{ id: "message-1", message: "Original question", sender: USER_SENDER }];
+const mockSettings = { autoAttachActiveNote: true };
 
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 jest.mock("@/aiParams", () => ({
@@ -23,7 +24,7 @@ jest.mock("@/aiParams", () => ({
   useSelectedTextContexts: () => [mockSelections],
 }));
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: () => ({}),
+  useSettingsValue: () => mockSettings,
 }));
 jest.mock("@/hooks/useChatManager", () => ({
   useChatManager: () => ({ messages: mockMessages, addMessage: jest.fn() }),
@@ -118,6 +119,10 @@ function renderChat(savedPath = "") {
 }
 
 describe("Chat", () => {
+  afterEach(() => {
+    mockSettings.autoAttachActiveNote = true;
+  });
+
   describe("handleSendMessage()", () => {
     it.each([true, false])(
       "preserves active-note inclusion %p when sending selected text https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
@@ -139,6 +144,19 @@ describe("Chat", () => {
         ]);
       }
     );
+
+    it("sends without the active note when auto-attach is off https://github.com/logancyang/obsidian-copilot/issues/3663", async () => {
+      mockSettings.autoAttachActiveNote = false;
+      const { chatUIState } = renderChat();
+      fireEvent.change(screen.getByLabelText("Message"), {
+        target: { value: "Compare findings" },
+      });
+
+      fireEvent.click(screen.getByText("Send"));
+
+      await waitFor(() => expect(chatUIState.sendMessage).toHaveBeenCalledTimes(1));
+      expect(chatUIState.sendMessage.mock.calls[0][3]).toBe(false);
+    });
   });
 
   describe("handleEdit()", () => {

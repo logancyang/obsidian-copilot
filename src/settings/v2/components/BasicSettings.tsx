@@ -235,6 +235,14 @@ export const BasicSettings: React.FC = () => {
         />
 
         <SettingItem
+          type="switch"
+          title="Auto-attach active note"
+          description="Attach the note open in the editor to each new chat. With this off, add it from Add context or with @ when you need it."
+          checked={settings.autoAttachActiveNote}
+          onCheckedChange={(checked) => updateSetting("autoAttachActiveNote", checked)}
+        />
+
+        <SettingItem
           type="custom"
           title="Copilot folder location"
           description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."

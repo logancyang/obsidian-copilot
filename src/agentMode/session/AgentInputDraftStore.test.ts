@@ -1,4 +1,6 @@
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
+import { DEFAULT_SETTINGS } from "@/constants";
+import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
 import type { App, TFile } from "obsidian";
 
 // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- minimal path-only stub for draft state tests
@@ -12,6 +14,8 @@ function buildStore({ live = ["a"], activeFile = null as TFile | null } = {}) {
 }
 
 describe("AgentInputDraftStore", () => {
+  afterEach(() => settingsStore.set(settingsAtom, DEFAULT_SETTINGS));
+
   describe("get()", () => {
     it("returns nothing for a chat input that has never been written", () => {
       const { store } = buildStore();
@@ -35,6 +39,16 @@ describe("AgentInputDraftStore", () => {
         loading: false,
         queue: [],
       });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3663 seeds a first write without the active note when auto-attach is off", () => {
+      updateSetting("autoAttachActiveNote", false);
+      const { store } = buildStore();
+
+      store.update("a", (draft) => ({ ...draft, input: "hello" }));
+
+      expect(store.get("a")?.includeActiveNote).toBe(false);
+      expect(store.get("a")?.includeActiveWebTab).toBe(true);
     });
 
     it("notifies subscribers only when the draft changes", () => {

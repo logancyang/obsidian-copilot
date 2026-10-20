@@ -3,6 +3,7 @@ import type {
   AgentInputDraftStore,
   QueuedAgentMessage,
 } from "@/agentMode/session/AgentInputDraftStore";
+import { useSettingsValue } from "@/settings/model";
 import { TFile } from "obsidian";
 import React, { useCallback, useMemo, useSyncExternalStore } from "react";
 
@@ -35,6 +36,7 @@ export function useAgentInputDrafts({
   chatInputId,
 }: UseAgentInputDraftsArgs): AgentInputDraftControls {
   const active = useSyncExternalStore(store.subscribe, () => store.get(chatInputId));
+  const { autoAttachActiveNote } = useSettingsValue();
 
   const updateActive = useCallback(
     (updater: (draft: AgentInputDraft) => AgentInputDraft) => store.update(chatInputId, updater),
@@ -102,12 +104,12 @@ export function useAgentInputDrafts({
         input: "",
         images: EMPTY_IMAGES,
         contextNotes: EMPTY_CONTEXT_NOTES,
-        includeActiveNote: true,
+        includeActiveNote: autoAttachActiveNote,
         includeActiveWebTab: true,
         loading: false,
         queue: EMPTY_QUEUE,
       },
-    [active]
+    [active, autoAttachActiveNote]
   );
 
   return useMemo(
