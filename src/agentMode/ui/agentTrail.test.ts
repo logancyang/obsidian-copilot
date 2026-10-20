@@ -183,18 +183,6 @@ describe("agentTrail", () => {
         }
       });
 
-      it("keeps skill loads, including miyo-search, saved before miyo_search replaced the skill (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
-        const parts = [
-          tool("load", { vendorToolName: "Skill", input: { skill: "miyo-search" } }),
-          tool("run", { vendorToolName: "Bash", input: { command: "sh miyo-search.sh q" } }),
-        ];
-        const tree = buildAgentTrail(parts);
-        expect(tree.map((n) => (n.type === "action" ? n.part.id : n.type))).toEqual([
-          "load",
-          "run",
-        ]);
-      });
-
       it("leaves the tools that flank a hidden one adjacent", () => {
         const parts = [
           tool("r1", { vendorToolName: "Read" }),

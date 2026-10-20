@@ -1,5 +1,6 @@
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { miyoSearchRun, pluralize } from "@/agentMode/ui/toolSummaries";
+import { pluralize } from "@/agentMode/ui/toolSummaries";
+import { miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 import { formatDuration } from "@/lib/duration";
 
 export type ActivityMember =

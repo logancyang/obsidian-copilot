@@ -16,11 +16,8 @@ import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
-import {
-  miyoResultPaths,
-  miyoSearchRun,
-  type ToolSummaryContext,
-} from "@/agentMode/ui/toolSummaries";
+import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
+import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
