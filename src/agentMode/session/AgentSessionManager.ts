@@ -2620,8 +2620,13 @@ export class AgentSessionManager {
             if (note instanceof TFile && this.opts.persistenceManager) {
               // A saved chat comes back the way Recent Chats reopens it, or the next autosave writes a duplicate note stamped with the replay time.
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
-              const loaded = await this.opts.persistenceManager.loadFile(note);
-              this.restoreFromNote(rebuilt, resumed, note, loaded);
+              // One unreadable note must not abort the loop and drop every later tab on this backend.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
+              const loaded = await this.opts.persistenceManager.loadFile(note).catch((e) => {
+                logWarn(`[AgentMode] reloading ${note.path} after ${backendId} restart failed`, e);
+                return null;
+              });
+              if (loaded) this.restoreFromNote(rebuilt, resumed, note, loaded);
             }
             if (resumed && replacement.recoveryMessages?.length) {
               // A fresh fallback has no backend history for these messages;

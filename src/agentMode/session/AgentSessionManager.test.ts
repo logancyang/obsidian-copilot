@@ -2825,6 +2825,55 @@ describe("AgentSessionManager", () => {
           expect(mgr.getSessionSourcePath(rebuilt.internalId)).toBe(note.path);
           await mgr.shutdown();
         });
+
+        it("rebuilds every tab when one chat's note cannot be read, leaving that chat unbound from its note (https://github.com/Brevilabs/obsidian-copilot-private/issues/742)", async () => {
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const broken = mockTFile({ path: "chats/agent__broken@20261012_214533.md" });
+          const healthy = mockTFile({ path: "chats/agent__healthy@20261012_214540.md" });
+          const app = buildApp();
+          jest
+            .mocked(app.vault.getAbstractFileByPath)
+            .mockImplementation((path) => [broken, healthy].find((f) => f.path === path) ?? null);
+          const mgr = buildManager({
+            app,
+            persistence: {
+              saveSession: jest.fn(async (messages: AgentChatMessage[]) => ({
+                path: messages[0].message === "broken" ? broken.path : healthy.path,
+              })),
+              loadFile: jest.fn(async (file: TFile) => {
+                if (file === broken) throw new Error("Missing backendId in agent chat frontmatter");
+                return {
+                  backendId: "opencode",
+                  sessionId: undefined,
+                  projectId: GLOBAL_SCOPE,
+                  messages: noteTurns,
+                };
+              }),
+            },
+            descriptor: buildDescriptor({
+              createBackendProcess: () => buildReplayingBackend().backend,
+            }),
+          });
+          for (const text of ["broken", "healthy"]) {
+            const chat = await mgr.createSession();
+            getSessionTestHandle(chat).setMessages(
+              [
+                { sender: USER_SENDER, message: text, isVisible: true, timestamp: asked },
+              ] as AgentChatMessage[],
+              true
+            );
+          }
+          await jest.advanceTimersByTimeAsync(2000);
+
+          await mgr.restartBackend("opencode", "managed skills changed");
+
+          const [first, second] = mgr.getSessions();
+          expect(mgr.getSessions()).toHaveLength(2);
+          expect(mgr.getSessionSourcePath(first.internalId)).toBe("");
+          expect(mgr.getSessionSourcePath(second.internalId)).toBe(healthy.path);
+          await mgr.shutdown();
+        });
       });
 
       it("keeps the replaced tab's title across the restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", async () => {
