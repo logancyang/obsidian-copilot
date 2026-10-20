@@ -1,5 +1,8 @@
 import type { BackendId } from "@/agentMode/session/types";
-import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
+import {
+  builtinSkillUnavailableReason,
+  isBuiltinSkillEnabledFor,
+} from "@/builtinSkills/builtinSkills";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
@@ -27,6 +30,20 @@ export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with the obsidian
 // Running miyo_search and grep for every request that may be answered from notes, even external-sounding ones, keeps the agent from skipping the vault; merging by path and opening matches keeps it from trusting a list it never read; naming the tool over the CLI keeps agents off a Miyo skill outside Copilot.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/736
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
+
+// OpenCode models skip a format skill whose description doesn't name their edit and write syntax Obsidian
+// can't render, and without the CLI skill they assume live app state such as open tabs is out of reach.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+const OBSIDIAN_FORMAT_SKILL_JOBS: ReadonlyArray<readonly [skill: string, job: string]> = [
+  ["obsidian-markdown", "embeds, block IDs, callouts, comments and properties"],
+  ["obsidian-bases", ".base files"],
+  ["json-canvas", ".canvas files"],
+];
+
+export const COPILOT_OBSIDIAN_FORMAT_LEAD =
+  "Before writing Obsidian syntax, load its skill and follow it over memory:";
+
+export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
 
 export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 
@@ -59,7 +76,9 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
-    builtinPrompt && isBuiltinSkillEnabledFor(settings, skill, backendId);
+    builtinPrompt &&
+    !builtinSkillUnavailableReason(skill) &&
+    isBuiltinSkillEnabledFor(settings, skill, backendId);
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
@@ -72,12 +91,17 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
   if (builtinPrompt && isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
-  const relayJobs = RELAY_SKILL_JOBS.filter(([skill]) => enabled(skill)).map(
-    ([skill, job]) => `${skill} for ${job}`
-  );
+  const enabledJobs = (jobs: typeof RELAY_SKILL_JOBS) =>
+    jobs.filter(([skill]) => enabled(skill)).map(([skill, job]) => `${skill} for ${job}`);
+  const relayJobs = enabledJobs(RELAY_SKILL_JOBS);
   if (relayJobs.length > 0) {
     parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
   }
+  const formatJobs = enabledJobs(OBSIDIAN_FORMAT_SKILL_JOBS);
+  if (formatJobs.length > 0) {
+    parts.push(`${COPILOT_OBSIDIAN_FORMAT_LEAD} ${formatJobs.join(", ")}.`);
+  }
+  if (enabled("obsidian-cli")) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
 
   return parts.join("\n\n");
 }

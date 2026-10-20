@@ -9,25 +9,24 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("ships the four approved skills for every Agent Mode backend", () => {
-      expect(OBSIDIAN_SKILLS.map((skill) => skill.name)).toEqual([
-        "obsidian-markdown",
-        "obsidian-bases",
-        "json-canvas",
-        "obsidian-cli",
+    it("offers the four skills to every agent but defaults them to OpenCode, and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
+        ["obsidian-markdown", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-bases", { disabledAgents: ["claude"] }],
+        ["json-canvas", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-cli", { disabledAgents: ["claude", "codex"] }],
       ]);
       for (const skill of OBSIDIAN_SKILLS) {
-        expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);
         expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
       }
     });
 
-    it("bumps only the changed CLI skill so existing vaults receive the safety update", () => {
+    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 1],
-        ["obsidian-bases", 1],
-        ["json-canvas", 1],
-        ["obsidian-cli", 2],
+        ["obsidian-markdown", 2],
+        ["obsidian-bases", 2],
+        ["json-canvas", 2],
+        ["obsidian-cli", 3],
       ]);
     });
 
@@ -82,6 +81,59 @@ describe("obsidianSkills", () => {
       );
     });
 
+    it("names the Markdown syntax that should trigger the skill and puts a list's block ID between blank lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-markdown");
+      expect(md).toMatch(
+        /description:[^\n]*block IDs[^\n]*Load before adding or changing any of these in a note\./
+      );
+      expect(md).not.toContain("ordinary Markdown is assumed knowledge");
+      expect(md).toContain(
+        "Put a block ID on its own line after a list or quote block, with a blank line\nbefore and after it; without the line before it marks only the last item."
+      );
+    });
+
+    it("explains how template insertion fills the title and date placeholders (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-cli");
+      expect(md).toContain("<code>create path=&lt;new note&gt; template=&lt;name&gt;</code>");
+      expect(md).toContain(
+        "<code>{{title}}</code> becomes the new note's full file name without\n  extension"
+      );
+      expect(md).toContain(
+        "<code>{{date}}</code> and <code>{{time}}</code> become the\n  current date and time"
+      );
+    });
+
+    it("keeps example wikilinks inside code fences so installed skills add no unresolved links to the vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const documents = OBSIDIAN_SKILLS.flatMap((skill) => [
+        skill.skillMd,
+        ...skill.files.filter((file) => file.path.endsWith(".md")).map((file) => file.content),
+      ]);
+      for (const document of documents) {
+        let fence: string | null = null;
+        for (const line of document.split("\n")) {
+          const marker = line.match(/^\s*(~~~|```)/)?.[1];
+          if (marker) {
+            fence = fence === marker ? null : (fence ?? marker);
+          } else if (fence === null) {
+            expect(line).not.toMatch(/\[\[/);
+          }
+        }
+      }
+    });
+
+    it("documents that Bases sorts only by properties listed in the view's order, and rounds day counts (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+      const md = skillMd("obsidian-bases");
+      expect(md).toContain("    sort:\n      - property: due\n        direction: ASC");
+      expect(md).toContain(
+        "Obsidian sorts only by properties that are also listed in\n<code>order</code>, so include every sort property there."
+      );
+      expect(md).toContain(
+        "- Every <code>sort</code> property also appears in that view's <code>order</code>."
+      );
+      expect(md).toContain("(date(due) - today()).days.round()");
+      expect(md).not.toMatch(/today\(\)\)\.days,/);
+    });
+
     it("preserves Bases schema, formula, quoting, and duration guidance", () => {
       const md = skillMd("obsidian-bases");
       expect(md).toContain("formulas:");
@@ -124,7 +176,7 @@ describe("obsidianSkills", () => {
       expect(md).toContain('obsidian vault="My Vault"');
       expect(md).toContain("property:set");
       expect(md).toContain("base:query");
-      expect(md).toContain("template:read ... resolve");
+      expect(md).toContain("template:read ... resolve title=");
       expect(md).toContain('obsidian vault="My Vault" tabs ids');
       expect(md).toContain('obsidian vault="My Vault" workspace ids');
       expect(md).toContain("Keep entries\nverbatim");

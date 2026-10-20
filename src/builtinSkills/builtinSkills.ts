@@ -1,4 +1,4 @@
-import type { BackendId } from "@/agentMode";
+import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import {
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
@@ -12,14 +12,14 @@ import {
 } from "@/openArtifacts/constants";
 import RESEARCH_MEMO_THEME from "openartifacts/skill/openartifacts/themes/research-memo.md";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 import { howToRunSection, SHELL_TOOL_SENTENCE } from "./howToRunSection";
 
 export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
-  readonly enabledAgents: readonly BackendId[];
-  readonly defaultDisabled?: boolean;
+  readonly defaultPreference?: BuiltinPreferences[string];
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -235,7 +235,7 @@ function relaySkill(opts: {
   license?: string;
   selfHostMode?: "search" | "deny";
   extraInstructions?: string;
-  defaultDisabled?: boolean;
+  defaultPreference?: BuiltinPreferences[string];
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
@@ -289,8 +289,7 @@ fi
   return {
     name: opts.name,
     version,
-    enabledAgents: ["claude", "codex", "opencode"],
-    defaultDisabled: opts.defaultDisabled,
+    defaultPreference: opts.defaultPreference,
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
@@ -347,7 +346,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
   license: "Copilot Plus or Self-Host",
   selfHostMode: "search",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
 });
 
 const WEB_FETCH = relaySkill({
@@ -360,7 +359,7 @@ const WEB_FETCH = relaySkill({
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
   selfHostMode: "deny",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
   extraInstructions: `## Self-Host mode
 
 Self-Host search providers do not provide a common full-page fetch contract. If
@@ -400,7 +399,6 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   version: OPENARTIFACTS_PUBLISH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: openartifacts-publish
 description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Also make a page private or public, add or remove the people who can open it, and see and answer access requests. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page, or to change who can open one.
@@ -1053,16 +1051,21 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/629
-export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
-  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
-> = Object.freeze(
+export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
   Object.fromEntries(
-    BUILTIN_SKILLS.filter((skill) => skill.defaultDisabled).map((skill) => [
-      skill.name,
-      Object.freeze({ disabled: true }),
-    ])
+    BUILTIN_SKILLS.flatMap(({ name, defaultPreference }) =>
+      defaultPreference ? [[name, Object.freeze(defaultPreference)] as const] : []
+    )
   )
 );
+
+// The CLI toggle is per device, so an unavailable skill keeps its synced files and loses only its
+// agent links and steering here. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+export function builtinSkillUnavailableReason(skillName: string): string | undefined {
+  return skillName === "obsidian-cli" && !isObsidianCliEnabled()
+    ? "Turn on Command line interface in Obsidian's Settings → General to use this skill."
+    : undefined;
+}
 
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
