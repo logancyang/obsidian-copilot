@@ -2,10 +2,9 @@ import type { BuiltinSkill } from "./builtinSkills";
 
 export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf5822214c6eb1202";
 
-const ENABLED_AGENTS = ["claude", "codex", "opencode"] as const;
 // In the Obsidian skills eval Claude and Codex wrote this syntax as well without the skills, except
 // Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-const DEFAULT_DISABLED_AGENTS = ["claude", "codex"] as const;
+const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
 const FORMAT_SKILL_VERSION = 2;
 const OBSIDIAN_CLI_VERSION = 3;
 
@@ -838,8 +837,7 @@ const LICENSE_FILE = { path: "LICENSE", content: UPSTREAM_LICENSE } as const;
 const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
   version: FORMAT_SKILL_VERSION,
-  enabledAgents: ENABLED_AGENTS,
-  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
+  defaultPreference: OPENCODE_ONLY,
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,
   files: [
     { path: "references/CALLOUTS.md", content: MARKDOWN_CALLOUTS_REFERENCE },
@@ -852,8 +850,7 @@ const OBSIDIAN_MARKDOWN: BuiltinSkill = {
 const OBSIDIAN_BASES: BuiltinSkill = {
   name: "obsidian-bases",
   version: FORMAT_SKILL_VERSION,
-  enabledAgents: ENABLED_AGENTS,
-  defaultDisabledAgents: ["claude"],
+  defaultPreference: { disabledAgents: ["claude"] },
   skillMd: OBSIDIAN_BASES_SKILL_MD,
   files: [
     { path: "references/FUNCTIONS_REFERENCE.md", content: BASES_FUNCTIONS_REFERENCE },
@@ -865,8 +862,7 @@ const OBSIDIAN_BASES: BuiltinSkill = {
 const JSON_CANVAS: BuiltinSkill = {
   name: "json-canvas",
   version: FORMAT_SKILL_VERSION,
-  enabledAgents: ENABLED_AGENTS,
-  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
+  defaultPreference: OPENCODE_ONLY,
   skillMd: JSON_CANVAS_SKILL_MD,
   files: [{ path: "references/EXAMPLES.md", content: JSON_CANVAS_EXAMPLES }, LICENSE_FILE],
 };
@@ -874,8 +870,7 @@ const JSON_CANVAS: BuiltinSkill = {
 const OBSIDIAN_CLI: BuiltinSkill = {
   name: "obsidian-cli",
   version: OBSIDIAN_CLI_VERSION,
-  enabledAgents: ENABLED_AGENTS,
-  defaultDisabledAgents: DEFAULT_DISABLED_AGENTS,
+  defaultPreference: OPENCODE_ONLY,
   skillMd: OBSIDIAN_CLI_SKILL_MD,
   files: [LICENSE_FILE],
 };

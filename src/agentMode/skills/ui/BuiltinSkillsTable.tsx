@@ -17,7 +17,6 @@ export interface BuiltinSkillRow {
   name: string;
   description: string;
   content: string;
-  enabledAgents: readonly BackendId[];
 }
 
 export interface BuiltinSkillsTableProps {
@@ -139,7 +138,6 @@ const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
                 skillEnabled &&
                 available &&
                 !unavailableReason &&
-                skill.enabledAgents.includes(agent.id) &&
                 !preference?.disabledAgents?.includes(agent.id);
               return (
                 <AgentIconButton

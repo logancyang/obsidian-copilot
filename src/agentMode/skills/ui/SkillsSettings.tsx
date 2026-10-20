@@ -56,7 +56,6 @@ const BUILTIN_ROWS = BUILTIN_SKILLS.map((skill) => ({
   name: skill.name,
   description: parseSkillFile(skill.skillMd, skill.name).frontmatter.description,
   content: skill.skillMd,
-  enabledAgents: skill.enabledAgents,
 }));
 
 export const SkillsSettings: React.FC = () => {

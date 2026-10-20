@@ -10,14 +10,13 @@ function skillMd(name: string): string {
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
     it("offers the four skills to every agent but defaults them to OpenCode, and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
-      expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultDisabledAgents])).toEqual([
-        ["obsidian-markdown", ["claude", "codex"]],
-        ["obsidian-bases", ["claude"]],
-        ["json-canvas", ["claude", "codex"]],
-        ["obsidian-cli", ["claude", "codex"]],
+      expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
+        ["obsidian-markdown", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-bases", { disabledAgents: ["claude"] }],
+        ["json-canvas", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-cli", { disabledAgents: ["claude", "codex"] }],
       ]);
       for (const skill of OBSIDIAN_SKILLS) {
-        expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);
         expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
       }
     });

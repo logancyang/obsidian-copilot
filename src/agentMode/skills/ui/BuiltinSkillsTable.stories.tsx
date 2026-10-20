@@ -9,7 +9,6 @@ const args: BuiltinSkillsTableProps = {
       name: "copilot-youtube-transcript",
       description: "Get a YouTube video transcript.",
       content: "# YouTube transcript\n\nRetrieve the transcript for a supplied video URL.",
-      enabledAgents: ["claude"],
     },
   ],
   agents: [
@@ -17,6 +16,7 @@ const args: BuiltinSkillsTableProps = {
     { id: "codex", displayName: "Codex", Icon: Bot },
     { id: "opencode", displayName: "OpenCode", Icon: Bot },
   ],
+  preferences: { "copilot-youtube-transcript": { disabledAgents: ["codex"] } },
   availableAgents: ["claude", "codex"],
   pendingSkills: [],
   onToggleSkill: noop,

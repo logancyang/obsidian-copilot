@@ -52,7 +52,7 @@ function settingsWith(
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
-    it("ships the approved Plus and Obsidian skills to all three agents", () => {
+    it("ships the approved Plus and Obsidian skills in a fixed order", () => {
       expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
         "copilot-web-search",
         "copilot-web-fetch",
@@ -64,9 +64,6 @@ describe("builtinSkills", () => {
         "json-canvas",
         "obsidian-cli",
       ]);
-      for (const skill of BUILTIN_SKILLS) {
-        expect(skill.enabledAgents).toEqual(["claude", "codex", "opencode"]);
-      }
     });
 
     it("ships one runnable script per OS — POSIX sh + Windows cmd/ps1, no Node", () => {

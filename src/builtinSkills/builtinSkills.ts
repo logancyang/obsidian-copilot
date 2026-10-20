@@ -1,4 +1,4 @@
-import type { BackendId } from "@/agentMode";
+import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import {
   OPENARTIFACTS_AGENT_HANDOFF_DIR,
@@ -19,9 +19,7 @@ import { howToRunSection, SHELL_TOOL_SENTENCE } from "./howToRunSection";
 export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
-  readonly enabledAgents: readonly BackendId[];
-  readonly defaultDisabled?: boolean;
-  readonly defaultDisabledAgents?: readonly BackendId[];
+  readonly defaultPreference?: BuiltinPreferences[string];
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
 }
@@ -237,7 +235,7 @@ function relaySkill(opts: {
   license?: string;
   selfHostMode?: "search" | "deny";
   extraInstructions?: string;
-  defaultDisabled?: boolean;
+  defaultPreference?: BuiltinPreferences[string];
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
@@ -291,8 +289,7 @@ fi
   return {
     name: opts.name,
     version,
-    enabledAgents: ["claude", "codex", "opencode"],
-    defaultDisabled: opts.defaultDisabled,
+    defaultPreference: opts.defaultPreference,
     skillMd: `---
 name: ${opts.name}
 description: ${opts.description}
@@ -349,7 +346,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
   license: "Copilot Plus or Self-Host",
   selfHostMode: "search",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
 });
 
 const WEB_FETCH = relaySkill({
@@ -362,7 +359,7 @@ const WEB_FETCH = relaySkill({
   arg: ["url", "<url-to-fetch>"],
   scriptFile: "web-fetch.sh",
   selfHostMode: "deny",
-  defaultDisabled: true,
+  defaultPreference: { disabled: true },
   extraInstructions: `## Self-Host mode
 
 Self-Host search providers do not provide a common full-page fetch contract. If
@@ -402,7 +399,6 @@ const OPENARTIFACTS_MISSING_KEY_MESSAGE =
 const OPENARTIFACTS_PUBLISH: BuiltinSkill = {
   name: "openartifacts-publish",
   version: OPENARTIFACTS_PUBLISH_VERSION,
-  enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: openartifacts-publish
 description: Publish an existing Markdown note or local HTML file, update a published Markdown note, or withdraw an OpenArtifacts page. Also make a page private or public, add or remove the people who can open it, and see and answer access requests. Use when the user asks to publish, share, update, delete, remove, or withdraw an OpenArtifacts page, or to change who can open one.
@@ -1055,21 +1051,10 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
 // Default-off is stored as an opt-out because older releases drop every other record,
 // which would erase opt-ins synced from newer devices:
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/629
-type BuiltinPreference = NonNullable<
-  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
->[string];
-
-export const DEFAULT_BUILTIN_PREFERENCES: NonNullable<
-  CopilotSettings["agentMode"]["skills"]["builtinPreferences"]
-> = Object.freeze(
+export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
   Object.fromEntries(
-    BUILTIN_SKILLS.flatMap(
-      (skill): Array<[string, BuiltinPreference]> =>
-        skill.defaultDisabled
-          ? [[skill.name, Object.freeze({ disabled: true })]]
-          : skill.defaultDisabledAgents
-            ? [[skill.name, Object.freeze({ disabledAgents: [...skill.defaultDisabledAgents] })]]
-            : []
+    BUILTIN_SKILLS.flatMap(({ name, defaultPreference }) =>
+      defaultPreference ? [[name, Object.freeze(defaultPreference)] as const] : []
     )
   )
 );
