@@ -39,43 +39,48 @@ export interface MiyoParseToolResult {
   isError: boolean;
 }
 
-export interface MiyoParseDeps {
-  parse: (path: string) => Promise<string>;
-}
+export function createMiyoParse(
+  parse: (path: string) => Promise<string>
+): (args: unknown) => Promise<MiyoParseToolResult> {
+  // Paging re-requests the same document once per part, so the parsed text is kept until its last part is read instead of reparsing it every time.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/740
+  let paging: { path: string; text: string } | undefined;
+  return async (args) => {
+    const input = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
+    const path = typeof input.path === "string" ? input.path : "";
+    if (!path.trim()) return failure("path must be a non-empty string.");
+    const offset =
+      typeof input.offset === "number" && Number.isInteger(input.offset) && input.offset > 0
+        ? input.offset
+        : 0;
 
-export async function runMiyoParse(
-  args: unknown,
-  { parse }: MiyoParseDeps
-): Promise<MiyoParseToolResult> {
-  const input = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
-  const path = typeof input.path === "string" ? input.path.trim() : "";
-  if (!path) return failure("path must be a non-empty string.");
-  const offset =
-    typeof input.offset === "number" && Number.isInteger(input.offset) && input.offset > 0
-      ? input.offset
-      : 0;
+    let text: string;
+    if (offset > 0 && paging?.path === path) {
+      text = paging.text;
+    } else {
+      try {
+        text = (await parse(path)).replace(/\n+$/, "");
+      } catch (error) {
+        return failure(
+          `Miyo could not parse ${path}. Tell the user, then read the file with any other tool you have; don't call ${MIYO_PARSE_TOOL_NAME} again for this file. Details: ${err2String(error)}`
+        );
+      }
+    }
+    if (offset > 0 && offset >= text.length) {
+      return failure(`offset ${offset} is past the end of ${path} (${text.length} characters).`);
+    }
 
-  let text: string;
-  try {
-    text = (await parse(path)).replace(/\n+$/, "");
-  } catch (error) {
-    return failure(
-      `Miyo could not parse ${path}. Tell the user, then read the file with any other tool you have; don't call ${MIYO_PARSE_TOOL_NAME} again for this file. Details: ${err2String(error)}`
-    );
-  }
-  if (offset > 0 && offset >= text.length) {
-    return failure(`offset ${offset} is past the end of ${path} (${text.length} characters).`);
-  }
-
-  const end = partEnd(text, offset);
-  if (offset === 0 && end === text.length) return { text, isError: false };
-  const next =
-    end < text.length
-      ? `Call ${MIYO_PARSE_TOOL_NAME} again with offset ${end} for the next part.`
-      : "End of document.";
-  return {
-    text: `${text.slice(offset, end)}\n\n[Characters ${offset}-${end} of ${text.length}. ${next}]`,
-    isError: false,
+    const end = partEnd(text, offset);
+    paging = end < text.length ? { path, text } : undefined;
+    if (offset === 0 && end === text.length) return { text, isError: false };
+    const next =
+      end < text.length
+        ? `Call ${MIYO_PARSE_TOOL_NAME} again with offset ${end} for the next part.`
+        : "End of document.";
+    return {
+      text: `${text.slice(offset, end)}\n\n[Characters ${offset}-${end} of ${text.length}. ${next}]`,
+      isError: false,
+    };
   };
 }
 
@@ -89,7 +94,10 @@ function partEnd(text: string, offset: number): number {
   while (encoder.encode(text.slice(offset, end)).length > PART_BUDGET_BYTES) {
     end = offset + Math.floor((end - offset) * 0.9);
   }
-  return end;
+  // A part ending between an emoji's two UTF-16 halves would hand both parts an unpaired surrogate that decodes as garbage.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/740
+  const last = text.charCodeAt(end - 1);
+  return end < text.length && last >= 0xd800 && last <= 0xdbff ? end - 1 : end;
 }
 
 export async function parseWithMiyoCli(path: string, cwd: string | undefined): Promise<string> {
@@ -116,7 +124,8 @@ export async function parseWithMiyoCli(path: string, cwd: string | undefined): P
   }
 }
 
-// Obsidian started from the Dock or Start menu misses the shell PATH, so Miyo's own install location comes first.
+// Obsidian started from the Dock or Start menu misses the shell PATH, so Miyo's own install location comes first,
+// unless a leftover there can't run and would shadow a working miyo on PATH.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/740
 function resolveMiyoCli(): string {
   const os = requireNodeModule<typeof import("node:os")>("os");
@@ -132,5 +141,10 @@ function resolveMiyoCli(): string {
           "miyo.exe"
         )
       : nodePath.join(os.homedir(), ".miyo", "bin", "miyo");
-  return fs.existsSync(installed) ? installed : "miyo";
+  try {
+    fs.accessSync(installed, fs.constants.X_OK);
+    return installed;
+  } catch {
+    return "miyo";
+  }
 }

@@ -29,11 +29,11 @@ import {
   runMiyoSearch,
 } from "@/miyo/miyoSearchTool";
 import {
+  createMiyoParse,
   MIYO_PARSE_TOOL,
   MIYO_PARSE_TOOL_NAME,
   MIYO_PARSE_TURNED_OFF_TEXT,
   parseWithMiyoCli,
-  runMiyoParse,
 } from "@/miyo/miyoParseTool";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
@@ -205,10 +205,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         {
           definition: MIYO_PARSE_TOOL,
           turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
-          call: (args) =>
-            runMiyoParse(args, {
-              parse: (path) => parseWithMiyoCli(path, getVaultBase(app) ?? undefined),
-            }),
+          call: createMiyoParse((path) => parseWithMiyoCli(path, getVaultBase(app) ?? undefined)),
         },
       ]
     ),
