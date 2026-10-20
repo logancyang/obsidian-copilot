@@ -11,6 +11,6 @@ export function stripUserMessageWrapper(content: string): string {
     .replace(/\n$/, "");
 }
 
-// Some agents end the turn when a reply is cut off mid tool call, so the plugin hands the cause back once. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+// Some agents end the turn when a reply is cut off, mid tool call or mid text, so the plugin hands the cause back once. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
 export const OUTPUT_LIMIT_CONTINUATION_PROMPT =
-  "Your last reply hit the output limit, so its unfinished tool call did not run. Continue in smaller tool calls without recapping.";
+  "Your last reply hit the output limit and was cut off, so any unfinished step did not run. Continue in smaller steps without recapping.";
