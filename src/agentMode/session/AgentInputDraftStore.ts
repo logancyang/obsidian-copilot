@@ -1,4 +1,5 @@
 import type { BackendId, PromptContent } from "@/agentMode/session/types";
+import { getSettings } from "@/settings/model";
 import type { MessageContext } from "@/types/message";
 import type { App, TFile } from "obsidian";
 
@@ -80,7 +81,7 @@ const createDraft = (): AgentInputDraft => ({
   input: "",
   images: [],
   contextNotes: [],
-  includeActiveNote: true,
+  includeActiveNote: getSettings().autoAttachActiveNote,
   includeActiveWebTab: true,
   loading: false,
   queue: [],

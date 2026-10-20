@@ -99,7 +99,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
-  const [includeActiveNote, setIncludeActiveNote] = useState(true);
+  const [includeActiveNote, setIncludeActiveNote] = useState(settings.autoAttachActiveNote);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(true);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
@@ -552,13 +552,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     clearSelectedTextContexts();
     plugin.chatSelectionHighlightController.clearForNewChat();
     plugin.suppressCurrentWebSelection(webSelectionUrl);
-    setIncludeActiveNote(true);
+    setIncludeActiveNote(settings.autoAttachActiveNote);
     setIncludeActiveWebTab(true);
   }, [
     handleStopGenerating,
     chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
+    settings.autoAttachActiveNote,
     settings.enableRecentConversations,
     handleSaveAsNote,
     safeSet,
@@ -633,6 +634,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     const handleAbortStream = (event: CustomEvent<{ reason?: ABORT_REASON }>) => {
       const reason = event.detail?.reason || ABORT_REASON.NEW_CHAT;
       handleStopGenerating(reason);
+      // The New Copilot Quick Chat command starts over without remounting this composer. https://github.com/logancyang/obsidian-copilot/issues/3663
+      if (reason === ABORT_REASON.NEW_CHAT) {
+        setIncludeActiveNote(settings.autoAttachActiveNote);
+        setIncludeActiveWebTab(true);
+      }
     };
 
     eventTarget?.addEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
@@ -640,12 +646,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.ABORT_STREAM, handleAbortStream);
     };
-  }, [eventTarget, handleStopGenerating]);
+  }, [eventTarget, handleStopGenerating, settings.autoAttachActiveNote]);
 
   const [prevChain, setPrevChain] = useState(selectedChain);
   if (prevChain !== selectedChain) {
     setPrevChain(selectedChain);
-    setIncludeActiveNote(true);
+    setIncludeActiveNote(settings.autoAttachActiveNote);
     setIncludeActiveWebTab(true);
   }
 

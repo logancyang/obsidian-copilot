@@ -1,6 +1,8 @@
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import { DEFAULT_SETTINGS } from "@/constants";
+import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
 import { act, renderHook } from "@testing-library/react";
 import type { App, TFile } from "obsidian";
 
@@ -27,6 +29,8 @@ const renderDrafts = (initialProps: Props) => {
 };
 
 describe("useAgentInputDrafts", () => {
+  afterEach(() => settingsStore.set(settingsAtom, DEFAULT_SETTINGS));
+
   it("seeds a fresh draft that includes the active note and web tab, with frozen empties", () => {
     const { result } = renderDrafts({ chatInputId: "a" });
 
@@ -37,6 +41,15 @@ describe("useAgentInputDrafts", () => {
     expect(result.current.images).toEqual([]);
     expect(result.current.contextNotes).toEqual([]);
     expect(result.current.queue).toEqual([]);
+  });
+
+  it("https://github.com/logancyang/obsidian-copilot/issues/3663 seeds a fresh draft without the active note when auto-attach is off", () => {
+    updateSetting("autoAttachActiveNote", false);
+    const { result } = renderDrafts({ chatInputId: "a" });
+
+    expect(result.current.includeActiveNote).toBe(false);
+    act(() => result.current.setInput("hello"));
+    expect(result.current.includeActiveNote).toBe(false);
   });
 
   it("keeps each session's compose draft isolated across switches", () => {
