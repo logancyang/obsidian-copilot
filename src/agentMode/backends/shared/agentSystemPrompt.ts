@@ -52,7 +52,7 @@ const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
 };
 
 // A skill can ask for one huge write that the output limit cuts off, and an agent stops to ask after one blocked step instead of finishing the job. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-export const COPILOT_STEP_FAILURE_POLICY = `Write long content in blocks of at most 200 lines per write/edit call, even if a skill asks for one write. If a step is cut off, blocked or fails, finish the rest without asking, within your permissions: redo cut-off steps smaller; omit content a safety system blocked and note the gap.`;
+export const COPILOT_STEP_FAILURE_POLICY = `Write at most 200 lines per write/edit, even if a skill says otherwise. If a step is cut off, blocked or fails, finish without asking: redo cut-off steps smaller; skip blocked content, noting it.`;
 
 function buildFileEditPolicy(backendId: BackendId): string {
   return `Edit vault files with your ${FILE_EDIT_TOOLS[backendId]} tools so Copilot shows a diff; shell/script writes (sed -i, python, redirects) show none. Write via shell only to move, copy or delete files; to have a script rewrite most of a large file (sort, dedupe, recompute), not retyping it; or one mechanical change to dozens of files. Then list changed files.`;

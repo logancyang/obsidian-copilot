@@ -119,8 +119,8 @@ describe("agentSystemPrompt", () => {
       }
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_STEP_FAILURE_POLICY);
-      expect(COPILOT_STEP_FAILURE_POLICY).toContain("even if a skill asks for one write");
-      expect(COPILOT_STEP_FAILURE_POLICY).toContain("omit content a safety system blocked");
+      expect(COPILOT_STEP_FAILURE_POLICY).toContain("even if a skill says otherwise");
+      expect(COPILOT_STEP_FAILURE_POLICY).toContain("skip blocked content, noting it");
     });
 
     it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
