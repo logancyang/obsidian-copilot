@@ -404,6 +404,24 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.usage).toBeUndefined();
     });
 
+    it("keeps an existing note's epoch when a later save's first message carries a different time, so chat links keep working (https://github.com/Brevilabs/obsidian-copilot-private/issues/744)", async () => {
+      const first = await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi", 1792522547700)],
+        "claude"
+      );
+      const note = app.files.get(first!.path)!;
+      Object.setPrototypeOf(note, TFile.prototype);
+
+      await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi", 1792522549569), makeMessage(AI_SENDER, "hello")],
+        "claude",
+        { existingPath: first!.path }
+      );
+
+      expect(note.contents).toContain("epoch: 1792522547700\n");
+      expect(note.contents).not.toContain("1792522549569");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 keeps frontmatter properties it does not manage when it saves an existing chat again", async () => {
       const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         sessionId: "s1",
