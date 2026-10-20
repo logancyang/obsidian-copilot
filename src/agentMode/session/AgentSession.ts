@@ -92,7 +92,10 @@ import {
   noEnabledModelError,
   pickEnabledModel,
 } from "@/agentMode/session/enabledModelSelection";
-import { stripUserMessageWrapper } from "@/agentMode/session/promptEnvelope";
+import {
+  OUTPUT_LIMIT_CONTINUATION_PROMPT,
+  stripUserMessageWrapper,
+} from "@/agentMode/session/promptEnvelope";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -833,34 +836,14 @@ export class AgentSession {
       const promptStarted = !signal.aborted;
       let resp: PromptOutput = { stopReason: "cancelled" };
       if (promptStarted) {
-        const backingPrompt = this.backend.prompt(req);
-        resp = await Promise.race([
-          backingPrompt,
-          new Promise<PromptOutput>((resolve) => {
-            signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), {
-              once: true,
-            });
-          }),
-        ]);
-        if (signal.aborted) {
-          const settledPrompt = backingPrompt.then(
-            () => undefined,
-            () => undefined
+        resp = await this.promptBackend(req, signal);
+        // An agent cut off at its output limit gets the cause and one chance to continue in smaller steps. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+        if (resp.stopReason === "max_tokens") {
+          if (placeholderId) this.store.settleOpenParts(placeholderId, "failed");
+          resp = await this.promptBackend(
+            { sessionId, prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }] },
+            signal
           );
-          const drain = settledPrompt.then(async () => {
-            let activity: number;
-            do {
-              activity = this.cancelledTurnActivity;
-              await new Promise<void>((resolve) =>
-                window.setTimeout(resolve, CANCELLED_TURN_QUIET_MS)
-              );
-            } while (activity !== this.cancelledTurnActivity);
-          });
-          this.cancelledPromptDrain = drain;
-          void drain.then(() => {
-            if (this.cancelledPromptDrain === drain) this.cancelledPromptDrain = null;
-          });
-          resp = { stopReason: "cancelled" };
         }
       }
       if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
@@ -886,7 +869,7 @@ export class AgentSession {
         );
         this.store.markMessageError(placeholderId, message);
       }
-      if (placeholderId) this.store.settleOpenCompactions(placeholderId);
+      if (placeholderId) this.store.settleOpenParts(placeholderId);
       if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
       if (
         placeholderId &&
@@ -913,7 +896,7 @@ export class AgentSession {
         const failure = formatPromptFailure(err);
         // The turn's error already shows the failure, so the row must not repeat it.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-        this.store.settleOpenCompactions(placeholderId, "failed");
+        this.store.settleOpenParts(placeholderId, "failed");
         this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
         this.notifyMessages();
       }
@@ -925,6 +908,35 @@ export class AgentSession {
       this.abortController = null;
       this.recomputeStatusIfChanged();
     }
+  }
+
+  private async promptBackend(req: PromptInput, signal: AbortSignal): Promise<PromptOutput> {
+    const backingPrompt = this.backend.prompt(req);
+    const resp = await Promise.race([
+      backingPrompt,
+      new Promise<PromptOutput>((resolve) => {
+        signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), {
+          once: true,
+        });
+      }),
+    ]);
+    if (!signal.aborted) return resp;
+    const settledPrompt = backingPrompt.then(
+      () => undefined,
+      () => undefined
+    );
+    const drain = settledPrompt.then(async () => {
+      let activity: number;
+      do {
+        activity = this.cancelledTurnActivity;
+        await new Promise<void>((resolve) => window.setTimeout(resolve, CANCELLED_TURN_QUIET_MS));
+      } while (activity !== this.cancelledTurnActivity);
+    });
+    this.cancelledPromptDrain = drain;
+    void drain.then(() => {
+      if (this.cancelledPromptDrain === drain) this.cancelledPromptDrain = null;
+    });
+    return { stopReason: "cancelled" };
   }
 
   private ensureMultiAgentEntitlement(): Promise<boolean> {
@@ -1603,7 +1615,7 @@ export class AgentSession {
         }
         if (!text.trim()) return true;
         this.flushHistoryUser();
-        this.historyAiId = null;
+        this.closeHistoryTurn();
         this.historyUser = { wireId: update.messageId, raw: text, occurredAt };
         this.historyTurnStartedAt = occurredAt;
         return true;
@@ -1669,6 +1681,8 @@ export class AgentSession {
     const pending = this.historyUser;
     this.historyUser = null;
     if (!pending) return;
+    // The plugin's own continuation is not something the user typed. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+    if (stripUserMessageWrapper(pending.raw).trim() === OUTPUT_LIMIT_CONTINUATION_PROMPT) return;
     this.store.addMessage({
       message: stripUserMessageWrapper(pending.raw),
       sender: USER_SENDER,
@@ -1708,8 +1722,16 @@ export class AgentSession {
   private endHistory(): void {
     this.flushHistoryUser();
     this.historyOpen = false;
-    this.historyAiId = null;
+    this.closeHistoryTurn();
     this.historyTurnStartedAt = undefined;
+  }
+
+  // A replayed turn is over, so a step it never finished did not run. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+  private closeHistoryTurn(): void {
+    if (this.historyAiId && this.store.settleOpenParts(this.historyAiId)) {
+      this.scheduleNotifyMessages();
+    }
+    this.historyAiId = null;
   }
 
   private resolveContentTarget(messageId: string | undefined): string | null {
