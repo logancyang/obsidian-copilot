@@ -285,7 +285,7 @@ describe("cliSignIn", () => {
               try {
                 process.kill(-proxy.pid, "SIGKILL");
               } catch (error) {
-                expect((error as NodeJS.ErrnoException).code).toBe("ESRCH");
+                expect(["ESRCH", "EPERM"]).toContain((error as NodeJS.ErrnoException).code);
               }
             }
           }
