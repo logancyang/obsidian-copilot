@@ -91,6 +91,16 @@ export async function buildRenderedDiffPlan(
   }
 
   for (const pairing of alignBlocks(beforeSplit.blocks, afterSplit.blocks)) {
+    const { extraBlankLines } = pairing.kind === "deleted" ? pairing.before : pairing.after;
+    // A spacer holds the blank lines rendering would merge, as Live Preview shows them, inside the
+    // Markdown so reference links and footnotes still find their definitions across it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
+    if (extraBlankLines) {
+      segments.push({
+        kind: "markdown",
+        markdown: `<div aria-hidden="true">${"<br>".repeat(extraBlankLines)}</div>`,
+      });
+    }
     switch (pairing.kind) {
       case "unchanged":
         segments.push({

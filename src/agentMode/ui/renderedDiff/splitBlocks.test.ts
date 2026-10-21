@@ -39,6 +39,32 @@ describe("splitBlocks", () => {
       });
     });
 
+    it("records the blank lines past the first separator on the block they precede, but not after frontmatter (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+      const source =
+        "---\nstatus: draft\n---\n\n\n# Alpha pilot\n\n\n\nThe pilot runs.\n\n\n- Kickoff\n- Review\n";
+      const app = appParsing({
+        sections: [
+          ["yaml", 0, 2],
+          ["heading", 5, 5],
+          ["paragraph", 9, 9],
+          ["list", 12, 13],
+        ],
+        listItems: [
+          [12, 12, -12],
+          [13, 13, -12],
+        ],
+      });
+
+      const split = await splitMarkdown(app, source);
+
+      expect(split.blocks).toEqual([
+        { type: "heading", text: "# Alpha pilot" },
+        { type: "text", text: "The pilot runs.", extraBlankLines: 2 },
+        { type: "text", text: "- Kickoff", extraBlankLines: 1 },
+        { type: "text", text: "- Review", continuesList: true },
+      ]);
+    });
+
     it("parses the exact source text it is given, encoded as an ArrayBuffer", async () => {
       const app = appParsing({ sections: [["paragraph", 0, 0]] });
 

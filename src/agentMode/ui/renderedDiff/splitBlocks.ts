@@ -6,6 +6,7 @@ export interface MarkdownBlock {
   type: MarkdownBlockType;
   text: string;
   continuesList?: true;
+  extraBlankLines?: number;
 }
 
 export interface MarkdownSplit {
@@ -96,6 +97,7 @@ export async function splitMarkdown(app: App, source: string): Promise<MarkdownS
     .map((item) => item.position.start.line);
   const blocks: MarkdownBlock[] = [];
   let frontmatter: string | null = null;
+  let previousEnd: number | null = null;
   for (const { type, position } of metadata.sections ?? []) {
     // After a note ending in a footnote definition Obsidian appends empty sections past its end.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -103,10 +105,18 @@ export async function splitMarkdown(app: App, source: string): Promise<MarkdownS
     const text = lines.slice(position.start.line, position.end.line + 1).join("\n");
     if (type === "yaml" && position.start.line === 0) {
       frontmatter = text;
-    } else if (type === "list") {
-      blocks.push(...listBlocks(lines, position.start.line, position.end.line, itemStarts));
     } else {
-      blocks.push(blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text));
+      const sectionBlocks =
+        type === "list"
+          ? listBlocks(lines, position.start.line, position.end.line, itemStarts)
+          : [blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text)];
+      // Rendering merges a run of blank lines into one paragraph break, while Live Preview shows
+      // each one, so the block keeps the count past the first.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
+      const extraBlankLines = previousEnd === null ? 0 : position.start.line - previousEnd - 2;
+      if (extraBlankLines > 0) sectionBlocks[0] = { ...sectionBlocks[0], extraBlankLines };
+      blocks.push(...sectionBlocks);
+      previousEnd = position.end.line;
     }
   }
   return { frontmatter, blocks: blocks.length === 0 ? EMPTY_BLOCKS : blocks };
