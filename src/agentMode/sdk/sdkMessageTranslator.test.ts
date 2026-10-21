@@ -858,6 +858,7 @@ describe("sdkMessageTranslator", () => {
           };
           const batched = {
             type: "user",
+            tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
             message: { content: order.map((id) => resultBlocks[id as keyof typeof resultBlocks]) },
             parent_tool_use_id: null,
             session_id: SESSION_ID,
@@ -1711,7 +1712,7 @@ describe("sdkMessageTranslator", () => {
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 skips the stand-ins Claude records around a stopped turn, and ends the turn at each input Claude adds on its own, so the agent's own reply stands apart", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 skips the stand-ins Claude records around a stopped turn, and ends the turn at each input Claude adds on its own but not at a human-origin prompt, so the agent's own reply stands apart", () => {
       const jsonl = transcript(
         userEntry("u-1", "real prompt"),
         userEntry("stop-1", [{ type: "text", text: "[Request interrupted by user]" }]),
@@ -1725,7 +1726,8 @@ describe("sdkMessageTranslator", () => {
         assistantEntry([{ type: "text", text: "The subagent finished." }]),
         userEntry("note-1", "<task-notification>\n<task-id>a1</task-id>\n</task-notification>", {
           origin: { kind: "task-notification" },
-        })
+        }),
+        userEntry("u-2", "typed by the user", { origin: { kind: "human" } })
       );
 
       expect(replay(jsonl)).toEqual([
@@ -1741,6 +1743,11 @@ describe("sdkMessageTranslator", () => {
           content: { type: "text", text: "The subagent finished." },
         },
         { sessionUpdate: "turn_ended", turnId: "", stopReason: "end_turn" },
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "typed by the user" },
+          messageId: "u-2",
+        },
       ]);
     });
 

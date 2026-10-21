@@ -23,7 +23,7 @@ import {
   type ClaudeTaskPlanState,
 } from "./claudeTodoPlan";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
-import { ClaudeTaskTracker, isAsyncLaunchResult } from "./claudeTaskProtocol";
+import { ClaudeTaskTracker } from "./claudeTaskProtocol";
 
 type SDKSystemLike = Extract<SDKMessage, { type: "system" }>;
 
@@ -441,14 +441,16 @@ function translateUserMessage(
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
   const originalFiles = preEditContent(msg);
-  const launchedTask = isAsyncLaunchResult(msg.tool_use_result);
+  const results = content.filter(isToolResultBlock);
+  const launchAck = state.tasks.launchAcknowledgedBy(
+    msg.tool_use_result,
+    results.map((b) => b.tool_use_id)
+  );
 
   const out: SessionEvent[] = [];
-  for (const block of content) {
-    const b = block as ToolResultBlock;
-    if (b.type !== "tool_result" || !b.tool_use_id) continue;
+  for (const b of results) {
     // A background task's launch result only says it started; the task's end settles its card. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (launchedTask || state.tasks.isRunningInBackground(b.tool_use_id)) continue;
+    if (b.tool_use_id === launchAck || state.tasks.isRunningInBackground(b.tool_use_id)) continue;
     out.push(
       ...toolResultEvents(sessionId, state, b.tool_use_id, b, toolResultStatus(b), originalFiles)
     );
@@ -461,6 +463,11 @@ interface ToolResultBlock {
   tool_use_id?: string;
   content?: unknown;
   is_error?: boolean;
+}
+
+function isToolResultBlock(block: unknown): block is ToolResultBlock & { tool_use_id: string } {
+  const b = block as ToolResultBlock | null;
+  return b?.type === "tool_result" && !!b.tool_use_id;
 }
 
 function toolResultStatus(block: ToolResultBlock): AgentToolStatus {
@@ -591,7 +598,7 @@ export function replayClaudeTranscript(
     if (!entry || entry.isSidechain) continue;
     const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
     // Input the CLI adds on its own (a task notification, a subagent's hand-back) is not a message anyone wrote, and the agent's reply to it is a reply of its own. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (entry.type === "user" && entry.origin) {
+    if (entry.type === "user" && isAgentOrigin(entry.origin)) {
       const end = event(sessionId, {
         sessionUpdate: "turn_ended",
         turnId: "",
@@ -623,6 +630,12 @@ export function replayClaudeTranscript(
     out.push(event(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "failed" }));
   }
   return out;
+}
+
+function isAgentOrigin(origin: unknown): boolean {
+  return (
+    typeof origin === "object" && origin !== null && (origin as { kind?: unknown }).kind !== "human"
+  );
 }
 
 function trackUnansweredToolCall(unanswered: Set<string>, update: SessionUpdate): void {

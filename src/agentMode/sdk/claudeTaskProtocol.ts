@@ -71,6 +71,17 @@ export class ClaudeTaskTracker {
     return false;
   }
 
+  launchAcknowledgedBy(
+    toolUseResult: unknown,
+    resultToolCallIds: readonly string[]
+  ): string | undefined {
+    if (!isAsyncLaunchResult(toolUseResult)) return undefined;
+    const taskId = launchedTaskId(toolUseResult);
+    const launch = taskId ? this.tasks.get(taskId)?.start?.toolCallId : undefined;
+    if (launch) return resultToolCallIds.includes(launch) ? launch : undefined;
+    return resultToolCallIds.length === 1 ? resultToolCallIds[0] : undefined;
+  }
+
   stopRunning(): readonly SessionUpdate[] {
     const updates: SessionUpdate[] = [];
     for (const [taskId, task] of this.tasks) {
@@ -157,7 +168,16 @@ export class ClaudeTaskTracker {
   }
 }
 
-export function isAsyncLaunchResult(toolUseResult: unknown): boolean {
+function launchedTaskId(toolUseResult: unknown): string | undefined {
+  const result = asRecord(toolUseResult);
+  return (
+    nonEmptyString(result?.agentId) ??
+    nonEmptyString(result?.taskId) ??
+    nonEmptyString(result?.backgroundTaskId)
+  );
+}
+
+function isAsyncLaunchResult(toolUseResult: unknown): boolean {
   const result = asRecord(toolUseResult);
   return (
     result?.isAsync === true ||

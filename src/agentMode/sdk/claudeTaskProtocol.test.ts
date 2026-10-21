@@ -1,5 +1,5 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { ClaudeTaskTracker, isAsyncLaunchResult } from "./claudeTaskProtocol";
+import { ClaudeTaskTracker } from "./claudeTaskProtocol";
 
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
 
@@ -181,20 +181,46 @@ describe("claudeTaskProtocol", () => {
         ).toEqual([]);
       });
     });
-  });
 
-  describe("isAsyncLaunchResult()", () => {
-    it.each([
-      ["a background subagent", { isAsync: true, status: "async_launched", agentId: "a1" }],
-      ["a workflow", { status: "async_launched", taskId: "w1" }],
-      ["a background command", { stdout: "", backgroundTaskId: "b1" }],
-    ])("recognizes the launch result of %s", (_name, result) => {
-      expect(isAsyncLaunchResult(result)).toBe(true);
-    });
+    describe("launchAcknowledgedBy()", () => {
+      it.each([
+        ["a background subagent", { isAsync: true, status: "async_launched", agentId: "a1" }],
+        ["a workflow", { status: "async_launched", taskId: "a1" }],
+        ["a background command", { stdout: "", backgroundTaskId: "a1" }],
+      ])(
+        `picks the started task's own result out of a batch for the launch result of %s (${ISSUE_175})`,
+        (_name, result) => {
+          const tracker = new ClaudeTaskTracker();
+          tracker.accept(started("a1"));
 
-    it("does not treat a finished tool's result as a launch", () => {
-      expect(isAsyncLaunchResult({ stdout: "done", stderr: "" })).toBe(false);
-      expect(isAsyncLaunchResult(undefined)).toBe(false);
+          expect(tracker.launchAcknowledgedBy(result, ["tool-read", "tool-a1"])).toBe("tool-a1");
+        }
+      );
+
+      it("takes a lone result as the acknowledgement when the launch arrives before its task starts", () => {
+        const tracker = new ClaudeTaskTracker();
+
+        expect(tracker.launchAcknowledgedBy({ isAsync: true, agentId: "a1" }, ["tool-a1"])).toBe(
+          "tool-a1"
+        );
+      });
+
+      it("names no acknowledgement when an unstarted launch shares its batch", () => {
+        const tracker = new ClaudeTaskTracker();
+
+        expect(
+          tracker.launchAcknowledgedBy({ isAsync: true, agentId: "a1" }, ["tool-read", "tool-a1"])
+        ).toBeUndefined();
+      });
+
+      it("names no acknowledgement for a finished tool's result", () => {
+        const tracker = new ClaudeTaskTracker();
+
+        expect(
+          tracker.launchAcknowledgedBy({ stdout: "done", stderr: "" }, ["tool-a1"])
+        ).toBeUndefined();
+        expect(tracker.launchAcknowledgedBy(undefined, ["tool-a1"])).toBeUndefined();
+      });
     });
   });
 });
