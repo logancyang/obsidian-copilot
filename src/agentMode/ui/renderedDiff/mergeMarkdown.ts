@@ -93,7 +93,7 @@ export async function buildRenderedDiffPlan(
 
   for (const pairing of alignBlocks(beforeSplit.blocks, afterSplit.blocks)) {
     const { extraBlankLines } = pairing.kind === "deleted" ? pairing.before : pairing.after;
-    // Rendering merges a run of blank lines into one paragraph break, while Live Preview shows each one.
+    // A spacer holds the blank lines rendering would merge, as Live Preview shows them.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
     if (extraBlankLines) segments.push({ kind: "spacer", lines: extraBlankLines });
     switch (pairing.kind) {

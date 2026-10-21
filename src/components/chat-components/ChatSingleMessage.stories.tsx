@@ -53,12 +53,12 @@ export const PlainText: StoryObj<UserMessageProps> = {
 export const MarkdownFormatting: StoryObj<UserMessageProps> = {
   args: { message: { ...baseMessage, message: formattedText } },
 };
-export const BlankLinesAndLists: StoryObj<UserMessageProps> = {
+export const ParagraphsAndLists: StoryObj<UserMessageProps> = {
   args: {
     message: {
       ...baseMessage,
       message:
-        "Summarize the research findings.\n\n\n\nKeep each region separate.\n\nCover these:\n- Accuracy by region\n- Cost per query\n  - Include the pilot months\n\n1. Draft the summary\n2. List the open questions",
+        "Summarize the research findings.\n\nKeep each region separate.\n\nCover these:\n- Accuracy by region\n- Cost per query\n  - Include the pilot months\n\n1. Draft the summary\n2. List the open questions",
     },
   },
 };
