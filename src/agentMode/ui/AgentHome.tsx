@@ -760,7 +760,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             container={rootEl}
                           />
                         }
-                        showMultiAgentUpsell
                       />
                       {composerNode}
                     </div>
