@@ -163,7 +163,7 @@ interface MockSessionTestHandle {
   setStatus(status: MockSessionStatus): void;
   setMessages(messages: { message: string }[], notify?: boolean): void;
   setHasUserVisibleMessages(value: boolean): void;
-  setTaskStatuses(statuses: AgentTask["status"][]): void;
+  setTaskStatuses(statuses: AgentTask["status"][], kinds?: AgentTask["kind"][]): void;
   setPendingPermissionCount(count: number): void;
   setQueuedPromptCount(count: number): void;
 }
@@ -271,11 +271,11 @@ function makeMockSession(overrides: {
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
     },
-    setTaskStatuses: (statuses) => {
+    setTaskStatuses: (statuses, kinds = []) => {
       tasks = statuses.map((taskStatus, i) => ({
         taskId: `task-${i}`,
         toolCallId: `tool-${i}`,
-        kind: "subagent",
+        kind: kinds[i] ?? "subagent",
         description: `Task ${i}`,
         status: taskStatus,
       }));
@@ -3091,7 +3091,17 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.backendId).toBe("opencode");
       });
 
-      it("defers restart while a chat's background task runs and restarts once the task ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+      it("restarts at once while only a background command runs, since a command may never end (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        getSessionTestHandle(first).setTaskStatuses(["running"], ["command"]);
+
+        await mgr.restartBackend("opencode", "skills changed");
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("defers restart while a chat's background subagent runs and restarts once the subagent ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();
         getSessionTestHandle(first).setTaskStatuses(["running"]);
@@ -3106,6 +3116,32 @@ describe("AgentSessionManager", () => {
           })
         );
         getSessionTestHandle(first).setTaskStatuses(["completed"]);
+        await shutDown;
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("restarts once the last background subagent ends even while a background command keeps running (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        getSessionTestHandle(first).setTaskStatuses(
+          ["running", "running"],
+          ["subagent", "command"]
+        );
+
+        await mgr.restartBackend("opencode", "skills changed");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        getSessionTestHandle(first).setTaskStatuses(
+          ["completed", "running"],
+          ["subagent", "command"]
+        );
         await shutDown;
 
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
