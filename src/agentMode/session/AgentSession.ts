@@ -136,6 +136,14 @@ interface TurnFileCapture {
   writeTimeBefore?: string | null;
 }
 
+function isTaskLifecycleUpdate(update: SessionEvent["update"]): boolean {
+  return (
+    update.sessionUpdate === "task_started" ||
+    update.sessionUpdate === "task_progress" ||
+    update.sessionUpdate === "task_ended"
+  );
+}
+
 function toolCallTarget(call: ToolCallSnapshot | ToolCallDelta): EditTargetSource {
   return {
     locations: call.locations,
@@ -1317,7 +1325,8 @@ export class AgentSession {
 
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
-    if (event.taskToolCallId !== undefined) {
+    // Task lifecycle updates describe the task itself, even when reported from inside a task. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (event.taskToolCallId !== undefined && !isTaskLifecycleUpdate(update)) {
       this.applyTaskContent(event.taskToolCallId, update);
       return;
     }

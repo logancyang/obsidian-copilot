@@ -96,7 +96,7 @@ describe("TaskDetailView", () => {
     expect(screen.getByText("Background command")).toBeTruthy();
     expect(screen.getByText(/\$ for i in/)).toBeTruthy();
     await screen.findByText(/line 2/);
-    expect(screen.getByLabelText("Command output").textContent).toBe("line 1\nline 2\n");
+    expect(screen.getByTestId("task-command-output").textContent).toBe("line 1\nline 2\n");
     expect(screen.queryByText(/Showing the last/)).toBeNull();
   });
 

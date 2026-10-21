@@ -119,7 +119,7 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
         <div className="tw-text-xs tw-text-muted">Showing the last 256 KB of output.</div>
       ) : null}
       <pre
-        aria-label="Command output"
+        data-testid="task-command-output"
         className="tw-m-0 tw-whitespace-pre-wrap tw-break-all tw-font-mono tw-text-xs tw-text-normal"
       >
         {output.text || (task.status === "running" ? "No output yet" : "No output")}

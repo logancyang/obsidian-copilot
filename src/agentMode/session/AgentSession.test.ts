@@ -5814,6 +5814,27 @@ describe("AgentSession", () => {
         });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 applies a task update reported from inside a task to the task, not to its messages", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Count words",
+        });
+
+        mock.emit({
+          sessionId: "acp-1",
+          update: { sessionUpdate: "task_progress", taskId: "task-1", model: "claude-haiku-9" },
+          taskToolCallId: "tool-agent",
+        });
+
+        expect(session.getTasks()[0].model).toBe("claude-haiku-9");
+        expect(session.getTaskMessages("task-1")).toEqual([]);
+      });
+
       it("returns one stable empty list before any task starts", () => {
         const session = makeSession(makeMockBackend());
 
