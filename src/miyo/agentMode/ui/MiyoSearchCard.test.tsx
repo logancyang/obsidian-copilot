@@ -44,7 +44,7 @@ describe("MiyoSearchCard", () => {
     });
 
     it("says a stopped search stopped, without a note count or shimmer (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
-      const { container } = render(<MiyoSearchCard status="cancelled" query="q" noteCount={3} />);
+      const { container } = renderCard({ status: "cancelled", notes: notes(3) });
 
       expect(screen.getByText("Miyo search stopped")).toBeTruthy();
       expect(screen.queryByText(/note/)).toBeNull();
