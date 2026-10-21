@@ -285,6 +285,9 @@ describe("builtinSkills", () => {
       expect(md).toMatch(
         /call\s+`openartifacts_unpublish` with the `docId`, and with the note as `notePath`/
       );
+      expect(md).toMatch(
+        /does\s+not link to that page, nothing was withdrawn: stop and ask the user\. Otherwise report/
+      );
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
