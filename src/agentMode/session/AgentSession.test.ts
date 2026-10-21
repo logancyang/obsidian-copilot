@@ -6297,6 +6297,35 @@ describe("AgentSession", () => {
         ]);
         expect(session.getTaskMessages("unknown")).toEqual([]);
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 shows a tool call still running when its task is stopped as stopped, not running", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Wait",
+        });
+        mock.emit({
+          sessionId: "acp-1",
+          taskToolCallId: "tool-agent",
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "tool-bash",
+            title: "perl",
+            kind: "execute",
+            status: "in_progress",
+          },
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
+          expect.objectContaining({ kind: "tool_call", id: "tool-bash", status: "cancelled" }),
+        ]);
+      });
     });
 
     describe("getCurrentTodoList()", () => {

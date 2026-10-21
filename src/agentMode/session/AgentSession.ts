@@ -115,6 +115,7 @@ const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
 const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
+const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   completed: "completed",
   failed: "failed",
@@ -1626,6 +1627,10 @@ export class AgentSession {
     });
     // A request from a task that has ended can no longer be answered, so its card must not stay open. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
     this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
+    // A tool call cut short by its task's end would otherwise spin in the task's view forever. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+    const content = this.taskContent.get(task.toolCallId);
+    const contentId = content?.getDisplayMessages()[0]?.id;
+    if (contentId) content?.stopToolCalls(contentId, EMPTY_TOOL_CALL_IDS);
     this.publishTasks();
     void this.finalizeTaskFileChanges(task.toolCallId);
   }
