@@ -13,6 +13,9 @@ import type {
   OpenArtifactsGuidance,
   OpenArtifactsLinkAccess,
   OpenArtifactsReceipt,
+  OpenArtifactsRole,
+  OpenArtifactsThreads,
+  OpenArtifactsThreadState,
 } from "@/openArtifacts/types";
 import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsidian";
 
@@ -26,6 +29,7 @@ const PRIVATE_UNSUPPORTED_MESSAGE =
 // The reference CLI's wording: an unconfigured server answers the whole access family with the same 404 as an old one.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 const PRIVATE_UNAVAILABLE_MESSAGE = "Not found, or this server does not support private documents.";
+const COMMENTS_UNAVAILABLE_MESSAGE = "Not found, or this server does not support comments.";
 const AMBIGUOUS_PUBLISH_MESSAGE =
   "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
 
@@ -114,6 +118,85 @@ export class OpenArtifactsClient {
     return this.access("PUT", docId, "", licenseKey, { linkAccess });
   }
 
+  addPerson(
+    docId: string,
+    email: string,
+    licenseKey: string,
+    role?: OpenArtifactsRole
+  ): Promise<OpenArtifactsAccess> {
+    return this.access(
+      "PUT",
+      docId,
+      `/people/${encodeURIComponent(email)}`,
+      licenseKey,
+      role && { role }
+    );
+  }
+
+  removePerson(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("DELETE", docId, `/people/${encodeURIComponent(email)}`, licenseKey);
+  }
+
+  declineRequest(docId: string, email: string, licenseKey: string): Promise<OpenArtifactsAccess> {
+    return this.access("DELETE", docId, `/requests/${encodeURIComponent(email)}`, licenseKey);
+  }
+
+  async listThreads(
+    docId: string,
+    licenseKey: string,
+    { state, since }: { state?: OpenArtifactsThreadState; since?: string } = {}
+  ): Promise<OpenArtifactsThreads> {
+    const query = new URLSearchParams();
+    if (state) query.set("state", state);
+    if (since) query.set("since", since);
+    const search = query.toString();
+    const value = await this.threads("GET", docId, search && `?${search}`, licenseKey, 200);
+    if (!Array.isArray(value.threads) || !value.threads.every(isRecord)) {
+      throw malformedResponse(200);
+    }
+    return value as OpenArtifactsThreads;
+  }
+
+  replyToThread(
+    docId: string,
+    threadId: string,
+    body: string,
+    licenseKey: string
+  ): Promise<Record<string, unknown>> {
+    return this.threads(
+      "POST",
+      docId,
+      `/${encodeURIComponent(threadId)}/comments`,
+      licenseKey,
+      201,
+      { body }
+    );
+  }
+
+  resolveThread(
+    docId: string,
+    threadId: string,
+    licenseKey: string,
+    version?: number
+  ): Promise<Record<string, unknown>> {
+    return this.threads(
+      "POST",
+      docId,
+      `/${encodeURIComponent(threadId)}/resolve`,
+      licenseKey,
+      200,
+      version === undefined ? {} : { version }
+    );
+  }
+
+  reopenThread(
+    docId: string,
+    threadId: string,
+    licenseKey: string
+  ): Promise<Record<string, unknown>> {
+    return this.threads("POST", docId, `/${encodeURIComponent(threadId)}/reopen`, licenseKey, 200);
+  }
+
   async openAsOwner(docId: string, licenseKey: string): Promise<string> {
     const response = await this.request({
       url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/open`,
@@ -142,7 +225,7 @@ export class OpenArtifactsClient {
     docId: string,
     suffix: string,
     licenseKey: string,
-    body?: { linkAccess: OpenArtifactsLinkAccess }
+    body?: { linkAccess: OpenArtifactsLinkAccess } | { role: OpenArtifactsRole }
   ): Promise<OpenArtifactsAccess> {
     const response = await this.request({
       url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/access${suffix}`,
@@ -195,6 +278,34 @@ export class OpenArtifactsClient {
       throw malformedResponse(response.status);
     }
     return value as unknown as OpenArtifactsAccess;
+  }
+
+  private async threads(
+    method: "GET" | "POST",
+    docId: string,
+    suffix: string,
+    licenseKey: string,
+    expectedStatus: number,
+    body?: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const response = await this.request({
+      url: `${DOCS_ENDPOINT}/${encodeURIComponent(docId)}/threads${suffix}`,
+      method,
+      headers: authorizationHeaders(licenseKey),
+      ...(body && { contentType: "application/json", body: JSON.stringify(body) }),
+      throw: false,
+    });
+    if (response.status === 404) {
+      throw new OpenArtifactsClientError(COMMENTS_UNAVAILABLE_MESSAGE, "not_found", 404, false);
+    }
+    if (response.status !== expectedStatus) {
+      throw errorFromResponse(response);
+    }
+    const value = responseJson(response);
+    if (!isRecord(value)) {
+      throw malformedResponse(response.status);
+    }
+    return value;
   }
 
   private async push(

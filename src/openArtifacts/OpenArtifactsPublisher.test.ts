@@ -963,5 +963,81 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.modalOptions).toHaveLength(0);
       });
     });
+
+    describe("publishDocument()", () => {
+      const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/746";
+      const AMBIGUOUS =
+        "OpenArtifacts may have published this note, but Copilot did not receive a valid receipt. To avoid creating a duplicate page, this publish cannot be retried until the plugin reloads.";
+
+      it(`${ISSUE} refuses a second publish on the same key while one runs, and frees the key after`, async () => {
+        const { publisher, file, client } = createHarness();
+        let finish!: () => void;
+        client.publish.mockImplementation(async (_document: unknown, licenseKey: string) =>
+          licenseKey === "slow"
+            ? new Promise((resolve) => (finish = () => resolve(RECEIPT)))
+            : RECEIPT
+        );
+        const running = publisher.publishDocument(file, DOCUMENT, "slow", null);
+
+        await expect(publisher.publishDocument(file, DOCUMENT, "key", null)).rejects.toThrow(
+          "An OpenArtifacts action is already in progress for this note."
+        );
+        await expect(
+          publisher.publishDocument("page.html", DOCUMENT, "key", null)
+        ).resolves.toMatchObject({ kind: "success", receipt: RECEIPT });
+        finish();
+        await expect(running).resolves.toMatchObject({ kind: "success" });
+        await expect(publisher.unpublish(file, DOC_ID, "key")).resolves.toMatchObject({
+          kind: "success",
+          action: "delete",
+        });
+      });
+
+      it(`${ISSUE} blocks the note in the dialog too after an agent publish may have created a page`, async () => {
+        const harness = createHarness();
+        harness.client.publish.mockRejectedValueOnce(
+          new OpenArtifactsClientError(AMBIGUOUS, "ambiguous_publish", null, false)
+        );
+
+        await expect(
+          harness.publisher.publishDocument(harness.file, DOCUMENT, "key", null)
+        ).rejects.toThrow(AMBIGUOUS);
+        await expect(
+          harness.publisher.publishDocument(harness.file, DOCUMENT, "key", null)
+        ).rejects.toThrow(AMBIGUOUS);
+        await harness.publisher.open(harness.file);
+
+        expect(harness.modalOptions[0].initialResult).toMatchObject({
+          kind: "failure",
+          message: AMBIGUOUS,
+        });
+        await harness.modalOptions[0].onConfirm("publish", activeDocument);
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+      });
+
+      it(`${ISSUE} blocks the note when an agent create cannot save its link, so neither path publishes again`, async () => {
+        const harness = createHarness();
+        harness.processFrontMatter.mockRejectedValueOnce(new Error("disk full"));
+
+        const result = await harness.publisher.publishDocument(harness.file, DOCUMENT, "key", null);
+
+        expect(result).toMatchObject({ kind: "persistence", receipt: RECEIPT });
+        await expect(
+          harness.publisher.publishDocument(harness.file, DOCUMENT, "key", null)
+        ).rejects.toThrow("The page is already published.");
+        await harness.publisher.open(harness.file);
+        expect(harness.modalOptions[0].initialResult).toMatchObject({ kind: "persistence" });
+        expect(harness.client.publish).toHaveBeenCalledTimes(1);
+      });
+
+      it(`${ISSUE} publishes nothing when the note gained a link to another page`, async () => {
+        const harness = createHarness({ openartifacts: NEW_DOC_URL });
+
+        await expect(
+          harness.publisher.publishDocument(harness.file, DOCUMENT, "key", null)
+        ).rejects.toThrow(`now links to page ${NEW_DOC_ID}`);
+        expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+    });
   });
 });
