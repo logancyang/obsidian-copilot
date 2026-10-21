@@ -440,8 +440,19 @@ describe("ClaudeSdkBackendProcess", () => {
       }
     );
 
-    it("keeps a subagent the model explicitly runs in the foreground", async () => {
-      await expect(invoke("Agent", { run_in_background: false })).resolves.toEqual({});
+    it(`runs a subagent the model asks to keep in the foreground in the background (${ISSUE_175})`, async () => {
+      await expect(
+        invoke("Agent", { prompt: "Count words", run_in_background: false })
+      ).resolves.toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          updatedInput: { prompt: "Count words", run_in_background: true },
+        },
+      });
+    });
+
+    it("leaves a subagent the model already runs in the background unchanged", async () => {
+      await expect(invoke("Agent", { run_in_background: true })).resolves.toEqual({});
     });
 
     it("leaves Bash and other tools to the model's own choice", async () => {
