@@ -5560,6 +5560,36 @@ describe("AgentSession", () => {
         finishPrompt();
         await turn;
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 rejects and removes a task's pending request when that task ends, keeping other requests", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-task-1",
+          kind: "subagent",
+          description: "Probe",
+        });
+        const taskDecision = session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+        });
+        void session.handleToolPermission({
+          ...writePermissionRequest(),
+          toolCall: { ...writePermissionRequest().toolCall, toolCallId: "tc-other" },
+          requester: { taskId: "task-2" },
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        await expect(taskDecision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(session.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-other",
+        ]);
+      });
     });
 
     describe("handleAskUserQuestion()", () => {
@@ -5854,6 +5884,28 @@ describe("AgentSession", () => {
         expect(session.getTasks()[0].status).toBe("stopped");
         expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
           status: "cancelled",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps a stopped foreground task's launching card stopped when the tool's failed result arrives after the stop, while still showing that result", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-agent",
+          status: "failed",
+          content: [{ type: "content", content: { type: "text", text: "Agent was stopped" } }],
+        });
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          status: "cancelled",
+          output: [{ type: "text", text: "Agent was stopped" }],
         });
       });
 

@@ -1172,7 +1172,7 @@ export class AgentSession {
     });
     this.settledStream = null;
     // Stop ends the main agent's turn only, so a background task's request stays answerable. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    this.requests.rejectMainToolPermissions();
+    this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
@@ -1493,7 +1493,16 @@ export class AgentSession {
       case "tool_call_update": {
         if (targetMessageId !== placeholderId) this.currentTurnShowedActivityElsewhere = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
-        const merged = mergeToolCallUpdate(existing, update);
+        // A task's end decides its launching card's status; the tool's result can arrive after a stop and must not turn it into a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+        const taskStatus = [...this.tasks.values()].find(
+          (task) => task.toolCallId === update.toolCallId
+        )?.status;
+        const merged = mergeToolCallUpdate(
+          existing,
+          taskStatus && taskStatus !== "running"
+            ? { ...update, status: LAUNCH_CARD_STATUS[taskStatus] }
+            : update
+        );
         // A late update to an earlier turn's call must not count as this turn's edit.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
         if (!isPriorToolUpdate && merged.kind === "tool_call") {
@@ -1629,6 +1638,8 @@ export class AgentSession {
       toolCallId: task.toolCallId,
       status: LAUNCH_CARD_STATUS[update.status],
     });
+    // A request from a task that has ended can no longer be answered, so its card must not stay open. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+    this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
     this.publishTasks();
   }
 
