@@ -9,7 +9,7 @@ import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type { SessionEvent, SessionId, SessionUpdate, TurnEnd } from "@/agentMode/session/types";
 import { AsyncPushQueue } from "./asyncPushQueue";
-import { cancelQueuedMessage, interruptAndCancelQueued } from "./claudeQueryControls";
+import { cancelQueuedMessage } from "./claudeQueryControls";
 import { describeSdkMessage, logSdkError, logSdkInbound } from "./sdkDebugTap";
 import { mapStopReason, translateSdkMessage, type TranslatorState } from "./sdkMessageTranslator";
 import {
@@ -42,6 +42,8 @@ export class ClaudeLiveQuery {
   private readonly stallTimeoutMs: number;
   private openTurnId: string | null = null;
   private closed = false;
+  private interrupted = false;
+  private stopWithdrawals: string[] | null = null;
   private stallError: Error | null = null;
   private resultWatch: number | undefined;
 
@@ -65,10 +67,24 @@ export class ClaudeLiveQuery {
     });
   }
 
-  // Stop takes back every message Claude has not read yet, so none of them runs after the stopped turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+  // Stop takes back each message Claude has not read, then interrupts without cancel_queued, which would also drop a finished background task's report waiting in Claude's queue. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
   async interrupt(): Promise<void> {
-    const receipt = await interruptAndCancelQueued(this.query);
-    this.withdraw(receipt?.cancelled ?? []);
+    this.interrupted = true;
+    const withdrawn: string[] = [];
+    this.stopWithdrawals = withdrawn;
+    await Promise.all(
+      this.undelivered.map(async (id) => {
+        const cancelled = await cancelQueuedMessage(this.query, id).catch((e: unknown) => {
+          logWarn("[AgentMode] withdraw at Stop", e);
+          return false;
+        });
+        if (cancelled) withdrawn.push(id);
+      })
+    );
+    this.stopWithdrawals = null;
+    // One report for the whole Stop returns its messages to the composer together, in send order. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+    this.withdraw(withdrawn);
+    await this.query.interrupt();
   }
 
   async cancelQueued(promptId: string): Promise<boolean> {
@@ -107,6 +123,13 @@ export class ClaudeLiveQuery {
       this.deliver(msg.uuid);
       return;
     }
+    // Claude drops a message it never ran, such as one withdrawn before Claude was ready, with only this frame. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+    const cancelled = cancelledCommandUuid(msg);
+    if (cancelled !== null) {
+      if (this.stopWithdrawals) this.stopWithdrawals.push(cancelled);
+      else this.withdraw([cancelled]);
+      return;
+    }
     const taskToolCallId =
       "parent_tool_use_id" in msg ? (msg.parent_tool_use_id ?? undefined) : undefined;
     if (!taskToolCallId && isTurnContent(msg)) this.startTurn();
@@ -139,6 +162,8 @@ export class ClaudeLiveQuery {
 
   private finishTurn(msg: SDKResultMessage): void {
     this.clearResultWatch();
+    const interrupted = this.interrupted;
+    this.interrupted = false;
     this.opts.translator.compactionTrigger = "auto";
     // A prompt stopped before Claude checked it is never echoed; only its result names it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     const consumed = (msg as { user_message_uuids?: unknown }).user_message_uuids;
@@ -153,7 +178,8 @@ export class ClaudeLiveQuery {
     } else if (stopReason !== "end_turn" && msg.subtype !== "success") {
       const errors = "errors" in msg ? msg.errors : undefined;
       if (errors && errors.length > 0) error = new Error(errors.join("; "));
-      else this.opts.onSignedOut();
+      // A turn Stop ended can fail without naming an error. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+      else if (!interrupted) this.opts.onSignedOut();
     }
     this.endTurn({ stopReason, ...(error ? { error } : {}) });
   }
@@ -216,6 +242,12 @@ export class ClaudeLiveQuery {
 
 function isReplayEcho(msg: SDKMessage): msg is SDKMessage & { type: "user"; uuid?: string } {
   return msg.type === "user" && (msg as { isReplay?: unknown }).isReplay === true;
+}
+
+function cancelledCommandUuid(msg: SDKMessage): string | null {
+  const frame = msg as { type: string; state?: unknown; command_uuid?: unknown };
+  if (frame.type !== "command_lifecycle" || frame.state !== "cancelled") return null;
+  return typeof frame.command_uuid === "string" ? frame.command_uuid : null;
 }
 
 function isTurnContent(msg: SDKMessage): boolean {

@@ -16,6 +16,7 @@ import { CLAUDE_DISCONNECTED_MESSAGE, ClaudeLiveQuery } from "./claudeLiveQuery"
 import { createTranslatorState } from "./sdkMessageTranslator";
 import { SDK_STREAM_STALL_MESSAGE } from "./sdkStreamStallGuard";
 import {
+  commandLifecycle,
   FakeClaudeQuery,
   SessionEventRecorder,
   resultFrame,
@@ -182,6 +183,27 @@ describe("claudeLiveQuery", () => {
     });
 
     describe("constructor()", () => {
+      it(`withdraws a prompt Claude reports cancelled without running it, such as one Stop withdrew before Claude was ready, and ignores the frame for a delivered prompt (${ISSUE_747})`, async () => {
+        const { live, fake, recorder } = startLive();
+        live.push("prompt-1", "first");
+        live.push("prompt-2", "second");
+        fake.echo(await fake.nextInput(0));
+        await recorder.waitFor("message_delivered");
+
+        fake.emit(
+          commandLifecycle("prompt-1", "cancelled"),
+          commandLifecycle("prompt-2", "queued"),
+          commandLifecycle("prompt-2", "cancelled")
+        );
+        await recorder.waitFor("messages_withdrawn");
+
+        expect(lifecycle(recorder.updates())).toEqual([
+          "delivered prompt-1",
+          "turn_started",
+          "withdrawn prompt-2",
+        ]);
+      });
+
       it(`runs a recorded background subagent session as three turns: the launch, an unrelated prompt, and the agent's own reply once the subagent ends (${ISSUE_175})`, async () => {
         const frames = readSdkFixture("claude-live-background-agent");
         const echoes = frames.filter((frame) => frame.tag === "user:echo");
@@ -468,26 +490,60 @@ describe("claudeLiveQuery", () => {
     });
 
     describe("interrupt()", () => {
-      it(`stops the turn with cancel_queued and reports the prompts Claude withdrew, ignoring ids it never sent or already delivered (${ISSUE_747})`, async () => {
+      it(`withdraws each prompt Claude has not read and reports them together, then interrupts without cancel_queued, so a background task's report waiting in Claude's queue survives Stop (${ISSUE_747})`, async () => {
         const { live, fake, recorder } = startLive();
         live.push("prompt-1", "first");
         live.push("prompt-2", "second");
         live.push("prompt-3", "third");
         fake.echo(await fake.nextInput(0));
         await recorder.waitFor("message_delivered");
-        fake.interrupt.mockResolvedValue({
-          still_queued: [],
-          cancelled: ["prompt-1", "prompt-2", "cli-cron", "prompt-3"],
-        });
+        const answers: Array<() => void> = [];
+        fake.cancelAsyncMessage.mockImplementation(
+          (uuid) =>
+            new Promise<boolean>((resolve) => {
+              fake.emit(commandLifecycle(uuid, "cancelled"));
+              answers.push(() => resolve(true));
+            })
+        );
 
-        await live.interrupt();
+        const stopped = live.interrupt();
+        fake.emit(textDelta("still streaming"));
+        await recorder.waitFor("agent_message_chunk");
+        for (const answer of answers) answer();
+        await stopped;
 
-        expect(fake.interrupt).toHaveBeenCalledWith({ cancelQueued: true });
+        expect(fake.cancelAsyncMessage.mock.calls).toEqual([["prompt-2"], ["prompt-3"]]);
+        expect(fake.interrupt).toHaveBeenCalledWith();
+        expect(fake.interrupt.mock.invocationCallOrder[0]).toBeGreaterThan(
+          Math.max(...fake.cancelAsyncMessage.mock.invocationCallOrder)
+        );
         expect(lifecycle(recorder.updates())).toEqual([
           "delivered prompt-1",
           "turn_started",
           "withdrawn prompt-2,prompt-3",
         ]);
+      });
+
+      it(`still interrupts the turn when withdrawing a prompt fails (${ISSUE_747})`, async () => {
+        const { live, fake } = startLive();
+        live.push("prompt-1", "first");
+        fake.cancelAsyncMessage.mockRejectedValue(new Error("control request failed"));
+
+        await live.interrupt();
+
+        expect(fake.interrupt).toHaveBeenCalledTimes(1);
+      });
+
+      it(`does not report a sign-out when the stopped turn ends without naming an error (${ISSUE_747})`, async () => {
+        const { live, fake, recorder, onSignedOut } = startLive();
+        live.push("prompt-1", "hi");
+        fake.echo(await fake.nextInput());
+
+        await live.interrupt();
+        fake.emit(resultFrame({ subtype: "error_during_execution", is_error: true, errors: [] }));
+        await recorder.waitFor("turn_ended");
+
+        expect(onSignedOut).not.toHaveBeenCalled();
       });
     });
 

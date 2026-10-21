@@ -1309,7 +1309,7 @@ describe("ClaudeSdkBackendProcess", () => {
         await proc.cancel({ sessionId });
         await proc.prompt({ sessionId, promptId: "p2", prompt: [{ type: "text", text: "next" }] });
 
-        expect(fakes[0].interrupt).toHaveBeenCalledWith({ cancelQueued: true });
+        expect(fakes[0].interrupt).toHaveBeenCalledTimes(1);
         expect(fakes[0].close).not.toHaveBeenCalled();
         expect(queryMock).toHaveBeenCalledTimes(1);
         expect((await fakes[0].nextInput(1)).uuid).toBe("p2");

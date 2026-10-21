@@ -920,6 +920,33 @@ describe("AgentChatInput", () => {
       expect(draft.setLoading).not.toHaveBeenCalled();
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 returns a message the session refuses while the agent works to the composer and says it failed", async () => {
+      jest.mocked(Notice).mockClear();
+      const backend = {
+        sendMessage: jest.fn(() => {
+          throw new Error("Session is closed");
+        }),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      let draft!: AgentInputDraftControls;
+      const store = new AgentInputDraftStore(
+        { workspace: { getActiveFile: () => null } } as unknown as App,
+        () => true
+      );
+      function Composer() {
+        draft = useAgentInputDrafts({ store, chatInputId: "input-1" });
+        return inputNode(backend, draft, { isLoading: true, acceptsMidTurnMessages: true });
+      }
+      render(<Composer />);
+      act(() => draft.setInput("keep this text"));
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(Notice).toHaveBeenCalledWith("Failed to send message. Please try again.");
+      expect(draft.input).toBe("keep this text");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends with interrupt from Send now, which only a backend taking mid-turn input offers", async () => {
       const backend = makeBackend();
       const draft = makeDraft({ input: "do this instead", loading: true });

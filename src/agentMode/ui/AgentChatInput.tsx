@@ -313,9 +313,10 @@ export const AgentChatInput = memo(function AgentChatInput({
       } catch (error) {
         logError("Error sending agent message:", error);
         new Notice("Failed to send message. Please try again.");
+        restoreToComposer([item]);
       }
     },
-    [backend, updateUserMessageHistory]
+    [backend, restoreToComposer, updateUserMessageHistory]
   );
 
   const handleSendMessage = useCallback(
