@@ -53,6 +53,29 @@ describe("useTaskOutputTail", () => {
       expect(calls.size).toBe(readsAtUnmount);
     });
 
+    it(`skips its re-reads while the view showing the output is hidden (${ISSUE_749})`, async () => {
+      jest.useFakeTimers();
+      const file = { text: "line 1\n" };
+      const { calls, wrapper } = countingReader(file);
+      const view = { shown: true };
+      const shownRef = { current: { isShown: () => view.shown } as unknown as HTMLElement };
+      const { result } = renderHook(
+        () => useTaskOutputTail(PATH, { live: true, maxBytes: 1024, shownRef }),
+        { wrapper }
+      );
+      await waitFor(() => expect(result.current.text).toBe("line 1\n"));
+
+      view.shown = false;
+      const readsWhenHidden = calls.size;
+      await act(() => jest.advanceTimersByTimeAsync(TASK_OUTPUT_POLL_MS * 3));
+      expect(calls.size).toBe(readsWhenHidden);
+
+      view.shown = true;
+      file.text += "line 2\n";
+      await act(() => jest.advanceTimersByTimeAsync(TASK_OUTPUT_POLL_MS));
+      expect(result.current.text).toBe("line 1\nline 2\n");
+    });
+
     it("reads an ended command's output once and does not keep polling", async () => {
       jest.useFakeTimers();
       const { calls, wrapper } = countingReader({ text: "done\n" });

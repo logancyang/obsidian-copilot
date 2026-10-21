@@ -26,6 +26,7 @@ export interface TaskDetailViewProps {
   messages: readonly AgentChatMessage[];
   app: App;
   onBack: () => void;
+  chatAwaitsAnswer?: boolean;
 }
 
 export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
@@ -34,6 +35,7 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
   messages,
   app,
   onBack,
+  chatAwaitsAnswer = false,
 }) => {
   const Icon = task.kind === "command" ? Terminal : Bot;
   const subtitle =
@@ -42,9 +44,15 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       : [taskKindLabel(task), task.model].filter(Boolean).join(" · ");
 
   return (
-    <div className="tw-flex tw-size-full tw-min-h-0 tw-flex-col" data-testid="agent-task-detail">
+    <div
+      className="tw-flex tw-size-full tw-min-h-0 tw-flex-col"
+      data-testid="agent-task-detail"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onBack();
+      }}
+    >
       <div className="copilot-divider-b tw-flex tw-items-center tw-gap-2 tw-px-2 tw-py-1.5">
-        <Button variant="ghost2" size="icon" aria-label="Back to chat" onClick={onBack}>
+        <Button variant="ghost2" size="icon" aria-label="Back to chat" onClick={onBack} autoFocus>
           <ArrowLeft className="tw-size-4" />
         </Button>
         <Icon className="tw-size-4 tw-shrink-0 tw-text-normal" />
@@ -59,6 +67,16 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
           <StatusBadge status={taskBadgeStatus(status)} />
         </span>
       </div>
+      {/* Permission requests and questions show only in the main chat, so a task's view must point there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
+      {chatAwaitsAnswer ? (
+        <button
+          type="button"
+          className="tw-h-auto tw-rounded-none tw-bg-callout-warning/10 tw-px-3 tw-py-1.5 tw-text-left tw-text-xs tw-text-warning tw-shadow-none"
+          onClick={onBack}
+        >
+          The chat is waiting for your answer. Back to chat
+        </button>
+      ) : null}
       {task.kind === "command" ? (
         <CommandDetail task={task} />
       ) : (
@@ -82,7 +100,8 @@ const SubagentDetail: React.FC<{
         : null,
     [task.prompt]
   );
-  const scrollRef = useStickToBottom(parts);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useStickToBottom(scrollRef, parts);
   return (
     <div ref={scrollRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-pb-3">
       {promptMessage ? (
@@ -100,11 +119,13 @@ const SubagentDetail: React.FC<{
 };
 
 const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const output = useTaskOutputTail(task.outputFile, {
     live: task.status === "running",
     maxBytes: COMMAND_OUTPUT_MAX_BYTES,
+    shownRef: scrollRef,
   });
-  const scrollRef = useStickToBottom(output.text);
+  useStickToBottom(scrollRef, output.text);
   return (
     <div
       ref={scrollRef}
@@ -128,8 +149,7 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
   );
 };
 
-function useStickToBottom(content: unknown): React.RefObject<HTMLDivElement> {
-  const ref = useRef<HTMLDivElement>(null);
+function useStickToBottom(ref: React.RefObject<HTMLDivElement>, content: unknown): void {
   const atBottom = useRef(true);
   useLayoutEffect(() => {
     const el = ref.current;
@@ -139,10 +159,9 @@ function useStickToBottom(content: unknown): React.RefObject<HTMLDivElement> {
     };
     el.addEventListener("scroll", onScroll);
     return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [ref]);
   useLayoutEffect(() => {
     const el = ref.current;
     if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [content]);
-  return ref;
+  }, [ref, content]);
 }

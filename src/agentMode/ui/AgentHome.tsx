@@ -698,6 +698,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         messages={backend.getTaskMessages(detailTask.taskId)}
                         app={app}
                         onBack={handleCloseTask}
+                        chatAwaitsAnswer={
+                          pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0
+                        }
                       />
                     ) : null}
                     {/* The chat stays mounted under a task's view so its scroll position and draft survive. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}

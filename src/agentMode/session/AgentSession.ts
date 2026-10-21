@@ -1668,11 +1668,16 @@ export class AgentSession {
       default:
         return;
     }
-    if (changed) this.publishTasks();
+    // A task's own messages change on every step it takes; the task list keeps its identity so the chat's cards do not re-render. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (changed) this.notifyTasks();
   }
 
   private publishTasks(): void {
     this.taskList = this.tasks.size === 0 ? EMPTY_TASKS : Object.freeze([...this.tasks.values()]);
+    this.notifyTasks();
+  }
+
+  private notifyTasks(): void {
     for (const l of this.listeners) {
       try {
         l.onTasksChanged?.();

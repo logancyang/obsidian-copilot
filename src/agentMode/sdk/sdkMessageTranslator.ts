@@ -398,6 +398,8 @@ function translateAssistantMessage(
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
     state.tasks.observeToolUse(b.id, b.name, b.input);
+    if (state.emittedToolUseIds.has(b.id)) continue;
+    state.emittedToolUseIds.add(b.id);
     // A subagent hands its report back through a tool call; the report is its last message. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     if (parentToolUseId !== undefined && b.name === SUBAGENT_HANDBACK_TOOL) {
       state.handbackToolUseIds.add(b.id);
@@ -406,8 +408,6 @@ function translateAssistantMessage(
       continue;
     }
     const { tool: name, mcpServer } = resolveToolName(b.name);
-    if (state.emittedToolUseIds.has(b.id)) continue;
-    state.emittedToolUseIds.add(b.id);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
     out.push(
       ...todoPlanEvents(sessionId, state, b.id, name, mcpServer, parentToolUseId, b.input ?? {})

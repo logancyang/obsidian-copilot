@@ -203,14 +203,14 @@ const AgentChatMessages = memo(
           : undefined,
       [messages, pendingPermission]
     );
-    // Questions take priority so the separate resolver queues have a stable
-    // presentation policy without carrying cross-type sequencing state.
-    // https://github.com/logancyang/obsidian-copilot/issues/2948
     const tasks = useAgentTasks();
     const pendingRequester =
       pendingPermission && tasks
         ? permissionRequesterName(pendingPermission, tasks.tasks)
         : undefined;
+    // Questions take priority so the separate resolver queues have a stable
+    // presentation policy without carrying cross-type sequencing state.
+    // https://github.com/logancyang/obsidian-copilot/issues/2948
     const pendingActionId = pendingQuestion
       ? `question:${pendingQuestion.requestId}`
       : pendingPermission

@@ -116,7 +116,7 @@ const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen })
             ? taskTitle(task)
             : `${taskKindLabel(task)} · ${taskTitle(task)}`}
         </span>
-        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-text-muted">
+        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-text-normal">
           {taskStatusLabel(status)}
           <StatusBadge status={taskBadgeStatus(status)} />
         </span>

@@ -91,13 +91,22 @@ const Demo: React.FC<Partial<Props>> = ({
   task = SUBAGENT,
   messages = SUBAGENT_MESSAGES,
   onBack = NO_OP,
+  status,
+  chatAwaitsAnswer,
 }) => {
   const app = useApp();
   return (
     <TaskOutputReaderContext.Provider value={OUTPUT_READER}>
       <TooltipProvider>
         <div className="tw-flex tw-h-[480px] tw-flex-col">
-          <TaskDetailView task={task} messages={messages} app={app} onBack={onBack} />
+          <TaskDetailView
+            task={task}
+            status={status}
+            messages={messages}
+            app={app}
+            onBack={onBack}
+            chatAwaitsAnswer={chatAwaitsAnswer}
+          />
         </div>
       </TooltipProvider>
     </TaskOutputReaderContext.Provider>
@@ -114,6 +123,11 @@ export default meta;
 export const SubagentRunning: StoryObj<Props> = {
   render: (args) => <Demo {...args} />,
   args: { messages: RUNNING_MESSAGES },
+};
+
+export const ChatAwaitsAnswer: StoryObj<Props> = {
+  render: (args) => <Demo {...args} />,
+  args: { messages: RUNNING_MESSAGES, status: "needs_approval", chatAwaitsAnswer: true },
 };
 
 export const SubagentFinished: StoryObj<Props> = {

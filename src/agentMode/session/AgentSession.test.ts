@@ -5835,6 +5835,31 @@ describe("AgentSession", () => {
         expect(session.getTaskMessages("task-1")).toEqual([]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the same task list and notifies listeners when only a task's own messages change", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Count words",
+        });
+        const before = session.getTasks();
+        let notified = 0;
+        subscribeTo(session, { onTasksChanged: () => notified++ });
+
+        mock.emit({
+          sessionId: "acp-1",
+          update: replayText("agent_message_chunk", "13 words."),
+          taskToolCallId: "tool-agent",
+        });
+
+        expect(notified).toBe(1);
+        expect(session.getTasks()).toBe(before);
+        expect(session.getTaskMessages("task-1")[0]?.message).toBe("13 words.");
+      });
+
       it("returns one stable empty list before any task starts", () => {
         const session = makeSession(makeMockBackend());
 

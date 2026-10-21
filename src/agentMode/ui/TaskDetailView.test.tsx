@@ -118,4 +118,28 @@ describe("TaskDetailView", () => {
 
     expect(onBack).toHaveBeenCalled();
   });
+
+  it(`focuses its back button on open and returns to the chat on Escape (${ISSUE_749})`, () => {
+    const { onBack } = renderDetail({});
+    const back = screen.getByRole("button", { name: "Back to chat" });
+
+    expect(back.ownerDocument.activeElement).toBe(back);
+    fireEvent.keyDown(back, { key: "Escape" });
+
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it(`points back to the chat while the chat waits for a permission answer, which it shows only there (${ISSUE_749})`, () => {
+    const { onBack } = renderDetail({ chatAwaitsAnswer: true });
+
+    fireEvent.click(screen.getByText(/The chat is waiting for your answer/));
+
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  it("shows no answer cue while the chat waits for nothing", () => {
+    renderDetail({});
+
+    expect(screen.queryByText(/The chat is waiting for your answer/)).toBeNull();
+  });
 });
