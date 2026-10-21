@@ -95,7 +95,8 @@ export class ClaudeLiveQuery {
     const taskToolCallId =
       "parent_tool_use_id" in msg ? (msg.parent_tool_use_id ?? undefined) : undefined;
     if (!taskToolCallId && isTurnContent(msg)) this.startTurn();
-    if (!taskToolCallId && this.openTurnId) this.stallGuard.observe(msg);
+    // A background task's frames say nothing about the main reply's stream, so they must not keep a stalled turn alive. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (!taskToolCallId && this.openTurnId && !("task_id" in msg)) this.stallGuard.observe(msg);
     // A subagent's frames carry the tool call that launched it; they belong to its task, not to a main-agent reply. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     for (const event of translateSdkMessage(msg, this.opts.sessionId, this.opts.translator)) {
       this.opts.emit(taskToolCallId ? { ...event, taskToolCallId } : event);

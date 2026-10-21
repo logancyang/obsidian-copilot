@@ -93,6 +93,18 @@ function lifecycle(updates: SessionUpdate[]): string[] {
   });
 }
 
+function taskFrame(subtype: string, fields: Record<string, unknown>): SDKMessage {
+  return {
+    type: "system",
+    subtype,
+    task_id: "task-1",
+    description: "Count words",
+    session_id: SESSION_ID,
+    uuid: `uuid-${subtype}`,
+    ...fields,
+  } as unknown as SDKMessage;
+}
+
 function replyText(updates: SessionUpdate[]): string {
   return updates
     .map((update) =>
@@ -412,6 +424,32 @@ describe("claudeLiveQuery", () => {
 
           expect(fake.interrupt).not.toHaveBeenCalled();
           expect(recorder.updates().some((u) => u.sessionUpdate === "turn_ended")).toBe(false);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it(`still ends a stalled main turn while a background subagent keeps reporting progress (${ISSUE_175})`, async () => {
+        jest.useFakeTimers();
+        try {
+          const { live, fake, recorder } = startLive(1_000);
+          live.push("prompt-1", "hi");
+          fake.echo(await fake.nextInput());
+          fake.emit(
+            taskFrame("task_started", { tool_use_id: "toolu_agent", task_type: "local_agent" }),
+            textDelta("half a sent")
+          );
+          await recorder.waitFor("agent_message_chunk");
+
+          jest.advanceTimersByTime(600);
+          fake.emit(taskFrame("task_progress", { last_tool_name: "Bash" }));
+          await recorder.waitFor("task_progress");
+          jest.advanceTimersByTime(600);
+
+          expect(lifecycle(recorder.updates())).toContain(
+            `turn_ended error: ${SDK_STREAM_STALL_MESSAGE}`
+          );
+          expect(fake.interrupt).toHaveBeenCalledTimes(1);
         } finally {
           jest.useRealTimers();
         }
