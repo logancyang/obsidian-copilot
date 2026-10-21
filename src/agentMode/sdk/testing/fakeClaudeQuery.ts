@@ -8,6 +8,7 @@ export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   readonly inputs: SDKUserMessage[] = [];
   readonly interrupt = jest.fn(async () => undefined);
   readonly cancelAsyncMessage = jest.fn(async (_uuid: string) => false);
+  readonly stopTask = jest.fn(async (_taskId: string) => undefined);
   readonly close = jest.fn(() => this.output.end());
   readonly setModel = jest.fn(async () => undefined);
   readonly setPermissionMode = jest.fn(async () => undefined);

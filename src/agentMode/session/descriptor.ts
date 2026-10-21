@@ -111,6 +111,10 @@ export interface BackendDescriptor {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/747
   readonly withdraw?: boolean;
 
+  // A backend that can end one background task on its own offers a stop control on each running task, leaving the main agent and other tasks running.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+  readonly stopTask?: boolean;
+
   getInstallState(settings: CopilotSettings): InstallState;
 
   getResolvedBinaryPath?(settings: CopilotSettings): string | null;

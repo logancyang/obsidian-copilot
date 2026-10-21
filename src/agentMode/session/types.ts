@@ -469,6 +469,11 @@ export interface WithdrawInput {
   promptId: string;
 }
 
+export interface StopTaskInput {
+  sessionId: SessionId;
+  taskId: string;
+}
+
 export type SessionUpdateHandler = (event: SessionEvent) => void;
 
 export interface BackendProcess {
@@ -487,6 +492,7 @@ export interface BackendProcess {
   prompt(params: PromptInput): Promise<void>;
   cancel(params: CancelInput): Promise<void>;
   withdraw?(params: WithdrawInput): Promise<boolean>;
+  stopTask?(params: StopTaskInput): Promise<void>;
   closeSession?(params: { sessionId: SessionId }): Promise<void>;
   setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState>;
   isSetSessionModelSupported(): boolean | null;

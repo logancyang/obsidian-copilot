@@ -31,6 +31,7 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
+  AgentToolStatus,
   TaskEndStatus,
   TaskStart,
   ToolCallDelta,
@@ -113,6 +114,11 @@ const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
 const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
+const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
+  completed: "completed",
+  failed: "failed",
+  stopped: "cancelled",
+};
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
@@ -785,6 +791,14 @@ export class AgentSession {
     });
     // A message the agent has already taken can no longer be withdrawn, so it shows as sent. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
     if (withdrawn === false) this.deliverPrompt(promptId);
+  }
+
+  canStopTasks(): boolean {
+    return this.getDescriptor?.()?.stopTask === true;
+  }
+
+  async stopTask(taskId: string): Promise<void> {
+    await this.backend.stopTask?.({ sessionId: this.backendSessionId!, taskId });
   }
 
   // A message sent while the agent works is shown only once it reaches the agent, at that point in the transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
@@ -1610,10 +1624,10 @@ export class AgentSession {
       summary: update.summary,
       outputFile: update.outputFile ?? task.outputFile,
     });
-    // The launching card follows its task; the task keeps the exact end status. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    // The launching card follows its task. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     this.updateLaunchCard({
       toolCallId: task.toolCallId,
-      status: update.status === "completed" ? "completed" : "failed",
+      status: LAUNCH_CARD_STATUS[update.status],
     });
     this.publishTasks();
   }

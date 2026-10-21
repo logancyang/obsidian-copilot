@@ -37,6 +37,8 @@ export interface AgentChatBackend {
   getMessages(): AgentChatMessage[];
   getTasks(): readonly AgentTask[];
   getTaskMessages(taskId: string): readonly AgentChatMessage[];
+  canStopTasks(): boolean;
+  stopTask(taskId: string): Promise<void>;
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;

@@ -52,7 +52,7 @@ import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { cn } from "@/lib/utils";
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getProjectLandingCaptureSignature } from "@/projects/projectContextSignature";
@@ -114,6 +114,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [sessionId]
   );
   const handleCloseTask = useCallback(() => setOpenedTask(null), []);
+  const handleStopTask = useCallback(
+    (taskId: string) => {
+      backend.stopTask(taskId).catch((e: unknown) => logWarn("[AgentMode] stop task failed", e));
+    },
+    [backend]
+  );
   const detailTask =
     openedTask?.sessionId === sessionId
       ? tasks.find((task) => task.taskId === openedTask.taskId)
@@ -750,6 +756,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             tasks={tasks}
                             permissions={pendingToolPermissions}
                             onOpenTask={handleOpenTask}
+                            onStopTask={backend.canStopTasks() ? handleStopTask : undefined}
                             container={rootEl}
                           />
                         }
