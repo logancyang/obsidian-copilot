@@ -5,7 +5,6 @@ import {
   taskKindLabel,
   taskStatusLabel,
   taskTitle,
-  type TaskDisplayStatus,
 } from "@/agentMode/ui/taskDisplay";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 import { Bot, Terminal } from "lucide-react";
@@ -13,11 +12,10 @@ import React from "react";
 
 export interface TaskCardProps {
   task: AgentTask;
-  status?: TaskDisplayStatus;
   onOpen: (taskId: string) => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, status = task.status, onOpen }) => (
+export const TaskCard: React.FC<TaskCardProps> = ({ task, onOpen }) => (
   <AgentActivityCard
     icon={task.kind === "command" ? Terminal : Bot}
     label={
@@ -27,8 +25,8 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, status = task.status, 
     }
     trailing={
       <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-font-normal tw-text-muted">
-        {taskStatusLabel(status)}
-        <StatusBadge status={taskBadgeStatus(status)} />
+        {taskStatusLabel(task.status)}
+        <StatusBadge status={taskBadgeStatus(task.status)} />
       </span>
     }
     expandable
