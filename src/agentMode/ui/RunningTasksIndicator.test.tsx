@@ -73,14 +73,16 @@ describe("RunningTasksIndicator", () => {
     expect(screen.queryByText("Print 30 progress lines")).toBeNull();
   });
 
-  it(`opens on hover with one row per running task, a subagent row naming its status (${ISSUE_749})`, async () => {
+  it(`opens on hover with one row per running task, each saying it runs only to screen readers beside its spinner (${ISSUE_749})`, async () => {
     renderIndicator({ permissions: [] }, { [OUTPUT]: "line 1\n" });
 
     fireEvent.pointerEnter(screen.getByRole("button", { name: "2 tasks running" }));
 
     expect(screen.getByText("general-purpose · Count words in Welcome")).toBeTruthy();
     expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
-    expect(screen.getAllByText("Running")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Running").map((label) => label.classList.contains("tw-sr-only"))
+    ).toEqual([true, true]);
     expect(await screen.findByText("line 1")).toBeTruthy();
   });
 

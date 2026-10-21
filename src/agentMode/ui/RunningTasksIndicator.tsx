@@ -1,15 +1,9 @@
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import { lastOutputLine } from "@/agentMode/session/taskOutputTail";
 import type { PermissionPrompt } from "@/agentMode/session/types";
-import { StatusBadge } from "@/agentMode/ui/ActionCard";
+import { TaskStatusMark } from "@/agentMode/ui/TaskCard";
 import { useTaskOutputTail } from "@/agentMode/ui/hooks/useTaskOutputTail";
-import {
-  runningTasks,
-  taskBadgeStatus,
-  taskDisplayStatus,
-  taskLabel,
-  taskStatusLabel,
-} from "@/agentMode/ui/taskDisplay";
+import { runningTasks, taskDisplayStatus, taskLabel } from "@/agentMode/ui/taskDisplay";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -159,10 +153,7 @@ const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen })
       <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
         <Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />
         <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{taskLabel(task)}</span>
-        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-text-normal">
-          {taskStatusLabel(status)}
-          <StatusBadge status={taskBadgeStatus(status)} />
-        </span>
+        <TaskStatusMark status={status} className="tw-text-normal" />
       </span>
       {task.kind === "command" ? <CommandOutputLine outputFile={task.outputFile} /> : null}
     </button>
