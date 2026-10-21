@@ -134,11 +134,11 @@ describe("bundleSizeGuard", () => {
       const outfile = path.join(workDir, "main.js");
       fs.writeFileSync(
         outfile,
-        `${"a".repeat(5_000_000)}\n${legalBundle(legalEntry("a.js", "  (*! notice *)"))}`
+        `${"a".repeat(5_500_000)}\n${legalBundle(legalEntry("a.js", "  (*! notice *)"))}`
       );
 
       expect(() => setupGuard(true, outfile).onEnd({ errors: [] })).toThrow(
-        "strictly below 5000000 bytes"
+        "strictly below 5500000 bytes"
       );
     });
 
@@ -191,9 +191,9 @@ describe("bundleSizeGuard", () => {
   });
 
   describe("assertBundleSize()", () => {
-    it("uses the 5 MB ceiling for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
-      expect(assertBundleSize("a".repeat(4_999_999))).toBe(4_999_999);
-      expect(() => assertBundleSize("a".repeat(5_000_000))).toThrow("strictly below 5000000 bytes");
+    it("uses the 5.5 MB ceiling for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
+      expect(assertBundleSize("a".repeat(5_499_999))).toBe(5_499_999);
+      expect(() => assertBundleSize("a".repeat(5_500_000))).toThrow("strictly below 5500000 bytes");
     });
 
     it("measures UTF-8 bytes and enforces a strict boundary for https://github.com/Brevilabs/obsidian-copilot-private/issues/94", () => {
