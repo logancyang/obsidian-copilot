@@ -165,6 +165,7 @@ interface MockSessionTestHandle {
   setHasUserVisibleMessages(value: boolean): void;
   setTaskStatuses(statuses: AgentTask["status"][]): void;
   setPendingPermissionCount(count: number): void;
+  setQueuedPromptCount(count: number): void;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -195,6 +196,7 @@ function makeMockSession(overrides: {
   let hasUserVisibleMessages = false;
   let tasks: AgentTask[] = [];
   let pendingPermissions: unknown[] = [];
+  let queuedPrompts: unknown[] = [];
   const listeners = new Set<{
     onMessagesChanged?: () => void;
     onStatusChanged?: (s: typeof status) => void;
@@ -243,6 +245,7 @@ function makeMockSession(overrides: {
     getRawSnapshot: () => ({ models: null, modes: null, configOptions: null }),
     getTasks: () => tasks,
     getPendingToolPermissions: () => pendingPermissions,
+    getQueuedPrompts: () => queuedPrompts,
     getNeedsAttention: () => needsAttention,
     markNeedsAttention: () => {
       if (needsAttention) return;
@@ -280,6 +283,9 @@ function makeMockSession(overrides: {
     },
     setPendingPermissionCount: (count) => {
       pendingPermissions = Array.from({ length: count }, (_, i) => ({ id: i }));
+    },
+    setQueuedPromptCount: (count) => {
+      queuedPrompts = Array.from({ length: count }, (_, i) => ({ id: `prompt-${i}` }));
     },
   });
   return session;
@@ -1971,6 +1977,10 @@ describe("AgentSessionManager", () => {
         [
           "holds a task's permission request",
           (s: AgentSession) => getSessionTestHandle(s).setPendingPermissionCount(1),
+        ],
+        [
+          "holds a sent message the agent has not taken yet",
+          (s: AgentSession) => getSessionTestHandle(s).setQueuedPromptCount(1),
         ],
         ["has a result the user has not seen", (s: AgentSession) => s.markNeedsAttention()],
       ])(

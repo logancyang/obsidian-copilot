@@ -518,7 +518,7 @@ export class AgentSessionManager {
       const status = session.getStatus();
       if (status !== "idle" && status !== "error") continue;
       if (hasRunningTask(session) || session.getPendingToolPermissions().length > 0) continue;
-      if (session.getNeedsAttention()) continue;
+      if (session.getQueuedPrompts().length > 0 || session.getNeedsAttention()) continue;
       excess--;
       void this.closeSession(session.internalId).catch((e) =>
         logWarn(`[AgentMode] closing an idle hidden chat failed`, e)
