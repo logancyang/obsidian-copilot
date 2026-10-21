@@ -9,7 +9,6 @@ import {
   AgentToolKind,
   AgentQuestionAnswers,
   AgentTodoListEntry,
-  AgentToolProgress,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -124,7 +123,6 @@ const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
-  progress?: AgentToolProgress;
   model?: string;
   outputFile?: string;
   summary?: string;
@@ -1604,14 +1602,14 @@ export class AgentSession {
     const task = this.tasks.get(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
-      const progress = update.progress ? { ...task.progress, ...update.progress } : task.progress;
-      this.tasks.set(task.taskId, {
-        ...task,
-        progress,
-        model: update.model ?? task.model,
-        outputFile: update.outputFile ?? task.outputFile,
-      });
-      this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      // Usage counts show only on the launching card, so a usage-only frame leaves task cards alone. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+      if (update.progress) {
+        this.updateLaunchCard({ toolCallId: task.toolCallId, progress: update.progress });
+      }
+      const model = update.model ?? task.model;
+      const outputFile = update.outputFile ?? task.outputFile;
+      if (model === task.model && outputFile === task.outputFile) return;
+      this.tasks.set(task.taskId, { ...task, model, outputFile });
       return this.publishTasks();
     }
     this.tasks.set(task.taskId, {

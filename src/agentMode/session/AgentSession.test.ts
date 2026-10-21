@@ -6101,11 +6101,7 @@ describe("AgentSession", () => {
         });
 
         expect(session.getTasks()).toEqual([
-          expect.objectContaining({
-            status: "completed",
-            summary: "13 words in total.",
-            progress: { toolName: "Bash", toolUses: 1 },
-          }),
+          expect.objectContaining({ status: "completed", summary: "13 words in total." }),
         ]);
         expect(card()).toMatchObject({
           status: "completed",
@@ -6113,7 +6109,33 @@ describe("AgentSession", () => {
         });
         const finalCard = card();
         expect(finalCard?.kind === "tool_call" ? finalCard.output : "not a card").toBeUndefined();
-        expect(onTasksChanged).toHaveBeenCalledTimes(3);
+        expect(onTasksChanged).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the same task list without notifying task listeners when a progress frame only updates usage, and shows the usage on the launching card", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+        mock.emitUpdate({ sessionUpdate: "task_progress", taskId: "task-1", model: "haiku-9" });
+        const before = session.getTasks();
+        const onTasksChanged = jest.fn();
+        subscribeTo(session, { onTasksChanged });
+
+        mock.emitUpdate({
+          sessionUpdate: "task_progress",
+          taskId: "task-1",
+          model: "haiku-9",
+          progress: { toolUses: 4, durationMs: 12_000 },
+        });
+
+        expect(session.getTasks()).toBe(before);
+        expect(onTasksChanged).not.toHaveBeenCalled();
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          progress: { toolUses: 4, durationMs: 12_000 },
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 records a running task's model and output file from progress without touching its launching card", async () => {
