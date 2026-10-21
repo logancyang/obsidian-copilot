@@ -3154,6 +3154,30 @@ describe("AgentSession", () => {
         expect(mock.prompt).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 sends nothing and keeps one cancelled reply for a prompt stopped while it waits behind a stopped turn", async () => {
+        const mock = makeMockBackend();
+        const endFirstTurn = holdPrompt(mock);
+        const session = makeSession(mock);
+        const first = session.sendPrompt("first");
+        await session.cancel();
+        await expect(first.turn).resolves.toBe("cancelled");
+
+        const next = session.sendPrompt("second");
+        await session.cancel();
+        endFirstTurn("cancelled");
+
+        await expect(next.turn).resolves.toBe("cancelled");
+        expect(mock.prompt).toHaveBeenCalledTimes(1);
+        expect(session.store.getDisplayMessages().map((m) => [m.sender, m.turnStopReason])).toEqual(
+          [
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+          ]
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a turn stopped while the agent is still accepting its prompt as cancelled and leaves the chat idle", async () => {
         const mock = makeMockBackend();
         mock.asBackend.prompt = () => new Promise(() => undefined);
