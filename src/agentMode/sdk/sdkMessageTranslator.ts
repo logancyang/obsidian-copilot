@@ -583,6 +583,14 @@ interface ClaudeTranscriptEntry {
   isCompactSummary?: boolean;
   origin?: unknown;
   message?: { content?: unknown };
+  attachment?: {
+    type?: string;
+    commandMode?: string;
+    prompt?: unknown;
+    source_uuid?: string;
+    isMeta?: boolean;
+    origin?: { kind?: string };
+  };
 }
 
 export function replayClaudeTranscript(
@@ -614,8 +622,10 @@ export function replayClaudeTranscript(
     // The CLI's stand-ins around a stopped turn are not messages anyone wrote. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (isStopBookkeeping(entry.message?.content)) continue;
     const content = entry.message?.content;
-    const events =
-      entry.type === "assistant"
+    const steer = midTurnPrompt(entry);
+    const events = steer
+      ? replayUserContent(steer.prompt, steer.messageId, sessionId, state)
+      : entry.type === "assistant"
         ? replayAssistantContent(content, sessionId, state)
         : entry.type === "user"
           ? replayUserContent(content, entry.uuid, sessionId, state)
@@ -636,6 +646,17 @@ function isAgentOrigin(origin: unknown): boolean {
   return (
     typeof origin === "object" && origin !== null && (origin as { kind?: unknown }).kind !== "human"
   );
+}
+
+// A message the user sent while the agent worked is kept as a queued command rather than a user entry. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+function midTurnPrompt(
+  entry: ClaudeTranscriptEntry
+): { prompt: unknown; messageId?: string } | null {
+  const attachment = entry.attachment;
+  if (entry.type !== "attachment" || attachment?.type !== "queued_command") return null;
+  if (attachment.commandMode !== "prompt" || attachment.isMeta) return null;
+  if (attachment.origin && attachment.origin.kind !== "human") return null;
+  return { prompt: attachment.prompt, messageId: attachment.source_uuid };
 }
 
 function trackUnansweredToolCall(unanswered: Set<string>, update: SessionUpdate): void {

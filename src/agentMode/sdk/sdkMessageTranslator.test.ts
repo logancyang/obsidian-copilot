@@ -1751,6 +1751,50 @@ describe("sdkMessageTranslator", () => {
       ]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 replays a message the user sent while the agent worked at the point it reached the agent, and skips queued task notifications and messages from other agents", () => {
+      const queued = (attachment: object): object => ({
+        type: "attachment",
+        attachment: { type: "queued_command", ...attachment },
+      });
+      const jsonl = transcript(
+        userEntry("u-1", "run six steps"),
+        assistantEntry([{ type: "text", text: "Step 1 done." }]),
+        queued({ commandMode: "prompt", prompt: "stop after step 2", source_uuid: "steer-1" }),
+        queued({
+          commandMode: "prompt",
+          prompt: [{ type: "text", text: "and say ALPHA" }],
+          source_uuid: "steer-2",
+          origin: { kind: "human" },
+        }),
+        queued({ commandMode: "task-notification", prompt: "<task-notification>…" }),
+        queued({ commandMode: "prompt", prompt: "subagent report", origin: { kind: "peer" } }),
+        assistantEntry([{ type: "text", text: "Stopped. ALPHA" }])
+      );
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "run six steps" },
+          messageId: "u-1",
+        },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Step 1 done." } },
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "stop after step 2" },
+          messageId: "steer-1",
+        },
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "and say ALPHA" },
+          messageId: "steer-2",
+        },
+        {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Stopped. ALPHA" },
+        },
+      ]);
+    });
+
     it(`finishes a replayed background task's tool call from its launch result instead of leaving it running (${ISSUE_643})`, () => {
       const jsonl = transcript(
         assistantEntry([
