@@ -574,7 +574,7 @@ interface ClaudeTranscriptEntry {
   isMeta?: boolean;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
-  origin?: { kind?: unknown };
+  origin?: unknown;
   message?: { content?: unknown };
 }
 
@@ -588,14 +588,24 @@ export function replayClaudeTranscript(
   const unansweredToolCallIds = new Set<string>();
   for (const line of jsonl.split(/\r?\n/)) {
     const entry = parseTranscriptEntry(line);
-    // Meta and subagent entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-    if (!entry || entry.isMeta || entry.isSidechain) continue;
-    // A compaction summary and the echo of a local command such as /compact are Claude CLI bookkeeping, not prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-    if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) continue;
-    // Task notifications and the CLI's stand-ins around a stopped turn are not messages anyone wrote. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (entry.origin?.kind === "task-notification" || isStopBookkeeping(entry.message?.content)) {
+    if (!entry || entry.isSidechain) continue;
+    const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
+    // Input the CLI adds on its own (a task notification, a subagent's hand-back) is not a message anyone wrote, and the agent's reply to it is a reply of its own. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (entry.type === "user" && entry.origin) {
+      const end = event(sessionId, {
+        sessionUpdate: "turn_ended",
+        turnId: "",
+        stopReason: "end_turn",
+      });
+      out.push(Number.isFinite(occurredAt) ? { ...end, occurredAt } : end);
       continue;
     }
+    // Meta entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+    if (entry.isMeta) continue;
+    // A compaction summary and the echo of a local command such as /compact are Claude CLI bookkeeping, not prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+    if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) continue;
+    // The CLI's stand-ins around a stopped turn are not messages anyone wrote. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (isStopBookkeeping(entry.message?.content)) continue;
     const content = entry.message?.content;
     const events =
       entry.type === "assistant"
@@ -603,7 +613,6 @@ export function replayClaudeTranscript(
         : entry.type === "user"
           ? replayUserContent(content, entry.uuid, sessionId, state)
           : [];
-    const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
     for (const e of events) {
       trackUnansweredToolCall(unansweredToolCallIds, e.update);
       out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);

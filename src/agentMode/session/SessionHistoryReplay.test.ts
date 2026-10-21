@@ -107,6 +107,24 @@ describe("SessionHistoryReplay", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 gives a replayed reply the agent started on its own its own bubble when the replay ends the turn before it", () => {
+        const { store, replay } = startReplay();
+
+        replay.append(replayText("user_message_chunk", "start a task", "u1"), undefined);
+        replay.append(replayText("agent_message_chunk", "Started.", "a1"), undefined);
+        replay.append(
+          { sessionUpdate: "turn_ended", turnId: "", stopReason: "end_turn" },
+          undefined
+        );
+        replay.append(replayText("agent_message_chunk", "The task finished.", "a2"), undefined);
+
+        expect(bubbles(store)).toEqual([
+          { sender: USER_SENDER, message: "start a task" },
+          { sender: AI_SENDER, message: "Started." },
+          { sender: AI_SENDER, message: "The task finished." },
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 joins user chunks that share a message id and splits chunks that have none", () => {
         const { store, replay } = startReplay();
 

@@ -694,6 +694,23 @@ describe("AgentSession", () => {
         expect(onCurrentTodoListChanged).toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 gives a replayed reply the agent started on its own its own bubble when the replay ends the turn before it", () => {
+        const mock = makeMockBackend();
+        const session = makeAwaitingResumeSession(mock);
+
+        mock.emitUpdate(replayText("user_message_chunk", "start a task", "u1"));
+        mock.emitUpdate(replayText("agent_message_chunk", "Started.", "a1"));
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "", stopReason: "end_turn" });
+        mock.emitUpdate(replayText("agent_message_chunk", "The task finished.", "a2"));
+
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "start a task" },
+          { sender: AI_SENDER, message: "Started." },
+          { sender: AI_SENDER, message: "The task finished." },
+        ]);
+        expect(session.getStatus()).toBe("starting");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps handling state and usage updates normally while history is collected", () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);

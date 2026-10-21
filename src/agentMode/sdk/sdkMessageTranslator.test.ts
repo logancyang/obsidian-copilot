@@ -1711,16 +1711,21 @@ describe("sdkMessageTranslator", () => {
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 skips task-notification inputs and the stand-ins Claude records around a stopped turn, keeping the agent's own reply", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 skips the stand-ins Claude records around a stopped turn, and ends the turn at each input Claude adds on its own, so the agent's own reply stands apart", () => {
       const jsonl = transcript(
         userEntry("u-1", "real prompt"),
         userEntry("stop-1", [{ type: "text", text: "[Request interrupted by user]" }]),
         userEntry("stop-2", [{ type: "text", text: "[Request interrupted by user for tool use]" }]),
         assistantEntry([{ type: "text", text: "No response requested." }]),
+        assistantEntry([{ type: "text", text: "Started it." }]),
+        userEntry("handback-1", "Another Claude session sent a message", {
+          isMeta: true,
+          origin: { kind: "peer", handback: true },
+        }),
+        assistantEntry([{ type: "text", text: "The subagent finished." }]),
         userEntry("note-1", "<task-notification>\n<task-id>a1</task-id>\n</task-notification>", {
           origin: { kind: "task-notification" },
-        }),
-        assistantEntry([{ type: "text", text: "The subagent finished." }])
+        })
       );
 
       expect(replay(jsonl)).toEqual([
@@ -1729,10 +1734,13 @@ describe("sdkMessageTranslator", () => {
           content: { type: "text", text: "real prompt" },
           messageId: "u-1",
         },
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Started it." } },
+        { sessionUpdate: "turn_ended", turnId: "", stopReason: "end_turn" },
         {
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "The subagent finished." },
         },
+        { sessionUpdate: "turn_ended", turnId: "", stopReason: "end_turn" },
       ]);
     });
 

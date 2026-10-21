@@ -60,6 +60,12 @@ export class SessionHistoryReplay {
         this.turnStartedAt = occurredAt;
         return true;
       }
+      // A replayed turn's end closes its reply, so a reply the agent started on its own gets its own bubble. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+      case "turn_ended":
+        this.flushUser();
+        this.closeTurn();
+        this.turnStartedAt = occurredAt;
+        return true;
       case "agent_message_chunk":
       case "agent_thought_chunk": {
         const text = extractText(update.content);
