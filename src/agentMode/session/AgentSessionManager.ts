@@ -1576,6 +1576,8 @@ export class AgentSessionManager {
       if (nextId) this.lastActiveByScope.set(closedScope, nextId);
     }
     this.notify();
+    // Closing an idle chat ends its subagents without a status change, so a restart they held runs now. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    void this.flushDeferredBackendRestartIfReady(session.backendId);
   }
 
   setActiveSession(id: string): void {

@@ -1627,6 +1627,27 @@ describe("AgentSessionManager", () => {
         expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: a.getBackendSessionId() });
       });
 
+      it("runs a held Reload once the idle chat whose subagent held it is closed, since nothing on that chat can change status again (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        getSessionTestHandle(a).setTaskStatuses(["running"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
+        await mgr.applyHeldConfigChange("opencode");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        await mgr.closeSession(a.internalId, { releaseBackend: true });
+        await shutDown;
+
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still closes the chat when the backend cannot release its session", async () => {
         const mgr = buildManager();
         const a = await mgr.createSession();
