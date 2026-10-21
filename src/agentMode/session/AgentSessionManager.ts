@@ -125,6 +125,12 @@ const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 const EMPTY_MCP_SERVERS: ReadonlyArray<AgentMcpServer> = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
+// Each hidden chat on a process-per-chat backend holds an agent process of a few hundred MB, so only a few idle ones stay open; a closed one resumes from its transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+const MAX_HIDDEN_PROCESS_CHATS = 3;
+
+function hasRunningTask(session: AgentSession): boolean {
+  return session.getTasks().some((task) => task.status === "running");
+}
 
 export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
@@ -496,13 +502,34 @@ export class AgentSessionManager {
       this.activeSessionId = nextId;
       if (nextId) this.lastActiveByScope.set(session.projectId, nextId);
     }
+    this.closeIdleHiddenChatsOverCap();
     this.notify();
+  }
+
+  private closeIdleHiddenChatsOverCap(): void {
+    const hidden = Array.from(this.detachedFromTabIds, (id) => this.sessions.get(id)).filter(
+      (session): session is AgentSession =>
+        !!session && this.opts.resolveDescriptor(session.backendId)?.processPerChat === true
+    );
+    let excess = hidden.length - MAX_HIDDEN_PROCESS_CHATS;
+    // The hidden set keeps hide order, so the least recently used chats come first. A chat that still works, waits on the user, or has an unseen result keeps its process. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    for (const session of hidden) {
+      if (excess <= 0) return;
+      const status = session.getStatus();
+      if (status !== "idle" && status !== "error") continue;
+      if (hasRunningTask(session) || session.getPendingToolPermissions().length > 0) continue;
+      if (session.getNeedsAttention()) continue;
+      excess--;
+      void this.closeSession(session.internalId).catch((e) =>
+        logWarn(`[AgentMode] closing an idle hidden chat failed`, e)
+      );
+    }
   }
 
   getRunningChatIds(): ReadonlySet<string> {
     const ids = new Set<string>();
     for (const [internalId, session] of this.sessions) {
-      if (session.getStatus() !== "running") continue;
+      if (session.getStatus() !== "running" && !hasRunningTask(session)) continue;
       for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
     }
     return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
@@ -985,8 +1012,9 @@ export class AgentSessionManager {
     if (projectId !== GLOBAL_SCOPE) {
       const reusable = this.pickReusableLandingSession(projectId);
       this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
+      if (reusable) this.detachedFromTabIds.delete(reusable.internalId);
+      this.closeIdleHiddenChatsOverCap();
       if (reusable) {
-        this.detachedFromTabIds.delete(reusable.internalId);
         this.activeSessionId = reusable.internalId;
         this.lastActiveByScope.set(projectId, reusable.internalId);
         reusable.clearNeedsAttention();
@@ -2312,8 +2340,14 @@ export class AgentSessionManager {
 
   private attachAttentionTracking(session: AgentSession): void {
     let prev = session.getStatus();
+    let tasksRunning = hasRunningTask(session);
     const unsubscribe = session.subscribe({
       onMessagesChanged: () => {},
+      onTasksChanged: () => {
+        if (hasRunningTask(session) === tasksRunning) return;
+        tasksRunning = !tasksRunning;
+        this.notify();
+      },
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
         const isRunning = next === "running";

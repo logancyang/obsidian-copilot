@@ -115,6 +115,10 @@ export interface BackendDescriptor {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/748
   readonly stopTask?: boolean;
 
+  // A backend that runs one agent process per chat keeps it alive while the chat is hidden, so only a few idle hidden chats stay open.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+  readonly processPerChat?: boolean;
+
   getInstallState(settings: CopilotSettings): InstallState;
 
   getResolvedBinaryPath?(settings: CopilotSettings): string | null;

@@ -2,7 +2,7 @@ import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
 import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
-import { AgentSession } from "./AgentSession";
+import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
@@ -163,6 +163,8 @@ interface MockSessionTestHandle {
   setStatus(status: MockSessionStatus): void;
   setMessages(messages: { message: string }[], notify?: boolean): void;
   setHasUserVisibleMessages(value: boolean): void;
+  setTaskStatuses(statuses: AgentTask["status"][]): void;
+  setPendingPermissionCount(count: number): void;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -191,10 +193,13 @@ function makeMockSession(overrides: {
   let needsAttention = false;
   let displayMessages: { message: string }[] = [];
   let hasUserVisibleMessages = false;
+  let tasks: AgentTask[] = [];
+  let pendingPermissions: unknown[] = [];
   const listeners = new Set<{
     onMessagesChanged?: () => void;
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
+    onTasksChanged?: () => void;
   }>();
   const session = {
     internalId: overrides.internalId,
@@ -236,6 +241,8 @@ function makeMockSession(overrides: {
     hasUserVisibleMessages: () => hasUserVisibleMessages,
     getState: () => null,
     getRawSnapshot: () => ({ models: null, modes: null, configOptions: null }),
+    getTasks: () => tasks,
+    getPendingToolPermissions: () => pendingPermissions,
     getNeedsAttention: () => needsAttention,
     markNeedsAttention: () => {
       if (needsAttention) return;
@@ -260,6 +267,19 @@ function makeMockSession(overrides: {
     },
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
+    },
+    setTaskStatuses: (statuses) => {
+      tasks = statuses.map((taskStatus, i) => ({
+        taskId: `task-${i}`,
+        toolCallId: `tool-${i}`,
+        kind: "subagent",
+        description: `Task ${i}`,
+        status: taskStatus,
+      }));
+      for (const l of listeners) l.onTasksChanged?.();
+    },
+    setPendingPermissionCount: (count) => {
+      pendingPermissions = Array.from({ length: count }, (_, i) => ({ id: i }));
     },
   });
   return session;
@@ -476,6 +496,28 @@ async function createActiveAndBackgroundSessions(
   const background = await mgr.createSession();
   mgr.setActiveSession(active.internalId);
   return { active, background };
+}
+
+function untilClosed(mgr: AgentSessionManager, session: AgentSession): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = mgr.subscribe(() => {
+      if (mgr.getSessions().includes(session)) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+function closedSessions(): unknown[] {
+  return mockSessionCancel.mock.contexts;
+}
+
+async function hideChats(mgr: AgentSessionManager, count: number): Promise<AgentSession[]> {
+  const chats: AgentSession[] = [];
+  for (let i = 0; i < count; i++) chats.push(await mgr.createSession());
+  await mgr.createSession();
+  for (const chat of chats) mgr.detachSessionFromTab(chat.internalId);
+  return chats;
 }
 
 async function enterWithConversation(
@@ -1898,6 +1940,78 @@ describe("AgentSessionManager", () => {
         expect(mockSessionCancel).not.toHaveBeenCalled();
         expect(mockSessionDispose).not.toHaveBeenCalled();
       });
+
+      it("closes the least recently hidden idle chat once a fourth chat of a process-per-chat backend is hidden, keeping the other three for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats = await hideChats(mgr, 3);
+        expect(closedSessions()).toEqual([]);
+        const fourth = await mgr.createSession();
+        const closed = untilClosed(mgr, chats[0]);
+
+        mgr.detachSessionFromTab(fourth.internalId);
+        await closed;
+
+        expect(closedSessions()).toEqual([chats[0]]);
+        expect(mgr.getBackendProcess(chats[0].backendId)!.closeSession).toHaveBeenCalledWith({
+          sessionId: chats[0].getBackendSessionId(),
+        });
+        expect(mgr.getSessions()).toEqual(expect.arrayContaining([...chats.slice(1), fourth]));
+      });
+
+      it.each([
+        ["runs its main turn", (s: AgentSession) => getSessionTestHandle(s).setStatus("running")],
+        [
+          "waits on the user's answer",
+          (s: AgentSession) => getSessionTestHandle(s).setStatus("awaiting_permission"),
+        ],
+        [
+          "runs a background task",
+          (s: AgentSession) => getSessionTestHandle(s).setTaskStatuses(["completed", "running"]),
+        ],
+        [
+          "holds a task's permission request",
+          (s: AgentSession) => getSessionTestHandle(s).setPendingPermissionCount(1),
+        ],
+        ["has a result the user has not seen", (s: AgentSession) => s.markNeedsAttention()],
+      ])(
+        "keeps the oldest hidden chat while it %s and closes the next idle one for https://github.com/Brevilabs/obsidian-copilot-private/issues/175",
+        async (_label, occupy) => {
+          const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
+          const first = await mgr.createSession();
+          occupy(first);
+          mgr.detachSessionFromTab(first.internalId);
+
+          const rest = await hideChats(mgr, 3);
+
+          expect(closedSessions()).toEqual([rest[0]]);
+          expect(mgr.getSessions()).toContain(first);
+        }
+      );
+
+      it("lets hidden chats exceed the cap while every one of them is busy for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats = [];
+        for (let i = 0; i < 4; i++) {
+          const chat = await mgr.createSession();
+          getSessionTestHandle(chat).setStatus("running");
+          chats.push(chat);
+        }
+        await mgr.createSession();
+
+        for (const chat of chats) mgr.detachSessionFromTab(chat.internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.getSessions()).toEqual(expect.arrayContaining(chats));
+      });
+
+      it("never closes hidden chats of a backend that shares one process across its chats for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager();
+
+        const chats = await hideChats(mgr, 5);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.getSessions()).toEqual(expect.arrayContaining(chats));
+      });
     });
 
     describe("closeChatSession()", () => {
@@ -1939,6 +2053,19 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toEqual([sibling]);
         expect(mgr.getActiveSession()).toBe(sibling);
         expect(proc.shutdown).not.toHaveBeenCalled();
+      });
+
+      it("releases a hidden chat's backend session while its task runs, so its query and tasks end, for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager();
+        const [hidden] = await hideChats(mgr, 1);
+        getSessionTestHandle(hidden).setTaskStatuses(["running"]);
+        const proc = mgr.getBackendProcess(hidden.backendId)!;
+
+        await mgr.closeChatSession(nativeIdOf(hidden));
+
+        expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: hidden.getBackendSessionId() });
+        expect(mgr.getSessions()).not.toContain(hidden);
+        expect(mgr.getRunningChatIds().size).toBe(0);
       });
     });
 
@@ -2009,6 +2136,32 @@ describe("AgentSessionManager", () => {
         listener.mockClear();
         getSessionTestHandle(a).setStatus("idle");
         expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("lists a chat whose main turn is idle while one of its tasks runs, until the task ends, for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager();
+        const chats = await hideChats(mgr, 1);
+        const nativeId = nativeIdOf(chats[0]);
+
+        getSessionTestHandle(chats[0]).setTaskStatuses(["running", "completed"]);
+        expect(mgr.getRunningChatIds().has(nativeId)).toBe(true);
+
+        getSessionTestHandle(chats[0]).setTaskStatuses(["completed", "stopped"]);
+        expect(mgr.getRunningChatIds().has(nativeId)).toBe(false);
+      });
+
+      it("notifies subscribers when a chat's first task starts and its last running task ends, not on other task updates, for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        const listener = jest.fn();
+        mgr.subscribe(listener);
+
+        getSessionTestHandle(a).setTaskStatuses(["running"]);
+        getSessionTestHandle(a).setTaskStatuses(["running", "running"]);
+        expect(listener).toHaveBeenCalledTimes(1);
+        getSessionTestHandle(a).setTaskStatuses(["completed", "running"]);
+        getSessionTestHandle(a).setTaskStatuses(["completed", "completed"]);
+        expect(listener).toHaveBeenCalledTimes(2);
       });
 
       it("keeps a session detached from its tab listed as running so history shows its spinner", async () => {
@@ -5134,6 +5287,17 @@ describe("AgentSessionManager", () => {
       }
 
       beforeEach(() => seedProjects(PROJECT_ID));
+
+      it("closes the project's least recently hidden idle chat once entering it hides a fourth chat of a process-per-chat backend for https://github.com/Brevilabs/obsidian-copilot-private/issues/175", async () => {
+        const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats = [];
+        for (let i = 0; i < 4; i++) chats.push(await enterWithConversation(mgr, PROJECT_ID));
+        expect(closedSessions()).toEqual([]);
+
+        await mgr.enterProject(PROJECT_ID);
+
+        expect(closedSessions()).toEqual([chats[0]]);
+      });
 
       it("touches last-used after a successful enter that spawns a session", async () => {
         const mgr = buildManager();
