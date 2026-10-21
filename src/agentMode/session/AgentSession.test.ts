@@ -3165,6 +3165,31 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 leaves one cancelled reply and runs no agents when Stop lands during the multi-agent entitlement check", async () => {
+        const mock = makeMockBackend();
+        let finishEntitlementCheck!: (entitled: boolean) => void;
+        jest
+          .mocked(ensureMultiAgentEntitlement)
+          .mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (finishEntitlementCheck = resolve))
+          );
+        const runFanoutTurn = jest.fn();
+        const session = makeSession(mock, { runFanoutTurn });
+        const { turn } = session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]);
+
+        await session.cancel();
+        finishEntitlementCheck(true);
+
+        await expect(turn).resolves.toBe("cancelled");
+        expect(runFanoutTurn).not.toHaveBeenCalled();
+        expect(session.store.getDisplayMessages().map((m) => [m.sender, m.turnStopReason])).toEqual(
+          [
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+          ]
+        );
+      });
+
       it("sends a cancel to the backend and resolves the turn as cancelled", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);

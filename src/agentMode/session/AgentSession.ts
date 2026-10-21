@@ -746,6 +746,8 @@ export class AgentSession {
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
+      // Stop already closed this prompt's reply, so nothing after it may run or open another. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+      if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       if (this.isOnModelNotEnabled()) {
         return this.refuseTurn(
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
@@ -761,7 +763,9 @@ export class AgentSession {
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
       if (this.runFanoutTurn && isFanout(this.lastMentionedAgents, this.backendId)) {
-        if (!(await this.ensureMultiAgentEntitlement())) {
+        const entitled = await this.ensureMultiAgentEntitlement();
+        if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
+        if (!entitled) {
           showMultiAgentUpgradePrompt();
           return this.refuseTurn(
             "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
@@ -811,7 +815,6 @@ export class AgentSession {
         projectContextUpdatesBlock
       );
 
-      if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       const outcome = await this.promptTurn(
         { sessionId, promptId: userMessageId, prompt: promptBlocks },
         true
@@ -869,7 +872,7 @@ export class AgentSession {
   }
 
   private refuseTurn(message: string): TurnOutcome {
-    const placeholderId = this.placeholderId ?? this.openReply();
+    const placeholderId = this.placeholderId!;
     this.store.markMessageError(placeholderId, message);
     this.store.markTurnComplete(placeholderId, "refusal", Date.now() - this.replyStartedAtMs);
     this.placeholderId = null;
@@ -881,7 +884,7 @@ export class AgentSession {
     originalPromptText: string,
     promptBlocks: PromptContent[]
   ): Promise<StopReason> {
-    const placeholderId = this.placeholderId ?? this.openReply();
+    const placeholderId = this.placeholderId!;
     const turnStartedAtMs = this.replyStartedAtMs;
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
