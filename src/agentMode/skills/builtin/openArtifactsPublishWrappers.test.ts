@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -6,10 +6,12 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
+import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
 import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 
@@ -31,7 +33,7 @@ interface CannedResponse {
 }
 
 const DOC_ID = "9f2k4mvq7t0xbz3n";
-const COMMENT_BODY = 'He said "hi" \\ back\\slash\nline two\ttab 中文 émoji 🚀';
+const COMMENT_BODY = 'He said "hi" & "A > B" \\ back\\slash %PATH%\nline two\ttab 中文 émoji 🚀';
 
 const HTML = [
   "<!doctype html>",
@@ -112,26 +114,39 @@ describe("openArtifactsPublishWrappers", () => {
     stderr: string;
   }
 
-  function run(args: string[], env: Record<string, string | undefined> = {}): Promise<RunResult> {
+  function run(
+    args: string[],
+    env: Record<string, string | undefined> = {},
+    throughCmdLauncher = false
+  ): Promise<RunResult> {
     return new Promise((resolve, reject) => {
-      const child = spawn(
-        windows ? "powershell.exe" : "sh",
-        [
-          ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
-          wrapper,
-          ...args,
-        ],
-        {
-          timeout: WRAPPER_TIMEOUT_MS,
-          env: {
-            ...process.env,
-            COPILOT_PLUS_LICENSE_KEY: "test-license-key",
-            OPENARTIFACTS_API_HOST: origin,
-            OPENARTIFACTS_WORKSPACE_ROOT: root,
-            ...env,
-          },
-        }
-      );
+      const options = {
+        timeout: WRAPPER_TIMEOUT_MS,
+        env: {
+          ...process.env,
+          COPILOT_PLUS_LICENSE_KEY: "test-license-key",
+          OPENARTIFACTS_API_HOST: origin,
+          OPENARTIFACTS_WORKSPACE_ROOT: root,
+          ...env,
+        },
+      };
+      const child =
+        windows && throughCmdLauncher
+          ? spawn(
+              [path.join(root, "openartifacts-publish.cmd"), ...args]
+                .map((arg) => `"${arg}"`)
+                .join(" "),
+              { ...options, shell: true }
+            )
+          : spawn(
+              windows ? "powershell.exe" : "sh",
+              [
+                ...(windows ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"] : []),
+                wrapper,
+                ...args,
+              ],
+              options
+            );
       let stdout = "";
       let stderr = "";
       child.stdout.setEncoding("utf8");
@@ -394,16 +409,36 @@ describe("openArtifactsPublishWrappers", () => {
     const GRANT = "http://127.0.0.1:9/open/grant?code=secret-grant-code";
     let opened: string;
 
-    function stubOpener(exitCode: number): Record<string, string> {
+    function stubOpener(): Record<string, string> {
       const bin = path.join(root, "bin");
       mkdirSync(bin);
       opened = path.join(root, "opened.txt");
       for (const name of ["open", "xdg-open"]) {
         const stub = path.join(bin, name);
-        writeFileSync(stub, `#!/bin/sh\nprintf '%s' "$1" > "${opened}"\nexit ${exitCode}\n`);
+        writeFileSync(
+          stub,
+          `#!/bin/sh\nprintf '%s' "$1" > "${opened}.tmp" && mv "${opened}.tmp" "${opened}"\n`
+        );
         chmodSync(stub, 0o755);
       }
       return { PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+    }
+
+    function pathWithoutOpener(): Record<string, string> {
+      const bin = path.join(root, "bin");
+      mkdirSync(bin);
+      for (const tool of ["sh", "curl", "mktemp", "rm", "sed", "tr", "grep", "uname", "cat"]) {
+        const found = execFileSync("sh", ["-c", `command -v ${tool}`], { encoding: "utf8" });
+        symlinkSync(found.trim(), path.join(bin, tool));
+      }
+      return { PATH: bin };
+    }
+
+    async function urlOnceBackgroundOpenerWrites(): Promise<string> {
+      for (let i = 0; i < 100 && !existsSync(opened); i++) {
+        await sleep(50);
+      }
+      return readFileSync(opened, "utf8");
     }
 
     beforeEach(() => {
@@ -413,11 +448,11 @@ describe("openArtifactsPublishWrappers", () => {
     (windows ? it.skip : it)(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 asks for the page's open link, hands it to the browser, and never prints it",
       async () => {
-        const result = await run(["open", DOC_ID], stubOpener(0));
+        const result = await run(["open", DOC_ID], stubOpener());
         expect(result.stderr).toBe("");
         expect(result.status).toBe(0);
         expect(JSON.parse(result.stdout)).toEqual({ opened: true, docId: DOC_ID });
-        expect(readFileSync(opened, "utf8")).toBe(GRANT);
+        expect(await urlOnceBackgroundOpenerWrites()).toBe(GRANT);
         expect(requests).toHaveLength(1);
         expect(requests[0].method).toBe("POST");
         expect(requests[0].url).toBe(`/api/v1/docs/${DOC_ID}/open`);
@@ -427,9 +462,9 @@ describe("openArtifactsPublishWrappers", () => {
     );
 
     (windows ? it.skip : it)(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 points at the share page, still without the link, when no browser starts",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 points at the share page, still without the link, when there is no browser opener",
       async () => {
-        const result = await run(["open", DOC_ID], stubOpener(1));
+        const result = await run(["open", DOC_ID], pathWithoutOpener());
         expect(result.status).toBe(1);
         expect(result.stdout).toBe("");
         expect(result.stderr).toContain(`Could not start a browser to open ${DOC_ID}.`);
@@ -439,7 +474,7 @@ describe("openArtifactsPublishWrappers", () => {
     );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 refuses a link that is not https or local, or carries credentials, without opening it", async () => {
-      const env = windows ? {} : stubOpener(0);
+      const env = windows ? {} : stubOpener();
       for (const url of [
         "javascript:alert(1)",
         "http://example.com/d/x",
@@ -518,16 +553,15 @@ describe("openArtifactsPublishWrappers", () => {
       expect(resolved.searchParams.get("since")).toBe("2026-10-14");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 replies with the exact body text", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 replies with the exact text of the reply file, through the .cmd launcher on Windows", async () => {
       canned = { status: 201, body: '{"commentId":"cm_d2h7j4v9s3"}' };
-      const result = await run([
-        "comments",
-        "reply",
-        DOC_ID,
-        "th_b7q3k9x2m4",
-        "--body",
-        COMMENT_BODY,
-      ]);
+      const replyFile = path.join(root, "reply.txt");
+      writeFileSync(replyFile, COMMENT_BODY);
+      const result = await run(
+        ["comments", "reply", DOC_ID, "th_b7q3k9x2m4", "--body-file", replyFile],
+        {},
+        true
+      );
       expect(result.stderr).toBe("");
       expect(result.status).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({ commentId: "cm_d2h7j4v9s3" });
@@ -574,7 +608,14 @@ describe("openArtifactsPublishWrappers", () => {
         status: 402,
         body: '{"error":{"code":"limit_reached","message":"Comments need a paid plan.","limit":"comments"}}',
       };
-      const refused = await run(["comments", "reply", DOC_ID, "th_b7q3k9x2m4", "--body", "Done."]);
+      const refused = await run([
+        "comments",
+        "reply",
+        DOC_ID,
+        "th_b7q3k9x2m4",
+        "--body-file",
+        htmlFile,
+      ]);
       expect(refused.status).toBe(1);
       expect(refused.stderr).toContain("HTTP 402");
       expect(refused.stderr).toContain('"limit":"comments"');
@@ -584,9 +625,14 @@ describe("openArtifactsPublishWrappers", () => {
       const cases: Array<[string[], string]> = [
         [["comments", "list", "../etc/passwd"], "Invalid OpenArtifacts document id"],
         [
-          ["comments", "reply", DOC_ID, "th_../x", "--body", "x"],
+          ["comments", "reply", DOC_ID, "th_../x", "--body-file", htmlFile],
           "Invalid OpenArtifacts thread id",
         ],
+        [
+          ["comments", "reply", DOC_ID, "th_b7q3k9x2m4", "--body-file", path.join(root, "none")],
+          "Reply file not found",
+        ],
+        [["comments", "reply", DOC_ID, "th_b7q3k9x2m4", "--body", "x"], "Usage:"],
         [["comments", "reopen", DOC_ID, "cm_c5r8n1t6w0"], "Invalid OpenArtifacts thread id"],
         [["comments", "resolve", DOC_ID, "th_b7q3k9x2m4", "--version", "0"], "--version must be"],
         [["comments", "list", DOC_ID, "--since", "yesterday"], "--since must be"],

@@ -465,29 +465,26 @@ above. Check the HTML, including inline CSS, for every reference to a local file
 include relative \`src\`, \`href\`, \`srcset\`, \`poster\`, or CSS \`url(...)\` references.
 If any exist, keep the file unchanged; name each reference in your report and say it will
 not load on the published page because only the HTML file is uploaded. This warning does
-not block publication: the user can make the file self-contained and ask you to publish the
-update. The original file remains user-owned; never delete the original HTML file.
+not block publication. The original file remains user-owned; never delete the original HTML file.
 
-## 2. Link the file
+## 2. Publish now, or wait when asked
 
-Give the user a clickable Markdown link to the exact HTML file you publish, as plain text
-in your reply (not in inline code or a code block). Percent-encode the target (\`%20\` for
+Publish in the same turn, with no review step: once the file is written, go to step 3. Do not
+link a generated handoff file then; step 3 deletes it, and the report gives the page url.
+
+Wait only when the user explicitly asks to see the page first, to wait, or not to publish
+yet. Then give the user a clickable Markdown link to the exact HTML file you will publish, as
+plain text in your reply (not in inline code or a code block). Percent-encode the target (\`%20\` for
 spaces, UTF-8 percent-encoding for non-ASCII characters). For a file inside the vault, such as
 a generated handoff, link its vault-root path:
 \`[page name.html](/.openartifacts/handoffs/page%20name.html)\`. Use the absolute path,
 such as \`[page.html](/Users/me/page.html)\`, only for a file outside the vault. Never put a
 drive letter or other \`:\` in the target; Obsidian treats such links as external. If a file
 outside the vault has such a path (for example on Windows), give its absolute path as plain
-text instead. Copilot opens the link in the default browser.
-
-Publish in the same turn, with no review step: once the file is written and linked, go to
-step 3.
-
-Wait only when the user explicitly asks to see the page first, to wait, or not to publish
-yet. Then link the file, say that, subject to any relative-asset warning above, opening it in
-a browser shows the page as it will be uploaded (OpenArtifacts adds its own top bar, with a
-Share button, and a footer byline when it serves the page), say who will be able to open it,
-and end your turn. Publish only when a later message from the user clearly asks for it. Treat
+text instead. Copilot opens the link in the default browser. Say that, subject to any
+relative-asset warning above, opening it in a browser shows the page as it will be uploaded
+(OpenArtifacts adds its own top bar, with a Share button, and a footer byline when it serves
+the page), say who will be able to open it, and end your turn. Publish only when a later message from the user clearly asks for it. Treat
 anything else as feedback: revise the generated Markdown handoff and repeat this step, or for
 an existing HTML file relay the feedback and wait for the user to update the file. When unsure
 whether a message is an approval, ask once. Never simulate the user's approval.
@@ -539,7 +536,8 @@ On Windows, use the \`.cmd\` wrapper with the same arguments (prefix with \`&\` 
 \`\`\`
 
 For an existing HTML file on Windows, replace the handoff path with the original absolute
-\`.html\` path. For an update, drop \`--private\` and add the \`docId\` at the end.
+\`.html\` path and omit the \`docId\`. To update a Markdown note, drop \`--private\` and add
+the \`docId\` at the end.
 
 Success returns the same server receipt for either input, \`{"docId", "url", "version"}\`, plus \`"linkAccess"\` on a create when the server reports it (a private publish also prints a \`manageUrl\`).
 
@@ -636,7 +634,7 @@ on a page, and before revising a page that is already published. Take the \`docI
 
 \`\`\`bash
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" comments list <docId>      # open threads (--resolved, --all, --since <iso>)
-sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" comments reply <docId> <threadId> --body "Softened in v4."
+sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" comments reply <docId> <threadId> --body-file "$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/reply.txt"
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" comments resolve <docId> <threadId> --version 4
 sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" comments reopen <docId> <threadId>
 \`\`\`
@@ -649,15 +647,16 @@ sh "/absolute/path/to/this/skill/directory/${OPENARTIFACTS_PUBLISH_USAGE}.sh" co
    may do.
 2. If there are no open threads, say so and stop. An \`anchorStatus\` of \`orphaned\` means the
    quoted text is no longer on the page; the comment may still apply.
-3. Revise the page so each comment is addressed: for a Markdown note, edit the note and render
-   it again as in step 1; for an existing HTML file, edit that file only when the user asks you
-   to. If a comment is a question, a disagreement or something you should not change without the
-   user, leave that thread open and raise it with the user.
-4. Link the revised file and publish the update with its \`docId\` at once, then record the page
-   in the note as in step 3.
-5. On each thread you addressed, run \`comments reply\` naming the new \`version\` from the
-   receipt and what changed in a sentence (for example "Softened in v4: now says two of three
-   accounts renewed."), then \`comments resolve\` with \`--version <n>\`. Leave other threads open.
+3. Revise the Markdown note so each comment is addressed and render it again as in step 1. A
+   page published from an existing HTML file cannot be updated in place: report its comments to
+   the user and leave the threads open. If a comment is a question, a disagreement or something
+   you should not change without the user, leave that thread open and raise it with the user.
+4. Publish the update with its \`docId\` at once, then record the page in the note as in step 3.
+5. On each thread you addressed, write a one-sentence reply naming the new \`version\` from the
+   receipt and what changed (for example "Softened in v4: now says two of three accounts
+   renewed.") to a new file under \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`, run \`comments reply\`
+   with \`--body-file\` and that file, delete the file, then run \`comments resolve\` with
+   \`--version <n>\`. Leave other threads open.
 6. Report how many threads were answered and resolved, how many remain open and why, and the
    page url.
 
@@ -696,7 +695,7 @@ usage() {
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh share <docId> [add <email> [--role view|comment] | remove|decline <email> | link anyone|invited]" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh open <docId>" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh comments list <docId> [--open|--resolved|--all] [--since <iso>]" >&2
-  printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh comments reply <docId> <threadId> --body <text>" >&2
+  printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh comments reply <docId> <threadId> --body-file <file>" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh comments resolve <docId> <threadId> [--version <n>]" >&2
   printf '%s\n' "       sh ${OPENARTIFACTS_PUBLISH_USAGE}.sh comments reopen <docId> <threadId>" >&2
   exit 1
@@ -799,9 +798,13 @@ case "$COMMAND" in
         fi
         ;;
       reply)
-        [ "$#" -eq 6 ] && [ "$5" = --body ] || usage
+        [ "$#" -eq 6 ] && [ "$5" = --body-file ] || usage
         THREAD_ID=$4
-        COMMENT_BODY=$6
+        BODY_FILE=$6
+        [ -f "$BODY_FILE" ] || {
+          printf '%s\n' "Reply file not found: $BODY_FILE" >&2
+          exit 1
+        }
         ;;
       resolve)
         [ "$#" -eq 4 ] || { [ "$#" -eq 6 ] && [ "$5" = --version ]; } || usage
@@ -901,7 +904,7 @@ elif [ "$COMMAND" = comments ]; then
     reply)
       {
         printf '{"body":'
-        printf '%s' "$COMMENT_BODY" | json_string
+        json_string < "$BODY_FILE"
         printf '}'
       } > "$BODY"
       STATUS=$(curl -sS -g -o "$RESPONSE" -w '%{http_code}' -X POST -H "@$HEADERS" -H 'Content-Type: application/json; charset=utf-8' --data-binary "@$BODY" "$THREADS_URL/$THREAD_ID/comments")
@@ -1017,10 +1020,12 @@ case "$STATUS" in
         exit 1
       }
       [ "$(uname)" = Darwin ] && OPENER=open || OPENER=xdg-open
-      "$OPENER" "$OPEN_URL" >/dev/null 2>&1 </dev/null || {
+      command -v "$OPENER" >/dev/null 2>&1 || {
         printf '%s\n' "Could not start a browser to open $DOC_ID. Open it from its share page instead: $API_HOST/share/$DOC_ID" >&2
         exit 1
       }
+      # An xdg-open whose browser does not fork runs until the browser closes, so it is not awaited.
+      "$OPENER" "$OPEN_URL" >/dev/null 2>&1 </dev/null &
       printf '{"opened":true,"docId":"%s"}\n' "$DOC_ID"
     elif [ "$COMMAND" = share ] || [ -n "$PRIVATE" ]; then
       # The share page is on the API host, so it is built here rather than taken from the url.
@@ -1067,7 +1072,7 @@ function Show-Usage {
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 share <docId> [add <email> [--role view|comment] | remove|decline <email> | link anyone|invited]')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 open <docId>')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 comments list <docId> [--open|--resolved|--all] [--since <iso>]')
-  [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 comments reply <docId> <threadId> --body <text>')
+  [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 comments reply <docId> <threadId> --body-file <file>')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 comments resolve <docId> <threadId> [--version <n>]')
   [Console]::Error.WriteLine('       ${OPENARTIFACTS_PUBLISH_USAGE}.ps1 comments reopen <docId> <threadId>')
   exit 1
@@ -1092,7 +1097,7 @@ $COMMENTS_ACTION = ''
 $THREAD_ID = ''
 $COMMENTS_STATE = ''
 $COMMENTS_SINCE = ''
-$COMMENT_BODY = ''
+$BODY_FILE = ''
 $RESOLVE_VERSION = ''
 if ($COMMAND -eq 'publish' -and $args.Count -ge 2 -and [string]$args[1] -eq '--private') {
   $PRIVATE = $true
@@ -1155,9 +1160,13 @@ switch ($COMMAND) {
         exit 1
       }
     } elseif ($COMMENTS_ACTION -ceq 'reply') {
-      if ($args.Count -ne 6 -or [string]$args[4] -cne '--body') { Show-Usage }
+      if ($args.Count -ne 6 -or [string]$args[4] -cne '--body-file') { Show-Usage }
       $THREAD_ID = [string]$args[3]
-      $COMMENT_BODY = [string]$args[5]
+      $BODY_FILE = [string]$args[5]
+      if (-not (Test-Path -LiteralPath $BODY_FILE -PathType Leaf)) {
+        [Console]::Error.WriteLine("Reply file not found: $BODY_FILE")
+        exit 1
+      }
     } elseif ($COMMENTS_ACTION -ceq 'resolve') {
       if ($args.Count -ne 4 -and ($args.Count -ne 6 -or [string]$args[4] -cne '--version')) { Show-Usage }
       $THREAD_ID = [string]$args[3]
@@ -1238,7 +1247,8 @@ try {
         Invoke-WebRequest -UseBasicParsing -Method Get -Uri ($threadsUri + '?' + $query) -Headers $headers
       }
       'reply' {
-        $commentBody = [System.Text.Encoding]::UTF8.GetBytes((@{ body = $COMMENT_BODY } | ConvertTo-Json -Compress))
+        $reply = [System.IO.File]::ReadAllText($BODY_FILE, (New-Object System.Text.UTF8Encoding($false)))
+        $commentBody = [System.Text.Encoding]::UTF8.GetBytes((@{ body = $reply } | ConvertTo-Json -Compress))
         Invoke-WebRequest -UseBasicParsing -Method Post -Uri "$threadsUri/$THREAD_ID/comments" -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $commentBody
       }
       'resolve' {
