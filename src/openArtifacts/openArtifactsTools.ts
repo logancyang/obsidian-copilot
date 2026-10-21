@@ -148,6 +148,7 @@ export const OPENARTIFACTS_TOOL_NAMES: readonly string[] = Object.freeze([
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
 const RETRY_IN_DIALOG =
   "Tell the user, and that running Publish file to OpenArtifacts on this note offers Retry save, which does not contact OpenArtifacts again.";
+const RETRY_UNPUBLISH = `Tell the user. Calling ${OPENARTIFACTS_UNPUBLISH_TOOL_NAME} again with the same docId and notePath retries removing the link, which does not contact OpenArtifacts again.`;
 
 export const OPENARTIFACTS_TURNED_OFF_TEXT =
   "OpenArtifacts needs a Copilot Plus license key. Don't call the OpenArtifacts tools again; tell the user to add their key in Copilot Settings.";
@@ -450,7 +451,10 @@ function persistenceWarning(
   result: Awaited<ReturnType<OpenArtifactsPublisher["publishDocument"]>>
 ): { warning?: string } {
   if (result.kind !== "persistence") return {};
-  return { warning: `${result.message} ${result.retrySave ? RETRY_IN_DIALOG : "Tell the user."}` };
+  if (!result.retrySave) return { warning: `${result.message} Tell the user.` };
+  return {
+    warning: `${result.message} ${result.action === "delete" ? RETRY_UNPUBLISH : RETRY_IN_DIALOG}`,
+  };
 }
 
 function findNote(value: unknown, { app, getVaultBase }: OpenArtifactsToolDeps): TFile | undefined {

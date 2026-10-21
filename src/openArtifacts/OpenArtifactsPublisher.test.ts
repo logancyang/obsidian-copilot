@@ -1030,6 +1030,25 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.client.publish).toHaveBeenCalledTimes(1);
       });
 
+      it(`${ISSUE} does not recreate a note link removed while an agent update ran`, async () => {
+        const harness = createHarness({ openartifacts: DOC_URL });
+        harness.client.update.mockImplementation(async () => {
+          delete harness.frontmatter.openartifacts;
+          return { ...RECEIPT, version: 2 };
+        });
+
+        const result = await harness.publisher.publishDocument(
+          harness.file,
+          DOCUMENT,
+          "key",
+          DOC_ID
+        );
+
+        expect(result).toMatchObject({ kind: "persistence", action: "update" });
+        expect(harness.frontmatter).toEqual({});
+        expect(harness.processFrontMatter).not.toHaveBeenCalled();
+      });
+
       it(`${ISSUE} publishes nothing when the note gained a link to another page`, async () => {
         const harness = createHarness({ openartifacts: NEW_DOC_URL });
 
