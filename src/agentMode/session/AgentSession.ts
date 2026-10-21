@@ -1601,7 +1601,7 @@ export class AgentSession {
         model: update.model ?? task.model,
         outputFile: update.outputFile ?? task.outputFile,
       });
-      if (update.progress) this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
       return this.publishTasks();
     }
     this.tasks.set(task.taskId, {
