@@ -2,7 +2,6 @@ import {
   BLOCK_MOVED,
   IMAGE_REMOVED_AND_ADDED,
   NON_MARKDOWN_FILE,
-  SPACED_WORDING_CHANGE,
   TASK_BLOCK_INSERTED,
   TASK_CHECKBOX_TOGGLED,
   WORDING_CHANGE,
@@ -58,20 +57,6 @@ describe("RenderedDiff", () => {
 
       await waitFor(() => expect(textOf(container, "del")).toEqual(["six", "two"]));
       expect(textOf(container, "ins")).toEqual(["eight", "three"]);
-    });
-
-    it("holds the note's extra blank lines between blocks as empty space of that many lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
-      const { container } = render(diffElement(SPACED_WORDING_CHANGE));
-
-      await waitFor(() => expect(textOf(container, "del")).toEqual(["six"]));
-      const spacers = Array.from(container.querySelectorAll<HTMLElement>("[aria-hidden=true]"));
-      expect(
-        spacers.map((spacer) => [spacer.textContent, spacer.querySelectorAll("br").length])
-      ).toEqual([
-        ["", 2],
-        ["", 1],
-      ]);
-      expect(spacers[0].previousElementSibling?.textContent).toBe("# Alpha pilot");
     });
 
     it("frames a moved block as a struck-through deleted block where it was and an inserted block where it went", async () => {

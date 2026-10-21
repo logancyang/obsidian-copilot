@@ -64,15 +64,6 @@ interface DiffSegmentViewProps {
 
 function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactElement {
   if (segment.kind === "code") return <CodeDiffView lines={segment.lines} />;
-  if (segment.kind === "spacer") {
-    return (
-      <div aria-hidden="true">
-        {Array.from({ length: segment.lines }, (_, index) => (
-          <br key={index} />
-        ))}
-      </div>
-    );
-  }
   if (segment.kind === "block") {
     return (
       <div

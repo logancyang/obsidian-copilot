@@ -285,18 +285,20 @@ describe("mergeMarkdown", () => {
       expect(plan).toEqual([{ kind: "markdown", markdown: "# Alpha\n\n- One\n- Two" }]);
     });
 
-    it("keeps each blank line past the first between blocks as a spacer of that many lines, as Live Preview shows them (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+    it("keeps each blank line past the first between blocks as a line break inside the same Markdown, so reference links and footnotes still resolve across them (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
       const { before, after } = SPACED_WORDING_CHANGE;
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
-        { kind: "markdown", markdown: "# Alpha pilot" },
-        { kind: "spacer", lines: 2 },
         {
           kind: "markdown",
-          markdown: `The pilot runs for ${DEL_OPEN}six${DEL_CLOSE}${INS_OPEN}eight${INS_CLOSE} weeks.`,
+          markdown: [
+            "# Alpha pilot",
+            '<div aria-hidden="true"><br><br></div>',
+            `The pilot runs for ${DEL_OPEN}six${DEL_CLOSE}${INS_OPEN}eight${INS_CLOSE} weeks.`,
+            '<div aria-hidden="true"><br></div>',
+            "We report progress every Friday.",
+          ].join("\n\n"),
         },
-        { kind: "spacer", lines: 1 },
-        { kind: "markdown", markdown: "We report progress every Friday." },
       ]);
     });
 
