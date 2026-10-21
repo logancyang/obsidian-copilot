@@ -36,7 +36,7 @@ interface TaskFrame {
 }
 
 const NO_UPDATES: readonly SessionUpdate[] = Object.freeze([]);
-const OUTPUT_FILE_IN_LAUNCH_TEXT = /Output is being written to: (\S+?)\.?(?:\s|$)/;
+const OUTPUT_FILE_IN_LAUNCH_TEXT = /Output is being written to: (.+?)\.(?:\s|$)/;
 
 // Claude reports subagents and background commands as task frames whose order varies: an end can
 // precede its start, and a foreground command only becomes a task once it moves to the background.

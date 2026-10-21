@@ -191,6 +191,24 @@ describe("claudeTaskProtocol", () => {
         ]);
       });
 
+      it(`keeps a whole output path that contains spaces (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("b1", { task_type: "local_bash" }));
+
+        const updates = tracker.observeLaunchResult(
+          { backgroundTaskId: "b1" },
+          "Command running in background with ID: b1. Output is being written to: /Users/me/My Vault/.claude/tasks/b1.output. You will be notified when it completes."
+        );
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "task_progress",
+            taskId: "b1",
+            outputFile: "/Users/me/My Vault/.claude/tasks/b1.output",
+          },
+        ]);
+      });
+
       it("reports nothing for an unknown task, a finished task, or text without an output path", () => {
         const tracker = new ClaudeTaskTracker();
         tracker.accept(started("b1", { task_type: "local_bash" }));
