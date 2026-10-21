@@ -190,14 +190,9 @@ export class FanoutOrchestrator {
         const runningTasks = new Set<string>();
         let turnOpen = false;
         let awaitingReport = false;
-        let cancelled = false;
         let turnEnded = false;
         let finishAnswer!: (error?: Error) => void;
         const answered = new Promise<Error | undefined>((resolve) => (finishAnswer = resolve));
-        const finishIfSettled = () => {
-          if (!turnEnded || turnOpen) return;
-          if (cancelled || (runningTasks.size === 0 && !awaitingReport)) finishAnswer();
-        };
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
           const update = event.update;
           switch (update.sessionUpdate) {
@@ -210,7 +205,7 @@ export class FanoutOrchestrator {
               turnOpen = false;
               turnEnded = true;
               if (update.error !== undefined) finishAnswer(update.error);
-              else finishIfSettled();
+              else if (runningTasks.size === 0 && !awaitingReport) finishAnswer();
               return;
             // An agent that exits starts no turn to report the tasks it ended. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
             case "session_disconnected":
@@ -248,9 +243,8 @@ export class FanoutOrchestrator {
             if (error !== undefined) throw error;
           });
         onPrompt(promptPromise, () => {
-          cancelled = true;
           promptProc.cancel({ sessionId: promptSessionId }).catch(() => undefined);
-          finishIfSettled();
+          finishAnswer();
         });
         await promptPromise;
         return "done";

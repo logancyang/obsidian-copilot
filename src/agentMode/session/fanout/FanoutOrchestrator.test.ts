@@ -524,6 +524,22 @@ describe("FanoutOrchestrator", () => {
         expect(claude.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
       });
 
+      it(`closes the sub-session on abort when the stopped prompt never starts a turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const claude = procs.get("claude")!;
+        const controller = new AbortController();
+        const runPromise = new FanoutOrchestrator(host).run(
+          runInput(["claude"], { signal: controller.signal })
+        );
+
+        await claude.prompted(1);
+        controller.abort();
+        const turn = await runPromise;
+
+        expect(turn.answers.claude.status).toBe("cancelled");
+        expect(claude.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
+      });
+
       it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
