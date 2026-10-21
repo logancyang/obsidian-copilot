@@ -255,6 +255,7 @@ describe("openArtifactsTools", () => {
       expect(first.isError).toBe(false);
       expect(json(first).docId).toBe(DOC_ID);
       expect(json(first).warning).toContain("The page is already published.");
+      expect(json(first).warning).toContain("Retry save");
       expect(second.isError).toBe(true);
       expect(second.text).toContain("The page is already published.");
       expect(client.publish).toHaveBeenCalledTimes(1);
@@ -571,6 +572,7 @@ describe("openArtifactsTools", () => {
       const result = await unpublish.call({ docId: DOC_ID, notePath: "Notes/Plan.md" });
 
       expect(json(result).warning).toContain("points to a different OpenArtifacts document");
+      expect(json(result).warning).not.toContain("Retry save");
       expect(frontmatter).toEqual({ openartifacts: other });
     });
 
@@ -592,6 +594,7 @@ describe("openArtifactsTools", () => {
       expect(result.isError).toBe(false);
       expect(json(result)).toMatchObject({ status: "unpublished" });
       expect(json(result).warning).toContain("The page is already deleted.");
+      expect(json(result).warning).toContain("Retry save");
       expect(client.delete).toHaveBeenCalledTimes(1);
     });
   });
