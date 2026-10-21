@@ -46,6 +46,23 @@ describe("ToolPermissionCard", () => {
       );
     });
 
+    it("names the subagent that asked instead of Agent Mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
+      const request = makeRequest([]);
+      request.toolCall.title = "Bash: wc -w Welcome.md";
+
+      render(
+        <ToolPermissionCard
+          request={request}
+          onResolve={jest.fn()}
+          requester={'general-purpose "Count words"'}
+        />
+      );
+
+      expect(screen.getByText(/wants to run/).textContent).toBe(
+        'general-purpose "Count words" wants to run Bash: wc -w Welcome.md.'
+      );
+    });
+
     it("keeps duplicate described actions together and numbers their tooltip triggers", async () => {
       const onResolve = jest.fn();
       const firstRule = "Allow commands starting with mkdir";

@@ -117,6 +117,7 @@ const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
   progress?: AgentToolProgress;
+  model?: string;
   outputFile?: string;
   summary?: string;
 }
@@ -1568,7 +1569,7 @@ export class AgentSession {
     >
   ): void {
     if (update.sessionUpdate === "task_started") {
-      const { taskId, toolCallId, kind, description, prompt, subagentType } = update;
+      const { taskId, toolCallId, kind, description, prompt, subagentType, command } = update;
       this.tasks.set(taskId, {
         taskId,
         toolCallId,
@@ -1576,6 +1577,7 @@ export class AgentSession {
         description,
         prompt,
         subagentType,
+        command,
         status: "running",
       });
       return this.publishTasks();
@@ -1583,9 +1585,14 @@ export class AgentSession {
     const task = this.tasks.get(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
-      const progress = { ...task.progress, ...update.progress };
-      this.tasks.set(task.taskId, { ...task, progress });
-      this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      const progress = update.progress ? { ...task.progress, ...update.progress } : task.progress;
+      this.tasks.set(task.taskId, {
+        ...task,
+        progress,
+        model: update.model ?? task.model,
+        outputFile: update.outputFile ?? task.outputFile,
+      });
+      if (update.progress) this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
       return this.publishTasks();
     }
     this.tasks.set(task.taskId, {
@@ -1594,13 +1601,10 @@ export class AgentSession {
       summary: update.summary,
       outputFile: update.outputFile ?? task.outputFile,
     });
-    // The launching card follows its task; the task keeps the exact end status. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    // The launching card follows its task; the task keeps the exact end status. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     this.updateLaunchCard({
       toolCallId: task.toolCallId,
       status: update.status === "completed" ? "completed" : "failed",
-      ...(update.summary
-        ? { content: [{ type: "content", content: { type: "text", text: update.summary } }] }
-        : {}),
     });
     this.publishTasks();
   }

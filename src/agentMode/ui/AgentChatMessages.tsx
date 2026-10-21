@@ -7,6 +7,8 @@ import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { setSettings } from "@/settings/model";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
+import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
@@ -204,6 +206,11 @@ const AgentChatMessages = memo(
     // Questions take priority so the separate resolver queues have a stable
     // presentation policy without carrying cross-type sequencing state.
     // https://github.com/logancyang/obsidian-copilot/issues/2948
+    const tasks = useAgentTasks();
+    const pendingRequester =
+      pendingPermission && tasks
+        ? permissionRequesterName(pendingPermission, tasks.tasks)
+        : undefined;
     const pendingActionId = pendingQuestion
       ? `question:${pendingQuestion.requestId}`
       : pendingPermission
@@ -294,6 +301,7 @@ const AgentChatMessages = memo(
                 <ToolPermissionCard
                   request={pendingPermission}
                   toolName={pendingToolName}
+                  requester={pendingRequester}
                   onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
                 />
               ) : null}

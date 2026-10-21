@@ -958,6 +958,138 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
+    describe("task details for the task views", () => {
+      const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
+
+      function assistantFrame(
+        content: unknown[],
+        parentToolUseId: string | null,
+        model?: string
+      ): SDKMessage {
+        return {
+          type: "assistant",
+          message: { content, ...(model ? { model } : {}) },
+          parent_tool_use_id: parentToolUseId,
+          uuid: UUID,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+      }
+
+      it(`reports a background command's command at its start and its output file from its launch result, and still hides the launch result (${ISSUE_749})`, () => {
+        const state = createTranslatorState();
+        translateSdkMessage(
+          assistantFrame(
+            [{ type: "tool_use", id: "tu-bash", name: "Bash", input: { command: "make render" } }],
+            null
+          ),
+          SESSION_ID,
+          state
+        );
+
+        const start = translateSdkMessage(
+          systemMessage({
+            subtype: "task_started",
+            task_id: "b1",
+            tool_use_id: "tu-bash",
+            description: "Render",
+            task_type: "local_bash",
+            is_backgrounded: true,
+          }),
+          SESSION_ID,
+          state
+        );
+        const ack = translateSdkMessage(
+          {
+            type: "user",
+            tool_use_result: { stdout: "", stderr: "", backgroundTaskId: "b1" },
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "tu-bash",
+                  content:
+                    "Command running in background with ID: b1. Output is being written to: /tmp/s1/tasks/b1.output. You will be notified when it completes.",
+                },
+              ],
+            },
+            parent_tool_use_id: null,
+            session_id: SESSION_ID,
+          } as unknown as SDKMessage,
+          SESSION_ID,
+          state
+        );
+
+        expect(start.map((e) => e.update)).toEqual([
+          expect.objectContaining({ sessionUpdate: "task_started", command: "make render" }),
+        ]);
+        expect(ack.map((e) => e.update)).toEqual([
+          { sessionUpdate: "task_progress", taskId: "b1", outputFile: "/tmp/s1/tasks/b1.output" },
+        ]);
+      });
+
+      it(`reports a subagent's model from its own assistant frames (${ISSUE_749})`, () => {
+        const state = createTranslatorState();
+        translateSdkMessage(
+          systemMessage({
+            subtype: "task_started",
+            task_id: "a1",
+            tool_use_id: "tu-agent",
+            task_type: "local_agent",
+          }),
+          SESSION_ID,
+          state
+        );
+
+        const out = translateSdkMessage(
+          assistantFrame([{ type: "text", text: "Counting." }], "tu-agent", "claude-haiku-9"),
+          SESSION_ID,
+          state
+        );
+
+        expect(out.map((e) => e.update)).toContainEqual({
+          sessionUpdate: "task_progress",
+          taskId: "a1",
+          model: "claude-haiku-9",
+        });
+      });
+
+      it(`shows a subagent's hand-back as its last message, not as a tool call with a result (${ISSUE_749})`, () => {
+        const state = createTranslatorState();
+
+        const handback = translateSdkMessage(
+          assistantFrame(
+            [
+              {
+                type: "tool_use",
+                id: "tu-handback",
+                name: "SubagentHandback",
+                input: { message: "Welcome.md has 9 words." },
+              },
+            ],
+            "tu-agent"
+          ),
+          SESSION_ID,
+          state
+        );
+        const result = translateSdkMessage(
+          userMessage(
+            [{ type: "tool_result", tool_use_id: "tu-handback", content: "Report delivered." }],
+            "tu-agent"
+          ),
+          SESSION_ID,
+          state
+        );
+
+        expect(handback.map((e) => e.update)).toEqual([
+          {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "Welcome.md has 9 words." },
+          },
+        ]);
+        expect(result).toEqual([]);
+      });
+    });
+
     describe("TodoWrite and Task tools emit plan events", () => {
       it("emits a plan event alongside the tool events for a TodoWrite stream", () => {
         const state = createTranslatorState();

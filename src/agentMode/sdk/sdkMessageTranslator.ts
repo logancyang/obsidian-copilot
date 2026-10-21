@@ -39,6 +39,7 @@ export interface TranslatorState {
     }
   >;
   emittedToolUseIds: Set<string>;
+  handbackToolUseIds: Set<string>;
   tasks: ClaudeTaskTracker;
   claudeTasks: ClaudeTaskPlanState;
   lastAssistantUsage?: AssistantUsageSample;
@@ -60,6 +61,7 @@ export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): Transl
     compactionTrigger: "auto",
     toolUseBlocks: new Map(),
     emittedToolUseIds: new Set(),
+    handbackToolUseIds: new Set(),
     tasks: new ClaudeTaskTracker(),
     claudeTasks: claudeTasks ?? createClaudeTaskPlanState(),
   };
@@ -359,6 +361,8 @@ function translateStreamEvent(
   }
 }
 
+const SUBAGENT_HANDBACK_TOOL = "SubagentHandback";
+
 function translateAssistantMessage(
   msg: SDKAssistantMessage,
   sessionId: SessionId,
@@ -382,10 +386,25 @@ function translateAssistantMessage(
   const content = message.content;
   if (!Array.isArray(content)) return out;
   // A subagent's turns arrive whole, never as stream deltas, so its text comes from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-  if (parentToolUseId !== undefined) out.push(...replayAssistantText(content, sessionId));
+  if (parentToolUseId !== undefined) {
+    out.push(...replayAssistantText(content, sessionId));
+    out.push(
+      ...state.tasks
+        .observeSubagentModel(parentToolUseId, message.model)
+        .map((update) => event(sessionId, update))
+    );
+  }
   for (const block of content) {
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
+    state.tasks.observeToolUse(b.id, b.name, b.input);
+    // A subagent hands its report back through a tool call; the report is its last message. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (parentToolUseId !== undefined && b.name === SUBAGENT_HANDBACK_TOOL) {
+      state.handbackToolUseIds.add(b.id);
+      const report = (b.input as { message?: unknown } | undefined)?.message;
+      if (typeof report === "string") out.push(textChunk(sessionId, "agent_message_chunk", report));
+      continue;
+    }
     const { tool: name, mcpServer } = resolveToolName(b.name);
     if (state.emittedToolUseIds.has(b.id)) continue;
     state.emittedToolUseIds.add(b.id);
@@ -451,8 +470,17 @@ function translateUserMessage(
 
   const out: SessionEvent[] = [];
   for (const b of results) {
+    if (state.handbackToolUseIds.has(b.tool_use_id)) continue;
     // A background task's launch result only says it started; the task's end settles its card. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (b.tool_use_id === launchAck || state.tasks.isRunningInBackground(b.tool_use_id)) continue;
+    if (b.tool_use_id === launchAck) {
+      out.push(
+        ...state.tasks
+          .observeLaunchResult(msg.tool_use_result, toolResultText(b.content))
+          .map((update) => event(sessionId, update))
+      );
+      continue;
+    }
+    if (state.tasks.isRunningInBackground(b.tool_use_id)) continue;
     const status = toolResultStatus(b, stoppedBeforeRun.has(b.tool_use_id));
     out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status, originalFiles));
   }
@@ -545,6 +573,12 @@ function makeToolCallUpdate(
     mcpServer,
     ...vendorMetaFields(name, parentToolUseId, mcpServer),
   };
+}
+
+function toolResultText(content: unknown): string {
+  return (toolResultContent(content) ?? [])
+    .map((c) => (c.type === "content" ? c.content.text : ""))
+    .join("\n");
 }
 
 function toolResultContent(content: unknown): ToolCallContent[] | undefined {

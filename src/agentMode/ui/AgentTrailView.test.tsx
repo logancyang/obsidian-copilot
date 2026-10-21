@@ -5,6 +5,8 @@ import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
+import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
+import { makeCommandTask, makeTask } from "@/agentMode/ui/testing/taskFixtures";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
   AgentMarkdownText: ({ text, miyoPaths }: { text: string; miyoPaths?: string[] }) => (
@@ -682,5 +684,58 @@ describe("AgentTrail", () => {
     });
 
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
+  });
+
+  describe("with task state from the session", () => {
+    const AGENT_LAUNCH = toolCall("call-1", {
+      vendorToolName: "Agent",
+      status: "in_progress",
+      input: { description: "Count words in Welcome", subagent_type: "general-purpose" },
+    });
+    const BASH_LAUNCH = toolCall("call-2", {
+      vendorToolName: "Bash",
+      status: "in_progress",
+      input: { command: "for i in $(seq 1 30); do echo $i; done" },
+    });
+
+    function renderWithTasks(parts: AgentMessagePart[], tasks = [makeTask(), makeCommandTask()]) {
+      const openTask = jest.fn();
+      const app = makeApp();
+      render(
+        <AppContext.Provider value={app}>
+          <TooltipProvider>
+            <AgentTasksProvider tasks={tasks} openTask={openTask}>
+              <AgentTrail parts={parts} isStreaming={false} turnStopReason="end_turn" app={app} />
+            </AgentTasksProvider>
+          </TooltipProvider>
+        </AppContext.Provider>
+      );
+      return { openTask };
+    }
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 shows a task's launching call as a compact card with the task's status that opens the task", () => {
+      const { openTask } = renderWithTasks([AGENT_LAUNCH, text("Started.")]);
+
+      expect(screen.getByText("general-purpose · Count words in Welcome")).toBeTruthy();
+      expect(screen.getByText("Running")).toBeTruthy();
+      expect(screen.queryByText(/Sub-agent/)).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /Count words in Welcome/ }));
+
+      expect(openTask).toHaveBeenCalledWith("task-1");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps a background command's card out of the surrounding command group", () => {
+      renderWithTasks([READ_A, BASH_LAUNCH, LINT, text("Started.")]);
+
+      expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
+      expect(screen.queryByText(/Ran 2 commands/)).toBeNull();
+    });
+
+    it("renders a launching call that has no task as before", () => {
+      renderWithTasks([AGENT_LAUNCH, text("Started.")], []);
+
+      expect(screen.getByText('general-purpose · "Count words in Welcome"')).toBeTruthy();
+    });
   });
 });

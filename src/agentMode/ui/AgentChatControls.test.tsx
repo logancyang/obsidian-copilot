@@ -132,6 +132,16 @@ describe("AgentChatControls", () => {
       ]);
     });
 
+    it("shows the running-tasks count at the start of the bar, before the upsell (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
+      mockUseCanUseMultiAgent.mockReturnValue(false);
+      const { container } = renderSessionControls({
+        tasksIndicator: <span>2 tasks running</span>,
+        showMultiAgentUpsell: true,
+      });
+
+      expect(container.textContent?.startsWith(`2 tasks running${UPSELL_COPY}`)).toBe(true);
+    });
+
     it("copies the chat link from the More Actions menu", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const onCopyChatLink = jest.fn();

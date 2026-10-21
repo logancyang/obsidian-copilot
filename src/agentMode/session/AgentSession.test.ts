@@ -5730,7 +5730,7 @@ describe("AgentSession", () => {
         prompt: "Count the words in every note",
       };
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 tracks a task from start to end while its launching card stays running past its turn and then shows the task's report", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 tracks a task from start to end while its launching card stays running past its turn, and https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the end summary off the card", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });
         const onTasksChanged = jest.fn();
@@ -5768,9 +5768,34 @@ describe("AgentSession", () => {
         expect(card()).toMatchObject({
           status: "completed",
           progress: { toolName: "Bash", toolUses: 1 },
-          output: [{ type: "text", text: "13 words in total." }],
         });
+        const finalCard = card();
+        expect(finalCard?.kind === "tool_call" ? finalCard.output : "not a card").toBeUndefined();
         expect(onTasksChanged).toHaveBeenCalledTimes(3);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 records a running task's model and output file from progress without touching its launching card", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+        const cardBefore = aiMessage(session)?.parts?.find((p) => p.kind === "tool_call");
+
+        mock.emitUpdate({ sessionUpdate: "task_progress", taskId: "task-1", model: "haiku-9" });
+        mock.emitUpdate({
+          sessionUpdate: "task_progress",
+          taskId: "task-1",
+          outputFile: "/tmp/tasks/task-1.output",
+        });
+
+        expect(session.getTasks()[0]).toMatchObject({
+          status: "running",
+          model: "haiku-9",
+          outputFile: "/tmp/tasks/task-1.output",
+        });
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toEqual(cardBefore);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a stopped task's exact status while its card shows it failed", async () => {

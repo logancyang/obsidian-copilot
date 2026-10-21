@@ -323,8 +323,8 @@ describe("AgentChatUIState", () => {
     });
     session.completeResume(null);
     const chat = new AgentChatUIState(session);
-    const emit = (update: SessionEvent["update"]) =>
-      handler!({ sessionId: "claude-session", update });
+    const emit = (update: SessionEvent["update"], taskToolCallId?: string) =>
+      handler!({ sessionId: "claude-session", update, taskToolCallId });
     return Object.assign(chat, { emit });
   }
 
@@ -385,6 +385,51 @@ describe("AgentChatUIState", () => {
 
       expect(chat.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["only the first two"]);
       expect(chat.takeWithdrawnPrompts()).toEqual([]);
+    });
+  });
+
+  describe("getTasks()", () => {
+    it("lists the session's tasks and notifies the UI when one starts (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
+      const chat = liveChat({});
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.emit({
+        sessionUpdate: "task_started",
+        taskId: "task-1",
+        toolCallId: "call-1",
+        kind: "command",
+        description: "Render the video",
+      });
+
+      expect(chat.getTasks()).toEqual([
+        expect.objectContaining({ taskId: "task-1", kind: "command", status: "running" }),
+      ]);
+      expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe("getTaskMessages()", () => {
+    it("returns a task's own messages and notifies the UI as they grow (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
+      const chat = liveChat({});
+      chat.emit({
+        sessionUpdate: "task_started",
+        taskId: "task-1",
+        toolCallId: "call-1",
+        kind: "subagent",
+        description: "Count words",
+      });
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.emit(
+        { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "9 words." } },
+        "call-1"
+      );
+
+      expect(chat.getTaskMessages("task-1")[0].parts).toEqual([{ kind: "text", text: "9 words." }]);
+      expect(chat.getMessages()).toEqual([]);
+      expect(listener).toHaveBeenCalled();
     });
   });
 });
