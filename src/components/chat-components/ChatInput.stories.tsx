@@ -74,7 +74,7 @@ function RestoredComposer() {
   );
 }
 const meta = {
-  title: "Chat/Restored Composer",
+  title: "Chat/Agent Composer",
   component: RestoredComposer,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta;
