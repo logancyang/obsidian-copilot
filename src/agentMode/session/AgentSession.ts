@@ -7,7 +7,6 @@ import {
   AgentMcpServer,
   AgentMessagePart,
   AgentToolKind,
-  AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
   AskUserQuestionPrompt,
@@ -21,10 +20,7 @@ import {
   EnabledModelEntry,
   ModelSelection,
   NewAgentChatMessage,
-  PERMISSION_ALLOW_KINDS,
-  PERMISSION_REJECT_KINDS,
   PermissionDecision,
-  PermissionOptionKind,
   PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
@@ -92,7 +88,6 @@ import {
 } from "@/agentMode/session/promptEnvelope";
 import { buildEmptyTurnMessage, formatPromptFailure } from "@/agentMode/session/promptFailure";
 import {
-  derivePlanTitleFromMarkdown,
   findToolCallPart,
   mergeToolCallUpdate,
   planToPart,
@@ -101,6 +96,7 @@ import {
   upsertCompactionPart,
 } from "@/agentMode/session/messageParts";
 import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
+import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -109,9 +105,6 @@ export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
 const CANCELLED_TURN_QUIET_MS = 1_000;
-const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
-const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
-const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 interface TurnFileCapture {
@@ -255,40 +248,13 @@ export class AgentSession {
   private readonly historyReplay = new SessionHistoryReplay({
     store: this.store,
     scheduleNotifyMessages: () => this.scheduleNotifyMessages(),
-    applyTodoList: (entries) => {
-      if (this.applyCurrentTodoList(entries)) this.notifyCurrentTodoListChanged();
-    },
+    applyTodoList: (entries) => this.requests.applyTodoList(entries),
   });
-  private pendingPlanResolvers = new Map<
-    string,
-    {
-      request: PermissionPrompt;
-      resolve: (resp: PermissionDecision) => void;
-    }
-  >();
-  private pendingToolResolvers = new Map<
-    string,
-    {
-      request: PermissionPrompt;
-      resolve: (resp: PermissionDecision) => void;
-    }
-  >();
-  private pendingQuestionResolvers = new Map<
-    string,
-    {
-      request: AskUserQuestionPrompt;
-      resolve: (answers: AgentQuestionAnswers) => void;
-    }
-  >();
-  private currentPlan: CurrentPlan | null = null;
-  private currentTodoList: AgentTodoListEntry[] | null = null;
-  private currentTodoListSignature: string | null = null;
+  private readonly requests: InteractiveRequests;
   private currentUsage: SessionUsage | null = null;
   private feedbackOffer: FeedbackOffer | null = null;
 
   private currentPlanUsage: PlanUsage | null = null;
-  private planSeq = 0;
-  private decidedPlanToolCallIds = new Set<string>();
   private needsAttention = false;
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
@@ -309,6 +275,16 @@ export class AgentSession {
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
+    this.requests = new InteractiveRequests({
+      store: this.store,
+      internalId: this.internalId,
+      getReplyId: () => this.placeholderId,
+      hasLeftPlanMode: () => this.hasLeftPlanMode(),
+      recomputeStatus: () => this.recomputeStatusIfChanged(),
+      notifyMessages: () => this.notifyMessages(),
+      notifyPlanChanged: () => this.notifyCurrentPlanChanged(),
+      notifyTodoListChanged: () => this.notifyCurrentTodoListChanged(),
+    });
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
@@ -565,12 +541,7 @@ export class AgentSession {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
     if (this.backendSessionId === null || !this.startupSettled) return "starting";
-    if (
-      this.pendingPlanResolvers.size +
-        this.pendingToolResolvers.size +
-        this.pendingQuestionResolvers.size >
-      0
-    ) {
+    if (this.requests.hasPending()) {
       return "awaiting_permission";
     }
     if (this.abortController !== null) return "running";
@@ -1033,14 +1004,8 @@ export class AgentSession {
     this.settledStream = null;
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
-    if (this.pendingToolResolvers.size > 0) {
-      this.flushResolvers(this.pendingToolResolvers);
-      this.notifyMessages();
-    }
-    if (this.pendingQuestionResolvers.size > 0) {
-      this.flushQuestionResolvers();
-      this.notifyMessages();
-    }
+    this.requests.rejectToolPermissions();
+    this.requests.withdrawQuestions();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
     } catch (e) {
@@ -1067,13 +1032,7 @@ export class AgentSession {
     this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
-    this.flushResolvers(this.pendingPlanResolvers);
-    this.flushResolvers(this.pendingToolResolvers);
-    this.flushQuestionResolvers();
-    this.decidedPlanToolCallIds.clear();
-    this.currentPlan = null;
-    this.currentTodoList = null;
-    this.currentTodoListSignature = null;
+    this.requests.dispose();
     this.settledStream = null;
     this.cancelledPromptDrain = null;
     this.cancelledMessageIds.clear();
@@ -1084,42 +1043,19 @@ export class AgentSession {
   }
 
   handlePlanProposalPermission(request: PermissionPrompt): Promise<PermissionDecision> {
-    const toolCallId = request.toolCall.toolCallId;
-    const exitPlan = tryReadExitPlanModeCall({
-      kind: request.toolCall.kind,
-      rawInput: request.toolCall.rawInput,
-      isPlanProposal: request.toolCall.isPlanProposal,
-    });
-    if (exitPlan) {
-      this.publishGatedPlan(toolCallId, exitPlan);
-    }
-    return new Promise<PermissionDecision>((resolve) => {
-      this.pendingPlanResolvers.set(toolCallId, { request, resolve });
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handlePlanProposalPermission(request);
   }
 
   resolvePlanProposalPermission(toolCallId: string, allow: boolean, denyMessage?: string): void {
-    const entry = this.pendingPlanResolvers.get(toolCallId);
-    if (!entry) return;
-    this.pendingPlanResolvers.delete(toolCallId);
-    const base = decisionFor(
-      entry.request,
-      allow ? PERMISSION_ALLOW_KINDS : PERMISSION_REJECT_KINDS
-    );
-    const decision: PermissionDecision = !allow && denyMessage ? { ...base, denyMessage } : base;
-    entry.resolve(decision);
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
+    this.requests.resolvePlanProposalPermission(toolCallId, allow, denyMessage);
   }
 
   getCurrentPlan(): CurrentPlan | null {
-    return this.currentPlan;
+    return this.requests.getCurrentPlan();
   }
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
-    return this.currentTodoList;
+    return this.requests.getCurrentTodoList();
   }
 
   getReportEvidence(): FeedbackEvidence {
@@ -1255,175 +1191,40 @@ export class AgentSession {
     decision?: PlanDecisionAction,
     feedbackText?: string
   ): boolean {
-    if (!this.currentPlan || this.currentPlan.id !== proposalId) return false;
-    if (this.currentPlan.pendingToolCallId) {
-      this.decidedPlanToolCallIds.add(this.currentPlan.pendingToolCallId);
-      if (decision) {
-        const summary =
-          decision === "approve"
-            ? "Approved plan"
-            : decision === "reject"
-              ? "Rejected plan"
-              : `Requested plan changes: ${feedbackText ?? "Feedback sent"}`;
-        // ACP may report only a titleless completion after the user decides.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
-        this.recordUserResponse(this.currentPlan.pendingToolCallId, summary);
-      }
-    }
-    this.currentPlan = null;
-    this.notifyCurrentPlanChanged();
-    return true;
-  }
-
-  private setCurrentPlan(next: Omit<CurrentPlan, "id" | "revision" | "decision">): void {
-    if (!this.currentPlan) {
-      this.planSeq += 1;
-      this.currentPlan = {
-        ...next,
-        id: `plan-${this.internalId}-${this.planSeq}`,
-        revision: 1,
-        decision: "pending",
-      };
-      this.notifyCurrentPlanChanged();
-      return;
-    }
-    const prev = this.currentPlan;
-    const bodyChanged = prev.body !== next.body;
-    const changed =
-      bodyChanged ||
-      prev.title !== next.title ||
-      prev.sourceFilePath !== next.sourceFilePath ||
-      prev.permissionGated !== next.permissionGated ||
-      prev.pendingToolCallId !== next.pendingToolCallId ||
-      prev.decision !== "pending";
-    if (!changed) return;
-    this.currentPlan = {
-      ...prev,
-      ...next,
-      revision: bodyChanged ? prev.revision + 1 : prev.revision,
-      decision: "pending",
-    };
-    this.notifyCurrentPlanChanged();
+    return this.requests.finalizePlanDecision(proposalId, decision, feedbackText);
   }
 
   clearCurrentPlanIfModeLeft(): void {
-    if (!this.currentPlan) return;
-    const descriptor = this.getDescriptor?.();
-    if (!descriptor) return;
-    if (!descriptor.getModeMapping) return;
-    if (this.isCurrentlyInPlanMode()) return;
-    const pending = this.currentPlan.pendingToolCallId;
-    if (pending) {
-      this.resolvePlanProposalPermission(pending, false);
-      this.decidedPlanToolCallIds.add(pending);
-    }
-    this.currentPlan = null;
-    this.notifyCurrentPlanChanged();
+    this.requests.clearCurrentPlanIfModeLeft();
   }
 
   hasPendingPlanPermission(): boolean {
-    return this.pendingPlanResolvers.size > 0;
+    return this.requests.hasPendingPlanPermission();
   }
 
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
-    const toolCallId = request.toolCall.toolCallId;
     this.observeToolCall(request.toolCall.kind, toolCallTarget(request.toolCall));
-    return new Promise<PermissionDecision>((resolve) => {
-      this.pendingToolResolvers.set(toolCallId, { request, resolve });
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handleToolPermission(request);
   }
 
   resolveToolPermission(toolCallId: string, optionId: string): void {
-    const entry = this.pendingToolResolvers.get(toolCallId);
-    if (!entry) return;
-    this.pendingToolResolvers.delete(toolCallId);
-    entry.resolve({ outcome: { outcome: "selected", optionId } });
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
+    this.requests.resolveToolPermission(toolCallId, optionId);
   }
 
   getPendingToolPermissions(): PermissionPrompt[] {
-    if (this.pendingToolResolvers.size === 0) return EMPTY_PERMISSIONS;
-    return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
+    return this.requests.getPendingToolPermissions();
   }
 
   handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
-    const requestId = request.requestId;
-    if (request.signal?.aborted) return Promise.resolve(EMPTY_ANSWERS);
-    return new Promise<AgentQuestionAnswers>((resolve) => {
-      this.pendingQuestionResolvers.set(requestId, { request, resolve });
-      // ACP timeout and cancellation withdraw the card without an answer.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-      request.signal?.addEventListener(
-        "abort",
-        () => this.resolveAskUserQuestion(requestId, EMPTY_ANSWERS),
-        { once: true }
-      );
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handleAskUserQuestion(request);
   }
 
   resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void {
-    const entry = this.pendingQuestionResolvers.get(requestId);
-    if (!entry) return;
-    this.pendingQuestionResolvers.delete(requestId);
-    const responses = entry.request.questions.flatMap((question) => {
-      const answer = answers[question.answerKey ?? question.question];
-      return answer ? [{ question: question.question, answer }] : [];
-    });
-    // ACP elicitation may have no tool call of its own; record the submitted
-    // answers in the current assistant turn.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-    if (responses.length > 0) {
-      const summary = `Answered: ${responses.map(({ answer }) => answer).join("; ")}`;
-      const detail = responses.map(({ question, answer }) => `${question}: ${answer}`).join("\n");
-      this.recordUserResponse(requestId, summary, detail);
-    }
-    entry.resolve(answers);
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
-  }
-
-  private recordUserResponse(toolCallId: string, summary: string, detail?: string): void {
-    const messageId = this.store.findMessageIdWithToolCall(toolCallId) ?? this.placeholderId;
-    if (!messageId) return;
-    const previous = this.findToolCallPart(messageId, toolCallId);
-    const part: AgentMessagePart = {
-      ...(previous?.kind === "tool_call" ? previous : {}),
-      kind: "tool_call",
-      id: toolCallId,
-      title: summary,
-      status: "completed",
-      userResponse: summary,
-      ...(detail ? { output: [{ type: "text", text: detail }] } : {}),
-    };
-    if (this.store.upsertAgentPart(messageId, part)) this.notifyMessages();
+    this.requests.resolveAskUserQuestion(requestId, answers);
   }
 
   getPendingAskUserQuestions(): AskUserQuestionPrompt[] {
-    if (this.pendingQuestionResolvers.size === 0) return EMPTY_QUESTIONS;
-    return Array.from(this.pendingQuestionResolvers.values(), (e) => e.request);
-  }
-
-  private flushResolvers(
-    map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
-  ): void {
-    for (const { request, resolve } of map.values()) {
-      resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
-    }
-    map.clear();
-    this.recomputeStatusIfChanged();
-  }
-
-  private flushQuestionResolvers(): void {
-    for (const { resolve } of this.pendingQuestionResolvers.values()) {
-      resolve(EMPTY_ANSWERS);
-    }
-    this.pendingQuestionResolvers.clear();
-    this.recomputeStatusIfChanged();
+    return this.requests.getPendingAskUserQuestions();
   }
 
   private handleSessionEvent(event: SessionEvent): void {
@@ -1473,9 +1274,7 @@ export class AgentSession {
       }
     }
 
-    if (update.sessionUpdate === "plan" && this.applyCurrentTodoList(update.entries)) {
-      this.notifyCurrentTodoListChanged();
-    }
+    if (update.sessionUpdate === "plan") this.requests.applyTodoList(update.entries);
 
     if (update.sessionUpdate === "session_info_update") {
       // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
@@ -1547,7 +1346,7 @@ export class AgentSession {
           isPlanProposal: update.isPlanProposal,
         });
         if (exitPlan) {
-          this.publishGatedPlan(update.toolCallId, exitPlan);
+          this.requests.publishGatedPlan(update.toolCallId, exitPlan);
           if (this.store.upsertAgentPart(targetMessageId, toolCallToPart(update))) {
             this.scheduleNotifyMessages();
           }
@@ -1582,7 +1381,7 @@ export class AgentSession {
             isPlanProposal: update.isPlanProposal,
           });
           if (exitPlan) {
-            this.publishGatedPlan(merged.id, exitPlan);
+            this.requests.publishGatedPlan(merged.id, exitPlan);
           }
         }
         if (this.store.upsertAgentPart(targetMessageId, merged)) {
@@ -1697,25 +1496,9 @@ export class AgentSession {
     return findToolCallPart(this.store, messageId, toolCallId);
   }
 
-  private publishGatedPlan(
-    toolCallId: string,
-    info: { plan: string; planFilePath?: string }
-  ): void {
-    if (this.decidedPlanToolCallIds.has(toolCallId)) return;
-    const stale = this.currentPlan?.pendingToolCallId;
-    if (stale && stale !== toolCallId) this.resolvePlanProposalPermission(stale, false);
-    const title = derivePlanTitleFromMarkdown(info.plan);
-    this.setCurrentPlan({
-      body: info.plan,
-      title,
-      sourceFilePath: info.planFilePath,
-      permissionGated: true,
-      pendingToolCallId: toolCallId,
-    });
-  }
-
-  private isCurrentlyInPlanMode(): boolean {
-    return this.currentState?.mode?.current === "plan";
+  private hasLeftPlanMode(): boolean {
+    if (!this.getDescriptor?.()?.getModeMapping) return false;
+    return this.currentState?.mode?.current !== "plan";
   }
 
   private recomputeStatusIfChanged(): void {
@@ -1796,18 +1579,6 @@ export class AgentSession {
     }
   }
 
-  private applyCurrentTodoList(entries: AgentPlanEntry[]): boolean {
-    const next: AgentTodoListEntry[] = entries.map((e) => ({
-      content: e.content,
-      status: e.status,
-    }));
-    const signature = next.length > 0 ? JSON.stringify(next) : null;
-    if (signature === this.currentTodoListSignature) return false;
-    this.currentTodoList = next.length > 0 ? next : null;
-    this.currentTodoListSignature = signature;
-    return true;
-  }
-
   private notifyCurrentTodoListChanged(): void {
     for (const l of this.listeners) {
       try {
@@ -1827,15 +1598,4 @@ export class AgentSession {
       }
     }
   }
-}
-
-function decisionFor(
-  req: PermissionPrompt,
-  kinds: ReadonlyArray<PermissionOptionKind>
-): PermissionDecision {
-  for (const k of kinds) {
-    const opt = req.options.find((o) => o.kind === k);
-    if (opt) return { outcome: { outcome: "selected", optionId: opt.optionId } };
-  }
-  return { outcome: { outcome: "cancelled" } };
 }

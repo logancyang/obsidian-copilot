@@ -16,6 +16,7 @@ import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plus
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
@@ -29,8 +30,6 @@ import type {
   BackendState,
   CopilotMode,
   EnabledModelEntry,
-  PermissionOption,
-  PermissionPrompt,
   SessionEvent,
   SessionUpdateHandler,
   StopReason,
@@ -282,44 +281,6 @@ function aiMessages(session: AgentSession) {
 
 function aiMessage(session: AgentSession) {
   return aiMessages(session)[0];
-}
-
-const ALLOW_OR_REJECT_OPTIONS: PermissionOption[] = [
-  { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
-  { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
-];
-
-function writePermissionRequest(): PermissionPrompt {
-  return {
-    sessionId: "acp-1",
-    toolCall: {
-      toolCallId: "tc-write",
-      kind: "edit",
-      status: "pending",
-      title: "Write",
-      rawInput: { file_path: "note.md", content: "updated" },
-    },
-    options: ALLOW_OR_REJECT_OPTIONS,
-  };
-}
-
-function planPermissionRequest(
-  toolCallId: string,
-  rawInput: Record<string, unknown>
-): PermissionPrompt {
-  return {
-    sessionId: "acp-1",
-    toolCall: {
-      toolCallId,
-      kind: "switch_mode",
-      status: "pending",
-      title: "ExitPlanMode",
-      rawInput,
-      vendorToolName: "ExitPlanMode",
-      isPlanProposal: true,
-    },
-    options: ALLOW_OR_REJECT_OPTIONS,
-  };
 }
 
 function subscribeTo(session: AgentSession, listener: Partial<AgentSessionListener> = {}) {
@@ -4513,47 +4474,6 @@ describe("AgentSession", () => {
     });
 
     describe("getCurrentPlan()", () => {
-      it("keeps the plan revision but tracks the new pending tool call when an identical plan body is proposed again", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const planBody = "# proposed plan body";
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "tc-plan-A",
-          title: "ExitPlanMode",
-          kind: "other",
-          status: "pending",
-          rawInput: { plan: planBody },
-          vendorToolName: "ExitPlanMode",
-          isPlanProposal: true,
-        });
-        const first = session.getCurrentPlan();
-        expect(first?.pendingToolCallId).toBe("tc-plan-A");
-        expect(first?.permissionGated).toBe(true);
-        expect(first?.revision).toBe(1);
-
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "tc-plan-B",
-          title: "ExitPlanMode",
-          kind: "other",
-          status: "pending",
-          rawInput: { plan: planBody },
-          vendorToolName: "ExitPlanMode",
-          isPlanProposal: true,
-        });
-        const second = session.getCurrentPlan();
-        expect(second?.pendingToolCallId).toBe("tc-plan-B");
-        expect(second?.permissionGated).toBe(true);
-        expect(second?.revision).toBe(1);
-
-        finishPrompt();
-        await turn;
-      });
-
       it("does not promote completed plan-file writes into proposal cards", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -4639,71 +4559,6 @@ describe("AgentSession", () => {
       });
     });
 
-    describe("handlePlanProposalPermission()", () => {
-      it("publishes a gated plan from an ExitPlanMode permission request", async () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "claude" });
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-from-permission", {
-            plan: "# permission plan body",
-            planFilePath: "/Users/test/.claude/plans/plan.md",
-          })
-        );
-
-        const plan = session.getCurrentPlan();
-        expect(plan?.body).toBe("# permission plan body");
-        expect(plan?.permissionGated).toBe(true);
-        expect(plan?.pendingToolCallId).toBe("tc-plan-from-permission");
-        expect(plan?.sourceFilePath).toBe("/Users/test/.claude/plans/plan.md");
-
-        session.resolvePlanProposalPermission("tc-plan-from-permission", false);
-        await decisionPromise;
-      });
-    });
-
-    describe("resolvePlanProposalPermission()", () => {
-      it("resolves with a reject option and the deny message when the plan is denied with feedback", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-deny-msg", { plan: "# x" })
-        );
-
-        session.resolvePlanProposalPermission("tc-plan-deny-msg", false, "please drop step 2");
-        const decision = await decisionPromise;
-
-        expect(decision.outcome).toEqual({ outcome: "selected", optionId: "reject_once" });
-        expect(decision.denyMessage).toBe("please drop step 2");
-
-        finishPrompt();
-        await turn;
-      });
-
-      it("resolves with the allow option and no deny message when the plan is approved", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-allow", { plan: "# x" })
-        );
-
-        session.resolvePlanProposalPermission("tc-plan-allow", true, "should be ignored");
-        const decision = await decisionPromise;
-
-        expect(decision.outcome).toEqual({ outcome: "selected", optionId: "allow_once" });
-        expect(decision.denyMessage).toBeUndefined();
-
-        finishPrompt();
-        await turn;
-      });
-    });
-
     describe("handleToolPermission()", () => {
       it("marks an active turn as awaiting permission while an inline tool card is pending", async () => {
         const mock = makeMockBackend();
@@ -4758,35 +4613,6 @@ describe("AgentSession", () => {
 
         finishPrompt();
         await turn;
-      });
-
-      it("withdraws an ACP question when its request signal aborts (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "codex" });
-        const controller = new AbortController();
-        const answers = session.handleAskUserQuestion({
-          sessionId: "acp-1",
-          requestId: "rpc-1",
-          questions: [
-            { question: "Approach", answerKey: "approach", options: [{ label: "Simple" }] },
-          ],
-          signal: controller.signal,
-        });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(1);
-        controller.abort();
-        await expect(answers).resolves.toEqual({});
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-        session.resolveAskUserQuestion("rpc-1", { approach: "Simple" });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-      });
-    });
-
-    describe("getPendingAskUserQuestions()", () => {
-      it("returns the shared empty array when no AskUserQuestion is pending", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "claude" });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-        expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
       });
     });
 
@@ -4964,33 +4790,6 @@ describe("AgentSession", () => {
           { content: "step A", status: "in_progress" },
           { content: "step B", status: "pending" },
         ]);
-      });
-
-      it("dedupes identical lists (synthesized + real plan channel) by content signature", () => {
-        const mock = makeMockBackend();
-        const session = makeLiveSession(mock);
-        let notified = 0;
-        subscribeTo(session, { onCurrentTodoListChanged: () => notified++ });
-        const entries = [{ content: "same", status: "pending", priority: "high" }];
-        mock.emit(planUpdate(entries));
-        const snapshot = session.getCurrentTodoList();
-        mock.emit(planUpdate([{ content: "same", status: "pending", priority: "low" }]));
-        expect(notified).toBe(1);
-        expect(session.getCurrentTodoList()).toBe(snapshot);
-      });
-
-      it("clears to null on an empty plan and on dispose", async () => {
-        const mock = makeMockBackend();
-        const session = makeLiveSession(mock);
-        mock.emit(planUpdate([{ content: "only", status: "pending" }]));
-        expect(session.getCurrentTodoList()).not.toBeNull();
-
-        mock.emit(planUpdate([]));
-        expect(session.getCurrentTodoList()).toBeNull();
-
-        mock.emit(planUpdate([{ content: "again", status: "pending" }]));
-        await session.dispose();
-        expect(session.getCurrentTodoList()).toBeNull();
       });
     });
   });
