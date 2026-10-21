@@ -78,7 +78,9 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         container={container}
         side="top"
         align="start"
-        className="tw-w-96 tw-max-w-[calc(100vw-2rem)] tw-p-1"
+        collisionBoundary={container}
+        collisionPadding={8}
+        className="tw-w-96 tw-max-w-[var(--radix-popover-content-available-width)] tw-p-1"
         onPointerEnter={show}
         onPointerLeave={hideSoon}
         onOpenAutoFocus={(event) => event.preventDefault()}
