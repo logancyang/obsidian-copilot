@@ -24,7 +24,6 @@ import {
   PlanDecisionAction,
   PromptContent,
   PromptInput,
-  PromptOutput,
   SessionEvent,
   SessionId,
   PlanUsage,
@@ -33,6 +32,7 @@ import {
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
+  TurnEnd,
   TurnFileChange,
 } from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
@@ -104,8 +104,15 @@ import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedba
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
-const CANCELLED_TURN_QUIET_MS = 1_000;
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
+
+type TurnOutcome = Omit<TurnEnd, "turnId">;
+
+interface PendingPrompt {
+  delivered: boolean;
+  continuesAtOutputLimit: boolean;
+  settle: (outcome: TurnOutcome) => void;
+}
 
 interface TurnFileCapture {
   edited: boolean;
@@ -224,6 +231,9 @@ export class AgentSession {
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
   private placeholderId: string | null = null;
+  private replyStartedAtMs = 0;
+  private openTurnId: string | null = null;
+  private pendingPrompts = new Map<string, PendingPrompt>();
   private turnFiles = new Map<string, TurnFileCapture>();
   private currentTurnHadRoutedToolActivity = false;
   private currentMessageIds = new Set<string>();
@@ -233,7 +243,7 @@ export class AgentSession {
     turnStartedAtMs: number;
   } | null = null;
   private cancelledPromptDrain: Promise<void> | null = null;
-  private cancelledTurnActivity = 0;
+  private finishCancelledPromptDrain: (() => void) | null = null;
   private cancelledMessageIds = new Set<string>();
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
@@ -549,7 +559,7 @@ export class AgentSession {
     if (this.requests.hasPending()) {
       return "awaiting_permission";
     }
-    if (this.abortController !== null) return "running";
+    if (this.abortController !== null || this.openTurnId !== null) return "running";
     if (this.lastTurnError) return "error";
     return "idle";
   }
@@ -668,7 +678,9 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
+    const promptId = uuidv4();
     const userMessage: NewAgentChatMessage = {
+      id: promptId,
       message: displayText,
       sender: USER_SENDER,
       timestamp: formatDateTime(new Date()),
@@ -677,19 +689,6 @@ export class AgentSession {
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
-
-    const turnStartedAtMs = Date.now();
-    const placeholder: NewAgentChatMessage = {
-      message: "",
-      sender: AI_SENDER,
-      timestamp: formatDateTime(new Date(turnStartedAtMs)),
-      isVisible: true,
-      parts: [],
-    };
-    this.placeholderId = this.store.addMessage(placeholder);
-    this.currentMessageIds = new Set();
-    this.currentTurnHadRoutedToolActivity = false;
-    this.turnFiles = new Map();
     this.notifyMessages();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
@@ -703,14 +702,7 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(
-      displayText,
-      userMessageId,
-      context,
-      turnStartedAtMs,
-      promptContent,
-      sendsCompact
-    );
+    const turn = this.runTurn(displayText, userMessageId, context, promptContent, sendsCompact);
     return { userMessageId, turn };
   }
 
@@ -718,11 +710,27 @@ export class AgentSession {
     displayText: string,
     userMessageId: string,
     context: MessageContext | undefined,
-    turnStartedAtMs: number,
     promptContent?: PromptContent[],
     sendsCompact = false
   ): Promise<StopReason> {
-    const placeholderId = this.placeholderId;
+    const outcome = await this.runPrompt(
+      displayText,
+      userMessageId,
+      context,
+      promptContent,
+      sendsCompact
+    );
+    if (outcome.error !== undefined) throw outcome.error;
+    return outcome.stopReason;
+  }
+
+  private async runPrompt(
+    displayText: string,
+    userMessageId: string,
+    context: MessageContext | undefined,
+    promptContent: PromptContent[] | undefined,
+    sendsCompact: boolean
+  ): Promise<TurnOutcome> {
     const sessionId = this.backendSessionId!;
     const signal = this.abortController!.signal;
     try {
@@ -738,10 +746,8 @@ export class AgentSession {
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
-      if (placeholderId && this.isOnModelNotEnabled()) {
+      if (this.isOnModelNotEnabled()) {
         return this.refuseTurn(
-          placeholderId,
-          turnStartedAtMs,
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
@@ -754,22 +760,16 @@ export class AgentSession {
         : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
-      if (
-        this.runFanoutTurn &&
-        isFanout(this.lastMentionedAgents, this.backendId) &&
-        placeholderId
-      ) {
+      if (this.runFanoutTurn && isFanout(this.lastMentionedAgents, this.backendId)) {
         if (!(await this.ensureMultiAgentEntitlement())) {
           showMultiAgentUpgradePrompt();
           return this.refuseTurn(
-            placeholderId,
-            turnStartedAtMs,
             "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
           );
         }
 
         const historyBlock = buildConversationHistoryBlock(
-          this.priorDisplayMessages(userMessageId, placeholderId),
+          this.priorDisplayMessages(userMessageId),
           CONVERSATION_HISTORY_MAX_CHARS
         );
         const promptBlocks = buildPromptBlocks(
@@ -781,7 +781,7 @@ export class AgentSession {
           historyBlock,
           projectContextUpdatesBlock
         );
-        return await this.runFanoutPath(placeholderId, displayText, promptBlocks, turnStartedAtMs);
+        return { stopReason: await this.runFanoutPath(displayText, promptBlocks) };
       }
 
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
@@ -789,7 +789,7 @@ export class AgentSession {
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
       const historyBlock = sendsSavedHistory
         ? buildConversationHistoryBlock(
-            this.priorDisplayMessages(userMessageId, placeholderId),
+            this.priorDisplayMessages(userMessageId),
             CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
@@ -811,82 +811,36 @@ export class AgentSession {
         projectContextUpdatesBlock
       );
 
-      const req: PromptInput = {
-        sessionId,
-        prompt: promptBlocks,
-      };
-      const promptStarted = !signal.aborted;
-      let resp: PromptOutput = { stopReason: "cancelled" };
-      if (promptStarted) {
-        resp = await this.promptBackend(req, signal);
-        if (leadingContextBlock !== null && resp.stopReason !== "cancelled") {
-          this.pendingFanoutContext = [];
-        }
-        if (sendsSavedHistory && resp.stopReason !== "cancelled") {
-          this.resendSavedHistory = false;
-        }
-        if (isFirstTurn) this.firstPromptSent = true;
-        if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
-        if (projectContextUpdates) {
-          this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
-        }
-        // An agent cut off at its output limit gets the cause and one chance to continue in smaller steps. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-        if (resp.stopReason === "max_tokens") {
-          if (placeholderId && this.store.settleOpenParts(placeholderId, "failed")) {
-            this.notifyMessages();
-          }
-          resp = await this.promptBackend(
-            { sessionId, prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }] },
-            signal
-          );
-        }
+      if (signal.aborted) return { stopReason: "cancelled" };
+      const outcome = await this.promptTurn(
+        { sessionId, promptId: userMessageId, prompt: promptBlocks },
+        true
+      );
+      if (outcome.error !== undefined) return outcome;
+      if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
+        this.pendingFanoutContext = [];
       }
-      if (
-        placeholderId &&
-        resp.stopReason !== "cancelled" &&
-        !this.currentTurnHadRoutedToolActivity &&
-        !this.store.hasAssistantActivity(placeholderId)
-      ) {
-        const message = buildEmptyTurnMessage(this.backendId, resp.stopReason);
-        logWarn(
-          `[AgentMode] ${this.backendId} completed a turn without assistant text or tool activity (stopReason=${resp.stopReason})`
+      if (sendsSavedHistory && outcome.stopReason !== "cancelled") {
+        this.resendSavedHistory = false;
+      }
+      if (isFirstTurn) this.firstPromptSent = true;
+      if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
+      if (projectContextUpdates) {
+        this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
+      }
+      if (outcome.stopReason === "max_tokens" && !signal.aborted) {
+        return await this.promptTurn(
+          {
+            sessionId,
+            promptId: uuidv4(),
+            prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
+          },
+          false
         );
-        this.store.markMessageError(placeholderId, message);
       }
-      if (placeholderId) this.store.settleOpenParts(placeholderId);
-      if (placeholderId) await this.finalizeTurnFileChanges(placeholderId, resp.turnDiff);
-      if (
-        placeholderId &&
-        this.store.markTurnComplete(placeholderId, resp.stopReason, Date.now() - turnStartedAtMs)
-      ) {
-        this.notifyMessages();
-      }
-      if (placeholderId && resp.stopReason !== "cancelled") {
-        this.settledStream = {
-          placeholderId,
-          messageIds: this.currentMessageIds,
-          turnStartedAtMs,
-        };
-      } else if (resp.stopReason === "cancelled") {
-        this.settledStream = null;
-      }
-      this.currentMessageIds = new Set();
-      if (this.placeholderId === placeholderId) this.placeholderId = null;
-      if (resp.stopReason === "end_turn") void this.pollSessionTitle();
-      return resp.stopReason;
+      return outcome;
     } catch (err) {
-      logWarn(`[AgentMode] prompt failed`, err);
-      if (placeholderId) {
-        const failure = formatPromptFailure(err);
-        // The turn's error already shows the failure, so the row must not repeat it.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-        this.store.settleOpenParts(placeholderId, "failed");
-        this.store.markMessageError(placeholderId, failure, Date.now() - turnStartedAtMs);
-        this.notifyMessages();
-      }
-      this.lastTurnError = true;
-      this.currentMessageIds = new Set();
-      if (this.placeholderId === placeholderId) this.placeholderId = null;
+      this.failReply(err);
       throw err;
     } finally {
       this.abortController = null;
@@ -894,54 +848,39 @@ export class AgentSession {
     }
   }
 
-  private async promptBackend(req: PromptInput, signal: AbortSignal): Promise<PromptOutput> {
-    const backingPrompt = this.backend.prompt(req);
-    const resp = await Promise.race([
-      backingPrompt,
-      new Promise<PromptOutput>((resolve) => {
-        signal.addEventListener("abort", () => resolve({ stopReason: "cancelled" }), {
-          once: true,
-        });
-      }),
-    ]);
-    if (!signal.aborted) return resp;
-    const settledPrompt = backingPrompt.then(
-      () => undefined,
-      () => undefined
+  private promptTurn(req: PromptInput, continuesAtOutputLimit: boolean): Promise<TurnOutcome> {
+    const ended = new Promise<TurnOutcome>((settle) => {
+      this.pendingPrompts.set(req.promptId, { delivered: false, continuesAtOutputLimit, settle });
+    });
+    return this.backend.prompt(req).then(
+      () => ended,
+      (err: unknown) => {
+        this.endCancelledPromptDrain();
+        if (!this.pendingPrompts.delete(req.promptId)) return ended;
+        throw err;
+      }
     );
-    const drain = settledPrompt.then(async () => {
-      let activity: number;
-      do {
-        activity = this.cancelledTurnActivity;
-        await new Promise<void>((resolve) => window.setTimeout(resolve, CANCELLED_TURN_QUIET_MS));
-      } while (activity !== this.cancelledTurnActivity);
-    });
-    this.cancelledPromptDrain = drain;
-    void drain.then(() => {
-      if (this.cancelledPromptDrain === drain) this.cancelledPromptDrain = null;
-    });
-    return { stopReason: "cancelled" };
   }
 
   private ensureMultiAgentEntitlement(): Promise<boolean> {
     return ensureMultiAgentEntitlement(this.getApp?.());
   }
 
-  private refuseTurn(placeholderId: string, turnStartedAtMs: number, message: string): StopReason {
+  private refuseTurn(message: string): TurnOutcome {
+    const placeholderId = this.openReply();
     this.store.markMessageError(placeholderId, message);
-    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - turnStartedAtMs);
-    this.currentMessageIds = new Set();
-    if (this.placeholderId === placeholderId) this.placeholderId = null;
+    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - this.replyStartedAtMs);
+    this.placeholderId = null;
     this.notifyMessages();
-    return "refusal";
+    return { stopReason: "refusal" };
   }
 
   private async runFanoutPath(
-    placeholderId: string,
     originalPromptText: string,
-    promptBlocks: PromptContent[],
-    turnStartedAtMs: number
+    promptBlocks: PromptContent[]
   ): Promise<StopReason> {
+    const placeholderId = this.openReply();
+    const turnStartedAtMs = this.replyStartedAtMs;
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
@@ -988,13 +927,8 @@ export class AgentSession {
     return stopReason;
   }
 
-  private priorDisplayMessages(
-    userMessageId: string,
-    placeholderId: string | null
-  ): readonly AgentChatMessage[] {
-    return this.store
-      .getDisplayMessages()
-      .filter((m) => m.id !== userMessageId && m.id !== placeholderId);
+  private priorDisplayMessages(userMessageId: string): readonly AgentChatMessage[] {
+    return this.store.getDisplayMessages().filter((m) => m.id !== userMessageId);
   }
 
   private displayNameFor(backendId: BackendId): string {
@@ -1006,9 +940,21 @@ export class AgentSession {
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
     this.abortController?.abort();
-    this.settledStream = null;
+    // The stopped prompt's turn may still be running or yet to start; it renders nothing until it ends. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (this.openTurnId !== null || this.pendingPrompts.size > 0) {
+      this.cancelledPromptDrain = new Promise<void>((resolve) => {
+        this.finishCancelledPromptDrain = resolve;
+      });
+    }
+    this.openTurnId = null;
+    const stopped = [...this.pendingPrompts.values()];
+    this.pendingPrompts.clear();
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
+    void this.finalizeReply("cancelled").then(() => {
+      for (const prompt of stopped) prompt.settle({ stopReason: "cancelled" });
+    });
+    this.settledStream = null;
     this.requests.rejectToolPermissions();
     this.requests.withdrawQuestions();
     try {
@@ -1039,7 +985,9 @@ export class AgentSession {
     this.unregisterSessionHandler = null;
     this.requests.dispose();
     this.settledStream = null;
-    this.cancelledPromptDrain = null;
+    this.endCancelledPromptDrain();
+    for (const prompt of this.pendingPrompts.values()) prompt.settle({ stopReason: "cancelled" });
+    this.pendingPrompts.clear();
     this.cancelledMessageIds.clear();
     this.currentMessageIds = new Set();
     this.recomputeStatusIfChanged();
@@ -1167,6 +1115,19 @@ export class AgentSession {
     if (this.historyReplay.append(update, event.occurredAt)) {
       return;
     }
+    switch (update.sessionUpdate) {
+      case "message_delivered": {
+        const prompt = this.pendingPrompts.get(update.promptId);
+        if (prompt) prompt.delivered = true;
+        return;
+      }
+      case "turn_started":
+        this.startTurn(update.turnId);
+        return;
+      case "turn_ended":
+        this.endTurn(update);
+        return;
+    }
     const toolOwnerMessageId =
       update.sessionUpdate === "tool_call_update"
         ? this.store.findMessageIdWithToolCall(update.toolCallId)
@@ -1183,7 +1144,6 @@ export class AgentSession {
       switch (update.sessionUpdate) {
         case "agent_message_chunk":
         case "agent_thought_chunk":
-          this.cancelledTurnActivity += 1;
           if (update.messageId) this.cancelledMessageIds.add(update.messageId);
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
@@ -1192,14 +1152,12 @@ export class AgentSession {
         case "tool_call":
         case "plan":
         case "compaction":
-          this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
           );
           return;
         case "tool_call_update":
           if (isPriorToolUpdate) break;
-          this.cancelledTurnActivity += 1;
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
           );
@@ -1339,6 +1297,112 @@ export class AgentSession {
         );
         return;
     }
+  }
+
+  private startTurn(turnId: string): void {
+    if (this.cancelledPromptDrain) return;
+    this.openTurnId = turnId;
+    if (!this.placeholderId) this.openReply();
+    this.recomputeStatusIfChanged();
+  }
+
+  private endTurn(end: TurnEnd): void {
+    if (this.cancelledPromptDrain) {
+      this.endCancelledPromptDrain();
+      return;
+    }
+    if (end.turnId !== this.openTurnId) {
+      logWarn(`[AgentMode] ignoring the end of turn ${end.turnId}, which is not running`);
+      return;
+    }
+    this.openTurnId = null;
+    const delivered = [...this.pendingPrompts].filter(([, prompt]) => prompt.delivered);
+    for (const [promptId] of delivered) this.pendingPrompts.delete(promptId);
+    const prompts = delivered.map(([, prompt]) => prompt);
+    const settle = (): void => {
+      for (const prompt of prompts) prompt.settle(end);
+      this.recomputeStatusIfChanged();
+    };
+    if (end.error !== undefined) {
+      this.failReply(end.error);
+      return settle();
+    }
+    // An agent cut off at its output limit gets the cause and one chance to continue in the same reply. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
+    if (end.stopReason === "max_tokens" && prompts.some((p) => p.continuesAtOutputLimit)) {
+      if (this.placeholderId && this.store.settleOpenParts(this.placeholderId, "failed")) {
+        this.notifyMessages();
+      }
+      return settle();
+    }
+    void this.finalizeReply(end.stopReason, end.turnDiff).then(settle);
+  }
+
+  private endCancelledPromptDrain(): void {
+    this.finishCancelledPromptDrain?.();
+    this.finishCancelledPromptDrain = null;
+    this.cancelledPromptDrain = null;
+  }
+
+  private openReply(): string {
+    this.replyStartedAtMs = Date.now();
+    this.placeholderId = this.store.addMessage({
+      message: "",
+      sender: AI_SENDER,
+      timestamp: formatDateTime(new Date(this.replyStartedAtMs)),
+      isVisible: true,
+      parts: [],
+    });
+    this.currentMessageIds = new Set();
+    this.currentTurnHadRoutedToolActivity = false;
+    this.turnFiles = new Map();
+    this.notifyMessages();
+    return this.placeholderId;
+  }
+
+  private async finalizeReply(stopReason: StopReason, turnDiff?: TurnDiff): Promise<void> {
+    const placeholderId = this.placeholderId;
+    if (!placeholderId) return;
+    const turnStartedAtMs = this.replyStartedAtMs;
+    this.placeholderId = null;
+    this.settledStream =
+      stopReason === "cancelled"
+        ? null
+        : { placeholderId, messageIds: this.currentMessageIds, turnStartedAtMs };
+    this.currentMessageIds = new Set();
+    if (
+      stopReason !== "cancelled" &&
+      !this.currentTurnHadRoutedToolActivity &&
+      !this.store.hasAssistantActivity(placeholderId)
+    ) {
+      const message = buildEmptyTurnMessage(this.backendId, stopReason);
+      logWarn(
+        `[AgentMode] ${this.backendId} completed a turn without assistant text or tool activity (stopReason=${stopReason})`
+      );
+      this.store.markMessageError(placeholderId, message);
+    }
+    this.store.settleOpenParts(placeholderId);
+    await this.finalizeTurnFileChanges(placeholderId, turnDiff);
+    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
+      this.notifyMessages();
+    }
+    if (stopReason === "end_turn") void this.pollSessionTitle();
+  }
+
+  private failReply(err: unknown): void {
+    logWarn(`[AgentMode] prompt failed`, err);
+    const placeholderId = this.placeholderId ?? this.openReply();
+    // The turn's error already shows the failure, so the row must not repeat it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
+    this.store.settleOpenParts(placeholderId, "failed");
+    this.store.markMessageError(
+      placeholderId,
+      formatPromptFailure(err),
+      Date.now() - this.replyStartedAtMs
+    );
+    this.placeholderId = null;
+    this.currentMessageIds = new Set();
+    this.lastTurnError = true;
+    this.notifyMessages();
   }
 
   private resolveContentTarget(messageId: string | undefined): string | null {

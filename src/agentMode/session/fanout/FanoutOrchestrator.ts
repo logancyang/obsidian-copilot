@@ -16,7 +16,9 @@ import type {
   PromptContent,
   SessionEvent,
   SessionId,
+  TurnEnd,
 } from "@/agentMode/session/types";
+import { v4 as uuidv4 } from "uuid";
 import {
   buildSummaryUserPrompt,
   FANOUT_AGENT_TIMEOUT_ERROR,
@@ -186,7 +188,13 @@ export class FanoutOrchestrator {
         this.host.excludeSubSessionFromHistory(backendId, sessionId);
 
         const live: SubSessionState = { current: opened.state, onChange: null };
+        let endTurn!: (end: TurnEnd) => void;
+        const turnEnded = new Promise<TurnEnd>((resolve) => (endTurn = resolve));
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
+          if (event.update.sessionUpdate === "turn_ended") {
+            endTurn(event.update);
+            return;
+          }
           if (event.update.sessionUpdate === "state_changed") {
             live.current = event.update.state;
             live.onChange?.();
@@ -205,7 +213,12 @@ export class FanoutOrchestrator {
 
         const promptProc = proc;
         const promptSessionId = sessionId;
-        const promptPromise = promptProc.prompt({ sessionId, prompt });
+        const promptPromise = promptProc
+          .prompt({ sessionId, promptId: uuidv4(), prompt })
+          .then(() => turnEnded)
+          .then((end) => {
+            if (end.error !== undefined) throw end.error;
+          });
         onPrompt(promptPromise, () => {
           promptProc.cancel({ sessionId: promptSessionId }).catch(() => undefined);
         });

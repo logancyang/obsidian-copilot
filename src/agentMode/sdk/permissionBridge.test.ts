@@ -54,6 +54,19 @@ describe("permissionBridge", () => {
         expect(captured!.options.map((o) => o.kind)).toEqual(["allow_once", "reject_once"]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 labels a request with the subagent that made it, and the main agent otherwise", async () => {
+        const requesters: PermissionPrompt["requester"][] = [];
+        const bridge = makeBridge(async (req) => {
+          requesters.push(req.requester);
+          return { outcome: { outcome: "selected", optionId: "allow_once" } };
+        });
+
+        await bridge.canUseTool("Edit", { file_path: "a.md" }, ctx);
+        await bridge.canUseTool("Edit", { file_path: "a.md" }, { ...ctx, agentID: "task-a" });
+
+        expect(requesters).toEqual(["main", { taskId: "task-a" }]);
+      });
+
       it.each([
         ["session", "Covers Bash(git add:*) until this chat ends. Start a new chat to undo."],
         [

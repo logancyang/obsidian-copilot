@@ -1,4 +1,5 @@
 import { logError, logInfo, logWarn } from "@/logger";
+import { err2String } from "@/utils";
 import {
   client as createClient,
   type ClientConnection,
@@ -38,13 +39,13 @@ import type {
   PermissionDecision,
   PermissionPrompt,
   PromptInput,
-  PromptOutput,
   ResumeSessionInput,
   ResumeSessionOutput,
   SessionEvent,
   SessionId,
   SessionUpdateHandler as DomainSessionUpdateHandler,
   SessionUsage,
+  TurnEnd,
 } from "@/agentMode/session/types";
 import { isCompactCommand } from "@/commands/compactCommand";
 import { wrapStreamsForDebug } from "./debugTap";
@@ -335,8 +336,29 @@ export class AcpBackendProcess implements BackendProcess {
     };
   }
 
-  async prompt(params: PromptInput): Promise<PromptOutput> {
-    const connection = this.requireConnection();
+  async prompt(params: PromptInput): Promise<void> {
+    const { sessionId, promptId } = params;
+    const turn = this.requestTurn(this.requireConnection(), params);
+    const emit = (update: SessionEvent["update"]) =>
+      this.domainHandlers.get(sessionId)?.({ sessionId, update });
+    emit({ sessionUpdate: "message_delivered", promptId });
+    emit({ sessionUpdate: "turn_started", turnId: promptId });
+    void turn.then(
+      (end) => emit({ sessionUpdate: "turn_ended", turnId: promptId, ...end }),
+      (error: unknown) =>
+        emit({
+          sessionUpdate: "turn_ended",
+          turnId: promptId,
+          stopReason: "end_turn",
+          error: error instanceof Error ? error : new Error(err2String(error)),
+        })
+    );
+  }
+
+  private async requestTurn(
+    connection: ClientConnection,
+    params: PromptInput
+  ): Promise<Omit<TurnEnd, "turnId">> {
     const [first] = params.prompt;
     if (first?.type === "text" && isCompactCommand(first.text)) {
       this.manualCompactSessions.add(params.sessionId);

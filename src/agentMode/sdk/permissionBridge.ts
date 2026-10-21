@@ -205,6 +205,7 @@ function synthesizePermissionPrompt(
   const { tool: name, mcpServer } = resolveToolName(toolName);
   return {
     sessionId,
+    requester: ctx.agentID ? { taskId: ctx.agentID } : "main",
     toolCall: {
       toolCallId: ctx.toolUseID,
       kind: deriveToolKind(name, mcpServer),

@@ -272,7 +272,17 @@ export type SessionUpdate =
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
   | { sessionUpdate: "state_changed"; state: BackendState }
   | { sessionUpdate: "usage_update"; usage: SessionUsage }
-  | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null };
+  | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null }
+  | { sessionUpdate: "message_delivered"; promptId: string }
+  | { sessionUpdate: "turn_started"; turnId: string }
+  | ({ sessionUpdate: "turn_ended" } & TurnEnd);
+
+export interface TurnEnd {
+  turnId: string;
+  stopReason: StopReason;
+  error?: Error;
+  turnDiff?: TurnDiff;
+}
 
 export interface SessionUsage {
   usedTokens: number;
@@ -316,8 +326,11 @@ export interface PermissionOption {
   kind: PermissionOptionKind;
 }
 
+export type PermissionRequester = "main" | { taskId: string };
+
 export interface PermissionPrompt {
   sessionId: SessionId;
+  requester?: PermissionRequester;
   toolCall: ToolCallSnapshot;
   options: PermissionOption[];
 }
@@ -382,12 +395,8 @@ export type LoadSessionOutput = OpenSessionOutput;
 
 export interface PromptInput {
   sessionId: SessionId;
+  promptId: string;
   prompt: PromptContent[];
-}
-
-export interface PromptOutput {
-  stopReason: StopReason;
-  turnDiff?: TurnDiff;
 }
 
 export interface TurnDiff {
@@ -429,7 +438,7 @@ export interface BackendProcess {
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
-  prompt(params: PromptInput): Promise<PromptOutput>;
+  prompt(params: PromptInput): Promise<void>;
   cancel(params: CancelInput): Promise<void>;
   closeSession?(params: { sessionId: SessionId }): Promise<void>;
   setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState>;

@@ -4,7 +4,12 @@ import type {
   ModelInfo,
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { BackendDescriptor, SessionEvent } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  PromptInput,
+  SessionEvent,
+  TurnEnd,
+} from "@/agentMode/session/types";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -237,7 +242,7 @@ async function promptReportingPlanUsage(
   queryMock.mockImplementationOnce(() =>
     Object.assign(makeQuery([resultMessage()]), { [USAGE_METHOD]: usage })
   );
-  await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+  await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
   await flushMicrotasks();
 }
 
@@ -245,10 +250,49 @@ function planUsageUpdates(events: SessionEvent[]): SessionEvent["update"][] {
   return events.map((e) => e.update).filter((u) => u.sessionUpdate === "plan_usage_update");
 }
 
+interface Collector {
+  events: SessionEvent[];
+  turnEnds: Array<(end: TurnEnd) => void>;
+}
+
+const collectors = new WeakMap<ClaudeSdkBackendProcess, Map<string, Collector>>();
+
+function collectorsOf(proc: ClaudeSdkBackendProcess): Map<string, Collector> {
+  let bySession = collectors.get(proc);
+  if (!bySession) {
+    bySession = new Map();
+    collectors.set(proc, bySession);
+  }
+  return bySession;
+}
+
 function registerCollector(proc: ClaudeSdkBackendProcess, sessionId: string): SessionEvent[] {
-  const events: SessionEvent[] = [];
-  proc.registerSessionHandler(sessionId, (e) => events.push(e));
-  return events;
+  const collector: Collector = { events: [], turnEnds: [] };
+  collectorsOf(proc).set(sessionId, collector);
+  proc.registerSessionHandler(sessionId, (event) => {
+    const { update } = event;
+    if (update.sessionUpdate === "turn_ended") collector.turnEnds.shift()?.(update);
+    else if (
+      update.sessionUpdate !== "message_delivered" &&
+      update.sessionUpdate !== "turn_started"
+    )
+      collector.events.push(event);
+  });
+  return collector.events;
+}
+
+let promptSeq = 0;
+
+function promptTurn(
+  proc: ClaudeSdkBackendProcess,
+  input: Omit<PromptInput, "promptId">
+): Promise<TurnEnd> {
+  if (!collectorsOf(proc).has(input.sessionId)) registerCollector(proc, input.sessionId);
+  const collector = collectorsOf(proc).get(input.sessionId)!;
+  return new Promise((resolve, reject) => {
+    collector.turnEnds.push(resolve);
+    proc.prompt({ ...input, promptId: `prompt-${++promptSeq}` }).catch(reject);
+  });
 }
 
 function errorResultMessage(errors: string[]): SDKMessage {
@@ -276,6 +320,7 @@ describe("ClaudeSdkBackendProcess", () => {
     it("returns a plain string when the prompt is text-only", () => {
       const result = promptInputToAnthropicContent({
         sessionId: "s1",
+        promptId: "p1",
         prompt: [
           { type: "text", text: "hello" },
           { type: "text", text: "world" },
@@ -287,6 +332,7 @@ describe("ClaudeSdkBackendProcess", () => {
     it("returns content blocks when an image is attached", () => {
       const result = promptInputToAnthropicContent({
         sessionId: "s1",
+        promptId: "p1",
         prompt: [
           { type: "text", text: "describe" },
           { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
@@ -304,6 +350,7 @@ describe("ClaudeSdkBackendProcess", () => {
     it("normalizes jpg media types before sending image blocks", () => {
       const result = promptInputToAnthropicContent({
         sessionId: "s1",
+        promptId: "p1",
         prompt: [
           { type: "text", text: "describe" },
           { type: "image", mimeType: "image/jpg", data: "aGVsbG8=" },
@@ -321,6 +368,7 @@ describe("ClaudeSdkBackendProcess", () => {
     it("omits image media types Anthropic does not accept", () => {
       const result = promptInputToAnthropicContent({
         sessionId: "s1",
+        promptId: "p1",
         prompt: [
           { type: "text", text: "describe" },
           { type: "image", mimeType: "image/heic", data: "aGVsbG8=" },
@@ -335,6 +383,7 @@ describe("ClaudeSdkBackendProcess", () => {
     it("represents resource_link as a defensive text reference", () => {
       const result = promptInputToAnthropicContent({
         sessionId: "s1",
+        promptId: "p1",
         prompt: [
           { type: "text", text: "see the doc" },
           { type: "resource_link", uri: "vault://README.md", name: "README" },
@@ -463,7 +512,7 @@ describe("ClaudeSdkBackendProcess", () => {
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const promptCalls = getPromptQueryCalls();
         expect(promptCalls).toHaveLength(1);
@@ -531,7 +580,54 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("prompt()", () => {
-      it("emits SDK text deltas as agent_message_chunk events and resolves with end_turn", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 resolves once the query starts, reporting delivery and the turn's start, and ends the turn at the result", async () => {
+        const controlled = makeControlledQuery();
+        queryMock.mockReturnValueOnce(controlled.query);
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const updates: SessionEvent["update"][] = [];
+        let endTurn!: () => void;
+        const turnEnded = new Promise<void>((resolve) => (endTurn = resolve));
+        proc.registerSessionHandler(sessionId, ({ update }) => {
+          updates.push(update);
+          if (update.sessionUpdate === "turn_ended") endTurn();
+        });
+
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
+
+        expect(updates).toEqual([
+          { sessionUpdate: "message_delivered", promptId: "p1" },
+          { sessionUpdate: "turn_started", turnId: "p1" },
+        ]);
+        controlled.finish();
+        await turnEnded;
+        expect(updates.at(-1)).toEqual({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
+          stopReason: "end_turn",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends the turn with the error when the SDK stream throws", async () => {
+        const failure = new Error("CLI exited");
+        queryMock.mockImplementation(() =>
+          Object.assign(
+            (async function* () {
+              yield streamEvent({ type: "message_start", message: {} });
+              throw failure;
+            })(),
+            { interrupt: jest.fn(), setModel: jest.fn(), setPermissionMode: jest.fn() }
+          )
+        );
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        const end = await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        expect(end.error).toBe(failure);
+      });
+
+      it("emits SDK text deltas as agent_message_chunk events and ends the turn with end_turn", async () => {
         queryMock.mockImplementation(() =>
           makeQuery([
             streamEvent({ type: "message_start", message: {} }),
@@ -547,7 +643,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         const events = registerCollector(proc, sessionId);
 
-        const resp = await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        const resp = await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         expect(resp.stopReason).toBe("end_turn");
         expect(events.map((e) => e.update)).toEqual([
@@ -569,7 +665,7 @@ describe("ClaudeSdkBackendProcess", () => {
           ],
         });
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
         expect(options.mcpServers).toEqual({
@@ -611,7 +707,7 @@ describe("ClaudeSdkBackendProcess", () => {
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
           const events = registerCollector(proc, sessionId);
 
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text }] });
 
           expect(events.map((e) => e.update)).toEqual([
             { sessionUpdate: "compaction", id: "compaction-1", status: "in_progress", trigger },
@@ -624,7 +720,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const promptCalls = getPromptQueryCalls();
         expect(promptCalls).toHaveLength(1);
@@ -648,7 +744,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
         expect(options.allowedTools).toEqual(["Read", "Glob", "Grep", "LS"]);
@@ -659,7 +755,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault/Projects/Research" });
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
         expect(options.settings).toEqual({
@@ -677,7 +773,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const proc = makeProc({ getSystemPromptAppend: () => "DO THIS THING WITH SKILLS" });
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const calls = getPromptQueryCalls();
         const opts = (calls[0][0] as { options: Record<string, unknown> }).options;
@@ -699,7 +795,7 @@ describe("ClaudeSdkBackendProcess", () => {
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         current = "SECOND DIRECTIVE";
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
         expect(opts.systemPrompt).toEqual({
@@ -718,8 +814,8 @@ describe("ClaudeSdkBackendProcess", () => {
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "1" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "2" }] });
 
         const promptCalls = getPromptQueryCalls();
         expect(promptCalls).toHaveLength(2);
@@ -734,7 +830,7 @@ describe("ClaudeSdkBackendProcess", () => {
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
         expect(call.options.thinking).toEqual({ type: "disabled" });
@@ -746,7 +842,7 @@ describe("ClaudeSdkBackendProcess", () => {
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         proc.registerSessionHandler(sessionId, () => {});
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
         const call = getPromptQueryCalls()[0][0] as { options: { thinking?: unknown } };
         expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
@@ -798,11 +894,10 @@ describe("ClaudeSdkBackendProcess", () => {
 
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        const events: SessionEvent[] = [];
-        proc.registerSessionHandler(sessionId, (event) => events.push(event));
+        const events = registerCollector(proc, sessionId);
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "start" }] });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "start" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "continue" }] });
 
         expect(events).toContainEqual({
           sessionId,
@@ -831,8 +926,14 @@ describe("ClaudeSdkBackendProcess", () => {
         proc.setPermissionPrompter(permissionPrompter);
         proc.setAskUserQuestionPrompter(questionPrompter);
 
-        const turnA = proc.prompt({ sessionId: sessionA, prompt: [{ type: "text", text: "A" }] });
-        const turnB = proc.prompt({ sessionId: sessionB, prompt: [{ type: "text", text: "B" }] });
+        const turnA = promptTurn(proc, {
+          sessionId: sessionA,
+          prompt: [{ type: "text", text: "A" }],
+        });
+        const turnB = promptTurn(proc, {
+          sessionId: sessionB,
+          prompt: [{ type: "text", text: "B" }],
+        });
         await flushMicrotasks();
         expect(getPromptQueryCalls()).toHaveLength(2);
         const [callA, callB] = getPromptQueryCalls().map(
@@ -862,17 +963,16 @@ describe("ClaudeSdkBackendProcess", () => {
         await turnB;
       });
 
-      it("rejects with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
+      it("ends the turn with Claude's reset message when a success-shaped result reports usage exhaustion", async () => {
         queryMock.mockImplementation(() => makeQuery(usageLimitMessages()));
 
         const proc = makeProc();
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        proc.registerSessionHandler(sessionId, () => {});
 
-        await expect(
-          proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
-        ).rejects.toThrow(new Error(USAGE_LIMIT_MESSAGE));
+        const end = await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        expect(end.error).toEqual(new Error(USAGE_LIMIT_MESSAGE));
       });
 
       it("does not start a query when its session closes during environment preparation https://github.com/Brevilabs/obsidian-copilot-private/issues/429", async () => {
@@ -883,11 +983,13 @@ describe("ClaudeSdkBackendProcess", () => {
         const backend = makeProc({ getManagedEnv: () => environment });
         const { sessionId } = await backend.newSession({ cwd: "/vault" });
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
-        const pending = backend.prompt({ sessionId, prompt: [] });
+        const pending = promptTurn(backend, { sessionId, prompt: [] });
         await flushMicrotasks();
         await backend.closeSession({ sessionId });
         finishEnvironment({});
-        await expect(pending).resolves.toEqual({ stopReason: "cancelled" });
+        await expect(pending).rejects.toThrow(
+          `Session ${sessionId} closed before its prompt was sent`
+        );
         expect(getPromptQueryCalls()).toHaveLength(0);
       });
 
@@ -901,7 +1003,7 @@ describe("ClaudeSdkBackendProcess", () => {
           proc.registerSessionHandler(sessionId, () => {});
 
           await expect(
-            proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
+            promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] })
           ).rejects.toBeInstanceOf(AuthRequiredError);
           expect(getPromptQueryCalls()).toHaveLength(0);
         });
@@ -914,8 +1016,8 @@ describe("ClaudeSdkBackendProcess", () => {
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
           proc.registerSessionHandler(sessionId, () => {});
 
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "1" }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "2" }] });
 
           expect(checkAuth).toHaveBeenCalledTimes(1);
           expect(getPromptQueryCalls()).toHaveLength(2);
@@ -929,11 +1031,11 @@ describe("ClaudeSdkBackendProcess", () => {
           proc.registerSessionHandler(sessionId, () => {});
 
           queryMock.mockImplementationOnce(() => makeQuery([errorResultMessage([])]));
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "1" }] });
           expect(checkAuth).toHaveBeenCalledTimes(1);
 
           queryMock.mockImplementationOnce(() => makeQuery([resultMessage()]));
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "2" }] });
           expect(checkAuth).toHaveBeenCalledTimes(2);
         });
       });
@@ -961,21 +1063,19 @@ describe("ClaudeSdkBackendProcess", () => {
           });
         }
 
-        it("aborts the turn and rejects when the stream stalls mid-message", async () => {
+        it("aborts the turn and ends it with a stall error when the stream stalls mid-message", async () => {
           queryMock.mockImplementation((arg: unknown) => makeStallingQuery(arg));
           const proc = makeProc();
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
-          proc.registerSessionHandler(sessionId, () => {});
 
           jest.useFakeTimers();
           try {
-            const turn = proc.prompt({
+            const turn = promptTurn(proc, {
               sessionId,
               prompt: [{ type: "text", text: "draft a plan" }],
             });
-            const assertion = expect(turn).rejects.toThrow(/stalled/i);
             await jest.advanceTimersByTimeAsync(61_000);
-            await assertion;
+            expect(String((await turn).error)).toMatch(/stalled/i);
           } finally {
             jest.useRealTimers();
           }
@@ -1059,14 +1159,15 @@ describe("ClaudeSdkBackendProcess", () => {
         const proc = makeProc();
 
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
-        const promptPromise = proc.prompt({
-          sessionId,
-          prompt: [{ type: "text", text: "hi" }],
-        });
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
 
         const seen: SessionEvent[] = [];
-        proc.registerSessionHandler(sessionId, (e) => seen.push(e));
-        await promptPromise;
+        await new Promise<void>((turnEnded) =>
+          proc.registerSessionHandler(sessionId, (e) => {
+            seen.push(e);
+            if (e.update.sessionUpdate === "turn_ended") turnEnded();
+          })
+        );
 
         expect(seen.map((e) => e.update)).toContainEqual({
           sessionUpdate: "agent_message_chunk",
@@ -1141,7 +1242,7 @@ describe("ClaudeSdkBackendProcess", () => {
         });
         expect(stateAfter.model?.current.effort).toBe("high");
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
         const promptCalls = getPromptQueryCalls();
         expect(promptCalls).toHaveLength(1);
         const call = promptCalls[0][0] as { options: { effort?: string } };
@@ -1168,7 +1269,7 @@ describe("ClaudeSdkBackendProcess", () => {
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
           proc.registerSessionHandler(sessionId, () => {});
           await proc.setSessionMode({ sessionId, modeId });
-          await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
 
           const call = getPromptQueryCalls()[0][0] as { options: { permissionMode?: string } };
           expect(call.options.permissionMode).toBe(modeId);
@@ -1199,17 +1300,17 @@ describe("ClaudeSdkBackendProcess", () => {
           .mockReset()
           .mockReturnValueOnce(Object.assign(a.query, { close: closeA }))
           .mockReturnValueOnce(Object.assign(b.query, { close: closeB }));
-        const pendingA = backend.prompt({ sessionId: first.sessionId, prompt: [] });
-        const pendingB = backend.prompt({ sessionId: sibling.sessionId, prompt: [] });
+        const pendingA = promptTurn(backend, { sessionId: first.sessionId, prompt: [] });
+        const pendingB = promptTurn(backend, { sessionId: sibling.sessionId, prompt: [] });
         await flushMicrotasks();
         await backend.closeSession({ sessionId: first.sessionId });
         expect(closeA).toHaveBeenCalledTimes(1);
         expect(closeB).not.toHaveBeenCalled();
         b.finish();
         await Promise.all([pendingA, pendingB]);
-        await expect(backend.prompt({ sessionId: first.sessionId, prompt: [] })).rejects.toThrow(
-          "Unknown session"
-        );
+        await expect(
+          promptTurn(backend, { sessionId: first.sessionId, prompt: [] })
+        ).rejects.toThrow("Unknown session");
       });
     });
 
@@ -1221,7 +1322,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const events = registerCollector(proc, sessionId);
 
         const resp = await proc.resumeSession({ sessionId, cwd: "/vault" });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "continue" }] });
 
         expect(resp.sessionId).toBe(sessionId);
         expect(resp.state.model?.current.baseModelId).toBe("claude-fake-pro");
@@ -1316,7 +1417,7 @@ describe("ClaudeSdkBackendProcess", () => {
         registerCollector(proc, sessionId);
 
         const loaded = await proc.loadSession({ sessionId, cwd });
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "continue" }] });
 
         expect(loaded).toEqual(resumed);
         const { options } = getPromptQueryCalls()[0][0] as { options: Record<string, unknown> };
@@ -1373,7 +1474,7 @@ describe("ClaudeSdkBackendProcess", () => {
         await proc.loadSession({ sessionId, cwd });
         events.length = 0;
 
-        await proc.prompt({ sessionId, prompt: [{ type: "text", text: "mark it done" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "mark it done" }] });
 
         expect(events.map((e) => e.update)).toContainEqual({
           sessionUpdate: "plan",
@@ -1388,7 +1489,7 @@ describe("ClaudeSdkBackendProcess", () => {
 
         await expect(proc.loadSession({ sessionId, cwd })).rejects.toThrow(sessionId);
         await expect(
-          proc.prompt({ sessionId, prompt: [{ type: "text", text: "continue" }] })
+          promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "continue" }] })
         ).rejects.toThrow();
 
         expect(events).toEqual([]);

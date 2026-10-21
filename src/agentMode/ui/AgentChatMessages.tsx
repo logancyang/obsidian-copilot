@@ -240,7 +240,9 @@ const AgentChatMessages = memo(
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
-    const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
+    // A sent message's reply appears only once its turn starts; until then the prior reply stays settled. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    const awaitsReply = visible.at(-1)?.sender === USER_SENDER;
+    const streamingMessageId = isLoading && !awaitsReply ? latestAssistant?.id : undefined;
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">

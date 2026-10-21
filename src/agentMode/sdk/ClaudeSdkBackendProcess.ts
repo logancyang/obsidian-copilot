@@ -9,6 +9,7 @@ import {
   type Options,
   type PermissionMode,
   type Query,
+  type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
@@ -35,7 +36,6 @@ import type {
   PermissionDecision,
   PermissionPrompt,
   PromptInput,
-  PromptOutput,
   ResumeSessionInput,
   ResumeSessionOutput,
   SessionEvent,
@@ -53,6 +53,7 @@ import {
   mapStopReason,
   replayClaudeTranscript,
   translateSdkMessage,
+  type TranslatorState,
 } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
@@ -257,7 +258,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     return { sessionId, state };
   }
 
-  async prompt(params: PromptInput): Promise<PromptOutput> {
+  async prompt(params: PromptInput): Promise<void> {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Unknown session ${params.sessionId}`);
@@ -353,7 +354,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const turnAbort = new AbortController();
     options.abortController = turnAbort;
 
-    if (this.sessions.get(params.sessionId) !== session) return { stopReason: "cancelled" };
+    if (this.sessions.get(params.sessionId) !== session) {
+      throw new Error(`Session ${params.sessionId} closed before its prompt was sent`);
+    }
     const q = query({ prompt: promptStream, options });
     session.active = q;
     session.firstPromptStarted = true;
@@ -367,18 +370,55 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       session.backgroundTasks,
       typeof messageContent === "string" && isCompactCommand(messageContent) ? "manual" : "auto"
     );
+    const turnId = params.promptId;
+    this.dispatchEvent({
+      sessionId: params.sessionId,
+      update: { sessionUpdate: "message_delivered", promptId: params.promptId },
+    });
+    this.dispatchEvent({
+      sessionId: params.sessionId,
+      update: { sessionUpdate: "turn_started", turnId },
+    });
+    void this.consumeTurn(session, q, stream, translatorState, params.sessionId).then(
+      (stopReason) =>
+        this.dispatchEvent({
+          sessionId: params.sessionId,
+          update: { sessionUpdate: "turn_ended", turnId, stopReason },
+        }),
+      (error: unknown) => {
+        logSdkError("→", "prompt", { error: err2String(error) }, params.sessionId);
+        this.dispatchEvent({
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: "turn_ended",
+            turnId,
+            stopReason: "end_turn",
+            error: error instanceof Error ? error : new Error(err2String(error)),
+          },
+        });
+      }
+    );
+  }
+
+  private async consumeTurn(
+    session: SessionState,
+    q: Query,
+    stream: AsyncIterable<SDKMessage>,
+    translatorState: TranslatorState,
+    sessionId: SessionId
+  ): Promise<StopReason> {
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
     try {
       let planUsageRequested = false;
       for await (const sdkMsg of stream) {
         if (this.shuttingDown) break;
-        logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, params.sessionId);
+        logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, sessionId);
         if (!planUsageRequested) {
           planUsageRequested = true;
           void this.refreshPlanUsage(q);
         }
-        const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
+        const events = translateSdkMessage(sdkMsg, sessionId, translatorState);
         for (const e of events) this.dispatchEvent(e);
         if (sdkMsg.type === "result") {
           stopReason = mapStopReason(sdkMsg);
@@ -399,12 +439,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       if (session.active === q) session.active = undefined;
     }
 
-    if (resultErrorMessage) {
-      logSdkError("→", "prompt", { error: resultErrorMessage }, params.sessionId);
-      throw new Error(resultErrorMessage);
-    }
-    logSdkOutboundResult("prompt", { stopReason }, params.sessionId);
-    return { stopReason };
+    if (resultErrorMessage) throw new Error(resultErrorMessage);
+    logSdkOutboundResult("prompt", { stopReason }, sessionId);
+    return stopReason;
   }
 
   async closeSession(params: { sessionId: SessionId }): Promise<void> {
