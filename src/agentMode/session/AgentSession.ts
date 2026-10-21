@@ -689,7 +689,7 @@ export class AgentSession {
       content: buildUserDisplayContent(displayText, promptContent),
     };
     const userMessageId = this.store.addMessage(userMessage);
-    this.notifyMessages();
+    this.openReply();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
       this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
@@ -811,7 +811,7 @@ export class AgentSession {
         projectContextUpdatesBlock
       );
 
-      if (signal.aborted) return { stopReason: "cancelled" };
+      if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       const outcome = await this.promptTurn(
         { sessionId, promptId: userMessageId, prompt: promptBlocks },
         true
@@ -867,7 +867,7 @@ export class AgentSession {
   }
 
   private refuseTurn(message: string): TurnOutcome {
-    const placeholderId = this.openReply();
+    const placeholderId = this.placeholderId ?? this.openReply();
     this.store.markMessageError(placeholderId, message);
     this.store.markTurnComplete(placeholderId, "refusal", Date.now() - this.replyStartedAtMs);
     this.placeholderId = null;
@@ -879,7 +879,7 @@ export class AgentSession {
     originalPromptText: string,
     promptBlocks: PromptContent[]
   ): Promise<StopReason> {
-    const placeholderId = this.openReply();
+    const placeholderId = this.placeholderId ?? this.openReply();
     const turnStartedAtMs = this.replyStartedAtMs;
     const signal = this.abortController?.signal ?? new AbortController().signal;
     const input: FanoutRunInput = {
@@ -986,6 +986,7 @@ export class AgentSession {
     this.requests.dispose();
     this.settledStream = null;
     this.endCancelledPromptDrain();
+    this.openTurnId = null;
     for (const prompt of this.pendingPrompts.values()) prompt.settle({ stopReason: "cancelled" });
     this.pendingPrompts.clear();
     this.cancelledMessageIds.clear();
@@ -1381,7 +1382,10 @@ export class AgentSession {
       this.store.markMessageError(placeholderId, message);
     }
     this.store.settleOpenParts(placeholderId);
-    await this.finalizeTurnFileChanges(placeholderId, turnDiff);
+    // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    await this.finalizeTurnFileChanges(placeholderId, turnDiff).catch((err: unknown) =>
+      logWarn(`[AgentMode] could not capture the turn's file changes`, err)
+    );
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }

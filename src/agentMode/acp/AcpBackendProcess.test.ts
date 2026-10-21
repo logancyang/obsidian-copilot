@@ -1638,6 +1638,23 @@ describe("AcpBackendProcess", () => {
         expect(recover).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends a running turn with the request's failure when the agent exits mid-turn", async () => {
+        const backend = await makeBackend();
+        let fail!: (error: Error) => void;
+        promptMock(backend).mockReturnValueOnce(new Promise((_resolve, reject) => (fail = reject)));
+        const turnEnded = promptTurn(backend);
+
+        mockProcessIsRunning = false;
+        for (const fn of exitListeners) fn();
+        fail(new Error("ACP connection closed"));
+
+        expect(await turnEnded).toMatchObject({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
+          error: new Error("ACP connection closed"),
+        });
+      });
+
       it("rejects with a has-exited error and reports not running after the subprocess exits", async () => {
         const backend = new AcpBackendProcess(
           buildApp(),

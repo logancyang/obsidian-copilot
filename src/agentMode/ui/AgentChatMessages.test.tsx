@@ -343,16 +343,6 @@ describe("AgentChatMessages", () => {
       expect(container.querySelector(".copilot-spinner-dot-0")).toBeNull();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps the prior reply settled while a sent message waits for its turn to start", () => {
-      const completed = assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 });
-      const sent = assistantMessage("user-2", 198_000, { sender: "user", message: "Next" });
-
-      renderMessages([completed, sent], true);
-
-      expect(screen.getByText("51s")).toBeTruthy();
-      expect(screen.queryByText("3m 19s")).toBeNull();
-    });
-
     it("retires the prior duration when the next turn starts", () => {
       const completed = assistantMessage("answer-1", 1_000, { turnDurationMs: 51_000 });
       const { container, rerender, props } = renderMessages([completed], false);

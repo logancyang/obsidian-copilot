@@ -339,8 +339,9 @@ export class AcpBackendProcess implements BackendProcess {
   async prompt(params: PromptInput): Promise<void> {
     const { sessionId, promptId } = params;
     const turn = this.requestTurn(this.requireConnection(), params);
-    const emit = (update: SessionEvent["update"]) =>
-      this.domainHandlers.get(sessionId)?.({ sessionId, update });
+    // The turn's end must reach its session even after the agent exits and its handlers are cleared. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    const handler = this.domainHandlers.get(sessionId);
+    const emit = (update: SessionEvent["update"]) => handler?.({ sessionId, update });
     emit({ sessionUpdate: "message_delivered", promptId });
     emit({ sessionUpdate: "turn_started", turnId: promptId });
     void turn.then(

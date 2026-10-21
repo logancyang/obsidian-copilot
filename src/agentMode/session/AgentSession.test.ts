@@ -2009,7 +2009,7 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("error");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 opens the reply only when the backend reports the turn started, and stays running from send to the turn's end", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 shows the reply at send, fills it once the turn starts, and stays running from send to the turn's end", async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
         let promptId = "";
@@ -2019,7 +2019,10 @@ describe("AgentSession", () => {
         const session = makeSession(mock);
 
         const { turn } = session.sendPrompt("hi");
-        expect(bubbles(session).map((b) => b.sender)).toEqual([USER_SENDER]);
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "hi" },
+          { sender: AI_SENDER, message: "" },
+        ]);
         expect(session.getStatus()).toBe("running");
 
         emit({ sessionUpdate: "message_delivered", promptId });
@@ -3098,6 +3101,23 @@ describe("AgentSession", () => {
             ]);
           });
 
+          it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends the turn without a file change card when the turn diff is malformed", async () => {
+            const vault = makeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              return {
+                stopReason: "end_turn" as const,
+                turnDiff: { root: "/vault", unifiedDiff: "@@ -1 +1 @@\n?not a diff line\n" },
+              };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await expect(session.sendPrompt("patch it").turn).resolves.toBe("end_turn");
+            expect(fileChangesOf(session)).toBeUndefined();
+            expect(session.getStatus()).toBe("idle");
+          });
+
           it("falls back to the snapshot for a file the turn diff no longer applies to https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
             const vault = makeVault({ "notes/a.md": "snapshot\n" });
             const mock = makeMockBackend();
@@ -3119,6 +3139,21 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt held behind a stopped turn as cancelled, without sending it, when the chat closes", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockImplementationOnce(() => new Promise(() => undefined));
+        const session = makeSession(mock);
+        const first = session.sendPrompt("first");
+        await session.cancel();
+        await expect(first.turn).resolves.toBe("cancelled");
+
+        const next = session.sendPrompt("second");
+        await session.dispose();
+
+        await expect(next.turn).resolves.toBe("cancelled");
+        expect(mock.prompt).toHaveBeenCalledTimes(1);
+      });
+
       it("sends a cancel to the backend and resolves the turn as cancelled", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -4354,7 +4389,7 @@ describe("AgentSession", () => {
           subscribeTo(session, { onMessagesChanged });
 
           const { turn } = session.sendPrompt("hi");
-          expect(onMessagesChanged).toHaveBeenCalledTimes(2);
+          expect(onMessagesChanged).toHaveBeenCalledTimes(1);
 
           onMessagesChanged.mockClear();
           streamChunk(mock, "Hel");
