@@ -106,7 +106,7 @@ describe("TaskDetailView", () => {
     delete (window as { ResizeObserver?: unknown }).ResizeObserver;
   });
 
-  it(`shows a subagent's title and model, its task as the first user message, then its work, live while it runs (${ISSUE_749})`, () => {
+  it(`shows a subagent's title and model, that it runs only by its spinner, its task as the first user message, then its work, live while it runs (${ISSUE_749})`, () => {
     renderDetail({
       task: makeTask({ prompt: "Count the words in Welcome.md", model: "claude-haiku-9" }),
       messages: SUBAGENT_MESSAGES,
@@ -114,6 +114,7 @@ describe("TaskDetailView", () => {
 
     expect(screen.getByText("Count words in Welcome")).toBeTruthy();
     expect(screen.getByText("general-purpose · claude-haiku-9")).toBeTruthy();
+    expect(screen.getByText("Running").classList.contains("tw-sr-only")).toBe(true);
     expect(screen.getByTestId("message-user").textContent).toBe("Count the words in Welcome.md");
     expect(screen.getByTestId("trail").textContent).toBe(
       "Bash: wc -w Welcome.md | Welcome.md has 9 words."
@@ -125,7 +126,7 @@ describe("TaskDetailView", () => {
   it(`stays open when its subagent ends and shows the final status (${ISSUE_749})`, () => {
     renderDetail({ task: makeTask({ status: "completed" }), messages: SUBAGENT_MESSAGES });
 
-    expect(screen.getByText("Completed")).toBeTruthy();
+    expect(screen.getByText("Completed").classList.contains("tw-sr-only")).toBe(false);
     expect(screen.getByTestId("trail").getAttribute("data-streaming")).toBe("false");
   });
 
