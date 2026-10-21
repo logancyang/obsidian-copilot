@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -21,6 +29,9 @@ interface CannedResponse {
   status: number;
   body: string;
 }
+
+const DOC_ID = "9f2k4mvq7t0xbz3n";
+const COMMENT_BODY = 'He said "hi" \\ back\\slash\nline two\ttab 中文 émoji 🚀';
 
 const HTML = [
   "<!doctype html>",
@@ -295,6 +306,37 @@ describe("openArtifactsPublishWrappers", () => {
       expect(JSON.parse(listed.stdout)).toMatchObject({ linkAccess: "invited", email: true });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 sends a role only when one is given, and only with add", async () => {
+      const plain = await run(["share", DOC_ID, "add", "alice@acme.com"]);
+      expect(plain.status).toBe(0);
+      expect(requests[0].body).toBe("");
+
+      const viewer = await run(["share", DOC_ID, "add", "alice@acme.com", "--role", "view"]);
+      expect(viewer.stderr).toBe("");
+      expect(viewer.status).toBe(0);
+      expect(requests[1].method).toBe("PUT");
+      expect(requests[1].url).toBe(`/api/v1/docs/${DOC_ID}/access/people/alice%40acme.com`);
+      expect(requests[1].authorization).toBe("Bearer test-license-key");
+      expect(requests[1].contentType).toMatch(/^application\/json/);
+      expect(JSON.parse(requests[1].body)).toEqual({ role: "view" });
+      expect(JSON.parse(viewer.stdout).manageUrl).toBe(`${origin}/share/${DOC_ID}`);
+
+      await run(["share", DOC_ID, "add", "alice@acme.com", "--role", "comment"]);
+      expect(JSON.parse(requests[2].body)).toEqual({ role: "comment" });
+
+      requests.length = 0;
+      for (const args of [
+        ["add", "alice@acme.com", "--role", "edit"],
+        ["remove", "alice@acme.com", "--role", "view"],
+        ["add", "alice@acme.com", "--role"],
+      ]) {
+        const refused = await run(["share", DOC_ID, ...args]);
+        expect(refused.status).toBe(1);
+        expect(refused.stderr).toContain("Usage:");
+      }
+      expect(requests).toHaveLength(0);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 encodes a plus sign in the address and removes or declines one address per call", async () => {
       await run(["share", "9f2k4mvq7t0xbz3n", "remove", "a+b@c.co"]);
       await run(["share", "9f2k4mvq7t0xbz3n", "decline", "bob@other.com"]);
@@ -345,6 +387,220 @@ describe("openArtifactsPublishWrappers", () => {
       expect(refused.status).toBe(1);
       expect(refused.stderr).toContain("HTTP 402");
       expect(refused.stderr).toContain("privateSharing");
+    });
+  });
+
+  describe("open", () => {
+    const GRANT = "http://127.0.0.1:9/open/grant?code=secret-grant-code";
+    let opened: string;
+
+    function stubOpener(exitCode: number): Record<string, string> {
+      const bin = path.join(root, "bin");
+      mkdirSync(bin);
+      opened = path.join(root, "opened.txt");
+      for (const name of ["open", "xdg-open"]) {
+        const stub = path.join(bin, name);
+        writeFileSync(stub, `#!/bin/sh\nprintf '%s' "$1" > "${opened}"\nexit ${exitCode}\n`);
+        chmodSync(stub, 0o755);
+      }
+      return { PATH: `${bin}${path.delimiter}${process.env.PATH}` };
+    }
+
+    beforeEach(() => {
+      canned = { status: 200, body: JSON.stringify({ url: GRANT, expiresAt: 1785000060000 }) };
+    });
+
+    (windows ? it.skip : it)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 asks for the page's open link, hands it to the browser, and never prints it",
+      async () => {
+        const result = await run(["open", DOC_ID], stubOpener(0));
+        expect(result.stderr).toBe("");
+        expect(result.status).toBe(0);
+        expect(JSON.parse(result.stdout)).toEqual({ opened: true, docId: DOC_ID });
+        expect(readFileSync(opened, "utf8")).toBe(GRANT);
+        expect(requests).toHaveLength(1);
+        expect(requests[0].method).toBe("POST");
+        expect(requests[0].url).toBe(`/api/v1/docs/${DOC_ID}/open`);
+        expect(requests[0].authorization).toBe("Bearer test-license-key");
+        expect(requests[0].body).toBe("");
+      }
+    );
+
+    (windows ? it.skip : it)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 points at the share page, still without the link, when no browser starts",
+      async () => {
+        const result = await run(["open", DOC_ID], stubOpener(1));
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain(`Could not start a browser to open ${DOC_ID}.`);
+        expect(result.stderr).toContain(`${origin}/share/${DOC_ID}`);
+        expect(result.stderr).not.toContain("secret-grant-code");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 refuses a link that is not https or local, or carries credentials, without opening it", async () => {
+      const env = windows ? {} : stubOpener(0);
+      for (const url of [
+        "javascript:alert(1)",
+        "http://example.com/d/x",
+        "https://user:pass@example.com/d/x",
+        "file:///etc/passwd",
+      ]) {
+        canned = { status: 200, body: JSON.stringify({ url, expiresAt: 1785000060000 }) };
+        const result = await run(["open", DOC_ID], env);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toContain("The server returned an invalid page link.");
+      }
+      if (!windows) expect(existsSync(opened)).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 explains a 404, relays other errors, and refuses a malformed id", async () => {
+      canned = { status: 404, body: '{"error":{"code":"not_found","message":"Not found."}}' };
+      const missing = await run(["open", DOC_ID]);
+      expect(missing.status).toBe(1);
+      expect(missing.stderr).toContain(
+        `No document ${DOC_ID} is in this account, or this server cannot open it.`
+      );
+
+      canned = { status: 401, body: '{"error":{"code":"unauthorized","message":"Bad key."}}' };
+      const refused = await run(["open", DOC_ID]);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain("HTTP 401");
+      expect(refused.stderr).toContain("Bad key.");
+
+      requests.length = 0;
+      const badId = await run(["open", "../etc/passwd"]);
+      expect(badId.status).toBe(1);
+      expect(badId.stderr).toContain("Invalid OpenArtifacts document id");
+      const extra = await run(["open", DOC_ID, "more"]);
+      expect(extra.stderr).toContain("Usage:");
+      expect(requests).toHaveLength(0);
+    });
+  });
+
+  describe("comments", () => {
+    const THREADS = JSON.stringify({
+      docId: DOC_ID,
+      version: 2,
+      latestVersion: 2,
+      threads: [
+        {
+          threadId: "th_b7q3k9x2m4",
+          anchor: { exact: "Revenue grew." },
+          state: "open",
+          comments: [{ commentId: "cm_c5r8n1t6w0", body: "Twelve percent of what? 中文 🚀" }],
+        },
+      ],
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 lists open threads by default and prints the server JSON unchanged", async () => {
+      canned = { status: 200, body: THREADS };
+      const result = await run(["comments", "list", DOC_ID]);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual(JSON.parse(THREADS));
+      expect(requests[0].method).toBe("GET");
+      expect(requests[0].url).toBe(`/api/v1/docs/${DOC_ID}/threads?state=open`);
+      expect(requests[0].authorization).toBe("Bearer test-license-key");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 passes the state and an encoded since", async () => {
+      canned = { status: 200, body: THREADS };
+      const since = "2026-10-14T09:00:00+02:00";
+      await run(["comments", "list", DOC_ID, "--all", "--since", since]);
+      await run(["comments", "list", DOC_ID, "--since", "2026-10-14", "--resolved"]);
+      const [all, resolved] = requests.map((item) => new URL(item.url!, origin));
+      expect(all.pathname).toBe(`/api/v1/docs/${DOC_ID}/threads`);
+      expect(all.searchParams.get("state")).toBe("all");
+      expect(all.searchParams.get("since")).toBe(since);
+      expect(resolved.searchParams.get("state")).toBe("resolved");
+      expect(resolved.searchParams.get("since")).toBe("2026-10-14");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 replies with the exact body text", async () => {
+      canned = { status: 201, body: '{"commentId":"cm_d2h7j4v9s3"}' };
+      const result = await run([
+        "comments",
+        "reply",
+        DOC_ID,
+        "th_b7q3k9x2m4",
+        "--body",
+        COMMENT_BODY,
+      ]);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({ commentId: "cm_d2h7j4v9s3" });
+      expect(requests[0].method).toBe("POST");
+      expect(requests[0].url).toBe(`/api/v1/docs/${DOC_ID}/threads/th_b7q3k9x2m4/comments`);
+      expect(requests[0].authorization).toBe("Bearer test-license-key");
+      expect(requests[0].contentType).toMatch(/^application\/json/);
+      expect(JSON.parse(requests[0].body)).toEqual({ body: COMMENT_BODY });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 resolves with or without the addressing version, and reopens", async () => {
+      canned = { status: 200, body: '{"threadId":"th_b7q3k9x2m4","state":"resolved"}' };
+      const resolved = await run([
+        "comments",
+        "resolve",
+        DOC_ID,
+        "th_b7q3k9x2m4",
+        "--version",
+        "4",
+      ]);
+      expect(resolved.status).toBe(0);
+      expect(JSON.parse(resolved.stdout)).toEqual(JSON.parse(canned.body));
+      await run(["comments", "resolve", DOC_ID, "th_b7q3k9x2m4"]);
+      await run(["comments", "reopen", DOC_ID, "th_b7q3k9x2m4"]);
+      expect(requests.map((item) => [item.method, item.url])).toEqual([
+        ["POST", `/api/v1/docs/${DOC_ID}/threads/th_b7q3k9x2m4/resolve`],
+        ["POST", `/api/v1/docs/${DOC_ID}/threads/th_b7q3k9x2m4/resolve`],
+        ["POST", `/api/v1/docs/${DOC_ID}/threads/th_b7q3k9x2m4/reopen`],
+      ]);
+      expect(JSON.parse(requests[0].body)).toEqual({ version: 4 });
+      expect(JSON.parse(requests[1].body)).toEqual({});
+      expect(requests[2].body).toBe("");
+      for (const request of requests) expect(request.authorization).toBe("Bearer test-license-key");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 explains a 404 as not found or unsupported, and relays other errors with their body", async () => {
+      canned = { status: 404, body: '{"error":{"code":"not_found","message":"Not found."}}' };
+      const missing = await run(["comments", "list", DOC_ID]);
+      expect(missing.status).toBe(1);
+      expect(missing.stdout).toBe("");
+      expect(missing.stderr).toContain("Not found, or this server does not support comments.");
+
+      canned = {
+        status: 402,
+        body: '{"error":{"code":"limit_reached","message":"Comments need a paid plan.","limit":"comments"}}',
+      };
+      const refused = await run(["comments", "reply", DOC_ID, "th_b7q3k9x2m4", "--body", "Done."]);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain("HTTP 402");
+      expect(refused.stderr).toContain('"limit":"comments"');
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 refuses malformed ids, flags and versions, and sends nothing", async () => {
+      const cases: Array<[string[], string]> = [
+        [["comments", "list", "../etc/passwd"], "Invalid OpenArtifacts document id"],
+        [
+          ["comments", "reply", DOC_ID, "th_../x", "--body", "x"],
+          "Invalid OpenArtifacts thread id",
+        ],
+        [["comments", "reopen", DOC_ID, "cm_c5r8n1t6w0"], "Invalid OpenArtifacts thread id"],
+        [["comments", "resolve", DOC_ID, "th_b7q3k9x2m4", "--version", "0"], "--version must be"],
+        [["comments", "list", DOC_ID, "--since", "yesterday"], "--since must be"],
+        [["comments", "list", DOC_ID, "--open", "--all"], "Usage:"],
+        [["comments", "reply", DOC_ID, "th_b7q3k9x2m4"], "Usage:"],
+        [["comments", "add", DOC_ID, "--quote", "x", "--body", "y"], "Usage:"],
+        [["comments", "list"], "Usage:"],
+      ];
+      for (const [args, message] of cases) {
+        const result = await run(args);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(message);
+      }
+      expect(requests).toHaveLength(0);
     });
   });
 
