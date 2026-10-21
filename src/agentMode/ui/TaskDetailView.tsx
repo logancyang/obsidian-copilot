@@ -69,13 +69,12 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
       </div>
       {/* Permission requests and questions show only in the main chat, so a task's view must point there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
       {chatAwaitsAnswer ? (
-        <button
-          type="button"
-          className="tw-h-auto tw-rounded-none tw-bg-callout-warning/10 tw-px-3 tw-py-1.5 tw-text-left tw-text-xs tw-text-warning tw-shadow-none"
-          onClick={onBack}
-        >
-          The chat is waiting for your answer. Back to chat
-        </button>
+        <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-bg-callout-warning/10 tw-px-3 tw-py-1 tw-text-xs tw-text-warning">
+          The chat is waiting for your answer.
+          <Button variant="link" size="fit" className="tw-shrink-0" onClick={onBack}>
+            Open chat
+          </Button>
+        </div>
       ) : null}
       {task.kind === "command" ? (
         <CommandDetail task={task} />

@@ -132,7 +132,8 @@ describe("TaskDetailView", () => {
   it(`points back to the chat while the chat waits for a permission answer, which it shows only there (${ISSUE_749})`, () => {
     const { onBack } = renderDetail({ chatAwaitsAnswer: true });
 
-    fireEvent.click(screen.getByText(/The chat is waiting for your answer/));
+    expect(screen.getByText(/The chat is waiting for your answer/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open chat" }));
 
     expect(onBack).toHaveBeenCalled();
   });
