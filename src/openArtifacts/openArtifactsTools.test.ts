@@ -402,7 +402,7 @@ describe("openArtifactsTools", () => {
           false,
           "https://www.obsidiancopilot.com/pricing"
         ),
-        "does not include private sharing, so nothing was published",
+        "does not include private sharing; they can upgrade at https://www.obsidiancopilot.com/pricing",
       ],
       [
         "a server without private documents",
@@ -445,7 +445,27 @@ describe("openArtifactsTools", () => {
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain("OpenArtifacts: Invalid key.");
       expect(refused.text).toContain("Copilot Settings");
+      expect(refused.text).not.toContain('access "public"');
       expect(client.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${ISSUE} sends nothing when the note's stored result is from another action, and says so`, async () => {
+      const { publish, unpublish, client, app, frontmatter } = harness();
+      jest.mocked(app.fileManager.processFrontMatter).mockRejectedValueOnce(new Error("disk full"));
+      const path = ".openartifacts/handoffs/plan.html";
+      await publish.call({ path, title: "Plan", notePath: "Notes/Plan.md" });
+      frontmatter.openartifacts = DOC_URL;
+
+      const update = await publish.call({ path, title: "Plan", notePath: "Notes/Plan.md" });
+      const withdraw = await unpublish.call({ docId: DOC_ID, notePath: "Notes/Plan.md" });
+
+      for (const result of [update, withdraw]) {
+        expect(result.isError).toBe(true);
+        expect(result.text).toContain("Nothing was sent");
+        expect(result.text).toContain("Retry save");
+      }
+      expect(client.update).not.toHaveBeenCalled();
+      expect(client.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -488,6 +508,26 @@ describe("openArtifactsTools", () => {
       expect(await share.call({ docId: DOC_ID, ...args })).toMatchObject({ isError: true });
       expect(client.addPerson).not.toHaveBeenCalled();
       expect(client.removePerson).not.toHaveBeenCalled();
+    });
+
+    it(`${ISSUE} words a refused private link the way a refused private publish is worded`, async () => {
+      const { share, client } = harness();
+      client.setLinkAccess.mockRejectedValue(
+        new OpenArtifactsClientError(
+          "Private sharing needs a paid plan.",
+          "limit_reached",
+          402,
+          false,
+          "https://www.obsidiancopilot.com/pricing"
+        )
+      );
+
+      const result = await share.call({ docId: DOC_ID, action: "link", link: "invited" });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toBe(
+        "OpenArtifacts: Private sharing needs a paid plan. The user's plan does not include private sharing; they can upgrade at https://www.obsidiancopilot.com/pricing Report this to the user; don't retry it on your own."
+      );
     });
   });
 
