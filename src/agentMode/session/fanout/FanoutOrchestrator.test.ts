@@ -385,7 +385,7 @@ describe("FanoutOrchestrator", () => {
         expect(procs.get("codex")!.closeSession).toHaveBeenCalledWith({ sessionId: "s-codex" });
       });
 
-      it(`waits for an answer's background task and includes the reply that reports it, leaving the task's own text out (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+      it(`waits for an answer's background task and includes the reply that reports it as a new paragraph, leaving the task's own text out (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
           codex: { sessionId: "s-codex" },
@@ -413,7 +413,7 @@ describe("FanoutOrchestrator", () => {
           update("s-claude", { sessionUpdate: "task_ended", taskId: "task-1", status: "completed" })
         );
         claude.emit(update("s-claude", { sessionUpdate: "turn_started", turnId: "t2" }));
-        claude.emit(textChunk("s-claude", " REPORT: it says hello."));
+        claude.emit(textChunk("s-claude", "REPORT: it says hello."));
         claude.emit(
           update("s-claude", { sessionUpdate: "turn_ended", turnId: "t2", stopReason: "end_turn" })
         );
@@ -424,7 +424,7 @@ describe("FanoutOrchestrator", () => {
         expect(turn.answers.claude).toEqual({
           backendId: "claude",
           status: "done",
-          text: "Launched a helper. REPORT: it says hello.",
+          text: "Launched a helper.\n\nREPORT: it says hello.",
         });
       });
 

@@ -203,6 +203,7 @@ export class FanoutOrchestrator {
           const update = event.update;
           switch (update.sessionUpdate) {
             case "turn_started":
+              if (lastEnd) onText("\n\n");
               turnOpen = true;
               awaitingReport = false;
               return;
