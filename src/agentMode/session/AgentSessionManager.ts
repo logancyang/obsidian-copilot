@@ -2363,6 +2363,8 @@ export class AgentSessionManager {
         tasksRunning = !tasksRunning;
         this.notify();
       },
+      // A dropped connection ends an idle chat's subagents with no reply to wait for and no status change. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+      onDisconnected: () => void this.flushDeferredBackendRestartIfReady(session.backendId),
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
         const isRunning = next === "running";

@@ -166,6 +166,7 @@ interface MockSessionTestHandle {
   setTaskStatuses(statuses: AgentTask["status"][], kinds?: AgentTask["kind"][]): void;
   setPendingPermissionCount(count: number): void;
   setQueuedPromptCount(count: number): void;
+  disconnect(): void;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -202,6 +203,7 @@ function makeMockSession(overrides: {
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
     onTasksChanged?: () => void;
+    onDisconnected?: () => void;
   }>();
   const session = {
     internalId: overrides.internalId,
@@ -286,6 +288,9 @@ function makeMockSession(overrides: {
     },
     setQueuedPromptCount: (count) => {
       queuedPrompts = Array.from({ length: count }, (_, i) => ({ id: `prompt-${i}` }));
+    },
+    disconnect: () => {
+      for (const l of listeners) l.onDisconnected?.();
     },
   });
   return session;
@@ -3120,6 +3125,29 @@ describe("AgentSessionManager", () => {
           })
         );
         handle.setStatus("idle");
+        await shutDown;
+
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("runs a held Reload once an idle chat's connection drops while its subagent runs, since no reply about the subagent can follow (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const handle = getSessionTestHandle(first);
+        handle.setTaskStatuses(["running"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
+        await mgr.applyHeldConfigChange("opencode");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        handle.setTaskStatuses(["stopped"]);
+        handle.disconnect();
         await shutDown;
 
         expect(mgr.hasHeldConfigChange("opencode")).toBe(false);

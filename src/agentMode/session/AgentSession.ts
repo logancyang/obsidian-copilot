@@ -192,6 +192,7 @@ export interface AgentSessionListener {
   onNeedsAttentionChanged?(needsAttention: boolean): void;
   onTasksChanged?(): void;
   onQueuedPromptsChanged?(): void;
+  onDisconnected?(): void;
 }
 
 export interface ProjectContextUpdates {
@@ -1577,6 +1578,13 @@ export class AgentSession {
     this.endCancelledPromptDrain();
     if (this.placeholderId || this.pendingPrompts.size > 0) this.failReply(error);
     this.withdrawPrompts([...this.pendingPrompts.keys()]);
+    for (const l of this.listeners) {
+      try {
+        l.onDisconnected?.();
+      } catch (e) {
+        logWarn(`[AgentMode] disconnect listener threw`, e);
+      }
+    }
   }
 
   private applyTaskUpdate(

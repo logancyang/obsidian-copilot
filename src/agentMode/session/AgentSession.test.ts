@@ -5628,6 +5628,28 @@ describe("AgentSession", () => {
         expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
       });
 
+      it("fires onDisconnected when the agent's connection drops, after the session ends its running tasks (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-1",
+          kind: "subagent",
+          description: "Survey",
+        });
+        const taskStatusesAtDisconnect: string[][] = [];
+        subscribeTo(session, {
+          onDisconnected: () =>
+            taskStatusesAtDisconnect.push(session.getTasks().map((task) => task.status)),
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+        mock.emitUpdate({ sessionUpdate: "session_disconnected", error: new Error("exited") });
+
+        expect(taskStatusesAtDisconnect).toEqual([["stopped"]]);
+      });
+
       describe("streamed-token notifications", () => {
         let rafQueue: FrameRequestCallback[];
 
