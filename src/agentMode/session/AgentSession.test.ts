@@ -288,6 +288,22 @@ function startSession(
   });
 }
 
+function midTurnDescriptor(): BackendDescriptor {
+  return { midTurnDelivery: true } as unknown as BackendDescriptor;
+}
+
+function recordPrompts(mock: MockBackend): PromptInput[] {
+  const sent: PromptInput[] = [];
+  mock.asBackend.prompt = async (input) => {
+    sent.push(input);
+  };
+  return sent;
+}
+
+function promptText(input: PromptInput): string {
+  return input.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
+}
+
 function holdPrompt(mock: MockBackend): (stopReason?: StopReason) => void {
   let resolve: (result: { stopReason: StopReason }) => void = () => {};
   mock.prompt.mockImplementation(() => new Promise((r) => (resolve = r)));
@@ -2026,6 +2042,202 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("error");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hands a message sent while the agent works to a backend that takes mid-turn input at once, and lists it as queued instead of showing it", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("list the notes");
+
+        const steer = session.sendPrompt("only do the first two");
+
+        await waitFor(() => expect(sent).toHaveLength(2));
+        expect(promptText(sent[1])).toContain("only do the first two");
+        expect(sent[1].promptId).toBe(steer.userMessageId);
+        expect(session.getQueuedPrompts()).toEqual([
+          expect.objectContaining({ id: steer.userMessageId, text: "only do the first two" }),
+        ]);
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "list the notes" },
+          { sender: AI_SENDER, message: "" },
+        ]);
+        expect(session.getStatus()).toBe("running");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses a message sent while the agent works on a backend without mid-turn input, so Copilot keeps holding it", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock);
+        session.sendPrompt("list the notes");
+
+        expect(() => session.sendPrompt("only do the first two")).toThrow(
+          "Session already has a turn in flight"
+        );
+        await waitFor(() => expect(sent).toHaveLength(1));
+        expect(session.getQueuedPrompts()).toEqual([]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses /compact and multi-agent questions while the agent works, even on a backend that takes mid-turn input", () => {
+        const mock = makeMockBackend();
+        recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("list the notes");
+
+        expect(() => session.sendPrompt("/compact")).toThrow(
+          "Session already has a turn in flight"
+        );
+        expect(() =>
+          session.sendPrompt("compare", undefined, undefined, ["claude", "codex"])
+        ).toThrow("Session already has a turn in flight");
+        expect(session.getQueuedPrompts()).toEqual([]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 shows a queued message at the point it reached the agent, keeps the work before it in its own reply, and renders later work below it in the same turn", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        const first = session.sendPrompt("list the notes");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit(replayText("agent_message_chunk", "Alpha: about A."));
+        const steer = session.sendPrompt("only do the first two");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+        emit(replayText("agent_message_chunk", "Beta: about B. Stopping there."));
+
+        expect(session.getQueuedPrompts()).toEqual([]);
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "list the notes" },
+          { sender: AI_SENDER, message: "Alpha: about A." },
+          { sender: USER_SENDER, message: "only do the first two" },
+          { sender: AI_SENDER, message: "Beta: about B. Stopping there." },
+        ]);
+        expect(aiMessages(session)[0].turnStopReason).toBe("end_turn");
+        expect(session.getStatus()).toBe("running");
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
+        await expect(first.turn).resolves.toBe("end_turn");
+        await expect(steer.turn).resolves.toBe("end_turn");
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 leaves no empty reply above a queued message the agent takes before saying anything", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        const steer = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+        emit(replayText("agent_message_chunk", "Both answered."));
+
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "first" },
+          { sender: USER_SENDER, message: "second" },
+          { sender: AI_SENDER, message: "Both answered." },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 shows a queued message that runs after the turn as its own exchange", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit(replayText("agent_message_chunk", "First answer."));
+        const steer = session.sendPrompt("now this", undefined, undefined, undefined, {
+          interrupt: true,
+        });
+        await waitFor(() => expect(sent).toHaveLength(2));
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
+        await waitFor(() => expect(session.getStatus()).toBe("idle"));
+        expect(session.getQueuedPrompts()).toHaveLength(1);
+
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+        emit({ sessionUpdate: "turn_started", turnId: "t2" });
+        emit(replayText("agent_message_chunk", "Second answer."));
+        emit({ sessionUpdate: "turn_ended", turnId: "t2", stopReason: "end_turn" });
+
+        await expect(steer.turn).resolves.toBe("end_turn");
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "first" },
+          { sender: AI_SENDER, message: "First answer." },
+          { sender: USER_SENDER, message: "now this" },
+          { sender: AI_SENDER, message: "Second answer." },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 asks the backend to interrupt the running turn for an interrupt-and-send message", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        session.sendPrompt("plain steer");
+        session.sendPrompt("urgent", undefined, undefined, undefined, { interrupt: true });
+
+        await waitFor(() => expect(sent).toHaveLength(3));
+        expect(sent.map((input) => input.interrupt)).toEqual([undefined, undefined, true]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hands messages to the backend in the order they were sent, even while an earlier one is still being handed over", async () => {
+        const mock = makeMockBackend();
+        const order: string[] = [];
+        let acceptFirst!: () => void;
+        mock.asBackend.prompt = (input) => {
+          order.push(promptText(input));
+          if (order.length > 1) return Promise.resolve();
+          return new Promise<void>((resolve) => (acceptFirst = resolve));
+        };
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        session.sendPrompt("second");
+        session.sendPrompt("third");
+        await waitFor(() => expect(order).toHaveLength(1));
+        expect(order[0]).toContain("first");
+
+        acceptFirst();
+
+        await waitFor(() => expect(order).toHaveLength(3));
+        expect(order[1]).toContain("second");
+        expect(order[2]).toContain("third");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 drops a queued message from the list and fails its send when the backend refuses it", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        mock.asBackend.prompt = () => Promise.reject(new Error("pipe closed"));
+
+        const steer = session.sendPrompt("second");
+
+        await expect(steer.turn).rejects.toThrow("pipe closed");
+        expect(session.getQueuedPrompts()).toEqual([]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 clears queued messages the agent withdraws, such as when it exits", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        const steer = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [steer.userMessageId] });
+
+        await expect(steer.turn).resolves.toBe("cancelled");
+        expect(session.getQueuedPrompts()).toEqual([]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 shows the reply at send, fills it once the turn starts, and stays running from send to the turn's end", async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
@@ -2837,6 +3049,42 @@ describe("AgentSession", () => {
           ]);
         });
 
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 reports one Files changed card for a turn a queued message extended, counting edits from before and after it", async () => {
+          const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+          const mock = makeMockBackend();
+          const sent = recordPrompts(mock);
+          const session = new AgentSession({
+            backend: mock.asBackend,
+            backendSessionId: "acp-1",
+            internalId: "internal-1",
+            backendId: "claude",
+            getApp: () => vault.app,
+            getDescriptor: midTurnDescriptor,
+          });
+          session.completeResume(null);
+          const first = session.sendPrompt("edit a, then b");
+          await waitFor(() => expect(sent).toHaveLength(1));
+          mock.emitUpdate({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+          mock.emitUpdate({ sessionUpdate: "turn_started", turnId: "t1" });
+          mock.emit(editCall("e1", "/vault/notes/a.md"));
+          vault.files.set("notes/a.md", "A\n");
+          const steer = session.sendPrompt("also uppercase b");
+          await waitFor(() => expect(sent).toHaveLength(2));
+          mock.emitUpdate({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+          mock.emit(editCall("e2", "/vault/notes/b.md"));
+          vault.files.set("notes/b.md", "B\n");
+          mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
+          await first.turn;
+
+          const replies = session.store.getDisplayMessages().filter((m) => m.sender === AI_SENDER);
+          expect(replies).toHaveLength(2);
+          expect(replies[0].fileChanges).toBeUndefined();
+          expect(replies[1].fileChanges?.map((change) => change.path)).toEqual([
+            "notes/a.md",
+            "notes/b.md",
+          ]);
+        });
+
         it("reports a file missing when the turn first named it as created, and one missing at turn end as deleted", async () => {
           const vault = makeVault({ "notes/old.md": "stale\n" });
           const mock = makeMockBackend();
@@ -3229,6 +3477,35 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 keeps a message queued for the agent's next step through Stop, and shows its turn when the agent runs it", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        const first = session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        const steer = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        await session.cancel();
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "cancelled" });
+        await expect(first.turn).resolves.toBe("cancelled");
+        expect(session.getQueuedPrompts()).toHaveLength(1);
+
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+        emit({ sessionUpdate: "turn_started", turnId: "t2" });
+        emit(replayText("agent_message_chunk", "Second answer."));
+        emit({ sessionUpdate: "turn_ended", turnId: "t2", stopReason: "end_turn" });
+
+        await expect(steer.turn).resolves.toBe("end_turn");
+        expect(bubbles(session).slice(-2)).toEqual([
+          { sender: USER_SENDER, message: "second" },
+          { sender: AI_SENDER, message: "Second answer." },
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt held behind a stopped turn as cancelled, without sending it, when the chat closes", async () => {
         const mock = makeMockBackend();
         mock.prompt.mockImplementationOnce(() => new Promise(() => undefined));

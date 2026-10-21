@@ -185,6 +185,38 @@ export const RunningAfterStop: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
+export const MessageDeliveredMidTurn: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "long-request",
+        sender: "user",
+        message: "Write a one-line summary of each note in the vault.",
+      },
+      {
+        ...message,
+        id: "before-steer",
+        message: "Alpha: launch checklist for the spring release.",
+        turnStopReason: "end_turn",
+        turnDurationMs: 8200,
+      },
+      {
+        ...message,
+        id: "steer",
+        sender: "user",
+        message: "Only do the first two notes.",
+      },
+      { ...message, id: "after-steer", message: "Beta: notes from the design review." },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 export const ApprovedPlanRunning: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,

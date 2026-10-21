@@ -66,7 +66,11 @@ jest.mock("@/components/chat-components/LexicalEditor", () => ({
 
 const image = new File(["image bytes"], "screenshot.png", { type: "image/png" });
 
-function composer(inputMessage: string, selectedImages: File[]) {
+function composer(
+  inputMessage: string,
+  selectedImages: File[],
+  overrides: Partial<ChatInputProps> = {}
+) {
   const props = {
     inputMessage,
     selectedImages,
@@ -85,6 +89,7 @@ function composer(inputMessage: string, selectedImages: File[]) {
     includeActiveNote: false,
     includeActiveWebTab: false,
     activeWebTab: null,
+    ...overrides,
   } as unknown as ChatInputProps;
   return { node: <ChatInput {...props} />, send: props.handleSendMessage, props };
 }
@@ -151,6 +156,43 @@ describe("ChatInput", () => {
       render(node);
       fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), { key: "Enter" });
       expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 offers Send now beside Stop while the agent works, sending the draft with interrupt", () => {
+      const { node, send } = composer("Do this instead", [], {
+        isGenerating: true,
+        canInterruptAndSend: true,
+      });
+      render(node);
+
+      fireEvent.click(screen.getByRole("button", { name: "Interrupt and send" }));
+
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ interrupt: true }));
+      expect(screen.getByRole("button", { name: "Stop generating" })).toBeTruthy();
+    });
+
+    it.each([
+      { scenario: "an empty draft", text: "   ", canInterruptAndSend: true },
+      { scenario: "a backend that cannot interrupt", text: "Do this", canInterruptAndSend: false },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hides Send now for $scenario",
+      ({ text, canInterruptAndSend }) => {
+        render(composer(text, [], { isGenerating: true, canInterruptAndSend }).node);
+
+        expect(screen.queryByRole("button", { name: "Interrupt and send" })).toBeNull();
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends Enter while the agent works without interrupt", () => {
+      const { node, send } = composer("Only the first two", [], {
+        isGenerating: true,
+        canInterruptAndSend: true,
+      });
+      render(node);
+
+      fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), { key: "Enter" });
+
+      expect(send).toHaveBeenCalledWith(expect.not.objectContaining({ interrupt: true }));
     });
   });
 });

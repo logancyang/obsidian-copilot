@@ -67,8 +67,10 @@ export interface ChatInputProps {
     contextNotes?: TFile[];
     contextFolders?: string[];
     webTabs?: WebTabContext[];
+    interrupt?: boolean;
   }) => void;
   isGenerating: boolean;
+  canInterruptAndSend?: boolean;
   onStopGenerating: () => void;
   app: App;
   contextNotes: TFile[];
@@ -164,6 +166,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setInputMessage,
     handleSendMessage,
     isGenerating,
+    canInterruptAndSend = false,
     onStopGenerating,
     app,
     contextNotes,
@@ -236,7 +239,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
-  const onSendMessage = () => {
+  const onSendMessage = (interrupt = false) => {
     if (editMode && onEditSave) {
       onEditSave(inputMessage, {
         notes: contextNotes,
@@ -249,9 +252,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     const webTabsFromEditor = getWebTabsFromEditorSnapshot();
     const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
 
+    const interruptMeta = interrupt ? { interrupt } : {};
     if (!isCopilotPlus) {
       handleSendMessage({
         webTabs: allWebTabs,
+        ...interruptMeta,
       });
       return;
     }
@@ -261,6 +266,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
       urls: contextUrls,
       contextFolders,
       webTabs: allWebTabs,
+      ...interruptMeta,
     });
   };
 
@@ -766,14 +772,29 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           {!isGenerating && toolControls}
           {modePickerOverride && <ModePicker override={modePickerOverride} />}
           {isGenerating ? (
-            <Button
-              size="icon"
-              className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
-              aria-label="Stop generating"
-              onClick={() => onStopGenerating()}
-            >
-              <Square className="tw-size-3 tw-fill-current" />
-            </Button>
+            <>
+              {canInterruptAndSend && (inputMessage.trim() || selectedImages.length > 0) && (
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="tw-text-muted"
+                  aria-label="Interrupt and send"
+                  title="Stop the agent at its next step and send this now"
+                  onClick={() => onSendMessage(true)}
+                >
+                  <CornerDownLeft className="!tw-size-3" />
+                  <span>Send now</span>
+                </Button>
+              )}
+              <Button
+                size="icon"
+                className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
+                aria-label="Stop generating"
+                onClick={() => onStopGenerating()}
+              >
+                <Square className="tw-size-3 tw-fill-current" />
+              </Button>
+            </>
           ) : (
             <>
               {editMode && onEditCancel && (

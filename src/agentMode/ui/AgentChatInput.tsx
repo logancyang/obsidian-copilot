@@ -2,7 +2,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
-import type { PromptContent } from "@/agentMode/session/types";
+import type { PromptContent, QueuedPrompt } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import {
   clearSelectedTextContexts,
@@ -57,6 +57,8 @@ interface AgentChatInputProps {
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   isLoading: boolean;
+  queuedPrompts: readonly QueuedPrompt[];
+  acceptsMidTurnMessages: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
@@ -155,6 +157,8 @@ export const AgentChatInput = memo(function AgentChatInput({
   updateUserMessageHistory,
   isStarting,
   isLoading: loading,
+  queuedPrompts,
+  acceptsMidTurnMessages,
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
@@ -289,8 +293,22 @@ export const AgentChatInput = memo(function AgentChatInput({
     [backend, setLoading, updateUserMessageHistory]
   );
 
+  // The session shows the message once it reaches the agent, so the composer neither waits nor holds it. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+  const sendMidTurn = useCallback(
+    (item: QueuedAgentMessage, interrupt: boolean) => {
+      try {
+        backend.sendMessage(item.text, item.context, item.promptContent, undefined, { interrupt });
+        if (item.rawInput) updateUserMessageHistory(item.rawInput);
+      } catch (error) {
+        logError("Error sending agent message:", error);
+        new Notice("Failed to send message. Please try again.");
+      }
+    },
+    [backend, updateUserMessageHistory]
+  );
+
   const handleSendMessage = useCallback(
-    async (webTabs?: WebTabContext[]) => {
+    async (webTabs?: WebTabContext[], interrupt = false) => {
       if (disabled) return;
       const text = inputMessage.trim();
       if (!text && selectedImages.length === 0) return;
@@ -370,7 +388,17 @@ export const AgentChatInput = memo(function AgentChatInput({
         mentionedAgents,
       };
 
-      if (loading || isStarting) {
+      if (loading || isStarting || queuedPrompts.length > 0) {
+        // Compaction and multi-agent questions are whole turns of their own, so Copilot holds them until the agent finishes. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+        if (
+          !isStarting &&
+          acceptsMidTurnMessages &&
+          !isCompactCommand(item.text) &&
+          !item.mentionedAgents
+        ) {
+          sendMidTurn(item, interrupt);
+          return;
+        }
         setQueuedMessages((q) => [...q, item]);
         return;
       }
@@ -387,6 +415,9 @@ export const AgentChatInput = memo(function AgentChatInput({
       selectedTextContexts,
       loading,
       isStarting,
+      queuedPrompts.length,
+      acceptsMidTurnMessages,
+      sendMidTurn,
       unsupportedImageModelLabel,
       disabled,
       resetCompose,
@@ -398,7 +429,16 @@ export const AgentChatInput = memo(function AgentChatInput({
   );
 
   useEffect(() => {
-    if (disabled || loading || isStarting || queuedMessages.length === 0) return;
+    // Held messages go after every message already handed to the agent. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    if (
+      disabled ||
+      loading ||
+      isStarting ||
+      queuedPrompts.length > 0 ||
+      queuedMessages.length === 0
+    ) {
+      return;
+    }
     const { batch, rest } = takeNextQueuedBatch(queuedMessages);
     const combined = combineQueuedMessages(batch);
     if (
@@ -416,6 +456,7 @@ export const AgentChatInput = memo(function AgentChatInput({
     disabled,
     loading,
     isStarting,
+    queuedPrompts.length,
     queuedMessages,
     runSend,
     setQueuedMessages,
@@ -441,8 +482,12 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   return (
     <>
-      {queuedMessages.length > 0 && (
-        <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
+      {(queuedPrompts.length > 0 || queuedMessages.length > 0) && (
+        <QueuedMessageList
+          delivering={queuedPrompts}
+          held={queuedMessages}
+          onRemove={handleRemoveQueuedMessage}
+        />
       )}
       <div
         className={
@@ -457,8 +502,11 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholder="Ask anything • @ to add context • / for commands"
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
+          handleSendMessage={safeAsyncHandler((meta) =>
+            handleSendMessage(meta?.webTabs, meta?.interrupt)
+          )}
           isGenerating={loading}
+          canInterruptAndSend={acceptsMidTurnMessages}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
           onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}

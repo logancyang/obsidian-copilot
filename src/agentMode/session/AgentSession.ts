@@ -25,6 +25,7 @@ import {
   PlanDecisionAction,
   PromptContent,
   PromptInput,
+  QueuedPrompt,
   SessionEvent,
   SessionId,
   PlanUsage,
@@ -110,6 +111,7 @@ export const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
@@ -171,6 +173,7 @@ export interface AgentSessionListener {
   onCurrentTodoListChanged?(): void;
   onNeedsAttentionChanged?(needsAttention: boolean): void;
   onTasksChanged?(): void;
+  onQueuedPromptsChanged?(): void;
 }
 
 export interface ProjectContextUpdates {
@@ -247,6 +250,8 @@ export class AgentSession {
   private replyStartedAtMs = 0;
   private openTurnId: string | null = null;
   private pendingPrompts = new Map<string, PendingPrompt>();
+  private queuedPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
+  private sendOrder: Promise<void> = Promise.resolve();
   private turnFiles = new Map<string, TurnFileCapture>();
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
@@ -674,7 +679,8 @@ export class AgentSession {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<BackendId>,
+    options: { interrupt?: boolean } = {}
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -689,24 +695,27 @@ export class AgentSession {
     if (status === "starting") {
       throw new Error("Session is still starting");
     }
-    if (status === "running" || status === "awaiting_permission") {
-      throw new Error("Session already has a turn in flight");
-    }
     if (status === "closed") {
       throw new Error("Session is closed");
     }
+    // Compaction and multi-agent questions are whole turns of their own, so they wait for the agent to finish. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    const busy =
+      status === "running" || status === "awaiting_permission" || this.queuedPrompts.length > 0;
+    if (busy) {
+      if (
+        !this.acceptsMidTurnPrompts() ||
+        sendsCompact ||
+        isFanout(mentionedAgents ?? EMPTY_BACKEND_IDS, this.backendId)
+      ) {
+        throw new Error("Session already has a turn in flight");
+      }
+      return this.queuePrompt(displayText, context, promptContent, options.interrupt === true);
+    }
 
     const promptId = uuidv4();
-    const userMessage: NewAgentChatMessage = {
-      id: promptId,
-      message: displayText,
-      sender: USER_SENDER,
-      timestamp: formatDateTime(new Date()),
-      isVisible: true,
-      context,
-      content: buildUserDisplayContent(displayText, promptContent),
-    };
-    const userMessageId = this.store.addMessage(userMessage);
+    const userMessageId = this.store.addMessage(
+      buildUserMessage(promptId, displayText, context, promptContent)
+    );
     this.openReply();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
@@ -720,23 +729,127 @@ export class AgentSession {
     this.lastTurnError = false;
     this.recomputeStatusIfChanged();
 
-    const turn = this.runTurn(displayText, userMessageId, context, promptContent, sendsCompact);
+    const order = this.takeSendOrder();
+    const turn = this.runTurn(
+      displayText,
+      userMessageId,
+      context,
+      promptContent,
+      sendsCompact,
+      order.done
+    );
     return { userMessageId, turn };
+  }
+
+  acceptsMidTurnPrompts(): boolean {
+    return this.getDescriptor?.()?.midTurnDelivery === true;
+  }
+
+  getQueuedPrompts(): readonly QueuedPrompt[] {
+    return this.queuedPrompts;
+  }
+
+  // A message sent while the agent works is shown only once it reaches the agent, at that point in the transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+  private queuePrompt(
+    text: string,
+    context: MessageContext | undefined,
+    promptContent: PromptContent[] | undefined,
+    interrupt: boolean
+  ): { userMessageId: string; turn: Promise<StopReason> } {
+    const prompt: QueuedPrompt = { id: uuidv4(), text, context, promptContent };
+    this.setQueuedPrompts([...this.queuedPrompts, prompt]);
+    const sessionId = this.backendSessionId!;
+    const order = this.takeSendOrder();
+    const turn = (async (): Promise<StopReason> => {
+      try {
+        await order.ready;
+        const webTabBlock =
+          (context?.webTabs?.length ?? 0) > 0 ? await serializeWebTabContext(context) : "";
+        const blocks = buildPromptBlocks(
+          text,
+          context,
+          promptContent,
+          webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock,
+          null,
+          null,
+          null
+        );
+        if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
+        const outcome = await this.promptTurn(
+          { sessionId, promptId: prompt.id, prompt: blocks, ...(interrupt ? { interrupt } : {}) },
+          false,
+          order.done
+        );
+        if (outcome.error !== undefined) throw outcome.error;
+        return outcome.stopReason;
+      } catch (err) {
+        this.removeQueuedPrompts([prompt.id]);
+        throw err;
+      } finally {
+        order.done();
+      }
+    })();
+    return { userMessageId: prompt.id, turn };
+  }
+
+  // A message still being prepared must reach the agent before a later one. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+  private takeSendOrder(): { ready: Promise<void>; done: () => void } {
+    const ready = this.sendOrder;
+    let done!: () => void;
+    this.sendOrder = new Promise<void>((resolve) => (done = resolve));
+    return { ready, done };
+  }
+
+  private setQueuedPrompts(next: readonly QueuedPrompt[]): void {
+    this.queuedPrompts = next.length === 0 ? EMPTY_QUEUED_PROMPTS : Object.freeze([...next]);
+    for (const l of this.listeners) {
+      try {
+        l.onQueuedPromptsChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] queued prompts listener threw`, e);
+      }
+    }
+  }
+
+  private removeQueuedPrompts(promptIds: readonly string[]): void {
+    const ids = new Set(promptIds);
+    if (!this.queuedPrompts.some((p) => ids.has(p.id))) return;
+    this.setQueuedPrompts(this.queuedPrompts.filter((p) => !ids.has(p.id)));
+  }
+
+  private showDeliveredPrompt(promptId: string): void {
+    const prompt = this.queuedPrompts.find((p) => p.id === promptId);
+    if (!prompt) return;
+    this.removeQueuedPrompts([promptId]);
+    // The agent's work before the message stays in its own reply; an empty reply gives way to the message. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    const reply = this.placeholderId;
+    if (reply && this.store.hasAssistantActivity(reply)) {
+      this.store.markTurnComplete(reply, "end_turn", Date.now() - this.replyStartedAtMs);
+    } else if (reply) {
+      this.store.deleteMessage(reply);
+    }
+    this.store.addMessage(
+      buildUserMessage(prompt.id, prompt.text, prompt.context, prompt.promptContent)
+    );
+    if (reply) this.openReply(true);
+    else this.notifyMessages();
   }
 
   private async runTurn(
     displayText: string,
     userMessageId: string,
     context: MessageContext | undefined,
-    promptContent?: PromptContent[],
-    sendsCompact = false
+    promptContent: PromptContent[] | undefined,
+    sendsCompact: boolean,
+    onPushed: () => void
   ): Promise<StopReason> {
     const outcome = await this.runPrompt(
       displayText,
       userMessageId,
       context,
       promptContent,
-      sendsCompact
+      sendsCompact,
+      onPushed
     );
     if (outcome.error !== undefined) throw outcome.error;
     return outcome.stopReason;
@@ -747,7 +860,8 @@ export class AgentSession {
     userMessageId: string,
     context: MessageContext | undefined,
     promptContent: PromptContent[] | undefined,
-    sendsCompact: boolean
+    sendsCompact: boolean,
+    onPushed: () => void
   ): Promise<TurnOutcome> {
     const sessionId = this.backendSessionId!;
     const signal = this.abortController!.signal;
@@ -835,7 +949,8 @@ export class AgentSession {
 
       const outcome = await this.promptTurn(
         { sessionId, promptId: userMessageId, prompt: promptBlocks },
-        true
+        true,
+        onPushed
       );
       if (outcome.error !== undefined) return outcome;
       if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
@@ -864,23 +979,31 @@ export class AgentSession {
       this.failReply(err);
       throw err;
     } finally {
+      onPushed();
       this.abortController = null;
       this.recomputeStatusIfChanged();
     }
   }
 
-  private promptTurn(req: PromptInput, continuesAtOutputLimit: boolean): Promise<TurnOutcome> {
+  private promptTurn(
+    req: PromptInput,
+    continuesAtOutputLimit: boolean,
+    onPushed?: () => void
+  ): Promise<TurnOutcome> {
     const ended = new Promise<TurnOutcome>((settle) => {
       this.pendingPrompts.set(req.promptId, { delivered: false, continuesAtOutputLimit, settle });
     });
-    const admitted = this.backend.prompt(req).then(
-      () => ended,
-      (err: unknown) => {
-        this.endCancelledPromptDrain();
-        if (!this.pendingPrompts.delete(req.promptId)) return ended;
-        throw err;
-      }
-    );
+    const admitted = this.backend
+      .prompt(req)
+      .finally(onPushed)
+      .then(
+        () => ended,
+        (err: unknown) => {
+          this.endCancelledPromptDrain();
+          if (!this.pendingPrompts.delete(req.promptId)) return ended;
+          throw err;
+        }
+      );
     // Stop must free the chat while the agent is still signing in or starting up. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     return Promise.race([ended, admitted]);
   }
@@ -963,15 +1086,18 @@ export class AgentSession {
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
     this.abortController?.abort();
+    // A message still queued for the agent's next step survives Stop and runs after it. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    const queued = new Set(this.queuedPrompts.map((p) => p.id));
+    const stoppedIds = [...this.pendingPrompts.keys()].filter((id) => !queued.has(id));
     // The stopped prompt's turn may still be running or yet to start; it renders nothing until it ends. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (this.openTurnId !== null || this.pendingPrompts.size > 0) {
+    if (this.openTurnId !== null || stoppedIds.length > 0) {
       this.cancelledPromptDrain = new Promise<void>((resolve) => {
         this.finishCancelledPromptDrain = resolve;
       });
     }
     this.openTurnId = null;
-    const stopped = [...this.pendingPrompts.values()];
-    this.pendingPrompts.clear();
+    const stopped = stoppedIds.map((id) => this.pendingPrompts.get(id)!);
+    for (const id of stoppedIds) this.pendingPrompts.delete(id);
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
     void this.finalizeReply("cancelled").then(() => {
@@ -1013,6 +1139,7 @@ export class AgentSession {
     this.openTurnId = null;
     for (const prompt of this.pendingPrompts.values()) prompt.settle({ stopReason: "cancelled" });
     this.pendingPrompts.clear();
+    this.queuedPrompts = EMPTY_QUEUED_PROMPTS;
     this.cancelledMessageIds.clear();
     this.currentMessageIds = new Set();
     this.recomputeStatusIfChanged();
@@ -1158,6 +1285,7 @@ export class AgentSession {
       case "message_delivered": {
         const prompt = this.pendingPrompts.get(update.promptId);
         if (prompt) prompt.delivered = true;
+        this.showDeliveredPrompt(update.promptId);
         return;
       }
       case "messages_withdrawn":
@@ -1362,6 +1490,7 @@ export class AgentSession {
       this.pendingPrompts.get(promptId)?.settle({ stopReason: "cancelled" });
       this.pendingPrompts.delete(promptId);
     }
+    this.removeQueuedPrompts(promptIds);
     this.recomputeStatusIfChanged();
   }
 
@@ -1517,7 +1646,7 @@ export class AgentSession {
     this.cancelledPromptDrain = null;
   }
 
-  private openReply(): string {
+  private openReply(continuesTurn = false): string {
     this.replyStartedAtMs = Date.now();
     this.placeholderId = this.store.addMessage({
       message: "",
@@ -1527,8 +1656,10 @@ export class AgentSession {
       parts: [],
     });
     this.currentMessageIds = new Set();
-    this.currentTurnHadRoutedToolActivity = false;
-    this.turnFiles = new Map();
+    if (!continuesTurn) {
+      this.currentTurnHadRoutedToolActivity = false;
+      this.turnFiles = new Map();
+    }
     this.notifyMessages();
     return this.placeholderId;
   }
@@ -1771,4 +1902,21 @@ export class AgentSession {
       }
     }
   }
+}
+
+function buildUserMessage(
+  id: string,
+  text: string,
+  context: MessageContext | undefined,
+  promptContent: PromptContent[] | undefined
+): NewAgentChatMessage {
+  return {
+    id,
+    message: text,
+    sender: USER_SENDER,
+    timestamp: formatDateTime(new Date()),
+    isVisible: true,
+    context,
+    content: buildUserDisplayContent(text, promptContent),
+  };
 }
