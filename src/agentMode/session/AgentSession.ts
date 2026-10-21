@@ -1371,7 +1371,7 @@ export class AgentSession {
         this.applyTaskUpdate(update);
         return;
       case "turn_started":
-        this.startTurn(update.turnId);
+        this.startTurn(update.turnId, update.startedAt);
         return;
       case "turn_ended":
         this.endTurn(update);
@@ -1538,12 +1538,12 @@ export class AgentSession {
     }
   }
 
-  private startTurn(turnId: string): void {
+  private startTurn(turnId: string, startedAt?: number): void {
     if (this.cancelledPromptDrain) return;
     // A turn that starts after Stop runs a message kept through it, so the stopped prompt's cancellation must not drop its output. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     if (this.abortController?.signal.aborted) this.abortController = null;
     this.openTurnId = turnId;
-    if (!this.placeholderId) this.openReply();
+    if (!this.placeholderId) this.openReply(false, startedAt);
     this.recomputeStatusIfChanged();
   }
 
@@ -1770,8 +1770,8 @@ export class AgentSession {
     this.stoppedPromptIds = EMPTY_PROMPT_IDS;
   }
 
-  private openReply(continuesTurn = false): string {
-    this.replyStartedAtMs = Date.now();
+  private openReply(continuesTurn = false, startedAtMs = Date.now()): string {
+    this.replyStartedAtMs = startedAtMs;
     this.placeholderId = this.store.addMessage({
       message: "",
       sender: AI_SENDER,

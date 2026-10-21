@@ -2389,6 +2389,25 @@ describe("AgentSession", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 times a reply the agent starts on its own from when the agent began the turn", async () => {
+        const now = jest.spyOn(Date, "now").mockReturnValue(100_000);
+        try {
+          const mock = makeMockBackend();
+          const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+          const session = makeSession(mock);
+
+          emit({ sessionUpdate: "turn_started", turnId: "notification", startedAt: 92_000 });
+          emit(replayText("agent_message_chunk", "The subagent finished."));
+          now.mockReturnValue(101_000);
+          emit({ sessionUpdate: "turn_ended", turnId: "notification", stopReason: "end_turn" });
+
+          await waitFor(() => expect(aiMessage(session)?.turnStopReason).toBe("end_turn"));
+          expect(aiMessage(session)?.turnDurationMs).toBe(9_000);
+        } finally {
+          now.mockRestore();
+        }
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt the agent withdrew as cancelled", async () => {
         const mock = makeMockBackend();
         let promptId = "";

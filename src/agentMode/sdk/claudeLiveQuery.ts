@@ -41,6 +41,7 @@ export class ClaudeLiveQuery {
   private readonly stallGuard: SdkStreamStallGuard;
   private readonly stallTimeoutMs: number;
   private openTurnId: string | null = null;
+  private turnBeganAt: number | null = null;
   private closed = false;
   private interrupted = false;
   private stopWithdrawals: string[] | null = null;
@@ -130,6 +131,10 @@ export class ClaudeLiveQuery {
       else this.withdraw([cancelled]);
       return;
     }
+    // Claude announces each turn with an init frame, well before a reply it starts on its own streams, so that reply's duration counts from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (msg.type === "system" && msg.subtype === "init" && !this.openTurnId) {
+      this.turnBeganAt = Date.now();
+    }
     const taskToolCallId =
       "parent_tool_use_id" in msg ? (msg.parent_tool_use_id ?? undefined) : undefined;
     if (!taskToolCallId && isTurnContent(msg)) this.startTurn();
@@ -156,7 +161,9 @@ export class ClaudeLiveQuery {
   private startTurn(): void {
     if (this.openTurnId) return;
     this.openTurnId = uuidv4();
-    this.emit({ sessionUpdate: "turn_started", turnId: this.openTurnId });
+    const startedAt = this.turnBeganAt ?? undefined;
+    this.turnBeganAt = null;
+    this.emit({ sessionUpdate: "turn_started", turnId: this.openTurnId, startedAt });
     this.opts.onTurnStarted(this.query);
   }
 
