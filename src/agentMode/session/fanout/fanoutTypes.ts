@@ -35,8 +35,6 @@ export const FANOUT_AGENT_TIMEOUT_ERROR = "Timed out waiting for this agent to a
 
 export const FANOUT_CANCEL_GRACE_MS = 3 * 1000;
 
-export const FANOUT_TRAILING_CHUNK_GRACE_MS = 500;
-
 export type FanoutSummaryStatus = "pending" | "streaming" | "done";
 
 export interface FanoutSummary {

@@ -13,17 +13,12 @@ import type {
   TurnEnd,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
-import { FANOUT_ALL_FAILED_SUMMARY, FANOUT_TRAILING_CHUNK_GRACE_MS } from "./fanoutTypes";
+import { FANOUT_ALL_FAILED_SUMMARY } from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
   logError: jest.fn(),
-}));
-
-jest.mock("./fanoutTypes", () => ({
-  ...jest.requireActual("./fanoutTypes"),
-  FANOUT_TRAILING_CHUNK_GRACE_MS: 5,
 }));
 
 jest.mock("@/agentMode/sdk/effortOption", () => ({
@@ -42,6 +37,7 @@ interface MockProc {
   rejectPrompt: (err: unknown) => void;
   endTurnsAtOnce: (onPrompt?: () => void) => void;
   promptCount: () => number;
+  prompted: (count: number) => Promise<void>;
 }
 
 function makeMockProc(sessionId: string): MockProc {
@@ -51,6 +47,8 @@ function makeMockProc(sessionId: string): MockProc {
     resolve: () => void;
     reject: (err: unknown) => void;
   }> = [];
+  let accepted = 0;
+  const promptWaiters: Array<{ count: number; resolve: () => void }> = [];
   const endTurn = (promptId: string, turnEnd: Omit<TurnEnd, "turnId">) =>
     handler?.({ sessionId, update: { sessionUpdate: "turn_ended", turnId: promptId, ...turnEnd } });
   const acceptPrompt = async ({ promptId }: PromptInput): Promise<void> => {
@@ -59,6 +57,8 @@ function makeMockProc(sessionId: string): MockProc {
       resolve: () => end({ stopReason: "end_turn" }),
       reject: (error) => end({ stopReason: "end_turn", error: error as Error }),
     });
+    accepted += 1;
+    for (const waiter of promptWaiters.filter((w) => w.count <= accepted)) waiter.resolve();
   };
   const settleOldest = (
     apply: (p: { resolve: () => void; reject: (e: unknown) => void }) => void
@@ -105,6 +105,10 @@ function makeMockProc(sessionId: string): MockProc {
         endTurn(promptId, { stopReason: "end_turn" });
       }),
     promptCount: () => (proc.prompt as jest.Mock).mock.calls.length,
+    prompted: (count) =>
+      count <= accepted
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => promptWaiters.push({ count, resolve })),
   };
 }
 
@@ -182,9 +186,6 @@ function makeHost(
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
 
-const flushPastGrace = () =>
-  new Promise((r) => window.setTimeout(r, FANOUT_TRAILING_CHUNK_GRACE_MS + 20));
-
 function runInput(
   agents: BackendId[],
   overrides: Partial<Parameters<FanoutOrchestrator["run"]>[0]> = {}
@@ -230,12 +231,12 @@ describe("FanoutOrchestrator", () => {
           })
         );
 
-        await flush();
+        await Promise.all([procs.get("claude")!.prompted(1), procs.get("codex")!.prompted(1)]);
         procs.get("claude")!.emit(textChunk("s-claude", "Claude says hi"));
         procs.get("codex")!.emit(textChunk("s-codex", "Codex says hi"));
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.resolvePrompt();
-        await flushPastGrace();
+        await procs.get("claude")!.prompted(2);
         procs.get("claude")!.emit(textChunk("s-claude", "summary"));
         procs.get("claude")!.resolvePrompt();
 
@@ -274,11 +275,11 @@ describe("FanoutOrchestrator", () => {
           runInput(["claude", "codex"], { signal: controller.signal })
         );
 
-        await flush();
+        await Promise.all([procs.get("claude")!.prompted(1), procs.get("codex")!.prompted(1)]);
         procs.get("claude")!.emit(textChunk("s-claude", "ok"));
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.rejectPrompt(new Error("backend boom"));
-        await flushPastGrace();
+        await procs.get("claude")!.prompted(2);
         procs.get("claude")!.resolvePrompt();
 
         const turn = await runPromise;
@@ -303,11 +304,9 @@ describe("FanoutOrchestrator", () => {
         const runPromise = orchestrator.run(
           runInput(["codex", "opencode"], { signal: controller.signal })
         );
-        await flush();
+        await Promise.all([procs.get("codex")!.prompted(1), procs.get("opencode")!.prompted(1)]);
         procs.get("codex")!.resolvePrompt();
         procs.get("opencode")!.resolvePrompt();
-        await flushPastGrace();
-        procs.get("codex")!.resolvePrompt();
         await runPromise;
 
         expect(procs.get("codex")!.setSessionMode).toHaveBeenCalledWith({
@@ -332,7 +331,7 @@ describe("FanoutOrchestrator", () => {
           runInput(["claude", "codex"], { signal: controller.signal })
         );
 
-        await flush();
+        await Promise.all([procs.get("claude")!.prompted(1), procs.get("codex")!.prompted(1)]);
         controller.abort();
         procs.get("claude")!.resolvePrompt();
         procs.get("codex")!.resolvePrompt();
@@ -357,7 +356,7 @@ describe("FanoutOrchestrator", () => {
           runInput(["claude", "codex"], { signal: controller.signal })
         );
 
-        await flush();
+        await Promise.all([procs.get("claude")!.prompted(1), procs.get("codex")!.prompted(1)]);
         procs.get("claude")!.rejectPrompt(new Error("boom-a"));
         procs.get("codex")!.rejectPrompt(new Error("boom-b"));
         const turn = await runPromise;

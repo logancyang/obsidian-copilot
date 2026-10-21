@@ -25,7 +25,6 @@ import {
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
   FANOUT_CANCEL_GRACE_MS,
-  FANOUT_TRAILING_CHUNK_GRACE_MS,
   selectSummaryInputs,
   type AgentAnswer,
   type FanoutTurn,
@@ -223,7 +222,6 @@ export class FanoutOrchestrator {
           promptProc.cancel({ sessionId: promptSessionId }).catch(() => undefined);
         });
         await promptPromise;
-        if (!raceSettled()) await this.awaitTrailingChunks();
         return "done";
       } finally {
         unregisterHandler?.();
@@ -238,12 +236,6 @@ export class FanoutOrchestrator {
       (onPrompt, raceSettled) => attempt(onPrompt, raceSettled),
       signal
     );
-  }
-
-  private awaitTrailingChunks(): Promise<void> {
-    return new Promise<void>((resolve) => {
-      window.setTimeout(resolve, FANOUT_TRAILING_CHUNK_GRACE_MS);
-    });
   }
 
   private runAttemptWithTimeout(
