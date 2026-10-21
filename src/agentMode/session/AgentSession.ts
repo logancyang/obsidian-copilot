@@ -1703,7 +1703,15 @@ export class AgentSession {
         const existing = store
           .getMessage(messageId)
           ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
-        const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
+        // A call cut short by its task's end fails afterwards on a disconnect; it reads stopped, as after Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+        const cutShort =
+          existing?.kind === "tool_call" &&
+          existing.status === "cancelled" &&
+          update.status === "failed";
+        const merged = mergeToolCallUpdate(
+          existing,
+          cutShort ? { ...update, status: "cancelled" } : this.withEndedTaskStatus(update)
+        );
         this.observeToolResult(this.filesOfTask(toolCallId), merged, update);
         changed = store.upsertAgentPart(messageId, merged);
         break;

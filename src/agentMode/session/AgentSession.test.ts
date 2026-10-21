@@ -6367,6 +6367,46 @@ describe("AgentSession", () => {
           expect.objectContaining({ kind: "tool_call", id: "tool-bash", status: "cancelled" }),
         ]);
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps a tool call its task's end cut short stopped when the cut call's failed result arrives afterwards, as after a disconnect, and still shows a late successful result", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const taskUpdate = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", taskToolCallId: "tool-agent", update });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Wait",
+        });
+        for (const toolCallId of ["tool-bash", "tool-write"]) {
+          taskUpdate({
+            sessionUpdate: "tool_call",
+            toolCallId,
+            title: toolCallId,
+            kind: "execute",
+            status: "in_progress",
+          });
+        }
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        taskUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-bash",
+          status: "failed",
+        });
+        taskUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-write",
+          status: "completed",
+        });
+
+        expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
+          expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
+          expect.objectContaining({ id: "tool-write", status: "completed" }),
+        ]);
+      });
     });
 
     describe("getCurrentTodoList()", () => {
