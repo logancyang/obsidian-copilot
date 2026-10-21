@@ -870,7 +870,8 @@ export class AgentSession {
     onPushed: () => void
   ): Promise<TurnOutcome> {
     const sessionId = this.backendSessionId!;
-    const signal = this.abortController!.signal;
+    const controller = this.abortController!;
+    const signal = controller.signal;
     try {
       const priorPromptDrain = this.cancelledPromptDrain;
       if (priorPromptDrain) {
@@ -986,7 +987,8 @@ export class AgentSession {
       throw err;
     } finally {
       onPushed();
-      this.abortController = null;
+      // A turn started after Stop already let go of this prompt's controller, and a later send may own the current one. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+      if (this.abortController === controller) this.abortController = null;
       this.recomputeStatusIfChanged();
     }
   }
