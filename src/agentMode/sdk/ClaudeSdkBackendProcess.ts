@@ -9,6 +9,7 @@ import {
   type Options,
   type PermissionMode,
   type Query,
+  type SDKResultMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
@@ -369,6 +370,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     );
     let stopReason: StopReason = "end_turn";
     let resultErrorMessage: string | null = null;
+    let result: SDKResultMessage | undefined;
     try {
       let planUsageRequested = false;
       for await (const sdkMsg of stream) {
@@ -380,24 +382,28 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         }
         const events = translateSdkMessage(sdkMsg, params.sessionId, translatorState);
         for (const e of events) this.dispatchEvent(e);
-        // A leftover background task's result arrives before the prompt's own. https://github.com/Brevilabs/obsidian-copilot-private/issues/195
-        if (sdkMsg.type === "result" && sdkMsg.origin?.kind !== "task-notification") {
-          stopReason = mapStopReason(sdkMsg);
-          if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
-            resultErrorMessage = sdkMsg.result;
-          } else if (stopReason !== "end_turn" && sdkMsg.subtype !== "success") {
-            const errs = "errors" in sdkMsg ? sdkMsg.errors : undefined;
-            if (errs && errs.length > 0) {
-              resultErrorMessage = errs.join("; ");
-            } else {
-              this.authConfirmed = false;
-            }
-          }
-          break;
+        if (sdkMsg.type === "result") {
+          result = sdkMsg;
+          // A leftover background task's result arrives before the prompt's own. https://github.com/Brevilabs/obsidian-copilot-private/issues/195
+          if (sdkMsg.origin?.kind !== "task-notification") break;
         }
       }
     } finally {
       if (session.active === q) session.active = undefined;
+    }
+
+    if (result) {
+      stopReason = mapStopReason(result);
+      if (result.subtype === "success" && result.is_error && result.result.trim()) {
+        resultErrorMessage = result.result;
+      } else if (stopReason !== "end_turn" && result.subtype !== "success") {
+        const errs = "errors" in result ? result.errors : undefined;
+        if (errs && errs.length > 0) {
+          resultErrorMessage = errs.join("; ");
+        } else {
+          this.authConfirmed = false;
+        }
+      }
     }
 
     if (resultErrorMessage) {

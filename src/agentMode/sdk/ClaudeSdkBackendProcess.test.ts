@@ -579,6 +579,27 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
+      it("rejects with a leftover background task's error when the stream ends before the prompt's own result (https://github.com/Brevilabs/obsidian-copilot-private/issues/195)", async () => {
+        queryMock.mockImplementation(() =>
+          makeQuery([
+            {
+              ...resultMessage(),
+              is_error: true,
+              num_turns: 0,
+              result: "Invalid API key",
+              origin: { kind: "task-notification" },
+            },
+          ] as SDKMessage[])
+        );
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, () => {});
+
+        await expect(
+          proc.prompt({ sessionId, prompt: [{ type: "text", text: "ping" }] })
+        ).rejects.toThrow(new Error("Invalid API key"));
+      });
+
       it("attaches Copilot's MCP servers over HTTP and pre-approves their tools on every turn", async () => {
         queryMock.mockImplementation(() => makeQuery([resultMessage()]));
         const proc = makeProc();
