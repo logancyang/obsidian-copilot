@@ -1,637 +1,200 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
+import { ClaudeTaskTracker, isAsyncLaunchResult } from "./claudeTaskProtocol";
 
-interface ToolResultFixture {
-  id: string;
-  content?: unknown;
-  isError?: boolean;
+const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
+
+function frame(fields: Record<string, unknown>): SDKMessage {
+  return { type: "system", uuid: "u", session_id: "s", ...fields } as unknown as SDKMessage;
 }
 
-function userMessage(
-  toolResults: ToolResultFixture[],
-  toolUseResult?: Record<string, unknown>
-): SDKMessage {
-  return {
-    type: "user",
-    ...(toolUseResult ? { tool_use_result: toolUseResult } : {}),
-    message: {
-      content: toolResults.map((result) => ({
-        type: "tool_result",
-        tool_use_id: result.id,
-        content: result.content ?? "done",
-        ...(result.isError ? { is_error: true } : {}),
-      })),
-    },
-    parent_tool_use_id: null,
-    session_id: "test-session",
-  } as unknown as SDKMessage;
+function started(taskId: string, fields: Record<string, unknown> = {}): SDKMessage {
+  return frame({
+    subtype: "task_started",
+    task_id: taskId,
+    tool_use_id: `tool-${taskId}`,
+    description: `Task ${taskId}`,
+    task_type: "local_agent",
+    is_backgrounded: true,
+    ...fields,
+  });
 }
 
-function launchAck(agentId: string, ...toolCallIds: string[]): SDKMessage {
-  return userMessage(
-    toolCallIds.map((id) => ({ id, content: "Async agent launched successfully." })),
-    { isAsync: true, status: "async_launched", agentId }
-  );
-}
-
-function systemMessage(frame: Record<string, unknown>): SDKMessage {
-  return { type: "system", ...frame } as unknown as SDKMessage;
-}
-
-function observeTool(
-  protocol: ClaudeBackgroundTaskStateMachine,
-  toolCallId: string,
-  nativeToolName: string
-): void {
-  protocol.accept({ kind: "tool_snapshot", toolCallId, nativeToolName });
-}
-
-function acceptMessage(protocol: ClaudeBackgroundTaskStateMachine, message: SDKMessage) {
-  return protocol.accept({ kind: "sdk_message", message });
+function notification(taskId: string, fields: Record<string, unknown> = {}): SDKMessage {
+  return frame({
+    subtype: "task_notification",
+    task_id: taskId,
+    tool_use_id: `tool-${taskId}`,
+    status: "completed",
+    summary: `Report from ${taskId}`,
+    output_file: `/tmp/tasks/${taskId}.output`,
+    ...fields,
+  });
 }
 
 describe("claudeTaskProtocol", () => {
-  describe("ClaudeBackgroundTaskStateMachine", () => {
+  describe("ClaudeTaskTracker", () => {
     describe("accept()", () => {
-      it("returns one stable empty decision for unrelated carriers", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
+      it(`reports a subagent's start with what it was asked to do, and its end with its report and output file (${ISSUE_175})`, () => {
+        const tracker = new ClaudeTaskTracker();
 
-        const first = protocol.accept({
-          kind: "tool_snapshot",
-          toolCallId: "read-a",
-          nativeToolName: "Read",
-        });
-        const second = protocol.accept({
-          kind: "tool_snapshot",
-          toolCallId: "mcp-task",
-        });
-
-        expect(first).toEqual({ updates: [], resultActions: new Map() });
-        expect(second).toBe(first);
-      });
-
-      it("binds a launch from task_started before its asynchronous acknowledgement", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-
-        const started = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
+        const start = tracker.accept(
+          started("a1", { prompt: "Count the words", subagent_type: "general-purpose" })
         );
-        const acknowledged = acceptMessage(protocol, launchAck("task-a", "launch"));
+        const end = tracker.accept(notification("a1"));
 
-        expect(started.updates).toEqual([{ toolCallId: "launch", status: "in_progress" }]);
-        expect(acknowledged.resultActions.get("launch")).toEqual({ kind: "omit" });
-      });
-
-      it("correlates task-only progress and terminal frames after the launch acknowledgement", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(protocol, launchAck("task-a", "launch"));
-
-        const progress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            description: "Count notes",
-          })
-        );
-        const completed = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-            summary: "done",
-          })
-        );
-
-        expect(progress.updates).toEqual([
+        expect(start).toEqual([
           {
-            toolCallId: "launch",
-            status: "in_progress",
-            progress: { description: "Count notes" },
+            sessionUpdate: "task_started",
+            taskId: "a1",
+            toolCallId: "tool-a1",
+            kind: "subagent",
+            description: "Task a1",
+            prompt: "Count the words",
+            subagentType: "general-purpose",
           },
         ]);
-        expect(completed.updates).toEqual([
+        expect(end).toEqual([
           {
-            toolCallId: "launch",
+            sessionUpdate: "task_ended",
+            taskId: "a1",
             status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "done" } }],
+            summary: "Report from a1",
+            outputFile: "/tmp/tasks/a1.output",
           },
         ]);
       });
 
-      it("keeps identified foreground task identity terminal after its ordinary result", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
+      it("reports a subagent's progress in the card's progress shape", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
 
-        const result = acceptMessage(
-          protocol,
-          userMessage([{ id: "launch", content: "foreground report" }])
-        );
-        const lateProgress = acceptMessage(
-          protocol,
-          systemMessage({
+        const progress = tracker.accept(
+          frame({
             subtype: "task_progress",
-            task_id: "task-a",
-            description: "too late",
-          })
-        );
-        observeTool(protocol, "replacement", "Agent");
-        const duplicateIdentity = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "replacement",
+            task_id: "a1",
+            description: "Running wc -w",
+            last_tool_name: "Bash",
+            usage: { tool_uses: 3, duration_ms: 9851, total_tokens: 4210 },
           })
         );
 
-        expect(result).toEqual({ updates: [], resultActions: new Map() });
-        expect(lateProgress.updates).toEqual([]);
-        expect(duplicateIdentity.updates).toEqual([]);
-      });
-
-      it("binds late foreground task identity without reopening a terminal launch", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(
-          protocol,
-          userMessage([{ id: "launch", content: "foreground report", isError: true }])
-        );
-
-        const lateStart = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
-        const lateProgress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            description: "too late",
-          })
-        );
-        observeTool(protocol, "replacement", "Task");
-        const duplicateIdentity = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "replacement",
-          })
-        );
-
-        expect(lateStart.updates).toEqual([]);
-        expect(lateProgress.updates).toEqual([]);
-        expect(duplicateIdentity.updates).toEqual([]);
-      });
-
-      it("ignores task-only frames without an unambiguous launch binding", () => {
-        const unknown = new ClaudeBackgroundTaskStateMachine();
-        expect(
-          acceptMessage(
-            unknown,
-            systemMessage({
-              subtype: "task_progress",
-              task_id: "unknown-task",
-              description: "working",
-            })
-          ).updates
-        ).toEqual([]);
-
-        const ambiguous = new ClaudeBackgroundTaskStateMachine();
-        observeTool(ambiguous, "launch-a", "Agent");
-        observeTool(ambiguous, "launch-b", "Task");
-        acceptMessage(ambiguous, launchAck("task-a", "launch-a", "launch-b"));
-
-        expect(
-          acceptMessage(
-            ambiguous,
-            systemMessage({
-              subtype: "task_notification",
-              task_id: "task-a",
-              status: "completed",
-              summary: "done",
-            })
-          ).updates
-        ).toEqual([]);
-      });
-
-      it("does not let an unsupported system subtype establish task identity", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-
-        const unsupported = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_checkpoint",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
-        const laterStart = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-b",
-            tool_use_id: "launch",
-          })
-        );
-
-        expect(unsupported.updates).toEqual([]);
-        expect(laterStart.updates).toEqual([{ toolCallId: "launch", status: "in_progress" }]);
-      });
-
-      it("settles a bound launch from a terminal task_updated patch", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
-
-        const updated = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_updated",
-            task_id: "task-a",
-            patch: { status: "completed" },
-          })
-        );
-
-        expect(updated.updates).toEqual([{ toolCallId: "launch", status: "completed" }]);
-      });
-
-      it("fails a bound launch from a killed task_updated patch and surfaces its error", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(protocol, launchAck("task-a", "launch"));
-
-        const killed = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_updated",
-            task_id: "task-a",
-            patch: { status: "killed", error: "killed by user" },
-          })
-        );
-
-        expect(killed.updates).toEqual([
+        expect(progress).toEqual([
           {
-            toolCallId: "launch",
-            status: "failed",
-            content: [{ type: "content", content: { type: "text", text: "killed by user" } }],
-          },
-        ]);
-      });
-
-      it("ignores non-terminal task_updated patches", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(protocol, launchAck("task-a", "launch"));
-
-        const running = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_updated",
-            task_id: "task-a",
-            patch: { status: "running", description: "still going" },
-          })
-        );
-
-        expect(running.updates).toEqual([]);
-      });
-
-      it("replays a task-only terminal frame once the launch acknowledgement binds", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-
-        const early = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-            summary: "done",
-          })
-        );
-        const acknowledged = acceptMessage(protocol, launchAck("task-a", "launch"));
-
-        expect(early.updates).toEqual([]);
-        expect(acknowledged.updates).toEqual([
-          {
-            toolCallId: "launch",
-            status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "done" } }],
-          },
-        ]);
-        expect(acknowledged.resultActions.get("launch")).toEqual({ kind: "omit" });
-      });
-
-      it("does not infer task identity from prompt or description", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "other", "Agent");
-        observeTool(protocol, "background", "Task");
-
-        const acknowledged = acceptMessage(
-          protocol,
-          userMessage(
-            [
-              { id: "other", content: "foreground report" },
-              { id: "background", content: "opaque internal acknowledgement" },
-            ],
-            {
-              isAsync: true,
-              status: "async_launched",
-              agentId: "task-a",
-              prompt: "background prompt",
-              description: "Background task",
-            }
-          )
-        );
-        const taskOnlyProgress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            description: "working",
-          })
-        );
-        const started = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "background",
-          })
-        );
-
-        expect(acknowledged.resultActions).toEqual(new Map());
-        expect(taskOnlyProgress.updates).toEqual([]);
-        expect(started.updates).toEqual([{ toolCallId: "background", status: "in_progress" }]);
-      });
-
-      it("preserves an earlier pending terminal report when a later patch has no output", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-            summary: "done",
-          })
-        );
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_updated",
-            task_id: "task-a",
-            patch: { status: "completed" },
-          })
-        );
-
-        const acknowledged = acceptMessage(protocol, launchAck("task-a", "launch"));
-
-        expect(acknowledged.updates).toEqual([
-          {
-            toolCallId: "launch",
-            status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "done" } }],
-          },
-        ]);
-      });
-
-      it("normalizes progress and never regresses a terminal launch", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-
-        const progress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            tool_use_id: "launch",
-            description: "Count notes",
-            last_tool_name: "Glob",
-            usage: {
-              tool_uses: 3,
-              duration_ms: 9851,
-              total_tokens: Number.POSITIVE_INFINITY,
-            },
-          })
-        );
-        const completed = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            tool_use_id: "launch",
-            status: "completed",
-            summary: "done",
-          })
-        );
-        const lateProgress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
-        const conflictingFailure = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            tool_use_id: "launch",
-            status: "failed",
-            summary: "late failure",
-          })
-        );
-
-        expect(progress.updates).toEqual([
-          {
-            toolCallId: "launch",
-            status: "in_progress",
+            sessionUpdate: "task_progress",
+            taskId: "a1",
             progress: {
-              description: "Count notes",
-              toolName: "Glob",
+              description: "Running wc -w",
+              toolName: "Bash",
               toolUses: 3,
               durationMs: 9851,
+              totalTokens: 4210,
             },
           },
         ]);
-        expect(completed.updates).toEqual([
-          {
-            toolCallId: "launch",
-            status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "done" } }],
-          },
-        ]);
-        expect(lateProgress.updates).toEqual([]);
-        expect(conflictingFailure.updates).toEqual([]);
       });
 
-      it("uses a prior task binding to suppress a batched asynchronous acknowledgement", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "foreground", "Agent");
-        observeTool(protocol, "background", "Task");
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "background",
-          })
+      it(`reports a background command as a command task, and a foreground command only once it moves to the background (${ISSUE_175})`, () => {
+        const tracker = new ClaudeTaskTracker();
+
+        const background = tracker.accept(started("b1", { task_type: "local_bash" }));
+        const foreground = tracker.accept(
+          started("b2", { task_type: "local_bash", is_backgrounded: false })
+        );
+        const moved = tracker.accept(
+          frame({ subtype: "task_updated", task_id: "b2", patch: { is_backgrounded: true } })
         );
 
-        const acknowledged = acceptMessage(
-          protocol,
-          userMessage(
-            [
-              { id: "foreground", content: "foreground report" },
-              { id: "background", content: "opaque internal acknowledgement" },
-            ],
-            { isAsync: true, status: "async_launched", agentId: "task-a" }
-          )
-        );
-        const progress = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            description: "Count notes",
-          })
-        );
+        expect(background).toMatchObject([{ sessionUpdate: "task_started", kind: "command" }]);
+        expect(foreground).toEqual([]);
+        expect(moved).toMatchObject([{ sessionUpdate: "task_started", taskId: "b2" }]);
+      });
 
-        expect(acknowledged.resultActions).toEqual(new Map([["background", { kind: "omit" }]]));
-        expect(progress.updates).toEqual([
-          {
-            toolCallId: "background",
-            status: "in_progress",
-            progress: { description: "Count notes" },
-          },
-        ]);
+      it("never reports a foreground command that ends in the foreground", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("b1", { task_type: "local_bash", is_backgrounded: false }));
+
+        expect(tracker.accept(notification("b1"))).toEqual([]);
+      });
+
+      it(`reports an end that arrives before its start right after the start (${ISSUE_175})`, () => {
+        const tracker = new ClaudeTaskTracker();
+
+        const early = tracker.accept(notification("a1"));
+        const start = tracker.accept(started("a1"));
+
+        expect(early).toEqual([]);
+        expect(start.map((update) => update.sessionUpdate)).toEqual(["task_started", "task_ended"]);
+      });
+
+      it(`reports each end once, ignoring a repeated notification and progress after the end (${ISSUE_175})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+        tracker.accept(notification("a1"));
+
+        expect(tracker.accept(notification("a1", { status: "stopped" }))).toEqual([]);
         expect(
-          acceptMessage(
-            protocol,
-            systemMessage({
-              subtype: "task_started",
-              task_id: "task-a",
-              tool_use_id: "foreground",
-            })
-          ).updates
+          tracker.accept(
+            frame({ subtype: "task_progress", task_id: "a1", usage: { tool_uses: 9 } })
+          )
         ).toEqual([]);
       });
 
-      it("retains terminal identity until a delayed output frame completes the card", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "launch",
-          })
-        );
-        const terminalStatus = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-          })
-        );
+      it("hides ambient housekeeping tasks", () => {
+        const tracker = new ClaudeTaskTracker();
 
-        const terminalOutput = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-            summary: "late",
-          })
-        );
-        const afterCompletion = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_progress",
-            task_id: "task-a",
-            description: "too late",
-          })
-        );
-        observeTool(protocol, "replacement", "Task");
-        const duplicateIdentity = acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_started",
-            task_id: "task-a",
-            tool_use_id: "replacement",
-          })
-        );
-
-        expect(terminalStatus.updates).toEqual([{ toolCallId: "launch", status: "completed" }]);
-        expect(terminalOutput.updates).toEqual([
-          {
-            toolCallId: "launch",
-            status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "late" } }],
-          },
-        ]);
-        expect(afterCompletion.updates).toEqual([]);
-        expect(duplicateIdentity.updates).toEqual([]);
+        expect(tracker.accept(started("w1", { ambient: true }))).toEqual([]);
+        expect(tracker.accept(notification("w1"))).toEqual([]);
       });
+    });
 
-      it("preserves the first terminal status when an ordinary result supplies late output", () => {
-        const protocol = new ClaudeBackgroundTaskStateMachine();
-        observeTool(protocol, "launch", "Agent");
-        acceptMessage(protocol, launchAck("task-a", "launch"));
-        acceptMessage(
-          protocol,
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "task-a",
-            status: "completed",
-          })
-        );
+    describe("isRunningInBackground()", () => {
+      it("is true for a running background launch only", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+        tracker.accept(started("a2", { is_backgrounded: false }));
 
-        const lateOutput = acceptMessage(
-          protocol,
-          userMessage([{ id: "launch", content: "late output", isError: true }])
-        );
-
-        expect(lateOutput.resultActions.get("launch")).toEqual({
-          kind: "preserve_status",
-          status: "completed",
-        });
+        expect(tracker.isRunningInBackground("tool-a1")).toBe(true);
+        expect(tracker.isRunningInBackground("tool-a2")).toBe(false);
+        tracker.accept(notification("a1"));
+        expect(tracker.isRunningInBackground("tool-a1")).toBe(false);
       });
+    });
+
+    describe("stopRunning()", () => {
+      it(`ends every running task as stopped once, so the orphan end Claude reports after resuming is dropped (${ISSUE_175})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+        tracker.accept(started("a2"));
+        tracker.accept(notification("a2"));
+
+        const stopped = tracker.stopRunning();
+
+        expect(stopped).toEqual([{ sessionUpdate: "task_ended", taskId: "a1", status: "stopped" }]);
+        expect(tracker.stopRunning()).toEqual([]);
+        expect(
+          tracker.accept(
+            notification("a1", {
+              status: "stopped",
+              summary: "No completion record was found for this background task.",
+            })
+          )
+        ).toEqual([]);
+      });
+    });
+  });
+
+  describe("isAsyncLaunchResult()", () => {
+    it.each([
+      ["a background subagent", { isAsync: true, status: "async_launched", agentId: "a1" }],
+      ["a workflow", { status: "async_launched", taskId: "w1" }],
+      ["a background command", { stdout: "", backgroundTaskId: "b1" }],
+    ])("recognizes the launch result of %s", (_name, result) => {
+      expect(isAsyncLaunchResult(result)).toBe(true);
+    });
+
+    it("does not treat a finished tool's result as a launch", () => {
+      expect(isAsyncLaunchResult({ stdout: "done", stderr: "" })).toBe(false);
+      expect(isAsyncLaunchResult(undefined)).toBe(false);
     });
   });
 });

@@ -274,8 +274,38 @@ export type SessionUpdate =
   | { sessionUpdate: "usage_update"; usage: SessionUsage }
   | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null }
   | { sessionUpdate: "message_delivered"; promptId: string }
+  | { sessionUpdate: "messages_withdrawn"; promptIds: string[] }
   | { sessionUpdate: "turn_started"; turnId: string }
-  | ({ sessionUpdate: "turn_ended" } & TurnEnd);
+  | ({ sessionUpdate: "turn_ended" } & TurnEnd)
+  | { sessionUpdate: "session_disconnected"; error: Error }
+  | ({ sessionUpdate: "task_started" } & TaskStart)
+  | {
+      sessionUpdate: "task_progress";
+      taskId: string;
+      progress?: AgentToolProgress;
+      outputFile?: string;
+    }
+  | ({ sessionUpdate: "task_ended" } & TaskEnd);
+
+export type TaskKind = "subagent" | "command";
+
+export type TaskEndStatus = "completed" | "failed" | "stopped";
+
+export interface TaskStart {
+  taskId: string;
+  toolCallId: string;
+  kind: TaskKind;
+  description: string;
+  prompt?: string;
+  subagentType?: string;
+}
+
+export interface TaskEnd {
+  taskId: string;
+  status: TaskEndStatus;
+  summary?: string;
+  outputFile?: string;
+}
 
 export interface TurnEnd {
   turnId: string;
@@ -298,6 +328,7 @@ export interface SessionEvent {
   sessionId: SessionId;
   update: SessionUpdate;
   occurredAt?: number;
+  taskToolCallId?: string;
 }
 
 export type PermissionOptionKind = "allow_once" | "allow_always" | "reject_once" | "reject_always";

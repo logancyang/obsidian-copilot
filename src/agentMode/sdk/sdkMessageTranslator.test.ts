@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { SessionEvent, SessionUpdate, SessionUsage } from "@/agentMode/session/types";
+import type { SessionUpdate, SessionUsage } from "@/agentMode/session/types";
 import {
   createTranslatorState,
   mapStopReason,
@@ -140,9 +140,8 @@ function trackToolUse(
   );
 }
 
-function seedLaunch(state: ReturnType<typeof createTranslatorState>): void {
-  trackToolUse(state, "tu-launch", "Agent");
-  translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state);
+function manualCompactionState(): TranslatorState {
+  return Object.assign(createTranslatorState(), { compactionTrigger: "manual" as const });
 }
 
 function userMessage(content: unknown[], parent: string | null = null): SDKMessage {
@@ -799,206 +798,56 @@ describe("sdkMessageTranslator", () => {
       expect(out).toEqual([]);
     });
 
-    it("preserves notification-only lifecycle ordering at the session-event boundary", () => {
-      const frames = readFixture();
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 reports each subagent of a recording with out-of-order task frames as one start and one end, and hides their launch acknowledgements", () => {
       const state = createTranslatorState();
-      const events: SessionEvent[] = [];
-      const completedLaunches = new Set<string>();
+      const updates = readFixture().flatMap((frame) =>
+        translateSdkMessage(frame.payload, "replay-session", state).map(({ update }) => update)
+      );
 
-      expect(JSON.stringify(frames)).not.toContain("TaskOutput");
-      for (const frame of frames) {
-        const translated = translateSdkMessage(frame.payload, "replay-session", state);
-        events.push(...translated);
-        for (const { update } of translated) {
-          if (update.sessionUpdate !== "tool_call_update") continue;
-          if (!update.toolCallId.startsWith("launch-")) continue;
-          if (update.status === "completed") completedLaunches.add(update.toolCallId);
-          if (completedLaunches.has(update.toolCallId))
-            expect(update.status).not.toBe("in_progress");
-        }
-      }
-
-      const updates = events.map(({ update }) => update);
-      const launches = updates.filter(
-        (update): update is Extract<SessionUpdate, { sessionUpdate: "tool_call" }> =>
-          update.sessionUpdate === "tool_call" && update.vendorToolName === "Agent"
+      const lifecycle = updates.flatMap((update) =>
+        update.sessionUpdate === "task_started" || update.sessionUpdate === "task_ended"
+          ? [`${update.sessionUpdate} ${update.taskId}`]
+          : []
       );
-      expect(launches.map(({ toolCallId }) => toolCallId)).toEqual(["launch-a", "launch-b"]);
-      expect(updates).toContainEqual(
-        expect.objectContaining({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "launch-a",
-          status: "completed",
-          content: [
-            {
-              type: "content",
-              content: { type: "text", text: "Structure report from the automatic notification." },
-            },
-          ],
-        })
-      );
-      expect(updates).toContainEqual(
-        expect.objectContaining({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "launch-b",
-          status: "completed",
-          content: [
-            {
-              type: "content",
-              content: { type: "text", text: "Themes report from the automatic notification." },
-            },
-          ],
-        })
-      );
+      expect(lifecycle).toEqual([
+        "task_started task-a",
+        "task_started task-b",
+        "task_ended task-b",
+        "task_ended task-a",
+      ]);
+      expect(updates).toContainEqual({
+        sessionUpdate: "task_ended",
+        taskId: "task-b",
+        status: "completed",
+        summary: "Themes report from the automatic notification.",
+      });
+      expect(updates.some((update) => update.sessionUpdate === "tool_call_update")).toBe(false);
       expect(updates).toContainEqual({
         sessionUpdate: "agent_message_chunk",
         content: { type: "text", text: "Combined final response from both reports." },
       });
     });
 
-    describe("background subagent system frames", () => {
-      it("folds task_notification onto the launch card as its output + terminal status", () => {
-        const state = createTranslatorState();
-        seedLaunch(state);
-        const out = translateSdkMessage(
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "abc123",
-            tool_use_id: "tu-launch",
-            status: "completed",
-            summary: "Most prominent category: AI/agents (16 notes).",
-          }),
-          SESSION_ID,
-          state
-        );
-        expect(out).toEqual([
-          {
-            sessionId: SESSION_ID,
-            update: {
-              sessionUpdate: "tool_call_update",
-              toolCallId: "tu-launch",
-              status: "completed",
-              content: [
-                {
-                  type: "content",
-                  content: { type: "text", text: "Most prominent category: AI/agents (16 notes)." },
-                },
-              ],
-            },
-          },
-        ]);
-      });
-
-      it("maps a non-completed task_notification status to failed", () => {
-        const state = createTranslatorState();
-        seedLaunch(state);
-        const out = translateSdkMessage(
-          systemMessage({
-            subtype: "task_notification",
-            task_id: "abc123",
-            tool_use_id: "tu-launch",
-            status: "stopped",
-            summary: "",
-          }),
-          SESSION_ID,
-          state
-        );
-        expect(out).toHaveLength(1);
-        expect(out[0].update).toMatchObject({ toolCallId: "tu-launch", status: "failed" });
-        expect((out[0].update as { content?: unknown }).content).toBeUndefined();
-      });
-
-      it("keeps task_started in progress and normalizes meaningful task_progress", () => {
-        const state = createTranslatorState();
-        seedLaunch(state);
-        expect(
+    describe("background task launches", () => {
+      it.each([
+        ["first", ["tu-launch", "tu-read"]],
+        ["last", ["tu-read", "tu-launch"]],
+      ])(
+        "drops the launch acknowledgement but still translates its batched sibling result when the ack is %s",
+        (_position, order) => {
+          const state = createTranslatorState();
+          for (const id of order) trackToolUse(state, id, id === "tu-launch" ? "Agent" : "Read");
           translateSdkMessage(
             systemMessage({
               subtype: "task_started",
               task_id: "abc123",
               tool_use_id: "tu-launch",
-              description: "started",
+              task_type: "local_agent",
+              is_backgrounded: true,
             }),
             SESSION_ID,
             state
-          )[0].update
-        ).toEqual({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "tu-launch",
-          status: "in_progress",
-        });
-        expect(
-          translateSdkMessage(
-            systemMessage({
-              subtype: "task_progress",
-              task_id: "abc123",
-              tool_use_id: "tu-launch",
-              description: "Count markdown files",
-              last_tool_name: "Read",
-              usage: { tool_uses: 3, duration_ms: 9851, total_tokens: 4210 },
-            }),
-            SESSION_ID,
-            state
-          )[0].update
-        ).toEqual({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "tu-launch",
-          status: "in_progress",
-          progress: {
-            description: "Count markdown files",
-            toolName: "Read",
-            toolUses: 3,
-            durationMs: 9851,
-            totalTokens: 4210,
-          },
-        });
-      });
-
-      it("ignores a task_notification that is not a tracked subagent launch (background Bash/Monitor)", () => {
-        const state = createTranslatorState();
-        seedLaunch(state);
-        expect(
-          translateSdkMessage(
-            systemMessage({
-              subtype: "task_notification",
-              task_id: "bash-task",
-              tool_use_id: "tu-bash",
-              status: "completed",
-              summary: "done",
-            }),
-            SESSION_ID,
-            state
-          )
-        ).toEqual([]);
-        expect(
-          translateSdkMessage(
-            systemMessage({
-              subtype: "task_notification",
-              task_id: "abc123",
-              tool_use_id: "tu-other",
-              status: "completed",
-              summary: "done",
-            }),
-            SESSION_ID,
-            state
-          )
-        ).toEqual([]);
-      });
-
-      it("suppresses the async-launch ack tool_result so the launch stays in_progress", () => {
-        const state = createTranslatorState();
-        trackToolUse(state, "tu-launch", "Agent");
-        expect(translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state)).toEqual([]);
-      });
-
-      it.each([
-        ["first", ["tu-launch", "tu-read"]],
-        ["last", ["tu-read", "tu-launch"]],
-      ])(
-        "drops the launch-ack block but still translates its batched sibling result when the ack is %s",
-        (_position, order) => {
-          const state = createTranslatorState();
-          for (const id of order) trackToolUse(state, id, id === "tu-launch" ? "Agent" : "Read");
+          );
           const resultBlocks = {
             "tu-launch": {
               type: "tool_result",
@@ -1009,7 +858,6 @@ describe("sdkMessageTranslator", () => {
           };
           const batched = {
             type: "user",
-            tool_use_result: { isAsync: true, status: "async_launched", agentId: "abc123" },
             message: { content: order.map((id) => resultBlocks[id as keyof typeof resultBlocks]) },
             parent_tool_use_id: null,
             session_id: SESSION_ID,
@@ -1022,50 +870,60 @@ describe("sdkMessageTranslator", () => {
         }
       );
 
-      it("keeps the first terminal status when an ordinary result supplies late output", () => {
+      it("drops a launch acknowledgement that arrives before its task_started frame", () => {
         const state = createTranslatorState();
         trackToolUse(state, "tu-launch", "Agent");
-        translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state);
+
+        expect(translateSdkMessage(launchAckResult("tu-launch"), SESSION_ID, state)).toEqual([]);
+      });
+
+      it("settles a foreground subagent's card from its ordinary result", () => {
+        const state = createTranslatorState();
+        trackToolUse(state, "tu-agent", "Agent");
         translateSdkMessage(
           systemMessage({
-            subtype: "task_notification",
+            subtype: "task_started",
             task_id: "abc123",
-            status: "completed",
+            tool_use_id: "tu-agent",
+            task_type: "local_agent",
+            is_backgrounded: false,
           }),
           SESSION_ID,
           state
         );
 
-        const lateOutput = translateSdkMessage(
+        const out = translateSdkMessage(
+          userMessage([{ type: "tool_result", tool_use_id: "tu-agent", content: "report" }]),
+          SESSION_ID,
+          state
+        );
+
+        expect(out[0].update).toMatchObject({ toolCallId: "tu-agent", status: "completed" });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 emits a subagent's whole-message text and thinking, which never stream", () => {
+        const state = createTranslatorState();
+
+        const out = translateSdkMessage(
           {
-            type: "user",
+            type: "assistant",
             message: {
               content: [
-                {
-                  type: "tool_result",
-                  tool_use_id: "tu-launch",
-                  content: "late output",
-                  is_error: true,
-                },
+                { type: "thinking", thinking: "Count first." },
+                { type: "text", text: "6 words." },
               ],
             },
-            parent_tool_use_id: null,
+            parent_tool_use_id: "tu-agent",
+            uuid: UUID,
             session_id: SESSION_ID,
           } as unknown as SDKMessage,
           SESSION_ID,
           state
         );
 
-        expect(lateOutput).toEqual([
-          {
-            sessionId: SESSION_ID,
-            update: {
-              sessionUpdate: "tool_call_update",
-              toolCallId: "tu-launch",
-              status: "completed",
-              content: [{ type: "content", content: { type: "text", text: "late output" } }],
-            },
-          },
+        expect(out.map((e) => e.update)).toEqual([
+          { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "Count first." } },
+          { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "6 words." } },
         ]);
       });
     });
@@ -1238,10 +1096,7 @@ describe("sdkMessageTranslator", () => {
       }
 
       it("turns a recorded manual /compact into a running compaction that completes with the token counts", () => {
-        const { updates } = translateFixture(
-          "claude-compact-manual",
-          createTranslatorState(undefined, undefined, "manual")
-        );
+        const { updates } = translateFixture("claude-compact-manual", manualCompactionState());
 
         expect(updates).toEqual([
           {
@@ -1356,7 +1211,7 @@ describe("sdkMessageTranslator", () => {
       it(`reports nothing to compact as skipped, not failed, and adds no agent text for it (${ISSUE_635})`, () => {
         const { updates } = translateFixture(
           "claude-compact-nothing-to-compact",
-          createTranslatorState(undefined, undefined, "manual")
+          manualCompactionState()
         );
 
         expect(updates.filter(isCompaction)).toEqual([
@@ -1856,6 +1711,31 @@ describe("sdkMessageTranslator", () => {
       ]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 skips task-notification inputs and the stand-ins Claude records around a stopped turn, keeping the agent's own reply", () => {
+      const jsonl = transcript(
+        userEntry("u-1", "real prompt"),
+        userEntry("stop-1", [{ type: "text", text: "[Request interrupted by user]" }]),
+        userEntry("stop-2", [{ type: "text", text: "[Request interrupted by user for tool use]" }]),
+        assistantEntry([{ type: "text", text: "No response requested." }]),
+        userEntry("note-1", "<task-notification>\n<task-id>a1</task-id>\n</task-notification>", {
+          origin: { kind: "task-notification" },
+        }),
+        assistantEntry([{ type: "text", text: "The subagent finished." }])
+      );
+
+      expect(replay(jsonl)).toEqual([
+        {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text: "real prompt" },
+          messageId: "u-1",
+        },
+        {
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "The subagent finished." },
+        },
+      ]);
+    });
+
     it(`finishes a replayed background task's tool call from its launch result instead of leaving it running (${ISSUE_643})`, () => {
       const jsonl = transcript(
         assistantEntry([
@@ -1895,39 +1775,6 @@ describe("sdkMessageTranslator", () => {
   });
 
   describe("createTranslatorState()", () => {
-    it("carries background task identity into the next state so a late terminal notification still settles the launch", () => {
-      const firstQuery = createTranslatorState();
-      seedLaunch(firstQuery);
-      translateSdkMessage(resultMsg({}), SESSION_ID, firstQuery);
-      const nextQuery = createTranslatorState(firstQuery.claudeTasks, firstQuery.backgroundTasks);
-
-      const completed = translateSdkMessage(
-        systemMessage({
-          subtype: "task_notification",
-          task_id: "abc123",
-          status: "completed",
-          summary: "finished after the first query",
-        }),
-        SESSION_ID,
-        nextQuery
-      );
-      const lateProgress = translateSdkMessage(
-        systemMessage({
-          subtype: "task_progress",
-          task_id: "abc123",
-          description: "too late",
-        }),
-        SESSION_ID,
-        nextQuery
-      );
-
-      expect(completed[0].update).toMatchObject({
-        toolCallId: "tu-launch",
-        status: "completed",
-      });
-      expect(lateProgress).toEqual([]);
-    });
-
     it("carries the task plan accumulator into the next state so a later TaskUpdate resolves an earlier TaskCreate", () => {
       const turn1 = createTranslatorState();
       translateSdkMessage(

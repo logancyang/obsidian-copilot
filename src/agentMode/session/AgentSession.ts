@@ -9,6 +9,7 @@ import {
   AgentToolKind,
   AgentQuestionAnswers,
   AgentTodoListEntry,
+  AgentToolProgress,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -29,6 +30,8 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
+  TaskEndStatus,
+  TaskStart,
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
@@ -105,6 +108,15 @@ export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
+const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
+const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+
+export interface AgentTask extends TaskStart {
+  status: "running" | TaskEndStatus;
+  progress?: AgentToolProgress;
+  outputFile?: string;
+  summary?: string;
+}
 
 type TurnOutcome = Omit<TurnEnd, "turnId">;
 
@@ -158,6 +170,7 @@ export interface AgentSessionListener {
   onCurrentPlanChanged?(): void;
   onCurrentTodoListChanged?(): void;
   onNeedsAttentionChanged?(needsAttention: boolean): void;
+  onTasksChanged?(): void;
 }
 
 export interface ProjectContextUpdates {
@@ -235,6 +248,9 @@ export class AgentSession {
   private openTurnId: string | null = null;
   private pendingPrompts = new Map<string, PendingPrompt>();
   private turnFiles = new Map<string, TurnFileCapture>();
+  private readonly tasks = new Map<string, AgentTask>();
+  private taskList: readonly AgentTask[] = EMPTY_TASKS;
+  private readonly taskContent = new Map<string, AgentMessageStore>();
   private currentTurnHadRoutedToolActivity = false;
   private currentMessageIds = new Set<string>();
   private settledStream: {
@@ -556,10 +572,12 @@ export class AgentSession {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
     if (this.backendSessionId === null || !this.startupSettled) return "starting";
-    if (this.requests.hasPending()) {
+    const mainTurnRunning = this.abortController !== null || this.openTurnId !== null;
+    // A background task can ask while the main agent is idle; its request must not hold the composer or show Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (mainTurnRunning && this.requests.hasPending()) {
       return "awaiting_permission";
     }
-    if (this.abortController !== null || this.openTurnId !== null) return "running";
+    if (mainTurnRunning) return "running";
     if (this.lastTurnError) return "error";
     return "idle";
   }
@@ -960,7 +978,8 @@ export class AgentSession {
       for (const prompt of stopped) prompt.settle({ stopReason: "cancelled" });
     });
     this.settledStream = null;
-    this.requests.rejectToolPermissions();
+    // Stop ends the main agent's turn only, so a background task's request stays answerable. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    this.requests.rejectMainToolPermissions();
     this.requests.withdrawQuestions();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
@@ -1015,6 +1034,16 @@ export class AgentSession {
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
     return this.requests.getCurrentTodoList();
+  }
+
+  getTasks(): readonly AgentTask[] {
+    return this.taskList;
+  }
+
+  getTaskMessages(taskId: string): readonly AgentChatMessage[] {
+    const toolCallId = this.tasks.get(taskId)?.toolCallId;
+    const store = toolCallId ? this.taskContent.get(toolCallId) : undefined;
+    return store?.getDisplayMessages() ?? EMPTY_MESSAGES;
   }
 
   getReportEvidence(): FeedbackEvidence {
@@ -1116,6 +1145,10 @@ export class AgentSession {
 
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
+    if (event.taskToolCallId !== undefined) {
+      this.applyTaskContent(event.taskToolCallId, update);
+      return;
+    }
     // A user message echoed outside the replay is already shown from the prompt that sent it. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
     if (update.sessionUpdate === "user_message_chunk" && !this.historyReplay.isOpen()) return;
     if (this.historyReplay.append(update, event.occurredAt)) {
@@ -1127,6 +1160,17 @@ export class AgentSession {
         if (prompt) prompt.delivered = true;
         return;
       }
+      case "messages_withdrawn":
+        this.withdrawPrompts(update.promptIds);
+        return;
+      case "session_disconnected":
+        this.handleDisconnect(update.error);
+        return;
+      case "task_started":
+      case "task_progress":
+      case "task_ended":
+        this.applyTaskUpdate(update);
+        return;
       case "turn_started":
         this.startTurn(update.turnId);
         return;
@@ -1310,6 +1354,134 @@ export class AgentSession {
     this.openTurnId = turnId;
     if (!this.placeholderId) this.openReply();
     this.recomputeStatusIfChanged();
+  }
+
+  private withdrawPrompts(promptIds: readonly string[]): void {
+    this.endCancelledPromptDrain();
+    for (const promptId of promptIds) {
+      this.pendingPrompts.get(promptId)?.settle({ stopReason: "cancelled" });
+      this.pendingPrompts.delete(promptId);
+    }
+    this.recomputeStatusIfChanged();
+  }
+
+  // The next send reconnects the agent, so the chat only reports the loss. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+  private handleDisconnect(error: Error): void {
+    this.endCancelledPromptDrain();
+    if (this.placeholderId || this.pendingPrompts.size > 0) this.failReply(error);
+    this.withdrawPrompts([...this.pendingPrompts.keys()]);
+  }
+
+  private applyTaskUpdate(
+    update: Extract<
+      SessionEvent["update"],
+      { sessionUpdate: "task_started" | "task_progress" | "task_ended" }
+    >
+  ): void {
+    if (update.sessionUpdate === "task_started") {
+      const { taskId, toolCallId, kind, description, prompt, subagentType } = update;
+      this.tasks.set(taskId, {
+        taskId,
+        toolCallId,
+        kind,
+        description,
+        prompt,
+        subagentType,
+        status: "running",
+      });
+      return this.publishTasks();
+    }
+    const task = this.tasks.get(update.taskId);
+    if (!task) return;
+    if (update.sessionUpdate === "task_progress") {
+      const progress = update.progress && { ...task.progress, ...update.progress };
+      this.tasks.set(task.taskId, {
+        ...task,
+        progress,
+        outputFile: update.outputFile ?? task.outputFile,
+      });
+      if (progress) this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      return this.publishTasks();
+    }
+    this.tasks.set(task.taskId, {
+      ...task,
+      status: update.status,
+      summary: update.summary,
+      outputFile: update.outputFile ?? task.outputFile,
+    });
+    // The launching card follows its task; the task keeps the exact end status. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    this.updateLaunchCard({
+      toolCallId: task.toolCallId,
+      status: update.status === "completed" ? "completed" : "failed",
+      ...(update.summary
+        ? { content: [{ type: "content", content: { type: "text", text: update.summary } }] }
+        : {}),
+    });
+    this.publishTasks();
+  }
+
+  private updateLaunchCard(delta: ToolCallDelta): void {
+    for (const store of [this.store, ...this.taskContent.values()]) {
+      const messageId = store.findMessageIdWithToolCall(delta.toolCallId);
+      if (!messageId) continue;
+      const card = store
+        .getMessage(messageId)
+        ?.parts?.find((part) => part.kind === "tool_call" && part.id === delta.toolCallId);
+      if (store.upsertAgentPart(messageId, mergeToolCallUpdate(card, delta))) {
+        if (store === this.store) this.scheduleNotifyMessages();
+      }
+      return;
+    }
+  }
+
+  private applyTaskContent(toolCallId: string, update: SessionEvent["update"]): void {
+    let store = this.taskContent.get(toolCallId);
+    if (!store) {
+      store = new AgentMessageStore();
+      this.taskContent.set(toolCallId, store);
+    }
+    const messageId =
+      store.getDisplayMessages()[0]?.id ??
+      store.addMessage({
+        message: "",
+        sender: AI_SENDER,
+        timestamp: formatDateTime(new Date()),
+        isVisible: true,
+        parts: [],
+      });
+    let changed: boolean;
+    switch (update.sessionUpdate) {
+      case "agent_message_chunk":
+        changed = store.appendAgentText(messageId, extractText(update.content));
+        break;
+      case "agent_thought_chunk":
+        changed = store.appendAgentThought(messageId, extractText(update.content));
+        break;
+      case "tool_call":
+        changed = store.upsertAgentPart(messageId, toolCallToPart(update));
+        break;
+      case "tool_call_update": {
+        const existing = store
+          .getMessage(messageId)
+          ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
+        changed = store.upsertAgentPart(messageId, mergeToolCallUpdate(existing, update));
+        break;
+      }
+      default:
+        return;
+    }
+    if (changed) this.publishTasks();
+  }
+
+  private publishTasks(): void {
+    this.taskList = this.tasks.size === 0 ? EMPTY_TASKS : Object.freeze([...this.tasks.values()]);
+    for (const l of this.listeners) {
+      try {
+        l.onTasksChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] tasks listener threw`, e);
+      }
+    }
   }
 
   private endTurn(end: TurnEnd): void {

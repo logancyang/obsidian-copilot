@@ -2060,6 +2060,79 @@ describe("AgentSession", () => {
         expect(aiMessages(session).map((m) => m.message)).toEqual(["earlier work", "the answer"]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 gives a turn the agent starts before a sent prompt arrives its own reply, and answers the prompt in a reply below it", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        let promptId = "";
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("unrelated question");
+
+        emit({ sessionUpdate: "turn_started", turnId: "notification" });
+        emit(replayText("agent_message_chunk", "The subagent finished."));
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "unrelated question" },
+          { sender: AI_SENDER, message: "The subagent finished." },
+        ]);
+        emit({ sessionUpdate: "turn_ended", turnId: "notification", stopReason: "end_turn" });
+        emit({ sessionUpdate: "message_delivered", promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "answer" });
+        emit(replayText("agent_message_chunk", "Here is the answer."));
+        emit({ sessionUpdate: "turn_ended", turnId: "answer", stopReason: "end_turn" });
+
+        expect(await turn).toBe("end_turn");
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "unrelated question" },
+          { sender: AI_SENDER, message: "The subagent finished." },
+          { sender: AI_SENDER, message: "Here is the answer." },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt the agent withdrew as cancelled", async () => {
+        const mock = makeMockBackend();
+        let promptId = "";
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("hi");
+        await waitFor(() => expect(promptId).not.toBe(""));
+
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+
+        expect(await turn).toBe("cancelled");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 shows a disconnect in the waiting reply, settles the prompt, and sends the next prompt normally", async () => {
+        const mock = makeMockBackend();
+        let promptId = "";
+        const realPrompt = mock.asBackend.prompt;
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("hi");
+        await waitFor(() => expect(promptId).not.toBe(""));
+
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+        mock.emitUpdate({
+          sessionUpdate: "session_disconnected",
+          error: new Error("Claude Code stopped unexpectedly."),
+        });
+        expect(await turn).toBe("cancelled");
+        expect(aiMessage(session)).toMatchObject({
+          isErrorMessage: true,
+          message: expect.stringContaining("Claude Code stopped unexpectedly."),
+        });
+        expect(session.getStatus()).toBe("error");
+
+        mock.asBackend.prompt = realPrompt;
+        expect(await session.sendPrompt("again").turn).toBe("end_turn");
+        expect(session.getStatus()).toBe("idle");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ignores the end of a turn that is not running", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -3212,6 +3285,51 @@ describe("AgentSession", () => {
             [AI_SENDER, "cancelled"],
           ]
         );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 sends the next prompt once the stopped prompt is withdrawn, without waiting for a turn that will never come", async () => {
+        const mock = makeMockBackend();
+        let stoppedPromptId = "";
+        const realPrompt = mock.asBackend.prompt;
+        mock.asBackend.prompt = async (input) => {
+          stoppedPromptId = input.promptId;
+        };
+        const session = makeSession(mock);
+        const first = session.sendPrompt("first");
+        await waitFor(() => expect(stoppedPromptId).not.toBe(""));
+        await session.cancel();
+        await first.turn;
+        mock.asBackend.prompt = realPrompt;
+
+        const next = session.sendPrompt("second");
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [stoppedPromptId] });
+
+        expect(await next.turn).toBe("end_turn");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a background task's permission request answerable when Stop ends the main turn", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn } = session.sendPrompt("hi");
+        void session.handleToolPermission(writePermissionRequest());
+        const fromTask = session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+          toolCall: { ...writePermissionRequest().toolCall, toolCallId: "tc-task" },
+        });
+
+        await session.cancel();
+        finishPrompt("cancelled");
+        await turn;
+
+        expect(session.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-task",
+        ]);
+        session.resolveToolPermission("tc-task", "allow_once");
+        await expect(fromTask).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "allow_once" },
+        });
       });
 
       it("sends a cancel to the backend and resolves the turn as cancelled", async () => {
@@ -4382,6 +4500,20 @@ describe("AgentSession", () => {
         await turn;
         expect(session.getStatus()).toBe("idle");
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 stays idle while only a background task's permission request waits, so the chat can still send", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+
+        void session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+        });
+
+        expect(session.getStatus()).toBe("idle");
+        expect(session.getPendingToolPermissions()).toHaveLength(1);
+        expect(await session.sendPrompt("meanwhile").turn).toBe("end_turn");
+      });
     });
 
     describe("subscribe()", () => {
@@ -4778,6 +4910,156 @@ describe("AgentSession", () => {
 
         expect(session.getFeedbackOffer()).toMatchObject({ status: "dismissed" });
         expect(session.getFeedbackOffer()?.report).toBeUndefined();
+      });
+    });
+
+    describe("getTasks()", () => {
+      function launchTurn(mock: MockBackend, session: AgentSession) {
+        let promptId = "";
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const { turn } = session.sendPrompt("count the words in a background subagent");
+        return {
+          turn,
+          run: (...updates: SessionEvent["update"][]) => {
+            mock.emitUpdate({ sessionUpdate: "message_delivered", promptId });
+            mock.emitUpdate({ sessionUpdate: "turn_started", turnId: "launch" });
+            for (const update of updates) mock.emitUpdate(update);
+          },
+        };
+      }
+
+      const AGENT_CARD: SessionEvent["update"] = {
+        sessionUpdate: "tool_call",
+        toolCallId: "tool-agent",
+        title: "Agent",
+        kind: "other",
+        status: "in_progress",
+        vendorToolName: "Agent",
+      };
+
+      const TASK_STARTED: SessionEvent["update"] = {
+        sessionUpdate: "task_started",
+        taskId: "task-1",
+        toolCallId: "tool-agent",
+        kind: "subagent",
+        description: "Count words",
+        prompt: "Count the words in every note",
+      };
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 tracks a task from start to end while its launching card stays running past its turn and then shows the task's report", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const onTasksChanged = jest.fn();
+        subscribeTo(session, { onTasksChanged });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED, replayText("agent_message_chunk", "Launched."));
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+        await waitFor(() => expect(aiMessage(session)?.turnStopReason).toBe("end_turn"));
+        const card = () => aiMessage(session)?.parts?.find((p) => p.kind === "tool_call");
+        expect(card()).toMatchObject({ status: "in_progress" });
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ taskId: "task-1", kind: "subagent", status: "running" }),
+        ]);
+
+        mock.emitUpdate({
+          sessionUpdate: "task_progress",
+          taskId: "task-1",
+          progress: { toolName: "Bash", toolUses: 1 },
+        });
+        mock.emitUpdate({
+          sessionUpdate: "task_ended",
+          taskId: "task-1",
+          status: "completed",
+          summary: "13 words in total.",
+        });
+
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({
+            status: "completed",
+            summary: "13 words in total.",
+            progress: { toolName: "Bash", toolUses: 1 },
+          }),
+        ]);
+        expect(card()).toMatchObject({
+          status: "completed",
+          progress: { toolName: "Bash", toolUses: 1 },
+          output: [{ type: "text", text: "13 words in total." }],
+        });
+        expect(onTasksChanged).toHaveBeenCalledTimes(3);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a stopped task's exact status while its card shows it failed", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        expect(session.getTasks()[0].status).toBe("stopped");
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          status: "failed",
+        });
+      });
+
+      it("returns one stable empty list before any task starts", () => {
+        const session = makeSession(makeMockBackend());
+
+        expect(session.getTasks()).toBe(session.getTasks());
+        expect(session.getTasks()).toEqual([]);
+      });
+    });
+
+    describe("getTaskMessages()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a subagent's text and tool calls in its own messages, never in the reply that is running when they arrive", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Count words",
+        });
+        const { turn } = session.sendPrompt("unrelated question");
+        const fromTask = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", update, taskToolCallId: "tool-agent" });
+
+        fromTask({
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-bash",
+          title: "wc -w",
+          kind: "execute",
+          status: "in_progress",
+        });
+        fromTask({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-bash",
+          status: "completed",
+        });
+        fromTask(replayText("agent_message_chunk", "13 words."));
+        mock.emitUpdate(replayText("agent_message_chunk", "The answer."));
+        finishPrompt();
+        await turn;
+
+        expect(aiMessage(session)?.message).toBe("The answer.");
+        expect(aiMessage(session)?.parts?.some((p) => p.kind === "tool_call")).toBe(false);
+        expect(session.getTaskMessages("task-1")).toEqual([
+          expect.objectContaining({
+            sender: AI_SENDER,
+            message: "13 words.",
+            parts: expect.arrayContaining([
+              expect.objectContaining({ kind: "tool_call", id: "tool-bash", status: "completed" }),
+            ]),
+          }),
+        ]);
+        expect(session.getTaskMessages("unknown")).toEqual([]);
       });
     });
 

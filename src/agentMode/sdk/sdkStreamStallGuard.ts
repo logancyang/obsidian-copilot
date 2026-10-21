@@ -1,16 +1,10 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
+export const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
 
 export const SDK_STREAM_STALL_MESSAGE =
   `Claude stopped responding — the response stream stalled mid-reply (no output for ` +
   `${SDK_STREAM_STALL_TIMEOUT_MS / 1000}s) and the turn was ended. Send your message again to continue.`;
-
-export interface SdkStreamStallGuardOptions {
-  abortController: AbortController;
-  timeoutMs?: number;
-  onStall?: (timeoutMs: number) => void;
-}
 
 function streamEventType(msg: SDKMessage): string | null {
   if (msg.type !== "stream_event") return null;
@@ -26,38 +20,36 @@ function isContentStreamEvent(evType: string | null): boolean {
   );
 }
 
-export async function* guardSdkStreamStall(
-  source: AsyncIterable<SDKMessage>,
-  { abortController, timeoutMs = SDK_STREAM_STALL_TIMEOUT_MS, onStall }: SdkStreamStallGuardOptions
-): AsyncGenerator<SDKMessage> {
-  let stalled = false;
-  let contentStarted = false;
-  let timer: number | undefined;
-  const disarm = (): void => {
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      timer = undefined;
-    }
-  };
-  try {
-    for await (const msg of source) {
-      disarm();
-      const evType = streamEventType(msg);
-      if (isContentStreamEvent(evType)) contentStarted = true;
-      if (evType === "message_stop") contentStarted = false;
-      if (contentStarted && evType !== "message_stop") {
-        timer = window.setTimeout(() => {
-          stalled = true;
-          onStall?.(timeoutMs);
-          abortController.abort();
-        }, timeoutMs);
-      }
-      yield msg;
-    }
-  } catch (e) {
-    if (!stalled) throw e;
-  } finally {
-    disarm();
+export class SdkStreamStallGuard {
+  private timer: number | undefined;
+  private contentStarted = false;
+
+  constructor(
+    private readonly onStall: () => void,
+    private readonly timeoutMs = SDK_STREAM_STALL_TIMEOUT_MS
+  ) {}
+
+  observe(msg: SDKMessage): void {
+    this.clearTimer();
+    const evType = streamEventType(msg);
+    if (isContentStreamEvent(evType)) this.contentStarted = true;
+    if (evType === "message_stop") this.contentStarted = false;
+    if (!this.contentStarted) return;
+    this.timer = window.setTimeout(() => {
+      this.timer = undefined;
+      this.contentStarted = false;
+      this.onStall();
+    }, this.timeoutMs);
   }
-  if (stalled) throw new Error(SDK_STREAM_STALL_MESSAGE);
+
+  disarm(): void {
+    this.clearTimer();
+    this.contentStarted = false;
+  }
+
+  private clearTimer(): void {
+    if (this.timer === undefined) return;
+    window.clearTimeout(this.timer);
+    this.timer = undefined;
+  }
 }

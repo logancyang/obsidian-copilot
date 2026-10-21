@@ -199,9 +199,13 @@ export class InteractiveRequests {
     return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
   }
 
-  rejectToolPermissions(): void {
-    if (this.pendingToolResolvers.size === 0) return;
-    this.flushResolvers(this.pendingToolResolvers);
+  rejectMainToolPermissions(): void {
+    const mainRequests = [...this.pendingToolResolvers].filter(
+      ([, { request }]) => (request.requester ?? "main") === "main"
+    );
+    if (mainRequests.length === 0) return;
+    for (const [toolCallId] of mainRequests) this.pendingToolResolvers.delete(toolCallId);
+    this.flushResolvers(new Map(mainRequests));
     this.deps.notifyMessages();
   }
 

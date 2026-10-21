@@ -268,13 +268,13 @@ describe("InteractiveRequests", () => {
       });
     });
 
-    describe("rejectToolPermissions()", () => {
-      it("rejects every pending tool permission and notifies the transcript", async () => {
+    describe("rejectMainToolPermissions()", () => {
+      it("rejects every pending main-agent tool permission and notifies the transcript", async () => {
         const { requests, notifyMessages } = makeRequests();
         const decision = requests.handleToolPermission(writePermissionRequest());
         notifyMessages.mockClear();
 
-        requests.rejectToolPermissions();
+        requests.rejectMainToolPermissions();
 
         await expect(decision).resolves.toEqual({
           outcome: { outcome: "selected", optionId: "reject_once" },
@@ -286,9 +286,30 @@ describe("InteractiveRequests", () => {
       it("does nothing when no tool permission is pending", () => {
         const { requests, notifyMessages } = makeRequests();
 
-        requests.rejectToolPermissions();
+        requests.rejectMainToolPermissions();
 
         expect(notifyMessages).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a background task's tool permission pending and answerable", async () => {
+        const { requests, notifyMessages } = makeRequests();
+        const fromTask = requests.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+          toolCall: { ...writePermissionRequest().toolCall, toolCallId: "tc-task" },
+        });
+        notifyMessages.mockClear();
+
+        requests.rejectMainToolPermissions();
+
+        expect(notifyMessages).not.toHaveBeenCalled();
+        expect(requests.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-task",
+        ]);
+        requests.resolveToolPermission("tc-task", "allow_once");
+        await expect(fromTask).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "allow_once" },
+        });
       });
     });
 

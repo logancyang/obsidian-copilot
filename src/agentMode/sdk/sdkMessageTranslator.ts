@@ -23,7 +23,7 @@ import {
   type ClaudeTaskPlanState,
 } from "./claudeTodoPlan";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
-import { ClaudeBackgroundTaskStateMachine, type ClaudeTaskToolUpdate } from "./claudeTaskProtocol";
+import { ClaudeTaskTracker, isAsyncLaunchResult } from "./claudeTaskProtocol";
 
 type SDKSystemLike = Extract<SDKMessage, { type: "system" }>;
 
@@ -39,7 +39,7 @@ export interface TranslatorState {
     }
   >;
   emittedToolUseIds: Set<string>;
-  backgroundTasks: ClaudeBackgroundTaskStateMachine;
+  tasks: ClaudeTaskTracker;
   claudeTasks: ClaudeTaskPlanState;
   lastAssistantUsage?: AssistantUsageSample;
   compactionTrigger: CompactionTrigger;
@@ -55,16 +55,12 @@ interface AssistantUsageSample {
   model: string;
 }
 
-export function createTranslatorState(
-  claudeTasks?: ClaudeTaskPlanState,
-  backgroundTasks?: ClaudeBackgroundTaskStateMachine,
-  compactionTrigger: CompactionTrigger = "auto"
-): TranslatorState {
+export function createTranslatorState(claudeTasks?: ClaudeTaskPlanState): TranslatorState {
   return {
-    compactionTrigger,
+    compactionTrigger: "auto",
     toolUseBlocks: new Map(),
     emittedToolUseIds: new Set(),
-    backgroundTasks: backgroundTasks ?? new ClaudeBackgroundTaskStateMachine(),
+    tasks: new ClaudeTaskTracker(),
     claudeTasks: claudeTasks ?? createClaudeTaskPlanState(),
   };
 }
@@ -139,10 +135,9 @@ function translateSystemMessage(
   sessionId: SessionId,
   state: TranslatorState
 ): SessionEvent[] {
-  const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
   return [
     ...compactionEvents(msg, sessionId, state),
-    ...taskUpdateEvents(sessionId, decision.updates),
+    ...state.tasks.accept(msg).map((update) => event(sessionId, update)),
   ];
 }
 
@@ -248,7 +243,6 @@ function translateStreamEvent(
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
         const { tool: name, mcpServer } = resolveToolName(block.name);
-        observeBackgroundTaskLaunch(state, block.id, name, mcpServer);
         state.toolUseBlocks.set(sdkEvent.index, {
           id: block.id,
           name,
@@ -386,11 +380,12 @@ function translateAssistantMessage(
   }
   const content = message.content;
   if (!Array.isArray(content)) return out;
+  // A subagent's turns arrive whole, never as stream deltas, so its text comes from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+  if (parentToolUseId !== undefined) out.push(...replayAssistantText(content, sessionId));
   for (const block of content) {
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
     const { tool: name, mcpServer } = resolveToolName(b.name);
-    observeBackgroundTaskLaunch(state, b.id, name, mcpServer);
     if (state.emittedToolUseIds.has(b.id)) continue;
     state.emittedToolUseIds.add(b.id);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
@@ -445,22 +440,19 @@ function translateUserMessage(
 ): SessionEvent[] {
   const content = (msg.message as { content?: unknown }).content;
   if (!Array.isArray(content)) return [];
-  const decision = state.backgroundTasks.accept({ kind: "sdk_message", message: msg });
   const originalFiles = preEditContent(msg);
+  const launchedTask = isAsyncLaunchResult(msg.tool_use_result);
 
   const out: SessionEvent[] = [];
   for (const block of content) {
     const b = block as ToolResultBlock;
     if (b.type !== "tool_result" || !b.tool_use_id) continue;
-
-    const resultAction = decision.resultActions.get(b.tool_use_id);
-    if (resultAction?.kind === "omit") continue;
-
-    const status =
-      resultAction?.kind === "preserve_status" ? resultAction.status : toolResultStatus(b);
-    out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status, originalFiles));
+    // A background task's launch result only says it started; the task's end settles its card. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (launchedTask || state.tasks.isRunningInBackground(b.tool_use_id)) continue;
+    out.push(
+      ...toolResultEvents(sessionId, state, b.tool_use_id, b, toolResultStatus(b), originalFiles)
+    );
   }
-  out.push(...taskUpdateEvents(sessionId, decision.updates));
   return out;
 }
 
@@ -534,28 +526,6 @@ function makeToolCallUpdate(
   };
 }
 
-function observeBackgroundTaskLaunch(
-  state: TranslatorState,
-  toolUseId: string,
-  name: string,
-  mcpServer: string | undefined
-): void {
-  state.backgroundTasks.accept({
-    kind: "tool_snapshot",
-    toolCallId: toolUseId,
-    nativeToolName: mcpServer ? undefined : name,
-  });
-}
-
-function taskUpdateEvents(
-  sessionId: SessionId,
-  updates: readonly ClaudeTaskToolUpdate[]
-): SessionEvent[] {
-  return updates.map((update) =>
-    event(sessionId, { sessionUpdate: "tool_call_update", ...update })
-  );
-}
-
 function toolResultContent(content: unknown): ToolCallContent[] | undefined {
   if (typeof content === "string") {
     return [{ type: "content", content: { type: "text", text: content } }];
@@ -604,6 +574,7 @@ interface ClaudeTranscriptEntry {
   isMeta?: boolean;
   isSidechain?: boolean;
   isCompactSummary?: boolean;
+  origin?: { kind?: unknown };
   message?: { content?: unknown };
 }
 
@@ -621,6 +592,10 @@ export function replayClaudeTranscript(
     if (!entry || entry.isMeta || entry.isSidechain) continue;
     // A compaction summary and the echo of a local command such as /compact are Claude CLI bookkeeping, not prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/635
     if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) continue;
+    // Task notifications and the CLI's stand-ins around a stopped turn are not messages anyone wrote. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (entry.origin?.kind === "task-notification" || isStopBookkeeping(entry.message?.content)) {
+      continue;
+    }
     const content = entry.message?.content;
     const events =
       entry.type === "assistant"
@@ -660,6 +635,19 @@ function parseTranscriptEntry(line: string): ClaudeTranscriptEntry | null {
   }
 }
 
+function replayAssistantText(content: unknown[], sessionId: SessionId): SessionEvent[] {
+  return content.flatMap((block) => {
+    const b = block as { type?: string; text?: unknown; thinking?: unknown };
+    if (b.type === "text" && typeof b.text === "string") {
+      return [textChunk(sessionId, "agent_message_chunk", b.text)];
+    }
+    if (b.type === "thinking" && typeof b.thinking === "string") {
+      return [textChunk(sessionId, "agent_thought_chunk", b.thinking)];
+    }
+    return [];
+  });
+}
+
 function replayAssistantContent(
   content: unknown,
   sessionId: SessionId,
@@ -668,19 +656,10 @@ function replayAssistantContent(
   if (!Array.isArray(content)) return [];
   const out: SessionEvent[] = [];
   for (const block of content) {
-    const b = block as {
-      type?: string;
-      text?: unknown;
-      thinking?: unknown;
-      id?: string;
-      name?: string;
-      input?: unknown;
-    };
-    if (b.type === "text" && typeof b.text === "string") {
-      out.push(textChunk(sessionId, "agent_message_chunk", b.text));
-    } else if (b.type === "thinking" && typeof b.thinking === "string") {
-      out.push(textChunk(sessionId, "agent_thought_chunk", b.thinking));
-    } else if (b.type === "tool_use" && b.id && b.name) {
+    const b = block as { type?: string; id?: string; name?: string; input?: unknown };
+    if (b.type !== "tool_use") {
+      out.push(...replayAssistantText([block], sessionId));
+    } else if (b.id && b.name) {
       const { tool: name, mcpServer } = resolveToolName(b.name);
       const input = b.input ?? {};
       out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, input)));
@@ -691,6 +670,23 @@ function replayAssistantContent(
 }
 
 const LOCAL_COMMAND_ECHO = /^<(command-name|local-command-stdout)>/;
+
+const STOP_BOOKKEEPING = new Set([
+  "[Request interrupted by user]",
+  "[Request interrupted by user for tool use]",
+  "No response requested.",
+]);
+
+function isStopBookkeeping(content: unknown): boolean {
+  if (typeof content === "string") return STOP_BOOKKEEPING.has(content.trim());
+  if (!Array.isArray(content) || content.length !== 1) return false;
+  const block = content[0] as { type?: unknown; text?: unknown };
+  return (
+    block?.type === "text" &&
+    typeof block.text === "string" &&
+    STOP_BOOKKEEPING.has(block.text.trim())
+  );
+}
 
 function isLocalCommandEcho(content: unknown): boolean {
   return typeof content === "string" && LOCAL_COMMAND_ECHO.test(content);

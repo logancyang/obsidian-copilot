@@ -8,9 +8,6 @@ import {
   type ModelInfo,
   type Options,
   type PermissionMode,
-  type Query,
-  type SDKMessage,
-  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -41,18 +38,15 @@ import type {
   SessionEvent,
   SessionId,
   SessionUpdateHandler,
-  StopReason,
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
-import { ClaudeBackgroundTaskStateMachine } from "./claudeTaskProtocol";
+import { ClaudeLiveQuery } from "./claudeLiveQuery";
 import {
   createTranslatorState,
-  mapStopReason,
   replayClaudeTranscript,
-  translateSdkMessage,
   type TranslatorState,
 } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
@@ -62,35 +56,29 @@ import {
   resolveSeedModelId,
   synthesizeEffortConfigOption,
 } from "./effortOption";
-import {
-  describeSdkMessage,
-  logSdkError,
-  logSdkInbound,
-  logSdkOutbound,
-  logSdkOutboundResult,
-} from "./sdkDebugTap";
-import { guardSdkStreamStall } from "./sdkStreamStallGuard";
+import { logSdkError, logSdkOutbound, logSdkOutboundResult } from "./sdkDebugTap";
 
 interface SessionState {
   cwd: string | null;
   projectId?: ProjectScopeId;
-  firstPromptStarted: boolean;
+  hasTranscript: boolean;
   model?: string;
   permissionMode?: PermissionMode;
   effort?: EffortLevel;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
-  claudeTaskPlan: ClaudeTaskPlanState;
-  backgroundTasks: ClaudeBackgroundTaskStateMachine;
-  active?: Query;
+  translator: TranslatorState;
+  live?: ClaudeLiveQuery;
+  starting?: Promise<ClaudeLiveQuery>;
   systemPromptAppend: string;
 }
 
-const FOREGROUND_ONLY_TOOLS = new Set(["Agent", "Task", "Bash"]);
-const REMOTE_AGENT_DENIAL_REASON =
-  "Remote-isolated agents require background execution, which is temporarily unavailable in Copilot v4.";
-
-export const enforceForegroundToolUse: HookCallback = async (input) => {
-  if (input.hook_event_name !== "PreToolUse" || !FOREGROUND_ONLY_TOOLS.has(input.tool_name)) {
+// Subagents run in the background unless the model chooses, so the chat stays free while they work.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+export const runSubagentsInBackground: HookCallback = async (input) => {
+  if (
+    input.hook_event_name !== "PreToolUse" ||
+    (input.tool_name !== "Agent" && input.tool_name !== "Task")
+  ) {
     return {};
   }
   const toolInput =
@@ -99,22 +87,11 @@ export const enforceForegroundToolUse: HookCallback = async (input) => {
     !Array.isArray(input.tool_input)
       ? (input.tool_input as Record<string, unknown>)
       : {};
-  if (
-    (input.tool_name === "Agent" || input.tool_name === "Task") &&
-    toolInput.isolation === "remote"
-  ) {
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: REMOTE_AGENT_DENIAL_REASON,
-      },
-    };
-  }
+  if (toolInput.run_in_background !== undefined) return {};
   return {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
-      updatedInput: { ...toolInput, run_in_background: false },
+      updatedInput: { ...toolInput, run_in_background: true },
     },
   };
 };
@@ -241,12 +218,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.sessions.set(sessionId, {
       cwd,
       projectId: params.projectId,
-      firstPromptStarted: false,
+      hasTranscript: false,
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(),
-      claudeTaskPlan: createClaudeTaskPlanState(),
-      backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
+      translator: createTranslatorState(),
     });
 
     const state = this.computeState(sessionId);
@@ -275,8 +251,33 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
 
     const messageContent = promptInputToAnthropicContent(params);
-    const promptStream = makePromptStream(messageContent, params.sessionId);
-    const permissionBridge = new PermissionBridge(params.sessionId, {
+    const live = await this.ensureLiveQuery(params.sessionId, session);
+    if (typeof messageContent === "string" && isCompactCommand(messageContent)) {
+      session.translator.compactionTrigger = "manual";
+    }
+    logSdkOutbound(
+      "prompt",
+      { promptId: params.promptId, prompt: summarizePromptContent(messageContent) },
+      params.sessionId
+    );
+    live.push(params.promptId, messageContent);
+  }
+
+  // One query serves the whole chat, so background tasks outlive the turn that launched them.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+  private ensureLiveQuery(sessionId: SessionId, session: SessionState): Promise<ClaudeLiveQuery> {
+    if (session.live) return Promise.resolve(session.live);
+    session.starting ??= this.startLiveQuery(sessionId, session).finally(() => {
+      session.starting = undefined;
+    });
+    return session.starting;
+  }
+
+  private async startLiveQuery(
+    sessionId: SessionId,
+    session: SessionState
+  ): Promise<ClaudeLiveQuery> {
+    const permissionBridge = new PermissionBridge(sessionId, {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
@@ -289,7 +290,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       includePartialMessages: true,
       // Edit tools stay out so the permission mode decides them. https://github.com/Brevilabs/obsidian-copilot-private/issues/690
       allowedTools: ["Read", "Glob", "Grep", "LS"],
-      disallowedTools: ["TaskOutput", "Workflow", "Monitor"],
       canUseTool: permissionBridge.canUseTool,
       // Claude's default skips every AGENTS.md below any CLAUDE.md. https://github.com/logancyang/obsidian-copilot/issues/3662
       settings: {
@@ -297,6 +297,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
           "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
         },
       },
+      // Each prompt's echo reports when it reaches Claude. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+      extraArgs: { "replay-user-messages": null },
+      // Stop ends the main turn only; background agents keep running. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+      perTaskStopAffordance: true,
+      hooks: { PreToolUse: [{ hooks: [runSubagentsInBackground] }] },
     };
     options.systemPrompt = {
       type: "preset",
@@ -304,10 +309,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       excludeDynamicSections: true,
       append: session.systemPromptAppend || undefined,
     };
-    if (session.firstPromptStarted) {
-      options.resume = params.sessionId;
+    if (session.hasTranscript) {
+      options.resume = sessionId;
     } else {
-      options.sessionId = params.sessionId;
+      options.sessionId = sessionId;
     }
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
@@ -334,119 +339,42 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       options.env = { ...process.env, ...extraEnv };
     }
 
-    options.hooks = { PreToolUse: [{ hooks: [enforceForegroundToolUse] }] };
-
+    if (this.sessions.get(sessionId) !== session) {
+      throw new Error(`Session ${sessionId} closed before its prompt was sent`);
+    }
     logSdkOutbound(
-      "prompt",
+      "query",
       {
-        prompt: summarizePromptContent(messageContent),
         resume: options.resume ?? null,
         sessionIdSeed: options.sessionId ?? null,
         model: options.model ?? null,
         permissionMode: options.permissionMode ?? null,
         effort: options.effort ?? null,
         allowedTools: options.allowedTools,
-        disallowedTools: options.disallowedTools,
       },
-      params.sessionId
+      sessionId
     );
-
-    const turnAbort = new AbortController();
-    options.abortController = turnAbort;
-
-    if (this.sessions.get(params.sessionId) !== session) {
-      throw new Error(`Session ${params.sessionId} closed before its prompt was sent`);
-    }
-    const q = query({ prompt: promptStream, options });
-    session.active = q;
-    session.firstPromptStarted = true;
-    const stream = guardSdkStreamStall(q, {
-      abortController: turnAbort,
-      onStall: (idleMs) => logSdkError("←", "stream:stalled", { idleMs }, params.sessionId),
+    const live: ClaudeLiveQuery = new ClaudeLiveQuery({
+      sessionId,
+      start: (input) => query({ prompt: input, options }),
+      translator: session.translator,
+      emit: (event) => this.dispatchEvent(event),
+      onTurnStarted: (q) => void this.refreshPlanUsage(q),
+      onSignedOut: () => {
+        this.authConfirmed = false;
+      },
+      onEnded: () => {
+        if (session.live === live) session.live = undefined;
+      },
     });
-
-    const translatorState = createTranslatorState(
-      session.claudeTaskPlan,
-      session.backgroundTasks,
-      typeof messageContent === "string" && isCompactCommand(messageContent) ? "manual" : "auto"
-    );
-    const turnId = params.promptId;
-    this.dispatchEvent({
-      sessionId: params.sessionId,
-      update: { sessionUpdate: "message_delivered", promptId: params.promptId },
-    });
-    this.dispatchEvent({
-      sessionId: params.sessionId,
-      update: { sessionUpdate: "turn_started", turnId },
-    });
-    void this.consumeTurn(session, q, stream, translatorState, params.sessionId).then(
-      (stopReason) =>
-        this.dispatchEvent({
-          sessionId: params.sessionId,
-          update: { sessionUpdate: "turn_ended", turnId, stopReason },
-        }),
-      (error: unknown) => {
-        logSdkError("→", "prompt", { error: err2String(error) }, params.sessionId);
-        this.dispatchEvent({
-          sessionId: params.sessionId,
-          update: {
-            sessionUpdate: "turn_ended",
-            turnId,
-            stopReason: "end_turn",
-            error: error instanceof Error ? error : new Error(err2String(error)),
-          },
-        });
-      }
-    );
-  }
-
-  private async consumeTurn(
-    session: SessionState,
-    q: Query,
-    stream: AsyncIterable<SDKMessage>,
-    translatorState: TranslatorState,
-    sessionId: SessionId
-  ): Promise<StopReason> {
-    let stopReason: StopReason = "end_turn";
-    let resultErrorMessage: string | null = null;
-    try {
-      let planUsageRequested = false;
-      for await (const sdkMsg of stream) {
-        if (this.shuttingDown) break;
-        logSdkInbound(describeSdkMessage(sdkMsg), sdkMsg, sessionId);
-        if (!planUsageRequested) {
-          planUsageRequested = true;
-          void this.refreshPlanUsage(q);
-        }
-        const events = translateSdkMessage(sdkMsg, sessionId, translatorState);
-        for (const e of events) this.dispatchEvent(e);
-        if (sdkMsg.type === "result") {
-          stopReason = mapStopReason(sdkMsg);
-          if (sdkMsg.subtype === "success" && sdkMsg.is_error && sdkMsg.result.trim()) {
-            resultErrorMessage = sdkMsg.result;
-          } else if (stopReason !== "end_turn" && sdkMsg.subtype !== "success") {
-            const errs = "errors" in sdkMsg ? sdkMsg.errors : undefined;
-            if (errs && errs.length > 0) {
-              resultErrorMessage = errs.join("; ");
-            } else {
-              this.authConfirmed = false;
-            }
-          }
-          break;
-        }
-      }
-    } finally {
-      if (session.active === q) session.active = undefined;
-    }
-
-    if (resultErrorMessage) throw new Error(resultErrorMessage);
-    logSdkOutboundResult("prompt", { stopReason }, sessionId);
-    return stopReason;
+    session.live = live;
+    session.hasTranscript = true;
+    return live;
   }
 
   async closeSession(params: { sessionId: SessionId }): Promise<void> {
     // Interrupt alone leaves the query's process alive. https://github.com/Brevilabs/obsidian-copilot-private/issues/429
-    this.sessions.get(params.sessionId)?.active?.close();
+    this.sessions.get(params.sessionId)?.live?.close();
     this.sessions.delete(params.sessionId);
     this.pendingUpdates.delete(params.sessionId);
   }
@@ -454,9 +382,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   async cancel(params: CancelInput): Promise<void> {
     logSdkOutbound("cancel", {}, params.sessionId);
     const session = this.sessions.get(params.sessionId);
-    if (!session?.active) return;
+    const live = session?.live ?? (await session?.starting?.catch(() => undefined));
+    if (!live) return;
     try {
-      await session.active.interrupt();
+      await live.query.interrupt();
     } catch (e) {
       logWarn("[AgentMode] SDK query.interrupt() threw", e);
       logSdkError("→", "interrupt", { error: err2String(e) }, params.sessionId);
@@ -468,9 +397,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const session = this.sessions.get(params.sessionId);
     if (!session) throw new Error(`Unknown session ${params.sessionId}`);
     session.model = params.modelId;
-    if (session.active) {
+    if (session.live) {
       try {
-        await session.active.setModel(params.modelId);
+        await session.live.query.setModel(params.modelId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setModel() threw (will apply on next turn)", e);
         logSdkError("→", "setModel", { error: err2String(e) }, params.sessionId);
@@ -494,9 +423,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       throw new Error(`Unsupported mode ${params.modeId}`);
     }
     session.permissionMode = mode;
-    if (session.active) {
+    if (session.live) {
       try {
-        await session.active.setPermissionMode(mode);
+        await session.live.query.setPermissionMode(mode);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setPermissionMode() threw (will apply on next turn)", e);
         logSdkError("→", "setPermissionMode", { error: err2String(e) }, params.sessionId);
@@ -535,6 +464,14 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       );
     }
     session.effort = params.value as EffortLevel;
+    if (session.live) {
+      try {
+        await session.live.query.applyFlagSettings({ effortLevel: session.effort });
+      } catch (e) {
+        logWarn("[AgentMode] SDK query.applyFlagSettings() threw (will apply on reconnect)", e);
+        logSdkError("→", "applyFlagSettings", { error: err2String(e) }, params.sessionId);
+      }
+    }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
     return state;
@@ -619,12 +556,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     this.sessions.set(params.sessionId, {
       cwd,
       projectId: params.projectId,
-      firstPromptStarted: true,
+      hasTranscript: true,
       model: seedModelId,
       mcpServers: params.mcpServers,
       systemPromptAppend: this.resolveSystemPromptAppend(),
-      claudeTaskPlan,
-      backgroundTasks: new ClaudeBackgroundTaskStateMachine(),
+      translator: createTranslatorState(claudeTaskPlan),
     });
 
     const state = this.computeState(params.sessionId);
@@ -649,15 +585,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   async shutdown(): Promise<void> {
     this.shuttingDown = true;
-    for (const session of this.sessions.values()) {
-      const q = session.active;
-      if (!q) continue;
-      try {
-        await q.interrupt();
-      } catch (e) {
-        logWarn("[AgentMode] interrupt during shutdown threw", e);
-      }
-    }
+    for (const session of this.sessions.values()) session.live?.close();
     this.sessions.clear();
     this.sessionHandlers.clear();
     this.pendingUpdates.clear();
@@ -852,18 +780,6 @@ function summarizePromptContent(content: string | AnthropicContentBlock[]): unkn
       ? { type: "image", media_type: b.source.media_type, dataLength: b.source.data.length }
       : b
   );
-}
-
-async function* makePromptStream(
-  content: string | AnthropicContentBlock[],
-  sessionId: SessionId
-): AsyncIterable<SDKUserMessage> {
-  yield {
-    type: "user",
-    message: { role: "user", content },
-    parent_tool_use_id: null,
-    session_id: sessionId,
-  };
 }
 
 function canonicalModeToSdk(modeId: string): PermissionMode | null {
