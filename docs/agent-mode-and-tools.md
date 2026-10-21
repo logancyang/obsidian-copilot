@@ -150,7 +150,7 @@ Agent Chat keeps each conversation separate:
 - Select **More Actions** above the composer and choose **Report error** to open **Report an issue** for the current chat, with its screenshot and agent details ready. See [Reporting from Agent Chat](troubleshooting-and-faq.md#reporting-from-agent-chat).
 - Select **More actions** above the composer and choose **Copy chat link** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen the chat in the same vault. The link points to the conversation's Markdown note, so Copilot saves the note first if it does not exist yet, including when autosave is off. The link keeps working after the note is renamed. To copy a link without opening the chat, hover it in **Recent Chats**, select **More actions**, and choose **Copy chat link**. A chat that has no note yet is saved as one first.
 - Properties you add to an Agent chat note stay when Copilot saves the chat again. Copilot updates only the properties it manages: the agent, session, project, token usage, and tags.
-- A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running. With Claude, Copilot keeps up to three idle closed chats open and closes older ones; they reopen from **Recent Chats**. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
+- A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
 - Deleting an Agent chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, and opencode may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
@@ -197,14 +197,14 @@ A step cut short by **Stop** shows as stopped. Any other step the agent left unf
 
 ### Send a message
 
-You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** stops the agent at its next step and sends your message at once. With Codex and opencode, the message waits with **Sends when the agent finishes**.
+You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** interrupts the agent and sends your message at once. With Codex and opencode, the message waits with **Sends when the agent finishes**.
 
 ### Background subagents and commands
 
 Claude runs subagents and long commands in the background, so you can keep chatting. When one finishes, Claude replies with its result on its own.
 
-- The task count at the start of the bar above the composer, such as **2 tasks running**, lists the running tasks. Hover it to see each task.
-- Select a task, or its card in the chat, to open its view: a subagent's steps or a command's output. Select **Back** or press Escape to return to the chat.
+- Hover the task count above the composer, such as **2 tasks running**, to see each running task.
+- Select a task, or its card in the chat, to open its view: a subagent's steps or a command's output. Select **Back to chat** or press Escape to return.
 - Select **Stop task** on a task to end only that task.
 
 ## Review what a turn changed
