@@ -4,6 +4,7 @@ import { COMMAND_OUTPUT_MAX_BYTES, TaskDetailView } from "@/agentMode/ui/TaskDet
 import { makeCommandTask, makeTask, textOutputReader } from "@/agentMode/ui/testing/taskFixtures";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import React from "react";
 
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
@@ -27,6 +28,11 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   ),
 }));
 
+jest.mock("@/agentMode/ui/TurnDiffView", () => ({
+  openTurnDiff: jest.fn(() => Promise.resolve()),
+}));
+
+const ISSUE_669 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/669";
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 const OUTPUT = "/tmp/tasks/task-2.output";
 
@@ -130,6 +136,31 @@ describe("TaskDetailView", () => {
 
     expect(screen.getByTestId("trail").textContent).toBe("Welcome.md has 9 words.");
     expect(screen.queryByText("No activity")).toBeNull();
+  });
+
+  it(`lists the files an ended subagent changed below its work and opens a file's diff from its row (${ISSUE_669})`, () => {
+    const change = {
+      path: "notes/b.md",
+      status: "modified" as const,
+      before: "b\n",
+      after: "B\n",
+      additions: 1,
+      deletions: 1,
+    };
+    renderDetail({
+      task: makeTask({ status: "completed" }),
+      messages: [{ ...SUBAGENT_MESSAGES[0], fileChanges: [change] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /b\.md/ }));
+
+    expect(openTurnDiff).toHaveBeenCalledWith({}, change, "call-1");
+  });
+
+  it("shows no Files changed card for a subagent that changed no files", () => {
+    renderDetail({ task: makeTask({ status: "completed" }), messages: SUBAGENT_MESSAGES });
+
+    expect(screen.queryByRole("button", { name: /\.md/ })).toBeNull();
   });
 
   it("says a subagent is starting before it has done anything", () => {

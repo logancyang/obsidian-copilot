@@ -3543,6 +3543,256 @@ describe("AgentSession", () => {
             ]);
           });
         });
+
+        describe("https://github.com/Brevilabs/obsidian-copilot-private/issues/669 with runs the agent starts and background subagents", () => {
+          const AGENT_CARD = {
+            sessionId: "acp-1",
+            update: {
+              sessionUpdate: "tool_call" as const,
+              toolCallId: "tool-agent",
+              title: "Agent",
+              kind: "other" as const,
+              status: "in_progress" as const,
+            },
+          };
+          const SUBAGENT_STARTED = {
+            sessionId: "acp-1",
+            update: {
+              sessionUpdate: "task_started" as const,
+              taskId: "task-1",
+              toolCallId: "tool-agent",
+              kind: "subagent" as const,
+              description: "Rewrite b",
+            },
+          };
+          const fromSubagent = (event: SessionEvent): SessionEvent => ({
+            ...event,
+            taskToolCallId: "tool-agent",
+          });
+          const text = (value: string): SessionEvent => ({
+            sessionId: "acp-1",
+            update: replayText("agent_message_chunk", value),
+          });
+
+          function liveChat(app: App) {
+            const mock = makeMockBackend();
+            const sent = recordPrompts(mock);
+            const session = new AgentSession({
+              backend: mock.asBackend,
+              backendSessionId: "acp-1",
+              internalId: "internal-1",
+              backendId: "claude",
+              getApp: () => app,
+              getDescriptor: midTurnDescriptor,
+            });
+            session.completeResume(null);
+            const run = (turnId: string, events: SessionEvent[]) => {
+              mock.emitUpdate({ sessionUpdate: "turn_started", turnId });
+              for (const event of events) mock.emit(event);
+            };
+            const endRun = (turnId: string) =>
+              mock.emitUpdate({ sessionUpdate: "turn_ended", turnId, stopReason: "end_turn" });
+            const send = async (prompt: string) => {
+              const sentBefore = sent.length;
+              const { turn } = session.sendPrompt(prompt);
+              await waitFor(() => expect(sent).toHaveLength(sentBefore + 1));
+              mock.emitUpdate({
+                sessionUpdate: "message_delivered",
+                promptId: sent[sentBefore].promptId,
+              });
+              return { turn };
+            };
+            const subagentChanges = () =>
+              session.getTaskMessages("task-1")[0]?.fileChanges?.map((change) => change.path);
+            return { mock, sent, session, run, endRun, send, subagentChanges };
+          }
+
+          it("gives a run the agent started on its own, after a subagent finished, its own Files changed card", async () => {
+            const vault = makeVault({ "notes/a.md": "a\n", "notes/plan.md": "plan\n" });
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("note the plan and start a subagent");
+            chat.run("launch", [
+              AGENT_CARD,
+              SUBAGENT_STARTED,
+              editCall("e0", "/vault/notes/plan.md"),
+            ]);
+            vault.files.set("notes/plan.md", "PLAN\n");
+            chat.endRun("launch");
+            await launch;
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            chat.run("agent-started", [editCall("e1", "/vault/notes/a.md"), text("Updated a.")]);
+            vault.files.set("notes/a.md", "A\n");
+            chat.endRun("agent-started");
+
+            await waitFor(() =>
+              expect(
+                aiMessages(chat.session).map((reply) => reply.fileChanges?.map((c) => c.path))
+              ).toEqual([["notes/plan.md"], ["notes/a.md"]])
+            );
+          });
+
+          it("leaves a subagent's edit made during a later user run off that run's card and puts it in the subagent's capture", async () => {
+            const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("start a subagent that rewrites b");
+            chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
+            chat.endRun("launch");
+            await launch;
+
+            const { turn: unrelated } = await chat.send("now uppercase a");
+            chat.run("unrelated", [
+              editCall("main-edit", "/vault/notes/a.md"),
+              fromSubagent(editCall("subagent-edit", "/vault/notes/b.md")),
+            ]);
+            vault.files.set("notes/a.md", "A\n");
+            vault.files.set("notes/b.md", "B\n");
+            chat.endRun("unrelated");
+            await unrelated;
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            expect(fileChangesOf(chat.session)?.map((change) => change.path)).toEqual([
+              "notes/a.md",
+            ]);
+            await waitFor(() => expect(chat.subagentChanges()).toEqual(["notes/b.md"]));
+          });
+
+          it("counts a subagent's permission request toward the subagent's capture, not the card of the user run open beside it", async () => {
+            const vault = makeVault({ "notes/b.md": "before the write\n" });
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("start a subagent that rewrites b");
+            chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
+            chat.endRun("launch");
+            await launch;
+
+            const { turn: unrelated } = await chat.send("what is 2 + 2?");
+            chat.run("unrelated", [text("4")]);
+            void chat.session.handleToolPermission({
+              sessionId: "acp-1",
+              toolCall: {
+                toolCallId: "subagent-edit",
+                title: "write",
+                kind: "edit",
+                locations: [{ path: "/vault/notes/b.md" }],
+              },
+              options: [{ optionId: "once", name: "Allow once", kind: "allow_once" }],
+              requester: { taskId: "task-1" },
+            });
+            chat.session.resolveToolPermission("subagent-edit", "once");
+            vault.files.set("notes/b.md", "written by the subagent\n");
+            chat.mock.emit(fromSubagent(editCall("subagent-edit", "/vault/notes/b.md")));
+            chat.endRun("unrelated");
+            await unrelated;
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            expect(fileChangesOf(chat.session)).toBeUndefined();
+            await waitFor(() =>
+              expect(chat.session.getTaskMessages("task-1")[0]?.fileChanges).toMatchObject([
+                {
+                  path: "notes/b.md",
+                  before: "before the write\n",
+                  after: "written by the subagent\n",
+                },
+              ])
+            );
+          });
+
+          it("captures a subagent's edit made after its launching run ended, from the file as the subagent's write found it", async () => {
+            const vault = makeVault({ "notes/b.md": "changed before the write landed\n" });
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("start a subagent that rewrites b");
+            chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
+            chat.endRun("launch");
+            await launch;
+
+            chat.mock.emit(fromSubagent(editCall("subagent-edit", "/vault/notes/b.md")));
+            vault.files.set("notes/b.md", "B\n");
+            chat.mock.emit(
+              fromSubagent(toolResult("subagent-edit", { "/vault/notes/b.md": "b\n" }))
+            );
+            expect(chat.subagentChanges()).toBeUndefined();
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            await waitFor(() =>
+              expect(chat.session.getTaskMessages("task-1")[0]?.fileChanges).toEqual([
+                {
+                  path: "notes/b.md",
+                  status: "modified",
+                  before: "b\n",
+                  after: "B\n",
+                  additions: 1,
+                  deletions: 1,
+                },
+              ])
+            );
+            expect(fileChangesOf(chat.session)).toBeUndefined();
+          });
+
+          it("extends an agent-started run's capture with a mid-turn message's edits, showing one card on the run's last reply", async () => {
+            const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+            const chat = liveChat(vault.app);
+            chat.run("agent-started", [editCall("e1", "/vault/notes/a.md")]);
+            vault.files.set("notes/a.md", "A\n");
+            const steer = chat.session.sendPrompt("also uppercase b");
+            await waitFor(() => expect(chat.sent).toHaveLength(1));
+            chat.mock.emitUpdate({
+              sessionUpdate: "message_delivered",
+              promptId: steer.userMessageId,
+            });
+            chat.mock.emit(editCall("e2", "/vault/notes/b.md"));
+            vault.files.set("notes/b.md", "B\n");
+            chat.endRun("agent-started");
+            await steer.turn;
+
+            expect(
+              aiMessages(chat.session).map((reply) => reply.fileChanges?.map((c) => c.path))
+            ).toEqual([undefined, ["notes/a.md", "notes/b.md"]]);
+          });
+
+          it("keeps the edits a subagent made before the composer's Stop ended it, and leaves them off the stopped reply", async () => {
+            const vault = makeVault({ "notes/b.md": "b\n" });
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("rewrite b in a subagent and wait for it");
+            chat.run("launch", [
+              AGENT_CARD,
+              SUBAGENT_STARTED,
+              fromSubagent(editCall("subagent-edit", "/vault/notes/b.md")),
+            ]);
+            vault.files.set("notes/b.md", "B\n");
+
+            await chat.session.cancel();
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "stopped",
+            });
+            chat.mock.emitUpdate({
+              sessionUpdate: "turn_ended",
+              turnId: "launch",
+              stopReason: "cancelled",
+            });
+            await launch;
+
+            await waitFor(() => expect(chat.subagentChanges()).toEqual(["notes/b.md"]));
+            expect(fileChangesOf(chat.session)).toBeUndefined();
+          });
+        });
       });
     });
 

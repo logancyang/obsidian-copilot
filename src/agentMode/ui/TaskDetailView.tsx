@@ -2,6 +2,7 @@ import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";
 import { useTaskOutputTail } from "@/agentMode/ui/hooks/useTaskOutputTail";
 import {
   taskBadgeStatus,
@@ -10,9 +11,11 @@ import {
   taskTitle,
   type TaskDisplayStatus,
 } from "@/agentMode/ui/taskDisplay";
+import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { Button } from "@/components/ui/button";
 import { USER_SENDER } from "@/constants";
+import { logError } from "@/logger";
 import { ArrowLeft, Bot, Terminal } from "lucide-react";
 import type { App } from "obsidian";
 import React, { useLayoutEffect, useMemo, useRef } from "react";
@@ -96,6 +99,7 @@ const SubagentDetail: React.FC<{
     // A subagent that shares none of its messages reports only through its notification summary. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     return own.length === 0 && task.summary ? [{ kind: "text", text: task.summary }] : own;
   }, [messages, task.summary]);
+  const fileChanges = useMemo(() => messages.flatMap((m) => m.fileChanges ?? []), [messages]);
   const promptMessage = useMemo(
     () =>
       task.prompt
@@ -116,6 +120,16 @@ const SubagentDetail: React.FC<{
           ) : (
             <div className="tw-text-sm tw-text-muted">{running ? "Starting…" : "No activity"}</div>
           )}
+          {fileChanges.length > 0 ? (
+            <FilesChangedCard
+              changes={fileChanges}
+              onOpen={(change) =>
+                void openTurnDiff(app, change, task.toolCallId).catch((error: unknown) =>
+                  logError("[TaskDetailView] failed to open the subagent's diff", error)
+                )
+              }
+            />
+          ) : null}
         </div>
       </div>
     </div>

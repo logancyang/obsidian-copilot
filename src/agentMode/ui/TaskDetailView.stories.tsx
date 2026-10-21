@@ -79,6 +79,58 @@ const RUNNING_MESSAGES: AgentChatMessage[] = [
   },
 ];
 
+const EDITING_MESSAGES: AgentChatMessage[] = [
+  {
+    id: "m2",
+    sender: "ai",
+    timestamp: null,
+    isVisible: true,
+    message: "",
+    parts: [
+      {
+        kind: "tool_call",
+        id: "e1",
+        title: "Edit: Projects/Launch plan.md",
+        status: "completed",
+        vendorToolName: "Edit",
+        toolKind: "edit",
+        locations: [{ path: "Projects/Launch plan.md" }],
+      },
+      {
+        kind: "tool_call",
+        id: "e2",
+        title: "Write: Projects/Launch checklist.md",
+        status: "completed",
+        vendorToolName: "Write",
+        toolKind: "edit",
+        locations: [{ path: "Projects/Launch checklist.md" }],
+      },
+      {
+        kind: "text",
+        text: "I moved the launch to **May 12** in the plan and added a checklist note.",
+      },
+    ],
+    fileChanges: [
+      {
+        path: "Projects/Launch plan.md",
+        status: "modified",
+        before: "# Launch plan\n\nShip on May 5.\n",
+        after: "# Launch plan\n\nShip on May 12.\nSee the checklist.\n",
+        additions: 2,
+        deletions: 1,
+      },
+      {
+        path: "Projects/Launch checklist.md",
+        status: "created",
+        before: null,
+        after: "- [ ] Freeze copy\n- [ ] Record the demo\n- [ ] Publish the post\n",
+        additions: 3,
+        deletions: 0,
+      },
+    ],
+  },
+];
+
 const SUBAGENT = makeTask({
   prompt:
     "Run the Bash command perl -e 'select(undef,undef,undef,20)' and then run wc -w Welcome.md, and reply with the word count.",
@@ -144,6 +196,19 @@ export const SubagentReportFromNotification: StoryObj<Props> = {
       summary: "Welcome.md has **9 words**. The vault's other top-level notes are empty templates.",
     },
     messages: [],
+  },
+};
+
+export const SubagentFinishedWithFileChanges: StoryObj<Props> = {
+  render: (args) => <Demo {...args} />,
+  args: {
+    task: makeTask({
+      description: "Move the launch date",
+      prompt: "Move the launch in Projects/Launch plan.md to May 12 and add a checklist note.",
+      model: "claude-haiku-4-5",
+      status: "completed",
+    }),
+    messages: EDITING_MESSAGES,
   },
 };
 
