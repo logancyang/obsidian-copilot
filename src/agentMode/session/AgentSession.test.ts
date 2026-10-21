@@ -4246,6 +4246,40 @@ describe("AgentSession", () => {
           getInstance.mockRestore();
         }
       });
+
+      it(`sends a web page in full again when its message was withdrawn while the page was still being read (${ISSUE_747})`, async () => {
+        const page = "<active_web_tab>\n<content>\nPAGE BODY\n</content>\n</active_web_tab>";
+        let finishReading!: (block: string) => void;
+        const processContextWebTabs = jest
+          .fn()
+          .mockReturnValueOnce(new Promise<string>((resolve) => (finishReading = resolve)))
+          .mockResolvedValue(page);
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
+          const mock = makeMockBackend();
+          const { sent, session } = queueTwo(mock);
+          await waitFor(() => expect(sent).toHaveLength(2));
+          const context = {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com/page", title: "Page", isActive: true }],
+          };
+          const withPage = session.sendPrompt("third", context);
+          await waitFor(() => expect(processContextWebTabs).toHaveBeenCalledTimes(1));
+          await session.withdrawPrompt(withPage.userMessageId);
+          finishReading(page);
+          await expect(withPage.turn).resolves.toBe("cancelled");
+
+          session.sendPrompt("third", context);
+
+          await waitFor(() => expect(sent).toHaveLength(3));
+          expect(promptText(sent[2])).toContain("PAGE BODY");
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
     });
 
     describe("takeWithdrawnPrompts()", () => {

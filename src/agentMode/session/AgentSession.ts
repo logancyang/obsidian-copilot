@@ -794,6 +794,8 @@ export class AgentSession {
         await order.ready;
         const webTabBlock =
           (context?.webTabs?.length ?? 0) > 0 ? await serializeWebTabContext(context) : "";
+        // A message withdrawn while it waited to be sent never reaches the agent. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+        if (!this.queuedPrompts.some((p) => p.id === prompt.id)) return "cancelled";
         const blocks = buildPromptBlocks(
           text,
           context,
@@ -804,8 +806,6 @@ export class AgentSession {
           null
         );
         if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
-        // A message withdrawn while it waited to be sent never reaches the agent. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-        if (!this.queuedPrompts.some((p) => p.id === prompt.id)) return "cancelled";
         const outcome = await this.promptTurn(
           { sessionId, promptId: prompt.id, prompt: blocks, ...(interrupt ? { interrupt } : {}) },
           false,
