@@ -24,7 +24,7 @@ const NETWORK_ERROR_MESSAGE = "Could not reach OpenArtifacts. Please try again."
 const PRIVATE_DOCS_ENDPOINT = `${OPENARTIFACTS_API_ORIGIN}/api/v1/private-docs`;
 // A private create is its own route, so a server without private sharing answers 404 and creates nothing.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-const PRIVATE_UNSUPPORTED_MESSAGE =
+export const PRIVATE_UNSUPPORTED_MESSAGE =
   "This OpenArtifacts server does not support private documents. Nothing was published.";
 // The reference CLI's wording: an unconfigured server answers the whole access family with the same 404 as an old one.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707

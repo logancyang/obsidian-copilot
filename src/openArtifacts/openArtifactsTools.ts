@@ -3,12 +3,11 @@ import {
   OPENARTIFACTS_DOC_ID_PATTERN,
   OPENARTIFACTS_MAX_HTML_BYTES,
 } from "@/openArtifacts/constants";
-import type {
-  OpenArtifactsFailureResult,
-  OpenArtifactsModalResult,
-} from "@/components/modals/OpenArtifactsModal";
-import type { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
-import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import type { OpenArtifactsModalResult } from "@/components/modals/OpenArtifactsModal";
+import {
+  PRIVATE_UNSUPPORTED_MESSAGE,
+  type OpenArtifactsClient,
+} from "@/openArtifacts/OpenArtifactsClient";
 import {
   createOpenArtifactsDocument,
   OpenArtifactsDocumentTooLargeError,
@@ -213,7 +212,7 @@ export function createOpenArtifactsTools(deps: OpenArtifactsToolDeps): OpenArtif
       try {
         return await run(input, deps.getLicenseKey());
       } catch (error) {
-        return failure(errorText(error));
+        return failure(failureText(operationFailure("publish", error), false));
       }
     },
   });
@@ -283,7 +282,9 @@ async function publish(
           ? deps.client.update(docId, document, licenseKey)
           : deps.publisher.create(document, licenseKey, linkAccess)
       );
-  if (result.kind === "failure") return failure(failureText(result, privateCreate));
+  if (result.kind === "failure" || result.action !== action) {
+    return failure(failureText(result, privateCreate));
+  }
   return {
     text: JSON.stringify({
       ...result.receipt,
@@ -436,7 +437,9 @@ async function unpublish(
   const result = note
     ? await deps.publisher.execute(note, docId, "delete", NO_DOCUMENT)
     : await settle("delete", () => deps.client.delete(docId, licenseKey));
-  if (result.kind === "failure") return failure(failureText(result, false));
+  if (result.kind === "failure" || result.action !== "delete") {
+    return failure(failureText(result, false));
+  }
   return {
     text: JSON.stringify({ docId, status: "unpublished", ...persistenceWarning(result) }),
     isError: false,
@@ -465,13 +468,20 @@ async function settle(
   }
 }
 
-function failureText(result: OpenArtifactsFailureResult, privateCreate: boolean): string {
+function failureText(result: OpenArtifactsModalResult, privateCreate: boolean): string {
+  // A note's stored result answers every later call on it, whatever that call asked, until Retry save or a reload clears it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+  if (result.kind !== "failure") {
+    return `Nothing was sent: an earlier OpenArtifacts action on this note is unfinished. ${persistenceWarning(result).warning}`;
+  }
   const advice = result.upgradeUrl
-    ? ` The user's plan does not include private sharing, so nothing was published; they can upgrade at ${result.upgradeUrl}`
+    ? ` The user's plan does not include private sharing; they can upgrade at ${result.upgradeUrl}`
     : result.accessNotice
       ? " The license key is missing or was refused; point the user to Copilot Settings."
       : "";
-  const publicly = privateCreate ? ` Publish it with access "public" only if the user asks.` : "";
+  const refusedPrivate = result.upgradeUrl || result.message === PRIVATE_UNSUPPORTED_MESSAGE;
+  const publicly =
+    privateCreate && refusedPrivate ? ` Publish it with access "public" only if the user asks.` : "";
   return `OpenArtifacts: ${result.message}${advice}${publicly} Report this to the user; don't retry it on your own.`;
 }
 
@@ -503,19 +513,6 @@ function manageUrl(docId: string): string {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
-}
-
-function errorText(error: unknown): string {
-  if (!(error instanceof OpenArtifactsClientError)) return err2String(error);
-  const detail =
-    error.status === null ? error.message : `HTTP ${error.status} ${error.code}: ${error.message}`;
-  const advice =
-    error.status === 401
-      ? " The license key was refused or the plan cannot publish; point the user to Copilot Settings."
-      : error.upgradeUrl
-        ? ` Private sharing needs a paid plan; the user can upgrade at ${error.upgradeUrl}`
-        : "";
-  return `OpenArtifacts: ${detail}${advice} Report this to the user; don't retry it on your own.`;
 }
 
 function failure(message: string): ToolResult {
