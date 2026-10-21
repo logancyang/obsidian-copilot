@@ -852,7 +852,7 @@ export class AgentSession {
     const ended = new Promise<TurnOutcome>((settle) => {
       this.pendingPrompts.set(req.promptId, { delivered: false, continuesAtOutputLimit, settle });
     });
-    return this.backend.prompt(req).then(
+    const admitted = this.backend.prompt(req).then(
       () => ended,
       (err: unknown) => {
         this.endCancelledPromptDrain();
@@ -860,6 +860,8 @@ export class AgentSession {
         throw err;
       }
     );
+    // Stop must free the chat while the agent is still signing in or starting up. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    return Promise.race([ended, admitted]);
   }
 
   private ensureMultiAgentEntitlement(): Promise<boolean> {

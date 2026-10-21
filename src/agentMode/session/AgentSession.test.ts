@@ -3154,6 +3154,17 @@ describe("AgentSession", () => {
         expect(mock.prompt).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a turn stopped while the agent is still accepting its prompt as cancelled and leaves the chat idle", async () => {
+        const mock = makeMockBackend();
+        mock.asBackend.prompt = () => new Promise(() => undefined);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("hi");
+        await session.cancel();
+
+        await expect(turn).resolves.toBe("cancelled");
+        expect(session.getStatus()).toBe("idle");
+      });
+
       it("sends a cancel to the backend and resolves the turn as cancelled", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
