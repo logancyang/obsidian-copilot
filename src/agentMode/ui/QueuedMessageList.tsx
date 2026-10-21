@@ -55,6 +55,14 @@ const QueuedMessageRow: React.FC<QueuedMessageRowProps> = ({ message, children }
   );
 };
 
+interface GroupCaptionProps {
+  children: React.ReactNode;
+}
+
+const GroupCaption: React.FC<GroupCaptionProps> = ({ children }) => (
+  <div className="tw-px-1 tw-text-ui-smaller tw-text-muted">{children}</div>
+);
+
 export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
   delivering,
   held,
@@ -63,19 +71,15 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
 }) => {
   return (
     <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
+      {delivering.length > 0 && <GroupCaption>The agent reads these at its next step</GroupCaption>}
       {delivering.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
-          <span className="tw-shrink-0 tw-text-muted">Queued</span>
           {onWithdraw && (
             <RemoveButton label="Withdraw queued message" onClick={() => onWithdraw(m.id)} />
           )}
         </QueuedMessageRow>
       ))}
-      {held.length > 0 && (
-        <div className="tw-px-1 tw-text-ui-smaller tw-text-muted">
-          Sends when the agent finishes
-        </div>
-      )}
+      {held.length > 0 && <GroupCaption>Sends when the agent finishes</GroupCaption>}
       {held.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
           <RemoveButton label="Remove queued message" onClick={() => onRemove(m.id)} />

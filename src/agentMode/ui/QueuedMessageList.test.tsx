@@ -44,18 +44,35 @@ describe("QueuedMessageList", () => {
       expect(screen.getByTitle("Explain this")).toBeTruthy();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 marks a message handed to the agent as Queued, without a remove control, until it reaches the agent", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 captions messages handed to the agent with when the agent reads them, without a per-row status word or a remove control", () => {
       render(
         <QueuedMessageList
-          delivering={[{ id: "steer", text: "Only the first two" }]}
+          delivering={[
+            { id: "steer-1", text: "Only the first two" },
+            { id: "steer-2", text: "Keep it short" },
+          ]}
           held={[]}
           onRemove={jest.fn()}
         />
       );
       expect(screen.getByTitle("Only the first two")).toBeTruthy();
-      expect(screen.getByText("Queued")).toBeTruthy();
+      expect(screen.getAllByText("The agent reads these at its next step")).toHaveLength(1);
+      expect(screen.queryByText("Queued")).toBeNull();
       expect(screen.queryByRole("button", { name: "Remove queued message" })).toBeNull();
       expect(screen.queryByText("Sends when the agent finishes")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 groups a mixed list under one caption per group, so each message's state reads from the caption above it", () => {
+      const { container } = render(
+        <QueuedMessageList
+          delivering={[{ id: "steer", text: "Only the first two" }]}
+          held={[{ id: "compact", text: "/compact", rawInput: "/compact" }]}
+          onRemove={jest.fn()}
+        />
+      );
+      expect(container.textContent).toBe(
+        "The agent reads these at its next stepOnly the first twoSends when the agent finishes/compact"
+      );
     });
 
     it("offers a withdraw control on each message handed to a backend that can withdraw it, and withdraws that message (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
