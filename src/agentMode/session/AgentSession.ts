@@ -1485,6 +1485,8 @@ export class AgentSession {
 
   private startTurn(turnId: string): void {
     if (this.cancelledPromptDrain) return;
+    // A turn that starts after Stop runs a message kept through it, so the stopped prompt's cancellation must not drop its output. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    if (this.abortController?.signal.aborted) this.abortController = null;
     this.openTurnId = turnId;
     if (!this.placeholderId) this.openReply();
     this.recomputeStatusIfChanged();

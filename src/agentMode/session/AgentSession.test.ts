@@ -3566,6 +3566,50 @@ describe("AgentSession", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 shows the turn of a message kept through Stop even while the stopped reply is still reading its file changes", async () => {
+        const adapter = new FileSystemAdapter();
+        const reads: Array<() => void> = [];
+        adapter.read = jest.fn(
+          () => new Promise<string>((resolve) => reads.push(() => resolve("text\n")))
+        );
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, {
+          getDescriptor: midTurnDescriptor,
+          getApp: () => ({ vault: { adapter } }) as unknown as App,
+        });
+        const first = session.sendPrompt("edit a");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit({
+          sessionUpdate: "tool_call",
+          toolCallId: "e1",
+          title: "edit",
+          kind: "edit",
+          status: "in_progress",
+          locations: [{ path: "/vault/notes/a.md" }],
+        });
+        const steer = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        await session.cancel();
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "cancelled" });
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+        emit({ sessionUpdate: "turn_started", turnId: "t2" });
+        emit(replayText("agent_message_chunk", "Second answer."));
+        emit({ sessionUpdate: "turn_ended", turnId: "t2", stopReason: "end_turn" });
+        for (const read of reads) read();
+
+        await expect(first.turn).resolves.toBe("cancelled");
+        await expect(steer.turn).resolves.toBe("end_turn");
+        expect(bubbles(session).slice(-2)).toEqual([
+          { sender: USER_SENDER, message: "second" },
+          { sender: AI_SENDER, message: "Second answer." },
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt held behind a stopped turn as cancelled, without sending it, when the chat closes", async () => {
         const mock = makeMockBackend();
         mock.prompt.mockImplementationOnce(() => new Promise(() => undefined));
