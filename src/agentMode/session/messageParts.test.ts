@@ -1,10 +1,14 @@
+import { AI_SENDER } from "@/constants";
+import { AgentMessageStore } from "./AgentMessageStore";
 import {
   compactionToPart,
   derivePlanTitleFromMarkdown,
+  findToolCallPart,
   mergeToolCallUpdate,
   planToPart,
   toolCallToPart,
   tryReadExitPlanModeCall,
+  upsertCompactionPart,
 } from "./messageParts";
 import type { AgentMessagePart } from "./types";
 
@@ -231,6 +235,60 @@ describe("messageParts", () => {
         postTokens: 10,
         startedAtMs: 1_000,
       });
+    });
+  });
+
+  describe("findToolCallPart()", () => {
+    it("returns a message's tool-call part with the given id, and nothing for an unknown id", () => {
+      const store = new AgentMessageStore();
+      const part: AgentMessagePart = {
+        kind: "tool_call",
+        id: "t1",
+        title: "Read",
+        status: "pending",
+      };
+      const messageId = store.addMessage({
+        message: "",
+        sender: AI_SENDER,
+        timestamp: null,
+        isVisible: true,
+        parts: [part],
+      });
+
+      expect(findToolCallPart(store, messageId, "t1")).toEqual(part);
+      expect(findToolCallPart(store, messageId, "t2")).toBeUndefined();
+    });
+  });
+
+  describe("upsertCompactionPart()", () => {
+    it("adds a compaction part stamped now, then updates it in place keeping its start time", () => {
+      jest.useFakeTimers({ now: 1_000 });
+      try {
+        const store = new AgentMessageStore();
+        const messageId = store.addMessage({
+          message: "",
+          sender: AI_SENDER,
+          timestamp: null,
+          isVisible: true,
+          parts: [],
+        });
+
+        expect(
+          upsertCompactionPart(store, messageId, {
+            id: "c1",
+            status: "in_progress",
+            trigger: "auto",
+          })
+        ).toBe(true);
+        jest.setSystemTime(5_000);
+        upsertCompactionPart(store, messageId, { id: "c1", status: "completed", trigger: "auto" });
+
+        expect(store.getMessage(messageId)?.parts).toEqual([
+          expect.objectContaining({ kind: "compaction", status: "completed", startedAtMs: 1_000 }),
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

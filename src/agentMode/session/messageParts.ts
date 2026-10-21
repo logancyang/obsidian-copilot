@@ -1,3 +1,4 @@
+import type { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import type {
   AgentMessagePart,
   AgentToolCallOutput,
@@ -142,4 +143,25 @@ export function compactionToPart(
     postTokens: update.postTokens,
     startedAtMs,
   };
+}
+
+export function findToolCallPart(
+  store: AgentMessageStore,
+  messageId: string,
+  toolCallId: string
+): AgentMessagePart | undefined {
+  const msg = store.getMessage(messageId);
+  return msg?.parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
+}
+
+export function upsertCompactionPart(
+  store: AgentMessageStore,
+  messageId: string,
+  update: CompactionSnapshot
+): boolean {
+  const existing = store
+    .getMessage(messageId)
+    ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
+  const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
+  return store.upsertAgentPart(messageId, compactionToPart(update, startedAtMs));
 }
