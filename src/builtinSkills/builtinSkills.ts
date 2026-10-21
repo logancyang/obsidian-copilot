@@ -586,7 +586,8 @@ on a page, and before revising a page that is already published. Take the \`docI
    page published from an existing HTML file cannot be updated in place: report its comments to
    the user and leave the threads open. If a comment is a question, a disagreement or something
    you should not change without the user, leave that thread open and raise it with the user.
-4. Publish the update at once as in step 3, with the note as \`notePath\`.
+4. Publish the update at once as in step 3, with that page's \`docId\` and the note as
+   \`notePath\`. If the tool says the note does not link to that page, stop and ask the user.
 5. On each thread you addressed, call \`openartifacts_comments\` with \`action: "reply"\`, the
    \`threadId\`, and a one-sentence \`body\` naming the new \`version\` from the receipt and what
    changed (for example "Softened in v4: now says two of three accounts renewed."), then with
@@ -610,7 +611,8 @@ on any other value or on two properties naming different ids. If there is no lin
 say nothing is published. Otherwise tell the user the link will stop working and that copies
 people already saved cannot be recalled, then end your turn. On a clear yes, call
 \`openartifacts_unpublish\` with the \`docId\`, and with the note as \`notePath\` when the page
-came from one: the tool removes only the note properties whose link names the withdrawn page.
+came from one: the tool removes the note's link to the page, and changes nothing if the note
+does not link to it; then stop and ask the user.
 Report that the page is gone. Never tell the user to delete the page at its public URL.
 `,
   files: [{ path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME }],
