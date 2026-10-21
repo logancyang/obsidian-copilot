@@ -112,15 +112,24 @@ describe("AgentChatControls", () => {
       expect(screen.queryByTitle("More Actions")).toBeNull();
     });
 
-    it("keeps the bar to the usage meter, New Chat, Chat History, and More Actions", () => {
+    it("keeps the bar to the usage meter, New Chat, Save Chat as Note, Chat History, and More Actions", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
-      renderSessionControls({ usageMeter: <span title="Context usage" /> });
+      renderSessionControls({
+        usageMeter: <span title="Context usage" />,
+        onSaveAsNote: () => {},
+      });
 
       const titles = Array.from(document.querySelectorAll("[title]")).map((el) =>
         el.getAttribute("title")
       );
-      expect(titles).toEqual(["Context usage", "New Chat", "Chat History", "More Actions"]);
+      expect(titles).toEqual([
+        "Context usage",
+        "New Chat",
+        "Save Chat as Note",
+        "Chat History",
+        "More Actions",
+      ]);
     });
 
     it("copies the chat link from the More Actions menu", () => {
@@ -192,21 +201,17 @@ describe("AgentChatControls", () => {
       expect(onReportError).toHaveBeenCalledTimes(1);
     });
 
-    it("offers Save chat as note in the More Actions menu only when autosave is off", () => {
+    it("offers a Save Chat as Note button in the bar only when autosave is off", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSaveAsNote = jest.fn();
       mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
       const { unmount } = renderSessionControls({ onSaveAsNote });
-      expect(
-        within(openMoreActions()).queryByRole("menuitem", { name: "Save chat as note" })
-      ).toBeNull();
+      expect(screen.queryByTitle("Save Chat as Note")).toBeNull();
       unmount();
 
       mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
       renderSessionControls({ onSaveAsNote });
-      fireEvent.click(
-        within(openMoreActions()).getByRole("menuitem", { name: "Save chat as note" })
-      );
+      fireEvent.click(screen.getByTitle("Save Chat as Note"));
 
       expect(onSaveAsNote).toHaveBeenCalledTimes(1);
     });

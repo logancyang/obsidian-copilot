@@ -131,6 +131,21 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
             <TooltipContent>New Chat</TooltipContent>
           </Tooltip>
         )}
+        {!settings.autosaveChat && onSaveAsNote && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost2"
+                size="icon"
+                title="Save Chat as Note"
+                onClick={() => void onSaveAsNote()}
+              >
+                <Download className="tw-size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Save Chat as Note</TooltipContent>
+          </Tooltip>
+        )}
         {historyAvailable && (
           <Tooltip>
             <ChatHistoryPopover
@@ -192,12 +207,6 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                     Add to bookmarks
                   </NeedsMessageMenuItem>
                 ))}
-              {!settings.autosaveChat && onSaveAsNote && (
-                <DropdownMenuItem onSelect={() => void onSaveAsNote()}>
-                  <Download />
-                  Save chat as note
-                </DropdownMenuItem>
-              )}
               {/* A report from here names the chat's agent, model and session, so only a host with a chat offers it.
                   https://github.com/Brevilabs/obsidian-copilot-private/issues/672 */}
               {onReportError && (
