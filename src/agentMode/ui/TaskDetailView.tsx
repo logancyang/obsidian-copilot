@@ -1,5 +1,5 @@
 import type { AgentTask } from "@/agentMode/session/AgentSession";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { useTaskOutputTail } from "@/agentMode/ui/hooks/useTaskOutputTail";
@@ -91,7 +91,11 @@ const SubagentDetail: React.FC<{
   app: App;
 }> = ({ task, messages, app }) => {
   const running = task.status === "running";
-  const parts = useMemo(() => messages.flatMap((m) => m.parts ?? []), [messages]);
+  const parts = useMemo((): AgentMessagePart[] => {
+    const own = messages.flatMap((m) => m.parts ?? []);
+    // A subagent that shares none of its messages reports only through its notification summary. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    return own.length === 0 && task.summary ? [{ kind: "text", text: task.summary }] : own;
+  }, [messages, task.summary]);
   const promptMessage = useMemo(
     () =>
       task.prompt

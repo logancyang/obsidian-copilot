@@ -135,6 +135,18 @@ export const SubagentFinished: StoryObj<Props> = {
   args: { task: { ...SUBAGENT, status: "completed" } },
 };
 
+export const SubagentReportFromNotification: StoryObj<Props> = {
+  render: (args) => <Demo {...args} />,
+  args: {
+    task: {
+      ...SUBAGENT,
+      status: "completed",
+      summary: "Welcome.md has **9 words**. The vault's other top-level notes are empty templates.",
+    },
+    messages: [],
+  },
+};
+
 export const CommandLive: StoryObj<Props> = {
   render: (args) => <Demo {...args} />,
   args: { task: makeCommandTask({ outputFile: "/tmp/tasks/live.output" }), messages: [] },

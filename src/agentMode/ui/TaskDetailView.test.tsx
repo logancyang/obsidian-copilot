@@ -84,6 +84,15 @@ describe("TaskDetailView", () => {
     expect(screen.getByTestId("trail").getAttribute("data-streaming")).toBe("false");
   });
 
+  it(`shows a finished subagent's notification summary as its report when it shared no messages (${ISSUE_749})`, () => {
+    renderDetail({
+      task: makeTask({ status: "completed", summary: "Welcome.md has 9 words." }),
+    });
+
+    expect(screen.getByTestId("trail").textContent).toBe("Welcome.md has 9 words.");
+    expect(screen.queryByText("No activity")).toBeNull();
+  });
+
   it("says a subagent is starting before it has done anything", () => {
     renderDetail({ task: makeTask() });
 
