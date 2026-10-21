@@ -66,5 +66,5 @@ export async function withBlankLineBreaks(app: App, markdown: string): Promise<s
     kept.push(...Array<string>(extra).fill("<br>"), "");
     copied = sections[index].position.start.line;
   }
-  return copied === 0 ? markdown : [...kept, ...lines.slice(copied)].join("\n");
+  return [...kept, ...lines.slice(copied)].join("\n");
 }

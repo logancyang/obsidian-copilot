@@ -50,7 +50,7 @@ Press **Enter** to send by default. You can switch this to **Shift + Enter** und
 
 The chat follows the latest response as it grows. Scroll up to read earlier messages without being pulled back down. A round down-arrow appears near the bottom of the chat; select it, or scroll to the end, to follow the response again.
 
-Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
+Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Blank lines between paragraphs show as you typed them. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
 
 Hover over a message to use its actions:
 

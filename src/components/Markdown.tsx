@@ -64,6 +64,8 @@ async function markdownWithBlankLines(app: App, text: string): Promise<string> {
   try {
     return await withBlankLineBreaks(app, text);
   } catch (error) {
+    // Obsidian's parser is a private API that may disappear; the text still renders, only the
+    // extra blank lines collapse. https://github.com/Brevilabs/obsidian-copilot-private/issues/751
     logWarn("[Markdown] blank-line parsing failed, rendering without them", error);
     return text;
   }
