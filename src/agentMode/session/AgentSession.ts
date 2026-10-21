@@ -1132,9 +1132,9 @@ export class AgentSession {
       );
     }
     const stoppedIds = [...this.pendingPrompts.keys()].filter((id) => !queued.has(id));
-    this.stoppedPromptIds = new Set(stoppedIds);
     // The stopped prompt's turn may still be running or yet to start; it renders nothing until it ends. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (this.openTurnId !== null || stoppedIds.length > 0) {
+      this.stoppedPromptIds = new Set(stoppedIds);
       this.cancelledPromptDrain = new Promise<void>((resolve) => {
         this.finishCancelledPromptDrain = resolve;
       });

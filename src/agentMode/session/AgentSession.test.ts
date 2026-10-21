@@ -3631,6 +3631,24 @@ describe("AgentSession", () => {
         expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["third"]);
       });
 
+      it(`ends the stopped turn's wait when its prompt is withdrawn even after a second Stop cancelled a send waiting behind it, so later sends go out (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        await session.cancel();
+        const waiting = session.sendPrompt("second");
+
+        await session.cancel();
+        await waiting.turn;
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [sent[0].promptId] });
+        session.sendPrompt("third");
+
+        await waitFor(() => expect(sent).toHaveLength(2));
+        expect(promptText(sent[1])).toContain("third");
+      });
+
       it(`keeps a send made right after Stop behind the stopped turn's end even once its queued messages are withdrawn, so that turn's late output never lands in the new reply (${ISSUE_747})`, async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
