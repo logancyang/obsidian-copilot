@@ -1368,6 +1368,16 @@ export class AgentSession {
         this.handleDisconnect(update.error);
         return;
       case "task_started":
+        // A launch from the stopped turn has no card left to settle it, so only a task the agent actually starts is listed. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+        if (
+          update.taskId === undefined &&
+          event.taskToolCallId === undefined &&
+          (this.cancelledPromptDrain || this.abortController?.signal.aborted)
+        ) {
+          return;
+        }
+        this.applyTaskUpdate(update);
+        return;
       case "task_progress":
       case "task_ended":
         this.applyTaskUpdate(update);

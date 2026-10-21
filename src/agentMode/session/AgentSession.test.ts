@@ -3885,6 +3885,42 @@ describe("AgentSession", () => {
         ]);
       });
 
+      it(`ignores a launch from the stopped turn that arrives after Stop, yet lists the task if the agent starts it anyway (${ISSUE_749})`, async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("run things");
+        await session.cancel();
+
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-late",
+          title: "Agent",
+          status: "in_progress",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          toolCallId: "tc-late",
+          kind: "subagent",
+          description: "Summarize",
+        });
+        finishPrompt("cancelled");
+        await turn;
+        const afterStop = session.getTasks();
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-late",
+          toolCallId: "tc-late",
+          kind: "subagent",
+          description: "Summarize",
+        });
+
+        expect(afterStop).toEqual([]);
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ taskId: "task-late", status: "running" }),
+        ]);
+      });
+
       it(`returns the messages a withdrawing backend takes back at Stop to the composer in send order, and never shows or runs them (${ISSUE_747})`, async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
