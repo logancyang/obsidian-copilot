@@ -75,7 +75,7 @@ interface SessionState {
   systemPromptAppend: string;
 }
 
-// Every subagent runs in the background, even one the model asks to wait on: the chat lists it as a task and its report starts a reply, so the chat never blocks on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+// Subagents run in the background unless the model chooses: the chat lists them as tasks and their reports start replies, while a model that needs a result before going on can still wait on it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
 export const runSubagentsInBackground: HookCallback = async (input) => {
   if (
     input.hook_event_name !== "PreToolUse" ||
@@ -89,7 +89,7 @@ export const runSubagentsInBackground: HookCallback = async (input) => {
     !Array.isArray(input.tool_input)
       ? (input.tool_input as Record<string, unknown>)
       : {};
-  if (toolInput.run_in_background === true) return {};
+  if (toolInput.run_in_background !== undefined) return {};
   return {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",

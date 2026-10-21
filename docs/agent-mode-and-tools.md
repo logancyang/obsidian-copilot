@@ -201,7 +201,7 @@ You can type and send while the agent works. With Claude, the message waits abov
 
 ### Background subagents and commands
 
-Claude runs every subagent and long command in the background, so you can keep chatting. A task appears as soon as Claude starts launching it. When one finishes, Claude replies with its result on its own.
+Claude runs subagents and long commands in the background unless it needs to wait on one, so you can keep chatting. A task appears as soon as Claude starts launching it. When one finishes, Claude replies with its result on its own.
 
 - Hover the task count above the composer, such as **2 tasks running**, to see each running task.
 - Select a task, or its card in the chat, to open its view: a subagent's steps or a command's output. Select **Back to chat** or press Escape to return.
