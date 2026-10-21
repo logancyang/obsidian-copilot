@@ -556,7 +556,7 @@ describe("ClaudeSdkBackendProcess", () => {
         const initializationResult = jest.fn().mockResolvedValue({ models: FAKE_CATALOG });
         queryMock.mockReturnValue({
           initializationResult,
-          interrupt: jest.fn().mockResolvedValue(undefined),
+          close: jest.fn(),
         });
 
         const proc = makeProc({ getEnvOverrides: () => ({ ANTHROPIC_MODEL: "claude-fable-5" }) });
