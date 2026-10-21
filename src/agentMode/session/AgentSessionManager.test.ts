@@ -3091,6 +3091,26 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.backendId).toBe("opencode");
       });
 
+      it("defers restart while a chat's background task runs and restarts once the task ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        getSessionTestHandle(first).setTaskStatuses(["running"]);
+
+        await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        getSessionTestHandle(first).setTaskStatuses(["completed"]);
+        await shutDown;
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 interrupts a busy turn when a privacy-boundary restart cannot be deferred", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();

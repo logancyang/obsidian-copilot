@@ -2357,6 +2357,7 @@ export class AgentSessionManager {
         if (hasRunningTask(session) === tasksRunning) return;
         tasksRunning = !tasksRunning;
         this.notify();
+        void this.flushDeferredBackendRestartIfReady(session.backendId);
       },
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
@@ -2519,7 +2520,12 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values()).some((session) => {
       if (session.backendId !== backendId) return false;
       const status = session.getStatus();
-      return status === "starting" || status === "running" || status === "awaiting_permission";
+      return (
+        status === "starting" ||
+        status === "running" ||
+        status === "awaiting_permission" ||
+        hasRunningTask(session)
+      );
     });
   }
 
