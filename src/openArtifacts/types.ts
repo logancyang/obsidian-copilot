@@ -6,6 +6,8 @@ export interface OpenArtifactsDocument {
 
 export type OpenArtifactsLinkAccess = "anyone" | "invited";
 
+export type OpenArtifactsRole = "view" | "comment";
+
 // The server's one-time offer to link this Copilot license to an OpenArtifacts account; its text is server-owned.
 // https://github.com/Brevilabs/OpenArtifacts/issues/94
 export interface OpenArtifactsGuidance {
@@ -28,8 +30,15 @@ export interface OpenArtifactsAccess {
   // Whether the server sends invite and request emails; when false the owner shares the link.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
   email: boolean;
-  people: { email: string; role: "view" | "comment"; addedAt: number }[];
+  people: { email: string; role: OpenArtifactsRole; addedAt: number }[];
   requests: { email: string; requestedAt: number }[];
+}
+
+export type OpenArtifactsThreadState = "open" | "resolved" | "all";
+
+export interface OpenArtifactsThreads {
+  threads: Record<string, unknown>[];
+  [field: string]: unknown;
 }
 
 export type OpenArtifactsAction = "publish" | "update" | "delete";

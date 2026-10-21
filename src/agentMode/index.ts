@@ -36,6 +36,13 @@ import {
   MIYO_PARSE_TURNED_OFF_TEXT,
   parseWithMiyo,
 } from "@/miyo/miyoParseTool";
+import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
+import {
+  createOpenArtifactsTools,
+  isOpenArtifactsToolsActive,
+  OPENARTIFACTS_TOOL_NAMES,
+  readLocalText,
+} from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
 import {
@@ -199,7 +206,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           ? getSettings().agentMode.offerFeedbackCards
           : toolName === MIYO_PARSE_TOOL_NAME
             ? isMiyoParseActive(getSettings())
-            : toolName === MIYO_SEARCH_TOOL_NAME && isMiyoSearchActive(getSettings()),
+            : toolName === MIYO_SEARCH_TOOL_NAME
+              ? isMiyoSearchActive(getSettings())
+              : OPENARTIFACTS_TOOL_NAMES.includes(toolName) &&
+                isOpenArtifactsToolsActive(getSettings()),
       [
         {
           definition: MIYO_SEARCH_TOOL,
@@ -223,6 +233,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             })
           ),
         },
+        ...createOpenArtifactsTools({
+          app,
+          client: new OpenArtifactsClient(),
+          publisher: plugin.openArtifactsPublisher,
+          getLicenseKey: () => getSettings().plusLicenseKey.trim(),
+          getVaultBase: () => getVaultBase(app),
+          openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
+          readText: (path) => readLocalText(app, path),
+        }),
       ]
     ),
   });

@@ -409,6 +409,27 @@ describe("agentMode", () => {
       }
     );
 
+    it.each([
+      ["a paid user has a license key", true, "plus-key", true],
+      ["the key is blank", true, "  ", false],
+      ["the user is not paid", false, "plus-key", false],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 hands sessions the OpenArtifacts tools through Copilot's MCP server when %s, with every other tool off",
+      (_state, isPaidUser, plusLicenseKey, hasTools) => {
+        mockSettings = {
+          ...mockSettings,
+          agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
+          enableMiyo: false,
+          isPaidUser,
+          plusLicenseKey,
+        };
+        createAgentSessionManager({} as App, plugin);
+        const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+
+        expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
+      }
+    );
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 follows the search switch as it changes", () => {
       mockSettings = {
         ...mockSettings,
