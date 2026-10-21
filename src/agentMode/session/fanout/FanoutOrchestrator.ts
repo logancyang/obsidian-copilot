@@ -218,7 +218,6 @@ export class FanoutOrchestrator {
               return;
             case "task_ended":
               if (runningTasks.delete(update.taskId) && !turnOpen) awaitingReport = true;
-              finishIfSettled();
               return;
             case "state_changed":
               live.current = update.state;
