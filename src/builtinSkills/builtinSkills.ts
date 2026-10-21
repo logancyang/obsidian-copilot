@@ -611,9 +611,9 @@ on any other value or on two properties naming different ids. If there is no lin
 say nothing is published. Otherwise tell the user the link will stop working and that copies
 people already saved cannot be recalled, then end your turn. On a clear yes, call
 \`openartifacts_unpublish\` with the \`docId\`, and with the note as \`notePath\` when the page
-came from one: the tool removes the note's link to the page, and changes nothing if the note
-does not link to it; then stop and ask the user.
-Report that the page is gone. Never tell the user to delete the page at its public URL.
+came from one; the tool then removes the note's link to the page. If the tool says the note does
+not link to that page, nothing was withdrawn: stop and ask the user. Otherwise report that the
+page is gone. Never tell the user to delete the page at its public URL.
 `,
   files: [{ path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME }],
 };
