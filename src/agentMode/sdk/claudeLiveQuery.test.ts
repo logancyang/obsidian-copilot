@@ -252,6 +252,28 @@ describe("claudeLiveQuery", () => {
         ]);
       });
 
+      it(`delivers an echoed prompt once when its result names it again, and keeps a prompt the result does not name waiting for its own turn (${ISSUE_175})`, async () => {
+        const { live, fake, recorder } = startLive();
+
+        live.push("prompt-1", "first");
+        live.push("prompt-2", "second");
+        fake.echo(await fake.nextInput(0));
+        fake.emit(textDelta("one"), resultFrame({ user_message_uuids: ["prompt-1"] }));
+        await recorder.waitFor("turn_ended");
+        fake.echo(await fake.nextInput(1));
+        fake.emit(textDelta("two"), resultFrame({ user_message_uuids: ["prompt-2"] }));
+        await recorder.waitFor("turn_ended", () => true, 1);
+
+        expect(lifecycle(recorder.updates())).toEqual([
+          "delivered prompt-1",
+          "turn_started",
+          "turn_ended",
+          "delivered prompt-2",
+          "turn_started",
+          "turn_ended",
+        ]);
+      });
+
       it(`starts a turn the agent begins on its own at its first main-agent content (${ISSUE_175})`, async () => {
         const { fake, recorder } = startLive();
 

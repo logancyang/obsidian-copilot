@@ -279,12 +279,7 @@ export type SessionUpdate =
   | ({ sessionUpdate: "turn_ended" } & TurnEnd)
   | { sessionUpdate: "session_disconnected"; error: Error }
   | ({ sessionUpdate: "task_started" } & TaskStart)
-  | {
-      sessionUpdate: "task_progress";
-      taskId: string;
-      progress?: AgentToolProgress;
-      outputFile?: string;
-    }
+  | { sessionUpdate: "task_progress"; taskId: string; progress: AgentToolProgress }
   | ({ sessionUpdate: "task_ended" } & TaskEnd);
 
 export type TaskKind = "subagent" | "command";

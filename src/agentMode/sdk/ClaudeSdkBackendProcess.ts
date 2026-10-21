@@ -277,6 +277,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     sessionId: SessionId,
     session: SessionState
   ): Promise<ClaudeLiveQuery> {
+    // Settings are read after the last await, so a change made while the query starts still reaches it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     const permissionBridge = new PermissionBridge(sessionId, {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
@@ -333,7 +335,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
     const envOverrides = this.opts.getEnvOverrides?.();
-    const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
     const extraEnv = { ...managedEnv, ...envOverrides };
     if (Object.keys(extraEnv).length > 0) {
       options.env = { ...process.env, ...extraEnv };
@@ -396,15 +397,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     logSdkOutbound("setSessionModel", { modelId: params.modelId }, params.sessionId);
     const session = this.sessions.get(params.sessionId);
     if (!session) throw new Error(`Unknown session ${params.sessionId}`);
+    // The query outlives this call, so a change it refuses must not show as applied. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    await session.live?.query.setModel(params.modelId);
     session.model = params.modelId;
-    if (session.live) {
-      try {
-        await session.live.query.setModel(params.modelId);
-      } catch (e) {
-        logWarn("[AgentMode] SDK query.setModel() threw (will apply on next turn)", e);
-        logSdkError("→", "setModel", { error: err2String(e) }, params.sessionId);
-      }
-    }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
     return state;
@@ -422,15 +417,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (!mode) {
       throw new Error(`Unsupported mode ${params.modeId}`);
     }
+    await session.live?.query.setPermissionMode(mode);
     session.permissionMode = mode;
-    if (session.live) {
-      try {
-        await session.live.query.setPermissionMode(mode);
-      } catch (e) {
-        logWarn("[AgentMode] SDK query.setPermissionMode() threw (will apply on next turn)", e);
-        logSdkError("→", "setPermissionMode", { error: err2String(e) }, params.sessionId);
-      }
-    }
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
     return state;
@@ -463,15 +451,9 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         `Effort '${params.value}' not supported by ${session.model ?? "default model"}`
       );
     }
-    session.effort = params.value as EffortLevel;
-    if (session.live) {
-      try {
-        await session.live.query.applyFlagSettings({ effortLevel: session.effort });
-      } catch (e) {
-        logWarn("[AgentMode] SDK query.applyFlagSettings() threw (will apply on reconnect)", e);
-        logSdkError("→", "applyFlagSettings", { error: err2String(e) }, params.sessionId);
-      }
-    }
+    const effort = params.value as EffortLevel;
+    await session.live?.query.applyFlagSettings({ effortLevel: effort });
+    session.effort = effort;
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
     return state;

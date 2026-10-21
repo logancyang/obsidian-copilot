@@ -1394,13 +1394,9 @@ export class AgentSession {
     const task = this.tasks.get(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
-      const progress = update.progress && { ...task.progress, ...update.progress };
-      this.tasks.set(task.taskId, {
-        ...task,
-        progress,
-        outputFile: update.outputFile ?? task.outputFile,
-      });
-      if (progress) this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      const progress = { ...task.progress, ...update.progress };
+      this.tasks.set(task.taskId, { ...task, progress });
+      this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
       return this.publishTasks();
     }
     this.tasks.set(task.taskId, {

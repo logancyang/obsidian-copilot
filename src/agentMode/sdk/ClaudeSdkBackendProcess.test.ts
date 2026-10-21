@@ -1194,6 +1194,46 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(getPromptQueryCalls()).toHaveLength(1);
       });
 
+      it(`rejects a mode the running query refuses and keeps the old one, so the chat never claims a mode Claude is not in (${ISSUE_175})`, async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await proc.setSessionMode({ sessionId, modeId: "default" });
+        const recorder = new SessionEventRecorder();
+        proc.registerSessionHandler(sessionId, recorder.handler);
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "1" }] });
+        await recorder.waitFor("turn_ended");
+        fakes[0].setPermissionMode.mockRejectedValueOnce(new Error("control request failed"));
+
+        await expect(
+          proc.setSessionMode({ sessionId, modeId: "bypassPermissions" })
+        ).rejects.toThrow("control request failed");
+        fakes[0].fail(new Error("process exited with code 1"));
+        await recorder.waitFor("session_disconnected");
+        await proc.prompt({ sessionId, promptId: "p2", prompt: [{ type: "text", text: "2" }] });
+
+        const reconnected = getPromptQueryCalls()[1][0] as { options: { permissionMode?: string } };
+        expect(reconnected.options.permissionMode).toBe("default");
+      });
+
+      it(`starts the query in a mode chosen while the query was still starting (${ISSUE_175})`, async () => {
+        let finishEnvironment!: (env: Record<string, string>) => void;
+        const environment = new Promise<Record<string, string>>((resolve) => {
+          finishEnvironment = resolve;
+        });
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getManagedEnv: () => environment });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        const turn = promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        await proc.setSessionMode({ sessionId, modeId: "plan" });
+        finishEnvironment({});
+        await turn;
+
+        const call = getPromptQueryCalls()[0][0] as { options: { permissionMode?: string } };
+        expect(call.options.permissionMode).toBe("plan");
+      });
+
       it("rejects a permission mode the SDK does not define", async () => {
         const proc = makeProc();
 
