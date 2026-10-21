@@ -256,7 +256,7 @@ export class AgentSession {
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
   private readonly taskContent = new Map<string, AgentMessageStore>();
-  private currentTurnHadRoutedToolActivity = false;
+  private currentTurnShowedActivityElsewhere = false;
   private currentMessageIds = new Set<string>();
   private settledStream: {
     placeholderId: string;
@@ -826,10 +826,11 @@ export class AgentSession {
     const prompt = this.queuedPrompts.find((p) => p.id === promptId);
     if (!prompt) return;
     this.removeQueuedPrompts([promptId]);
-    // The agent's work before the message stays in its own reply; an empty reply gives way to the message. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    // The agent's work before the message stays in its own reply and still counts for the turn; an empty reply gives way to the message. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     const reply = this.placeholderId;
     if (reply && this.store.hasAssistantActivity(reply)) {
       this.store.markTurnComplete(reply, "end_turn", Date.now() - this.replyStartedAtMs);
+      this.currentTurnShowedActivityElsewhere = true;
     } else if (reply) {
       this.store.deleteMessage(reply);
     }
@@ -1431,7 +1432,7 @@ export class AgentSession {
         return;
       }
       case "tool_call_update": {
-        if (targetMessageId !== placeholderId) this.currentTurnHadRoutedToolActivity = true;
+        if (targetMessageId !== placeholderId) this.currentTurnShowedActivityElsewhere = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
         // A late update to an earlier turn's call must not count as this turn's edit.
@@ -1662,7 +1663,7 @@ export class AgentSession {
     });
     this.currentMessageIds = new Set();
     if (!continuesTurn) {
-      this.currentTurnHadRoutedToolActivity = false;
+      this.currentTurnShowedActivityElsewhere = false;
       this.turnFiles = new Map();
     }
     this.notifyMessages();
@@ -1681,7 +1682,7 @@ export class AgentSession {
     this.currentMessageIds = new Set();
     if (
       stopReason !== "cancelled" &&
-      !this.currentTurnHadRoutedToolActivity &&
+      !this.currentTurnShowedActivityElsewhere &&
       !this.store.hasAssistantActivity(placeholderId)
     ) {
       const message = buildEmptyTurnMessage(this.backendId, stopReason);

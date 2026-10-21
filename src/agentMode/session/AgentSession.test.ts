@@ -2156,6 +2156,32 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 ends a turn without an error when the agent adds nothing after a queued message, since its earlier work is already shown", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        const first = session.sendPrompt("list the notes");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit(replayText("agent_message_chunk", "Alpha: about A."));
+        const steer = session.sendPrompt("that's enough, no reply needed");
+        await waitFor(() => expect(sent).toHaveLength(2));
+        emit({ sessionUpdate: "message_delivered", promptId: steer.userMessageId });
+
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
+
+        await expect(first.turn).resolves.toBe("end_turn");
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "list the notes" },
+          { sender: AI_SENDER, message: "Alpha: about A." },
+          { sender: USER_SENDER, message: "that's enough, no reply needed" },
+          { sender: AI_SENDER, message: "" },
+        ]);
+        expect(aiMessages(session).some((m) => m.isErrorMessage)).toBe(false);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 leaves no empty reply above a queued message the agent takes before saying anything", async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
