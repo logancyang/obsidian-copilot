@@ -633,13 +633,32 @@ describe("AgentTrail", () => {
   });
 
   it("renders a Miyo search as its own card between grouped work, with its query and note count (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
-    const miyo = miyoSearchCall({ notePaths: ["v/a.md", "v/b.md"] });
+    const miyo = miyoSearchCall({ notes: [{ path: "v/a.md" }, { path: "v/b.md" }] });
     renderTrail({ parts: [READ_A, LINT, miyo, READ_B, LINT, text("Found it.")] });
 
     expect(screen.getByText("Searched with Miyo")).toBeTruthy();
     expect(screen.getByText("“standing desk”")).toBeTruthy();
     expect(screen.getByText("2 notes")).toBeTruthy();
     expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
+  });
+
+  it("unfolds a Miyo search card to list its notes and opens a clicked note in a new tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/750)", () => {
+    const openLinkText = jest.fn();
+    const app = {
+      workspace: { getActiveFile: jest.fn(() => null), openLinkText },
+      vault: { getAbstractFileByPath: jest.fn(() => ({})) },
+    } as never;
+    renderTrail({
+      app,
+      parts: [miyoSearchCall({ notes: [{ path: "v/a.md" }, { path: "v/b.md" }] }), text("Done.")],
+    });
+
+    expect(screen.queryByText("a")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Searched with Miyo/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^a/ }));
+
+    expect(screen.getByText("b")).toBeTruthy();
+    expect(openLinkText).toHaveBeenCalledWith("v/a.md", "", true);
   });
 
   it("renders a failed Miyo search as a failed card with its reason and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
@@ -655,7 +674,10 @@ describe("AgentTrail", () => {
 
   it("gives the answer text the note paths of the turn's Miyo searches, as when the chat is reopened from history (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
     renderTrail({
-      parts: [miyoSearchCall({ notePaths: ["v/a.md", "v/b.md"] }), text("See [[a]].")],
+      parts: [
+        miyoSearchCall({ notes: [{ path: "v/a.md" }, { path: "v/b.md" }] }),
+        text("See [[a]]."),
+      ],
       isStreaming: false,
     });
 

@@ -5,11 +5,15 @@ import { MIYO_SEARCH_TOOL_NAME } from "@/miyo/miyoSearchTool";
 
 export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
 
+export interface MiyoNote {
+  folder?: string;
+  path: string;
+}
+
 export interface MiyoSearchRun {
   status: AgentToolStatus;
   query: string | null;
-  noteCount: number | null;
-  notePaths: readonly string[];
+  notes: readonly MiyoNote[] | null;
   error: string | null;
 }
 
@@ -61,20 +65,17 @@ function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 const MIYO_FAILURE_REASON = /Details: ([\s\S]*)$/;
 
-// Only notes without a folder are in the active vault, so only their paths can match a link in the answer.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-function miyoNotes(text: string): { count: number; vaultPaths: string[] } | null {
+function miyoNotes(text: string): MiyoNote[] | null {
   try {
     const results = (JSON.parse(text) as { results?: unknown }).results;
     if (!Array.isArray(results)) return null;
-    const notes = results.filter(
-      (r: { path?: unknown } | null): r is { folder?: string; path: string } =>
-        typeof r?.path === "string"
-    );
-    return {
-      count: new Set(notes.map((r) => JSON.stringify([r.folder, r.path]))).size,
-      vaultPaths: [...new Set(notes.filter((r) => r.folder === undefined).map((r) => r.path))],
-    };
+    const notes = new Map<string, MiyoNote>();
+    for (const r of results as ({ folder?: unknown; path?: unknown } | null)[]) {
+      if (typeof r?.path !== "string") continue;
+      const folder = typeof r.folder === "string" ? r.folder : undefined;
+      notes.set(JSON.stringify([folder, r.path]), { folder, path: r.path });
+    }
+    return [...notes.values()];
   } catch {
     return null;
   }
@@ -84,20 +85,24 @@ export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
   const query = miyoSearchQuery(part);
   if (query === undefined) return null;
   const text = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
-  const notes = miyoNotes(text);
   return {
     status: part.status,
     query,
-    noteCount: notes?.count ?? null,
-    notePaths: notes?.vaultPaths ?? EMPTY_MIYO_PATHS,
+    notes: miyoNotes(text),
     error:
       part.status === "failed" ? stringOrNull(MIYO_FAILURE_REASON.exec(text)?.[1] ?? text) : null,
   };
 }
 
+// Only notes without a folder are in the active vault, so only their paths can match a link in the answer.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly string[] {
   const paths = parts.flatMap((part) =>
-    part.kind === "tool_call" ? (miyoSearchRun(part)?.notePaths ?? []) : []
+    part.kind === "tool_call"
+      ? (miyoSearchRun(part)?.notes ?? []).flatMap((note) =>
+          note.folder === undefined ? [note.path] : []
+        )
+      : []
   );
-  return paths.length > 0 ? paths : EMPTY_MIYO_PATHS;
+  return paths.length > 0 ? [...new Set(paths)] : EMPTY_MIYO_PATHS;
 }

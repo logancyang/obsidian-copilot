@@ -61,13 +61,12 @@ describe("miyoSearchRun", () => {
     ] as const;
 
     it.each(backends)(
-      "reads the query, the note count and the note paths from a completed %s miyo_search call (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
+      "reads the query and the found notes from a completed %s miyo_search call (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
       (_name, call) => {
         expect(miyoSearchRun(call(stdout(miyoJson(NOTES))))).toEqual({
           status: "completed",
           query: "hiking trip",
-          noteCount: 2,
-          notePaths: NOTES,
+          notes: NOTES.map((path) => ({ path })),
           error: null,
         });
       }
@@ -77,17 +76,16 @@ describe("miyoSearchRun", () => {
       const t = opencodeCall(
         stdout(JSON.stringify({ results: [{ path: "a.md" }], count: 1 }, null, 2))
       );
-      expect(miyoSearchRun(t)).toMatchObject({ noteCount: 1, notePaths: ["a.md"] });
+      expect(miyoSearchRun(t)?.notes).toEqual([{ path: "a.md" }]);
     });
 
     it.each(backends)(
-      "shows a %s call with no result yet as running with its query and no count",
+      "shows a %s call with no result yet as running with its query and no notes",
       (_name, call) => {
         expect(miyoSearchRun(call({ status: "in_progress" }))).toEqual({
           status: "in_progress",
           query: "hiking trip",
-          noteCount: null,
-          notePaths: [],
+          notes: null,
           error: null,
         });
       }
@@ -96,19 +94,16 @@ describe("miyoSearchRun", () => {
     it.each(backends)(
       "reports no notes for a completed %s call whose search matched nothing",
       (_name, call) => {
-        expect(miyoSearchRun(call(stdout(miyoJson([]))))).toMatchObject({
-          noteCount: 0,
-          notePaths: [],
-        });
+        expect(miyoSearchRun(call(stdout(miyoJson([]))))?.notes).toEqual([]);
       }
     );
 
-    it("counts each note once when a result lists it more than once", () => {
+    it("lists each note once when a result lists it more than once", () => {
       const t = claudeCall(stdout(miyoJson(["a.md", "a.md", "b.md"])));
-      expect(miyoSearchRun(t)?.noteCount).toBe(2);
+      expect(miyoSearchRun(t)?.notes).toEqual([{ path: "a.md" }, { path: "b.md" }]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 counts notes from other Miyo folders but offers only the vault's notes for link badges", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps the Miyo folder of a note outside the vault apart from a vault note at the same path", () => {
       const text = JSON.stringify({
         results: [
           { path: "Research/Sleep.md" },
@@ -117,10 +112,11 @@ describe("miyoSearchRun", () => {
         ],
         count: 3,
       });
-      expect(miyoSearchRun(claudeCall(stdout(text)))).toMatchObject({
-        noteCount: 3,
-        notePaths: ["Research/Sleep.md"],
-      });
+      expect(miyoSearchRun(claudeCall(stdout(text)))?.notes).toEqual([
+        { path: "Research/Sleep.md" },
+        { folder: "Research", path: "Interview.md" },
+        { folder: "Reading Notes", path: "Research/Sleep.md" },
+      ]);
     });
 
     it.each(backends)(
@@ -129,8 +125,7 @@ describe("miyoSearchRun", () => {
         expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }))).toEqual({
           status: "failed",
           query: "hiking trip",
-          noteCount: null,
-          notePaths: [],
+          notes: null,
           error: "net::ERR_CONNECTION_REFUSED",
         });
       }
@@ -153,16 +148,15 @@ describe("miyoSearchRun", () => {
       expect(miyoSearchRun(t)).toEqual({
         status: "completed",
         query: "hiking trip",
-        noteCount: null,
-        notePaths: [],
+        notes: null,
         error: null,
       });
     });
 
-    it("reports a completed call with no output as completed with an unknown count", () => {
+    it("reports a completed call with no output as completed with unknown notes", () => {
       expect(miyoSearchRun(codexCall())).toMatchObject({
         status: "completed",
-        noteCount: null,
+        notes: null,
         error: null,
       });
     });

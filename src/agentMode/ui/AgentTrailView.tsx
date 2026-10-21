@@ -24,6 +24,7 @@ import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailE
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { getVaultBase } from "@/utils/vaultPath";
+import { openVaultPath } from "@/utils/openVaultPath";
 import { App } from "obsidian";
 
 interface AgentTrailProps {
@@ -156,11 +157,19 @@ function renderNode(
 ): React.ReactNode {
   switch (node.type) {
     case "action": {
+      const expansionId = actionExpansionId(trailId, node.part.id);
       const miyoSearch = miyoSearchRun(node.part);
       if (miyoSearch) {
-        return <MiyoSearchCard key={key} {...miyoSearch} />;
+        return (
+          <MiyoSearchCard
+            key={key}
+            {...miyoSearch}
+            open={ctx.expansion.isOpen(expansionId)}
+            onToggle={() => ctx.expansion.toggle(expansionId)}
+            onOpenNote={(path) => openVaultPath(ctx.app, path, { newLeaf: true })}
+          />
+        );
       }
-      const expansionId = actionExpansionId(trailId, node.part.id);
       return (
         <ActionCard
           key={key}
