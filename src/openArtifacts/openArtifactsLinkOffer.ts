@@ -14,7 +14,7 @@ export async function isLinkOfferPending(vault: Vault): Promise<boolean> {
   );
 }
 
-// The skill wrappers read the same marker, so the offer is shown once per vault across both paths.
+// The dialog and the agent tools share this marker, so the offer is shown once per vault across both paths.
 // https://github.com/Brevilabs/OpenArtifacts/issues/94
 export async function markLinkOfferShown(vault: Vault): Promise<void> {
   await ensureFolderExists(vault, OPENARTIFACTS_VAULT_FOLDER).catch(async (error) => {
