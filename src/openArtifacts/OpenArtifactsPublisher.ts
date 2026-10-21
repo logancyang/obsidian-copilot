@@ -5,7 +5,6 @@ import {
   type OpenArtifactsModalOptions,
   type OpenArtifactsModalResult,
   type OpenArtifactsPersistenceResult,
-  type OpenArtifactsSuccessResult,
 } from "@/components/modals/OpenArtifactsModal";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -78,8 +77,6 @@ const MISSING_LICENSE_MESSAGE =
   "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.";
 const BUSY_MESSAGE = "An OpenArtifacts action is already in progress for this note.";
 
-type OpenArtifactsSettledResult = OpenArtifactsSuccessResult | OpenArtifactsPersistenceResult;
-
 async function loadConfiguredLicenseKey(): Promise<string> {
   return getSettings().plusLicenseKey.trim();
 }
@@ -98,7 +95,10 @@ async function buildDocumentWithComponent(
   }
 }
 
-function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArtifactsFailureResult {
+export function operationFailure(
+  action: OpenArtifactsAction,
+  error: unknown
+): OpenArtifactsFailureResult {
   if (
     error instanceof OpenArtifactsFrontmatterParseError ||
     error instanceof OpenArtifactsPropertyConflictError
@@ -164,9 +164,9 @@ export class OpenArtifactsPublisher {
   private readonly recordLedger: (entry: OpenArtifactsLedgerEntry) => Promise<void>;
   private readonly isLinkOfferPending: () => Promise<boolean>;
   private readonly markLinkOfferShown: () => Promise<void>;
-  private readonly inFlightFiles = new Set<TFile | string>();
+  private readonly inFlightFiles = new Set<TFile>();
   private readonly blockedPublishResults = new Map<
-    TFile | string,
+    TFile,
     OpenArtifactsFailureResult | OpenArtifactsPersistenceResult
   >();
   private readonly modals = new Set<OpenArtifactsModalPort>();
@@ -229,7 +229,13 @@ export class OpenArtifactsPublisher {
       onConfirm: openingResult
         ? () => Promise.resolve(openingResult)
         : (action, ownerDocument, linkAccess) =>
-            this.execute(file, docId, action, ownerDocument, linkAccess),
+            this.execute(
+              file,
+              docId,
+              action,
+              () => this.buildDocument(file, ownerDocument),
+              linkAccess
+            ),
       onClosed: () => this.modals.delete(modal),
     });
     this.modals.add(modal);
@@ -271,83 +277,6 @@ export class OpenArtifactsPublisher {
     };
   }
 
-  /**
-   * Publishes an agent's page under the dialog's per-note lock and blocking rules, keyed by the note or,
-   * for a page with no note, by its HTML path, so neither path can publish a duplicate.
-   * https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-   */
-  publishDocument(
-    key: TFile | string,
-    document: OpenArtifactsDocument,
-    licenseKey: string,
-    docId: string | null,
-    linkAccess?: OpenArtifactsLinkAccess
-  ): Promise<OpenArtifactsSettledResult> {
-    return this.runExclusive(key, async () => {
-      let linked: string | null = null;
-      if (key instanceof TFile) {
-        linked = await getOpenArtifactsDocId(this.app, key);
-        if (linked && linked !== docId) {
-          throw new Error(`${key.path} now links to page ${linked}, so nothing was published.`);
-        }
-      }
-      const receipt = docId
-        ? await this.client.update(docId, document, licenseKey)
-        : await this.create(document, licenseKey, linkAccess);
-      if (!(key instanceof TFile)) {
-        return { kind: "success", action: docId ? "update" : "publish", receipt };
-      }
-      await this.recordPublishedReceipt(key, document, receipt);
-      // An update of a linked note re-reads the link as the dialog does, so one removed during the request stays removed.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-      return linked
-        ? this.saveUpdatedIdentity(key, linked, receipt)
-        : this.savePublishedIdentity(key, receipt);
-    });
-  }
-
-  async unpublish(
-    file: TFile | null,
-    docId: string,
-    licenseKey: string
-  ): Promise<OpenArtifactsSettledResult> {
-    if (file) {
-      // The page is already deleted, so unpublishing again only retries removing the link, as the dialog's Retry save does.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-      const blocked = this.blockedPublishResults.get(file);
-      if (
-        blocked?.kind === "persistence" &&
-        blocked.action === "delete" &&
-        blocked.retrySave &&
-        (await getOpenArtifactsDocId(this.app, file)) === docId
-      ) {
-        const result = await blocked.retrySave();
-        if (result.kind === "failure") throw new Error(result.message);
-        return result;
-      }
-      return this.runExclusive(file, () => this.withdraw(file, docId, licenseKey));
-    }
-    await this.client.delete(docId, licenseKey);
-    return { kind: "success", action: "delete" };
-  }
-
-  private async runExclusive<T>(key: TFile | string, operation: () => Promise<T>): Promise<T> {
-    const blocked = this.blockedPublishResults.get(key);
-    if (blocked) throw new Error(blocked.message);
-    if (this.inFlightFiles.has(key)) throw new Error(BUSY_MESSAGE);
-    this.inFlightFiles.add(key);
-    try {
-      return await operation();
-    } catch (error) {
-      if (error instanceof OpenArtifactsClientError && error.code === "ambiguous_publish") {
-        this.blockedPublishResults.set(key, operationFailure("publish", error));
-      }
-      throw error;
-    } finally {
-      this.inFlightFiles.delete(key);
-    }
-  }
-
   dispose(): void {
     this.disposed = true;
     for (const modal of [...this.modals]) {
@@ -357,11 +286,15 @@ export class OpenArtifactsPublisher {
     this.blockedPublishResults.clear();
   }
 
-  private async execute(
+  /**
+   * The one publish, update and delete flow for a note, shared by the dialog and the agent tools.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+   */
+  async execute(
     file: TFile,
     expectedDocId: string | null,
     action: OpenArtifactsAction,
-    ownerDocument: Document,
+    buildDocument: () => Promise<OpenArtifactsDocument>,
     linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsModalResult> {
     const expectedAction: OpenArtifactsAction = expectedDocId ? "update" : "publish";
@@ -427,10 +360,20 @@ export class OpenArtifactsPublisher {
           if ((await getOpenArtifactsDocId(this.app, file)) !== docId) {
             return identityChangedFailure(resolvedAction);
           }
-          return await this.withdraw(file, docId!, licenseKey);
+          await this.client.delete(docId!, licenseKey);
+          await this.recordLedgerSafely({
+            docId: docId!,
+            status: "unpublished",
+            notePath: file.path,
+            url: null,
+            publishedAt: null,
+            version: null,
+            contentHash: null,
+          });
+          return await this.removeLocalIdentity(file, docId!);
         }
 
-        const document = await this.buildDocument(file, ownerDocument);
+        const document = await buildDocument();
         const preRequestDocId = await getOpenArtifactsDocId(this.app, file);
         if (preRequestDocId !== docId) {
           return identityChangedFailure(resolvedAction);
@@ -443,7 +386,30 @@ export class OpenArtifactsPublisher {
 
         const receipt = await this.client.update(docId, document, licenseKey);
         await this.recordPublishedReceipt(file, document, receipt);
-        return await this.saveUpdatedIdentity(file, docId, receipt);
+        // A successful update moves a legacy `symposium` key to `openartifacts`.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/395
+        let saved = false;
+        let currentDocId: string | null | undefined;
+        try {
+          currentDocId = await getOpenArtifactsDocId(this.app, file);
+          if (currentDocId === docId) saved = await saveOpenArtifactsLink(this.app, file, receipt);
+        } catch (error) {
+          logWarn("[OpenArtifacts] Could not verify or save the note's identity", error);
+        }
+        if (!saved) {
+          const result: OpenArtifactsPersistenceResult = {
+            kind: "persistence",
+            action: "update",
+            message:
+              "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
+            receipt,
+          };
+          if (!currentDocId) {
+            this.blockedPublishResults.set(file, result);
+          }
+          return result;
+        }
+        return { kind: "success", action: "update", receipt };
       } catch (error) {
         const failure = operationFailure(resolvedAction, error);
         if (error instanceof OpenArtifactsClientError && error.code === "ambiguous_publish") {
@@ -454,7 +420,7 @@ export class OpenArtifactsPublisher {
     });
   }
 
-  private async create(
+  async create(
     document: OpenArtifactsDocument,
     licenseKey: string,
     linkAccess?: OpenArtifactsLinkAccess
@@ -473,24 +439,6 @@ export class OpenArtifactsPublisher {
       );
     }
     return receipt;
-  }
-
-  private async withdraw(
-    file: TFile,
-    docId: string,
-    licenseKey: string
-  ): Promise<OpenArtifactsSettledResult> {
-    await this.client.delete(docId, licenseKey);
-    await this.recordLedgerSafely({
-      docId,
-      status: "unpublished",
-      notePath: file.path,
-      url: null,
-      publishedAt: null,
-      version: null,
-      contentHash: null,
-    });
-    return this.removeLocalIdentity(file, docId);
   }
 
   private async recordPublishedReceipt(
@@ -517,41 +465,10 @@ export class OpenArtifactsPublisher {
     }
   }
 
-  private async saveUpdatedIdentity(
-    file: TFile,
-    docId: string,
-    receipt: OpenArtifactsReceipt
-  ): Promise<OpenArtifactsSettledResult> {
-    // A successful update moves a legacy `symposium` key to `openartifacts`.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/395
-    let saved = false;
-    let currentDocId: string | null | undefined;
-    try {
-      currentDocId = await getOpenArtifactsDocId(this.app, file);
-      if (currentDocId === docId) saved = await saveOpenArtifactsLink(this.app, file, receipt);
-    } catch (error) {
-      logWarn("[OpenArtifacts] Could not verify or save the note's identity", error);
-    }
-    if (!saved) {
-      const result: OpenArtifactsPersistenceResult = {
-        kind: "persistence",
-        action: "update",
-        message:
-          "The original page was updated, but this note’s OpenArtifacts identity changed or could not be verified. Its current identity was left unchanged.",
-        receipt,
-      };
-      if (!currentDocId) {
-        this.blockedPublishResults.set(file, result);
-      }
-      return result;
-    }
-    return { kind: "success", action: "update", receipt };
-  }
-
   private async savePublishedIdentity(
     file: TFile,
     receipt: OpenArtifactsReceipt
-  ): Promise<OpenArtifactsSettledResult> {
+  ): Promise<OpenArtifactsModalResult> {
     try {
       const saved = await saveOpenArtifactsLink(this.app, file, receipt);
       if (!saved) {
@@ -602,7 +519,7 @@ export class OpenArtifactsPublisher {
   private async removeLocalIdentity(
     file: TFile,
     expectedDocId: string
-  ): Promise<OpenArtifactsSettledResult> {
+  ): Promise<OpenArtifactsModalResult> {
     try {
       const removed = await removeOpenArtifactsDocId(this.app, file, expectedDocId);
       if (!removed) {

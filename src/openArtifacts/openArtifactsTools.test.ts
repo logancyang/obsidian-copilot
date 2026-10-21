@@ -1,3 +1,4 @@
+import type { OpenArtifactsModalOptions } from "@/components/modals/OpenArtifactsModal";
 import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import {
@@ -95,8 +96,15 @@ function harness(frontmatter: Record<string, unknown> = {}) {
       .fn()
       .mockResolvedValue({ threadId: "th_1", state: "open", resolution: null }),
   };
-  const publisher = new OpenArtifactsPublisher(app, { client });
-  const publishDocument = jest.spyOn(publisher, "publishDocument");
+  const dialogs: OpenArtifactsModalOptions[] = [];
+  const publisher = new OpenArtifactsPublisher(app, {
+    client,
+    loadLicenseKey: async () => KEY,
+    createModal: (options) => {
+      dialogs.push(options);
+      return { open: () => {}, close: () => {} };
+    },
+  });
   const openInBrowser = jest.fn();
   const deps: OpenArtifactsToolDeps = {
     app,
@@ -111,7 +119,8 @@ function harness(frontmatter: Record<string, unknown> = {}) {
   return {
     app,
     client,
-    publishDocument,
+    publisher,
+    dialogs,
     openInBrowser,
     files,
     frontmatter,
@@ -185,8 +194,8 @@ describe("openArtifactsTools", () => {
       expect(client.update).not.toHaveBeenCalled();
     });
 
-    it(`${ISSUE} publishes a new page privately by default, under a lock on its vault path, and returns the receipt with a manageUrl`, async () => {
-      const { publish, client, publishDocument } = harness();
+    it(`${ISSUE} publishes a new page privately by default and returns the receipt with a manageUrl`, async () => {
+      const { publish, client, app } = harness();
 
       const result = await publish.call({
         path: "/vault/.openartifacts/handoffs/plan.html",
@@ -207,7 +216,7 @@ describe("openArtifactsTools", () => {
         "invited",
         true
       );
-      expect(publishDocument.mock.calls[0][0]).toBe(".openartifacts/handoffs/plan.html");
+      expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
     });
 
     it(`${ISSUE} publishes publicly only when asked, with no manageUrl`, async () => {
@@ -225,7 +234,7 @@ describe("openArtifactsTools", () => {
     });
 
     it(`${ISSUE} saves the link in the note and appends a ledger row after creating a page from it`, async () => {
-      const { publish, frontmatter, files, publishDocument, note } = harness({ tags: ["plan"] });
+      const { publish, frontmatter, files } = harness({ tags: ["plan"] });
 
       await publish.call({
         path: ".openartifacts/handoffs/plan.html",
@@ -237,11 +246,10 @@ describe("openArtifactsTools", () => {
       expect(files.get(LEDGER)).toContain(
         `| ${DOC_ID} | published | Notes/Plan.md | <${DOC_URL}> |`
       );
-      expect(publishDocument.mock.calls[0][0]).toBe(note);
     });
 
-    it(`${ISSUE} blocks the note when the new page's link cannot be saved, so publishing again creates no second page`, async () => {
-      const { publish, client, app } = harness();
+    it(`${ISSUE} blocks the note when the new page's link cannot be saved, so neither the agent nor the dialog creates a second page`, async () => {
+      const { publish, client, app, publisher, note, dialogs } = harness();
       jest.mocked(app.fileManager.processFrontMatter).mockRejectedValueOnce(new Error("disk full"));
       const args = {
         path: ".openartifacts/handoffs/plan.html",
@@ -256,8 +264,32 @@ describe("openArtifactsTools", () => {
       expect(json(first).docId).toBe(DOC_ID);
       expect(json(first).warning).toContain("The page is already published.");
       expect(json(first).warning).toContain("Retry save");
-      expect(second.isError).toBe(true);
-      expect(second.text).toContain("The page is already published.");
+      expect(second).toEqual(first);
+      await publisher.open(note);
+      expect(dialogs[0].initialResult).toMatchObject({ kind: "persistence", action: "publish" });
+      expect(client.publish).toHaveBeenCalledTimes(1);
+    });
+
+    it(`${ISSUE} blocks the note for the agent and the dialog after a publish may have created a page`, async () => {
+      const { publish, client, publisher, note, dialogs } = harness();
+      const ambiguous = "OpenArtifacts may have published this note.";
+      client.publish.mockRejectedValue(
+        new OpenArtifactsClientError(ambiguous, "ambiguous_publish", null, false)
+      );
+      const args = {
+        path: ".openartifacts/handoffs/plan.html",
+        title: "Plan",
+        notePath: "Notes/Plan.md",
+      };
+
+      const first = await publish.call(args);
+      const second = await publish.call(args);
+      await publisher.open(note);
+
+      expect(first.isError).toBe(true);
+      expect(first.text).toContain(ambiguous);
+      expect(second.text).toContain(ambiguous);
+      expect(dialogs[0].initialResult).toMatchObject({ kind: "failure", message: ambiguous });
       expect(client.publish).toHaveBeenCalledTimes(1);
     });
 
@@ -285,6 +317,41 @@ describe("openArtifactsTools", () => {
       expect(client.update).toHaveBeenCalledWith(DOC_ID, expect.anything(), KEY);
       expect(json(result)).toEqual({ docId: DOC_ID, url: DOC_URL, version: 2 });
       expect(frontmatter).toEqual({ openartifacts: DOC_URL });
+    });
+
+    it(`${ISSUE} keeps a note link removed while the update ran removed`, async () => {
+      const { publish, client, frontmatter, app } = harness({ openartifacts: DOC_URL });
+      client.update.mockImplementation(async () => {
+        delete frontmatter.openartifacts;
+        return { docId: DOC_ID, url: DOC_URL, version: 2 };
+      });
+
+      const result = await publish.call({
+        path: ".openartifacts/handoffs/plan.html",
+        title: "Plan",
+        notePath: "Notes/Plan.md",
+      });
+
+      expect(json(result)).toMatchObject({ docId: DOC_ID, version: 2 });
+      expect(json(result).warning).toContain("identity changed or could not be verified");
+      expect(frontmatter).toEqual({});
+      expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
+    });
+
+    it(`${ISSUE} publishes nothing for a docId the note does not link to`, async () => {
+      const { publish, client } = harness();
+
+      const result = await publish.call({
+        path: ".openartifacts/handoffs/plan.html",
+        title: "Plan",
+        notePath: "Notes/Plan.md",
+        docId: DOC_ID,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain(`Notes/Plan.md has no OpenArtifacts link, not ${DOC_ID}`);
+      expect(client.update).not.toHaveBeenCalled();
+      expect(client.publish).not.toHaveBeenCalled();
     });
 
     it(`${ISSUE} refuses a docId that conflicts with the note's link, and access on an update`, async () => {
@@ -360,7 +427,7 @@ describe("openArtifactsTools", () => {
 
         expect(result.isError).toBe(true);
         expect(result.text).toContain(message);
-        expect(result.text).toContain('access "public" only if they ask');
+        expect(result.text).toContain('access "public" only if the user asks');
         expect(client.publish).toHaveBeenCalledTimes(1);
       }
     );
@@ -376,7 +443,7 @@ describe("openArtifactsTools", () => {
 
       expect(missing.text).toContain("Could not read gone.html");
       expect(refused.isError).toBe(true);
-      expect(refused.text).toContain("HTTP 401 unauthorized: Invalid key.");
+      expect(refused.text).toContain("OpenArtifacts: Invalid key.");
       expect(refused.text).toContain("Copilot Settings");
       expect(client.publish).toHaveBeenCalledTimes(1);
     });
@@ -565,14 +632,15 @@ describe("openArtifactsTools", () => {
       expect(files.get(LEDGER)).toContain(`| ${DOC_ID} | unpublished | Notes/Plan.md |`);
     });
 
-    it(`${ISSUE} leaves a note that links to another page unchanged and says so`, async () => {
+    it(`${ISSUE} withdraws nothing when the note links to another page`, async () => {
       const other = `https://openartifacts.site/d/${OTHER_DOC_ID}`;
-      const { unpublish, frontmatter } = harness({ openartifacts: other });
+      const { unpublish, client, frontmatter } = harness({ openartifacts: other });
 
       const result = await unpublish.call({ docId: DOC_ID, notePath: "Notes/Plan.md" });
 
-      expect(json(result).warning).toContain("points to a different OpenArtifacts document");
-      expect(json(result).warning).not.toContain("Retry save");
+      expect(result.isError).toBe(true);
+      expect(result.text).toContain(`is linked to page ${OTHER_DOC_ID}, not ${DOC_ID}`);
+      expect(client.delete).not.toHaveBeenCalled();
       expect(frontmatter).toEqual({ openartifacts: other });
     });
 
@@ -585,22 +653,28 @@ describe("openArtifactsTools", () => {
       expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
     });
 
-    it(`${ISSUE} reports a withdrawn page whose link could not be removed, and unpublishing again only retries the removal`, async () => {
-      const { unpublish, client, app, frontmatter } = harness({ openartifacts: DOC_URL });
+    it(`${ISSUE} returns the dialog's stored result when a withdrawn page's link could not be removed, and the dialog's Retry save removes it`, async () => {
+      const { unpublish, client, app, frontmatter, publisher, note, dialogs } = harness({
+        openartifacts: DOC_URL,
+      });
       jest.mocked(app.fileManager.processFrontMatter).mockRejectedValueOnce(new Error("disk full"));
       const args = { docId: DOC_ID, notePath: "Notes/Plan.md" };
 
-      const result = await unpublish.call(args);
+      const first = await unpublish.call(args);
+      const second = await unpublish.call(args);
 
-      expect(result.isError).toBe(false);
-      expect(json(result)).toMatchObject({ status: "unpublished" });
-      expect(json(result).warning).toContain("The page is already deleted.");
-      expect(json(result).warning).toContain("Calling openartifacts_unpublish again");
-      expect((await unpublish.call({ ...args, docId: OTHER_DOC_ID })).isError).toBe(true);
+      expect(first.isError).toBe(false);
+      expect(json(first)).toMatchObject({ status: "unpublished" });
+      expect(json(first).warning).toContain("The page is already deleted.");
+      expect(json(first).warning).toContain("Retry save");
+      expect(second).toEqual(first);
 
-      const retried = await unpublish.call(args);
-
-      expect(json(retried)).toEqual({ docId: DOC_ID, status: "unpublished" });
+      await publisher.open(note);
+      const stored = dialogs[0].initialResult;
+      expect(stored).toMatchObject({ kind: "persistence", action: "delete" });
+      await expect(
+        stored?.kind === "persistence" ? stored.retrySave?.() : undefined
+      ).resolves.toMatchObject({ kind: "success", action: "delete" });
       expect(frontmatter).toEqual({});
       expect(client.delete).toHaveBeenCalledTimes(1);
     });

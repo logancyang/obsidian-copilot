@@ -3,14 +3,22 @@ import {
   OPENARTIFACTS_DOC_ID_PATTERN,
   OPENARTIFACTS_MAX_HTML_BYTES,
 } from "@/openArtifacts/constants";
+import type {
+  OpenArtifactsFailureResult,
+  OpenArtifactsModalResult,
+} from "@/components/modals/OpenArtifactsModal";
 import type { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import {
   createOpenArtifactsDocument,
   OpenArtifactsDocumentTooLargeError,
 } from "@/openArtifacts/openArtifactsDocument";
-import { getOpenArtifactsSavedLink } from "@/openArtifacts/openArtifactsFrontmatter";
-import type { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
+import { getOpenArtifactsDocId } from "@/openArtifacts/openArtifactsFrontmatter";
+import {
+  operationFailure,
+  type OpenArtifactsPublisher,
+} from "@/openArtifacts/OpenArtifactsPublisher";
+import type { OpenArtifactsAction, OpenArtifactsReceipt } from "@/openArtifacts/types";
 import type { CopilotSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -58,7 +66,10 @@ export const OPENARTIFACTS_PUBLISH_TOOL = Object.freeze({
         description: 'Who can open a new page. Defaults to "private". Omit it for an update.',
       },
       notePath: NOTE_PATH_PROPERTY,
-      docId: { ...DOC_ID_PROPERTY, description: "The page to update, when there is no notePath." },
+      docId: {
+        ...DOC_ID_PROPERTY,
+        description: "The page to update. With notePath, it must be the page the note links to.",
+      },
     },
     required: ["path", "title"],
   },
@@ -126,7 +137,7 @@ export const OPENARTIFACTS_COMMENTS_TOOL = Object.freeze({
 
 export const OPENARTIFACTS_UNPUBLISH_TOOL = Object.freeze({
   name: OPENARTIFACTS_UNPUBLISH_TOOL_NAME,
-  description: `Withdraw one of the user's OpenArtifacts pages: its link stops working for everyone. Call it only after the user confirms. Pass notePath to also remove the note's openartifacts or symposium property when it links to this page.`,
+  description: `Withdraw one of the user's OpenArtifacts pages: its link stops working for everyone. Call it only after the user confirms. When the page was published from a note, pass notePath too: Copilot then removes the note's openartifacts or symposium property, and changes nothing if the note links to another page.`,
   inputSchema: {
     type: "object",
     properties: { docId: DOC_ID_PROPERTY, notePath: NOTE_PATH_PROPERTY },
@@ -148,7 +159,6 @@ export const OPENARTIFACTS_TOOL_NAMES: readonly string[] = Object.freeze([
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
 const RETRY_IN_DIALOG =
   "Tell the user, and that running Publish file to OpenArtifacts on this note offers Retry save, which does not contact OpenArtifacts again.";
-const RETRY_UNPUBLISH = `Tell the user. Calling ${OPENARTIFACTS_UNPUBLISH_TOOL_NAME} again with the same docId and notePath retries removing the link, which does not contact OpenArtifacts again.`;
 
 export const OPENARTIFACTS_TURNED_OFF_TEXT =
   "OpenArtifacts needs a Copilot Plus license key. Don't call the OpenArtifacts tools again; tell the user to add their key in Copilot Settings.";
@@ -177,12 +187,14 @@ export type OpenArtifactsToolClient = Pick<
   | "replyToThread"
   | "resolveThread"
   | "reopenThread"
+  | "update"
+  | "delete"
 >;
 
 export interface OpenArtifactsToolDeps {
   app: App;
   client: OpenArtifactsToolClient;
-  publisher: Pick<OpenArtifactsPublisher, "publishDocument" | "unpublish">;
+  publisher: Pick<OpenArtifactsPublisher, "execute" | "create">;
   getLicenseKey: () => string;
   getVaultBase: () => string | null;
   openInBrowser: (url: string) => void;
@@ -252,13 +264,9 @@ async function publish(
     return failure(`Could not read ${path}: ${err2String(error)}`);
   }
   const document = createOpenArtifactsDocument(title, html);
-  const saved = note ? await getOpenArtifactsSavedLink(deps.app, note) : null;
-  if (saved && docIdArg && saved.docId !== docIdArg) {
-    return failure(
-      `${note!.path} is linked to page ${saved.docId}, not ${docIdArg}. Ask the user which page to update.`
-    );
-  }
-  const docId = saved?.docId ?? docIdArg;
+  const linked = note ? await getOpenArtifactsDocId(deps.app, note) : null;
+  if (note && docIdArg && linked !== docIdArg) return failure(mismatch(note, linked, docIdArg));
+  const docId = note ? linked : docIdArg;
   if (docId && input.access !== undefined) {
     return failure(
       "access applies only to a new page; an update keeps who can open it. Call again without access."
@@ -266,37 +274,24 @@ async function publish(
   }
 
   const privateCreate = !docId && input.access !== "public";
-  let result;
-  try {
-    result = await deps.publisher.publishDocument(
-      note ?? normalizePath(toVaultRelative(path, deps.getVaultBase())),
-      document,
-      licenseKey,
-      docId,
-      privateCreate ? "invited" : undefined
-    );
-  } catch (error) {
-    const refusal = privateRefusal(error);
-    if (refusal) return failure(refusal);
-    throw error;
-  }
+  const linkAccess = privateCreate ? "invited" : undefined;
+  const action = docId ? "update" : "publish";
+  const result = note
+    ? await deps.publisher.execute(note, docId, action, async () => document, linkAccess)
+    : await settle(action, () =>
+        docId
+          ? deps.client.update(docId, document, licenseKey)
+          : deps.publisher.create(document, licenseKey, linkAccess)
+      );
+  if (result.kind === "failure") return failure(failureText(result, privateCreate));
   return {
     text: JSON.stringify({
       ...result.receipt,
-      ...(privateCreate && { manageUrl: manageUrl(result.receipt!.docId) }),
+      ...(privateCreate && result.receipt && { manageUrl: manageUrl(result.receipt.docId) }),
       ...persistenceWarning(result),
     }),
     isError: false,
   };
-}
-
-function privateRefusal(error: unknown): string | null {
-  if (!(error instanceof OpenArtifactsClientError)) return null;
-  const publicly = `Tell the user, and publish it with access "public" only if they ask.`;
-  if (error.upgradeUrl) {
-    return `The user's plan does not include private sharing, so nothing was published. ${publicly} They can upgrade at ${error.upgradeUrl}`;
-  }
-  return error.code === "private_unsupported" ? `${error.message} ${publicly}` : null;
 }
 
 async function share(
@@ -436,25 +431,53 @@ async function unpublish(
   const note = input.notePath === undefined ? null : findNote(input.notePath, deps);
   if (note === undefined)
     return failure(`notePath ${String(input.notePath)} is not a Markdown note in this vault.`);
-  const result = await deps.publisher.unpublish(note, docId, licenseKey);
+  const linked = note ? await getOpenArtifactsDocId(deps.app, note) : null;
+  if (note && linked !== docId) return failure(mismatch(note, linked, docId));
+  const result = note
+    ? await deps.publisher.execute(note, docId, "delete", NO_DOCUMENT)
+    : await settle("delete", () => deps.client.delete(docId, licenseKey));
+  if (result.kind === "failure") return failure(failureText(result, false));
   return {
-    text: JSON.stringify({
-      docId,
-      status: "unpublished",
-      ...persistenceWarning(result),
-    }),
+    text: JSON.stringify({ docId, status: "unpublished", ...persistenceWarning(result) }),
     isError: false,
   };
 }
 
-function persistenceWarning(
-  result: Awaited<ReturnType<OpenArtifactsPublisher["publishDocument"]>>
-): { warning?: string } {
+// The note's saved link names the page it publishes to; a docId from the agent only cross-checks it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+function mismatch(note: TFile, linked: string | null, docId: string): string {
+  const link = linked ? `is linked to page ${linked}` : "has no OpenArtifacts link";
+  return `${note.path} ${link}, not ${docId}, so nothing was changed. Ask the user which page they mean.`;
+}
+
+const NO_DOCUMENT = () => Promise.reject(new Error("Unpublishing builds no page."));
+
+// A page with no note has no identity to lock, block or record, so its result is just the request's.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+async function settle(
+  action: OpenArtifactsAction,
+  request: () => Promise<OpenArtifactsReceipt | void>
+): Promise<OpenArtifactsModalResult> {
+  try {
+    return { kind: "success", action, receipt: (await request()) || undefined };
+  } catch (error) {
+    return operationFailure(action, error);
+  }
+}
+
+function failureText(result: OpenArtifactsFailureResult, privateCreate: boolean): string {
+  const advice = result.upgradeUrl
+    ? ` The user's plan does not include private sharing, so nothing was published; they can upgrade at ${result.upgradeUrl}`
+    : result.accessNotice
+      ? " The license key is missing or was refused; point the user to Copilot Settings."
+      : "";
+  const publicly = privateCreate ? ` Publish it with access "public" only if the user asks.` : "";
+  return `OpenArtifacts: ${result.message}${advice}${publicly} Report this to the user; don't retry it on your own.`;
+}
+
+function persistenceWarning(result: OpenArtifactsModalResult): { warning?: string } {
   if (result.kind !== "persistence") return {};
-  if (!result.retrySave) return { warning: `${result.message} Tell the user.` };
-  return {
-    warning: `${result.message} ${result.action === "delete" ? RETRY_UNPUBLISH : RETRY_IN_DIALOG}`,
-  };
+  return { warning: `${result.message} ${result.retrySave ? RETRY_IN_DIALOG : "Tell the user."}` };
 }
 
 function findNote(value: unknown, { app, getVaultBase }: OpenArtifactsToolDeps): TFile | undefined {
