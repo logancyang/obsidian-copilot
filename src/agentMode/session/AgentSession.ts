@@ -15,7 +15,6 @@ import {
   BackendProcess,
   BackendState,
   CopilotMode,
-  CompactionSnapshot,
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
@@ -97,6 +96,7 @@ import {
 } from "@/agentMode/session/messageParts";
 import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
+import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -251,10 +251,9 @@ export class AgentSession {
     applyTodoList: (entries) => this.requests.applyTodoList(entries),
   });
   private readonly requests: InteractiveRequests;
-  private currentUsage: SessionUsage | null = null;
+  private readonly usageTracker: UsageTracker;
   private feedbackOffer: FeedbackOffer | null = null;
 
-  private currentPlanUsage: PlanUsage | null = null;
   private needsAttention = false;
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
@@ -284,6 +283,12 @@ export class AgentSession {
       notifyMessages: () => this.notifyMessages(),
       notifyPlanChanged: () => this.notifyCurrentPlanChanged(),
       notifyTodoListChanged: () => this.notifyCurrentTodoListChanged(),
+    });
+    this.usageTracker = new UsageTracker({
+      backend: this.backend,
+      getModelId: () => this.currentState?.model?.current.baseModelId,
+      whenReady: () => this.ready,
+      notifyMessages: () => this.notifyMessages(),
     });
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
@@ -381,7 +386,7 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modelId,
     });
-    this.dropUsageWindowOnModelChange(next);
+    this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
   }
@@ -481,7 +486,7 @@ export class AgentSession {
       configId,
       value,
     });
-    this.dropUsageWindowOnModelChange(next);
+    this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
@@ -1103,87 +1108,15 @@ export class AgentSession {
   }
 
   getSessionUsage(): SessionUsage | null {
-    return this.currentUsage;
+    return this.usageTracker.getSessionUsage();
   }
 
   getPlanUsage(): PlanUsage | null {
-    return this.currentPlanUsage;
+    return this.usageTracker.getPlanUsage();
   }
 
   seedSessionUsage(usage: SessionUsage | undefined): void {
-    if (!usage) return;
-    this.currentUsage = usage;
-    this.notifyMessages();
-    // A persisted snapshot can predate the model's window being known — hosted models
-    // never carry one on the wire, and older chats were saved before windows were
-    // filled in at all — so without this a reopened chat shows a bare count until its
-    // next turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-    if (usage.contextWindow === undefined) void this.fillSeededContextWindow(usage);
-  }
-
-  private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
-    if (!this.backend.readContextWindow) return;
-    // A chat with no resumable backend session is seeded into a freshly created one,
-    // BEFORE its `newSession` has resolved — so at call time the model is not known
-    // yet. Wait for startup to settle rather than silently skipping, or exactly those
-    // older chats would stay count-only until their next turn
-    // (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-    try {
-      await this.ready;
-    } catch {
-      return;
-    }
-    const wireModelId = this.currentState?.model?.current.baseModelId ?? null;
-    if (!wireModelId) return;
-    let contextWindow: number | null = null;
-    try {
-      contextWindow = await this.backend.readContextWindow(wireModelId);
-    } catch {
-      return;
-    }
-    if (!contextWindow) return;
-    if (this.currentUsage !== seeded) return;
-    if (this.currentState?.model?.current.baseModelId !== wireModelId) return;
-    this.currentUsage = { ...seeded, contextWindow };
-    this.notifyMessages();
-  }
-
-  private applyUsageUpdate(usage: SessionUsage): void {
-    // Some backends use zero as an empty terminal snapshot after cancellation.
-    // It does not measure consumed context, so wait for a positive reading.
-    // https://github.com/logancyang/obsidian-copilot/issues/2975
-    if (!usage.usedTokens) return;
-    if (usage.contextWindow === undefined && this.currentUsage?.contextWindow !== undefined) {
-      return;
-    }
-    this.currentUsage = usage;
-    this.notifyMessages();
-  }
-
-  // Compaction reports the new context size directly, so it bypasses applyUsageUpdate's guards.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-  private applyCompactedUsage(compaction: CompactionSnapshot): boolean {
-    if (compaction.status !== "completed" || compaction.postTokens === undefined) return false;
-    this.currentUsage = {
-      usedTokens: compaction.postTokens,
-      contextWindow: this.currentUsage?.contextWindow,
-      updatedAt: Date.now(),
-    };
-    return true;
-  }
-
-  /**
-   * Drop the held context window when the model changes, keeping the count. `applyUsageUpdate`
-   * ignores windowless snapshots while a windowed one is held, so a stale window would stick.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/193
-   */
-  private dropUsageWindowOnModelChange(next: BackendState | null): void {
-    const before = this.currentState?.model?.current.baseModelId;
-    const after = next?.model?.current.baseModelId;
-    if (!before || !after || before === after) return;
-    if (this.currentUsage?.contextWindow === undefined) return;
-    this.currentUsage = { ...this.currentUsage, contextWindow: undefined };
-    this.notifyMessages();
+    void this.usageTracker.seedSessionUsage(usage);
   }
 
   finalizePlanDecision(
@@ -1284,7 +1217,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
-      this.dropUsageWindowOnModelChange(update.state);
+      this.usageTracker.dropUsageWindowOnModelChange(update.state);
       this.currentState = update.state;
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
@@ -1297,12 +1230,11 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "usage_update") {
-      this.applyUsageUpdate(update.usage);
+      this.usageTracker.applyUsageUpdate(update.usage);
       return;
     }
     if (update.sessionUpdate === "plan_usage_update") {
-      this.currentPlanUsage = update.planUsage;
-      this.notifyMessages();
+      this.usageTracker.applyPlanUsage(update.planUsage);
       return;
     }
 
@@ -1397,7 +1329,7 @@ export class AgentSession {
       }
       case "compaction": {
         const upserted = upsertCompactionPart(this.store, targetMessageId, update);
-        const metered = this.applyCompactedUsage(update);
+        const metered = this.usageTracker.applyCompactedUsage(update);
         if (upserted || metered) this.scheduleNotifyMessages();
         return;
       }

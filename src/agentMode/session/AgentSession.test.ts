@@ -3818,72 +3818,6 @@ describe("AgentSession", () => {
         }
       );
 
-      it.each([
-        ["still running", { status: "in_progress" as const }],
-        ["skipped", { status: "skipped" as const }],
-        ["failed", { status: "failed" as const, error: "boom" }],
-        ["completed without a post-compaction count", { status: "completed" as const }],
-      ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 leaves the meter alone for a compaction that is %s",
-        async (_label, snapshot) => {
-          const mock = makeMockBackend();
-          const finishPrompt = holdPrompt(mock);
-          const session = makeSession(mock);
-          mock.emitUpdate({
-            sessionUpdate: "usage_update",
-            usage: { usedTokens: 103_000, contextWindow: 200_000, updatedAt: 1 },
-          });
-          const { turn } = session.sendPrompt("/compact");
-
-          mock.emitUpdate({
-            sessionUpdate: "compaction",
-            id: "c1",
-            trigger: "manual",
-            ...snapshot,
-          });
-
-          expect(session.getSessionUsage()).toEqual({
-            usedTokens: 103_000,
-            contextWindow: 200_000,
-            updatedAt: 1,
-          });
-          finishPrompt();
-          await turn;
-        }
-      );
-
-      it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
-        });
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 6000, contextWindow: 1_000_000, updatedAt: 2 },
-        });
-        expect(session.getSessionUsage()?.contextWindow).toBe(1_000_000);
-      });
-
-      it("ignores a used-only fallback once an occupancy snapshot exists", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
-        });
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 6000, updatedAt: 2 },
-        });
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 5000,
-          contextWindow: 200_000,
-          updatedAt: 1,
-        });
-      });
-
       it("keeps the last positive usage when a stopped turn reports zero (https://github.com/logancyang/obsidian-copilot/issues/2975)", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -3948,6 +3882,25 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("getPlanUsage()", () => {
+      it("starts null and stores an incoming plan_usage_update, notifying subscribers", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+        expect(session.getPlanUsage()).toBeNull();
+        const planUsage = {
+          windows: [{ id: "five_hour", label: "5h", percent: 40 }],
+          updatedAt: 1,
+        };
+
+        mock.emitUpdate({ sessionUpdate: "plan_usage_update", planUsage });
+
+        expect(session.getPlanUsage()).toBe(planUsage);
+        expect(onMessagesChanged).toHaveBeenCalled();
+      });
+    });
+
     describe("seedSessionUsage()", () => {
       it("seeds usage from persisted history and re-notifies", () => {
         const mock = makeMockBackend();
@@ -3968,104 +3921,6 @@ describe("AgentSession", () => {
           usage: { usedTokens: 2000, contextWindow: 200_000, updatedAt: 10 },
         });
         expect(session.getSessionUsage()?.usedTokens).toBe(2000);
-      });
-
-      it("fills a seeded snapshot's missing window from the backend catalog (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-        const mock = makeMockBackend();
-        const readContextWindow = jest.fn(async () => 1_048_576);
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "state_changed",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(readContextWindow).toHaveBeenCalledWith("copilot-plus/gemini-3-pro");
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 27_514,
-          updatedAt: 1,
-          contextWindow: 1_048_576,
-        });
-      });
-
-      it("fills the window for a chat seeded into a still-starting session (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-        const mock = makeMockBackend();
-        const readContextWindow = jest.fn(async () => 1_048_576);
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
-        mock.newSession.mockResolvedValueOnce({
-          sessionId: "acp-1",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-        const session = startSession(mock);
-
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await session.ready;
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 27_514,
-          updatedAt: 1,
-          contextWindow: 1_048_576,
-        });
-      });
-
-      it("leaves a live snapshot alone when the seed's window answer arrives late", async () => {
-        let release!: (window: number) => void;
-        const mock = makeMockBackend();
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = jest.fn(
-          () => new Promise((resolve) => (release = resolve))
-        );
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "state_changed",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 31_000, contextWindow: 200_000, updatedAt: 2 },
-        });
-        release(1_048_576);
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 31_000,
-          contextWindow: 200_000,
-          updatedAt: 2,
-        });
-      });
-
-      it("leaves usage untouched when the seed is undefined", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        session.seedSessionUsage(undefined);
-        expect(session.getSessionUsage()).toBeNull();
       });
     });
 
