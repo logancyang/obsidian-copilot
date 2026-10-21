@@ -1545,6 +1545,10 @@ export class AgentSession {
     // A message the agent never read goes back to the composer, so its text is not lost. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
     if (withdrawn.length > 0) {
       this.withdrawnPrompts = Object.freeze([...this.withdrawnPrompts, ...withdrawn]);
+      // A web page that rode only on a withdrawn message never reached the agent, so it goes in full next time. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+      if (withdrawn.some((p) => (p.context?.webTabs?.length ?? 0) > 0)) {
+        this.lastSentWebTabBlock = null;
+      }
     }
     this.removeQueuedPrompts(promptIds);
     this.recomputeStatusIfChanged();

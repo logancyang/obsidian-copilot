@@ -4212,6 +4212,40 @@ describe("AgentSession", () => {
         expect(sent).toHaveLength(1);
         expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
       });
+
+      it(`sends a web page in full again when the only message that carried it was withdrawn before the agent read it (${ISSUE_747})`, async () => {
+        const processContextWebTabs = jest
+          .fn()
+          .mockResolvedValue(
+            "<active_web_tab>\n<content>\nPAGE BODY\n</content>\n</active_web_tab>"
+          );
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
+          const mock = makeMockBackend();
+          const { sent, session } = queueTwo(mock);
+          const context = {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com/page", title: "Page", isActive: true }],
+          };
+          const withPage = session.sendPrompt("third", context);
+          await waitFor(() => expect(sent).toHaveLength(3));
+          mock.asBackend.withdraw = async ({ promptId }) => {
+            mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+            return true;
+          };
+          await session.withdrawPrompt(withPage.userMessageId);
+
+          session.sendPrompt("third", context);
+
+          await waitFor(() => expect(sent).toHaveLength(4));
+          expect(promptText(sent[3])).toContain("PAGE BODY");
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
     });
 
     describe("takeWithdrawnPrompts()", () => {
