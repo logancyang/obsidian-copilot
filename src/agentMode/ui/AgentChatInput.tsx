@@ -41,7 +41,6 @@ import { getModelKeyFromModel } from "@/settings/model";
 import { modelSupportsVision } from "@/utils";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
-import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { App, Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
@@ -59,7 +58,6 @@ interface AgentChatInputProps {
   isLoading: boolean;
   queuedPrompts: readonly QueuedPrompt[];
   acceptsMidTurnMessages: boolean;
-  canWithdrawMessages: boolean;
   hasPendingPlanPermission: boolean;
   modelPickerOverride: ChatInputProps["modelPickerOverride"];
   modePickerOverride: ChatInputProps["modePickerOverride"];
@@ -160,7 +158,6 @@ export const AgentChatInput = memo(function AgentChatInput({
   isLoading: loading,
   queuedPrompts,
   acceptsMidTurnMessages,
-  canWithdrawMessages,
   hasPendingPlanPermission,
   modelPickerOverride,
   modePickerOverride,
@@ -475,22 +472,6 @@ export const AgentChatInput = memo(function AgentChatInput({
     unsupportedImageModelLabel,
   ]);
 
-  const handleWithdrawMessage = useCallback(
-    (id: string) => {
-      backend.withdrawMessage(id).catch((e: unknown) => {
-        logError("[AgentMode] withdraw failed", e);
-      });
-    },
-    [backend]
-  );
-
-  const handleRemoveQueuedMessage = useCallback(
-    (id: string) => {
-      setQueuedMessages((q) => q.filter((m) => m.id !== id));
-    },
-    [setQueuedMessages]
-  );
-
   useEffect(() => {
     const handleAbortStream = () => {
       void handleStopGenerating();
@@ -503,14 +484,6 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   return (
     <>
-      {(queuedPrompts.length > 0 || queuedMessages.length > 0) && (
-        <QueuedMessageList
-          delivering={queuedPrompts}
-          held={queuedMessages}
-          onRemove={handleRemoveQueuedMessage}
-          onWithdraw={canWithdrawMessages ? handleWithdrawMessage : undefined}
-        />
-      )}
       <div
         className={
           hasPendingPlanPermission || disabled ? "tw-pointer-events-none tw-opacity-50" : undefined

@@ -164,7 +164,6 @@ function inputNode(
       isLoading={draft.loading}
       queuedPrompts={[]}
       acceptsMidTurnMessages={false}
-      canWithdrawMessages={false}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -558,7 +557,7 @@ describe("AgentChatInput", () => {
       let draft!: AgentInputDraftControls;
       function Composer({ queuedPrompts }: { queuedPrompts: readonly QueuedPrompt[] }) {
         draft = useAgentInputDrafts({ store, chatInputId: "input-1" });
-        return inputNode(backend, draft, { queuedPrompts, canWithdrawMessages: true });
+        return inputNode(backend, draft, { queuedPrompts });
       }
       const view = render(<Composer queuedPrompts={queued} />);
       act(() => draft.setInput("current draft"));
@@ -569,27 +568,6 @@ describe("AgentChatInput", () => {
       expect(draft.input).toBe("first\n\nsecond\n\ncurrent draft");
       expect(draft.contextNotes).toEqual([note]);
       expect(draft.images[0]).toMatchObject({ name: "queued-image-1.png" });
-    });
-
-    it("offers to withdraw a message queued at a backend that can withdraw it, and asks the backend to (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
-      const backend = {
-        cancel: jest.fn(),
-        withdrawMessage: jest.fn(async () => undefined),
-        takeWithdrawnPrompts: () => [],
-      } as unknown as AgentChatBackend;
-      const queuedPrompts = [{ id: "steer", text: "Only the first two" }];
-      const view = renderInput(backend, makeDraft({ loading: true }), { queuedPrompts });
-      expect(screen.queryByRole("button", { name: "Withdraw queued message" })).toBeNull();
-
-      view.rerender(
-        inputNode(backend, makeDraft({ loading: true }), {
-          queuedPrompts,
-          canWithdrawMessages: true,
-        })
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Withdraw queued message" }));
-
-      expect(backend.withdrawMessage).toHaveBeenCalledWith("steer");
     });
 
     it("restores resolved commands and prepends queued images before draft images https://github.com/Brevilabs/obsidian-copilot-private/issues/485", async () => {
@@ -987,8 +965,6 @@ describe("AgentChatInput", () => {
         acceptsMidTurnMessages: true,
       });
       expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(screen.getByText("The agent reads these at its next step")).toBeTruthy();
-      expect(screen.getByText("Sends when the agent finishes")).toBeTruthy();
 
       rerender(
         inputNode(backend, makeDraft({ queue: [held] }), {

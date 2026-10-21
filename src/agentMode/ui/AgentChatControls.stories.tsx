@@ -1,5 +1,8 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { UsageMeter } from "@/agentMode/ui/AgentContextMeter";
+import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
+import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
+import { makeCommandTask, makeTask } from "@/agentMode/ui/testing/taskFixtures";
 import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -88,4 +91,30 @@ export const MoreActionsBookmarksOff: Story = {
 
 export const MoreActionsEmptyChat: Story = {
   args: { openMoreActions: true, getChatBookmarkState: undefined, onCopyChatLink: undefined },
+};
+
+export const BelowQueuedMessages: Story = {
+  render: (args) => (
+    <div className="tw-flex tw-flex-col">
+      <QueuedMessageList
+        delivering={[{ id: "steer", text: "Only summarize the first two notes." }]}
+        held={[{ id: "compact", text: "/compact", rawInput: "/compact" }]}
+        onRemove={() => undefined}
+        onWithdraw={() => undefined}
+      />
+      <ControlsStory
+        {...args}
+        tasksIndicator={
+          <RunningTasksIndicator
+            tasks={[makeTask(), makeCommandTask()]}
+            permissions={[]}
+            onOpenTask={() => undefined}
+          />
+        }
+      />
+      <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm tw-text-muted">
+        Composer
+      </div>
+    </div>
+  ),
 };

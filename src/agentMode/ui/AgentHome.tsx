@@ -13,6 +13,7 @@ import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
+import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
@@ -559,7 +560,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       isLoading={isLoading}
       queuedPrompts={queuedPrompts}
       acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
-      canWithdrawMessages={backend.canWithdrawMessages()}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}
@@ -567,6 +567,28 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       disabled={isOrphanedProject}
     />
   );
+
+  const { queue: heldMessages, setQueue: setHeldMessages } = draft;
+  const handleRemoveHeldMessage = useCallback(
+    (id: string) => setHeldMessages((queue) => queue.filter((m) => m.id !== id)),
+    [setHeldMessages]
+  );
+  const handleWithdrawMessage = useCallback(
+    (id: string) => {
+      backend.withdrawMessage(id).catch((e: unknown) => logError("[AgentMode] withdraw failed", e));
+    },
+    [backend]
+  );
+  // The controls bar sits directly above the composer, so pending messages list above both. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  const queuedMessagesNode =
+    queuedPrompts.length > 0 || heldMessages.length > 0 ? (
+      <QueuedMessageList
+        delivering={queuedPrompts}
+        held={heldMessages}
+        onRemove={handleRemoveHeldMessage}
+        onWithdraw={backend.canWithdrawMessages() ? handleWithdrawMessage : undefined}
+      />
+    ) : null;
 
   const showProjectHero = isProjectLanding && !isOrphanedProject;
   const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
@@ -666,7 +688,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 {isLanding ? (
                   <AgentLandingStack
                     hero={hero}
-                    composer={composerNode}
+                    composer={
+                      <>
+                        {queuedMessagesNode}
+                        {composerNode}
+                      </>
+                    }
                     floating={
                       !isProjectLanding &&
                       projects.length === 0 &&
@@ -735,6 +762,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         isLoading={isLoading}
                         feedbackOffer={feedbackOffer}
                       />
+                      {queuedMessagesNode}
                       <AgentChatControls
                         onCopyChatLink={
                           activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
