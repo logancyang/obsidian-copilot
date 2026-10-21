@@ -103,68 +103,75 @@ const SubagentDetail: React.FC<{
         : null,
     [task.prompt]
   );
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useStickToBottom(scrollRef, parts);
+  const { scrollRef, contentRef } = useStickToBottom();
   return (
-    <div ref={scrollRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-pb-3">
-      {promptMessage ? (
-        <ChatSingleMessage message={promptMessage} app={app} isStreaming={false} />
-      ) : null}
-      <div className="tw-px-3 tw-pt-2">
-        {parts.length > 0 ? (
-          <AgentTrail parts={parts} isStreaming={running} app={app} />
-        ) : (
-          <div className="tw-text-sm tw-text-muted">{running ? "Starting…" : "No activity"}</div>
-        )}
+    <div ref={scrollRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto">
+      <div ref={contentRef} className="tw-pb-3">
+        {promptMessage ? (
+          <ChatSingleMessage message={promptMessage} app={app} isStreaming={false} />
+        ) : null}
+        <div className="tw-px-3 tw-pt-2">
+          {parts.length > 0 ? (
+            <AgentTrail parts={parts} isStreaming={running} app={app} />
+          ) : (
+            <div className="tw-text-sm tw-text-muted">{running ? "Starting…" : "No activity"}</div>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
 const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { scrollRef, contentRef } = useStickToBottom();
   const output = useTaskOutputTail(task.outputFile, {
     live: task.status === "running",
     maxBytes: COMMAND_OUTPUT_MAX_BYTES,
     shownRef: scrollRef,
   });
-  useStickToBottom(scrollRef, output.text);
   return (
-    <div
-      ref={scrollRef}
-      className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-2 tw-overflow-y-auto tw-p-3"
-    >
-      {task.command ? (
-        <pre className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-rounded tw-bg-secondary-alt tw-p-2 tw-font-mono tw-text-xs tw-text-normal">
-          $ {task.command}
+    <div ref={scrollRef} className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto">
+      <div ref={contentRef} className="tw-flex tw-flex-col tw-gap-2 tw-p-3">
+        {task.command ? (
+          <pre className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-rounded tw-bg-secondary-alt tw-p-2 tw-font-mono tw-text-xs tw-text-normal">
+            $ {task.command}
+          </pre>
+        ) : null}
+        {output.truncated ? (
+          <div className="tw-text-xs tw-text-muted">Showing the last 256 KB of output.</div>
+        ) : null}
+        <pre
+          data-testid="task-command-output"
+          className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-font-mono tw-text-xs tw-text-normal"
+        >
+          {output.text || (task.status === "running" ? "No output yet" : "No output")}
         </pre>
-      ) : null}
-      {output.truncated ? (
-        <div className="tw-text-xs tw-text-muted">Showing the last 256 KB of output.</div>
-      ) : null}
-      <pre
-        data-testid="task-command-output"
-        className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-font-mono tw-text-xs tw-text-normal"
-      >
-        {output.text || (task.status === "running" ? "No output yet" : "No output")}
-      </pre>
+      </div>
     </div>
   );
 };
 
-function useStickToBottom(ref: React.RefObject<HTMLDivElement>, content: unknown): void {
-  const atBottom = useRef(true);
+function useStickToBottom() {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content) return;
+    let atBottom = true;
     const onScroll = () => {
-      atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
+      atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < STICK_TO_BOTTOM_PX;
     };
+    // Markdown renders after React commits, so the view follows the content's size, not its data. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    const resizes = new ResizeObserver(() => {
+      if (atBottom) el.scrollTop = el.scrollHeight;
+    });
     el.addEventListener("scroll", onScroll);
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [ref]);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && atBottom.current) el.scrollTop = el.scrollHeight;
-  }, [ref, content]);
+    resizes.observe(content);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      resizes.disconnect();
+    };
+  }, []);
+  return { scrollRef, contentRef };
 }

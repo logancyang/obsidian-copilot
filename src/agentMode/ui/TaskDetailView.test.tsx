@@ -3,7 +3,7 @@ import { TaskOutputReaderContext } from "@/agentMode/ui/hooks/useTaskOutputTail"
 import { COMMAND_OUTPUT_MAX_BYTES, TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { makeCommandTask, makeTask, textOutputReader } from "@/agentMode/ui/testing/taskFixtures";
 import { AppContext } from "@/context";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
@@ -60,7 +60,46 @@ function renderDetail(
   return { onBack };
 }
 
+const resizeCallbacks: ResizeObserverCallback[] = [];
+
+class MockResizeObserver {
+  constructor(callback: ResizeObserverCallback) {
+    resizeCallbacks.push(callback);
+  }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+function contentResized() {
+  act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+}
+
+function fakeScrollGeometry(el: HTMLElement) {
+  const geometry = { scrollHeight: 200, clientHeight: 100, scrollTop: 100 };
+  Object.defineProperties(el, {
+    scrollHeight: { get: () => geometry.scrollHeight },
+    clientHeight: { get: () => geometry.clientHeight },
+    scrollTop: {
+      get: () => geometry.scrollTop,
+      set: (value: number) => {
+        geometry.scrollTop = Math.min(value, geometry.scrollHeight - geometry.clientHeight);
+      },
+    },
+  });
+  return geometry;
+}
+
 describe("TaskDetailView", () => {
+  beforeEach(() => {
+    resizeCallbacks.length = 0;
+    window.ResizeObserver = MockResizeObserver;
+  });
+
+  afterEach(() => {
+    delete (window as { ResizeObserver?: unknown }).ResizeObserver;
+  });
+
   it(`shows a subagent's title and model, its task as the first user message, then its work, live while it runs (${ISSUE_749})`, () => {
     renderDetail({
       task: makeTask({ prompt: "Count the words in Welcome.md", model: "claude-haiku-9" }),
@@ -118,6 +157,30 @@ describe("TaskDetailView", () => {
 
     expect(await screen.findByText("Showing the last 256 KB of output.")).toBeTruthy();
     expect(screen.getByText("Completed")).toBeTruthy();
+  });
+
+  it(`keeps following the bottom when the report grows after it renders, such as rendered Markdown (${ISSUE_749})`, () => {
+    renderDetail({ task: makeTask({ status: "completed" }), messages: SUBAGENT_MESSAGES });
+    const scroller = screen.getByTestId("trail").closest<HTMLElement>(".tw-overflow-y-auto")!;
+    const geometry = fakeScrollGeometry(scroller);
+
+    geometry.scrollHeight = 400;
+    contentResized();
+
+    expect(geometry.scrollTop).toBe(300);
+  });
+
+  it("leaves the reader's position alone when the content grows while they are scrolled up", () => {
+    renderDetail({ task: makeTask({ status: "completed" }), messages: SUBAGENT_MESSAGES });
+    const scroller = screen.getByTestId("trail").closest<HTMLElement>(".tw-overflow-y-auto")!;
+    const geometry = fakeScrollGeometry(scroller);
+    geometry.scrollTop = 20;
+    fireEvent.scroll(scroller);
+
+    geometry.scrollHeight = 400;
+    contentResized();
+
+    expect(geometry.scrollTop).toBe(20);
   });
 
   it("returns to the chat from its back button", () => {
