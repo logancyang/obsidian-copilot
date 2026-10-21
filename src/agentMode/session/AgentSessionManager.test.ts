@@ -3101,13 +3101,17 @@ describe("AgentSessionManager", () => {
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 
-      it("defers restart while a chat's background subagent runs and restarts once the subagent ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+      it("holds a Reload while a background subagent runs and restarts after the reply the agent starts once it ends, even with a background command still running (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
         const mgr = buildManager();
         const first = await mgr.createSession();
-        getSessionTestHandle(first).setTaskStatuses(["running"]);
+        const handle = getSessionTestHandle(first);
+        handle.setTaskStatuses(["running", "running"], ["subagent", "command"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
 
-        await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
-        expect(mockBackendShutdown).not.toHaveBeenCalled();
+        await mgr.applyHeldConfigChange("opencode");
+        handle.setTaskStatuses(["completed", "running"], ["subagent", "command"]);
+        handle.setStatus("running");
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
 
         const shutDown = new Promise<void>((resolve) =>
           mockBackendShutdown.mockImplementationOnce(async () => {
@@ -3115,35 +3119,10 @@ describe("AgentSessionManager", () => {
             return undefined;
           })
         );
-        getSessionTestHandle(first).setTaskStatuses(["completed"]);
+        handle.setStatus("idle");
         await shutDown;
 
-        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
-      });
-
-      it("restarts once the last background subagent ends even while a background command keeps running (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
-        const mgr = buildManager();
-        const first = await mgr.createSession();
-        getSessionTestHandle(first).setTaskStatuses(
-          ["running", "running"],
-          ["subagent", "command"]
-        );
-
-        await mgr.restartBackend("opencode", "skills changed");
-        expect(mockBackendShutdown).not.toHaveBeenCalled();
-
-        const shutDown = new Promise<void>((resolve) =>
-          mockBackendShutdown.mockImplementationOnce(async () => {
-            resolve();
-            return undefined;
-          })
-        );
-        getSessionTestHandle(first).setTaskStatuses(
-          ["completed", "running"],
-          ["subagent", "command"]
-        );
-        await shutDown;
-
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 

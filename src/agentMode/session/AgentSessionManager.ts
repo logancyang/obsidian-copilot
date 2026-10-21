@@ -141,7 +141,7 @@ function hasRunningTask(session: AgentSession): boolean {
   return session.getTasks().some((task) => task.status === "running");
 }
 
-// A subagent ends its own work, but a background command such as a server or a watcher may never end, so only subagents hold a restart. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+// A subagent ends its own work, but a background command such as a server or a watcher may never end, so only subagents hold a restart; it runs at the next status change, after the reply that reports the subagent. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
 function hasRunningSubagent(session: AgentSession): boolean {
   return session.getTasks().some((task) => task.kind === "subagent" && task.status === "running");
 }
@@ -2359,7 +2359,6 @@ export class AgentSessionManager {
     const unsubscribe = session.subscribe({
       onMessagesChanged: () => {},
       onTasksChanged: () => {
-        void this.flushDeferredBackendRestartIfReady(session.backendId);
         if (hasRunningTask(session) === tasksRunning) return;
         tasksRunning = !tasksRunning;
         this.notify();
