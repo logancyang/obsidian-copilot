@@ -1983,12 +1983,17 @@ describe("AgentSessionManager", () => {
           (s: AgentSession) => getSessionTestHandle(s).setQueuedPromptCount(1),
         ],
         ["has a result the user has not seen", (s: AgentSession) => s.markNeedsAttention()],
+        [
+          "holds unsent text in its composer",
+          (s: AgentSession, mgr: AgentSessionManager) =>
+            mgr.drafts.update(s.chatInputId, (draft) => ({ ...draft, input: "half-written" })),
+        ],
       ])(
         "keeps the oldest hidden chat while it %s and closes the next idle one for https://github.com/Brevilabs/obsidian-copilot-private/issues/175",
         async (_label, occupy) => {
           const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
           const first = await mgr.createSession();
-          occupy(first);
+          occupy(first, mgr);
           mgr.detachSessionFromTab(first.internalId);
 
           const rest = await hideChats(mgr, 3);
