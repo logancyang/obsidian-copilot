@@ -145,6 +145,7 @@ function translateSystemMessage(
 // first status that opens it names it. A reported nothing-to-compact is a failure only in wording.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
 const NOTHING_TO_COMPACT = /not enough messages to compact/i;
+const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 
 function compactionEvents(
   msg: SDKSystemLike,
@@ -446,14 +447,14 @@ function translateUserMessage(
     msg.tool_use_result,
     results.map((b) => b.tool_use_id)
   );
+  const stoppedBeforeRun = toolCallsStoppedBeforeRun(msg);
 
   const out: SessionEvent[] = [];
   for (const b of results) {
     // A background task's launch result only says it started; the task's end settles its card. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (b.tool_use_id === launchAck || state.tasks.isRunningInBackground(b.tool_use_id)) continue;
-    out.push(
-      ...toolResultEvents(sessionId, state, b.tool_use_id, b, toolResultStatus(b), originalFiles)
-    );
+    const status = toolResultStatus(b, stoppedBeforeRun.has(b.tool_use_id));
+    out.push(...toolResultEvents(sessionId, state, b.tool_use_id, b, status, originalFiles));
   }
   return out;
 }
@@ -470,8 +471,21 @@ function isToolResultBlock(block: unknown): block is ToolResultBlock & { tool_us
   return b?.type === "tool_result" && !!b.tool_use_id;
 }
 
-function toolResultStatus(block: ToolResultBlock): AgentToolStatus {
+function toolResultStatus(block: ToolResultBlock, stoppedBeforeRun: boolean): AgentToolStatus {
+  if (stoppedBeforeRun) return "cancelled";
   return block.is_error ? "failed" : "completed";
+}
+
+// A tool call that a message sent with Send now stopped before it ran is reported as never executed, which is not a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+function toolCallsStoppedBeforeRun(msg: SDKUserMessage): ReadonlySet<string> {
+  const meta = (msg as { tool_result_meta?: unknown }).tool_result_meta;
+  if (!Array.isArray(meta)) return EMPTY_TOOL_CALL_IDS;
+  return new Set(
+    meta.flatMap((entry) => {
+      const { id, non_execution_kind } = entry as { id?: unknown; non_execution_kind?: unknown };
+      return non_execution_kind === "cancelled" && typeof id === "string" ? [id] : [];
+    })
+  );
 }
 
 function toolResultEvents(
@@ -582,6 +596,7 @@ interface ClaudeTranscriptEntry {
   isSidechain?: boolean;
   isCompactSummary?: boolean;
   origin?: unknown;
+  toolDenialKind?: string;
   message?: { content?: unknown };
   attachment?: {
     type?: string;
@@ -628,7 +643,7 @@ export function replayClaudeTranscript(
       : entry.type === "assistant"
         ? replayAssistantContent(content, sessionId, state)
         : entry.type === "user"
-          ? replayUserContent(content, entry.uuid, sessionId, state)
+          ? replayUserContent(content, entry.uuid, sessionId, state, entry.toolDenialKind)
           : [];
     for (const e of events) {
       trackUnansweredToolCall(unansweredToolCallIds, e.update);
@@ -663,7 +678,7 @@ function trackUnansweredToolCall(unanswered: Set<string>, update: SessionUpdate)
   if (update.sessionUpdate === "tool_call") unanswered.add(update.toolCallId);
   if (
     update.sessionUpdate === "tool_call_update" &&
-    (update.status === "completed" || update.status === "failed")
+    (update.status === "completed" || update.status === "failed" || update.status === "cancelled")
   ) {
     unanswered.delete(update.toolCallId);
   }
@@ -739,7 +754,8 @@ function replayUserContent(
   content: unknown,
   messageId: string | undefined,
   sessionId: SessionId,
-  state: TranslatorState
+  state: TranslatorState,
+  toolDenialKind?: string
 ): SessionEvent[] {
   if (typeof content === "string") {
     return [textChunk(sessionId, "user_message_chunk", content, messageId)];
@@ -755,7 +771,13 @@ function replayUserContent(
   // A replayed background task has no later notification to settle it, so its result alone sets the status. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
   return blocks.flatMap((b) =>
     b?.type === "tool_result" && b.tool_use_id
-      ? toolResultEvents(sessionId, state, b.tool_use_id, b, toolResultStatus(b))
+      ? toolResultEvents(
+          sessionId,
+          state,
+          b.tool_use_id,
+          b,
+          toolResultStatus(b, toolDenialKind === "cancelled")
+        )
       : []
   );
 }

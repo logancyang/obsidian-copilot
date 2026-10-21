@@ -8,7 +8,25 @@ interface QueuedMessageListProps {
   delivering: readonly QueuedPrompt[];
   held: readonly QueuedAgentMessage[];
   onRemove: (id: string) => void;
+  onWithdraw?: (id: string) => void;
 }
+
+interface RemoveButtonProps {
+  label: string;
+  onClick: () => void;
+}
+
+const RemoveButton: React.FC<RemoveButtonProps> = ({ label, onClick }) => (
+  <Button
+    variant="ghost2"
+    size="fit"
+    className="tw-shrink-0 tw-text-muted hover:tw-text-error"
+    onClick={onClick}
+    aria-label={label}
+  >
+    <X className="tw-size-3" />
+  </Button>
+);
 
 interface QueuedMessageRowProps {
   message: QueuedPrompt;
@@ -41,12 +59,16 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
   delivering,
   held,
   onRemove,
+  onWithdraw,
 }) => {
   return (
     <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
       {delivering.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
           <span className="tw-shrink-0 tw-text-muted">Queued</span>
+          {onWithdraw && (
+            <RemoveButton label="Withdraw queued message" onClick={() => onWithdraw(m.id)} />
+          )}
         </QueuedMessageRow>
       ))}
       {held.length > 0 && (
@@ -56,15 +78,7 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
       )}
       {held.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
-          <Button
-            variant="ghost2"
-            size="fit"
-            className="tw-shrink-0 tw-text-muted hover:tw-text-error"
-            onClick={() => onRemove(m.id)}
-            aria-label="Remove queued message"
-          >
-            <X className="tw-size-3" />
-          </Button>
+          <RemoveButton label="Remove queued message" onClick={() => onRemove(m.id)} />
         </QueuedMessageRow>
       ))}
     </div>

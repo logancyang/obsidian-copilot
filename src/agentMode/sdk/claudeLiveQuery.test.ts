@@ -39,6 +39,7 @@ function readSdkFixture(name: string): FixtureFrame[] {
 }
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
 const ISSUE_195 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/195";
+const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
 
 interface Harness {
   live: ClaudeLiveQuery;
@@ -463,6 +464,56 @@ describe("claudeLiveQuery", () => {
         } finally {
           jest.useRealTimers();
         }
+      });
+    });
+
+    describe("interrupt()", () => {
+      it(`stops the turn with cancel_queued and reports the prompts Claude withdrew, ignoring ids it never sent or already delivered (${ISSUE_747})`, async () => {
+        const { live, fake, recorder } = startLive();
+        live.push("prompt-1", "first");
+        live.push("prompt-2", "second");
+        live.push("prompt-3", "third");
+        fake.echo(await fake.nextInput(0));
+        await recorder.waitFor("message_delivered");
+        fake.interrupt.mockResolvedValue({
+          still_queued: [],
+          cancelled: ["prompt-1", "prompt-2", "cli-cron", "prompt-3"],
+        });
+
+        await live.interrupt();
+
+        expect(fake.interrupt).toHaveBeenCalledWith({ cancelQueued: true });
+        expect(lifecycle(recorder.updates())).toEqual([
+          "delivered prompt-1",
+          "turn_started",
+          "withdrawn prompt-2,prompt-3",
+        ]);
+      });
+    });
+
+    describe("cancelQueued()", () => {
+      it(`withdraws one queued prompt by its uuid and reports it withdrawn (${ISSUE_747})`, async () => {
+        const { live, fake, recorder } = startLive();
+        live.push("prompt-1", "first");
+        live.push("prompt-2", "second");
+        fake.cancelAsyncMessage.mockResolvedValue(true);
+
+        await expect(live.cancelQueued("prompt-2")).resolves.toBe(true);
+
+        expect(fake.cancelAsyncMessage).toHaveBeenCalledWith("prompt-2");
+        expect(lifecycle(recorder.updates())).toEqual(["withdrawn prompt-2"]);
+      });
+
+      it(`reports nothing when Claude has already taken the prompt, and its echo still delivers it (${ISSUE_747})`, async () => {
+        const { live, fake, recorder } = startLive();
+        live.push("prompt-1", "first");
+        fake.cancelAsyncMessage.mockResolvedValue(false);
+
+        await expect(live.cancelQueued("prompt-1")).resolves.toBe(false);
+        fake.echo(await fake.nextInput(0));
+        await recorder.waitFor("message_delivered");
+
+        expect(lifecycle(recorder.updates())).toEqual(["delivered prompt-1", "turn_started"]);
       });
     });
 

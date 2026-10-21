@@ -38,6 +38,7 @@ import type {
   SessionEvent,
   SessionId,
   SessionUpdateHandler,
+  WithdrawInput,
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
@@ -406,11 +407,17 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const live = session?.live ?? (await session?.starting?.catch(() => undefined));
     if (!live) return;
     try {
-      await live.query.interrupt();
+      await live.interrupt();
     } catch (e) {
       logWarn("[AgentMode] SDK query.interrupt() threw", e);
       logSdkError("→", "interrupt", { error: err2String(e) }, params.sessionId);
     }
+  }
+
+  async withdraw(params: WithdrawInput): Promise<boolean> {
+    logSdkOutbound("withdraw", { promptId: params.promptId }, params.sessionId);
+    const live = this.sessions.get(params.sessionId)?.live;
+    return live ? live.cancelQueued(params.promptId) : false;
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {

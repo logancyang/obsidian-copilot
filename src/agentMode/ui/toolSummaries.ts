@@ -93,7 +93,7 @@ function firstQuestionText(part: ToolCallPart): string | null {
 }
 
 function verb(part: ToolCallPart, progressive: string, past: string): string {
-  return part.status === "completed" || part.status === "failed" ? past : progressive;
+  return part.status === "pending" || part.status === "in_progress" ? progressive : past;
 }
 
 function fileChangeVerb(
@@ -102,10 +102,12 @@ function fileChangeVerb(
   past: string,
   negated: string
 ): string {
-  // A failed or denied file change leaves the note untouched, so the label
+  // A failed, denied or stopped file change leaves the note untouched, so the label
   // must not claim it happened.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/691
-  return part.status === "failed" ? `Didn't ${negated}` : verb(part, progressive, past);
+  return part.status === "failed" || part.status === "cancelled"
+    ? `Didn't ${negated}`
+    : verb(part, progressive, past);
 }
 
 function createsNewFile(part: ToolCallPart): boolean {

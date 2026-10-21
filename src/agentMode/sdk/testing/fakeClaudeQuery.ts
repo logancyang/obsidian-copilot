@@ -1,4 +1,8 @@
-import type { SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKControlInterruptResponse,
+  SDKMessage,
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import type { SessionEvent, SessionUpdate } from "@/agentMode/session/types";
 import { AsyncPushQueue } from "@/agentMode/sdk/asyncPushQueue";
 
@@ -6,7 +10,12 @@ type Uuid = `${string}-${string}-${string}-${string}-${string}`;
 
 export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   readonly inputs: SDKUserMessage[] = [];
-  readonly interrupt = jest.fn(async () => undefined);
+  readonly interrupt = jest.fn(
+    async (_options?: {
+      cancelQueued: boolean;
+    }): Promise<SDKControlInterruptResponse | undefined> => undefined
+  );
+  readonly cancelAsyncMessage = jest.fn(async (_uuid: string) => false);
   readonly close = jest.fn(() => this.output.end());
   readonly setModel = jest.fn(async () => undefined);
   readonly setPermissionMode = jest.fn(async () => undefined);

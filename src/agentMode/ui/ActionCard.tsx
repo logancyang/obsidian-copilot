@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Loader2, Check, X } from "lucide-react";
+import { CircleStop, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { displayTargetFromPath, lookupToolSummary } from "@/agentMode/ui/toolSummaries";
@@ -100,6 +100,9 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   }
   if (status === "failed") {
     return <X className="tw-size-3 tw-shrink-0 tw-text-error" />;
+  }
+  if (status === "cancelled") {
+    return <CircleStop className="tw-size-3 tw-shrink-0 tw-text-muted" />;
   }
   return <Check className="tw-size-3 tw-shrink-0 tw-text-success" />;
 };

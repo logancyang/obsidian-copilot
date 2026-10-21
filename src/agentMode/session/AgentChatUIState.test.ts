@@ -1,3 +1,4 @@
+import { waitFor } from "@testing-library/react";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendDescriptor } from "@/agentMode/session/descriptor";
@@ -301,7 +302,7 @@ describe("AgentChatUIState", () => {
     });
   });
 
-  function liveChat(descriptor: Partial<BackendDescriptor>) {
+  function liveChat(descriptor: Partial<BackendDescriptor>, extra: Partial<BackendProcess> = {}) {
     let handler: SessionUpdateHandler | undefined;
     const backend = {
       isRunning: () => true,
@@ -311,6 +312,7 @@ describe("AgentChatUIState", () => {
         return () => undefined;
       },
       prompt: async () => undefined,
+      ...extra,
     } as unknown as BackendProcess;
     const session = new AgentSession({
       backend,
@@ -348,6 +350,41 @@ describe("AgentChatUIState", () => {
 
       expect(chat.getQueuedPrompts()).toEqual([]);
       expect(listener).toHaveBeenCalled();
+    });
+  });
+
+  describe("canWithdrawMessages()", () => {
+    it("follows the backend's withdraw capability (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      expect(liveChat({ withdraw: true }).canWithdrawMessages()).toBe(true);
+      expect(liveChat({}).canWithdrawMessages()).toBe(false);
+    });
+  });
+
+  describe("withdrawMessage()", () => {
+    it("asks the backend to withdraw a queued message (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", async () => {
+      const withdraw = jest.fn(async () => false);
+      const prompt = jest.fn(async () => undefined);
+      const chat = liveChat({ midTurnDelivery: true, withdraw: true }, { prompt, withdraw });
+      chat.sendMessage("list the notes");
+      const { id } = chat.sendMessage("only the first two");
+      await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
+
+      await chat.withdrawMessage(id);
+
+      expect(withdraw).toHaveBeenCalledWith({ sessionId: "claude-session", promptId: id });
+    });
+  });
+
+  describe("takeWithdrawnPrompts()", () => {
+    it("hands over the messages the agent withdrew, once (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      const chat = liveChat({ midTurnDelivery: true });
+      chat.sendMessage("list the notes");
+      const { id } = chat.sendMessage("only the first two");
+
+      chat.emit({ sessionUpdate: "messages_withdrawn", promptIds: [id] });
+
+      expect(chat.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["only the first two"]);
+      expect(chat.takeWithdrawnPrompts()).toEqual([]);
     });
   });
 });

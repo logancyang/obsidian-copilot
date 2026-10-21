@@ -9,6 +9,7 @@ import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type { SessionEvent, SessionId, SessionUpdate, TurnEnd } from "@/agentMode/session/types";
 import { AsyncPushQueue } from "./asyncPushQueue";
+import { cancelQueuedMessage, interruptAndCancelQueued } from "./claudeQueryControls";
 import { describeSdkMessage, logSdkError, logSdkInbound } from "./sdkDebugTap";
 import { mapStopReason, translateSdkMessage, type TranslatorState } from "./sdkMessageTranslator";
 import {
@@ -62,6 +63,18 @@ export class ClaudeLiveQuery {
       // "now" ends the running turn at its next safe point and runs this message; background tasks keep running. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
       ...(interrupt ? { priority: "now" as const } : {}),
     });
+  }
+
+  // Stop takes back every message Claude has not read yet, so none of them runs after the stopped turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+  async interrupt(): Promise<void> {
+    const receipt = await interruptAndCancelQueued(this.query);
+    this.withdraw(receipt?.cancelled ?? []);
+  }
+
+  async cancelQueued(promptId: string): Promise<boolean> {
+    const cancelled = await cancelQueuedMessage(this.query, promptId);
+    if (cancelled) this.withdraw([promptId]);
+    return cancelled;
   }
 
   close(): void {
@@ -174,11 +187,20 @@ export class ClaudeLiveQuery {
           new Error(failure === null ? CLAUDE_DISCONNECTED_MESSAGE : err2String(failure)));
     logSdkError("←", "query:ended", { error: err2String(error) }, this.opts.sessionId);
     this.endTurn({ stopReason: "end_turn", error });
-    if (this.undelivered.length > 0) {
-      this.emit({ sessionUpdate: "messages_withdrawn", promptIds: this.undelivered.splice(0) });
-    }
+    this.withdraw([...this.undelivered]);
     for (const update of this.opts.translator.tasks.stopRunning()) this.emit(update);
     this.emit({ sessionUpdate: "session_disconnected", error });
+  }
+
+  private withdraw(promptIds: readonly string[]): void {
+    const withdrawn = promptIds.filter((id) => {
+      const index = this.undelivered.indexOf(id);
+      if (index >= 0) this.undelivered.splice(index, 1);
+      return index >= 0;
+    });
+    if (withdrawn.length > 0) {
+      this.emit({ sessionUpdate: "messages_withdrawn", promptIds: withdrawn });
+    }
   }
 
   private clearResultWatch(): void {

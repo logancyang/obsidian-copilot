@@ -82,6 +82,18 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getQueuedPrompts();
   }
 
+  canWithdrawMessages(): boolean {
+    return this.session.canWithdrawPrompts();
+  }
+
+  withdrawMessage(id: string): Promise<void> {
+    return this.session.withdrawPrompt(id);
+  }
+
+  takeWithdrawnPrompts(): readonly QueuedPrompt[] {
+    return this.session.takeWithdrawnPrompts();
+  }
+
   async cancel(): Promise<void> {
     await this.session.cancel();
   }

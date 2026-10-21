@@ -58,6 +58,27 @@ describe("QueuedMessageList", () => {
       expect(screen.queryByText("Sends when the agent finishes")).toBeNull();
     });
 
+    it("offers a withdraw control on each message handed to a backend that can withdraw it, and withdraws that message (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      const onWithdraw = jest.fn();
+      render(
+        <QueuedMessageList
+          delivering={[
+            { id: "steer-1", text: "Only the first two" },
+            { id: "steer-2", text: "Keep it short" },
+          ]}
+          held={[]}
+          onRemove={jest.fn()}
+          onWithdraw={onWithdraw}
+        />
+      );
+
+      const controls = screen.getAllByRole("button", { name: "Withdraw queued message" });
+      fireEvent.click(controls[1]);
+
+      expect(controls).toHaveLength(2);
+      expect(onWithdraw).toHaveBeenCalledWith("steer-2");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 tells the user that messages Copilot holds send when the agent finishes", () => {
       render(
         <QueuedMessageList
