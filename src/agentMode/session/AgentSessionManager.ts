@@ -1022,9 +1022,9 @@ export class AgentSessionManager {
     if (projectId !== GLOBAL_SCOPE) {
       const reusable = this.pickReusableLandingSession(projectId);
       this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
-      if (reusable) this.detachedFromTabIds.delete(reusable.internalId);
       this.closeIdleHiddenChatsOverCap();
       if (reusable) {
+        this.detachedFromTabIds.delete(reusable.internalId);
         this.activeSessionId = reusable.internalId;
         this.lastActiveByScope.set(projectId, reusable.internalId);
         reusable.clearNeedsAttention();
