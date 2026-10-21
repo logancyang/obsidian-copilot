@@ -2091,6 +2091,40 @@ describe("AgentSession", () => {
         expect(session.getQueuedPrompts()).toEqual([]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 refuses a follow-up while a multi-agent question runs, so Copilot holds it and sends it with the agents' answers once they finish", async () => {
+        const mock = makeMockBackend();
+        const answered: FanoutTurn = {
+          answers: {
+            opencode: { backendId: "opencode", status: "done", text: "a" },
+            claude: { backendId: "claude", status: "done", text: "b" },
+          },
+          summary: { status: "done", text: "the fan-out summary", complete: true },
+        };
+        let finishFanout!: () => void;
+        const runFanoutTurn = jest.fn(
+          () => new Promise<FanoutTurn>((resolve) => (finishFanout = () => resolve(answered)))
+        );
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor, runFanoutTurn });
+        const fanout = session.sendPrompt("compare X and Y", undefined, undefined, [
+          "opencode",
+          "claude",
+        ]);
+        await waitFor(() => expect(runFanoutTurn).toHaveBeenCalled());
+
+        expect(session.acceptsMidTurnPrompts()).toBe(false);
+        expect(() => session.sendPrompt("expand on that")).toThrow(
+          "Session already has a turn in flight"
+        );
+
+        finishFanout();
+        await fanout.turn;
+        expect(session.acceptsMidTurnPrompts()).toBe(true);
+        await session.sendPrompt("expand on that").turn;
+        expect(promptText(mock.prompt.mock.calls[0][0] as PromptInput)).toContain(
+          "the fan-out summary"
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 shows a queued message at the point it reached the agent, keeps the work before it in its own reply, and renders later work below it in the same turn", async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);

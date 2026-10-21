@@ -742,7 +742,12 @@ export class AgentSession {
   }
 
   acceptsMidTurnPrompts(): boolean {
-    return this.getDescriptor?.()?.midTurnDelivery === true;
+    // A follow-up to a multi-agent question waits for the agents' answers, which ride the next normal turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+    const fanoutRunning =
+      this.abortController !== null &&
+      this.runFanoutTurn !== null &&
+      isFanout(this.lastMentionedAgents, this.backendId);
+    return !fanoutRunning && this.getDescriptor?.()?.midTurnDelivery === true;
   }
 
   getQueuedPrompts(): readonly QueuedPrompt[] {
