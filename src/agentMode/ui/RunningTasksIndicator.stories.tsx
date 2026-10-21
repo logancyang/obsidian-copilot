@@ -34,7 +34,7 @@ const APPROVAL: PermissionPrompt = {
 const meta = {
   title: "Agent Mode/Running Tasks",
   component: RunningTasksIndicator,
-  parameters: { gallery: { host: "popover", layout: "padded" } },
+  parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: { tasks: TASKS, permissions: [], onOpenTask: () => {} },
 } satisfies Meta<Props>;
 export default meta;

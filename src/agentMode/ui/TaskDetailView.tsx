@@ -111,7 +111,7 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
       className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-2 tw-overflow-y-auto tw-p-3"
     >
       {task.command ? (
-        <pre className="tw-m-0 tw-whitespace-pre-wrap tw-break-all tw-rounded tw-bg-secondary-alt tw-p-2 tw-font-mono tw-text-xs tw-text-normal">
+        <pre className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-rounded tw-bg-secondary-alt tw-p-2 tw-font-mono tw-text-xs tw-text-normal">
           $ {task.command}
         </pre>
       ) : null}
@@ -120,7 +120,7 @@ const CommandDetail: React.FC<{ task: AgentTask }> = ({ task }) => {
       ) : null}
       <pre
         data-testid="task-command-output"
-        className="tw-m-0 tw-whitespace-pre-wrap tw-break-all tw-font-mono tw-text-xs tw-text-normal"
+        className="tw-m-0 tw-whitespace-pre-wrap tw-break-words tw-font-mono tw-text-xs tw-text-normal"
       >
         {output.text || (task.status === "running" ? "No output yet" : "No output")}
       </pre>
