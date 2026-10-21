@@ -18,13 +18,11 @@ import {
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
-  NewAgentChatMessage,
   PermissionDecision,
   PermissionPrompt,
   PermissionRequester,
   PlanDecisionAction,
   PromptContent,
-  PromptInput,
   QueuedPrompt,
   SessionEvent,
   SessionId,
@@ -37,13 +35,12 @@ import {
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
-  TurnEnd,
   TurnFileChange,
 } from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import { Notice, type App, type DataAdapter } from "obsidian";
+import type { App, DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
@@ -56,7 +53,9 @@ import {
   buildTurnFileChange,
   filePatchesByVaultPath,
   revertFilePatch,
+  type FileCaptures,
 } from "@/agentMode/session/turnFileChanges";
+import { TurnTracker, type TurnOutcome, type TurnSend } from "@/agentMode/session/TurnTracker";
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
@@ -84,13 +83,12 @@ import {
 } from "@/agentMode/session/enabledModelSelection";
 import {
   buildPromptBlocks,
-  buildUserDisplayContent,
+  buildUserMessage,
   extractText,
   OUTPUT_LIMIT_CONTINUATION_PROMPT,
   serializeWebTabContext,
   withReadOnlyPreamble,
 } from "@/agentMode/session/promptEnvelope";
-import { buildEmptyTurnMessage, formatPromptFailure } from "@/agentMode/session/promptFailure";
 import {
   findToolCallPart,
   mergeToolCallUpdate,
@@ -112,8 +110,6 @@ export const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
-const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
-const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
 const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   completed: "completed",
@@ -132,22 +128,6 @@ export interface AgentTask extends TaskStart {
   outputFile?: string;
   summary?: string;
 }
-
-type TurnOutcome = Omit<TurnEnd, "turnId">;
-
-interface PendingPrompt {
-  delivered: boolean;
-  continuesAtOutputLimit: boolean;
-  settle: (outcome: TurnOutcome) => void;
-}
-
-interface TurnFileCapture {
-  edited: boolean;
-  snapshot: Promise<string | null>;
-  writeTimeBefore?: string | null;
-}
-
-type FileCaptures = Map<string, TurnFileCapture>;
 
 function isTaskLifecycleUpdate(update: SessionEvent["update"]): boolean {
   return (
@@ -266,34 +246,14 @@ export class AgentSession {
   private cachedStatus: AgentSessionStatus = "starting";
   private startupFailed = false;
   private startupSettled = false;
-  private lastTurnError = false;
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
-  private placeholderId: string | null = null;
-  private replyStartedAtMs = 0;
-  private openTurnId: string | null = null;
-  private pendingPrompts = new Map<string, PendingPrompt>();
-  private queuedPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
-  private withdrawnPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
-  private stoppedPromptIds: ReadonlySet<string> = EMPTY_PROMPT_IDS;
-  private sendOrder: Promise<void> = Promise.resolve();
-  private turnFiles: FileCaptures = new Map();
+  private readonly turns: TurnTracker;
   private readonly taskFiles = new Map<string, FileCaptures>();
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
   private readonly taskContent = new Map<string, AgentMessageStore>();
-  private currentTurnShowedActivityElsewhere = false;
-  private currentMessageIds = new Set<string>();
-  private settledStream: {
-    placeholderId: string;
-    messageIds: Set<string>;
-    turnStartedAtMs: number;
-  } | null = null;
-  private cancelledPromptDrain: Promise<void> | null = null;
-  private finishCancelledPromptDrain: (() => void) | null = null;
-  private cancelledMessageIds = new Set<string>();
-  private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
   private currentState: BackendState | null = null;
@@ -321,6 +281,30 @@ export class AgentSession {
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
     this.backendId = opts.backendId;
+    this.turns = new TurnTracker({
+      store: this.store,
+      backendId: this.backendId,
+      prompt: (input) => this.backend.prompt({ sessionId: this.backendSessionId!, ...input }),
+      notifyMessages: () => this.notifyMessages(),
+      notifyQueuedPrompts: () => this.notifyQueuedPromptsChanged(),
+      promptsWithdrawn: (prompts) => {
+        // A web page that rode only on a withdrawn message never reached the agent, so it goes in full next time. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+        if (prompts.some((p) => (p.context?.webTabs?.length ?? 0) > 0)) {
+          this.lastSentWebTabBlock = null;
+        }
+      },
+      notifyStatus: () => this.recomputeStatusIfChanged(),
+      runningTaskToolCallIds: () =>
+        new Set(
+          [...this.tasks.values()]
+            .filter((task) => task.status === "running" && task.taskId !== undefined)
+            .map((task) => task.toolCallId)
+        ),
+      endLaunches: (status) => this.endLaunchesOfEndedTurn(status),
+      captureFileChanges: (files, messageId, turnDiff) =>
+        this.finalizeFileChanges(files, this.store, messageId, turnDiff),
+      onTurnCompleted: () => void this.pollSessionTitle(),
+    });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
     this.cwd = opts.cwd ?? null;
@@ -335,7 +319,7 @@ export class AgentSession {
     this.requests = new InteractiveRequests({
       store: this.store,
       internalId: this.internalId,
-      getReplyId: () => this.placeholderId,
+      getReplyId: () => this.turns.getReplyId(),
       hasLeftPlanMode: () => this.hasLeftPlanMode(),
       recomputeStatus: () => this.recomputeStatusIfChanged(),
       notifyMessages: () => this.notifyMessages(),
@@ -604,13 +588,13 @@ export class AgentSession {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
     if (this.backendSessionId === null || !this.startupSettled) return "starting";
-    const mainTurnRunning = this.abortController !== null || this.openTurnId !== null;
+    const mainTurnRunning = this.turns.isMainTurnRunning();
     // A background task can ask while the main agent is idle; its request must not hold the composer or show Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (mainTurnRunning && this.requests.hasPending()) {
       return "awaiting_permission";
     }
     if (mainTurnRunning) return "running";
-    if (this.lastTurnError) return "error";
+    if (this.turns.hasLastTurnFailed()) return "error";
     return "idle";
   }
 
@@ -727,7 +711,9 @@ export class AgentSession {
     }
     // Compaction and multi-agent questions are whole turns of their own, so they wait for the agent to finish. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     const busy =
-      status === "running" || status === "awaiting_permission" || this.queuedPrompts.length > 0;
+      status === "running" ||
+      status === "awaiting_permission" ||
+      this.turns.getQueuedPrompts().length > 0;
     if (busy) {
       if (
         !this.acceptsMidTurnPrompts() ||
@@ -743,7 +729,7 @@ export class AgentSession {
     const userMessageId = this.store.addMessage(
       buildUserMessage(promptId, displayText, context, promptContent)
     );
-    this.openReply();
+    this.turns.openReply();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
       this.applyAgentLabel(deriveChatTitleFromMessages(this.store.getDisplayMessages()));
@@ -752,18 +738,14 @@ export class AgentSession {
     this.lastMentionedAgents =
       mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
 
-    this.abortController = new AbortController();
-    this.lastTurnError = false;
-    this.recomputeStatusIfChanged();
-
-    const order = this.takeSendOrder();
+    const send = this.turns.startSend();
     const turn = this.runTurn(
       displayText,
       userMessageId,
       context,
       promptContent,
       sendsCompact,
-      order.done
+      send
     );
     return { userMessageId, turn };
   }
@@ -771,14 +753,14 @@ export class AgentSession {
   acceptsMidTurnPrompts(): boolean {
     // A follow-up to a multi-agent question waits for the agents' answers, which ride the next normal turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     const fanoutRunning =
-      this.abortController !== null &&
+      this.turns.isSending() &&
       this.runFanoutTurn !== null &&
       isFanout(this.lastMentionedAgents, this.backendId);
     return !fanoutRunning && this.getDescriptor?.()?.midTurnDelivery === true;
   }
 
   getQueuedPrompts(): readonly QueuedPrompt[] {
-    return this.queuedPrompts;
+    return this.turns.getQueuedPrompts();
   }
 
   canWithdrawPrompts(): boolean {
@@ -786,20 +768,13 @@ export class AgentSession {
   }
 
   takeWithdrawnPrompts(): readonly QueuedPrompt[] {
-    const withdrawn = this.withdrawnPrompts;
-    this.withdrawnPrompts = EMPTY_QUEUED_PROMPTS;
-    return withdrawn;
+    return this.turns.takeWithdrawnPrompts();
   }
 
-  async withdrawPrompt(promptId: string): Promise<void> {
-    if (!this.queuedPrompts.some((p) => p.id === promptId)) return;
-    if (!this.pendingPrompts.has(promptId)) return this.withdrawPrompts([promptId]);
-    const withdrawn = await this.backend.withdraw?.({
-      sessionId: this.backendSessionId!,
-      promptId,
-    });
-    // A message the agent has already taken can no longer be withdrawn, so it shows as sent. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (withdrawn === false) this.deliverPrompt(promptId);
+  withdrawPrompt(promptId: string): Promise<void> {
+    return this.turns.withdrawQueued(promptId, () =>
+      this.backend.withdraw?.({ sessionId: this.backendSessionId!, promptId })
+    );
   }
 
   canStopTasks(): boolean {
@@ -810,7 +785,6 @@ export class AgentSession {
     await this.backend.stopTask?.({ sessionId: this.backendSessionId!, taskId });
   }
 
-  // A message sent while the agent works is shown only once it reaches the agent, at that point in the transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
   private queuePrompt(
     text: string,
     context: MessageContext | undefined,
@@ -818,16 +792,10 @@ export class AgentSession {
     interrupt: boolean
   ): { userMessageId: string; turn: Promise<StopReason> } {
     const prompt: QueuedPrompt = { id: uuidv4(), text, context, promptContent };
-    this.setQueuedPrompts([...this.queuedPrompts, prompt]);
-    const sessionId = this.backendSessionId!;
-    const order = this.takeSendOrder();
-    const turn = (async (): Promise<StopReason> => {
-      try {
-        await order.ready;
-        const webTabBlock =
-          (context?.webTabs?.length ?? 0) > 0 ? await serializeWebTabContext(context) : "";
-        // A message withdrawn while it waited to be sent never reaches the agent. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-        if (!this.queuedPrompts.some((p) => p.id === prompt.id)) return "cancelled";
+    const turn = this.turns.queue(prompt, interrupt, async () => {
+      const webTabBlock =
+        (context?.webTabs?.length ?? 0) > 0 ? await serializeWebTabContext(context) : "";
+      return () => {
         const blocks = buildPromptBlocks(
           text,
           context,
@@ -838,37 +806,13 @@ export class AgentSession {
           null
         );
         if (webTabBlock) this.lastSentWebTabBlock = webTabBlock;
-        const outcome = await this.promptTurn(
-          { sessionId, promptId: prompt.id, prompt: blocks, ...(interrupt ? { interrupt } : {}) },
-          false,
-          order.done
-        );
-        if (outcome.error !== undefined) throw outcome.error;
-        return outcome.stopReason;
-      } catch (err) {
-        // A message the agent refused goes back to the composer, and the user is told why it came back. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-        if (this.queuedPrompts.some((p) => p.id === prompt.id)) {
-          this.withdrawPrompts([prompt.id]);
-          new Notice("Failed to send message. Please try again.");
-        }
-        throw err;
-      } finally {
-        order.done();
-      }
-    })();
+        return blocks;
+      };
+    });
     return { userMessageId: prompt.id, turn };
   }
 
-  // A message still being prepared must reach the agent before a later one. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-  private takeSendOrder(): { ready: Promise<void>; done: () => void } {
-    const ready = this.sendOrder;
-    let done!: () => void;
-    this.sendOrder = new Promise<void>((resolve) => (done = resolve));
-    return { ready, done };
-  }
-
-  private setQueuedPrompts(next: readonly QueuedPrompt[]): void {
-    this.queuedPrompts = next.length === 0 ? EMPTY_QUEUED_PROMPTS : Object.freeze([...next]);
+  private notifyQueuedPromptsChanged(): void {
     for (const l of this.listeners) {
       try {
         l.onQueuedPromptsChanged?.();
@@ -878,38 +822,13 @@ export class AgentSession {
     }
   }
 
-  private removeQueuedPrompts(promptIds: readonly string[]): void {
-    const ids = new Set(promptIds);
-    if (!this.queuedPrompts.some((p) => ids.has(p.id))) return;
-    this.setQueuedPrompts(this.queuedPrompts.filter((p) => !ids.has(p.id)));
-  }
-
-  private showDeliveredPrompt(promptId: string): void {
-    const prompt = this.queuedPrompts.find((p) => p.id === promptId);
-    if (!prompt) return;
-    this.removeQueuedPrompts([promptId]);
-    // The agent's work before the message stays in its own reply and still counts for the turn; an empty reply gives way to the message. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-    const reply = this.placeholderId;
-    if (reply && this.store.hasAssistantActivity(reply)) {
-      this.store.markTurnComplete(reply, "end_turn", Date.now() - this.replyStartedAtMs);
-      this.currentTurnShowedActivityElsewhere = true;
-    } else if (reply) {
-      this.store.deleteMessage(reply);
-    }
-    this.store.addMessage(
-      buildUserMessage(prompt.id, prompt.text, prompt.context, prompt.promptContent)
-    );
-    if (reply) this.openReply(true);
-    else this.notifyMessages();
-  }
-
   private async runTurn(
     displayText: string,
     userMessageId: string,
     context: MessageContext | undefined,
     promptContent: PromptContent[] | undefined,
     sendsCompact: boolean,
-    onPushed: () => void
+    send: TurnSend
   ): Promise<StopReason> {
     const outcome = await this.runPrompt(
       displayText,
@@ -917,7 +836,7 @@ export class AgentSession {
       context,
       promptContent,
       sendsCompact,
-      onPushed
+      send
     );
     if (outcome.error !== undefined) throw outcome.error;
     return outcome.stopReason;
@@ -929,28 +848,18 @@ export class AgentSession {
     context: MessageContext | undefined,
     promptContent: PromptContent[] | undefined,
     sendsCompact: boolean,
-    onPushed: () => void
+    { signal, pushed: onPushed }: TurnSend
   ): Promise<TurnOutcome> {
-    const sessionId = this.backendSessionId!;
-    const controller = this.abortController!;
-    const signal = controller.signal;
     try {
-      const priorPromptDrain = this.cancelledPromptDrain;
-      if (priorPromptDrain) {
-        await Promise.race([
-          priorPromptDrain,
-          new Promise<void>((resolve) => {
-            signal.addEventListener("abort", () => resolve(), { once: true });
-          }),
-        ]);
-      }
+      const stoppedTurnEnded = this.turns.whenStoppedTurnEnds(signal);
+      if (stoppedTurnEnded) await stoppedTurnEnded;
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
       // Stop already closed this prompt's reply, so nothing after it may run or open another. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       if (this.isOnModelNotEnabled()) {
-        return this.refuseTurn(
+        return this.turns.refuse(
           `This chat's model isn't enabled for ${this.displayNameFor(this.backendId)}. Pick an enabled model to continue.`
         );
       }
@@ -968,7 +877,7 @@ export class AgentSession {
         if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
         if (!entitled) {
           showMultiAgentUpgradePrompt();
-          return this.refuseTurn(
+          return this.turns.refuse(
             "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
           );
         }
@@ -986,7 +895,7 @@ export class AgentSession {
           historyBlock,
           projectContextUpdatesBlock
         );
-        return { stopReason: await this.runFanoutPath(displayText, promptBlocks) };
+        return { stopReason: await this.runFanoutPath(displayText, promptBlocks, signal) };
       }
 
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
@@ -1016,8 +925,8 @@ export class AgentSession {
         projectContextUpdatesBlock
       );
 
-      const outcome = await this.promptTurn(
-        { sessionId, promptId: userMessageId, prompt: promptBlocks },
+      const outcome = await this.turns.submit(
+        { promptId: userMessageId, prompt: promptBlocks },
         true,
         onPushed
       );
@@ -1034,9 +943,8 @@ export class AgentSession {
         this.markProjectContextUpdatesDeliveredFn?.(projectContextUpdates.epoch);
       }
       if (outcome.stopReason === "max_tokens" && !signal.aborted) {
-        return await this.promptTurn(
+        return await this.turns.submit(
           {
-            sessionId,
             promptId: uuidv4(),
             prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
           },
@@ -1045,59 +953,25 @@ export class AgentSession {
       }
       return outcome;
     } catch (err) {
-      this.failReply(err);
+      this.turns.failReply(err);
       throw err;
     } finally {
       onPushed();
-      // A turn started after Stop already let go of this prompt's controller, and a later send may own the current one. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-      if (this.abortController === controller) this.abortController = null;
-      this.recomputeStatusIfChanged();
+      this.turns.endSend(signal);
     }
-  }
-
-  private promptTurn(
-    req: PromptInput,
-    continuesAtOutputLimit: boolean,
-    onPushed?: () => void
-  ): Promise<TurnOutcome> {
-    const ended = new Promise<TurnOutcome>((settle) => {
-      this.pendingPrompts.set(req.promptId, { delivered: false, continuesAtOutputLimit, settle });
-    });
-    const admitted = this.backend
-      .prompt(req)
-      .finally(onPushed)
-      .then(
-        () => ended,
-        (err: unknown) => {
-          this.endCancelledPromptDrain();
-          if (!this.pendingPrompts.delete(req.promptId)) return ended;
-          throw err;
-        }
-      );
-    // Stop must free the chat while the agent is still signing in or starting up. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    return Promise.race([ended, admitted]);
   }
 
   private ensureMultiAgentEntitlement(): Promise<boolean> {
     return ensureMultiAgentEntitlement(this.getApp?.());
   }
 
-  private refuseTurn(message: string): TurnOutcome {
-    const placeholderId = this.placeholderId!;
-    this.store.markMessageError(placeholderId, message);
-    this.store.markTurnComplete(placeholderId, "refusal", Date.now() - this.replyStartedAtMs);
-    this.placeholderId = null;
-    this.notifyMessages();
-    return { stopReason: "refusal" };
-  }
-
   private async runFanoutPath(
     originalPromptText: string,
-    promptBlocks: PromptContent[]
+    promptBlocks: PromptContent[],
+    signal: AbortSignal
   ): Promise<StopReason> {
-    const placeholderId = this.placeholderId!;
-    const turnStartedAtMs = this.replyStartedAtMs;
-    const signal = this.abortController?.signal ?? new AbortController().signal;
+    const placeholderId = this.turns.getReplyId()!;
+    const turnStartedAtMs = this.turns.getReplyStartedAtMs();
     const input: FanoutRunInput = {
       agents: this.lastMentionedAgents,
       mainAgent: this.backendId,
@@ -1139,7 +1013,7 @@ export class AgentSession {
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
-    if (this.placeholderId === placeholderId) this.placeholderId = null;
+    this.turns.releaseReply(placeholderId);
     return stopReason;
   }
 
@@ -1155,31 +1029,7 @@ export class AgentSession {
     const status = this.getStatus();
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
-    this.abortController?.abort();
-    // A message handed to the agent for its next step is the backend's to withdraw at Stop; a backend that cannot keeps it and runs it next. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    const queued = new Set(this.queuedPrompts.map((p) => p.id));
-    if (this.canWithdrawPrompts()) {
-      this.withdrawPrompts(
-        this.queuedPrompts.flatMap((p) => (this.pendingPrompts.has(p.id) ? [] : [p.id]))
-      );
-    }
-    const stoppedIds = [...this.pendingPrompts.keys()].filter((id) => !queued.has(id));
-    // The stopped prompt's turn may still be running or yet to start; it renders nothing until it ends. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (this.openTurnId !== null || stoppedIds.length > 0) {
-      this.stoppedPromptIds = new Set(stoppedIds);
-      this.cancelledPromptDrain = new Promise<void>((resolve) => {
-        this.finishCancelledPromptDrain = resolve;
-      });
-    }
-    this.openTurnId = null;
-    const stopped = stoppedIds.map((id) => this.pendingPrompts.get(id)!);
-    for (const id of stoppedIds) this.pendingPrompts.delete(id);
-    for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
-    this.currentMessageIds = new Set();
-    void this.finalizeReply("cancelled").then(() => {
-      for (const prompt of stopped) prompt.settle({ stopReason: "cancelled" });
-    });
-    this.settledStream = null;
+    this.turns.stop(this.canWithdrawPrompts());
     // Stop ends the main agent's turn only, so a background task's request stays answerable. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
@@ -1210,14 +1060,7 @@ export class AgentSession {
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.requests.dispose();
-    this.settledStream = null;
-    this.endCancelledPromptDrain();
-    this.openTurnId = null;
-    for (const prompt of this.pendingPrompts.values()) prompt.settle({ stopReason: "cancelled" });
-    this.pendingPrompts.clear();
-    this.queuedPrompts = EMPTY_QUEUED_PROMPTS;
-    this.cancelledMessageIds.clear();
-    this.currentMessageIds = new Set();
+    this.turns.dispose();
     this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
@@ -1359,10 +1202,10 @@ export class AgentSession {
     }
     switch (update.sessionUpdate) {
       case "message_delivered":
-        this.deliverPrompt(update.promptId);
+        this.turns.deliverPrompt(update.promptId);
         return;
       case "messages_withdrawn":
-        this.withdrawPrompts(update.promptIds);
+        this.turns.withdrawPrompts(update.promptIds);
         return;
       case "session_disconnected":
         this.handleDisconnect(update.error);
@@ -1372,7 +1215,7 @@ export class AgentSession {
         if (
           update.taskId === undefined &&
           event.taskToolCallId === undefined &&
-          (this.cancelledPromptDrain || this.abortController?.signal.aborted)
+          this.turns.isStopping()
         ) {
           return;
         }
@@ -1383,10 +1226,10 @@ export class AgentSession {
         this.applyTaskUpdate(update);
         return;
       case "turn_started":
-        this.startTurn(update.turnId, update.startedAt);
+        this.turns.startTurn(update.turnId, update.startedAt);
         return;
       case "turn_ended":
-        this.endTurn(update);
+        this.turns.endTurn(update);
         return;
     }
     const toolOwnerMessageId =
@@ -1401,11 +1244,11 @@ export class AgentSession {
       toolOwnerStopReason !== undefined &&
       toolOwnerStopReason !== "cancelled";
 
-    if (this.cancelledPromptDrain || this.abortController?.signal.aborted) {
+    if (this.turns.isStopping()) {
       switch (update.sessionUpdate) {
         case "agent_message_chunk":
         case "agent_thought_chunk":
-          if (update.messageId) this.cancelledMessageIds.add(update.messageId);
+          this.turns.dropStoppedContent(update.messageId);
           logWarn(
             `[AgentMode] dropping ${update.sessionUpdate} from cancelled turn ${this.internalId}`
           );
@@ -1463,7 +1306,7 @@ export class AgentSession {
     ) {
       const text = extractText(update.content);
       if (!text) return;
-      const target = this.resolveContentTarget(update.messageId);
+      const target = this.turns.resolveContentTarget(update.messageId);
       if (!target) {
         logWarn(`[AgentMode] dropping ${update.sessionUpdate} — no target for ${this.internalId}`);
         return;
@@ -1473,16 +1316,15 @@ export class AgentSession {
           ? this.store.appendAgentText(target, text)
           : this.store.appendAgentThought(target, text);
       if (appended) {
-        if (target === this.settledStream?.placeholderId) {
-          this.store.extendTurnDuration(target, Date.now() - this.settledStream.turnStartedAtMs);
-        }
+        this.turns.extendSettledTurn(target);
         this.scheduleNotifyMessages();
       }
       return;
     }
 
-    const placeholderId = this.placeholderId;
-    const targetMessageId = isPriorToolUpdate ? toolOwnerMessageId : placeholderId;
+    const targetMessageId = this.turns.resolveToolTarget(
+      isPriorToolUpdate ? toolOwnerMessageId : undefined
+    );
     if (!targetMessageId) {
       logWarn(`[AgentMode] dropping session/update — no placeholder for ${this.internalId}`);
       return;
@@ -1490,7 +1332,7 @@ export class AgentSession {
 
     switch (update.sessionUpdate) {
       case "tool_call": {
-        this.observeToolCall(this.turnFiles, update.kind, toolCallTarget(update));
+        this.observeToolCall(this.turns.getTurnFiles(), update.kind, toolCallTarget(update));
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -1509,12 +1351,11 @@ export class AgentSession {
         return;
       }
       case "tool_call_update": {
-        if (targetMessageId !== placeholderId) this.currentTurnShowedActivityElsewhere = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
         // A late update to an earlier turn's call must not count as this turn's edit.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-        if (!isPriorToolUpdate) this.observeToolResult(this.turnFiles, merged, update);
+        if (!isPriorToolUpdate) this.observeToolResult(this.turns.getTurnFiles(), merged, update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -1551,51 +1392,12 @@ export class AgentSession {
     }
   }
 
-  private startTurn(turnId: string, startedAt?: number): void {
-    if (this.cancelledPromptDrain) return;
-    // A turn that starts after Stop runs a message kept through it, so the stopped prompt's cancellation must not drop its output. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
-    if (this.abortController?.signal.aborted) this.abortController = null;
-    this.openTurnId = turnId;
-    if (!this.placeholderId) this.openReply(false, startedAt);
-    this.recomputeStatusIfChanged();
-  }
-
-  private deliverPrompt(promptId: string): void {
-    const prompt = this.pendingPrompts.get(promptId);
-    if (prompt) prompt.delivered = true;
-    this.showDeliveredPrompt(promptId);
-  }
-
-  private withdrawPrompts(promptIds: readonly string[]): void {
-    // A stopped message the agent never took has no turn left to wait for. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (promptIds.some((id) => this.stoppedPromptIds.has(id))) this.endCancelledPromptDrain();
-    for (const promptId of promptIds) {
-      this.pendingPrompts.get(promptId)?.settle({ stopReason: "cancelled" });
-      this.pendingPrompts.delete(promptId);
-    }
-    const ids = new Set(promptIds);
-    const withdrawn = this.queuedPrompts.filter((p) => ids.has(p.id));
-    // A message the agent never read goes back to the composer, so its text is not lost. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (withdrawn.length > 0) {
-      this.withdrawnPrompts = Object.freeze([...this.withdrawnPrompts, ...withdrawn]);
-      // A web page that rode only on a withdrawn message never reached the agent, so it goes in full next time. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-      if (withdrawn.some((p) => (p.context?.webTabs?.length ?? 0) > 0)) {
-        this.lastSentWebTabBlock = null;
-      }
-    }
-    this.removeQueuedPrompts(promptIds);
-    this.recomputeStatusIfChanged();
-  }
-
-  // The next send reconnects the agent, so the chat only reports the loss. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
   private handleDisconnect(error: Error): void {
-    this.endCancelledPromptDrain();
     // A launch the agent never started cannot start after the connection is gone. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     for (const task of this.tasks.values()) {
       if (task.taskId === undefined && task.status === "running") this.endTask(task, "stopped");
     }
-    if (this.placeholderId || this.pendingPrompts.size > 0) this.failReply(error);
-    this.withdrawPrompts([...this.pendingPrompts.keys()]);
+    this.turns.disconnect(error);
     for (const l of this.listeners) {
       try {
         l.onDisconnected?.();
@@ -1808,149 +1610,9 @@ export class AgentSession {
     }
   }
 
-  private endTurn(end: TurnEnd): void {
-    if (this.cancelledPromptDrain) {
-      this.endCancelledPromptDrain();
-      return;
-    }
-    if (end.turnId !== this.openTurnId) {
-      logWarn(`[AgentMode] ignoring the end of turn ${end.turnId}, which is not running`);
-      return;
-    }
-    this.openTurnId = null;
-    const delivered = [...this.pendingPrompts].filter(([, prompt]) => prompt.delivered);
-    for (const [promptId] of delivered) this.pendingPrompts.delete(promptId);
-    const prompts = delivered.map(([, prompt]) => prompt);
-    const settle = (): void => {
-      for (const prompt of prompts) prompt.settle(end);
-      this.recomputeStatusIfChanged();
-    };
-    if (end.error !== undefined) {
-      this.failReply(end.error);
-      return settle();
-    }
-    // An agent cut off at its output limit gets the cause and one chance to continue in the same reply. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-    if (end.stopReason === "max_tokens" && prompts.some((p) => p.continuesAtOutputLimit)) {
-      if (this.placeholderId && this.store.settleOpenParts(this.placeholderId, "failed")) {
-        this.notifyMessages();
-      }
-      return settle();
-    }
-    void this.finalizeReply(end.stopReason, end.turnDiff).then(settle);
-  }
-
-  private endCancelledPromptDrain(): void {
-    this.finishCancelledPromptDrain?.();
-    this.finishCancelledPromptDrain = null;
-    this.cancelledPromptDrain = null;
-    this.stoppedPromptIds = EMPTY_PROMPT_IDS;
-  }
-
-  private openReply(continuesTurn = false, startedAtMs = Date.now()): string {
-    this.replyStartedAtMs = startedAtMs;
-    this.placeholderId = this.store.addMessage({
-      message: "",
-      sender: AI_SENDER,
-      timestamp: formatDateTime(new Date(this.replyStartedAtMs)),
-      isVisible: true,
-      parts: [],
-    });
-    this.currentMessageIds = new Set();
-    if (!continuesTurn) {
-      this.currentTurnShowedActivityElsewhere = false;
-      this.turnFiles = new Map();
-    }
-    this.notifyMessages();
-    return this.placeholderId;
-  }
-
-  private async finalizeReply(stopReason: StopReason, turnDiff?: TurnDiff): Promise<void> {
-    const placeholderId = this.placeholderId;
-    if (!placeholderId) return;
-    const turnStartedAtMs = this.replyStartedAtMs;
-    this.placeholderId = null;
-    this.settledStream =
-      stopReason === "cancelled"
-        ? null
-        : { placeholderId, messageIds: this.currentMessageIds, turnStartedAtMs };
-    this.currentMessageIds = new Set();
-    if (
-      stopReason !== "cancelled" &&
-      !this.currentTurnShowedActivityElsewhere &&
-      !this.store.hasAssistantActivity(placeholderId)
-    ) {
-      const message = buildEmptyTurnMessage(this.backendId, stopReason);
-      logWarn(
-        `[AgentMode] ${this.backendId} completed a turn without assistant text or tool activity (stopReason=${stopReason})`
-      );
-      this.store.markMessageError(placeholderId, message);
-    }
-    // Stop ends the turn's tool calls with it; a background task launched in the turn keeps running. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (stopReason === "cancelled") {
-      const startedTasks = [...this.tasks.values()].filter(
-        (task) => task.status === "running" && task.taskId !== undefined
-      );
-      this.store.stopToolCalls(placeholderId, new Set(startedTasks.map((task) => task.toolCallId)));
-    }
-    this.store.settleOpenParts(placeholderId);
-    this.endLaunchesOfEndedTurn(stopReason === "cancelled" ? "stopped" : "failed");
-    // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    const turnFiles = this.turnFiles;
-    this.turnFiles = new Map();
-    const filesChanged = await this.finalizeFileChanges(
-      turnFiles,
-      this.store,
-      placeholderId,
-      turnDiff
-    ).catch((err: unknown) => {
-      logWarn(`[AgentMode] could not capture the turn's file changes`, err);
-      return false;
-    });
-    if (filesChanged) this.notifyMessages();
-    if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
-      this.notifyMessages();
-    }
-    if (stopReason === "end_turn") void this.pollSessionTitle();
-  }
-
-  private failReply(err: unknown): void {
-    logWarn(`[AgentMode] prompt failed`, err);
-    const placeholderId = this.placeholderId ?? this.openReply();
-    // The turn's error already shows the failure, so the row must not repeat it.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-    this.store.settleOpenParts(placeholderId, "failed");
-    this.endLaunchesOfEndedTurn("failed");
-    this.store.markMessageError(
-      placeholderId,
-      formatPromptFailure(err),
-      Date.now() - this.replyStartedAtMs
-    );
-    this.placeholderId = null;
-    this.currentMessageIds = new Set();
-    this.lastTurnError = true;
-    this.notifyMessages();
-  }
-
-  private resolveContentTarget(messageId: string | undefined): string | null {
-    if (
-      this.cancelledPromptDrain ||
-      this.abortController?.signal.aborted ||
-      (messageId !== undefined && this.cancelledMessageIds.has(messageId))
-    ) {
-      return null;
-    }
-    if (messageId && this.settledStream?.messageIds.has(messageId)) {
-      return this.settledStream.placeholderId;
-    }
-    const placeholderId = this.placeholderId;
-    if (!placeholderId) return null;
-    if (messageId) this.currentMessageIds.add(messageId);
-    return placeholderId;
-  }
-
   // A subagent's edits belong to its own capture, never to the card of the main-agent run open beside it. https://github.com/Brevilabs/obsidian-copilot-private/issues/669
   private filesOf(requester: PermissionRequester): FileCaptures | undefined {
-    if (requester === "main") return this.turnFiles;
+    if (requester === "main") return this.turns.getTurnFiles();
     const toolCallId = this.taskWithId(requester.taskId)?.toolCallId;
     return toolCallId === undefined ? undefined : this.filesOfTask(toolCallId);
   }
@@ -2151,21 +1813,4 @@ export class AgentSession {
       }
     }
   }
-}
-
-function buildUserMessage(
-  id: string,
-  text: string,
-  context: MessageContext | undefined,
-  promptContent: PromptContent[] | undefined
-): NewAgentChatMessage {
-  return {
-    id,
-    message: text,
-    sender: USER_SENDER,
-    timestamp: formatDateTime(new Date()),
-    isVisible: true,
-    context,
-    content: buildUserDisplayContent(text, promptContent),
-  };
 }

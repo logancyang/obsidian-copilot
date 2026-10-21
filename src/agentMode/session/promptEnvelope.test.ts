@@ -1,9 +1,11 @@
 import type { TFile } from "obsidian";
+import { USER_SENDER } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
 import { FANOUT_READONLY_PREAMBLE } from "./fanout/fanoutTypes";
 import {
   buildPromptBlocks,
   buildUserDisplayContent,
+  buildUserMessage,
   extractText,
   serializeWebTabContext,
   stripUserMessageWrapper,
@@ -301,6 +303,35 @@ describe("promptEnvelope", () => {
       expect(
         buildUserDisplayContent("   ", [{ type: "image", mimeType: "image/png", data: "AAA=" }])
       ).toEqual([{ type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } }]);
+    });
+  });
+
+  describe("buildUserMessage()", () => {
+    it("builds a visible user bubble with the prompt's id, text, context and timestamp", () => {
+      const context = { notes: [], urls: ["https://example.com"] };
+
+      const message = buildUserMessage("p1", "summarize this", context, undefined);
+
+      expect(message).toMatchObject({
+        id: "p1",
+        message: "summarize this",
+        sender: USER_SENDER,
+        isVisible: true,
+        context,
+        content: undefined,
+      });
+      expect(message.timestamp).not.toBeNull();
+    });
+
+    it("shows the prompt's images beside its text", () => {
+      const message = buildUserMessage("p1", "describe this", undefined, [
+        { type: "image", mimeType: "image/png", data: "AAA=" },
+      ]);
+
+      expect(message.content).toEqual([
+        { type: "text", text: "describe this" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
+      ]);
     });
   });
 

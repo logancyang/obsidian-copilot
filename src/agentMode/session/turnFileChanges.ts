@@ -2,6 +2,14 @@ import { toVaultTargetPath } from "@/agentMode/session/editTargets";
 import type { TurnDiff, TurnFileChange } from "@/agentMode/session/types";
 import { applyPatch, diffLines, parsePatch, reversePatch, type StructuredPatch } from "diff";
 
+export interface TurnFileCapture {
+  edited: boolean;
+  snapshot: Promise<string | null>;
+  writeTimeBefore?: string | null;
+}
+
+export type FileCaptures = Map<string, TurnFileCapture>;
+
 export function buildTurnFileChange(
   path: string,
   before: string | null,
