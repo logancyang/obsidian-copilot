@@ -96,6 +96,15 @@ describe("taskOutputTail", () => {
         expect(next).toEqual({ text: "cccc\n", truncated: true });
       });
 
+      it(`keeps the newest part of a single line longer than the cap instead of showing no output (${ISSUE_749})`, async () => {
+        const file = memoryReader("x".repeat(20) + "\n");
+        const tail = new TaskOutputTail(PATH, 8, file.reader);
+
+        const snapshot = await tail.poll();
+
+        expect(snapshot).toEqual({ text: "xxxxxxx\n", truncated: true });
+      });
+
       it("decodes a character split across two reads", async () => {
         const file = memoryReader();
         const tail = new TaskOutputTail(PATH, 1024, file.reader);

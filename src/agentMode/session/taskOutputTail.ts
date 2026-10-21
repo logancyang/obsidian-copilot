@@ -46,7 +46,9 @@ export function lastOutputLine(text: string): string {
 
 function dropPartialFirstLine(text: string): string {
   const newline = text.indexOf("\n");
-  return newline === -1 ? text : text.slice(newline + 1);
+  const rest = newline === -1 ? text : text.slice(newline + 1);
+  // A single line longer than the cap would otherwise leave no output to show. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  return rest.trim().length > 0 ? rest : text;
 }
 
 // A command's output can grow without bound, so only its newest bytes are read and kept. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
