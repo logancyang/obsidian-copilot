@@ -38,7 +38,11 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
   const [open, setOpen] = useState(defaultOpen);
   const closeTimer = useRef<number | null>(null);
   const running = runningTasks(tasks);
-  if (running.length === 0) return null;
+  if (running.length === 0) {
+    // The list unmounts under the pointer when the last task ends, so no hover-out ever closes it. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (open) setOpen(false);
+    return null;
+  }
 
   const cancelClose = () => {
     if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);

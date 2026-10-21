@@ -54,6 +54,18 @@ describe("RunningTasksIndicator", () => {
     expect(container.textContent).toBe("");
   });
 
+  it(`keeps its list closed when tasks run again after the last one ended while the list was open (${ISSUE_749})`, () => {
+    const { rerenderWith } = renderIndicator({});
+    fireEvent.pointerEnter(screen.getByRole("button", { name: "2 tasks running" }));
+    expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
+
+    rerenderWith({ tasks: [] });
+    rerenderWith({ tasks: [makeCommandTask({ taskId: "task-3" })] });
+
+    expect(screen.getByRole("button", { name: "1 task running" })).toBeTruthy();
+    expect(screen.queryByText("Print 30 progress lines")).toBeNull();
+  });
+
   it(`opens on hover with one row per running task, a subagent row naming its status (${ISSUE_749})`, async () => {
     renderIndicator({ permissions: [] }, { [OUTPUT]: "line 1\n" });
 
