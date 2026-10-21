@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
@@ -10,7 +10,6 @@ import {
   AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
-  AgentToolCallOutput,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -28,7 +27,6 @@ import {
   PermissionOptionKind,
   PermissionPrompt,
   PlanDecisionAction,
-  PlanSummary,
   PromptContent,
   PromptInput,
   PromptOutput,
@@ -37,17 +35,12 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
-  ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
   TurnFileChange,
 } from "@/agentMode/session/types";
-import {
-  isNoteSelectedTextContext,
-  isWebSelectedTextContext,
-  MessageContext,
-} from "@/types/message";
+import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime, type FormattedDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import type { App, DataAdapter } from "obsidian";
@@ -67,8 +60,6 @@ import {
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
-import { ContextProcessor } from "@/contextProcessor";
-import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
@@ -77,7 +68,6 @@ import {
 } from "@/agentMode/session/conversationHistory";
 import {
   buildPriorFanoutContextBlock,
-  FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
   renderFanoutComposite,
   serializeFanoutComposite,
@@ -93,9 +83,23 @@ import {
   pickEnabledModel,
 } from "@/agentMode/session/enabledModelSelection";
 import {
+  buildPromptBlocks,
+  buildUserDisplayContent,
+  extractText,
   OUTPUT_LIMIT_CONTINUATION_PROMPT,
+  serializeWebTabContext,
   stripUserMessageWrapper,
+  withReadOnlyPreamble,
 } from "@/agentMode/session/promptEnvelope";
+import { buildEmptyTurnMessage, formatPromptFailure } from "@/agentMode/session/promptFailure";
+import {
+  compactionToPart,
+  derivePlanTitleFromMarkdown,
+  mergeToolCallUpdate,
+  planToPart,
+  toolCallToPart,
+  tryReadExitPlanModeCall,
+} from "@/agentMode/session/messageParts";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -103,7 +107,6 @@ import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedba
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
-const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
 const CANCELLED_TURN_QUIET_MS = 1_000;
 const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
@@ -1956,292 +1959,6 @@ export class AgentSession {
   }
 }
 
-function buildEmptyTurnMessage(backendId: BackendId, stopReason: StopReason): string {
-  return `${backendId} finished the turn without returning any assistant text or tool activity (stop reason: ${stopReason}). Try again, or switch models if this repeats.`;
-}
-
-function formatPromptFailure(err: unknown): string {
-  const base = err2String(err);
-  const providerMessage = extractProviderErrorMessage(err);
-  if (!providerMessage || base.includes(providerMessage)) return base;
-  return `${base}\n${providerMessage}`;
-}
-
-function extractProviderErrorMessage(err: unknown): string | null {
-  const found = findProviderErrorPayload(err, new Set<unknown>());
-  if (!found) return null;
-  const type = typeof found.type === "string" ? found.type : "ProviderError";
-  const message = typeof found.message === "string" ? found.message : null;
-  if (!message) return type;
-  return `${type}: ${message}`;
-}
-
-function findProviderErrorPayload(
-  value: unknown,
-  seen: Set<unknown>
-): { type?: unknown; message?: unknown } | null {
-  if (value === null || typeof value !== "object") return null;
-  if (seen.has(value)) return null;
-  seen.add(value);
-  const record = value as Record<string, unknown>;
-  const directError = record.error;
-  if (directError && typeof directError === "object") {
-    const errorRecord = directError as Record<string, unknown>;
-    if (typeof errorRecord.message === "string" || typeof errorRecord.type === "string") {
-      return { type: errorRecord.type, message: errorRecord.message };
-    }
-  }
-  if (typeof record.message === "string") {
-    const parsed = tryParseJsonObject(record.message);
-    if (parsed) {
-      const nested = findProviderErrorPayload(parsed, seen);
-      if (nested) return nested;
-    }
-  }
-  if (record.data) {
-    const nested = findProviderErrorPayload(record.data, seen);
-    if (nested) return nested;
-  }
-  if (Array.isArray(record.errors)) {
-    for (const item of record.errors) {
-      const nested = findProviderErrorPayload(item, seen);
-      if (nested) return nested;
-    }
-  }
-  const cause = record.cause;
-  if (cause) return findProviderErrorPayload(cause, seen);
-  return null;
-}
-
-function tryParseJsonObject(s: string): Record<string, unknown> | null {
-  const t = s.trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const v = JSON.parse(t);
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-type DisplayContentItem =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
-
-export function buildUserDisplayContent(
-  displayText: string,
-  promptContent?: PromptContent[]
-): DisplayContentItem[] | undefined {
-  const images = (promptContent ?? []).filter(
-    (p): p is Extract<PromptContent, { type: "image" }> => p.type === "image"
-  );
-  if (images.length === 0) return undefined;
-  const content: DisplayContentItem[] = [];
-  if (displayText.trim()) content.push({ type: "text", text: displayText });
-  for (const img of images) {
-    content.push({
-      type: "image_url",
-      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
-    });
-  }
-  return content;
-}
-
-export function buildPromptBlocks(
-  displayText: string,
-  context?: MessageContext,
-  content?: PromptContent[],
-  webTabBlock?: string,
-  projectContextBlock?: string | null,
-  leadingContextBlock?: string | null,
-  projectContextUpdatesBlock?: string | null
-): PromptContent[] {
-  const sections = [
-    projectContextBlock?.trim() || null,
-    projectContextUpdatesBlock?.trim() || null,
-    leadingContextBlock?.trim() || null,
-    buildContextEnvelope(context),
-    buildWebSelectionBlocks(context),
-    webTabBlock?.trim() || null,
-  ].filter((s): s is string => Boolean(s));
-  const head = sections.length > 0 ? sections.join("\n\n") : null;
-  const headText = head
-    ? `${head}\n\n<user-message>\n${displayText}\n</user-message>`
-    : displayText;
-  const extras = content ?? [];
-  if (extras.length === 0) return [{ type: "text", text: headText }];
-  return [{ type: "text", text: headText }, ...extras];
-}
-
-export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
-  const i = blocks.findIndex((b) => b.type === "text");
-  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
-  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
-  const out = blocks.slice();
-  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
-  return out;
-}
-
-async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {
-  const webTabs = context?.webTabs;
-  if (!webTabs || webTabs.length === 0) return "";
-  return (await ContextProcessor.getInstance().processContextWebTabs(webTabs)).trim();
-}
-
-function buildWebSelectionBlocks(context: MessageContext | undefined): string | null {
-  const selections = (context?.selectedTextContexts ?? []).filter(isWebSelectedTextContext);
-  if (selections.length === 0) return null;
-  return selections
-    .map((s) =>
-      [
-        `<${WEB_SELECTED_TEXT_TAG}>`,
-        `<title>${escapeXml(s.title)}</title>`,
-        `<url>${escapeXml(s.url)}</url>`,
-        `<content>\n${escapeXml(s.content)}\n</content>`,
-        `</${WEB_SELECTED_TEXT_TAG}>`,
-      ].join("\n")
-    )
-    .join("\n\n");
-}
-
-function buildContextEnvelope(context: MessageContext | undefined): string | null {
-  if (!context) return null;
-  const notePaths = (context.notes ?? []).map((n) => n.path).filter(Boolean);
-  const excerpts = (context.selectedTextContexts ?? []).filter(isNoteSelectedTextContext);
-  if (notePaths.length === 0 && excerpts.length === 0) return null;
-
-  const lines: string[] = [
-    "<copilot-context>",
-    "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
-  ];
-  if (notePaths.length > 0) {
-    lines.push("", "Notes:");
-    for (const p of notePaths) lines.push(`- ${p}`);
-  }
-  if (excerpts.length > 0) {
-    lines.push("", "Selected excerpts (already inlined; no need to re-read):");
-    for (const e of excerpts) {
-      const location = e.startLine > 0 ? ` (lines ${e.startLine}-${e.endLine})` : "";
-      lines.push(`- ${e.notePath}${location}:`);
-      for (const l of e.content.split("\n")) lines.push(`  ${l}`);
-    }
-  }
-  lines.push("</copilot-context>");
-  return lines.join("\n");
-}
-
-function extractText(content: PromptContent): string {
-  if (content.type === "text") return content.text;
-  return "";
-}
-
-function toolCallToPart(
-  call: ToolCallSnapshot & { sessionUpdate?: "tool_call" }
-): AgentMessagePart {
-  return {
-    kind: "tool_call",
-    id: call.toolCallId,
-    title: call.title,
-    toolKind: call.kind,
-    status: call.status ?? "pending",
-    input: call.rawInput,
-    output: extractToolCallOutputs(call.content),
-    locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
-    vendorToolName: call.vendorToolName,
-    mcpServer: call.mcpServer,
-    parentToolCallId: call.parentToolCallId,
-    progress: call.progress,
-  };
-}
-
-export function tryReadExitPlanModeCall(args: {
-  kind?: string;
-  rawInput: unknown;
-  isPlanProposal?: boolean;
-}): { plan: string; planFilePath?: string } | null {
-  const raw = args.rawInput as { plan?: unknown; planFilePath?: unknown } | null | undefined;
-  const plan = raw?.plan;
-  if (typeof plan !== "string") return null;
-  if (!args.isPlanProposal && args.kind !== "switch_mode") return null;
-  const planFilePath = typeof raw?.planFilePath === "string" ? raw.planFilePath : undefined;
-  return { plan, planFilePath };
-}
-
-function derivePlanTitleFromMarkdown(md: string): string {
-  for (const line of md.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    return trimmed.replace(/^#+\s*/, "").slice(0, 80);
-  }
-  return "Plan proposal";
-}
-
-function mergeToolCallUpdate(
-  existing: AgentMessagePart | undefined,
-  upd: ToolCallDelta & { sessionUpdate?: "tool_call_update" }
-): AgentMessagePart {
-  const base: AgentMessagePart =
-    existing && existing.kind === "tool_call"
-      ? existing
-      : {
-          kind: "tool_call",
-          id: upd.toolCallId,
-          title: upd.title ?? "Tool call",
-          status: "pending",
-        };
-  if (base.kind !== "tool_call") return base;
-  return {
-    ...base,
-    title: upd.title ?? base.title,
-    toolKind: upd.kind ?? base.toolKind,
-    status: upd.status ?? base.status,
-    input: upd.rawInput !== undefined ? upd.rawInput : base.input,
-    output:
-      upd.content !== undefined && upd.content !== null
-        ? extractToolCallOutputs(upd.content)
-        : base.output,
-    locations:
-      upd.locations !== undefined && upd.locations !== null
-        ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
-        : base.locations,
-    vendorToolName: upd.vendorToolName ?? base.vendorToolName,
-    mcpServer: upd.mcpServer ?? base.mcpServer,
-    parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
-    progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
-  };
-}
-
-function extractToolCallOutputs(
-  content: ToolCallContent[] | null | undefined
-): AgentToolCallOutput[] | undefined {
-  if (!content) return undefined;
-  const outputs: AgentToolCallOutput[] = [];
-  for (const item of content) {
-    if (item.type === "content" && item.content.type === "text") {
-      outputs.push(capToolOutputText(item.content.text));
-    } else if (item.type === "diff") {
-      outputs.push({
-        type: "diff",
-        path: item.path,
-        oldText: item.oldText ?? null,
-        newText: item.newText,
-      });
-    }
-  }
-  return outputs.length > 0 ? outputs : undefined;
-}
-
-function capToolOutputText(text: string): AgentToolCallOutput {
-  if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) return { type: "text", text };
-  const omitted = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
-  return {
-    type: "text",
-    text:
-      text.slice(0, MAX_TOOL_OUTPUT_TEXT_CHARS) +
-      `\n\n[Display trimmed: ${omitted.toLocaleString()} more characters. The agent received the full output.]`,
-  };
-}
-
 function decisionFor(
   req: PermissionPrompt,
   kinds: ReadonlyArray<PermissionOptionKind>
@@ -2251,30 +1968,6 @@ function decisionFor(
     if (opt) return { outcome: { outcome: "selected", optionId: opt.optionId } };
   }
   return { outcome: { outcome: "cancelled" } };
-}
-
-function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessagePart {
-  return {
-    kind: "plan",
-    entries: plan.entries.map((e) => ({
-      content: e.content,
-      priority: e.priority,
-      status: e.status,
-    })),
-  };
-}
-
-function compactionToPart(update: CompactionSnapshot, startedAtMs: number): AgentMessagePart {
-  return {
-    kind: "compaction",
-    id: update.id,
-    status: update.status,
-    trigger: update.trigger,
-    error: update.error,
-    preTokens: update.preTokens,
-    postTokens: update.postTokens,
-    startedAtMs,
-  };
 }
 
 function historyTimestamp(occurredAt: number | undefined): FormattedDateTime | null {

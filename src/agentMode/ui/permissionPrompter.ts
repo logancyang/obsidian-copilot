@@ -1,4 +1,5 @@
-import { tryReadExitPlanModeCall, type AgentSession } from "@/agentMode/session/AgentSession";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { tryReadExitPlanModeCall } from "@/agentMode/session/messageParts";
 import type {
   AskUserQuestionPrompter,
   PermissionPrompter,
