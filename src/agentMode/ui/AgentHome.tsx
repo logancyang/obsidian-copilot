@@ -643,7 +643,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 className={
                   isLanding
                     ? "tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2"
-                    : "tw-flex tw-size-full tw-flex-col tw-overflow-hidden"
+                    : "tw-relative tw-flex tw-size-full tw-flex-col tw-overflow-hidden"
                 }
                 data-agent-landing={
                   isProjectLanding ? "project" : isLanding ? "global" : "conversation"
@@ -703,11 +703,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         }
                       />
                     ) : null}
-                    {/* The chat stays mounted under a task's view so its scroll position and draft survive. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
+                    {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
                     <div
                       className={cn(
                         "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
-                        detailTask && "tw-hidden"
+                        detailTask && "tw-invisible tw-absolute tw-inset-0"
                       )}
                     >
                       <AgentChatMessages
