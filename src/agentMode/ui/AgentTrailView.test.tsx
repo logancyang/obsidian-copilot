@@ -722,7 +722,7 @@ describe("AgentTrail", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Count words in Welcome/ }));
 
-      expect(openTask).toHaveBeenCalledWith("task-1");
+      expect(openTask).toHaveBeenCalledWith("call-1");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps a background command's card out of the surrounding command group", () => {

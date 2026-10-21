@@ -7,24 +7,25 @@ import {
   runningTasks,
   taskBadgeStatus,
   taskDisplayStatus,
-  taskKindLabel,
+  taskLabel,
   taskStatusLabel,
-  taskTitle,
 } from "@/agentMode/ui/taskDisplay";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { Bot, Loader2, Square, Terminal } from "lucide-react";
 import React, { useRef, useState } from "react";
 
 const ROW_OUTPUT_BYTES = 4096;
+export const STOP_UNAVAILABLE_UNTIL_STARTED = "Can stop once the task starts";
 const HOVER_CLOSE_MS = 150;
 
 interface RunningTasksIndicatorProps {
   tasks: readonly AgentTask[];
   permissions: readonly PermissionPrompt[];
-  onOpenTask: (taskId: string) => void;
+  onOpenTask: (toolCallId: string) => void;
   onStopTask?: (taskId: string) => void;
   container?: HTMLElement | null;
   defaultOpen?: boolean;
@@ -87,31 +88,53 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
       >
         <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-p-0">
           {running.map((task) => (
-            <li key={task.taskId} className="tw-flex tw-items-start tw-gap-1">
+            <li key={task.toolCallId} className="tw-flex tw-items-start tw-gap-1">
               <RunningTaskRow
                 task={task}
                 status={taskDisplayStatus(task, permissions)}
                 onOpen={() => {
                   setOpen(false);
-                  onOpenTask(task.taskId);
+                  onOpenTask(task.toolCallId);
                 }}
               />
-              {onStopTask && (
-                <Button
-                  variant="ghost2"
-                  size="fit"
-                  className="tw-mt-2 tw-shrink-0 tw-p-1 tw-text-muted hover:tw-text-error"
-                  aria-label="Stop task"
-                  onClick={() => onStopTask(task.taskId)}
-                >
-                  <Square className="tw-size-3 tw-fill-current" />
-                </Button>
-              )}
+              {onStopTask && <StopTaskButton taskId={task.taskId} onStopTask={onStopTask} />}
             </li>
           ))}
         </ul>
       </PopoverContent>
     </Popover>
+  );
+};
+
+// Stopping needs the id the agent gives a task once it starts; until then the control stays in place, disabled, and says why. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+const StopTaskButton: React.FC<{
+  taskId: string | undefined;
+  onStopTask: (taskId: string) => void;
+}> = ({ taskId, onStopTask }) => {
+  const disabled = taskId === undefined;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost2"
+          size="fit"
+          className={cn(
+            "tw-mt-2 tw-shrink-0 tw-p-1 tw-text-muted",
+            disabled ? "tw-cursor-not-allowed tw-opacity-50" : "hover:tw-text-error"
+          )}
+          aria-label="Stop task"
+          aria-disabled={disabled || undefined}
+          onClick={() => {
+            if (!disabled) onStopTask(taskId);
+          }}
+        >
+          <Square className="tw-size-3 tw-fill-current" />
+        </Button>
+      </TooltipTrigger>
+      {disabled ? (
+        <TooltipContent side="left">{STOP_UNAVAILABLE_UNTIL_STARTED}</TooltipContent>
+      ) : null}
+    </Tooltip>
   );
 };
 
@@ -135,11 +158,7 @@ const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen })
     >
       <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">
         <Icon className="tw-size-3.5 tw-shrink-0 tw-text-normal" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">
-          {task.kind === "command"
-            ? taskTitle(task)
-            : `${taskKindLabel(task)} · ${taskTitle(task)}`}
-        </span>
+        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-normal">{taskLabel(task)}</span>
         <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-text-normal">
           {taskStatusLabel(status)}
           <StatusBadge status={taskBadgeStatus(status)} />

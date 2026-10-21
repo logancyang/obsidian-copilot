@@ -120,6 +120,11 @@ const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   failed: "failed",
   stopped: "cancelled",
 };
+const UNSTARTED_TASK_END: Partial<Record<AgentToolStatus, TaskEndStatus>> = {
+  completed: "completed",
+  failed: "failed",
+  cancelled: "stopped",
+};
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
@@ -1238,10 +1243,8 @@ export class AgentSession {
     return this.taskList;
   }
 
-  getTaskMessages(taskId: string): readonly AgentChatMessage[] {
-    const toolCallId = this.tasks.get(taskId)?.toolCallId;
-    const store = toolCallId ? this.taskContent.get(toolCallId) : undefined;
-    return store?.getDisplayMessages() ?? EMPTY_MESSAGES;
+  getTaskMessages(toolCallId: string): readonly AgentChatMessage[] {
+    return this.taskContent.get(toolCallId)?.getDisplayMessages() ?? EMPTY_MESSAGES;
   }
 
   getReportEvidence(): FeedbackEvidence {
@@ -1515,6 +1518,7 @@ export class AgentSession {
         if (this.store.upsertAgentPart(targetMessageId, merged)) {
           this.scheduleNotifyMessages();
         }
+        this.endUnstartedTasks();
         return;
       }
       case "plan": {
@@ -1576,6 +1580,10 @@ export class AgentSession {
   // The next send reconnects the agent, so the chat only reports the loss. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
   private handleDisconnect(error: Error): void {
     this.endCancelledPromptDrain();
+    // A launch the agent never started cannot start after the connection is gone. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    for (const task of this.tasks.values()) {
+      if (task.taskId === undefined && task.status === "running") this.endTask(task, "stopped");
+    }
     if (this.placeholderId || this.pendingPrompts.size > 0) this.failReply(error);
     this.withdrawPrompts([...this.pendingPrompts.keys()]);
     for (const l of this.listeners) {
@@ -1593,21 +1601,8 @@ export class AgentSession {
       { sessionUpdate: "task_started" | "task_progress" | "task_ended" }
     >
   ): void {
-    if (update.sessionUpdate === "task_started") {
-      const { taskId, toolCallId, kind, description, prompt, subagentType, command } = update;
-      this.tasks.set(taskId, {
-        taskId,
-        toolCallId,
-        kind,
-        description,
-        prompt,
-        subagentType,
-        command,
-        status: "running",
-      });
-      return this.publishTasks();
-    }
-    const task = this.tasks.get(update.taskId);
+    if (update.sessionUpdate === "task_started") return this.startTask(update);
+    const task = this.taskWithId(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
       // Usage counts show only on the launching card, so a usage-only frame leaves task cards alone. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
@@ -1617,22 +1612,75 @@ export class AgentSession {
       const model = update.model ?? task.model;
       const outputFile = update.outputFile ?? task.outputFile;
       if (model === task.model && outputFile === task.outputFile) return;
-      this.tasks.set(task.taskId, { ...task, model, outputFile });
+      this.tasks.set(task.toolCallId, { ...task, model, outputFile });
       return this.publishTasks();
     }
-    this.tasks.set(task.taskId, {
+    this.endTask(task, update.status, update.summary, update.outputFile);
+  }
+
+  // One entry per launching tool call, so a task's card, row and open view keep their identity when its id arrives. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  private startTask(start: TaskStart): void {
+    const existing = this.tasks.get(start.toolCallId);
+    if (start.taskId === undefined && existing && existing.status !== "running") return;
+    this.tasks.set(start.toolCallId, {
+      ...existing,
+      toolCallId: start.toolCallId,
+      kind: start.kind,
+      taskId: start.taskId ?? existing?.taskId,
+      description: start.description || existing?.description || "",
+      prompt: start.prompt ?? existing?.prompt,
+      subagentType: start.subagentType ?? existing?.subagentType,
+      command: start.command ?? existing?.command,
+      status: "running",
+    });
+    this.publishTasks();
+  }
+
+  private taskWithId(taskId: string): AgentTask | undefined {
+    for (const task of this.tasks.values()) if (task.taskId === taskId) return task;
+    return undefined;
+  }
+
+  // A launch that settles before the agent names its task never became one: it was denied, failed or stopped. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  private endUnstartedTasks(): void {
+    for (const task of this.tasks.values()) {
+      if (task.taskId !== undefined || task.status !== "running") continue;
+      const card = this.findLaunchCard(task.toolCallId)?.card;
+      const status = card?.kind === "tool_call" ? UNSTARTED_TASK_END[card.status] : undefined;
+      if (status) this.endTask(task, status);
+    }
+  }
+
+  private findLaunchCard(
+    toolCallId: string
+  ): { store: AgentMessageStore; messageId: string; card?: AgentMessagePart } | undefined {
+    for (const store of [this.store, ...this.taskContent.values()]) {
+      const messageId = store.findMessageIdWithToolCall(toolCallId);
+      if (!messageId) continue;
+      const card = store
+        .getMessage(messageId)
+        ?.parts?.find((part) => part.kind === "tool_call" && part.id === toolCallId);
+      return { store, messageId, card };
+    }
+    return undefined;
+  }
+
+  private endTask(
+    task: AgentTask,
+    status: TaskEndStatus,
+    summary?: string,
+    outputFile?: string
+  ): void {
+    this.tasks.set(task.toolCallId, {
       ...task,
-      status: update.status,
-      summary: update.summary,
-      outputFile: update.outputFile ?? task.outputFile,
+      status,
+      summary,
+      outputFile: outputFile ?? task.outputFile,
     });
     // The launching card follows its task. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
-    this.updateLaunchCard({
-      toolCallId: task.toolCallId,
-      status: LAUNCH_CARD_STATUS[update.status],
-    });
+    this.updateLaunchCard({ toolCallId: task.toolCallId, status: LAUNCH_CARD_STATUS[status] });
     // A request from a task that has ended can no longer be answered, so its card must not stay open. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
-    this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
+    if (task.taskId !== undefined) this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
     // A tool call cut short by its task's end would otherwise spin in the task's view forever. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
     const content = this.taskContent.get(task.toolCallId);
     const contentId = content?.getDisplayMessages()[0]?.id;
@@ -1658,25 +1706,18 @@ export class AgentSession {
   private withEndedTaskStatus<T extends { toolCallId: string }>(
     update: T
   ): T | (T & { status: AgentToolStatus }) {
-    const taskStatus = [...this.tasks.values()].find(
-      (task) => task.toolCallId === update.toolCallId
-    )?.status;
+    const taskStatus = this.tasks.get(update.toolCallId)?.status;
     return taskStatus && taskStatus !== "running"
       ? { ...update, status: LAUNCH_CARD_STATUS[taskStatus] }
       : update;
   }
 
   private updateLaunchCard(delta: ToolCallDelta): void {
-    for (const store of [this.store, ...this.taskContent.values()]) {
-      const messageId = store.findMessageIdWithToolCall(delta.toolCallId);
-      if (!messageId) continue;
-      const card = store
-        .getMessage(messageId)
-        ?.parts?.find((part) => part.kind === "tool_call" && part.id === delta.toolCallId);
-      if (store.upsertAgentPart(messageId, mergeToolCallUpdate(card, delta))) {
-        if (store === this.store) this.scheduleNotifyMessages();
-      }
-      return;
+    const launch = this.findLaunchCard(delta.toolCallId);
+    if (!launch) return;
+    const { store, messageId, card } = launch;
+    if (store.upsertAgentPart(messageId, mergeToolCallUpdate(card, delta))) {
+      if (store === this.store) this.scheduleNotifyMessages();
     }
   }
 
@@ -1722,6 +1763,7 @@ export class AgentSession {
         );
         this.observeToolResult(this.filesOfTask(toolCallId), merged, update);
         changed = store.upsertAgentPart(messageId, merged);
+        this.endUnstartedTasks();
         break;
       }
       default:
@@ -1825,8 +1867,11 @@ export class AgentSession {
     }
     // Stop ends the turn's tool calls with it; a background task launched in the turn keeps running. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
     if (stopReason === "cancelled") {
-      const runningTasks = [...this.tasks.values()].filter((task) => task.status === "running");
-      this.store.stopToolCalls(placeholderId, new Set(runningTasks.map((task) => task.toolCallId)));
+      const startedTasks = [...this.tasks.values()].filter(
+        (task) => task.status === "running" && task.taskId !== undefined
+      );
+      this.store.stopToolCalls(placeholderId, new Set(startedTasks.map((task) => task.toolCallId)));
+      this.endUnstartedTasks();
     }
     this.store.settleOpenParts(placeholderId);
     // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
@@ -1885,7 +1930,7 @@ export class AgentSession {
   // A subagent's edits belong to its own capture, never to the card of the main-agent run open beside it. https://github.com/Brevilabs/obsidian-copilot-private/issues/669
   private filesOf(requester: PermissionRequester): FileCaptures | undefined {
     if (requester === "main") return this.turnFiles;
-    const toolCallId = this.tasks.get(requester.taskId)?.toolCallId;
+    const toolCallId = this.taskWithId(requester.taskId)?.toolCallId;
     return toolCallId === undefined ? undefined : this.filesOfTask(toolCallId);
   }
 

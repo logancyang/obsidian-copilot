@@ -2,6 +2,7 @@ import type { PermissionPrompt } from "@/agentMode/session/types";
 import { TaskOutputReaderContext } from "@/agentMode/ui/hooks/useTaskOutputTail";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { makeCommandTask, makeTask, textOutputReader } from "@/agentMode/ui/testing/taskFixtures";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
@@ -45,17 +46,19 @@ const renderWithOutput = ({
   defaultOpen,
   onStopTask,
 }: Partial<Props>) => (
-  <TaskOutputReaderContext.Provider value={OUTPUT_READER}>
-    <div className="tw-flex tw-h-72 tw-items-end">
-      <RunningTasksIndicator
-        tasks={tasks}
-        permissions={permissions}
-        defaultOpen={defaultOpen}
-        onOpenTask={() => {}}
-        onStopTask={onStopTask}
-      />
-    </div>
-  </TaskOutputReaderContext.Provider>
+  <TooltipProvider>
+    <TaskOutputReaderContext.Provider value={OUTPUT_READER}>
+      <div className="tw-flex tw-h-72 tw-items-end">
+        <RunningTasksIndicator
+          tasks={tasks}
+          permissions={permissions}
+          defaultOpen={defaultOpen}
+          onOpenTask={() => {}}
+          onStopTask={onStopTask}
+        />
+      </div>
+    </TaskOutputReaderContext.Provider>
+  </TooltipProvider>
 );
 
 export const Count: StoryObj<Props> = { render: renderWithOutput };
@@ -78,4 +81,21 @@ export const NeedsApproval: StoryObj<Props> = {
 export const PopoverRowsWithStop: StoryObj<Props> = {
   render: renderWithOutput,
   args: { defaultOpen: true, onStopTask: () => {} },
+};
+
+export const PopoverRowsStarting: StoryObj<Props> = {
+  render: renderWithOutput,
+  args: {
+    defaultOpen: true,
+    onStopTask: () => {},
+    tasks: [
+      makeTask({ taskId: undefined, description: "", subagentType: undefined }),
+      makeTask({
+        taskId: undefined,
+        toolCallId: "call-4",
+        description: "Summarize the meeting notes",
+      }),
+      makeCommandTask(),
+    ],
+  },
 };

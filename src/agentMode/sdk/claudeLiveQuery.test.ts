@@ -87,7 +87,7 @@ function lifecycle(updates: SessionUpdate[]): string[] {
       case "session_disconnected":
         return [`disconnected: ${update.error.message}`];
       case "task_started":
-        return [`task_started ${update.taskId}`];
+        return [`task_started ${update.taskId ?? `launch ${update.toolCallId}`}`];
       case "task_ended":
         return [`task_ended ${update.taskId} ${update.status}`];
       default:
@@ -218,6 +218,8 @@ describe("claudeLiveQuery", () => {
         expect(lifecycle(recorder.updates())).toEqual([
           `delivered ${echoes[0].payload.uuid}`,
           "turn_started",
+          "task_started launch toolu_01RcE2APQiNj6mPLBCvi47oY",
+          "task_started launch toolu_01RcE2APQiNj6mPLBCvi47oY",
           "task_started af1943f5abdca8b57",
           "turn_ended",
           `delivered ${echoes[1].payload.uuid}`,

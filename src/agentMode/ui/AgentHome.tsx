@@ -109,9 +109,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const isLoading = draft.loading || isTurnInFlight;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
-  const [openedTask, setOpenedTask] = useState<{ sessionId: string; taskId: string } | null>(null);
+  const [openedTask, setOpenedTask] = useState<{ sessionId: string; toolCallId: string } | null>(
+    null
+  );
   const handleOpenTask = useCallback(
-    (taskId: string) => setOpenedTask({ sessionId, taskId }),
+    (toolCallId: string) => setOpenedTask({ sessionId, toolCallId }),
     [sessionId]
   );
   const handleStopTask = useCallback(
@@ -122,7 +124,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
   const detailTask =
     openedTask?.sessionId === sessionId
-      ? tasks.find((task) => task.taskId === openedTask.taskId)
+      ? tasks.find((task) => task.toolCallId === openedTask.toolCallId)
       : undefined;
   const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailTask !== undefined);
   const handleCloseTask = useCallback(() => {
@@ -706,7 +708,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       <TaskDetailView
                         task={detailTask}
                         status={taskDisplayStatus(detailTask, pendingToolPermissions)}
-                        messages={backend.getTaskMessages(detailTask.taskId)}
+                        messages={backend.getTaskMessages(detailTask.toolCallId)}
                         app={app}
                         onBack={handleCloseTask}
                         chatAwaitsAnswer={

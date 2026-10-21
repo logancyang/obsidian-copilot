@@ -827,19 +827,39 @@ describe("sdkMessageTranslator", () => {
       expect(out).toEqual([]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 reports each subagent of a recording with out-of-order task frames as one start and one end, and hides their launch acknowledgements", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 reports a streamed Agent call as a task at its first frame, right after its tool call", () => {
+      const state = createTranslatorState();
+
+      const out = translateSdkMessage(
+        streamEvent({
+          type: "content_block_start",
+          index: 0,
+          content_block: { type: "tool_use", id: "tu-agent", name: "Agent", input: {} },
+        }),
+        SESSION_ID,
+        state
+      ).map(({ update }) => update.sessionUpdate);
+
+      expect(out).toEqual(["tool_call", "task_started"]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 reports each subagent of a recording with out-of-order task frames as one launch, one start and one end, and hides their launch acknowledgements", () => {
       const state = createTranslatorState();
       const updates = readFixture().flatMap((frame) =>
         translateSdkMessage(frame.payload, "replay-session", state).map(({ update }) => update)
       );
 
       const lifecycle = updates.flatMap((update) =>
-        update.sessionUpdate === "task_started" || update.sessionUpdate === "task_ended"
-          ? [`${update.sessionUpdate} ${update.taskId}`]
-          : []
+        update.sessionUpdate === "task_started"
+          ? [`task_started ${update.taskId ?? `launch ${update.toolCallId}`}`]
+          : update.sessionUpdate === "task_ended"
+            ? [`task_ended ${update.taskId}`]
+            : []
       );
       expect(lifecycle).toEqual([
+        "task_started launch launch-a",
         "task_started task-a",
+        "task_started launch launch-b",
         "task_started task-b",
         "task_ended task-b",
         "task_ended task-a",

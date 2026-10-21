@@ -3,7 +3,7 @@ import React, { createContext, useContext, useMemo } from "react";
 
 export interface AgentTasksContextValue {
   tasks: readonly AgentTask[];
-  openTask: (taskId: string) => void;
+  openTask: (toolCallId: string) => void;
 }
 
 const AgentTasksContext = createContext<AgentTasksContextValue | null>(null);

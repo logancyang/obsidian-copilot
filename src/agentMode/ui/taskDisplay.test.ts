@@ -5,6 +5,7 @@ import {
   taskBadgeStatus,
   taskDisplayStatus,
   taskKindLabel,
+  taskLabel,
   taskStatusLabel,
   taskTitle,
 } from "@/agentMode/ui/taskDisplay";
@@ -30,6 +31,14 @@ describe("taskDisplay", () => {
         "for i in $(seq 1 30); do echo line $i; sleep 1; done"
       );
       expect(taskTitle(makeTask({ description: "", subagentType: undefined }))).toBe("Task");
+    });
+  });
+
+  describe("taskLabel()", () => {
+    it(`names a subagent by its type and description, and by its type alone while its launch has no description yet (${ISSUE_749})`, () => {
+      expect(taskLabel(makeTask())).toBe("general-purpose · Count words in Welcome");
+      expect(taskLabel(makeTask({ description: "", subagentType: undefined }))).toBe("Subagent");
+      expect(taskLabel(makeCommandTask())).toBe("Print 30 progress lines");
     });
   });
 

@@ -23,6 +23,12 @@ export function taskTitle(task: AgentTask): string {
   return task.description || task.subagentType || task.command || "Task";
 }
 
+// A subagent is listed from its launch, before its description has streamed in. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+export function taskLabel(task: AgentTask): string {
+  if (task.kind === "command") return taskTitle(task);
+  return [taskKindLabel(task), task.description].filter(Boolean).join(" · ");
+}
+
 export function taskKindLabel(task: AgentTask): string {
   if (task.kind === "command") return "Command";
   return task.subagentType ?? "Subagent";

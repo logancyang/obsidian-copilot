@@ -45,10 +45,18 @@ export class ClaudeTaskTracker {
   private readonly tasks = new Map<string, TrackedTask>();
   private readonly earlyEnds = new Map<string, TaskEnd>();
   private readonly commands = new Map<string, string>();
+  private readonly launches = new Map<string, TaskStart>();
 
-  observeToolUse(toolUseId: string, name: string, input: unknown): void {
+  // A subagent or background command is a task from its tool call on, long before Claude reports it started. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  observeToolUse(toolUseId: string, name: string, input: unknown): readonly SessionUpdate[] {
     const command = name === "Bash" ? nonEmptyString(asRecord(input)?.command) : undefined;
     if (command) this.commands.set(toolUseId, command);
+    const launch = taskLaunch(toolUseId, name, input);
+    if (!launch || this.hasTaskFor(toolUseId)) return NO_UPDATES;
+    const previous = this.launches.get(toolUseId);
+    if (previous && JSON.stringify(previous) === JSON.stringify(launch)) return NO_UPDATES;
+    this.launches.set(toolUseId, launch);
+    return [{ sessionUpdate: "task_started", ...launch }];
   }
 
   // A background command's launch result is the only frame that names its output file while it runs. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
@@ -93,6 +101,11 @@ export class ClaudeTaskTracker {
     }
   }
 
+  private hasTaskFor(toolCallId: string): boolean {
+    for (const task of this.tasks.values()) if (task.start?.toolCallId === toolCallId) return true;
+    return false;
+  }
+
   isRunningInBackground(toolCallId: string): boolean {
     for (const task of this.tasks.values()) {
       if (task.start?.toolCallId === toolCallId) return task.background && !task.ended;
@@ -125,15 +138,20 @@ export class ClaudeTaskTracker {
     if (frame.ambient === true || frame.skip_transcript === true) return NO_UPDATES;
     const toolCallId = nonEmptyString(frame.tool_use_id);
     const kind: TaskKind = frame.task_type === "local_agent" ? "subagent" : "command";
+    const launch = toolCallId ? this.launches.get(toolCallId) : undefined;
+    if (toolCallId) this.launches.delete(toolCallId);
     const task: TrackedTask = {
       start: toolCallId
         ? {
             taskId,
             toolCallId,
             kind,
-            description: nonEmptyString(frame.description) ?? "",
-            ...optional("prompt", nonEmptyString(frame.prompt)),
-            ...optional("subagentType", nonEmptyString(frame.subagent_type)),
+            description: nonEmptyString(frame.description) ?? launch?.description ?? "",
+            ...optional("prompt", nonEmptyString(frame.prompt) ?? launch?.prompt),
+            ...optional(
+              "subagentType",
+              nonEmptyString(frame.subagent_type) ?? launch?.subagentType
+            ),
             ...optional("command", kind === "command" ? this.commands.get(toolCallId) : undefined),
           }
         : undefined,
@@ -205,6 +223,31 @@ function launchedTaskId(toolUseResult: unknown): string | undefined {
     nonEmptyString(result?.taskId) ??
     nonEmptyString(result?.backgroundTaskId)
   );
+}
+
+const SUBAGENT_TOOLS = new Set(["Agent", "Task"]);
+
+function taskLaunch(toolCallId: string, name: string, input: unknown): TaskStart | undefined {
+  const fields = asRecord(input);
+  const description = nonEmptyString(fields?.description) ?? "";
+  if (SUBAGENT_TOOLS.has(name)) {
+    return {
+      toolCallId,
+      kind: "subagent",
+      description,
+      ...optional("prompt", nonEmptyString(fields?.prompt)),
+      ...optional("subagentType", nonEmptyString(fields?.subagent_type)),
+    };
+  }
+  if (name === "Bash" && fields?.run_in_background === true) {
+    return {
+      toolCallId,
+      kind: "command",
+      description,
+      ...optional("command", nonEmptyString(fields.command)),
+    };
+  }
+  return undefined;
 }
 
 function isAsyncLaunchResult(toolUseResult: unknown): boolean {

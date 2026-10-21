@@ -123,8 +123,8 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getTasks();
   }
 
-  getTaskMessages(taskId: string): readonly AgentChatMessage[] {
-    return this.session.getTaskMessages(taskId);
+  getTaskMessages(toolCallId: string): readonly AgentChatMessage[] {
+    return this.session.getTaskMessages(toolCallId);
   }
 
   canStopTasks(): boolean {

@@ -177,6 +177,11 @@ export const SubagentRunning: StoryObj<Props> = {
   args: { messages: RUNNING_MESSAGES },
 };
 
+export const SubagentStarting: StoryObj<Props> = {
+  render: (args) => <Demo {...args} />,
+  args: { task: { ...SUBAGENT, taskId: undefined, model: undefined }, messages: [] },
+};
+
 export const ChatAwaitsAnswer: StoryObj<Props> = {
   render: (args) => <Demo {...args} />,
   args: { messages: RUNNING_MESSAGES, status: "needs_approval", chatAwaitsAnswer: true },

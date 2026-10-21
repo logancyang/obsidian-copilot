@@ -39,6 +39,6 @@ describe("TaskCard", () => {
 
     fireEvent.click(screen.getByRole("button"));
 
-    expect(onOpen).toHaveBeenCalledWith("task-1");
+    expect(onOpen).toHaveBeenCalledWith("call-1");
   });
 });

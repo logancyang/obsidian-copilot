@@ -151,6 +151,94 @@ describe("claudeTaskProtocol", () => {
     });
 
     describe("observeToolUse()", () => {
+      it(`reports a subagent as a task from its tool call, before Claude names it, with what the call says so far (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+
+        const early = tracker.observeToolUse("tool-a1", "Agent", {});
+        const complete = tracker.observeToolUse("tool-a1", "Agent", {
+          description: "Count words",
+          prompt: "Count the words in Welcome.md",
+          subagent_type: "general-purpose",
+          run_in_background: false,
+        });
+
+        expect(early).toEqual([
+          {
+            sessionUpdate: "task_started",
+            toolCallId: "tool-a1",
+            kind: "subagent",
+            description: "",
+          },
+        ]);
+        expect(complete).toEqual([
+          {
+            sessionUpdate: "task_started",
+            toolCallId: "tool-a1",
+            kind: "subagent",
+            description: "Count words",
+            prompt: "Count the words in Welcome.md",
+            subagentType: "general-purpose",
+          },
+        ]);
+      });
+
+      it("reports a launch once when the same tool call is seen again unchanged", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.observeToolUse("tool-a1", "Agent", { description: "Count words" });
+
+        expect(tracker.observeToolUse("tool-a1", "Agent", { description: "Count words" })).toEqual(
+          []
+        );
+      });
+
+      it(`reports a Bash call as a task only once its input asks for the background (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+
+        expect(tracker.observeToolUse("tool-b1", "Bash", { command: "ls" })).toEqual([]);
+        expect(
+          tracker.observeToolUse("tool-b2", "Bash", {
+            command: "npm run render",
+            description: "Render",
+            run_in_background: true,
+          })
+        ).toEqual([
+          {
+            sessionUpdate: "task_started",
+            toolCallId: "tool-b2",
+            kind: "command",
+            description: "Render",
+            command: "npm run render",
+          },
+        ]);
+      });
+
+      it(`attaches Claude's task id to a launched task and keeps the prompt the launch carried (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.observeToolUse("tool-a1", "Agent", {
+          description: "Count words",
+          prompt: "Count the words",
+        });
+
+        const start = tracker.accept(started("a1", { description: undefined, prompt: undefined }));
+
+        expect(start).toEqual([
+          expect.objectContaining({
+            taskId: "a1",
+            toolCallId: "tool-a1",
+            description: "Count words",
+            prompt: "Count the words",
+          }),
+        ]);
+        expect(tracker.observeToolUse("tool-a1", "Agent", { description: "Changed" })).toEqual([]);
+      });
+
+      it(`reports no launch for a tool call whose task Claude already started (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+
+        expect(tracker.observeToolUse("tool-a1", "Agent", { description: "Task a1" })).toEqual([]);
+      });
+
       it(`puts the Bash command that launched a background command on its start (${ISSUE_749})`, () => {
         const tracker = new ClaudeTaskTracker();
         tracker.observeToolUse("tool-b1", "Bash", {
