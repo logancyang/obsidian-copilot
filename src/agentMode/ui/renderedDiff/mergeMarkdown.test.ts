@@ -21,6 +21,7 @@ import {
   NON_MARKDOWN_FILE,
   ORDERED_LIST_ITEM_APPENDED,
   REMOVED_LIST_ITEM,
+  SPACED_WORDING_CHANGE,
   TABLE_CELL_EDIT,
   TABLE_COLUMN_ADDED,
   TASK_CHECKBOX_TOGGLED,
@@ -282,6 +283,21 @@ describe("mergeMarkdown", () => {
       const plan = await buildRenderedDiffPlan(app, before, after, true);
 
       expect(plan).toEqual([{ kind: "markdown", markdown: "# Alpha\n\n- One\n- Two" }]);
+    });
+
+    it("keeps each blank line past the first between blocks as a spacer of that many lines, as Live Preview shows them (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+      const { before, after } = SPACED_WORDING_CHANGE;
+
+      expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
+        { kind: "markdown", markdown: "# Alpha pilot" },
+        { kind: "spacer", lines: 2 },
+        {
+          kind: "markdown",
+          markdown: `The pilot runs for ${DEL_OPEN}six${DEL_CLOSE}${INS_OPEN}eight${INS_CLOSE} weeks.`,
+        },
+        { kind: "spacer", lines: 1 },
+        { kind: "markdown", markdown: "We report progress every Friday." },
+      ]);
     });
 
     it("shows an appended list item as that inserted item below the unchanged items", async () => {

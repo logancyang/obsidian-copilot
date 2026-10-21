@@ -1,3 +1,8 @@
+import {
+  extraBlankLinesBetween,
+  parseMarkdownSections,
+  type MarkdownSection,
+} from "@/utils/markdownSections";
 import type { App } from "obsidian";
 
 export type MarkdownBlockType = "code" | "heading" | "table" | "text";
@@ -6,30 +11,12 @@ export interface MarkdownBlock {
   type: MarkdownBlockType;
   text: string;
   continuesList?: true;
+  extraBlankLines?: number;
 }
 
 export interface MarkdownSplit {
   frontmatter: string | null;
   blocks: readonly MarkdownBlock[];
-}
-
-interface ParsedSection {
-  type: string;
-  position: { start: { line: number; offset: number }; end: { line: number; offset: number } };
-}
-
-interface ParsedListItem {
-  parent: number;
-  position: { start: { line: number } };
-}
-
-interface ParsedMetadata {
-  sections?: ParsedSection[];
-  listItems?: ParsedListItem[];
-}
-
-interface MetadataParser {
-  computeMetadataAsync?: (buffer: ArrayBuffer) => Promise<ParsedMetadata>;
 }
 
 const EMPTY_BLOCKS: readonly MarkdownBlock[] = Object.freeze([]);
@@ -80,34 +67,30 @@ function listBlocks(
   });
 }
 
-// Sections come from Obsidian's own parser, through the undocumented computeMetadataAsync, so the
-// split matches what the editor renders. A missing method rejects and the caller falls back to a line diff.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 export async function splitMarkdown(app: App, source: string): Promise<MarkdownSplit> {
-  const parser = app.metadataCache as unknown as MetadataParser;
-  if (typeof parser.computeMetadataAsync !== "function") {
-    throw new Error("Obsidian's Markdown parser is unavailable");
-  }
-  const buffer = new TextEncoder().encode(source).buffer as ArrayBuffer;
-  const metadata = await parser.computeMetadataAsync(buffer);
+  const { sections, listItems } = await parseMarkdownSections(app, source);
   const lines = source.split("\n");
-  const itemStarts = (metadata.listItems ?? [])
+  const itemStarts = listItems
     .filter((item) => item.parent < 0)
     .map((item) => item.position.start.line);
   const blocks: MarkdownBlock[] = [];
   let frontmatter: string | null = null;
-  for (const { type, position } of metadata.sections ?? []) {
-    // After a note ending in a footnote definition Obsidian appends empty sections past its end.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    if (position.start.offset === position.end.offset) continue;
+  let previous: MarkdownSection | null = null;
+  for (const section of sections) {
+    const { type, position } = section;
     const text = lines.slice(position.start.line, position.end.line + 1).join("\n");
     if (type === "yaml" && position.start.line === 0) {
       frontmatter = text;
-    } else if (type === "list") {
-      blocks.push(...listBlocks(lines, position.start.line, position.end.line, itemStarts));
-    } else {
-      blocks.push(blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text));
+      continue;
     }
+    const sectionBlocks =
+      type === "list"
+        ? listBlocks(lines, position.start.line, position.end.line, itemStarts)
+        : [blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text)];
+    const extraBlankLines = previous === null ? 0 : extraBlankLinesBetween(previous, section);
+    if (extraBlankLines > 0) sectionBlocks[0] = { ...sectionBlocks[0], extraBlankLines };
+    blocks.push(...sectionBlocks);
+    previous = section;
   }
   return { frontmatter, blocks: blocks.length === 0 ? EMPTY_BLOCKS : blocks };
 }

@@ -55,6 +55,9 @@ const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 // Tall pasted user messages collapse behind a Show more control.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/151
 const COLLAPSED_USER_MESSAGE_CLASS_NAME = cn("tw-max-h-[12lh]");
+const USER_MARKDOWN_CLASS_NAME = cn(
+  "tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
+);
 
 export const normalizeFootnoteRendering = (root: HTMLElement): void => {
   const footnoteSection = root.querySelector(".footnotes");
@@ -794,7 +797,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       <Markdown
                         text={message.message}
                         sourcePath={sourcePath}
-                        className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
+                        keepBlankLines
+                        className={USER_MARKDOWN_CLASS_NAME}
                       />
                     ) : (
                       <div
@@ -827,7 +831,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <Markdown
         text={message.message}
         sourcePath={sourcePath}
-        className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
+        keepBlankLines
+        className={USER_MARKDOWN_CLASS_NAME}
       />
     ) : (
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>

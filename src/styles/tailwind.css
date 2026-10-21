@@ -244,7 +244,10 @@ If your plugin does not need CSS, delete this file.
   margin-bottom: 0;
 }
 
-.message-content p {
+/* Only assistant segments are compact; user messages keep Obsidian's paragraph and list
+   spacing so they read like the note they were typed as.
+   https://github.com/Brevilabs/obsidian-copilot-private/issues/751 */
+.message-segment p {
   margin-top: 0;
   margin-bottom: 0;
 }
@@ -317,8 +320,8 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-normal);
 }
 
-.message-content ul,
-.message-content ol {
+.message-segment ul,
+.message-segment ol {
   padding-left: 20px;
   margin: 10px;
 }

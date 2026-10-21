@@ -10,6 +10,29 @@ jest.mock("@/utils/renderMarkdown", () => ({
 }));
 
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
+const BLANK_LINES_ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/751";
+
+function appParsingParagraphs(until?: Promise<void>): App {
+  const computeMetadataAsync = jest.fn(async (buffer: ArrayBuffer) => {
+    await until;
+    const lines = new TextDecoder().decode(buffer).split("\n");
+    const sections = lines.flatMap((line, index) =>
+      line === ""
+        ? []
+        : [
+            {
+              type: "paragraph",
+              position: {
+                start: { line: index, offset: index },
+                end: { line: index, offset: index + 1 },
+              },
+            },
+          ]
+    );
+    return { sections };
+  });
+  return { metadataCache: { computeMetadataAsync } } as unknown as App;
+}
 
 describe("Markdown", () => {
   describe("Markdown()", () => {
@@ -62,6 +85,75 @@ describe("Markdown", () => {
       );
 
       expect(await screen.findByText("Release notes remain readable")).not.toBeNull();
+    });
+
+    it(`renders each blank line past the first as a <br> line when asked to keep blank lines for ${BLANK_LINES_ISSUE_URL}`, async () => {
+      jest.mocked(renderMarkdown).mockResolvedValue(undefined);
+
+      render(
+        <AppContext.Provider value={appParsingParagraphs()}>
+          <Markdown keepBlankLines sourcePath="" text={"Alpha\n\n\n\nBeta"} />
+        </AppContext.Provider>
+      );
+
+      await waitFor(() =>
+        expect(renderMarkdown).toHaveBeenCalledWith(
+          expect.anything(),
+          "Alpha\n\n<br>\n<br>\n\nBeta",
+          expect.anything(),
+          "",
+          expect.anything()
+        )
+      );
+    });
+
+    it(`renders the Markdown as written when Obsidian's parser is unavailable for ${BLANK_LINES_ISSUE_URL}`, async () => {
+      jest.mocked(renderMarkdown).mockResolvedValue(undefined);
+
+      render(
+        <AppContext.Provider value={new App()}>
+          <Markdown keepBlankLines sourcePath="" text={"Alpha\n\n\n\nBeta"} />
+        </AppContext.Provider>
+      );
+
+      await waitFor(() =>
+        expect(renderMarkdown).toHaveBeenCalledWith(
+          expect.anything(),
+          "Alpha\n\n\n\nBeta",
+          expect.anything(),
+          "",
+          expect.anything()
+        )
+      );
+    });
+
+    it(`never renders text whose blank-line parse finishes after newer text replaced it for ${BLANK_LINES_ISSUE_URL}`, async () => {
+      jest.mocked(renderMarkdown).mockReset();
+      jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
+        target.textContent = text;
+      });
+      let finishFirstParse: (() => void) | undefined;
+      const firstApp = appParsingParagraphs(
+        new Promise<void>((resolve) => {
+          finishFirstParse = resolve;
+        })
+      );
+      const view = render(
+        <AppContext.Provider value={firstApp}>
+          <Markdown keepBlankLines sourcePath="" text="Old release notes" />
+        </AppContext.Provider>
+      );
+
+      view.rerender(
+        <AppContext.Provider value={appParsingParagraphs()}>
+          <Markdown keepBlankLines sourcePath="" text="Current release notes" />
+        </AppContext.Provider>
+      );
+      expect(await screen.findByText("Current release notes")).not.toBeNull();
+      await act(async () => finishFirstParse?.());
+
+      expect(renderMarkdown).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Old release notes")).toBeNull();
     });
 
     it(`does not let an obsolete failed render replace newer content for ${ISSUE_URL}`, async () => {

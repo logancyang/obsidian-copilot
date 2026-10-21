@@ -195,6 +195,14 @@ export const CRLF_TO_LF_CONVERSION: RenderedDiffFixture = {
   after: "# Alpha\n\nBody\n",
 };
 
+export const SPACED_WORDING_CHANGE: RenderedDiffFixture = {
+  path: "projects/Alpha/Project brief.md",
+  before:
+    "# Alpha pilot\n\n\n\nThe pilot runs for six weeks.\n\n\nWe report progress every Friday.\n",
+  after:
+    "# Alpha pilot\n\n\n\nThe pilot runs for eight weeks.\n\n\nWe report progress every Friday.\n",
+};
+
 export const BLANK_LINE_ADDED: RenderedDiffFixture = {
   path: "projects/Alpha/Project brief.md",
   before: "Alpha\n\nBeta\n",
@@ -621,6 +629,25 @@ export const RECORDED_PARSES: ReadonlyMap<
         sections: [
           ["heading", 0, 0],
           ["paragraph", 2, 2],
+        ],
+      },
+    },
+  ],
+  [
+    SPACED_WORDING_CHANGE,
+    {
+      before: {
+        sections: [
+          ["heading", 0, 0],
+          ["paragraph", 4, 4],
+          ["paragraph", 7, 7],
+        ],
+      },
+      after: {
+        sections: [
+          ["heading", 0, 0],
+          ["paragraph", 4, 4],
+          ["paragraph", 7, 7],
         ],
       },
     },

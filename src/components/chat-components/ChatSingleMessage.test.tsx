@@ -297,6 +297,47 @@ describe("ChatSingleMessage", () => {
       );
     });
 
+    it("keeps the blank lines a user typed between paragraphs as empty lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+      const parsingApp = {
+        ...testApp,
+        metadataCache: {
+          computeMetadataAsync: async () => ({
+            sections: [
+              {
+                type: "paragraph",
+                position: { start: { line: 0, offset: 0 }, end: { line: 0, offset: 5 } },
+              },
+              {
+                type: "paragraph",
+                position: { start: { line: 4, offset: 9 }, end: { line: 4, offset: 13 } },
+              },
+            ],
+          }),
+        },
+      } as unknown as App;
+      renderComponent(
+        <AppContext.Provider value={parsingApp}>
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, sender: "user", message: "Alpha\n\n\n\nBeta" }}
+              app={parsingApp}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        </AppContext.Provider>
+      );
+
+      await waitFor(() =>
+        expect(renderMarkdownMock).toHaveBeenCalledWith(
+          parsingApp,
+          "Alpha\n\n<br>\n<br>\n\nBeta",
+          expect.any(HTMLElement),
+          "",
+          expect.anything()
+        )
+      );
+    });
+
     describe("sent context selections", () => {
       it.each(["note", "web"] as const)(
         "shows one full-excerpt tooltip for a sent %s selection https://github.com/Brevilabs/obsidian-copilot-private/issues/465",
@@ -464,7 +505,7 @@ describe("ChatSingleMessage", () => {
       );
       expect(screen.getByText(timestamp)).toBeTruthy();
     });
-    it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", () => {
+    it("collapses an oversized user message behind a Show more control (https://github.com/Brevilabs/obsidian-copilot-private/issues/151)", async () => {
       const restoreContentHeight = stubContentDimensions(2000, 240);
 
       try {
@@ -482,7 +523,7 @@ describe("ChatSingleMessage", () => {
           true
         );
         expect(screen.getByRole("button", { name: /show more/i })).toBeTruthy();
-        expect(screen.getByText("A very long pasted prompt")).toBeTruthy();
+        expect(await screen.findByText("A very long pasted prompt")).toBeTruthy();
       } finally {
         restoreContentHeight();
       }
