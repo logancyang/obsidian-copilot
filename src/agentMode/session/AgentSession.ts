@@ -1621,6 +1621,7 @@ export class AgentSession {
   // One entry per launching tool call, so a task's card, row and open view keep their identity when its id arrives. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
   private startTask(start: TaskStart): void {
     const existing = this.tasks.get(start.toolCallId);
+    if (existing?.taskId !== undefined) return;
     if (start.taskId === undefined && existing && existing.status !== "running") return;
     this.tasks.set(start.toolCallId, {
       ...existing,
@@ -1648,6 +1649,14 @@ export class AgentSession {
       const card = this.findLaunchCard(task.toolCallId)?.card;
       const status = card?.kind === "tool_call" ? UNSTARTED_TASK_END[card.status] : undefined;
       if (status) this.endTask(task, status);
+    }
+  }
+
+  // The agent names every task its turn launched before the turn ends, so a launch still unnamed then, such as a call cut off mid-stream, never starts. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  private endLaunchesOfEndedTurn(status: TaskEndStatus): void {
+    for (const task of this.tasks.values()) {
+      if (task.taskId !== undefined || task.status !== "running") continue;
+      if (this.store.findMessageIdWithToolCall(task.toolCallId)) this.endTask(task, status);
     }
   }
 
@@ -1685,6 +1694,7 @@ export class AgentSession {
     const content = this.taskContent.get(task.toolCallId);
     const contentId = content?.getDisplayMessages()[0]?.id;
     if (contentId) content?.stopToolCalls(contentId, EMPTY_TOOL_CALL_IDS);
+    this.endUnstartedTasks();
     this.publishTasks();
     void this.finalizeTaskFileChanges(task.toolCallId);
   }
@@ -1871,9 +1881,9 @@ export class AgentSession {
         (task) => task.status === "running" && task.taskId !== undefined
       );
       this.store.stopToolCalls(placeholderId, new Set(startedTasks.map((task) => task.toolCallId)));
-      this.endUnstartedTasks();
     }
     this.store.settleOpenParts(placeholderId);
+    this.endLaunchesOfEndedTurn(stopReason === "cancelled" ? "stopped" : "failed");
     // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     const turnFiles = this.turnFiles;
     this.turnFiles = new Map();
@@ -1899,6 +1909,7 @@ export class AgentSession {
     // The turn's error already shows the failure, so the row must not repeat it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
     this.store.settleOpenParts(placeholderId, "failed");
+    this.endLaunchesOfEndedTurn("failed");
     this.store.markMessageError(
       placeholderId,
       formatPromptFailure(err),
