@@ -16,7 +16,6 @@ import type {
   PromptContent,
   SessionEvent,
   SessionId,
-  TurnEnd,
 } from "@/agentMode/session/types";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -192,26 +191,30 @@ export class FanoutOrchestrator {
         let turnOpen = false;
         let awaitingReport = false;
         let cancelled = false;
-        let lastEnd: TurnEnd | null = null;
-        let finishAnswer!: (end: TurnEnd) => void;
-        const answered = new Promise<TurnEnd>((resolve) => (finishAnswer = resolve));
+        let turnEnded = false;
+        let finishAnswer!: (error?: Error) => void;
+        const answered = new Promise<Error | undefined>((resolve) => (finishAnswer = resolve));
         const finishIfSettled = () => {
-          if (!lastEnd || turnOpen) return;
-          if (cancelled || (runningTasks.size === 0 && !awaitingReport)) finishAnswer(lastEnd);
+          if (!turnEnded || turnOpen) return;
+          if (cancelled || (runningTasks.size === 0 && !awaitingReport)) finishAnswer();
         };
         unregisterHandler = proc.registerSessionHandler(sessionId, (event) => {
           const update = event.update;
           switch (update.sessionUpdate) {
             case "turn_started":
-              if (lastEnd) onText("\n\n");
+              if (turnEnded) onText("\n\n");
               turnOpen = true;
               awaitingReport = false;
               return;
             case "turn_ended":
               turnOpen = false;
-              lastEnd = update;
-              if (update.error !== undefined) finishAnswer(update);
+              turnEnded = true;
+              if (update.error !== undefined) finishAnswer(update.error);
               else finishIfSettled();
+              return;
+            // An agent that exits starts no turn to report the tasks it ended. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+            case "session_disconnected":
+              finishAnswer(update.error);
               return;
             case "task_started":
               if (update.taskId) runningTasks.add(update.taskId);
@@ -241,8 +244,8 @@ export class FanoutOrchestrator {
         const promptPromise = promptProc
           .prompt({ sessionId, promptId: uuidv4(), prompt })
           .then(() => answered)
-          .then((end) => {
-            if (end.error !== undefined) throw end.error;
+          .then((error) => {
+            if (error !== undefined) throw error;
           });
         onPrompt(promptPromise, () => {
           cancelled = true;

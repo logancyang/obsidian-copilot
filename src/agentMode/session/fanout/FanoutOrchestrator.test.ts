@@ -462,6 +462,42 @@ describe("FanoutOrchestrator", () => {
         }
       });
 
+      it(`ends an answer waiting on a background task with the disconnect error when the agent exits, keeping its text (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const claude = procs.get("claude")!;
+        const runPromise = new FanoutOrchestrator(host).run(runInput(["claude"]));
+
+        await claude.prompted(1);
+        claude.emit(textChunk("s-claude", "Launched a helper."));
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "task_started",
+            taskId: "task-1",
+            toolCallId: "call-1",
+            kind: "subagent",
+            description: "Slow helper",
+          })
+        );
+        claude.resolvePrompt();
+        claude.emit(
+          update("s-claude", { sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" })
+        );
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "session_disconnected",
+            error: new Error("Claude exited"),
+          })
+        );
+        const turn = await runPromise;
+
+        expect(turn.answers.claude).toEqual({
+          backendId: "claude",
+          status: "error",
+          text: "Launched a helper.",
+          error: expect.stringContaining("Claude exited"),
+        });
+      });
+
       it(`stops waiting for a background task on abort and closes the sub-session so the task ends with it (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
         const claude = procs.get("claude")!;
