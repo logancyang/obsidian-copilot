@@ -863,6 +863,26 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(call.options.thinking).toEqual({ type: "adaptive", display: "summarized" });
       });
 
+      it(`applies an extended-thinking toggle flipped mid-chat to the running query before the next prompt, without restarting it (${ISSUE_175})`, async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        let thinking = true;
+        const proc = makeProc({ getEnableThinking: () => thinking });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "1" }] });
+
+        thinking = false;
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "2" }] });
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "3" }] });
+        thinking = true;
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "4" }] });
+
+        expect(fakes[0].setMaxThinkingTokens.mock.calls).toEqual([
+          [0, undefined],
+          [31_999, "summarized"],
+        ]);
+        expect(getPromptQueryCalls()).toHaveLength(1);
+      });
+
       it("keeps each chat's permission and question requests bound to its own session for https://github.com/logancyang/obsidian-copilot/issues/2948", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc();

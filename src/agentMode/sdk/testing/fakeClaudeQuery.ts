@@ -11,6 +11,7 @@ export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   readonly setModel = jest.fn(async () => undefined);
   readonly setPermissionMode = jest.fn(async () => undefined);
   readonly applyFlagSettings = jest.fn(async () => undefined);
+  readonly setMaxThinkingTokens = jest.fn(async () => undefined);
   private readonly output = new AsyncPushQueue<SDKMessage>();
   private readonly inputWaiters: Array<() => void> = [];
   private failure: Error | null = null;

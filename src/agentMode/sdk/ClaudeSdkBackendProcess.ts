@@ -65,6 +65,7 @@ interface SessionState {
   model?: string;
   permissionMode?: PermissionMode;
   effort?: EffortLevel;
+  thinking?: boolean;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
   translator: TranslatorState;
   live?: ClaudeLiveQuery;
@@ -110,6 +111,8 @@ export interface ClaudeSdkBackendProcessOptions {
   checkAuth?: () => Promise<boolean>;
   checkCompatibility?: () => Promise<void>;
 }
+
+const THINKING_BUDGET_TOKENS = 31_999;
 
 const STATIC_SDK_MODES: RawModeState = {
   currentModeId: "default",
@@ -252,6 +255,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
     const messageContent = promptInputToAnthropicContent(params);
     const live = await this.ensureLiveQuery(params.sessionId, session);
+    await this.applyThinkingSetting(session, live);
     if (typeof messageContent === "string" && isCompactCommand(messageContent)) {
       session.translator.compactionTrigger = "manual";
     }
@@ -271,6 +275,17 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       session.starting = undefined;
     });
     return session.starting;
+  }
+
+  // The query outlives the toggle, so each prompt brings it up to date; a positive budget turns thinking on whether the query started with it or not. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+  private async applyThinkingSetting(session: SessionState, live: ClaudeLiveQuery): Promise<void> {
+    const thinking = Boolean(this.opts.getEnableThinking?.());
+    if (session.thinking === thinking) return;
+    await live.query.setMaxThinkingTokens(
+      thinking ? THINKING_BUDGET_TOKENS : 0,
+      thinking ? "summarized" : undefined
+    );
+    session.thinking = thinking;
   }
 
   private async startLiveQuery(
@@ -331,7 +346,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         ...session.mcpServers.map((server) => `mcp__${server.name}`),
       ];
     }
-    options.thinking = this.opts.getEnableThinking?.()
+    session.thinking = Boolean(this.opts.getEnableThinking?.());
+    options.thinking = session.thinking
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
     const envOverrides = this.opts.getEnvOverrides?.();
