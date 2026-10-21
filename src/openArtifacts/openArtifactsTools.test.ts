@@ -585,16 +585,23 @@ describe("openArtifactsTools", () => {
       expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
     });
 
-    it(`${ISSUE} reports a withdrawn page whose link could not be removed from the note`, async () => {
-      const { unpublish, client, app } = harness({ openartifacts: DOC_URL });
+    it(`${ISSUE} reports a withdrawn page whose link could not be removed, and unpublishing again only retries the removal`, async () => {
+      const { unpublish, client, app, frontmatter } = harness({ openartifacts: DOC_URL });
       jest.mocked(app.fileManager.processFrontMatter).mockRejectedValueOnce(new Error("disk full"));
+      const args = { docId: DOC_ID, notePath: "Notes/Plan.md" };
 
-      const result = await unpublish.call({ docId: DOC_ID, notePath: "Notes/Plan.md" });
+      const result = await unpublish.call(args);
 
       expect(result.isError).toBe(false);
       expect(json(result)).toMatchObject({ status: "unpublished" });
       expect(json(result).warning).toContain("The page is already deleted.");
-      expect(json(result).warning).toContain("Retry save");
+      expect(json(result).warning).toContain("Calling openartifacts_unpublish again");
+      expect((await unpublish.call({ ...args, docId: OTHER_DOC_ID })).isError).toBe(true);
+
+      const retried = await unpublish.call(args);
+
+      expect(json(retried)).toEqual({ docId: DOC_ID, status: "unpublished" });
+      expect(frontmatter).toEqual({});
       expect(client.delete).toHaveBeenCalledTimes(1);
     });
   });
