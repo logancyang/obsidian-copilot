@@ -49,14 +49,20 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
   [] as ManifestPathEntry[]
 ) as ManifestPathEntry[];
 
+// The system prompt is shared by every chat on a backend, so this policy rides the block only project chats get.
+// https://github.com/logancyang/obsidian-copilot/issues/3801
+export const PROJECT_WORKSPACE_POLICY = `The working directory is this project's workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
+
 const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
+  PROJECT_WORKSPACE_POLICY,
   "This project's context sources could not be loaded.",
   "</project_context>",
 ].join("\n");
 
 const EMPTY_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
+  PROJECT_WORKSPACE_POLICY,
   "No context sources are configured for this project.",
   "</project_context>",
 ].join("\n");
@@ -133,7 +139,11 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   const shown = lines.slice(0, MAX_MANIFEST_ENTRIES);
   const omitted = total - shown.length;
 
-  const out: string[] = ["<project_context>", "Context sources for this project."];
+  const out: string[] = [
+    "<project_context>",
+    PROJECT_WORKSPACE_POLICY,
+    "Context sources for this project.",
+  ];
 
   let currentSection = "";
   for (const item of shown) {
