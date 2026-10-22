@@ -1,8 +1,9 @@
 import { FANOUT_READONLY_PREAMBLE } from "@/agentMode/session/fanout/fanoutTypes";
-import type { PromptContent } from "@/agentMode/session/types";
-import { WEB_SELECTED_TEXT_TAG } from "@/constants";
+import type { NewAgentChatMessage, PromptContent } from "@/agentMode/session/types";
+import { USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { ContextProcessor } from "@/contextProcessor";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import { formatDateTime } from "@/utils";
 import {
   isNoteSelectedTextContext,
   isWebSelectedTextContext,
@@ -47,6 +48,23 @@ export function buildUserDisplayContent(
     });
   }
   return content;
+}
+
+export function buildUserMessage(
+  id: string,
+  text: string,
+  context: MessageContext | undefined,
+  promptContent: PromptContent[] | undefined
+): NewAgentChatMessage {
+  return {
+    id,
+    message: text,
+    sender: USER_SENDER,
+    timestamp: formatDateTime(new Date()),
+    isVisible: true,
+    context,
+    content: buildUserDisplayContent(text, promptContent),
+  };
 }
 
 export function buildPromptBlocks(
