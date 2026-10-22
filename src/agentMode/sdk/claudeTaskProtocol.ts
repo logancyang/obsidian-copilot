@@ -13,6 +13,7 @@ interface TrackedTask {
   background: boolean;
   announced: boolean;
   ended: boolean;
+  model?: string;
 }
 
 interface TaskFrame {
@@ -35,6 +36,7 @@ interface TaskFrame {
 }
 
 const NO_UPDATES: readonly SessionUpdate[] = Object.freeze([]);
+const OUTPUT_FILE_IN_LAUNCH_TEXT = /Output is being written to: (.+?)\.(?:\s|$)/;
 
 // Claude reports subagents and background commands as task frames whose order varies: an end can
 // precede its start, and a foreground command only becomes a task once it moves to the background.
@@ -42,6 +44,33 @@ const NO_UPDATES: readonly SessionUpdate[] = Object.freeze([]);
 export class ClaudeTaskTracker {
   private readonly tasks = new Map<string, TrackedTask>();
   private readonly earlyEnds = new Map<string, TaskEnd>();
+  private readonly commands = new Map<string, string>();
+
+  observeToolUse(toolUseId: string, name: string, input: unknown): void {
+    const command = name === "Bash" ? nonEmptyString(asRecord(input)?.command) : undefined;
+    if (command) this.commands.set(toolUseId, command);
+  }
+
+  // A background command's launch result is the only frame that names its output file while it runs. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  observeLaunchResult(toolUseResult: unknown, text: string): readonly SessionUpdate[] {
+    const taskId = nonEmptyString(asRecord(toolUseResult)?.backgroundTaskId);
+    const outputFile = OUTPUT_FILE_IN_LAUNCH_TEXT.exec(text)?.[1];
+    const task = taskId ? this.tasks.get(taskId) : undefined;
+    if (!taskId || !outputFile || !task?.announced || task.ended) return NO_UPDATES;
+    return [{ sessionUpdate: "task_progress", taskId, outputFile }];
+  }
+
+  // A subagent's model is named only on its own assistant frames. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  observeSubagentModel(toolCallId: string, model: string | undefined): readonly SessionUpdate[] {
+    if (!model) return NO_UPDATES;
+    for (const [taskId, task] of this.tasks) {
+      if (task.start?.toolCallId !== toolCallId) continue;
+      if (!task.announced || task.ended || task.model === model) return NO_UPDATES;
+      task.model = model;
+      return [{ sessionUpdate: "task_progress", taskId, model }];
+    }
+    return NO_UPDATES;
+  }
 
   accept(message: SDKMessage): readonly SessionUpdate[] {
     if (message.type !== "system") return NO_UPDATES;
@@ -105,6 +134,7 @@ export class ClaudeTaskTracker {
             description: nonEmptyString(frame.description) ?? "",
             ...optional("prompt", nonEmptyString(frame.prompt)),
             ...optional("subagentType", nonEmptyString(frame.subagent_type)),
+            ...optional("command", kind === "command" ? this.commands.get(toolCallId) : undefined),
           }
         : undefined,
       background: frame.is_backgrounded !== false,

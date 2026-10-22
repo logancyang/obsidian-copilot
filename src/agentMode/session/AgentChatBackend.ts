@@ -1,5 +1,6 @@
 import type { MessageContext } from "@/types/message";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -34,6 +35,8 @@ export interface AgentChatBackend {
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
+  getTasks(): readonly AgentTask[];
+  getTaskMessages(taskId: string): readonly AgentChatMessage[];
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;

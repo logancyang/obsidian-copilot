@@ -31,7 +31,12 @@ function isInteractive(part: ToolCallPart): boolean {
 
 const EMPTY_GROUPED_TRAIL = Object.freeze([]) as unknown as GroupedTrailNode[];
 
-export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
+const NEVER_STANDALONE = () => false;
+
+export function foldActivityGroups(
+  nodes: RenderNode[],
+  isStandalone: (part: ToolCallPart) => boolean = NEVER_STANDALONE
+): GroupedTrailNode[] {
   if (nodes.length === 0) return EMPTY_GROUPED_TRAIL;
   const out: GroupedTrailNode[] = [];
   let run: ActivityMember[] = [];
@@ -55,7 +60,7 @@ export function foldActivityGroups(nodes: RenderNode[]): GroupedTrailNode[] {
       case "action":
         // A grouped Miyo search would be hidden behind "Ran N commands".
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-        if (isInteractive(node.part) || miyoSearchRun(node.part)) {
+        if (isInteractive(node.part) || miyoSearchRun(node.part) || isStandalone(node.part)) {
           flush();
           out.push(node);
         } else {

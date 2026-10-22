@@ -66,6 +66,19 @@ describe("activityGroups", () => {
       expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup"]);
     });
 
+    it("keeps a call the caller marks standalone out of the group, such as a task's launching call (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
+      const grouped = foldActivityGroups(
+        [
+          action("a", { vendorToolName: "Read" }),
+          action("b", { vendorToolName: "Read" }),
+          action("launch", { vendorToolName: "Bash" }),
+          action("c", { vendorToolName: "Bash" }),
+        ],
+        (part) => part.id === "launch"
+      );
+      expect(types(grouped)).toEqual(["activityGroup", "action", "action"]);
+    });
+
     it("never folds a compaction row into a group and splits the groups around it", () => {
       const compaction: RenderNode = {
         type: "compaction",

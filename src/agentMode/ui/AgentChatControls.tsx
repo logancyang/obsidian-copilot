@@ -66,6 +66,7 @@ interface AgentChatControlsProps {
   onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
   onReportError?: () => void;
   usageMeter?: React.ReactNode;
+  tasksIndicator?: React.ReactNode;
   showMultiAgentUpsell?: boolean;
 }
 
@@ -86,6 +87,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onSetChatBookmarked,
   onReportError,
   usageMeter,
+  tasksIndicator,
   showMultiAgentUpsell = false,
 }) => {
   const settings = useSettingsValue();
@@ -102,6 +104,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
       <div className="tw-ml-1 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
+        {tasksIndicator}
         {showMultiAgentUpsell && !canUseMultiAgent && (
           <Button
             variant="ghost2"

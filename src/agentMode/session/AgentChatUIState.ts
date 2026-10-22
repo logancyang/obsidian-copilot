@@ -1,6 +1,6 @@
 import { logError, logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { AgentSession, AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -31,6 +31,7 @@ export class AgentChatUIState implements AgentChatBackend {
       onCurrentPlanChanged: () => this.notifyListeners(),
       onCurrentTodoListChanged: () => this.notifyListeners(),
       onQueuedPromptsChanged: () => this.notifyListeners(),
+      onTasksChanged: () => this.notifyListeners(),
     });
   }
 
@@ -116,6 +117,14 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  getTasks(): readonly AgentTask[] {
+    return this.session.getTasks();
+  }
+
+  getTaskMessages(taskId: string): readonly AgentChatMessage[] {
+    return this.session.getTaskMessages(taskId);
   }
 
   isStarting(): boolean {

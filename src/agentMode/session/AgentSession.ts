@@ -117,6 +117,7 @@ const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
   progress?: AgentToolProgress;
+  model?: string;
   outputFile?: string;
   summary?: string;
 }
@@ -133,6 +134,14 @@ interface TurnFileCapture {
   edited: boolean;
   snapshot: Promise<string | null>;
   writeTimeBefore?: string | null;
+}
+
+function isTaskLifecycleUpdate(update: SessionEvent["update"]): boolean {
+  return (
+    update.sessionUpdate === "task_started" ||
+    update.sessionUpdate === "task_progress" ||
+    update.sessionUpdate === "task_ended"
+  );
 }
 
 function toolCallTarget(call: ToolCallSnapshot | ToolCallDelta): EditTargetSource {
@@ -1316,7 +1325,8 @@ export class AgentSession {
 
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
-    if (event.taskToolCallId !== undefined) {
+    // Task lifecycle updates describe the task itself, even when reported from inside a task. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (event.taskToolCallId !== undefined && !isTaskLifecycleUpdate(update)) {
       this.applyTaskContent(event.taskToolCallId, update);
       return;
     }
@@ -1568,7 +1578,7 @@ export class AgentSession {
     >
   ): void {
     if (update.sessionUpdate === "task_started") {
-      const { taskId, toolCallId, kind, description, prompt, subagentType } = update;
+      const { taskId, toolCallId, kind, description, prompt, subagentType, command } = update;
       this.tasks.set(taskId, {
         taskId,
         toolCallId,
@@ -1576,6 +1586,7 @@ export class AgentSession {
         description,
         prompt,
         subagentType,
+        command,
         status: "running",
       });
       return this.publishTasks();
@@ -1583,8 +1594,13 @@ export class AgentSession {
     const task = this.tasks.get(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
-      const progress = { ...task.progress, ...update.progress };
-      this.tasks.set(task.taskId, { ...task, progress });
+      const progress = update.progress ? { ...task.progress, ...update.progress } : task.progress;
+      this.tasks.set(task.taskId, {
+        ...task,
+        progress,
+        model: update.model ?? task.model,
+        outputFile: update.outputFile ?? task.outputFile,
+      });
       this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
       return this.publishTasks();
     }
@@ -1594,13 +1610,10 @@ export class AgentSession {
       summary: update.summary,
       outputFile: update.outputFile ?? task.outputFile,
     });
-    // The launching card follows its task; the task keeps the exact end status. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    // The launching card follows its task; the task keeps the exact end status. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     this.updateLaunchCard({
       toolCallId: task.toolCallId,
       status: update.status === "completed" ? "completed" : "failed",
-      ...(update.summary
-        ? { content: [{ type: "content", content: { type: "text", text: update.summary } }] }
-        : {}),
     });
     this.publishTasks();
   }
@@ -1655,11 +1668,16 @@ export class AgentSession {
       default:
         return;
     }
-    if (changed) this.publishTasks();
+    // A task's own messages change on every step it takes; the task list keeps its identity so the chat's cards do not re-render. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    if (changed) this.notifyTasks();
   }
 
   private publishTasks(): void {
     this.taskList = this.tasks.size === 0 ? EMPTY_TASKS : Object.freeze([...this.tasks.values()]);
+    this.notifyTasks();
+  }
+
+  private notifyTasks(): void {
     for (const l of this.listeners) {
       try {
         l.onTasksChanged?.();

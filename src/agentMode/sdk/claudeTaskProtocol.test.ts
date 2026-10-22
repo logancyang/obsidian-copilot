@@ -2,6 +2,9 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { ClaudeTaskTracker } from "./claudeTaskProtocol";
 
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
+const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
+const LAUNCH_TEXT =
+  "Command running in background with ID: b1. Output is being written to: /tmp/claude/s1/tasks/b1.output. You will be notified when it completes.";
 
 function frame(fields: Record<string, unknown>): SDKMessage {
   return { type: "system", uuid: "u", session_id: "s", ...fields } as unknown as SDKMessage;
@@ -144,6 +147,104 @@ describe("claudeTaskProtocol", () => {
 
         expect(tracker.accept(started("w1", { ambient: true }))).toEqual([]);
         expect(tracker.accept(notification("w1"))).toEqual([]);
+      });
+    });
+
+    describe("observeToolUse()", () => {
+      it(`puts the Bash command that launched a background command on its start (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.observeToolUse("tool-b1", "Bash", {
+          command: "npm run render",
+          description: "Render",
+        });
+
+        const start = tracker.accept(started("b1", { task_type: "local_bash" }));
+
+        expect(start).toEqual([
+          expect.objectContaining({ kind: "command", command: "npm run render" }),
+        ]);
+      });
+
+      it("gives a subagent no command even when its tool input has one", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.observeToolUse("tool-a1", "Agent", { command: "not a shell command" });
+
+        const [start] = tracker.accept(started("a1"));
+
+        expect(start).not.toHaveProperty("command");
+      });
+    });
+
+    describe("observeLaunchResult()", () => {
+      it(`reports a running command's output file from its launch result (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("b1", { task_type: "local_bash" }));
+
+        const updates = tracker.observeLaunchResult({ backgroundTaskId: "b1" }, LAUNCH_TEXT);
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "task_progress",
+            taskId: "b1",
+            outputFile: "/tmp/claude/s1/tasks/b1.output",
+          },
+        ]);
+      });
+
+      it(`keeps a whole output path that contains spaces (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("b1", { task_type: "local_bash" }));
+
+        const updates = tracker.observeLaunchResult(
+          { backgroundTaskId: "b1" },
+          "Command running in background with ID: b1. Output is being written to: /Users/me/My Vault/.claude/tasks/b1.output. You will be notified when it completes."
+        );
+
+        expect(updates).toEqual([
+          {
+            sessionUpdate: "task_progress",
+            taskId: "b1",
+            outputFile: "/Users/me/My Vault/.claude/tasks/b1.output",
+          },
+        ]);
+      });
+
+      it("reports nothing for an unknown task, a finished task, or text without an output path", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("b1", { task_type: "local_bash" }));
+        tracker.accept(started("b2", { task_type: "local_bash" }));
+        tracker.accept(notification("b2"));
+
+        expect(tracker.observeLaunchResult({ backgroundTaskId: "b9" }, LAUNCH_TEXT)).toEqual([]);
+        expect(tracker.observeLaunchResult({ backgroundTaskId: "b2" }, LAUNCH_TEXT)).toEqual([]);
+        expect(tracker.observeLaunchResult({ backgroundTaskId: "b1" }, "Started.")).toEqual([]);
+      });
+    });
+
+    describe("observeSubagentModel()", () => {
+      it(`reports a subagent's model once, and again only when it changes (${ISSUE_749})`, () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+
+        const first = tracker.observeSubagentModel("tool-a1", "claude-haiku-9");
+        const repeat = tracker.observeSubagentModel("tool-a1", "claude-haiku-9");
+        const changed = tracker.observeSubagentModel("tool-a1", "claude-opus-9");
+
+        expect(first).toEqual([
+          { sessionUpdate: "task_progress", taskId: "a1", model: "claude-haiku-9" },
+        ]);
+        expect(repeat).toEqual([]);
+        expect(changed).toEqual([
+          { sessionUpdate: "task_progress", taskId: "a1", model: "claude-opus-9" },
+        ]);
+      });
+
+      it("reports nothing without a model or for a tool call that launched no task", () => {
+        const tracker = new ClaudeTaskTracker();
+        tracker.accept(started("a1"));
+
+        expect(tracker.observeSubagentModel("tool-a1", undefined)).toEqual([]);
+        expect(tracker.observeSubagentModel("tool-zz", "claude-haiku-9")).toEqual([]);
       });
     });
 

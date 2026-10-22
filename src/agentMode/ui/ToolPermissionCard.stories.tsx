@@ -112,3 +112,19 @@ export const CodexCommandPrefix: StoryObj<ToolPermissionCardProps> = {
     },
   },
 };
+
+export const SubagentRequester: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    requester:
+      'general-purpose "Audit every project note for stale launch dates and summarize what changed since the last review"',
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Bash: wc -w Projects/Launch brief.md",
+        kind: "execute",
+        rawInput: { command: "wc -w 'Projects/Launch brief.md'" },
+      },
+    },
+  },
+};

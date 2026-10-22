@@ -22,6 +22,8 @@ import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
+import { useAgentTasks, type AgentTasksContextValue } from "@/agentMode/ui/AgentTasksContext";
+import { TaskCard } from "@/agentMode/ui/TaskCard";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openVaultPath } from "@/utils/openVaultPath";
@@ -122,6 +124,7 @@ interface TrailContext {
   expansion: TrailExpansion;
   summaryCtx: ToolSummaryContext;
   miyoPaths: readonly string[];
+  tasks: AgentTasksContextValue | null;
 }
 
 const LinearTrail: React.FC<{
@@ -130,14 +133,19 @@ const LinearTrail: React.FC<{
   app: App;
 }> = ({ parts, isStreaming, app }) => {
   const expansion = useTrailExpansion();
+  const tasks = useAgentTasks();
   const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
-  const nodes = foldActivityGroups(buildAgentTrail(parts));
+  // A task's launching card must stay visible, not folded into "Ran N commands". https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  const nodes = foldActivityGroups(buildAgentTrail(parts), (part) =>
+    Boolean(tasks?.tasks.some((task) => task.toolCallId === part.id))
+  );
   const ctx: TrailContext = {
     app,
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
     expansion,
     summaryCtx,
     miyoPaths: miyoResultPaths(parts),
+    tasks,
   };
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
@@ -155,6 +163,10 @@ function renderNode(
   atLiveEdge: boolean,
   trailId: string
 ): React.ReactNode {
+  // A task's work is shown in its own view, so its launching call is only a link there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+  const launch = node.type === "action" ? node.part : node.type === "subagent" ? node.parent : null;
+  const task = launch && ctx.tasks?.tasks.find((t) => t.toolCallId === launch.id);
+  if (task && ctx.tasks) return <TaskCard key={key} task={task} onOpen={ctx.tasks.openTask} />;
   switch (node.type) {
     case "action": {
       const expansionId = actionExpansionId(trailId, node.part.id);
