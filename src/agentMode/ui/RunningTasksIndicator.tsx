@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
-import { Bot, Loader2, Terminal } from "lucide-react";
+import { Bot, Loader2, Square, Terminal } from "lucide-react";
 import React, { useRef, useState } from "react";
 
 const ROW_OUTPUT_BYTES = 4096;
@@ -24,6 +24,7 @@ interface RunningTasksIndicatorProps {
   tasks: readonly AgentTask[];
   permissions: readonly PermissionPrompt[];
   onOpenTask: (taskId: string) => void;
+  onStopTask?: (taskId: string) => void;
   container?: HTMLElement | null;
   defaultOpen?: boolean;
 }
@@ -32,6 +33,7 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
   tasks,
   permissions,
   onOpenTask,
+  onStopTask,
   container,
   defaultOpen = false,
 }) => {
@@ -75,14 +77,14 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         container={container}
         side="top"
         align="start"
-        className="tw-w-80 tw-max-w-[calc(100vw-2rem)] tw-p-1"
+        className="tw-w-96 tw-max-w-[calc(100vw-2rem)] tw-p-1"
         onPointerEnter={show}
         onPointerLeave={hideSoon}
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-p-0">
           {running.map((task) => (
-            <li key={task.taskId}>
+            <li key={task.taskId} className="tw-flex tw-items-start tw-gap-1">
               <RunningTaskRow
                 task={task}
                 status={taskDisplayStatus(task, permissions)}
@@ -91,6 +93,17 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
                   onOpenTask(task.taskId);
                 }}
               />
+              {onStopTask && (
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="tw-mt-2 tw-shrink-0 tw-p-1 tw-text-muted hover:tw-text-error"
+                  aria-label="Stop task"
+                  onClick={() => onStopTask(task.taskId)}
+                >
+                  <Square className="tw-size-3 tw-fill-current" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -110,7 +123,7 @@ const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen })
   return (
     <button
       type="button"
-      className="tw-flex tw-h-auto tw-w-full tw-flex-col tw-items-stretch tw-gap-0.5 tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-modifier-hover"
+      className="tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5 tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-modifier-hover"
       onClick={onOpen}
     >
       <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">

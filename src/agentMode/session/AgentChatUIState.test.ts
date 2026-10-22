@@ -432,4 +432,22 @@ describe("AgentChatUIState", () => {
       expect(listener).toHaveBeenCalled();
     });
   });
+
+  describe("canStopTasks()", () => {
+    it("follows the backend's per-task stop capability (https://github.com/Brevilabs/obsidian-copilot-private/issues/748)", () => {
+      expect(liveChat({ stopTask: true }).canStopTasks()).toBe(true);
+      expect(liveChat({}).canStopTasks()).toBe(false);
+    });
+  });
+
+  describe("stopTask()", () => {
+    it("asks the backend to stop the task with that id (https://github.com/Brevilabs/obsidian-copilot-private/issues/748)", async () => {
+      const stopTask = jest.fn(async () => undefined);
+      const chat = liveChat({ stopTask: true }, { stopTask });
+
+      await chat.stopTask("task-1");
+
+      expect(stopTask).toHaveBeenCalledWith({ sessionId: "claude-session", taskId: "task-1" });
+    });
+  });
 });

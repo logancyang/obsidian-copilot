@@ -39,7 +39,12 @@ const meta = {
 } satisfies Meta<Props>;
 export default meta;
 
-const renderWithOutput = ({ tasks = TASKS, permissions = [], defaultOpen }: Partial<Props>) => (
+const renderWithOutput = ({
+  tasks = TASKS,
+  permissions = [],
+  defaultOpen,
+  onStopTask,
+}: Partial<Props>) => (
   <TaskOutputReaderContext.Provider value={OUTPUT_READER}>
     <div className="tw-flex tw-h-72 tw-items-end">
       <RunningTasksIndicator
@@ -47,6 +52,7 @@ const renderWithOutput = ({ tasks = TASKS, permissions = [], defaultOpen }: Part
         permissions={permissions}
         defaultOpen={defaultOpen}
         onOpenTask={() => {}}
+        onStopTask={onStopTask}
       />
     </div>
   </TaskOutputReaderContext.Provider>
@@ -67,4 +73,9 @@ export const PopoverRows: StoryObj<Props> = {
 export const NeedsApproval: StoryObj<Props> = {
   render: renderWithOutput,
   args: { defaultOpen: true, permissions: [APPROVAL] },
+};
+
+export const PopoverRowsWithStop: StoryObj<Props> = {
+  render: renderWithOutput,
+  args: { defaultOpen: true, onStopTask: () => {} },
 };

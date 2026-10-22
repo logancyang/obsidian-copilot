@@ -1364,6 +1364,21 @@ describe("ClaudeSdkBackendProcess", () => {
       });
     });
 
+    describe("stopTask()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 asks Claude to stop that task on the chat's live query, without interrupting or closing it", async () => {
+        queryMock.mockImplementation(silent());
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
+
+        await proc.stopTask({ sessionId, taskId: "bg-task-1" });
+
+        expect(fakes[0].stopTask).toHaveBeenCalledWith("bg-task-1");
+        expect(fakes[0].interrupt).not.toHaveBeenCalled();
+        expect(fakes[0].close).not.toHaveBeenCalled();
+      });
+    });
+
     describe("shutdown()", () => {
       it("closes every chat's live query", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));

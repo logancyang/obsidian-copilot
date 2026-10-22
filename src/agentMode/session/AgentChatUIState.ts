@@ -127,6 +127,14 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getTaskMessages(taskId);
   }
 
+  canStopTasks(): boolean {
+    return this.session.canStopTasks();
+  }
+
+  stopTask(taskId: string): Promise<void> {
+    return this.session.stopTask(taskId);
+  }
+
   isStarting(): boolean {
     return this.session.getStatus() === "starting";
   }

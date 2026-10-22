@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
+const ISSUE_748 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/748";
 const OUTPUT = "/tmp/tasks/task-2.output";
 
 function renderIndicator(
@@ -123,5 +124,25 @@ describe("RunningTasksIndicator", () => {
     fireEvent.click(screen.getByText("Print 30 progress lines"));
 
     expect(onOpenTask).toHaveBeenCalledWith("task-2");
+  });
+
+  it(`gives every running subagent and command row a stop control that stops that task without opening it (${ISSUE_748})`, () => {
+    const onStopTask = jest.fn();
+    const { onOpenTask } = renderIndicator({ defaultOpen: true, onStopTask });
+    const stops = screen.getAllByRole("button", { name: "Stop task" });
+
+    fireEvent.click(stops[1]);
+
+    expect(stops).toHaveLength(2);
+    expect(onStopTask).toHaveBeenCalledTimes(1);
+    expect(onStopTask).toHaveBeenCalledWith("task-2");
+    expect(onOpenTask).not.toHaveBeenCalled();
+  });
+
+  it(`shows no stop control when the agent cannot stop one task (${ISSUE_748})`, () => {
+    renderIndicator({ defaultOpen: true });
+
+    expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop task" })).toBeNull();
   });
 });

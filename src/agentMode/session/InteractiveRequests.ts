@@ -16,6 +16,7 @@ import {
   PermissionDecision,
   PermissionOptionKind,
   PermissionPrompt,
+  PermissionRequester,
   PlanDecisionAction,
 } from "@/agentMode/session/types";
 
@@ -199,13 +200,15 @@ export class InteractiveRequests {
     return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
   }
 
-  rejectMainToolPermissions(): void {
-    const mainRequests = [...this.pendingToolResolvers].filter(
-      ([, { request }]) => (request.requester ?? "main") === "main"
-    );
-    if (mainRequests.length === 0) return;
-    for (const [toolCallId] of mainRequests) this.pendingToolResolvers.delete(toolCallId);
-    this.flushResolvers(new Map(mainRequests));
+  rejectToolRequestsFrom(requester: PermissionRequester): void {
+    const taskId = typeof requester === "object" ? requester.taskId : undefined;
+    const requests = [...this.pendingToolResolvers].filter(([, { request }]) => {
+      const from = request.requester ?? "main";
+      return typeof from === "object" ? from.taskId === taskId : taskId === undefined;
+    });
+    if (requests.length === 0) return;
+    for (const [toolCallId] of requests) this.pendingToolResolvers.delete(toolCallId);
+    this.flushResolvers(new Map(requests));
     this.deps.notifyMessages();
   }
 

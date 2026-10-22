@@ -31,6 +31,7 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
+  AgentToolStatus,
   TaskEndStatus,
   TaskStart,
   ToolCallDelta,
@@ -113,6 +114,11 @@ const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
 const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
+const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
+  completed: "completed",
+  failed: "failed",
+  stopped: "cancelled",
+};
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
@@ -787,6 +793,14 @@ export class AgentSession {
     if (withdrawn === false) this.deliverPrompt(promptId);
   }
 
+  canStopTasks(): boolean {
+    return this.getDescriptor?.()?.stopTask === true;
+  }
+
+  async stopTask(taskId: string): Promise<void> {
+    await this.backend.stopTask?.({ sessionId: this.backendSessionId!, taskId });
+  }
+
   // A message sent while the agent works is shown only once it reaches the agent, at that point in the transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
   private queuePrompt(
     text: string,
@@ -1158,7 +1172,7 @@ export class AgentSession {
     });
     this.settledStream = null;
     // Stop ends the main agent's turn only, so a background task's request stays answerable. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    this.requests.rejectMainToolPermissions();
+    this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
@@ -1479,7 +1493,7 @@ export class AgentSession {
       case "tool_call_update": {
         if (targetMessageId !== placeholderId) this.currentTurnShowedActivityElsewhere = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
-        const merged = mergeToolCallUpdate(existing, update);
+        const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
         // A late update to an earlier turn's call must not count as this turn's edit.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
         if (!isPriorToolUpdate && merged.kind === "tool_call") {
@@ -1610,12 +1624,26 @@ export class AgentSession {
       summary: update.summary,
       outputFile: update.outputFile ?? task.outputFile,
     });
-    // The launching card follows its task; the task keeps the exact end status. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+    // The launching card follows its task. A summary is not a result: a subagent's is boilerplate about its hand-back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     this.updateLaunchCard({
       toolCallId: task.toolCallId,
-      status: update.status === "completed" ? "completed" : "failed",
+      status: LAUNCH_CARD_STATUS[update.status],
     });
+    // A request from a task that has ended can no longer be answered, so its card must not stay open. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+    this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
     this.publishTasks();
+  }
+
+  // A task's end decides its launching card's status; the tool's result can arrive after a stop and must not turn it into a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+  private withEndedTaskStatus<T extends { toolCallId: string }>(
+    update: T
+  ): T | (T & { status: AgentToolStatus }) {
+    const taskStatus = [...this.tasks.values()].find(
+      (task) => task.toolCallId === update.toolCallId
+    )?.status;
+    return taskStatus && taskStatus !== "running"
+      ? { ...update, status: LAUNCH_CARD_STATUS[taskStatus] }
+      : update;
   }
 
   private updateLaunchCard(delta: ToolCallDelta): void {
@@ -1662,7 +1690,10 @@ export class AgentSession {
         const existing = store
           .getMessage(messageId)
           ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
-        changed = store.upsertAgentPart(messageId, mergeToolCallUpdate(existing, update));
+        changed = store.upsertAgentPart(
+          messageId,
+          mergeToolCallUpdate(existing, this.withEndedTaskStatus(update))
+        );
         break;
       }
       default:

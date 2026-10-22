@@ -268,13 +268,13 @@ describe("InteractiveRequests", () => {
       });
     });
 
-    describe("rejectMainToolPermissions()", () => {
+    describe("rejectToolRequestsFrom()", () => {
       it("rejects every pending main-agent tool permission and notifies the transcript", async () => {
         const { requests, notifyMessages } = makeRequests();
         const decision = requests.handleToolPermission(writePermissionRequest());
         notifyMessages.mockClear();
 
-        requests.rejectMainToolPermissions();
+        requests.rejectToolRequestsFrom("main");
 
         await expect(decision).resolves.toEqual({
           outcome: { outcome: "selected", optionId: "reject_once" },
@@ -286,9 +286,31 @@ describe("InteractiveRequests", () => {
       it("does nothing when no tool permission is pending", () => {
         const { requests, notifyMessages } = makeRequests();
 
-        requests.rejectMainToolPermissions();
+        requests.rejectToolRequestsFrom("main");
 
         expect(notifyMessages).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 rejects only the named task's pending tool permissions and keeps the main agent's and other tasks' requests", async () => {
+        const { requests } = makeRequests();
+        const fromTask = (taskId: string) => ({
+          ...writePermissionRequest(),
+          requester: { taskId },
+          toolCall: { ...writePermissionRequest().toolCall, toolCallId: `tc-${taskId}` },
+        });
+        void requests.handleToolPermission(writePermissionRequest());
+        const ended = requests.handleToolPermission(fromTask("task-1"));
+        void requests.handleToolPermission(fromTask("task-2"));
+
+        requests.rejectToolRequestsFrom({ taskId: "task-1" });
+
+        await expect(ended).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(requests.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-write",
+          "tc-task-2",
+        ]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a background task's tool permission pending and answerable", async () => {
@@ -300,7 +322,7 @@ describe("InteractiveRequests", () => {
         });
         notifyMessages.mockClear();
 
-        requests.rejectMainToolPermissions();
+        requests.rejectToolRequestsFrom("main");
 
         expect(notifyMessages).not.toHaveBeenCalled();
         expect(requests.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([

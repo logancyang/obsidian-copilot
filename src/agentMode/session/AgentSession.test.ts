@@ -4332,6 +4332,49 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("canStopTasks()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 reports whether the backend can stop one task on its own", () => {
+        const mock = makeMockBackend();
+
+        expect(
+          makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor }).canStopTasks()
+        ).toBe(true);
+        expect(
+          makeSession(mock, { getDescriptor: () => OpencodeBackendDescriptor }).canStopTasks()
+        ).toBe(false);
+      });
+    });
+
+    describe("stopTask()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 asks the backend to stop that task only, and the task ends when the backend reports it stopped", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor });
+        for (const taskId of ["task-1", "task-2"]) {
+          mock.emitUpdate({
+            sessionUpdate: "task_started",
+            taskId,
+            toolCallId: `tool-${taskId}`,
+            kind: "subagent",
+            description: taskId,
+          });
+        }
+        const stopTask = jest.fn(async ({ taskId }: { taskId: string }) => {
+          mock.emitUpdate({ sessionUpdate: "task_ended", taskId, status: "stopped" });
+        });
+        mock.asBackend.stopTask = stopTask;
+
+        await session.stopTask("task-1");
+
+        expect(stopTask).toHaveBeenCalledTimes(1);
+        expect(stopTask).toHaveBeenCalledWith({ sessionId: "acp-1", taskId: "task-1" });
+        expect(session.getTasks().map((t) => [t.taskId, t.status])).toEqual([
+          ["task-1", "stopped"],
+          ["task-2", "running"],
+        ]);
+        expect(session.getStatus()).toBe("idle");
+      });
+    });
+
     describe("releaseBackendSession()", () => {
       function setupReleaseSession() {
         const mock = makeMockBackend();
@@ -5517,6 +5560,36 @@ describe("AgentSession", () => {
         finishPrompt();
         await turn;
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 rejects and removes a task's pending request when that task ends, keeping other requests", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-task-1",
+          kind: "subagent",
+          description: "Probe",
+        });
+        const taskDecision = session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+        });
+        void session.handleToolPermission({
+          ...writePermissionRequest(),
+          toolCall: { ...writePermissionRequest().toolCall, toolCallId: "tc-other" },
+          requester: { taskId: "task-2" },
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        await expect(taskDecision).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+        expect(session.getPendingToolPermissions().map((p) => p.toolCall.toolCallId)).toEqual([
+          "tc-other",
+        ]);
+      });
     });
 
     describe("handleAskUserQuestion()", () => {
@@ -5798,7 +5871,7 @@ describe("AgentSession", () => {
         expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toEqual(cardBefore);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 keeps a stopped task's exact status while its card shows it failed", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 shows a stopped task's launching card as stopped, not failed", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });
         const { turn, run } = launchTurn(mock, session);
@@ -5810,7 +5883,67 @@ describe("AgentSession", () => {
 
         expect(session.getTasks()[0].status).toBe("stopped");
         expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          status: "cancelled",
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps a stopped foreground task's launching card stopped when the tool's failed result arrives after the stop, while still showing that result", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-agent",
           status: "failed",
+          content: [{ type: "content", content: { type: "text", text: "Agent was stopped" } }],
+        });
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          status: "cancelled",
+          output: [{ type: "text", text: "Agent was stopped" }],
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps the launching card of a stopped command started inside a subagent stopped when the command's failed result arrives after the stop", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const fromSubagent = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", update, taskToolCallId: "tool-agent" });
+        mock.emitUpdate(TASK_STARTED);
+        fromSubagent({
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-bash",
+          title: "npm test",
+          kind: "execute",
+          status: "in_progress",
+        });
+        fromSubagent({
+          sessionUpdate: "task_started",
+          taskId: "task-2",
+          toolCallId: "tool-bash",
+          kind: "command",
+          description: "npm test",
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-2", status: "stopped" });
+        fromSubagent({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-bash",
+          status: "failed",
+          content: [{ type: "content", content: { type: "text", text: "Command was stopped" } }],
+        });
+
+        expect(
+          session.getTaskMessages("task-1")[0]?.parts?.find((p) => p.kind === "tool_call")
+        ).toMatchObject({
+          id: "tool-bash",
+          status: "cancelled",
+          output: [{ type: "text", text: "Command was stopped" }],
         });
       });
 

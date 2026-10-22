@@ -212,6 +212,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   summarizesSessionTitle: false,
   midTurnDelivery: true,
   withdraw: true,
+  stopTask: true,
   agentProductName: "Claude Code",
   wire: claudeWire,
   showModelDescriptions: true,

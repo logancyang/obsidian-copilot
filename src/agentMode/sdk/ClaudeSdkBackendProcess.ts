@@ -38,6 +38,7 @@ import type {
   SessionEvent,
   SessionId,
   SessionUpdateHandler,
+  StopTaskInput,
   WithdrawInput,
 } from "@/agentMode/session/types";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
@@ -418,6 +419,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     logSdkOutbound("withdraw", { promptId: params.promptId }, params.sessionId);
     const live = this.sessions.get(params.sessionId)?.live;
     return live ? live.cancelQueued(params.promptId) : false;
+  }
+
+  async stopTask(params: StopTaskInput): Promise<void> {
+    logSdkOutbound("stopTask", { taskId: params.taskId }, params.sessionId);
+    await this.sessions.get(params.sessionId)?.live?.query.stopTask(params.taskId);
   }
 
   async setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState> {
