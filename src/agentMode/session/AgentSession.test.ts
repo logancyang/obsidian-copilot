@@ -30,9 +30,11 @@ import type {
   BackendState,
   CopilotMode,
   EnabledModelEntry,
+  PromptInput,
   SessionEvent,
   SessionUpdateHandler,
   StopReason,
+  TurnEnd,
 } from "./types";
 
 jest.mock("@/logger", () => ({
@@ -75,7 +77,24 @@ function makeMockBackend(): MockBackend {
       handler = null;
     };
   });
-  const prompt = jest.fn(async () => ({ stopReason: "end_turn" as const }));
+  const prompt = jest.fn(
+    async (_input: PromptInput): Promise<Omit<TurnEnd, "turnId">> => ({ stopReason: "end_turn" })
+  );
+  const emitTurn = (update: SessionEvent["update"]) => handler?.({ sessionId: "acp-1", update });
+  const acceptPrompt = async (input: PromptInput): Promise<void> => {
+    emitTurn({ sessionUpdate: "message_delivered", promptId: input.promptId });
+    emitTurn({ sessionUpdate: "turn_started", turnId: input.promptId });
+    void prompt(input).then(
+      (outcome) => emitTurn({ sessionUpdate: "turn_ended", turnId: input.promptId, ...outcome }),
+      (error: unknown) =>
+        emitTurn({
+          sessionUpdate: "turn_ended",
+          turnId: input.promptId,
+          stopReason: "end_turn",
+          error: error as Error,
+        })
+    );
+  };
   const cancel = jest.fn(async () => undefined);
   const closeSession = jest.fn(async () => undefined);
   const newSession = jest.fn(async () => ({ sessionId: "acp-1", state: emptyState() }));
@@ -89,7 +108,7 @@ function makeMockBackend(): MockBackend {
     setPermissionPrompter: () => {},
     registerSessionHandler: registerHandler,
     newSession: newSession,
-    prompt: prompt,
+    prompt: acceptPrompt,
     cancel: cancel,
     closeSession,
     setSessionModel: setSessionModel,
@@ -1427,6 +1446,7 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
         expect(mock.prompt).toHaveBeenCalledWith({
           sessionId: "acp-1",
+          promptId: userMessageId,
           prompt: [{ type: "text", text: "Hi there" }],
         });
       });
@@ -1469,6 +1489,7 @@ describe("AgentSession", () => {
         ]);
         expect(mock.prompt).toHaveBeenCalledWith({
           sessionId: "acp-1",
+          promptId: expect.any(String),
           prompt: [
             { type: "text", text: "describe" },
             { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
@@ -1704,6 +1725,7 @@ describe("AgentSession", () => {
         expect(mock.prompt).toHaveBeenCalledTimes(2);
         expect(mock.prompt.mock.calls[1][0]).toEqual({
           sessionId: "acp-1",
+          promptId: expect.any(String),
           prompt: [{ type: "text", text: OUTPUT_LIMIT_CONTINUATION_PROMPT }],
         });
         expect(bubbles(session).map((b) => b.sender)).toEqual([USER_SENDER, AI_SENDER]);
@@ -1973,9 +1995,10 @@ describe("AgentSession", () => {
         expect(placeholder?.message).toContain("requires a newer version of Codex");
       });
 
-      it("renders a visible error (not an empty bubble) when the backend reports auth required", async () => {
+      it("renders a visible error (not an empty bubble) when the backend refuses the prompt because auth is required", async () => {
         const mock = makeMockBackend();
-        mock.prompt.mockRejectedValueOnce(new AuthRequiredError("You're not signed in to Claude."));
+        mock.asBackend.prompt = () =>
+          Promise.reject(new AuthRequiredError("You're not signed in to Claude."));
         const session = makeSession(mock, { backendId: "claude" });
 
         await expect(session.sendPrompt("hi").turn).rejects.toBeInstanceOf(AuthRequiredError);
@@ -1984,6 +2007,72 @@ describe("AgentSession", () => {
         expect(placeholder?.isErrorMessage).toBe(true);
         expect(placeholder?.message).toContain("not signed in to Claude");
         expect(session.getStatus()).toBe("error");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 shows the reply at send, fills it once the turn starts, and stays running from send to the turn's end", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        let promptId = "";
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const session = makeSession(mock);
+
+        const { turn } = session.sendPrompt("hi");
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "hi" },
+          { sender: AI_SENDER, message: "" },
+        ]);
+        expect(session.getStatus()).toBe("running");
+
+        emit({ sessionUpdate: "message_delivered", promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit(replayText("agent_message_chunk", "hello"));
+        expect(bubbles(session)).toEqual([
+          { sender: USER_SENDER, message: "hi" },
+          { sender: AI_SENDER, message: "hello" },
+        ]);
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
+
+        expect(await turn).toBe("end_turn");
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 leaves a prompt waiting through a turn that ended before the prompt was delivered", async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        let promptId = "";
+        mock.asBackend.prompt = async (input) => {
+          promptId = input.promptId;
+        };
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("follow-up");
+
+        emit({ sessionUpdate: "turn_started", turnId: "earlier" });
+        emit(replayText("agent_message_chunk", "earlier work"));
+        emit({ sessionUpdate: "turn_ended", turnId: "earlier", stopReason: "refusal" });
+        emit({ sessionUpdate: "message_delivered", promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "answer" });
+        emit(replayText("agent_message_chunk", "the answer"));
+        emit({ sessionUpdate: "turn_ended", turnId: "answer", stopReason: "end_turn" });
+
+        expect(await turn).toBe("end_turn");
+        expect(aiMessages(session).map((m) => m.message)).toEqual(["earlier work", "the answer"]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ignores the end of a turn that is not running", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("hi");
+        mock.emitUpdate(replayText("agent_message_chunk", "still working"));
+
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "unknown", stopReason: "end_turn" });
+
+        expect(session.getStatus()).toBe("running");
+        expect(aiMessage(session)?.turnStopReason).toBeUndefined();
+        finishPrompt();
+        expect(await turn).toBe("end_turn");
       });
 
       it("appends streamed message chunks to the assistant placeholder", async () => {
@@ -3012,6 +3101,23 @@ describe("AgentSession", () => {
             ]);
           });
 
+          it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends the turn without a file change card when the turn diff is malformed", async () => {
+            const vault = makeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              return {
+                stopReason: "end_turn" as const,
+                turnDiff: { root: "/vault", unifiedDiff: "@@ -1 +1 @@\n?not a diff line\n" },
+              };
+            });
+            const session = makeSession(mock, vault.app);
+
+            await expect(session.sendPrompt("patch it").turn).resolves.toBe("end_turn");
+            expect(fileChangesOf(session)).toBeUndefined();
+            expect(session.getStatus()).toBe("idle");
+          });
+
           it("falls back to the snapshot for a file the turn diff no longer applies to https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
             const vault = makeVault({ "notes/a.md": "snapshot\n" });
             const mock = makeMockBackend();
@@ -3033,6 +3139,81 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt held behind a stopped turn as cancelled, without sending it, when the chat closes", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockImplementationOnce(() => new Promise(() => undefined));
+        const session = makeSession(mock);
+        const first = session.sendPrompt("first");
+        await session.cancel();
+        await expect(first.turn).resolves.toBe("cancelled");
+
+        const next = session.sendPrompt("second");
+        await session.dispose();
+
+        await expect(next.turn).resolves.toBe("cancelled");
+        expect(mock.prompt).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 sends nothing and keeps one cancelled reply for a prompt stopped while it waits behind a stopped turn", async () => {
+        const mock = makeMockBackend();
+        const endFirstTurn = holdPrompt(mock);
+        const session = makeSession(mock);
+        const first = session.sendPrompt("first");
+        await session.cancel();
+        await expect(first.turn).resolves.toBe("cancelled");
+
+        const next = session.sendPrompt("second");
+        await session.cancel();
+        endFirstTurn("cancelled");
+
+        await expect(next.turn).resolves.toBe("cancelled");
+        expect(mock.prompt).toHaveBeenCalledTimes(1);
+        expect(session.store.getDisplayMessages().map((m) => [m.sender, m.turnStopReason])).toEqual(
+          [
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+          ]
+        );
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a turn stopped while the agent is still accepting its prompt as cancelled and leaves the chat idle", async () => {
+        const mock = makeMockBackend();
+        mock.asBackend.prompt = () => new Promise(() => undefined);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("hi");
+        await session.cancel();
+
+        await expect(turn).resolves.toBe("cancelled");
+        expect(session.getStatus()).toBe("idle");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 leaves one cancelled reply and runs no agents when Stop lands during the multi-agent entitlement check", async () => {
+        const mock = makeMockBackend();
+        let finishEntitlementCheck!: (entitled: boolean) => void;
+        jest
+          .mocked(ensureMultiAgentEntitlement)
+          .mockImplementationOnce(
+            () => new Promise<boolean>((resolve) => (finishEntitlementCheck = resolve))
+          );
+        const runFanoutTurn = jest.fn();
+        const session = makeSession(mock, { runFanoutTurn });
+        const { turn } = session.sendPrompt("review", undefined, undefined, ["opencode", "claude"]);
+
+        await session.cancel();
+        finishEntitlementCheck(true);
+
+        await expect(turn).resolves.toBe("cancelled");
+        expect(runFanoutTurn).not.toHaveBeenCalled();
+        expect(session.store.getDisplayMessages().map((m) => [m.sender, m.turnStopReason])).toEqual(
+          [
+            [USER_SENDER, undefined],
+            [AI_SENDER, "cancelled"],
+          ]
+        );
+      });
+
       it("sends a cancel to the backend and resolves the turn as cancelled", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -3077,10 +3258,12 @@ describe("AgentSession", () => {
         ]);
       });
 
-      it("settles locally and drops retry output when backend cancellation fails", async () => {
+      it("settles locally, drops retry output, and holds the next prompt until the stopped turn ends when backend cancellation fails", async () => {
         const mock = makeMockBackend();
         let resolveBackingPrompt: ((value: { stopReason: "cancelled" }) => void) | null = null;
         let resolveSecondPrompt: ((value: { stopReason: "end_turn" }) => void) | null = null;
+        let secondPromptSent!: () => void;
+        const secondPromptSending = new Promise<void>((resolve) => (secondPromptSent = resolve));
         mock.prompt
           .mockImplementationOnce(
             () =>
@@ -3092,6 +3275,7 @@ describe("AgentSession", () => {
             () =>
               new Promise((resolve) => {
                 resolveSecondPrompt = resolve;
+                secondPromptSent();
               })
           );
         const session = makeSession(mock);
@@ -3134,90 +3318,72 @@ describe("AgentSession", () => {
         expect(mock.prompt).toHaveBeenCalledTimes(1);
         emitChunk("agent_message_chunk", " stale retry", "msg-retry");
 
-        jest.useFakeTimers();
-        try {
-          resolveBackingPrompt!({ stopReason: "cancelled" });
-          await jest.advanceTimersByTimeAsync(500);
-          emitChunk("agent_message_chunk", " delayed stale retry", "msg-retry");
-          await jest.advanceTimersByTimeAsync(500);
-          expect(mock.prompt).toHaveBeenCalledTimes(1);
-
-          await jest.advanceTimersByTimeAsync(1_000);
-          expect(mock.prompt).toHaveBeenCalledTimes(2);
-          emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
-          emitChunk("agent_message_chunk", "recovered", "msg-second");
-          resolveSecondPrompt!({ stopReason: "end_turn" });
-          await expect(next.turn).resolves.toBe("end_turn");
-          expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
-        } finally {
-          jest.useRealTimers();
-        }
+        resolveBackingPrompt!({ stopReason: "cancelled" });
+        await secondPromptSending;
+        emitChunk("agent_message_chunk", " stale trailing chunk", "msg-retry");
+        emitChunk("agent_message_chunk", "recovered", "msg-second");
+        resolveSecondPrompt!({ stopReason: "end_turn" });
+        await expect(next.turn).resolves.toBe("end_turn");
+        expect(session.store.getDisplayMessages().at(-1)?.message).toBe("recovered");
       });
 
       it("routes a prior turn's tool update after the current turn is cancelled", async () => {
-        jest.useFakeTimers();
-        try {
-          const mock = makeMockBackend();
-          const resolvePrompts: Array<(value: { stopReason: "end_turn" | "cancelled" }) => void> =
-            [];
-          mock.prompt.mockImplementation(
-            () =>
-              new Promise((resolve) => {
-                resolvePrompts.push(resolve);
-              })
-          );
-          const session = makeSession(mock, { backendId: "claude-code" });
+        const mock = makeMockBackend();
+        const resolvePrompts: Array<(value: { stopReason: "end_turn" | "cancelled" }) => void> = [];
+        mock.prompt.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolvePrompts.push(resolve);
+            })
+        );
+        const session = makeSession(mock, { backendId: "claude-code" });
 
-          const first = session.sendPrompt("launch a background agent");
-          mock.emitUpdate({
-            sessionUpdate: "tool_call",
-            toolCallId: "tc-agent",
-            title: "Agent",
-            status: "in_progress",
-          });
-          resolvePrompts[0]({ stopReason: "end_turn" });
-          await first.turn;
+        const first = session.sendPrompt("launch a background agent");
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-agent",
+          title: "Agent",
+          status: "in_progress",
+        });
+        resolvePrompts[0]({ stopReason: "end_turn" });
+        await first.turn;
 
-          const second = session.sendPrompt("do something else");
-          mock.emitUpdate({
-            sessionUpdate: "tool_call",
-            toolCallId: "tc-cancelled",
-            title: "Current turn tool",
-            status: "in_progress",
-          });
-          await session.cancel();
-          await expect(second.turn).resolves.toBe("cancelled");
+        const second = session.sendPrompt("do something else");
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-cancelled",
+          title: "Current turn tool",
+          status: "in_progress",
+        });
+        await session.cancel();
+        await expect(second.turn).resolves.toBe("cancelled");
 
-          mock.emitUpdate({
-            sessionUpdate: "tool_call_update",
-            toolCallId: "tc-agent",
-            status: "completed",
-            content: [{ type: "content", content: { type: "text", text: "agent report" } }],
-          });
-          mock.emitUpdate({
-            sessionUpdate: "tool_call_update",
-            toolCallId: "tc-cancelled",
-            status: "completed",
-          });
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-agent",
+          status: "completed",
+          content: [{ type: "content", content: { type: "text", text: "agent report" } }],
+        });
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-cancelled",
+          status: "completed",
+        });
 
-          const ai = aiMessages(session);
-          expect(ai[0]?.parts?.[0]).toMatchObject({
-            kind: "tool_call",
-            id: "tc-agent",
-            status: "completed",
-            output: [{ type: "text", text: "agent report" }],
-          });
-          expect(ai[1]?.parts?.[0]).toMatchObject({
-            kind: "tool_call",
-            id: "tc-cancelled",
-            status: "in_progress",
-          });
+        const ai = aiMessages(session);
+        expect(ai[0]?.parts?.[0]).toMatchObject({
+          kind: "tool_call",
+          id: "tc-agent",
+          status: "completed",
+          output: [{ type: "text", text: "agent report" }],
+        });
+        expect(ai[1]?.parts?.[0]).toMatchObject({
+          kind: "tool_call",
+          id: "tc-cancelled",
+          status: "in_progress",
+        });
 
-          resolvePrompts[1]({ stopReason: "cancelled" });
-          await jest.advanceTimersByTimeAsync(500);
-        } finally {
-          jest.useRealTimers();
-        }
+        resolvePrompts[1]({ stopReason: "cancelled" });
       });
 
       it("rejects a pending inline tool permission before awaiting backend cancel", async () => {

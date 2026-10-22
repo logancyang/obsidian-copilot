@@ -4,6 +4,8 @@ import type { BackendDescriptor } from "@/agentMode/session/descriptor";
 import type {
   BackendProcess,
   PermissionPrompt,
+  PromptInput,
+  SessionEvent,
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
@@ -38,7 +40,23 @@ describe("AgentChatUIState", () => {
         emitUpdate = handler;
         return () => undefined;
       },
-      prompt,
+      prompt: async (input: PromptInput) => {
+        const emit = (update: SessionEvent["update"]) =>
+          emitUpdate!({ sessionId: "codex-session", update });
+        emit({ sessionUpdate: "message_delivered", promptId: input.promptId });
+        emit({ sessionUpdate: "turn_started", turnId: input.promptId });
+        void prompt(input).then(
+          (outcome: { stopReason: "end_turn" }) =>
+            emit({ sessionUpdate: "turn_ended", turnId: input.promptId, ...outcome }),
+          (error: Error) =>
+            emit({
+              sessionUpdate: "turn_ended",
+              turnId: input.promptId,
+              stopReason: "end_turn",
+              error,
+            })
+        );
+      },
     } as unknown as BackendProcess;
     const descriptor = { planFeedbackDelivery: feedbackDelivery } as unknown as BackendDescriptor;
     const session = new AgentSession({

@@ -1,5 +1,10 @@
 import { FileSystemAdapter, App } from "obsidian";
-import type { BackendDescriptor, PermissionOption } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  PermissionOption,
+  PromptContent,
+  SessionEvent,
+} from "@/agentMode/session/types";
 import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
@@ -642,7 +647,7 @@ describe("AcpBackendProcess", () => {
           first.mockClear();
           second.mockClear();
 
-          await backend.prompt({ sessionId: "s1", prompt: [] });
+          await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
           await settle();
 
           for (const handler of [first, second]) {
@@ -703,7 +708,7 @@ describe("AcpBackendProcess", () => {
           await settle();
 
           for (let turn = 0; turn < 2; turn++) {
-            await backend.prompt({ sessionId: "s1", prompt: [] });
+            await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
             await settle();
           }
 
@@ -724,7 +729,7 @@ describe("AcpBackendProcess", () => {
           await settle();
           handler.mockClear();
 
-          await backend.prompt({ sessionId: "s1", prompt: [] });
+          await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
           await settle();
 
           expect(planEvents(handler)).toEqual([
@@ -793,7 +798,7 @@ describe("AcpBackendProcess", () => {
           const handler = jest.fn();
           backend.registerSessionHandler("s1", handler);
 
-          await backend.prompt({ sessionId: "s1", prompt: [] });
+          await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
           await settle();
           releaseStaleRead({ kind: "usage", planUsage: PLAN_USAGE });
           await settle();
@@ -832,7 +837,7 @@ describe("AcpBackendProcess", () => {
           const handler = jest.fn();
           backend.registerSessionHandler("s1", handler);
 
-          await backend.prompt({ sessionId: "s1", prompt: [] });
+          await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
           await settle();
 
           expect(planEvents(handler)).toHaveLength(0);
@@ -1354,7 +1359,47 @@ describe("AcpBackendProcess", () => {
         return backend;
       }
 
-      it("returns the turn diff its backend reads from the prompt result's metadata https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
+      function promptTurn(
+        backend: AcpBackendProcess,
+        prompt: PromptContent[] = [],
+        handler: jest.Mock = jest.fn()
+      ): Promise<SessionEvent["update"]> {
+        return new Promise((resolve, reject) => {
+          backend.registerSessionHandler("s1", (event) => {
+            handler(event);
+            if (event.update.sessionUpdate === "turn_ended") resolve(event.update);
+          });
+          backend.prompt({ sessionId: "s1", promptId: "p1", prompt }).catch(reject);
+        });
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 resolves once session/prompt is sent, reporting delivery and the turn's start, and ends the turn when the agent answers", async () => {
+        const backend = await makeBackend();
+        const updates: SessionEvent["update"][] = [];
+        let endTurn!: (update: SessionEvent["update"]) => void;
+        const turnEnded = new Promise<SessionEvent["update"]>((resolve) => (endTurn = resolve));
+        backend.registerSessionHandler("s1", ({ update }) => {
+          updates.push(update);
+          if (update.sessionUpdate === "turn_ended") endTurn(update);
+        });
+        let answer!: (result: { stopReason: string }) => void;
+        promptMock(backend).mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+
+        await backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] });
+
+        expect(updates).toEqual([
+          { sessionUpdate: "message_delivered", promptId: "p1" },
+          { sessionUpdate: "turn_started", turnId: "p1" },
+        ]);
+        answer({ stopReason: "max_tokens" });
+        await expect(turnEnded).resolves.toEqual({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
+          stopReason: "max_tokens",
+        });
+      });
+
+      it("ends the turn with the turn diff its backend reads from the prompt result's metadata https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
         const readTurnDiff = jest.fn(() => ({
           root: "/repo",
           unifiedDiff: "diff --git a/x b/x\n",
@@ -1371,10 +1416,12 @@ describe("AcpBackendProcess", () => {
           _meta: { vendor: { diff: "raw" } },
         });
 
-        const result = await backend.prompt({ sessionId: "s1", prompt: [] });
+        const turnEnd = await promptTurn(backend);
 
         expect(readTurnDiff).toHaveBeenCalledWith({ vendor: { diff: "raw" } });
-        expect(result).toEqual({
+        expect(turnEnd).toEqual({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
           stopReason: "end_turn",
           turnDiff: { root: "/repo", unifiedDiff: "diff --git a/x b/x\n" },
         });
@@ -1399,7 +1446,7 @@ describe("AcpBackendProcess", () => {
             return { stopReason: "end_turn" };
           });
 
-          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: promptText }] });
+          await promptTurn(backend, [{ type: "text", text: promptText }], handler);
 
           return handler.mock.calls
             .map(([e]) => e.update)
@@ -1423,7 +1470,7 @@ describe("AcpBackendProcess", () => {
           backend.registerSessionHandler("s1", handler);
           const client = getVaultClient(backend);
           promptMock(backend).mockResolvedValueOnce({ stopReason: "end_turn" });
-          await backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] });
+          await promptTurn(backend, [{ type: "text", text: "/compact" }], handler);
 
           await client.sessionUpdate({
             sessionId: "s1",
@@ -1434,7 +1481,11 @@ describe("AcpBackendProcess", () => {
             },
           } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
-          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+          expect(
+            handler.mock.calls
+              .map(([e]) => e.update)
+              .filter((u) => u.sessionUpdate === "compaction")
+          ).toEqual([
             expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
           ]);
         });
@@ -1446,7 +1497,11 @@ describe("AcpBackendProcess", () => {
           const client = getVaultClient(backend);
           (backend as unknown as { connection: null }).connection = null;
           await expect(
-            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
+            backend.prompt({
+              sessionId: "s1",
+              promptId: "p1",
+              prompt: [{ type: "text", text: "/compact" }],
+            })
           ).rejects.toThrow();
 
           await client.sessionUpdate({
@@ -1458,7 +1513,11 @@ describe("AcpBackendProcess", () => {
             },
           } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
-          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+          expect(
+            handler.mock.calls
+              .map(([e]) => e.update)
+              .filter((u) => u.sessionUpdate === "compaction")
+          ).toEqual([
             expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
           ]);
         });
@@ -1469,9 +1528,7 @@ describe("AcpBackendProcess", () => {
           backend.registerSessionHandler("s1", handler);
           const client = getVaultClient(backend);
           promptMock(backend).mockRejectedValueOnce(new Error("agent exited"));
-          await expect(
-            backend.prompt({ sessionId: "s1", prompt: [{ type: "text", text: "/compact" }] })
-          ).rejects.toThrow();
+          await promptTurn(backend, [{ type: "text", text: "/compact" }], handler);
 
           await client.sessionUpdate({
             sessionId: "s1",
@@ -1482,20 +1539,26 @@ describe("AcpBackendProcess", () => {
             },
           } as unknown as Parameters<typeof client.sessionUpdate>[0]);
 
-          expect(handler.mock.calls.map(([e]) => e.update)).toEqual([
+          expect(
+            handler.mock.calls
+              .map(([e]) => e.update)
+              .filter((u) => u.sessionUpdate === "compaction")
+          ).toEqual([
             expect.objectContaining({ sessionUpdate: "compaction", id: "c2", trigger: "auto" }),
           ]);
         });
       });
 
-      it("returns only the stop reason for a backend that reads no turn diff", async () => {
+      it("ends the turn with only the stop reason for a backend that reads no turn diff", async () => {
         const backend = await makeBackend();
         promptMock(backend).mockResolvedValueOnce({
           stopReason: "end_turn",
           _meta: { vendor: { diff: "raw" } },
         });
 
-        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).resolves.toEqual({
+        await expect(promptTurn(backend)).resolves.toEqual({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
           stopReason: "end_turn",
         });
       });
@@ -1509,7 +1572,7 @@ describe("AcpBackendProcess", () => {
           usage: { totalTokens: 4200, inputTokens: 100, outputTokens: 20 },
         });
 
-        await backend.prompt({ sessionId: "s1", prompt: [] });
+        await promptTurn(backend, [], handler);
 
         const usageEvents = handler.mock.calls
           .map(([e]) => e)
@@ -1538,7 +1601,7 @@ describe("AcpBackendProcess", () => {
           stopReason: "end_turn",
           usage: { totalTokens: 999_999, inputTokens: 1, outputTokens: 1 },
         });
-        await backend.prompt({ sessionId: "s1", prompt: [] });
+        await promptTurn(backend, [], handler);
 
         const usageEvents = handler.mock.calls
           .map(([e]) => e)
@@ -1558,9 +1621,9 @@ describe("AcpBackendProcess", () => {
         promptMock(backend).mockRejectedValue(serviceFailure());
         mockListSessions.mockRejectedValueOnce(serviceFailure());
 
-        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(
-          "opencode's internal service stopped. Please try again."
-        );
+        await expect(promptTurn(backend)).resolves.toMatchObject({
+          error: new Error("opencode's internal service stopped. Please try again."),
+        });
         expect(recover).toHaveBeenCalledTimes(1);
       });
 
@@ -1571,8 +1634,25 @@ describe("AcpBackendProcess", () => {
         const failure = new RequestError(-32603, "Internal error: Provider offline");
         promptMock(backend).mockRejectedValue(failure);
 
-        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toBe(failure);
+        expect(await promptTurn(backend)).toMatchObject({ error: failure });
         expect(recover).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends a running turn with the request's failure when the agent exits mid-turn", async () => {
+        const backend = await makeBackend();
+        let fail!: (error: Error) => void;
+        promptMock(backend).mockReturnValueOnce(new Promise((_resolve, reject) => (fail = reject)));
+        const turnEnded = promptTurn(backend);
+
+        mockProcessIsRunning = false;
+        for (const fn of exitListeners) fn();
+        fail(new Error("ACP connection closed"));
+
+        expect(await turnEnded).toMatchObject({
+          sessionUpdate: "turn_ended",
+          turnId: "p1",
+          error: new Error("ACP connection closed"),
+        });
       });
 
       it("rejects with a has-exited error and reports not running after the subprocess exits", async () => {
@@ -1589,7 +1669,9 @@ describe("AcpBackendProcess", () => {
         mockProcessIsRunning = false;
         for (const fn of exitListeners) fn();
 
-        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(/has exited/);
+        await expect(
+          backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] })
+        ).rejects.toThrow(/has exited/);
         expect(backend.isRunning()).toBe(false);
       });
 
@@ -1600,7 +1682,9 @@ describe("AcpBackendProcess", () => {
           "1.0.0",
           buildStubDescriptor()
         );
-        await expect(backend.prompt({ sessionId: "s1", prompt: [] })).rejects.toThrow(/start\(\)/);
+        await expect(
+          backend.prompt({ sessionId: "s1", promptId: "p1", prompt: [] })
+        ).rejects.toThrow(/start\(\)/);
       });
     });
 

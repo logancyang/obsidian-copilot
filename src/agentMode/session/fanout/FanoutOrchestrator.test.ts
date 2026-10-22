@@ -7,8 +7,10 @@ import type {
   BackendProcess,
   BackendState,
   ModelSelection,
+  PromptInput,
   SessionEvent,
   SessionUpdateHandler,
+  TurnEnd,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
 import { FANOUT_ALL_FAILED_SUMMARY, FANOUT_TRAILING_CHUNK_GRACE_MS } from "./fanoutTypes";
@@ -38,6 +40,7 @@ interface MockProc {
   cancel: jest.Mock;
   resolvePrompt: () => void;
   rejectPrompt: (err: unknown) => void;
+  endTurnsAtOnce: (onPrompt?: () => void) => void;
   promptCount: () => number;
 }
 
@@ -48,10 +51,15 @@ function makeMockProc(sessionId: string): MockProc {
     resolve: () => void;
     reject: (err: unknown) => void;
   }> = [];
-  const promptPromise = () =>
-    new Promise<{ stopReason: "end_turn" }>((resolve, reject) => {
-      pending.push({ resolve: () => resolve({ stopReason: "end_turn" }), reject });
+  const endTurn = (promptId: string, turnEnd: Omit<TurnEnd, "turnId">) =>
+    handler?.({ sessionId, update: { sessionUpdate: "turn_ended", turnId: promptId, ...turnEnd } });
+  const acceptPrompt = async ({ promptId }: PromptInput): Promise<void> => {
+    const end = (turnEnd: Omit<TurnEnd, "turnId">) => endTurn(promptId, turnEnd);
+    pending.push({
+      resolve: () => end({ stopReason: "end_turn" }),
+      reject: (error) => end({ stopReason: "end_turn", error: error as Error }),
     });
+  };
   const settleOldest = (
     apply: (p: { resolve: () => void; reject: (e: unknown) => void }) => void
   ) => {
@@ -71,7 +79,7 @@ function makeMockProc(sessionId: string): MockProc {
       };
     },
     newSession: jest.fn(() => Promise.resolve({ sessionId, state: emptyState() })),
-    prompt: jest.fn(() => promptPromise()),
+    prompt: jest.fn(acceptPrompt),
     cancel,
     setSessionModel: jest.fn(async () => ({ model: null, mode: null })),
     isSetSessionModelSupported: () => true,
@@ -91,6 +99,11 @@ function makeMockProc(sessionId: string): MockProc {
     cancel,
     resolvePrompt: () => settleOldest((p) => p.resolve()),
     rejectPrompt: (err) => settleOldest((p) => p.reject(err)),
+    endTurnsAtOnce: (onPrompt) =>
+      jest.mocked(proc.prompt).mockImplementation(async ({ promptId }) => {
+        onPrompt?.();
+        endTurn(promptId, { stopReason: "end_turn" });
+      }),
     promptCount: () => (proc.prompt as jest.Mock).mock.calls.length,
   };
 }
@@ -361,10 +374,7 @@ describe("FanoutOrchestrator", () => {
           opencode: { sessionId: "s-opencode" },
         });
         const proc = procs.get("claude")!;
-        jest.mocked(proc.proc.prompt).mockImplementation(async () => {
-          proc.emit(textChunk("s-claude", "Claude answered directly"));
-          return { stopReason: "end_turn" };
-        });
+        proc.endTurnsAtOnce(() => proc.emit(textChunk("s-claude", "Claude answered directly")));
 
         const turn = await new FanoutOrchestrator(host).run(
           runInput(["claude"], { mainAgent: "opencode" })
@@ -422,11 +432,10 @@ describe("FanoutOrchestrator", () => {
                 descriptor: descriptorFor(backendId),
               };
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: "high" });
-        jest.mocked(proc.prompt).mockImplementation(async () => {
-          procs.get("codex")!.emit(textChunk("s-codex", "answer"));
-          return { stopReason: "end_turn" };
-        });
-        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        procs
+          .get("codex")!
+          .endTurnsAtOnce(() => procs.get("codex")!.emit(textChunk("s-codex", "answer")));
+        procs.get("claude")!.endTurnsAtOnce();
         await new FanoutOrchestrator(host).run(runInput(["codex", "claude"]));
         expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
           sessionId: "s-codex",
@@ -481,11 +490,12 @@ describe("FanoutOrchestrator", () => {
           .mockResolvedValueOnce(successState)
           .mockResolvedValueOnce(successState)
           .mockRejectedValueOnce(new Error("Model unavailable"));
-        jest.mocked(proc.prompt).mockImplementation(async () => {
-          procs.get("codex")!.emit(textChunk("s-codex", "Successful answer"));
-          return { stopReason: "end_turn" };
-        });
-        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        procs
+          .get("codex")!
+          .endTurnsAtOnce(() =>
+            procs.get("codex")!.emit(textChunk("s-codex", "Successful answer"))
+          );
+        procs.get("claude")!.endTurnsAtOnce();
 
         const result = await new FanoutOrchestrator(host).run(runInput(["codex", "claude"]));
 
@@ -536,11 +546,10 @@ describe("FanoutOrchestrator", () => {
         };
         host.onSelectionApplied = jest.fn();
         jest.mocked(proc.setSessionConfigOption).mockResolvedValue(confirmed);
-        jest.mocked(proc.prompt).mockImplementation(async () => {
-          procs.get("opencode")!.emit(textChunk("s-opencode", "answer"));
-          return { stopReason: "end_turn" };
-        });
-        jest.mocked(procs.get("claude")!.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        procs
+          .get("opencode")!
+          .endTurnsAtOnce(() => procs.get("opencode")!.emit(textChunk("s-opencode", "answer")));
+        procs.get("claude")!.endTurnsAtOnce();
 
         await new FanoutOrchestrator(host).run(runInput(["opencode", "claude"]));
 
@@ -600,7 +609,7 @@ describe("FanoutOrchestrator", () => {
             .mocked(proc.newSession)
             .mockResolvedValue({ sessionId: "s-opencode", state: initial });
           jest.mocked(proc.setSessionConfigOption).mockResolvedValue(refreshed);
-          jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+          procs.get("opencode")!.endTurnsAtOnce();
 
           await new FanoutOrchestrator(host).run(runInput(["opencode"]));
 
@@ -639,7 +648,7 @@ describe("FanoutOrchestrator", () => {
           sessionId: "s-opencode",
           state: catalog(["opencode/big-pickle"]),
         });
-        jest.mocked(mock.proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        mock.endTurnsAtOnce();
 
         const run = new FanoutOrchestrator(host).run(runInput(["opencode"]));
         await flush();
@@ -708,7 +717,7 @@ describe("FanoutOrchestrator", () => {
         host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
         const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
         expect(effortOption).toBeTruthy();
-        jest.mocked(proc.prompt).mockResolvedValue({ stopReason: "end_turn" });
+        procs.get("claude")!.endTurnsAtOnce();
 
         await new FanoutOrchestrator(host).run(runInput(["claude"]));
 
