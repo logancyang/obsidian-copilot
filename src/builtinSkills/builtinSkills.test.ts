@@ -260,7 +260,7 @@ describe("builtinSkills", () => {
       expect(md).toContain("call `openartifacts_open` with the\n`docId`");
       expect(md).toMatch(/the tool never returns it; do not try to recover it/);
       expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
-      expect(md).toContain("Manage who can open it: {manageUrl}");
+      expect(md).not.toContain("manageUrl");
       expect(md).toContain('Report an update as "Updated: {url}."');
       expect(md).toContain("{guidance.message} [Link account]({guidance.url})");
       expect(md).toMatch(/nothing was published: tell the user[\s\S]*Never do that automatically/);

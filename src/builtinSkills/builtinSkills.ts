@@ -500,7 +500,7 @@ If the user named people, add each person after the private publish with one
 user names a person without one, publish privately without them and ask for the address.
 
 Success returns the receipt as JSON: \`docId\`, \`url\`, \`version\`, \`linkAccess\` on a create
-when the server reports it, a \`manageUrl\` on a private create, and \`guidance\` when the server
+when the server reports it, and \`guidance\` when the server
 offers to link the user's account. After a Markdown publish, delete the generated HTML file from
 \`${OPENARTIFACTS_AGENT_HANDOFF_DIR}/\`. If the receipt has a \`warning\`, relay it as it says,
 and never write the \`openartifacts\` property yourself to work around it.
@@ -514,18 +514,16 @@ Report a private publish as:
 Use "Only you can open it." when nobody was named. Say an email was sent only when the
 \`openartifacts_share\` result shows \`"email": true\`; otherwise tell the user the server sent no
 email and that they should send the invitees the link. Invitees sign in with the address that was
-invited. End the report with this line, using the receipt's \`manageUrl\`:
-
-"Manage who can open it: {manageUrl}"
+invited.
 
 Report a public create as "Published: {url}. Anyone with the link can open it." Report an update as "Updated: {url}." and do not say who can open it; an update keeps who could open it before.
 
-If a create receipt has a \`guidance\` object, add one more line as the very last line of the report, after the "Manage who can open it" line on a private publish: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
+If a create receipt has a \`guidance\` object, add one more line as the very last line of the report: "{guidance.message} [Link account]({guidance.url})". Use \`guidance.message\` exactly as the receipt gives it.
 
 After a private publish and its \`openartifacts_share\` calls, call \`openartifacts_open\` with the
 \`docId\` so Copilot opens the page in the user's browser already signed in, and say it opened. The
 link it opens signs the user in, so the tool never returns it; do not try to recover it. If it
-fails, skip it silently; the report still has the url and the \`manageUrl\`. Call
+fails, skip it silently; the report still has the url. Call
 \`openartifacts_open\` the same way whenever the user asks to open one of their pages.
 
 If an \`add\` fails after a private publish, the page is private. Report the url, who can open
@@ -552,7 +550,7 @@ note's \`openartifacts\` property (the part after \`/d/\`).
   it, and that the list of invited people is kept in case the user switches back.
 - Add, remove or decline a person: \`action: "add"\`, \`"remove"\` or \`"decline"\` with \`email\`.
 - When the user asks who has access, use \`action: "list"\` and report \`people\` with their
-  \`role\`, and the pending \`requests\`, with the \`manageUrl\`. Approve a request with
+  \`role\`, and the pending \`requests\`. Approve a request with
   \`add\` and decline it with \`decline\`, only when the user says so.
 - An added person can comment by default. \`role: "view"\` makes them a reader who cannot, and
   adding the same address again with \`role: "comment"\` or \`"view"\` changes their role.

@@ -1,5 +1,4 @@
 import {
-  OPENARTIFACTS_API_ORIGIN,
   OPENARTIFACTS_DOC_ID_PATTERN,
   OPENARTIFACTS_MAX_HTML_BYTES,
 } from "@/openArtifacts/constants";
@@ -78,7 +77,7 @@ export const OPENARTIFACTS_PUBLISH_TOOL = Object.freeze({
 
 export const OPENARTIFACTS_SHARE_TOOL = Object.freeze({
   name: OPENARTIFACTS_SHARE_TOOL_NAME,
-  description: `See or change who can open one of the user's OpenArtifacts pages, one change per call, only when the user asks. "list" returns the people, their roles and the pending access requests. "link" with "invited" makes the page private and with "anyone" opens it to anyone with the link. "add" invites an email (role "comment" by default, or "view" for a reader who cannot comment); adding an address with a pending request approves it, and adding it again with another role changes the role. "remove" takes a person off, and "decline" declines a pending request. Returns the page's access as JSON, with a manageUrl where the user can manage it.`,
+  description: `See or change who can open one of the user's OpenArtifacts pages, one change per call, only when the user asks. "list" returns the people, their roles and the pending access requests. "link" with "invited" makes the page private and with "anyone" opens it to anyone with the link. "add" invites an email (role "comment" by default, or "view" for a reader who cannot comment); adding an address with a pending request approves it, and adding it again with another role changes the role. "remove" takes a person off, and "decline" declines a pending request. Returns the page's access as JSON.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -288,7 +287,6 @@ async function publish(
   return {
     text: JSON.stringify({
       ...result.receipt,
-      ...(privateCreate && result.receipt && { manageUrl: manageUrl(result.receipt.docId) }),
       ...persistenceWarning(result),
     }),
     isError: false,
@@ -325,7 +323,7 @@ async function share(
   } else {
     return failure('action must be "list", "link", "add", "remove" or "decline".');
   }
-  return { text: JSON.stringify({ ...access, manageUrl: manageUrl(docId) }), isError: false };
+  return { text: JSON.stringify(access), isError: false };
 }
 
 async function open(
@@ -481,7 +479,9 @@ function failureText(result: OpenArtifactsModalResult, privateCreate: boolean): 
       : "";
   const refusedPrivate = result.upgradeUrl || result.message === PRIVATE_UNSUPPORTED_MESSAGE;
   const publicly =
-    privateCreate && refusedPrivate ? ` Publish it with access "public" only if the user asks.` : "";
+    privateCreate && refusedPrivate
+      ? ` Publish it with access "public" only if the user asks.`
+      : "";
   return `OpenArtifacts: ${result.message}${advice}${publicly} Report this to the user; don't retry it on your own.`;
 }
 
@@ -505,10 +505,6 @@ function docIdOf(value: unknown): string | undefined {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function manageUrl(docId: string): string {
-  return `${OPENARTIFACTS_API_ORIGIN}/share/${docId}`;
 }
 
 function byteLength(value: string): number {

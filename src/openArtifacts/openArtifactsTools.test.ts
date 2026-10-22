@@ -26,7 +26,6 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/746"
 const DOC_ID = "9f2k4mvq7t0xbz3n";
 const OTHER_DOC_ID = "0123456789abcdef";
 const DOC_URL = `https://openartifacts.site/d/${DOC_ID}`;
-const MANAGE_URL = `https://api.openartifacts.ai/share/${DOC_ID}`;
 const HTML = "<!doctype html><title>Plan</title><h1>Plan</h1>";
 const KEY = "plus-key";
 const LEDGER = ".openartifacts/publish-history.md";
@@ -194,7 +193,7 @@ describe("openArtifactsTools", () => {
       expect(client.update).not.toHaveBeenCalled();
     });
 
-    it(`${ISSUE} publishes a new page privately by default and returns the receipt with a manageUrl`, async () => {
+    it(`${ISSUE} publishes a new page privately by default and returns the receipt`, async () => {
       const { publish, client, app } = harness();
 
       const result = await publish.call({
@@ -208,7 +207,6 @@ describe("openArtifactsTools", () => {
         url: DOC_URL,
         version: 1,
         linkAccess: "invited",
-        manageUrl: MANAGE_URL,
       });
       expect(client.publish).toHaveBeenCalledWith(
         { title: "Plan", html: HTML, byteLength: HTML.length },
@@ -219,7 +217,7 @@ describe("openArtifactsTools", () => {
       expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
     });
 
-    it(`${ISSUE} publishes publicly only when asked, with no manageUrl`, async () => {
+    it(`${ISSUE} publishes publicly only when asked`, async () => {
       const { publish, client } = harness();
       client.publish.mockResolvedValue({ docId: DOC_ID, url: DOC_URL, version: 1 });
 
@@ -230,7 +228,7 @@ describe("openArtifactsTools", () => {
       });
 
       expect(client.publish.mock.calls[0][2]).toBeUndefined();
-      expect(json(result).manageUrl).toBeUndefined();
+      expect(json(result)).toEqual({ docId: DOC_ID, url: DOC_URL, version: 1 });
     });
 
     it(`${ISSUE} saves the link in the note and appends a ledger row after creating a page from it`, async () => {
@@ -470,7 +468,7 @@ describe("openArtifactsTools", () => {
   });
 
   describe("openartifacts_share", () => {
-    it(`${ISSUE} makes one change per call and returns the access with a manageUrl`, async () => {
+    it(`${ISSUE} makes one change per call and returns the access`, async () => {
       const { share, client } = harness();
 
       const added = await share.call({
@@ -487,7 +485,6 @@ describe("openArtifactsTools", () => {
       expect(json(added)).toEqual({
         docId: DOC_ID,
         people: [{ email: "a@b.co" }],
-        manageUrl: MANAGE_URL,
       });
       expect(client.addPerson).toHaveBeenCalledWith(DOC_ID, "a@b.co", KEY, "view");
       expect(client.removePerson).toHaveBeenCalledWith(DOC_ID, "a@b.co", KEY);
