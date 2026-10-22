@@ -73,10 +73,12 @@ function continuesList(segment: DiffSegment | undefined): boolean {
 
 function DiffSegmentView({ continued, path, segment }: DiffSegmentViewProps): React.ReactElement {
   if (segment.kind === "code") return <CodeDiffView lines={segment.lines} />;
-  // Items of one list split across segments render as separate lists, so the list margins between
-  // them go to keep the items as close as their siblings.
+  // Obsidian scrolls a lone table by setting overflow-x on its container, which traps the table's
+  // margins inside the highlight, so they move onto the container. Items of one list split across
+  // segments render as separate lists, so the list margins between them go.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
-  const listJoins = cn(
+  const spacing = cn(
+    "[&[style*=overflow-x]>table]:tw-my-0 [&[style*=overflow-x]]:tw-my-[var(--p-spacing)]",
     segment.continuesList && "[&>:first-child]:tw-mt-0",
     continued && "[&>:last-child]:tw-mb-0"
   );
@@ -91,7 +93,7 @@ function DiffSegmentView({ continued, path, segment }: DiffSegmentViewProps): Re
         )}
       >
         <Markdown
-          className={listJoins}
+          className={spacing}
           nested
           onRendered={BLOCK_DECORATORS[segment.change]}
           sourcePath={path}
@@ -102,7 +104,7 @@ function DiffSegmentView({ continued, path, segment }: DiffSegmentViewProps): Re
   }
   return (
     <Markdown
-      className={listJoins}
+      className={spacing}
       nested
       onRendered={decorateMarkdown}
       sourcePath={path}
