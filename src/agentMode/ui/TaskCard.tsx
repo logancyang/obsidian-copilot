@@ -2,34 +2,41 @@ import type { AgentTask } from "@/agentMode/session/AgentSession";
 import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import {
   taskBadgeStatus,
-  taskKindLabel,
+  taskLabel,
   taskStatusLabel,
-  taskTitle,
+  type TaskDisplayStatus,
 } from "@/agentMode/ui/taskDisplay";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
+import { cn } from "@/lib/utils";
 import { Bot, Terminal } from "lucide-react";
 import React from "react";
 
 export interface TaskCardProps {
   task: AgentTask;
-  onOpen: (taskId: string) => void;
+  onOpen: (toolCallId: string) => void;
 }
+
+// The spinner alone shows a running task; only final states need words on screen. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+export const TaskStatusMark: React.FC<{ status: TaskDisplayStatus; className?: string }> = ({
+  status,
+  className,
+}) => (
+  <span className={cn("tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs", className)}>
+    {status === "running" ? (
+      <span className="tw-sr-only">{taskStatusLabel(status)}</span>
+    ) : (
+      taskStatusLabel(status)
+    )}
+    <StatusBadge status={taskBadgeStatus(status)} />
+  </span>
+);
 
 export const TaskCard: React.FC<TaskCardProps> = ({ task, onOpen }) => (
   <AgentActivityCard
     icon={task.kind === "command" ? Terminal : Bot}
-    label={
-      <span className="tw-truncate">
-        {task.kind === "command" ? taskTitle(task) : `${taskKindLabel(task)} · ${taskTitle(task)}`}
-      </span>
-    }
-    trailing={
-      <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-font-normal tw-text-muted">
-        {taskStatusLabel(task.status)}
-        <StatusBadge status={taskBadgeStatus(task.status)} />
-      </span>
-    }
+    label={<span className="tw-truncate">{taskLabel(task)}</span>}
+    trailing={<TaskStatusMark status={task.status} className="tw-font-normal tw-text-muted" />}
     expandable
-    onToggle={() => onOpen(task.taskId)}
+    onToggle={() => onOpen(task.toolCallId)}
   />
 );

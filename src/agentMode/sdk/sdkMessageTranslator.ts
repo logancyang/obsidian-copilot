@@ -277,7 +277,8 @@ function translateStreamEvent(
             mcpServer,
             parentToolUseId,
             block.input ?? {}
-          )
+          ),
+          ...launchEvents(sessionId, state, block.id, block.name, block.input ?? {})
         );
         return out;
       }
@@ -352,6 +353,9 @@ function translateStreamEvent(
           parentToolUseId,
           finalInput
         ),
+        ...(block.mcpServer
+          ? []
+          : launchEvents(sessionId, state, block.id, block.name, finalInput)),
       ];
     }
     case "message_delta":
@@ -397,8 +401,11 @@ function translateAssistantMessage(
   for (const block of content) {
     const b = block as { type?: string; id?: string; name?: string; input?: unknown };
     if (b.type !== "tool_use" || !b.id || !b.name) continue;
-    state.tasks.observeToolUse(b.id, b.name, b.input);
-    if (state.emittedToolUseIds.has(b.id)) continue;
+    const launch = launchEvents(sessionId, state, b.id, b.name, b.input);
+    if (state.emittedToolUseIds.has(b.id)) {
+      out.push(...launch);
+      continue;
+    }
     state.emittedToolUseIds.add(b.id);
     // A subagent hands its report back through a tool call; the report is its last message. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
     if (parentToolUseId !== undefined && b.name === SUBAGENT_HANDBACK_TOOL) {
@@ -410,7 +417,8 @@ function translateAssistantMessage(
     const { tool: name, mcpServer } = resolveToolName(b.name);
     out.push(event(sessionId, makeToolCallUpdate(b.id, b.name, b.input ?? {}, parentToolUseId)));
     out.push(
-      ...todoPlanEvents(sessionId, state, b.id, name, mcpServer, parentToolUseId, b.input ?? {})
+      ...todoPlanEvents(sessionId, state, b.id, name, mcpServer, parentToolUseId, b.input ?? {}),
+      ...launch
     );
   }
   return out;
@@ -451,6 +459,18 @@ function todoPlanEvents(
   if (mcpServer || parentToolUseId) return [];
   const update = planUpdateFromClaudeToolUse(state.claudeTasks, toolUseId, name, rawInput);
   return update ? [event(sessionId, update)] : [];
+}
+
+function launchEvents(
+  sessionId: SessionId,
+  state: TranslatorState,
+  toolUseId: string,
+  name: string,
+  input: unknown
+): SessionEvent[] {
+  return state.tasks
+    .observeToolUse(toolUseId, name, input)
+    .map((update) => event(sessionId, update));
 }
 
 function translateUserMessage(

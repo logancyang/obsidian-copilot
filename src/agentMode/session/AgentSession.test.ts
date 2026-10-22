@@ -297,6 +297,7 @@ function withdrawingDescriptor(): BackendDescriptor {
 }
 
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
+const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 
 function recordPrompts(mock: MockBackend): PromptInput[] {
   const sent: PromptInput[] = [];
@@ -3622,7 +3623,7 @@ describe("AgentSession", () => {
               return { turn };
             };
             const subagentChanges = () =>
-              session.getTaskMessages("task-1")[0]?.fileChanges?.map((change) => change.path);
+              session.getTaskMessages("tool-agent")[0]?.fileChanges?.map((change) => change.path);
             return { mock, sent, session, run, endRun, send, subagentChanges };
           }
 
@@ -3718,7 +3719,7 @@ describe("AgentSession", () => {
 
             expect(fileChangesOf(chat.session)).toBeUndefined();
             await waitFor(() =>
-              expect(chat.session.getTaskMessages("task-1")[0]?.fileChanges).toMatchObject([
+              expect(chat.session.getTaskMessages("tool-agent")[0]?.fileChanges).toMatchObject([
                 {
                   path: "notes/b.md",
                   before: "before the write\n",
@@ -3749,7 +3750,7 @@ describe("AgentSession", () => {
             });
 
             await waitFor(() =>
-              expect(chat.session.getTaskMessages("task-1")[0]?.fileChanges).toEqual([
+              expect(chat.session.getTaskMessages("tool-agent")[0]?.fileChanges).toEqual([
                 {
                   path: "notes/b.md",
                   status: "modified",
@@ -3844,6 +3845,79 @@ describe("AgentSession", () => {
           "cancelled",
           "cancelled",
           "in_progress",
+        ]);
+      });
+
+      it(`ends a task Stop cut off before the agent named it as stopped, while a named task launched in that turn keeps running (${ISSUE_749})`, async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("run things");
+        for (const toolCallId of ["tc-named", "tc-launching"]) {
+          mock.emitUpdate({
+            sessionUpdate: "tool_call",
+            toolCallId,
+            title: toolCallId,
+            status: "in_progress",
+          });
+        }
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tc-named",
+          kind: "subagent",
+          description: "Research",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          toolCallId: "tc-launching",
+          kind: "subagent",
+          description: "Summarize",
+        });
+
+        await session.cancel();
+        finishPrompt("cancelled");
+        await turn;
+
+        expect(session.getTasks().map((task) => [task.toolCallId, task.status])).toEqual([
+          ["tc-named", "running"],
+          ["tc-launching", "stopped"],
+        ]);
+      });
+
+      it(`ignores a launch from the stopped turn that arrives after Stop, yet lists the task if the agent starts it anyway (${ISSUE_749})`, async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("run things");
+        await session.cancel();
+
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-late",
+          title: "Agent",
+          status: "in_progress",
+        });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          toolCallId: "tc-late",
+          kind: "subagent",
+          description: "Summarize",
+        });
+        finishPrompt("cancelled");
+        await turn;
+        const afterStop = session.getTasks();
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-late",
+          toolCallId: "tc-late",
+          kind: "subagent",
+          description: "Summarize",
+        });
+
+        expect(afterStop).toEqual([]);
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ taskId: "task-late", status: "running" }),
         ]);
       });
 
@@ -6094,6 +6168,219 @@ describe("AgentSession", () => {
         prompt: "Count the words in every note",
       };
 
+      const AGENT_LAUNCH: SessionEvent["update"] = {
+        sessionUpdate: "task_started",
+        toolCallId: "tool-agent",
+        kind: "subagent",
+        description: "Count words",
+        prompt: "Count the words in every note",
+      };
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 lists a launched task as running before the agent names it, and attaches the name to the same entry", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH);
+        const launched = session.getTasks();
+
+        mock.emitUpdate({ ...TASK_STARTED, prompt: undefined, description: "" });
+
+        expect(launched).toEqual([
+          {
+            toolCallId: "tool-agent",
+            kind: "subagent",
+            description: "Count words",
+            prompt: "Count the words in every note",
+            status: "running",
+          },
+        ]);
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({
+            taskId: "task-1",
+            toolCallId: "tool-agent",
+            description: "Count words",
+            prompt: "Count the words in every note",
+            status: "running",
+          }),
+        ]);
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ toolCallId: "tool-agent", status: "completed" }),
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps a launched task's own messages under its launching call before and after the agent names it", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH);
+        mock.emit({
+          sessionId: "acp-1",
+          update: replayText("agent_message_chunk", "Counting. "),
+          taskToolCallId: "tool-agent",
+        });
+
+        mock.emitUpdate(TASK_STARTED);
+        mock.emit({
+          sessionId: "acp-1",
+          update: replayText("agent_message_chunk", "13 words."),
+          taskToolCallId: "tool-agent",
+        });
+
+        expect(session.getTaskMessages("tool-agent")[0]?.message).toBe("Counting. 13 words.");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a launched task as failed when its launching call fails before the agent names it, such as a denied launch", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH);
+
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-agent",
+          status: "failed",
+        });
+
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ toolCallId: "tool-agent", status: "failed" }),
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a command a subagent launched when its launching call fails inside the subagent before the agent names it", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        const inSubagent = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", update, taskToolCallId: "tool-agent" });
+        inSubagent({
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-bg",
+          title: "Bash",
+          kind: "execute",
+          status: "in_progress",
+        });
+        inSubagent({
+          sessionUpdate: "task_started",
+          toolCallId: "tool-bg",
+          kind: "command",
+          description: "Render",
+        });
+
+        inSubagent({ sessionUpdate: "tool_call_update", toolCallId: "tool-bg", status: "failed" });
+
+        expect(session.getTasks().map((task) => [task.toolCallId, task.status])).toEqual([
+          ["tool-agent", "running"],
+          ["tool-bg", "failed"],
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a launched task the agent never named as stopped when the connection is lost", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH);
+
+        mock.emitUpdate({ sessionUpdate: "session_disconnected", error: new Error("gone") });
+
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ toolCallId: "tool-agent", status: "stopped" }),
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ignores a repeated launch for a task that already ended, and reopens it if the agent then names it", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH);
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-agent",
+          status: "failed",
+        });
+
+        mock.emitUpdate(AGENT_LAUNCH);
+        const afterRepeat = session.getTasks()[0]?.status;
+        mock.emitUpdate(TASK_STARTED);
+
+        expect(afterRepeat).toBe("failed");
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ taskId: "task-1", status: "running" }),
+        ]);
+      });
+
+      it.each([
+        ["ends", undefined],
+        ["fails", new Error("overloaded")],
+      ])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a launched task the agent never named as failed when the launching turn %s, such as a call cut off mid-stream",
+        async (_, error) => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock, { backendId: "claude" });
+          const { turn, run } = launchTurn(mock, session);
+          run(AGENT_CARD, AGENT_LAUNCH);
+
+          mock.emitUpdate({
+            sessionUpdate: "turn_ended",
+            turnId: "launch",
+            stopReason: "end_turn",
+            error,
+          });
+          await turn.catch(() => undefined);
+
+          expect(session.getTasks()).toEqual([
+            expect.objectContaining({ toolCallId: "tool-agent", status: "failed" }),
+          ]);
+          expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+            status: "failed",
+          });
+        }
+      );
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ignores a repeated start for a named task that already ended", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
+        const ended = session.getTasks();
+
+        mock.emitUpdate(TASK_STARTED);
+
+        expect(session.getTasks()).toBe(ended);
+        expect(ended).toEqual([expect.objectContaining({ status: "completed" })]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a command a subagent was launching as stopped when that subagent ends first", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        const inSubagent = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", update, taskToolCallId: "tool-agent" });
+        inSubagent({
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-bg",
+          title: "Bash",
+          kind: "execute",
+          status: "in_progress",
+        });
+        inSubagent({
+          sessionUpdate: "task_started",
+          toolCallId: "tool-bg",
+          kind: "command",
+          description: "Render",
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        expect(session.getTasks().map((task) => [task.toolCallId, task.status])).toEqual([
+          ["tool-agent", "stopped"],
+          ["tool-bg", "stopped"],
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 tracks a task from start to end while its launching card stays running past its turn, and https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the end summary off the card", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });
@@ -6252,7 +6539,7 @@ describe("AgentSession", () => {
         });
 
         expect(
-          session.getTaskMessages("task-1")[0]?.parts?.find((p) => p.kind === "tool_call")
+          session.getTaskMessages("tool-agent")[0]?.parts?.find((p) => p.kind === "tool_call")
         ).toMatchObject({
           id: "tool-bash",
           status: "cancelled",
@@ -6278,7 +6565,7 @@ describe("AgentSession", () => {
         });
 
         expect(session.getTasks()[0].model).toBe("claude-haiku-9");
-        expect(session.getTaskMessages("task-1")).toEqual([]);
+        expect(session.getTaskMessages("tool-agent")).toEqual([]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the same task list and notifies listeners when only a task's own messages change", () => {
@@ -6303,7 +6590,7 @@ describe("AgentSession", () => {
 
         expect(notified).toBe(1);
         expect(session.getTasks()).toBe(before);
-        expect(session.getTaskMessages("task-1")[0]?.message).toBe("13 words.");
+        expect(session.getTaskMessages("tool-agent")[0]?.message).toBe("13 words.");
       });
 
       it("returns one stable empty list before any task starts", () => {
@@ -6349,7 +6636,7 @@ describe("AgentSession", () => {
 
         expect(aiMessage(session)?.message).toBe("The answer.");
         expect(aiMessage(session)?.parts?.some((p) => p.kind === "tool_call")).toBe(false);
-        expect(session.getTaskMessages("task-1")).toEqual([
+        expect(session.getTaskMessages("tool-agent")).toEqual([
           expect.objectContaining({
             sender: AI_SENDER,
             message: "13 words.",
@@ -6385,7 +6672,7 @@ describe("AgentSession", () => {
 
         mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
 
-        expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
+        expect(session.getTaskMessages("tool-agent")[0]?.parts).toEqual([
           expect.objectContaining({ kind: "tool_call", id: "tool-bash", status: "cancelled" }),
         ]);
       });
@@ -6424,7 +6711,7 @@ describe("AgentSession", () => {
           status: "completed",
         });
 
-        expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
+        expect(session.getTaskMessages("tool-agent")[0]?.parts).toEqual([
           expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
           expect.objectContaining({ id: "tool-write", status: "completed" }),
         ]);

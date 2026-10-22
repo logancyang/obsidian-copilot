@@ -427,7 +427,7 @@ describe("AgentChatUIState", () => {
         "call-1"
       );
 
-      expect(chat.getTaskMessages("task-1")[0].parts).toEqual([{ kind: "text", text: "9 words." }]);
+      expect(chat.getTaskMessages("call-1")[0].parts).toEqual([{ kind: "text", text: "9 words." }]);
       expect(chat.getMessages()).toEqual([]);
       expect(listener).toHaveBeenCalled();
     });

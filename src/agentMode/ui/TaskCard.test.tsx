@@ -6,11 +6,11 @@ import React from "react";
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 
 describe("TaskCard", () => {
-  it(`shows a subagent's type, title and that it is running (${ISSUE_749})`, () => {
+  it(`shows a subagent's type and title, and that it is running only to screen readers beside the spinner (${ISSUE_749})`, () => {
     render(<TaskCard task={makeTask()} onOpen={jest.fn()} />);
 
     expect(screen.getByText("general-purpose · Count words in Welcome")).toBeTruthy();
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByText("Running").classList.contains("tw-sr-only")).toBe(true);
   });
 
   it.each([
@@ -28,7 +28,7 @@ describe("TaskCard", () => {
       );
 
       expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
-      expect(screen.getByText(label)).toBeTruthy();
+      expect(screen.getByText(label).classList.contains("tw-sr-only")).toBe(false);
       expect(screen.queryByText("Background command done")).toBeNull();
     }
   );
@@ -39,6 +39,6 @@ describe("TaskCard", () => {
 
     fireEvent.click(screen.getByRole("button"));
 
-    expect(onOpen).toHaveBeenCalledWith("task-1");
+    expect(onOpen).toHaveBeenCalledWith("call-1");
   });
 });

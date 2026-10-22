@@ -1,16 +1,10 @@
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
-import { StatusBadge } from "@/agentMode/ui/ActionCard";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";
 import { useTaskOutputTail } from "@/agentMode/ui/hooks/useTaskOutputTail";
-import {
-  taskBadgeStatus,
-  taskKindLabel,
-  taskStatusLabel,
-  taskTitle,
-  type TaskDisplayStatus,
-} from "@/agentMode/ui/taskDisplay";
+import { TaskStatusMark } from "@/agentMode/ui/TaskCard";
+import { taskKindLabel, taskTitle, type TaskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { Button } from "@/components/ui/button";
@@ -65,10 +59,7 @@ export const TaskDetailView: React.FC<TaskDetailViewProps> = ({
           </span>
           <span className="tw-truncate tw-text-xs tw-text-muted">{subtitle}</span>
         </div>
-        <span className="tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs tw-text-muted">
-          {taskStatusLabel(status)}
-          <StatusBadge status={taskBadgeStatus(status)} />
-        </span>
+        <TaskStatusMark status={status} className="tw-text-muted" />
       </div>
       {/* Permission requests and questions show only in the main chat, so a task's view must point there. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
       {chatAwaitsAnswer ? (

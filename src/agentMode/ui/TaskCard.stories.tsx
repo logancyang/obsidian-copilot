@@ -18,6 +18,10 @@ export default meta;
 
 export const Running: StoryObj<TaskCardProps> = {};
 
+export const Starting: StoryObj<TaskCardProps> = {
+  args: { task: makeTask({ taskId: undefined, description: "", subagentType: undefined }) },
+};
+
 export const Completed: StoryObj<TaskCardProps> = {
   args: { task: makeTask({ status: "completed" }) },
 };

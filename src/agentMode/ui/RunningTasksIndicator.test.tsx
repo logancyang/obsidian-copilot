@@ -3,8 +3,12 @@ import {
   TASK_OUTPUT_POLL_MS,
   TaskOutputReaderContext,
 } from "@/agentMode/ui/hooks/useTaskOutputTail";
-import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
+import {
+  RunningTasksIndicator,
+  STOP_UNAVAILABLE_UNTIL_STARTED,
+} from "@/agentMode/ui/RunningTasksIndicator";
 import { makeCommandTask, makeTask, textOutputReader } from "@/agentMode/ui/testing/taskFixtures";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
@@ -19,14 +23,16 @@ function renderIndicator(
   const onOpenTask = jest.fn();
   const createReader = textOutputReader(files);
   const element = (next: Partial<React.ComponentProps<typeof RunningTasksIndicator>>) => (
-    <TaskOutputReaderContext.Provider value={createReader}>
-      <RunningTasksIndicator
-        tasks={[makeTask(), makeCommandTask()]}
-        permissions={[]}
-        onOpenTask={onOpenTask}
-        {...next}
-      />
-    </TaskOutputReaderContext.Provider>
+    <TooltipProvider>
+      <TaskOutputReaderContext.Provider value={createReader}>
+        <RunningTasksIndicator
+          tasks={[makeTask(), makeCommandTask()]}
+          permissions={[]}
+          onOpenTask={onOpenTask}
+          {...next}
+        />
+      </TaskOutputReaderContext.Provider>
+    </TooltipProvider>
   );
   const result = render(element(props));
   return {
@@ -67,14 +73,16 @@ describe("RunningTasksIndicator", () => {
     expect(screen.queryByText("Print 30 progress lines")).toBeNull();
   });
 
-  it(`opens on hover with one row per running task, a subagent row naming its status (${ISSUE_749})`, async () => {
+  it(`opens on hover with one row per running task, each saying it runs only to screen readers beside its spinner (${ISSUE_749})`, async () => {
     renderIndicator({ permissions: [] }, { [OUTPUT]: "line 1\n" });
 
     fireEvent.pointerEnter(screen.getByRole("button", { name: "2 tasks running" }));
 
     expect(screen.getByText("general-purpose · Count words in Welcome")).toBeTruthy();
     expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
-    expect(screen.getAllByText("Running")).toHaveLength(2);
+    expect(
+      screen.getAllByText("Running").map((label) => label.classList.contains("tw-sr-only"))
+    ).toEqual([true, true]);
     expect(await screen.findByText("line 1")).toBeTruthy();
   });
 
@@ -123,7 +131,7 @@ describe("RunningTasksIndicator", () => {
 
     fireEvent.click(screen.getByText("Print 30 progress lines"));
 
-    expect(onOpenTask).toHaveBeenCalledWith("task-2");
+    expect(onOpenTask).toHaveBeenCalledWith("call-2");
   });
 
   it(`gives every running subagent and command row a stop control that stops that task without opening it (${ISSUE_748})`, () => {
@@ -137,6 +145,33 @@ describe("RunningTasksIndicator", () => {
     expect(onStopTask).toHaveBeenCalledTimes(1);
     expect(onStopTask).toHaveBeenCalledWith("task-2");
     expect(onOpenTask).not.toHaveBeenCalled();
+  });
+
+  it(`shows a launched task's stop control disabled with the reason until the agent names the task, then enables the same control in place (${ISSUE_749})`, async () => {
+    const onStopTask = jest.fn();
+    const launching = makeTask({ taskId: undefined });
+    const { rerenderWith } = renderIndicator({
+      defaultOpen: true,
+      onStopTask,
+      tasks: [launching],
+    });
+    const stop = screen.getByRole("button", { name: "Stop task" });
+    const row = screen.getByText("Count words in Welcome", { exact: false });
+
+    fireEvent.click(stop);
+    fireEvent.focus(stop);
+
+    expect(stop.getAttribute("aria-disabled")).toBe("true");
+    expect(onStopTask).not.toHaveBeenCalled();
+    expect((await screen.findAllByText(STOP_UNAVAILABLE_UNTIL_STARTED)).length).toBeGreaterThan(0);
+
+    rerenderWith({ defaultOpen: true, onStopTask, tasks: [{ ...launching, taskId: "task-1" }] });
+    fireEvent.click(stop);
+
+    expect(screen.getByRole("button", { name: "Stop task" })).toBe(stop);
+    expect(screen.getByText("Count words in Welcome", { exact: false })).toBe(row);
+    expect(stop.getAttribute("aria-disabled")).toBeNull();
+    expect(onStopTask).toHaveBeenCalledWith("task-1");
   });
 
   it(`shows no stop control when the agent cannot stop one task (${ISSUE_748})`, () => {
