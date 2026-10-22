@@ -45,8 +45,6 @@ export const COPILOT_OBSIDIAN_FORMAT_LEAD =
 
 export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
 
-export const COPILOT_PROJECT_WORKSPACE_POLICY = `With <project_context>, the working directory is the project workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
-
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
@@ -82,11 +80,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
-  parts.push(
-    buildFileEditPolicy(backendId),
-    COPILOT_PROJECT_WORKSPACE_POLICY,
-    COPILOT_FOLDER_MENTION_DIRECTIVE
-  );
+  parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
   if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);

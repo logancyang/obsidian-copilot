@@ -14,7 +14,6 @@ import {
   COPILOT_FEEDBACK_POINTER,
   COPILOT_OBSIDIAN_CLI_STEERING,
   COPILOT_OBSIDIAN_FORMAT_LEAD,
-  COPILOT_PROJECT_WORKSPACE_POLICY,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
   COPILOT_WEB_RESEARCH_STEERING,
@@ -141,10 +140,10 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT, steering)).toContain(steering);
     });
 
-    it("keeps the project workspace policy internal and always on", () => {
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
+    it("leaves the project outputs/ policy out of the prompt every chat shares, so non-project chats never save there https://github.com/logancyang/obsidian-copilot/issues/3801", () => {
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain("outputs/");
       setDisableBuiltinSystemPrompt(true);
-      expect(buildAgentSystemPrompt(AGENT)).toContain(COPILOT_PROJECT_WORKSPACE_POLICY);
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain("outputs/");
     });
 
     it("tells each agent to edit vault files with its own edit tools so Copilot can show a diff (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {

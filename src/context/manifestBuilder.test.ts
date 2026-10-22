@@ -17,6 +17,7 @@ import {
   buildProjectContext,
   buildProjectContextBlock,
   MAX_MANIFEST_ENTRIES,
+  PROJECT_WORKSPACE_POLICY,
   type ManifestPathEntry,
   type ManifestSources,
 } from "./manifestBuilder";
@@ -238,6 +239,16 @@ describe("manifestBuilder", () => {
 
       expect(buildProjectContext(fakeApp(), "missing")).toContain("could not be loaded");
     });
+
+    it("tells a project chat to save generated files to outputs/ even when the project has no sources or cannot be loaded https://github.com/logancyang/obsidian-copilot/issues/3801", () => {
+      getRecord.mockReturnValue(record({}));
+      const noSources = buildProjectContext(fakeApp(), "p1");
+      getRecord.mockReturnValue(undefined);
+      const unavailable = buildProjectContext(fakeApp(), "missing");
+
+      expect(noSources).toContain(PROJECT_WORKSPACE_POLICY);
+      expect(unavailable).toContain(PROJECT_WORKSPACE_POLICY);
+    });
   });
 
   describe("buildProjectContextBlock()", () => {
@@ -245,6 +256,13 @@ describe("manifestBuilder", () => {
       const md = buildProjectContextBlock(sources({ tags: ["#research"] }));
       expect(md.startsWith("<project_context>")).toBe(true);
       expect(md.endsWith("</project_context>")).toBe(true);
+    });
+
+    it("states the outputs/ workspace policy ahead of the source listing, so the entry cap never drops it https://github.com/logancyang/obsidian-copilot/issues/3801", () => {
+      const md = buildProjectContextBlock(sources({ tags: ["#research"] }));
+
+      expect(md.startsWith(`<project_context>\n${PROJECT_WORKSPACE_POLICY}\n`)).toBe(true);
+      expect(md.indexOf(PROJECT_WORKSPACE_POLICY)).toBeLessThan(md.indexOf("## Included tags"));
     });
 
     it("lists folders and notes by absolute path without expanding members", () => {
