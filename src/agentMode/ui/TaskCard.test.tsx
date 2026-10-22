@@ -14,12 +14,12 @@ describe("TaskCard", () => {
   });
 
   it.each([
-    ["completed", "Completed", true],
-    ["failed", "Failed", true],
-    ["stopped", "Stopped", false],
+    ["completed", "Completed"],
+    ["failed", "Failed"],
+    ["stopped", "Stopped"],
   ] as const)(
-    `shows a %s task's final status, in words only to screen readers when its icon is a check or cross, and no result text (${ISSUE_749})`,
-    (status, label, iconOnly) => {
+    `shows a %s task's final status by its icon, in words only to screen readers, and no result text (${ISSUE_749})`,
+    (status, label) => {
       render(
         <TaskCard
           task={makeCommandTask({ status, summary: "Background command done" })}
@@ -28,7 +28,7 @@ describe("TaskCard", () => {
       );
 
       expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
-      expect(screen.getByText(label).classList.contains("tw-sr-only")).toBe(iconOnly);
+      expect(screen.getByText(label).classList.contains("tw-sr-only")).toBe(true);
       expect(screen.queryByText("Background command done")).toBeNull();
     }
   );
