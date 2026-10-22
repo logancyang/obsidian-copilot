@@ -172,9 +172,11 @@ export function ChangeScroller({ navigation, children }: ChangeScrollerProps): R
           ))}
         </div>
       ) : null}
+      {/* Obsidian gives reading view the note's font, size and line height through this container's class.
+      https://github.com/Brevilabs/obsidian-copilot-private/issues/755 */}
       <div
         ref={navigation.scrollerRef}
-        className="tw-flex-1 tw-overflow-y-auto tw-p-[var(--file-margins)]"
+        className="markdown-preview-view tw-flex-1"
         onScroll={navigation.syncToScroll}
       >
         <div

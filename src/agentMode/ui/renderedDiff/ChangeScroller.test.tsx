@@ -210,6 +210,12 @@ describe("ChangeScroller", () => {
       expect(scroller().scrollTop).toBe(1000 - ANCHOR);
     });
 
+    it("scrolls the note in Obsidian's reading-view container so its text takes the note's font, size and line height (https://github.com/Brevilabs/obsidian-copilot-private/issues/755)", () => {
+      render(<Harness>note</Harness>);
+
+      expect(scroller().classList).toContain("markdown-preview-view");
+    });
+
     it("shows no tick strip when nothing changed", () => {
       render(<Harness>note</Harness>);
 
