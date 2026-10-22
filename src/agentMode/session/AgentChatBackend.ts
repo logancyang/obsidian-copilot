@@ -12,6 +12,7 @@ import type {
   PlanDecisionAction,
   PromptContent,
   PlanUsage,
+  QueuedPrompt,
   SessionUsage,
 } from "./types";
 
@@ -21,8 +22,11 @@ export interface AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<BackendId>,
+    options?: { interrupt?: boolean }
   ): { id: string; turn: Promise<void> };
+  acceptsMidTurnMessages(): boolean;
+  getQueuedPrompts(): readonly QueuedPrompt[];
   cancel(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;

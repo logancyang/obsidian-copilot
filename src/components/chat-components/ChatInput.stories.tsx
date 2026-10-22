@@ -74,9 +74,49 @@ function RestoredComposer() {
   );
 }
 const meta = {
-  title: "Chat/Restored Composer",
+  title: "Chat/Agent Composer",
   component: RestoredComposer,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta;
 export default meta;
 export const StoppedQueue: StoryObj = {};
+
+function RunningComposer({ canInterruptAndSend }: { canInterruptAndSend: boolean }) {
+  const app = useApp();
+  const [input, setInput] = React.useState("Only summarize the first two notes.");
+  const [notes, setNotes] = React.useState<TFile[]>([]);
+  const [images, setImages] = React.useState<File[]>([]);
+  return (
+    <GalleryChatInputProvider>
+      <ChatInput
+        app={app}
+        isAgentMode
+        inputMessage={input}
+        setInputMessage={setInput}
+        contextNotes={notes}
+        setContextNotes={setNotes}
+        selectedImages={images}
+        setSelectedImages={setImages}
+        onAddImage={(files) => setImages((previous) => [...previous, ...files])}
+        includeActiveNote={false}
+        setIncludeActiveNote={() => undefined}
+        activeWebTab={null}
+        includeActiveWebTab={false}
+        setIncludeActiveWebTab={() => undefined}
+        handleSendMessage={() => setInput("")}
+        onStopGenerating={() => undefined}
+        isGenerating
+        canInterruptAndSend={canInterruptAndSend}
+        disableModelSwitch
+      />
+    </GalleryChatInputProvider>
+  );
+}
+
+export const RunningWithSendNow: StoryObj = {
+  render: () => <RunningComposer canInterruptAndSend />,
+};
+
+export const RunningWithoutSendNow: StoryObj = {
+  render: () => <RunningComposer canInterruptAndSend={false} />,
+};

@@ -210,6 +210,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
   summarizesSessionTitle: false,
+  midTurnDelivery: true,
   agentProductName: "Claude Code",
   wire: claudeWire,
   showModelDescriptions: true,

@@ -300,4 +300,54 @@ describe("AgentChatUIState", () => {
       expect(review.chat.isTurnInFlight()).toBe(false);
     });
   });
+
+  function liveChat(descriptor: Partial<BackendDescriptor>) {
+    let handler: SessionUpdateHandler | undefined;
+    const backend = {
+      isRunning: () => true,
+      onExit: () => () => undefined,
+      registerSessionHandler: (_id: string, h: SessionUpdateHandler) => {
+        handler = h;
+        return () => undefined;
+      },
+      prompt: async () => undefined,
+    } as unknown as BackendProcess;
+    const session = new AgentSession({
+      backend,
+      backendSessionId: "claude-session",
+      internalId: "live",
+      backendId: "claude",
+      getDescriptor: () => descriptor as BackendDescriptor,
+    });
+    session.completeResume(null);
+    const chat = new AgentChatUIState(session);
+    const emit = (update: SessionEvent["update"]) =>
+      handler!({ sessionId: "claude-session", update });
+    return Object.assign(chat, { emit });
+  }
+
+  describe("acceptsMidTurnMessages()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 follows the backend's mid-turn delivery capability", () => {
+      expect(liveChat({ midTurnDelivery: true }).acceptsMidTurnMessages()).toBe(true);
+      expect(liveChat({}).acceptsMidTurnMessages()).toBe(false);
+    });
+  });
+
+  describe("getQueuedPrompts()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 lists a message sent while the agent works, and notifies the composer when the agent withdraws it", () => {
+      const chat = liveChat({ midTurnDelivery: true });
+      chat.sendMessage("list the notes");
+      const { id } = chat.sendMessage("only the first two");
+      expect(chat.getQueuedPrompts()).toEqual([
+        expect.objectContaining({ id, text: "only the first two" }),
+      ]);
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.emit({ sessionUpdate: "messages_withdrawn", promptIds: [id] });
+
+      expect(chat.getQueuedPrompts()).toEqual([]);
+      expect(listener).toHaveBeenCalled();
+    });
+  });
 });

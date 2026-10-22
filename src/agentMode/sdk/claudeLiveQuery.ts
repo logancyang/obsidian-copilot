@@ -51,7 +51,7 @@ export class ClaudeLiveQuery {
     void this.consume();
   }
 
-  push(promptId: string, content: ClaudeUserContent): void {
+  push(promptId: string, content: ClaudeUserContent, interrupt = false): void {
     this.undelivered.push(promptId);
     this.input.push({
       type: "user",
@@ -59,6 +59,8 @@ export class ClaudeLiveQuery {
       session_id: "",
       parent_tool_use_id: null,
       message: { role: "user", content },
+      // "now" ends the running turn at its next safe point and runs this message; background tasks keep running. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+      ...(interrupt ? { priority: "now" as const } : {}),
     });
   }
 

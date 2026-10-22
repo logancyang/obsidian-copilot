@@ -423,6 +423,14 @@ export interface PromptInput {
   sessionId: SessionId;
   promptId: string;
   prompt: PromptContent[];
+  interrupt?: boolean;
+}
+
+export interface QueuedPrompt {
+  readonly id: string;
+  readonly text: string;
+  readonly context?: MessageContext;
+  readonly promptContent?: PromptContent[];
 }
 
 export interface TurnDiff {

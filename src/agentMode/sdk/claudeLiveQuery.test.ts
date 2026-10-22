@@ -134,6 +134,16 @@ describe("claudeLiveQuery", () => {
         expect(fake.inputs.map((input) => input.uuid)).toEqual(["prompt-1", "prompt-2"]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends an interrupt-and-send prompt at priority now, so Claude ends the running turn at its next safe point and runs it", async () => {
+        const { live, fake } = startLive();
+
+        live.push("steer", "keep going");
+        live.push("urgent", "do this instead", true);
+
+        expect((await fake.nextInput(0)).priority).toBeUndefined();
+        expect((await fake.nextInput(1)).priority).toBe("now");
+      });
+
       it(`reports a prompt delivered when Claude echoes it and starts its turn there, without rendering the echo (${ISSUE_175})`, async () => {
         const { live, fake, recorder } = startLive();
 

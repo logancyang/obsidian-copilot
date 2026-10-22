@@ -13,6 +13,7 @@ import type {
   PlanDecisionAction,
   PromptContent,
   PlanUsage,
+  QueuedPrompt,
   SessionUsage,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
@@ -29,6 +30,7 @@ export class AgentChatUIState implements AgentChatBackend {
       onModelChanged: () => this.notifyListeners(),
       onCurrentPlanChanged: () => this.notifyListeners(),
       onCurrentTodoListChanged: () => this.notifyListeners(),
+      onQueuedPromptsChanged: () => this.notifyListeners(),
     });
   }
 
@@ -51,13 +53,15 @@ export class AgentChatUIState implements AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<BackendId>,
+    options?: { interrupt?: boolean }
   ): { id: string; turn: Promise<void> } {
     const { userMessageId, turn } = this.session.sendPrompt(
       text,
       context,
       promptContent,
-      mentionedAgents
+      mentionedAgents,
+      options
     );
     this.notifyListeners();
     const wrapped = turn.then(
@@ -68,6 +72,14 @@ export class AgentChatUIState implements AgentChatBackend {
     );
     this.currentTurn = turn;
     return { id: userMessageId, turn: wrapped };
+  }
+
+  acceptsMidTurnMessages(): boolean {
+    return this.session.acceptsMidTurnPrompts();
+  }
+
+  getQueuedPrompts(): readonly QueuedPrompt[] {
+    return this.session.getQueuedPrompts();
   }
 
   async cancel(): Promise<void> {

@@ -103,6 +103,10 @@ export interface BackendDescriptor {
 
   readonly planFeedbackDelivery?: "permission" | "next_turn";
 
+  // A backend that takes input while its agent works gets each message at the agent's next step instead of Copilot holding it until the turn ends.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/509
+  readonly midTurnDelivery?: boolean;
+
   getInstallState(settings: CopilotSettings): InstallState;
 
   getResolvedBinaryPath?(settings: CopilotSettings): string | null;

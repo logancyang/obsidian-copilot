@@ -574,6 +574,21 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("prompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends an interrupt-and-send prompt to Claude at priority now", async () => {
+        queryMock.mockImplementation(silent());
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await proc.prompt({
+          sessionId,
+          promptId: "p1",
+          prompt: [{ type: "text", text: "hi" }],
+          interrupt: true,
+        });
+
+        expect(await fakes[0].nextInput()).toMatchObject({ uuid: "p1", priority: "now" });
+      });
+
       it(`resolves once the prompt is queued on the chat's live query, which reports its delivery and turn when Claude echoes it (${ISSUE_175})`, async () => {
         queryMock.mockImplementation(silent());
         const proc = makeProc();

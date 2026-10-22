@@ -98,6 +98,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingToolPermissions,
     pendingAskUserQuestions,
     feedbackOffer,
+    queuedPrompts,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
 
@@ -528,6 +529,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       isLoading={isLoading}
+      queuedPrompts={queuedPrompts}
+      acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}

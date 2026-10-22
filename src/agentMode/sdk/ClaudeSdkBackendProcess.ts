@@ -261,10 +261,14 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     logSdkOutbound(
       "prompt",
-      { promptId: params.promptId, prompt: summarizePromptContent(messageContent) },
+      {
+        promptId: params.promptId,
+        prompt: summarizePromptContent(messageContent),
+        ...(params.interrupt ? { interrupt: true } : {}),
+      },
       params.sessionId
     );
-    live.push(params.promptId, messageContent);
+    live.push(params.promptId, messageContent, params.interrupt === true);
   }
 
   // One query serves the whole chat, so background tasks outlive the turn that launched them.

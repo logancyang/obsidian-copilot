@@ -40,9 +40,10 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
-        handleSendMessage?: () => void;
+        handleSendMessage?: (meta?: { interrupt?: boolean }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
+        canInterruptAndSend?: boolean;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -62,6 +63,11 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
+          {props.canInterruptAndSend && (
+            <button type="button" onClick={() => props.handleSendMessage?.({ interrupt: true })}>
+              send now
+            </button>
+          )}
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
@@ -155,6 +161,8 @@ function inputNode(
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       isLoading={draft.loading}
+      queuedPrompts={[]}
+      acceptsMidTurnMessages={false}
       hasPendingPlanPermission={false}
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
@@ -803,6 +811,74 @@ describe("AgentChatInput", () => {
 
       expect(backend.sendMessage).not.toHaveBeenCalled();
       expect(enqueuedItem(draft.setQueue as jest.Mock).id).toMatch(/^queued-/);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hands a message sent while the agent works straight to a backend that takes mid-turn input, instead of holding it", async () => {
+      const backend = makeBackend();
+      const draft = makeDraft({ input: "only the first two", loading: true });
+
+      renderInput(backend, draft, { acceptsMidTurnMessages: true });
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("only the first two");
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][4]).toEqual({ interrupt: false });
+      expect(draft.setQueue).not.toHaveBeenCalled();
+      expect(draft.setLoading).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends with interrupt from Send now, which only a backend taking mid-turn input offers", async () => {
+      const backend = makeBackend();
+      const draft = makeDraft({ input: "do this instead", loading: true });
+
+      const { rerender } = renderInput(backend, draft);
+      expect(screen.queryByText("send now")).toBeNull();
+      rerender(inputNode(backend, draft, { acceptsMidTurnMessages: true }));
+      fireEvent.click(screen.getByText("send now"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][4]).toEqual({ interrupt: true });
+    });
+
+    it.each([
+      { scenario: "/compact", input: "/compact" },
+      { scenario: "anything while the chat is starting", input: "hello", isStarting: true },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/509 holds $scenario until the agent finishes, even on a backend that takes mid-turn input",
+      async ({ input, isStarting = false }) => {
+        const backend = makeBackend();
+        const draft = makeDraft({ input, loading: true });
+
+        renderInput(backend, draft, { acceptsMidTurnMessages: true, isStarting });
+        fireEvent.click(screen.getByText("send"));
+
+        await waitFor(() => expect(draft.setQueue).toHaveBeenCalled());
+        expect(backend.sendMessage).not.toHaveBeenCalled();
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 keeps held messages back until every message already handed to the agent has reached it", async () => {
+      const backend = makeBackend();
+      const held = { id: "queued-1", text: "/compact", rawInput: "/compact" };
+      const queued = { id: "steer", text: "only the first two" };
+
+      const { rerender } = renderInput(backend, makeDraft({ queue: [held] }), {
+        queuedPrompts: [queued],
+        acceptsMidTurnMessages: true,
+      });
+      expect(backend.sendMessage).not.toHaveBeenCalled();
+      expect(screen.getByText("Queued")).toBeTruthy();
+      expect(screen.getByText("Sends when the agent finishes")).toBeTruthy();
+
+      rerender(
+        inputNode(backend, makeDraft({ queue: [held] }), {
+          queuedPrompts: [],
+          acceptsMidTurnMessages: true,
+        })
+      );
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("/compact");
     });
 
     it("queues a message behind a plan-approved turn even after draft loading clears (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
