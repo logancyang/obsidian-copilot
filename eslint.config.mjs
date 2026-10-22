@@ -249,7 +249,7 @@ export default [
         callees: ["classnames", "clsx", "ctl", "cn", "cva"],
         config: "./tailwind.config.js",
         cssFiles: ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
-        whitelist: ["clickable-icon", "mod-cta", "markdown-rendered"],
+        whitelist: ["clickable-icon", "mod-cta", "markdown-rendered", "markdown-preview-view"],
       },
     },
     rules: {
