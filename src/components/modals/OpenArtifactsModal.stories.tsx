@@ -144,6 +144,22 @@ export const PrivateSharingNeedsPaidPlan: StoryObj<OpenArtifactsModalContentProp
   },
 };
 
+// Without a license key the dialog opens on the upgrade offer, and nothing is sent.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+export const NeedsCopilotPlus: StoryObj<OpenArtifactsModalContentProps> = {
+  args: {
+    initialResult: {
+      kind: "failure",
+      action: "publish",
+      message:
+        "OpenArtifacts comes with Copilot Plus. If you have it, add your license key in Copilot Settings.",
+      accessNotice: true,
+      retryable: false,
+      upgradeUrl: createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "openartifacts_access"),
+    },
+  },
+};
+
 // The screen after a first publish: the receipt, then the access panel.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PublishedWithAccessPanel: StoryObj<OpenArtifactsModalContentProps> = {

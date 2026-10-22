@@ -150,7 +150,7 @@ describe("OpenArtifactsPublisher", () => {
         const result = await harness.modalOptions[0].onConfirm("publish", activeDocument);
 
         expect(result).toEqual({ kind: "success", action: "publish", receipt: RECEIPT });
-        expect(harness.loadLicenseKey).toHaveBeenCalledTimes(1);
+        expect(harness.loadLicenseKey).toHaveBeenCalledTimes(2);
         expect(harness.buildDocument).toHaveBeenCalledWith(harness.file, activeDocument);
         expect(harness.client.publish).toHaveBeenCalledWith(
           DOCUMENT,
@@ -859,22 +859,48 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.frontmatter.symposium).toBe(NEW_DOC_URL);
       });
 
-      it("requires a non-empty Keychain-hydrated key without locally checking a plan", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 opens on the upgrade offer without a Keychain-hydrated key, without locally checking a plan", async () => {
         const harness = createHarness();
         harness.loadLicenseKey.mockResolvedValue("");
-
-        const result = await openAndConfirm(harness, "publish");
-
-        expect(result).toEqual({
+        const offer = {
           kind: "failure",
           action: "publish",
           message:
-            "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.",
+            "OpenArtifacts comes with Copilot Plus. If you have it, add your license key in Copilot Settings.",
           accessNotice: true,
           retryable: false,
-        });
+          upgradeUrl:
+            "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=openartifacts_access",
+        };
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(harness.modalOptions[0].initialResult).toEqual(offer);
+        expect(result).toEqual(offer);
         expect(harness.buildDocument).not.toHaveBeenCalled();
         expect(harness.client.publish).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers the upgrade link when OpenArtifacts refuses the key", async () => {
+        const harness = createHarness();
+        harness.client.publish.mockRejectedValue(
+          new OpenArtifactsClientError(
+            "Publishing requires a paid plan.",
+            "unauthorized",
+            401,
+            false
+          )
+        );
+
+        const result = await openAndConfirm(harness, "publish");
+
+        expect(result).toMatchObject({
+          kind: "failure",
+          message: "Publishing requires a paid plan.",
+          accessNotice: true,
+          upgradeUrl:
+            "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=openartifacts_access",
+        });
       });
 
       it("keeps one in-flight operation per file across renames and releases it afterward", async () => {

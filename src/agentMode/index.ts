@@ -39,7 +39,6 @@ import {
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import {
   createOpenArtifactsTools,
-  isOpenArtifactsToolsActive,
   OPENARTIFACTS_TOOL_NAMES,
   readLocalText,
 } from "@/openArtifacts/openArtifactsTools";
@@ -129,6 +128,18 @@ function spawnModelConfigKey(
     .join("\n");
 }
 
+// The OpenArtifacts tools have no switch: a user without Copilot Plus gets the upgrade offer when they call one.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+export function isCopilotToolOn(toolName: string, settings: CopilotSettings): boolean {
+  return toolName === SEND_FEEDBACK_TOOL_NAME
+    ? settings.agentMode.offerFeedbackCards
+    : toolName === MIYO_PARSE_TOOL_NAME
+      ? isMiyoParseActive(settings)
+      : toolName === MIYO_SEARCH_TOOL_NAME
+        ? isMiyoSearchActive(settings)
+        : OPENARTIFACTS_TOOL_NAMES.includes(toolName);
+}
+
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
@@ -201,15 +212,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     persistenceManager,
     sessionIndex,
     copilotMcpServer: createCopilotMcpServer(
-      (toolName) =>
-        toolName === SEND_FEEDBACK_TOOL_NAME
-          ? getSettings().agentMode.offerFeedbackCards
-          : toolName === MIYO_PARSE_TOOL_NAME
-            ? isMiyoParseActive(getSettings())
-            : toolName === MIYO_SEARCH_TOOL_NAME
-              ? isMiyoSearchActive(getSettings())
-              : OPENARTIFACTS_TOOL_NAMES.includes(toolName) &&
-                isOpenArtifactsToolsActive(getSettings()),
+      (toolName) => isCopilotToolOn(toolName, getSettings()),
       [
         {
           definition: MIYO_SEARCH_TOOL,

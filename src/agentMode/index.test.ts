@@ -3,7 +3,7 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
-import { createAgentSessionManager } from "./index";
+import { createAgentSessionManager, isCopilotToolOn } from "./index";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
@@ -358,93 +358,19 @@ describe("agentMode", () => {
       );
     });
 
-    it("hands sessions Copilot's MCP server only while feedback cards are on, following the setting as it changes", () => {
-      mockSettings = withCards(true);
-      createAgentSessionManager({} as App, plugin);
-      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-
-      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
-      mockSettings = withCards(false);
-      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
-    });
-
-    it.each([
-      ["Miyo is connected and the search switch is on", true, true, true],
-      ["the search switch is off", true, false, false],
-      ["Miyo is disconnected even though the switch defaults on", false, true, false],
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/736 hands sessions miyo_search through Copilot's MCP server when %s, with feedback cards off",
-      (_state, enableMiyo, enableMiyoSearchSkill, hasTools) => {
-        mockSettings = {
-          ...mockSettings,
-          agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
-          enableMiyo,
-          enableMiyoSearchSkill,
-        };
-        createAgentSessionManager({} as App, plugin);
-        const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-
-        expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
-      }
-    );
-
-    it.each([
-      ["Miyo is connected and document processing is on", true, true, true],
-      ["document processing is off", true, false, false],
-      ["Miyo is disconnected even though document processing defaults on", false, true, false],
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/740 hands sessions miyo_parse through Copilot's MCP server when %s, with feedback cards off",
-      (_state, enableMiyo, enableMiyoDocumentProcessing, hasTools) => {
-        mockSettings = {
-          ...mockSettings,
-          agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
-          enableMiyo,
-          enableMiyoSearchSkill: false,
-          enableMiyoDocumentProcessing,
-        };
-        createAgentSessionManager({} as App, plugin);
-        const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-
-        expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
-      }
-    );
-
-    it.each([
-      ["a paid user has a license key", true, "plus-key", true],
-      ["the key is blank", true, "  ", false],
-      ["the user is not paid", false, "plus-key", false],
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 hands sessions the OpenArtifacts tools through Copilot's MCP server when %s, with every other tool off",
-      (_state, isPaidUser, plusLicenseKey, hasTools) => {
-        mockSettings = {
-          ...mockSettings,
-          agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
-          enableMiyo: false,
-          isPaidUser,
-          plusLicenseKey,
-        };
-        createAgentSessionManager({} as App, plugin);
-        const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-
-        expect(copilotMcpServer?.hasEnabledTools()).toBe(hasTools);
-      }
-    );
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 follows the search switch as it changes", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 always hands sessions Copilot's MCP server, since the OpenArtifacts tools have no switch", () => {
       mockSettings = {
         ...mockSettings,
         agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
-        enableMiyo: true,
-        enableMiyoSearchSkill: true,
+        enableMiyo: false,
+        isPaidUser: false,
+        plusLicenseKey: "",
       };
       createAgentSessionManager({} as App, plugin);
       const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
 
       expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
-      mockSettings = { ...mockSettings, enableMiyoSearchSkill: false };
-      expect(copilotMcpServer?.hasEnabledTools()).toBe(false);
     });
-
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
       createAgentSessionManager({} as App, plugin);
 
@@ -621,5 +547,70 @@ describe("agentMode", () => {
         expect.objectContaining({ availableAgents: ["claude"] })
       );
     });
+  });
+});
+
+describe("isCopilotToolOn()", () => {
+  const off = (update: Partial<CopilotSettings>): CopilotSettings =>
+    ({
+      agentMode: { offerFeedbackCards: false },
+      enableMiyo: false,
+      ...update,
+    }) as CopilotSettings;
+
+  it("follows the feedback-card setting for send_feedback", () => {
+    expect(
+      isCopilotToolOn(
+        "send_feedback",
+        off({ agentMode: { offerFeedbackCards: true } as CopilotSettings["agentMode"] })
+      )
+    ).toBe(true);
+    expect(isCopilotToolOn("send_feedback", off({}))).toBe(false);
+  });
+
+  it.each([
+    ["Miyo is connected and the search switch is on", true, true, true],
+    ["the search switch is off", true, false, false],
+    ["Miyo is disconnected even though the switch defaults on", false, true, false],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/736 offers miyo_search when %s",
+    (_state, enableMiyo, enableMiyoSearchSkill, on) => {
+      expect(isCopilotToolOn("miyo_search", off({ enableMiyo, enableMiyoSearchSkill }))).toBe(on);
+    }
+  );
+
+  it.each([
+    ["Miyo is connected and document processing is on", true, true, true],
+    ["document processing is off", true, false, false],
+    ["Miyo is disconnected even though document processing defaults on", false, true, false],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/740 offers miyo_parse when %s",
+    (_state, enableMiyo, enableMiyoDocumentProcessing, on) => {
+      expect(isCopilotToolOn("miyo_parse", off({ enableMiyo, enableMiyoDocumentProcessing }))).toBe(
+        on
+      );
+    }
+  );
+
+  it.each([
+    ["a Plus user", { isPaidUser: true, plusLicenseKey: "plus-key" }],
+    ["a user with no key", { isPaidUser: false, plusLicenseKey: "" }],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers every OpenArtifacts tool to %s",
+    (_user, update) => {
+      for (const name of [
+        "openartifacts_publish",
+        "openartifacts_share",
+        "openartifacts_open",
+        "openartifacts_comments",
+        "openartifacts_unpublish",
+      ]) {
+        expect(isCopilotToolOn(name, off(update))).toBe(true);
+      }
+    }
+  );
+
+  it("offers no tool it does not host", () => {
+    expect(isCopilotToolOn("unknown_tool", off({}))).toBe(false);
   });
 });

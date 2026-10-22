@@ -6,6 +6,7 @@ import {
   type OpenArtifactsModalResult,
   type OpenArtifactsPersistenceResult,
 } from "@/components/modals/OpenArtifactsModal";
+import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
@@ -74,7 +75,10 @@ interface OpenArtifactsPublisherDependencies {
 }
 
 const MISSING_LICENSE_MESSAGE =
-  "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.";
+  "OpenArtifacts comes with Copilot Plus. If you have it, add your license key in Copilot Settings.";
+// Every refusal of access, in the dialog or from an agent, offers the same upgrade link.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+const ACCESS_UPGRADE_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "openartifacts_access");
 const BUSY_MESSAGE = "An OpenArtifacts action is already in progress for this note.";
 
 async function loadConfiguredLicenseKey(): Promise<string> {
@@ -93,6 +97,17 @@ async function buildDocumentWithComponent(
   } finally {
     component.unload();
   }
+}
+
+export function missingLicenseFailure(action: OpenArtifactsAction): OpenArtifactsFailureResult {
+  return {
+    kind: "failure",
+    action,
+    message: MISSING_LICENSE_MESSAGE,
+    accessNotice: true,
+    retryable: false,
+    upgradeUrl: ACCESS_UPGRADE_URL,
+  };
 }
 
 export function operationFailure(
@@ -121,15 +136,17 @@ export function operationFailure(
     };
   }
   if (error instanceof OpenArtifactsClientError) {
+    const accessNotice = error.status === 401 && error.code === "unauthorized";
+    // A 402 on the first private publish goes through onConfirm and never reaches AccessPanel.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
+    const upgradeUrl = error.upgradeUrl ?? (accessNotice ? ACCESS_UPGRADE_URL : undefined);
     return {
       kind: "failure",
       action,
       message: error.message,
-      accessNotice: error.status === 401 && error.code === "unauthorized",
+      accessNotice,
       retryable: error.retryable,
-      // A 402 on the first private publish goes through onConfirm and never reaches AccessPanel.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
-      ...(error.upgradeUrl && { upgradeUrl: error.upgradeUrl }),
+      ...(upgradeUrl && { upgradeUrl }),
     };
   }
 
@@ -214,6 +231,11 @@ export class OpenArtifactsPublisher {
         }
         initialResult = operationFailure("publish", error);
       }
+    }
+    // Without a key nothing can be published, so the dialog opens on the upgrade offer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+    if (!initialResult && !(await this.loadLicenseKey().catch(() => ""))) {
+      initialResult = missingLicenseFailure("publish");
     }
     if (this.disposed) {
       return;
@@ -336,13 +358,7 @@ export class OpenArtifactsPublisher {
         licenseKey = "";
       }
       if (!licenseKey) {
-        return {
-          kind: "failure",
-          action: resolvedAction,
-          message: MISSING_LICENSE_MESSAGE,
-          accessNotice: true,
-          retryable: false,
-        };
+        return missingLicenseFailure(resolvedAction);
       }
 
       if (resolvedAction === "delete" && !docId) {
