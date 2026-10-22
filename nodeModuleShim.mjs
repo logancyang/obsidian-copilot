@@ -1,15 +1,18 @@
 export const nodeBuiltinExternals = [
   "node:*",
   "async_hooks",
+  "buffer",
   "child_process",
   "crypto",
   "events",
   "fs",
   "fs/promises",
+  "net",
   "os",
   "path",
   "process",
   "readline",
+  "string_decoder",
   "url",
   "util",
 ];
