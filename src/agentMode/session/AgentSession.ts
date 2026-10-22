@@ -22,6 +22,7 @@ import {
   NewAgentChatMessage,
   PermissionDecision,
   PermissionPrompt,
+  PermissionRequester,
   PlanDecisionAction,
   PromptContent,
   PromptInput,
@@ -114,6 +115,7 @@ const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
 const EMPTY_PROMPT_IDS: ReadonlySet<string> = new Set();
+const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   completed: "completed",
   failed: "failed",
@@ -141,6 +143,8 @@ interface TurnFileCapture {
   snapshot: Promise<string | null>;
   writeTimeBefore?: string | null;
 }
+
+type FileCaptures = Map<string, TurnFileCapture>;
 
 function isTaskLifecycleUpdate(update: SessionEvent["update"]): boolean {
   return (
@@ -270,7 +274,8 @@ export class AgentSession {
   private withdrawnPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
   private stoppedPromptIds: ReadonlySet<string> = EMPTY_PROMPT_IDS;
   private sendOrder: Promise<void> = Promise.resolve();
-  private turnFiles = new Map<string, TurnFileCapture>();
+  private turnFiles: FileCaptures = new Map();
+  private readonly taskFiles = new Map<string, FileCaptures>();
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
   private readonly taskContent = new Map<string, AgentMessageStore>();
@@ -1313,7 +1318,8 @@ export class AgentSession {
   }
 
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
-    this.observeToolCall(request.toolCall.kind, toolCallTarget(request.toolCall));
+    const files = this.filesOf(request.requester ?? "main");
+    if (files) this.observeToolCall(files, request.toolCall.kind, toolCallTarget(request.toolCall));
     return this.requests.handleToolPermission(request);
   }
 
@@ -1472,7 +1478,7 @@ export class AgentSession {
 
     switch (update.sessionUpdate) {
       case "tool_call": {
-        this.observeToolCall(update.kind, toolCallTarget(update));
+        this.observeToolCall(this.turnFiles, update.kind, toolCallTarget(update));
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -1496,17 +1502,7 @@ export class AgentSession {
         const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
         // A late update to an earlier turn's call must not count as this turn's edit.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-        if (!isPriorToolUpdate && merged.kind === "tool_call") {
-          this.observeToolCall(
-            merged.toolKind,
-            {
-              locations: merged.locations,
-              input: merged.input,
-              diffPaths: diffTargetPaths(merged.output),
-            },
-            update.originalFiles
-          );
-        }
+        if (!isPriorToolUpdate) this.observeToolResult(this.turnFiles, merged, update);
         if (merged.kind === "tool_call") {
           const exitPlan = tryReadExitPlanModeCall({
             kind: update.kind ?? merged.toolKind,
@@ -1631,7 +1627,25 @@ export class AgentSession {
     });
     // A request from a task that has ended can no longer be answered, so its card must not stay open. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
     this.requests.rejectToolRequestsFrom({ taskId: task.taskId });
+    // A tool call cut short by its task's end would otherwise spin in the task's view forever. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+    const content = this.taskContent.get(task.toolCallId);
+    const contentId = content?.getDisplayMessages()[0]?.id;
+    if (contentId) content?.stopToolCalls(contentId, EMPTY_TOOL_CALL_IDS);
     this.publishTasks();
+    void this.finalizeTaskFileChanges(task.toolCallId);
+  }
+
+  private async finalizeTaskFileChanges(toolCallId: string): Promise<void> {
+    const files = this.taskFiles.get(toolCallId);
+    this.taskFiles.delete(toolCallId);
+    const store = this.taskContent.get(toolCallId);
+    const messageId = store?.getDisplayMessages()[0]?.id;
+    if (!files || !store || !messageId) return;
+    try {
+      if (await this.finalizeFileChanges(files, store, messageId)) this.notifyTasks();
+    } catch (err) {
+      logWarn(`[AgentMode] could not capture a task's file changes`, err);
+    }
   }
 
   // A task's end decides its launching card's status; the tool's result can arrive after a stop and must not turn it into a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
@@ -1684,16 +1698,16 @@ export class AgentSession {
         changed = store.appendAgentThought(messageId, extractText(update.content));
         break;
       case "tool_call":
+        this.observeToolCall(this.filesOfTask(toolCallId), update.kind, toolCallTarget(update));
         changed = store.upsertAgentPart(messageId, toolCallToPart(update));
         break;
       case "tool_call_update": {
         const existing = store
           .getMessage(messageId)
           ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
-        changed = store.upsertAgentPart(
-          messageId,
-          mergeToolCallUpdate(existing, this.withEndedTaskStatus(update))
-        );
+        const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
+        this.observeToolResult(this.filesOfTask(toolCallId), merged, update);
+        changed = store.upsertAgentPart(messageId, merged);
         break;
       }
       default:
@@ -1802,9 +1816,18 @@ export class AgentSession {
     }
     this.store.settleOpenParts(placeholderId);
     // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    await this.finalizeTurnFileChanges(placeholderId, turnDiff).catch((err: unknown) =>
-      logWarn(`[AgentMode] could not capture the turn's file changes`, err)
-    );
+    const turnFiles = this.turnFiles;
+    this.turnFiles = new Map();
+    const filesChanged = await this.finalizeFileChanges(
+      turnFiles,
+      this.store,
+      placeholderId,
+      turnDiff
+    ).catch((err: unknown) => {
+      logWarn(`[AgentMode] could not capture the turn's file changes`, err);
+      return false;
+    });
+    if (filesChanged) this.notifyMessages();
     if (this.store.markTurnComplete(placeholderId, stopReason, Date.now() - turnStartedAtMs)) {
       this.notifyMessages();
     }
@@ -1845,7 +1868,38 @@ export class AgentSession {
     return placeholderId;
   }
 
+  // A subagent's edits belong to its own capture, never to the card of the main-agent run open beside it. https://github.com/Brevilabs/obsidian-copilot-private/issues/669
+  private filesOf(requester: PermissionRequester): FileCaptures | undefined {
+    if (requester === "main") return this.turnFiles;
+    const toolCallId = this.tasks.get(requester.taskId)?.toolCallId;
+    return toolCallId === undefined ? undefined : this.filesOfTask(toolCallId);
+  }
+
+  private filesOfTask(toolCallId: string): FileCaptures {
+    let files = this.taskFiles.get(toolCallId);
+    if (!files) {
+      files = new Map();
+      this.taskFiles.set(toolCallId, files);
+    }
+    return files;
+  }
+
+  private observeToolResult(
+    files: FileCaptures,
+    part: AgentMessagePart,
+    update: ToolCallDelta
+  ): void {
+    if (part.kind !== "tool_call") return;
+    this.observeToolCall(
+      files,
+      part.toolKind,
+      { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
+      update.originalFiles
+    );
+  }
+
   private observeToolCall(
+    files: FileCaptures,
     kind: AgentToolKind | undefined,
     target: EditTargetSource,
     originalFiles?: Readonly<Record<string, string | null>>
@@ -1864,12 +1918,12 @@ export class AgentSession {
     );
     for (const path of editTargetPaths(target, vaultBase)) {
       if (!isCapturableVaultPath(path)) continue;
-      let capture = this.turnFiles.get(path);
+      let capture = files.get(path);
       if (!capture) {
         // Read as the call is announced; an Auto-mode write can land first, so a write-time original wins.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
         capture = { edited: false, snapshot: readVaultText(adapter, path) };
-        this.turnFiles.set(path, capture);
+        files.set(path, capture);
       }
       if (!changes) continue;
       capture.edited = true;
@@ -1881,15 +1935,16 @@ export class AgentSession {
 
   // Before text comes from a source that saw the file at write time; the first-mention snapshot
   // is only the fallback. https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-  private async finalizeTurnFileChanges(
+  private async finalizeFileChanges(
+    files: FileCaptures,
+    store: AgentMessageStore,
     messageId: string,
-    turnDiff: TurnDiff | undefined
-  ): Promise<void> {
-    const edited = [...this.turnFiles].filter(([, capture]) => capture.edited);
-    this.turnFiles = new Map();
+    turnDiff?: TurnDiff
+  ): Promise<boolean> {
+    const edited = [...files].filter(([, capture]) => capture.edited);
     const app = this.getApp?.();
     const adapter = app?.vault?.adapter;
-    if (edited.length === 0 || !app || !adapter) return;
+    if (edited.length === 0 || !app || !adapter) return false;
     const turnPatches = turnDiff ? filePatchesByVaultPath(turnDiff, getVaultBase(app)) : undefined;
     const changes = (
       await Promise.all(
@@ -1907,8 +1962,7 @@ export class AgentSession {
         })
       )
     ).filter((change): change is TurnFileChange => change !== null);
-    if (changes.length === 0) return;
-    if (this.store.setFileChanges(messageId, changes)) this.notifyMessages();
+    return changes.length > 0 && store.setFileChanges(messageId, changes);
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
