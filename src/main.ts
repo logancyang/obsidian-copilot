@@ -218,7 +218,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // reads, and this catch keeps Obsidian from logging the failure itself.
       // https://github.com/logancyang/obsidian-copilot/issues/3518
       logFatalError("Copilot failed to start.", error);
-      new Notice("Copilot failed to start. Check the console for details.");
+      new Notice("Copilot failed to start. Check the Copilot log for details.");
       // Obsidian keeps a plugin enabled when work after onload fails, so release whatever
       // startup registered before the failure. https://github.com/logancyang/obsidian-copilot/issues/3518
       this.unload();
@@ -271,7 +271,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           await persistSettings(next, (data) => this.saveData(data), prev);
         } catch (error) {
           logError("Failed to persist settings.", error);
-          new Notice("Copilot failed to save settings. Check logs and try again.");
+          new Notice("Copilot failed to save settings. Check the Copilot log, then try again.");
         }
         if (plusSyncNeeded(prev, next)) {
           syncPlus(next.isPaidUser, next.plusLicenseKey);
@@ -1064,7 +1064,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       await this.agentSessionManager?.addContextNoteToActiveChat(note);
     } catch (error) {
       logError("Failed to add a note to Agent Chat.", error);
-      new Notice("Could not add the note to Agent Chat. Check Copilot logs.");
+      new Notice("Could not add the note to Agent Chat. Check the Copilot log.");
     }
   }
 
@@ -1103,7 +1103,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       await manager.createSession();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session", error);
-      new Notice("Failed to create agent session. Check Copilot logs.");
+      new Notice("Failed to start a new chat. Check the Copilot log.");
     }
   }
 
@@ -1115,7 +1115,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       await this.activateAgentView();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session with draft", error);
-      new Notice("Failed to create agent session. Check Copilot logs.");
+      new Notice("Failed to start a new chat. Check the Copilot log.");
     }
   }
 
@@ -1396,7 +1396,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   async openChatSourceFile(fileId: string): Promise<void> {
     if (isNativeChatId(fileId)) {
       new Notice(
-        "This chat has no saved note. Turn on Autosave Chat as Markdown to save chats as notes in your vault."
+        "This chat has no saved note. Turn on Autosave chats as Markdown to save chats as notes in your vault."
       );
       return;
     }

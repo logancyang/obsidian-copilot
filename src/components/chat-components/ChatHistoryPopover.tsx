@@ -481,7 +481,7 @@ function ChatHistoryItem({
                   onDelete(chat.id);
                 }}
                 className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="Confirm Delete"
+                title="Confirm delete"
               >
                 <Check className="tw-size-3" />
               </Button>
@@ -505,8 +505,8 @@ function ChatHistoryItem({
                   size="sm"
                   variant="ghost"
                   className="tw-size-5 tw-p-0"
-                  aria-label="Close session"
-                  title="Close session"
+                  aria-label="Close chat"
+                  title="Close chat"
                   onClick={(event) => {
                     event.stopPropagation();
                     safeAsyncHandler(onCloseSession)(chat.id);
@@ -549,7 +549,7 @@ function ChatHistoryItem({
                   onDelete(chat.id);
                 }}
                 className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-                title="delete file"
+                title="Delete file"
               >
                 <Trash2 className="tw-size-3" />
               </Button>

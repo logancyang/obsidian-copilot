@@ -129,7 +129,9 @@ export const BasicSettings: React.FC = () => {
         void applyCopilotRootChange(app, folder)
           .then(() => ensureCopilotSubfolders(app.vault, { copilotFolder: folder }))
           .then(() => new Notice(`Copilot folder changed to "${folder}".`, 4000))
-          .catch(() => new Notice("Failed to change the Copilot folder. Check the logs.", 5000));
+          .catch(
+            () => new Notice("Failed to change the Copilot folder. Check the Copilot log.", 5000)
+          );
       },
       <CopilotFolderChangeNotice
         oldRoot={persistedRoot}
@@ -197,19 +199,19 @@ export const BasicSettings: React.FC = () => {
       <SettingSection label="General">
         <SettingItem
           type="select"
-          title="Open Plugin In"
+          title="Open plugin in"
           description="Choose where to open the plugin."
           value={settings.defaultOpenArea}
           onChange={(value) => updateSetting("defaultOpenArea", value as DEFAULT_OPEN_AREA)}
           options={[
-            { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
+            { label: "Sidebar view", value: DEFAULT_OPEN_AREA.VIEW },
             { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
           ]}
         />
 
         <SettingItem
           type="select"
-          title="Send Shortcut"
+          title="Send shortcut"
           description={
             <div className="tw-flex tw-items-center tw-gap-1.5">
               <span className="tw-leading-none">Keyboard shortcut to send messages.</span>
@@ -245,7 +247,7 @@ export const BasicSettings: React.FC = () => {
         <SettingItem
           type="custom"
           title="Copilot folder location"
-          description="Where Copilot keeps conversations, prompts, memory and more. All sub-folders derive from this."
+          description="Where Copilot keeps chats, commands, memory, and more. Its other folders live inside this one."
         >
           <div className="tw-flex tw-items-center tw-gap-2">
             <Input
@@ -296,11 +298,11 @@ export const BasicSettings: React.FC = () => {
         )}
       </SettingSection>
 
-      <SettingSection label="Saving conversations">
+      <SettingSection label="Saving chats">
         <SettingItem
           type="switch"
-          title="Autosave Chat as Markdown"
-          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent Chats from session history; only the Markdown note is skipped."
+          title="Autosave chats as Markdown"
+          description="Writes each chat to a Markdown note in your vault after every user message and AI response. With this off, agent chats still appear in Recent chats; only the Markdown note is skipped."
           checked={settings.autosaveChat}
           onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
         />
@@ -312,12 +314,10 @@ export const BasicSettings: React.FC = () => {
           <CollapsibleContent>
             <SettingItem
               type="custom"
-              title="Conversation Filename Template"
+              title="Chat note name template"
               description={
                 <div className="tw-flex tw-items-start tw-gap-1.5 ">
-                  <span className="tw-leading-none">
-                    Customize the format of saved conversation note names.
-                  </span>
+                  <span className="tw-leading-none">Customize the names of saved chat notes.</span>
                   <HelpTooltip
                     content={
                       <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
@@ -336,7 +336,7 @@ export const BasicSettings: React.FC = () => {
                               <strong>{"{$time}"}</strong>: Time in HHMMSS format
                             </li>
                             <li>
-                              <strong>{"{$topic}"}</strong>: Chat conversation topic
+                              <strong>{"{$topic}"}</strong>: Chat topic
                             </li>
                           </ul>
                           <i className="tw-mt-2 tw-text-sm tw-text-muted">

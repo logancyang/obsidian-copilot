@@ -49,17 +49,17 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
     warning={<ConfigWarningStrip state={state} detail={claudeUpdateDetail(state)} />}
     onClose={onClose}
   >
-    <ConfigSection title="Claude Code binary">
+    <ConfigSection title="Claude Code installation">
       <p className="tw-my-0 tw-text-sm tw-text-muted">
-        Copilot runs the <code>claude</code> CLI on this machine. Auto-detect checks the usual
-        install locations.
+        Copilot uses Claude Code installed on this computer. Auto-detect looks in the usual install
+        locations.
       </p>
       <BinaryPathSetting
         binaryName="claude"
         placeholder={PATH_PLACEHOLDER}
         initialPath={binaryPath}
         hasPersistedPath={hasBinaryPathOverride}
-        notFoundHint="claude not found in known install locations. Run the install command below, then click Auto-detect again."
+        notFoundHint="Claude Code wasn't found. Install it with the command below, then select Auto-detect again."
         onSave={onSavePath}
         onClear={onClearPath}
         persistOnAutoDetect
@@ -73,7 +73,7 @@ export const ClaudeConfigView: React.FC<ClaudeConfigViewProps> = ({
     </ConfigSection>
     <AuthenticationSection
       ready={state.kind === "ready"}
-      unavailableMessage="Set up a supported Claude CLI above to enable sign-in."
+      unavailableMessage="Set up a supported version of Claude Code above to sign in."
       auth={auth}
     />
   </ConfigDialogShell>

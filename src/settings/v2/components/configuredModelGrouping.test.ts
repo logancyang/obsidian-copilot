@@ -438,7 +438,7 @@ describe("configuredModelGrouping", () => {
         ["Anthropic", { kind: "cloud", label: "Anthropic" }],
         ["opencode", { kind: "cloud", label: "OpenCode Zen" }],
         ["openrouter", { kind: "cloud", label: "openrouter" }],
-        ["lmstudio", { kind: "local", label: "The lmstudio server set in opencode" }],
+        ["lmstudio", { kind: "local", label: "The lmstudio server set in OpenCode" }],
       ]);
     });
 

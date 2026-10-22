@@ -110,10 +110,10 @@ describe("SkillLoadIssues", () => {
         />
       );
 
-      fireEvent.click(screen.getAllByRole("button", { name: "Fix with Agent" })[0]);
+      fireEvent.click(screen.getAllByRole("button", { name: "Fix with agent" })[0]);
       fireEvent.click(screen.getAllByRole("button", { name: "Open SKILL.md" })[0]);
       fireEvent.click(screen.getAllByRole("button", { name: "Show in folder" })[0]);
-      fireEvent.click(screen.getByRole("button", { name: "Fix All with Agent" }));
+      fireEvent.click(screen.getByRole("button", { name: "Fix all with agent" }));
 
       expect(order).toEqual([
         "close",

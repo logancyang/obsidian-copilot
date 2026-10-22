@@ -63,7 +63,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
       {issues.length > 1 && (
         <div className="tw-flex tw-justify-end">
           <Button size="sm" onClick={() => runAction(onFixAll)}>
-            Fix All with Agent
+            Fix all with agent
           </Button>
         </div>
       )}
@@ -88,7 +88,7 @@ export const SkillLoadIssuesModalContent: React.FC<SkillLoadIssuesModalContentPr
             )}
             <div className="tw-mt-2 tw-flex tw-gap-1">
               <Button variant="secondary" size="sm" onClick={() => runAction(issue.onFixWithAgent)}>
-                Fix with Agent
+                Fix with agent
               </Button>
               <Button variant="ghost2" size="sm" onClick={() => runAction(issue.onOpen)}>
                 Open SKILL.md

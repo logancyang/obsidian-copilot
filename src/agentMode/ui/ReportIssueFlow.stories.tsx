@@ -10,7 +10,7 @@ import * as React from "react";
 
 const SOURCES: ReportSourceOption[] = [
   { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
-  { id: "activityLog", label: "Agent Mode activity log", defaultChecked: true },
+  { id: "activityLog", label: "Agent activity log", defaultChecked: true },
   {
     id: "chatLog",
     label: "Copilot log",

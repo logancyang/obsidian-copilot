@@ -45,13 +45,15 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   const handleUpgrade = React.useCallback(() => {
     const action = descriptor.managedInstall;
     if (!action || managedInstall.kind === "running") return;
-    new Notice(`Upgrading ${descriptor.displayName}…`);
+    new Notice(`Updating ${descriptor.displayName}…`);
     action
       .run(plugin)
-      .then(() => new Notice(`${descriptor.displayName} upgraded.`))
+      .then(() => new Notice(`${descriptor.displayName} updated.`))
       .catch((e) => {
         logError("[AgentMode] upgrade failed", e);
-        new Notice(`Failed to upgrade ${descriptor.displayName}. See console for details.`);
+        new Notice(
+          `Failed to update ${descriptor.displayName}. Check the Copilot log for details.`
+        );
       });
   }, [descriptor, plugin, managedInstall.kind]);
 
@@ -90,10 +92,10 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
         action={{
           label: canUpgrade
             ? upgrading
-              ? "Upgrading…"
+              ? "Updating…"
               : failed
                 ? "Retry"
-                : "Upgrade"
+                : "Update"
             : `Configure ${descriptor.displayName}`,
           disabled: canUpgrade && upgrading,
           onClick: canUpgrade ? handleUpgrade : () => descriptor.openInstallUI(plugin),
@@ -150,7 +152,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
     return (
       <AgentStatusCard
         layout="row"
-        message={`${descriptor.displayName} config has changed`}
+        message={`${descriptor.displayName} settings changed`}
         action={{
           label: reloading ? "Reloading…" : "Reload",
           disabled: reloading,
@@ -175,7 +177,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, plugin, onInstallCli
   return (
     <AgentStatusCard
       tone="error"
-      summary={`${descriptor.displayName} session error`}
+      summary={`${descriptor.displayName} ran into a problem`}
       message={bootError}
       action={{ label: "Retry", onClick: handleRetry }}
     />

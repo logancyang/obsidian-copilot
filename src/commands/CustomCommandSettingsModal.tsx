@@ -140,7 +140,7 @@ export class CustomCommandSettingsModal extends Modal {
   ) {
     super(app);
     // @ts-ignore
-    this.setTitle("Edit Command");
+    this.setTitle("Edit command");
   }
 
   onOpen() {

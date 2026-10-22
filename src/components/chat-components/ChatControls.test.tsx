@@ -53,12 +53,12 @@ describe("ChatControls", () => {
         </TooltipProvider>
       );
 
-      fireEvent.pointerDown(screen.getByTitle("Advanced Settings"), {
+      fireEvent.pointerDown(screen.getByTitle("Advanced settings"), {
         button: 0,
         ctrlKey: false,
       });
 
-      await waitFor(() => expect(screen.getByText("Auto-accept Edits")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Auto-accept edits")).toBeTruthy());
       expect(screen.queryByText("Refresh Vault Index")).toBeNull();
       expect(screen.queryByText("Force Reindex Vault")).toBeNull();
     });

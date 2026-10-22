@@ -166,7 +166,7 @@ describe("AddProjectModal", () => {
       getCachedProjectRecordById.mockReturnValue(undefined);
       renderModal();
 
-      await waitFor(() => expect(screen.getByText("Edit Project")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Edit project")).toBeTruthy());
       expect(screen.queryByLabelText("Project instructions")).toBeNull();
       expect(readAgentsFile).not.toHaveBeenCalled();
     });

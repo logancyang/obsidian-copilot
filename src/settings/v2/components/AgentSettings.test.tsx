@@ -201,11 +201,11 @@ describe("AgentSettings", () => {
       expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Quick Chat"]);
     });
 
-    it("keeps the default backend picker outside the tab strip", () => {
+    it("keeps the default agent picker outside the tab strip", () => {
       render(<AgentSettings />);
       const tablist = screen.getByRole("tablist");
-      expect(within(tablist).queryByText("Default backend")).toBeNull();
-      expect(screen.getByText("Default backend")).not.toBeNull();
+      expect(within(tablist).queryByText("Default agent")).toBeNull();
+      expect(screen.getByText("Default agent")).not.toBeNull();
     });
 
     it("mutes the chime when the notification sound switch is turned off", () => {

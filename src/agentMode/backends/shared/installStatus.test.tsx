@@ -94,7 +94,7 @@ describe("installStatus", () => {
       ["absent", "Not set up", { kind: "absent" }],
       [
         "incompatible",
-        "Upgrade required",
+        "Update required",
         {
           kind: "incompatible",
           source: "custom",

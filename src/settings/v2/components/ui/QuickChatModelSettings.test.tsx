@@ -15,9 +15,9 @@ describe("QuickChatModelSettings", () => {
           <div>Model switches</div>
         </QuickChatModelSettings>
       );
-      expect(screen.getByDisplayValue("Select Model")).not.toBeNull();
+      expect(screen.getByDisplayValue("Select model")).not.toBeNull();
       expect(screen.getByText("Model switches")).not.toBeNull();
-      fireEvent.change(screen.getByRole("combobox"), { target: { value: "Select Model" } });
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: "Select model" } });
       expect(onDefaultModelChange).not.toHaveBeenCalled();
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "a" } });
       expect(onDefaultModelChange).toHaveBeenCalledWith("a");
@@ -33,7 +33,7 @@ describe("QuickChatModelSettings", () => {
         </QuickChatModelSettings>
       );
       expect(screen.getByDisplayValue("Model A")).not.toBeNull();
-      expect(screen.queryByText("Select Model")).toBeNull();
+      expect(screen.queryByText("Select model")).toBeNull();
     });
   });
 });

@@ -23,7 +23,7 @@ export class ProjectFileSelectModal extends BaseNoteModal<TFile> {
     this.availableNotes = this.getOrderedProjectFiles(excludeFilePaths);
     this.titleOnly = titleOnly;
     // @ts-ignore
-    this.setTitle("Select File");
+    this.setTitle("Select file");
   }
 
   protected getOrderedProjectFiles(excludeFilePaths: string[] = []): TFile[] {

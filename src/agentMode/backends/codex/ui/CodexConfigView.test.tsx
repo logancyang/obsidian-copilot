@@ -55,12 +55,14 @@ describe("CodexConfigView", () => {
   describe("CodexConfigView()", () => {
     it(`uses the same mutually exclusive source tabs as OpenCode without mutating the install: ${ISSUE}`, () => {
       const { actions, onSourceChange, rerender, props } = renderView();
-      expect(screen.getByRole("radiogroup", { name: "codex-acp binary source" })).toBeTruthy();
+      expect(
+        screen.getByRole("radiogroup", { name: "codex-acp installation source" })
+      ).toBeTruthy();
       expect(screen.queryByRole("textbox")).toBeNull();
       expect(screen.getByText("darwin-arm64")).toBeTruthy();
       expect(screen.getByText(`v${CODEX_PINNED_VERSION} (pinned)`)).toBeTruthy();
       expect(screen.getByText("~/.obsidian-copilot/codex")).toBeTruthy();
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       expect(onSourceChange).toHaveBeenCalledWith("custom");
       expect(actions.install).not.toHaveBeenCalled();
       expect(actions.saveCustomPath).not.toHaveBeenCalled();
@@ -91,9 +93,7 @@ describe("CodexConfigView", () => {
     it("shows an authentication warning without browser instructions until an adapter is ready: https://github.com/Brevilabs/obsidian-copilot-private/issues/379", () => {
       renderView({ source: "custom" });
       expect(screen.getByRole("heading", { name: "Authentication" })).toBeTruthy();
-      expect(screen.getByRole("alert").textContent).toContain(
-        "Set up a supported Codex adapter above"
-      );
+      expect(screen.getByRole("alert").textContent).toContain("Set up Codex above to sign in");
       expect(screen.queryByRole("button", { name: /Sign in/ })).toBeNull();
       expect(screen.queryByText(/existing profile and credentials/)).toBeNull();
     });
@@ -170,9 +170,9 @@ describe("CodexConfigView", () => {
       });
       expect(screen.getByRole("progressbar")).toBeTruthy();
       expect(screen.getByText("Installing…")).toBeTruthy();
-      expect(screen.getByRole<HTMLButtonElement>("radio", { name: "My own binary" }).disabled).toBe(
-        true
-      );
+      expect(
+        screen.getByRole<HTMLButtonElement>("radio", { name: "My own installation" }).disabled
+      ).toBe(true);
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(actions.cancelInstall).toHaveBeenCalledTimes(1);
       rerender(
@@ -193,11 +193,11 @@ describe("CodexConfigView", () => {
           source: "managed",
           currentVersion: "1.9.0-r1",
           minVersion: CODEX_PINNED_VERSION,
-          message: "Upgrade required",
+          message: "Update required",
         },
         activeSource: "managed",
       });
-      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
       expect(actions.upgrade).toHaveBeenCalledTimes(1);
     });
 

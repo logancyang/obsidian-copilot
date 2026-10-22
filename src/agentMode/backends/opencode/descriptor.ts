@@ -72,7 +72,7 @@ export { detectOpencodeCliPath } from "./opencodeCliDetector";
 
 export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
-  displayName: "opencode",
+  displayName: "OpenCode",
   Icon: OpencodeLogo,
   selfHostable: true,
   routesCopilotModels: true,

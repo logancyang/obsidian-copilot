@@ -483,7 +483,7 @@ describe("main", () => {
 
         expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
         expect(Notice).toHaveBeenCalledWith(
-          "Could not add the note to Agent Chat. Check Copilot logs."
+          "Could not add the note to Agent Chat. Check the Copilot log."
         );
       });
 
@@ -509,7 +509,7 @@ describe("main", () => {
         expect(addContextNoteToActiveChat).not.toHaveBeenCalled();
         expect(logError).toHaveBeenCalledWith("Failed to add a note to Agent Chat.", failure);
         expect(Notice).toHaveBeenCalledWith(
-          "Could not add the note to Agent Chat. Check Copilot logs."
+          "Could not add the note to Agent Chat. Check the Copilot log."
         );
       });
     });
@@ -906,7 +906,7 @@ describe("main", () => {
         await finishStartup();
         expect(logFatalError).toHaveBeenCalledWith("Copilot failed to start.", failure);
         expect(Notice).toHaveBeenCalledWith(
-          "Copilot failed to start. Check the console for details."
+          "Copilot failed to start. Check the Copilot log for details."
         );
         expect(plugin.unload).toHaveBeenCalledTimes(1);
       });

@@ -288,8 +288,8 @@ describe("SkillsSettings", () => {
       await act(async () => {
         renderSettings();
       });
-      expect(screen.getByRole("region", { name: "Your Skills" })).toBeTruthy();
-      expect(screen.getByRole("region", { name: "Built-in Skills" })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Your skills" })).toBeTruthy();
+      expect(screen.getByRole("region", { name: "Built-in skills" })).toBeTruthy();
       fireEvent.pointerDown(
         screen.getByRole("button", { name: "More actions for copilot-youtube-transcript" }),
         { button: 0, ctrlKey: false }
@@ -461,8 +461,8 @@ describe("SkillsSettings", () => {
         const agent = screen.getByRole("button", { name: "copilot-youtube-transcript for Claude" });
         expect(agent.getAttribute("aria-disabled")).toBe(String(folder === "copilot/skills"));
         expect(screen.queryByRole("table")).toBeNull();
-        expect(screen.getByRole("region", { name: "Your Skills" })).toBeTruthy();
-        expect(screen.getByRole("region", { name: "Built-in Skills" })).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Your skills" })).toBeTruthy();
+        expect(screen.getByRole("region", { name: "Built-in skills" })).toBeTruthy();
       }
     );
 

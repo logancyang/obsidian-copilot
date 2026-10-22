@@ -38,7 +38,7 @@ export default class CopilotAgentView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Copilot Agent";
+    return "Copilot Agent Chat";
   }
 
   async onOpen(): Promise<void> {

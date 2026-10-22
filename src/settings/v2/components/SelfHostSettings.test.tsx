@@ -44,7 +44,7 @@ describe("SelfHostSettings", () => {
 
       expect(screen.getByText("Firecrawl API Key")).toBeTruthy();
       expect(screen.queryByText("Perplexity API Key")).toBeNull();
-      expect(screen.getByText("Supadata API Key")).toBeTruthy();
+      expect(screen.getByText("Supadata API key")).toBeTruthy();
     });
 
     it("shows the Perplexity key (not Firecrawl) when the provider is perplexity", () => {

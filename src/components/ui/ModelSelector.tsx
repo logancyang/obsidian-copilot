@@ -71,11 +71,11 @@ export function ModelSelector({
         >
           <div className="tw-min-w-0 tw-flex-1 tw-truncate">
             {modelError ? (
-              <span className="tw-truncate tw-text-error">Model Load Failed</span>
+              <span className="tw-truncate tw-text-error">Model failed to load</span>
             ) : currentModel ? (
               <ModelDisplay model={currentModel} iconSize={8} />
             ) : (
-              <span className="tw-truncate">Select Model</span>
+              <span className="tw-truncate">Select model</span>
             )}
           </div>
           {currentModel?._needsSelfHostWarning && (

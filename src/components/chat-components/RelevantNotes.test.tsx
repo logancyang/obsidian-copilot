@@ -240,11 +240,11 @@ describe("RelevantNotes", () => {
       act(() => getChatRelevantNotesStore(mockApp).select(null));
     });
 
-    it("hands the result's note to the chat when Add to Chat is selected with an editor source", async () => {
+    it("hands the result's note to the chat when Add to chat is selected with an editor source", async () => {
       const onAddToChat = jest.fn();
       render(<RelevantNotes onAddToChat={onAddToChat} />);
 
-      fireEvent.click(await screen.findByTitle("Add to Chat"));
+      fireEvent.click(await screen.findByTitle("Add to chat"));
 
       expect(onAddToChat).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });

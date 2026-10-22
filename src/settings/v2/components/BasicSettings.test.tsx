@@ -108,10 +108,10 @@ describe("BasicSettings", () => {
     it("hides the filename template behind a collapsed Advanced disclosure", () => {
       render(<BasicSettings />);
       expect(screen.getByRole("button", { name: "Advanced" })).not.toBeNull();
-      expect(screen.queryByText("Conversation Filename Template")).toBeNull();
+      expect(screen.queryByText("Chat note name template")).toBeNull();
 
       fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
+      expect(screen.getByText("Chat note name template")).not.toBeNull();
     });
 
     it("keeps the template reachable when autosave is off", () => {
@@ -123,7 +123,7 @@ describe("BasicSettings", () => {
       render(<BasicSettings />);
 
       fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-      expect(screen.getByText("Conversation Filename Template")).not.toBeNull();
+      expect(screen.getByText("Chat note name template")).not.toBeNull();
     });
 
     it("turns off active-note auto-attach from its switch (https://github.com/logancyang/obsidian-copilot/issues/3663)", () => {

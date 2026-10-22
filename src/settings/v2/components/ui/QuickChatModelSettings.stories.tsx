@@ -51,8 +51,8 @@ export const Empty: StoryObj<QuickChatModelSettingsProps> = {
         searchPlaceholder="Search chat models…"
         emptyState={
           <span>
-            No models configured yet. Add a provider on the{" "}
-            <span className="tw-font-medium">Models (BYOK)</span> tab to populate Quick Chat.
+            No models yet. Add a provider on the <span className="tw-font-medium">BYOK</span> tab to
+            use it in Quick Chat.
           </span>
         }
       />

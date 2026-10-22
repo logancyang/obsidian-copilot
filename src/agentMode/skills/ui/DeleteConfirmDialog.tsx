@@ -130,12 +130,12 @@ function collectDeletePaths(
 
   out.push({
     path: `${folder}/${skill.name}/`,
-    note: "canonical SKILL.md and supporting files",
+    note: "SKILL.md and supporting files",
   });
   for (const agent of skill.enabledAgents) {
     const dir = agentDirsProjectRel[agent];
     if (dir === undefined) continue;
-    out.push({ path: `${dir}/${skill.name}`, note: "symlink" });
+    out.push({ path: `${dir}/${skill.name}`, note: "shortcut" });
   }
   return out;
 }

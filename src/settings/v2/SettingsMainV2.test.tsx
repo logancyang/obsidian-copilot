@@ -72,7 +72,7 @@ describe("SettingsMainV2", () => {
         "BYOK",
         "Miyo",
         "Skills",
-        "Command",
+        "Commands",
         "Self-Host",
         "Advanced",
       ]);

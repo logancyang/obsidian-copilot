@@ -173,7 +173,7 @@ export const ByokPanel: React.FC = () => {
       <ProviderVerificationProgress pending={pendingChecks} />
       <div className="tw-flex tw-items-start tw-justify-between tw-gap-4">
         <div className="tw-flex tw-flex-col tw-gap-1">
-          <div className="tw-text-xl tw-font-bold tw-text-normal">Bring Your Own Key</div>
+          <div className="tw-text-xl tw-font-bold tw-text-normal">Bring your own key</div>
           <div className="tw-max-w-xl tw-text-sm tw-text-muted">
             Set up your own providers and models to use in Copilot.
           </div>

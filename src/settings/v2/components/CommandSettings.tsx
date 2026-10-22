@@ -99,12 +99,11 @@ const MobileCommandCard: React.FC<{
     <div className="tw-flex tw-flex-wrap tw-justify-around">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-1">
-          <span className="tw-text-sm tw-font-medium">In Menu</span>
+          <span className="tw-text-sm tw-font-medium">Right-click</span>
           <HelpTooltip
             content={
               <div className="tw-max-w-xs tw-text-xs">
-                If enabled, the command will be available in the context menu when you right-click
-                in the editor.
+                Shows the command when you right-click in the editor.
               </div>
             }
           />
@@ -124,12 +123,10 @@ const MobileCommandCard: React.FC<{
       </div>
       <div className="tw-flex tw-items-center tw-justify-between  tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-1">
-          <span className="tw-text-sm tw-font-medium">In Slash</span>
+          <span className="tw-text-sm tw-font-medium">Slash menu</span>
           <HelpTooltip
             content={
-              <div className="tw-max-w-xs tw-text-xs">
-                If enabled, the command will be available as a slash command in the chat.
-              </div>
+              <div className="tw-max-w-xs tw-text-xs">Shows the command in the chat's / menu.</div>
             }
           />
         </div>
@@ -160,7 +157,7 @@ const MobileCommandCard: React.FC<{
       primaryAction={{
         icon: <PenLine className="tw-size-4" />,
         onClick: handleEdit,
-        tooltip: "Edit Command",
+        tooltip: "Edit command",
       }}
       dropdownActions={dropdownActions}
       containerRef={containerRef}
@@ -381,7 +378,7 @@ export const CommandSettings: React.FC = () => {
           <div className="tw-space-y-2">
             {commands.length === 0 ? (
               <div className="tw-rounded-lg tw-border tw-border-border tw-bg-primary tw-p-8 tw-text-center tw-text-muted">
-                No custom prompt files found.
+                No custom commands yet.
               </div>
             ) : (
               commands.map((command) => (
@@ -406,7 +403,7 @@ export const CommandSettings: React.FC = () => {
     <div className="tw-space-y-4" ref={containerRef}>
       <section className={cn("tw-flex tw-flex-col tw-gap-4")}>
         <div className="tw-flex tw-flex-col tw-gap-2">
-          <div className="tw-text-xl tw-font-bold">Custom Commands</div>
+          <div className="tw-text-xl tw-font-bold">Custom commands</div>
           <div className="tw-text-sm tw-text-muted">
             Preset prompts you trigger from the editor right-click menu or with a <code>/</code>{" "}
             command in chat.
@@ -416,9 +413,8 @@ export const CommandSettings: React.FC = () => {
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-4 tw-text-muted tw-bg-interactive-accent/10">
           <Info className="tw-size-5 tw-shrink-0 tw-text-accent" />{" "}
           <div>
-            Commands are automatically loaded from .md files in your custom prompts folder{" "}
-            <strong>{customPromptsFolder}</strong>. Modifying the files will also update the command
-            settings.
+            Commands load automatically from the Markdown files in your custom commands folder{" "}
+            <strong>{customPromptsFolder}</strong>. Editing a file updates its command.
           </div>
         </div>
 
@@ -430,8 +426,8 @@ export const CommandSettings: React.FC = () => {
           />
           <SettingItem
             type="switch"
-            title="Custom Prompt Templating"
-            description="Process variables like {activenote}, {foldername}, or {#tag} in prompts. Disable for raw prompts."
+            title="Command templating"
+            description="Fill in variables like {activenote}, {foldername}, or {#tag} in commands. Turn off to send commands exactly as written."
             checked={settings.enableCustomPromptTemplating}
             onCheckedChange={(checked) => {
               updateSetting("enableCustomPromptTemplating", checked);
@@ -439,8 +435,8 @@ export const CommandSettings: React.FC = () => {
           />
           <SettingItem
             type="select"
-            title="Custom Prompts Sort Strategy"
-            description="Sort order for slash command menu prompts"
+            title="Command sort order"
+            description="How commands are ordered in the slash menu."
             value={settings.promptSortStrategy}
             onChange={(value) => updateSetting("promptSortStrategy", value)}
             options={[
@@ -461,11 +457,11 @@ export const CommandSettings: React.FC = () => {
                     app,
                     generateDefaultCommands,
                     "This will add default commands to your custom prompts folder. Do you want to continue?",
-                    "Generate Default Commands"
+                    "Generate default commands"
                   ).open()
                 }
               >
-                Generate Default
+                Generate defaults
               </Button>
             </div>
             <Button
@@ -487,7 +483,7 @@ export const CommandSettings: React.FC = () => {
               }}
             >
               <Plus className="tw-size-2 md:tw-size-4" />
-              Add Cmd
+              Add command
             </Button>
           </div>
 
@@ -504,12 +500,11 @@ export const CommandSettings: React.FC = () => {
                     <TableHead>Name</TableHead>
                     <TableHead className="tw-w-24 tw-text-center">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                        In Menu
+                        Right-click
                         <HelpTooltip
                           content={
                             <div className="tw-max-w-xs tw-text-xs">
-                              If enabled, the command will be available in the context menu when you
-                              right-click in the editor.
+                              Shows the command when you right-click in the editor.
                             </div>
                           }
                         />
@@ -517,12 +512,11 @@ export const CommandSettings: React.FC = () => {
                     </TableHead>
                     <TableHead className="tw-w-28 tw-text-center">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                        Slash Cmd
+                        Slash menu
                         <HelpTooltip
                           content={
                             <div className="tw-max-w-xs tw-text-xs">
-                              If enabled, the command will be available as a slash command in the
-                              chat.
+                              Shows the command in the chat's / menu.
                             </div>
                           }
                         />
@@ -539,7 +533,7 @@ export const CommandSettings: React.FC = () => {
                     {commands.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
-                          No custom prompt files found.
+                          No custom commands yet.
                         </TableCell>
                       </TableRow>
                     ) : (

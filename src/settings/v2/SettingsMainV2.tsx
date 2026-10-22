@@ -60,7 +60,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   byok: "BYOK",
   miyo: "Miyo",
   selfhost: "Self-Host",
-  command: "Command",
+  command: "Commands",
   skills: "Skills",
   advanced: "Advanced",
 };
@@ -149,7 +149,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                 className="tw-flex tw-flex-col tw-gap-2 tw-text-base tw-font-semibold sm:tw-flex-row sm:tw-items-center sm:tw-justify-between"
               >
                 <div className="tw-flex tw-items-center tw-gap-2">
-                  <span>Copilot Settings</span>
+                  <span>Copilot settings</span>
                   <div className="tw-flex tw-items-center tw-gap-1">
                     <span className="tw-text-xs tw-font-normal tw-text-muted">
                       v{plugin.manifest.version}
@@ -177,7 +177,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
                 </div>
                 <div className="tw-self-end sm:tw-self-auto">
                   <Button variant="secondary" size="sm" onClick={handleReset}>
-                    Reset Settings
+                    Reset settings
                   </Button>
                 </div>
               </div>

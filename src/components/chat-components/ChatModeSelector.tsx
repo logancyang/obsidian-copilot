@@ -25,11 +25,11 @@ export function ChatModeSelector({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost2" size="fit" className="tw-ml-1 tw-text-sm tw-text-muted">
           {selectedChain === ChainType.LLM_CHAIN ? (
-            "chat (free)"
+            "Chat (free)"
           ) : (
             <div className="tw-flex tw-items-center tw-gap-1">
               <Sparkles className="tw-size-4" />
-              copilot plus
+              Copilot Plus
             </div>
           )}
           <ChevronDown className="tw-mt-0.5 tw-size-5" />
@@ -37,18 +37,18 @@ export function ChatModeSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuItem onSelect={() => onModeChange(ChainType.LLM_CHAIN)}>
-          chat (free)
+          Chat (free)
         </DropdownMenuItem>
         {isPaidUser ? (
           <DropdownMenuItem onSelect={() => onModeChange(ChainType.COPILOT_PLUS_CHAIN)}>
             <div className="tw-flex tw-items-center tw-gap-1">
               <Sparkles className="tw-size-4" />
-              copilot plus
+              Copilot Plus
             </div>
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem onSelect={onPlusUpsell}>
-            copilot plus
+            Copilot Plus
             <SquareArrowOutUpRight className="tw-size-3" />
           </DropdownMenuItem>
         )}

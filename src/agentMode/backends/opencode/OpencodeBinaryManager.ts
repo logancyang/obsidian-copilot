@@ -189,13 +189,13 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
   getDataDir(): string {
     const adapter = this.plugin.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
+      throw new Error("Agent Chat requires Obsidian on desktop.");
     }
     const home = requireNodeModule<typeof import("node:os")>("os").homedir();
     if (!home || !nodePath().isAbsolute(home) || nodePath().parse(home).root === home) {
       throw new Error(
         "Could not resolve your home directory to install the opencode runtime. " +
-          "Agent Mode installs it under ~/.obsidian-copilot; check that your account has a valid home directory."
+          "Copilot installs it under ~/.obsidian-copilot; check that your account has a valid home directory."
       );
     }
     return opencodeManagedDataDir(home);
@@ -258,7 +258,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     try {
       const archivePath = nodePath().join(tmpDir, asset.name);
       await downloadFile(asset.url, archivePath, {
-        displayName: "opencode",
+        displayName: "OpenCode",
         signal: opts.signal,
         onProgress: (received, total) => opts.progress.download(received, total),
       });
@@ -298,7 +298,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
       opts.progress.verifying();
       const verified = await verifyOpencodeBinary(nodePath().join(stageBinDir, binName));
       if (parseVersionFromStdout(verified.stdout) !== version)
-        throw new Error(`The opencode download did not report version ${version}.`);
+        throw new Error(`The OpenCode download did not report version ${version}.`);
       this.throwIfAborted(opts.signal);
       opts.progress.activating();
       await promoteManagedVersion(stageDir, versionDir, "opencode");
@@ -344,7 +344,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     return this.runExclusive({ kind: "installing", progress: null }, async (signal) => {
       const s = readOpencodeSettings();
       if (s.binarySource !== "custom" || !s.binaryPath) {
-        throw new Error("No custom opencode binary is configured to upgrade.");
+        throw new Error("No custom OpenCode installation is configured to update.");
       }
       const binaryPath = s.binaryPath;
       try {
@@ -401,7 +401,7 @@ export class OpencodeBinaryManager extends ManagedBinaryManager<InstallOptions> 
     const version = parseVersionFromStdout(stdout);
     if (!version) {
       throw new Error(
-        `${p} --version output didn't include a version number. Is this an opencode binary?`
+        `${p} --version output didn't include a version number. Is this an OpenCode installation?`
       );
     }
     return { version, path: p };
@@ -453,11 +453,11 @@ export async function verifyOpencodeBinary(p: string): Promise<{ stdout: string 
     }
     if (err.signal === "SIGTERM") {
       throw new Error(
-        `${p} did not respond to --version within ${VERIFY_BINARY_TIMEOUT_MS}ms. Is this an opencode binary?`
+        `${p} did not respond to --version within ${VERIFY_BINARY_TIMEOUT_MS}ms. Is this an OpenCode installation?`
       );
     }
     throw new Error(
-      `${p} --version failed: ${err.message ?? String(err)}. Is this an opencode binary?`
+      `${p} --version failed: ${err.message ?? String(err)}. Is this an OpenCode installation?`
     );
   }
 }

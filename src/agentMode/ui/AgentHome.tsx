@@ -150,7 +150,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       }
     } catch (error) {
       logError("[AgentMode] manual save failed", error);
-      new Notice("Failed to save chat as note. Check console for details.");
+      new Notice("Failed to save chat as note. Check the Copilot log for details.");
     }
   }, [manager]);
 
@@ -225,7 +225,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       } catch (error) {
         logError("[AgentMode] close chat session failed", error);
         new Notice(
-          `Could not close session: ${error instanceof Error ? error.message : "Try again."}`
+          `Could not close chat: ${error instanceof Error ? error.message : "Try again."}`
         );
       }
     },
@@ -401,7 +401,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       {
         id: "chats",
         icon: <MessageSquare className="tw-size-4" />,
-        title: "Recent Chats",
+        title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}
@@ -492,7 +492,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       {
         id: "project-chats",
         icon: <MessageSquare className="tw-size-4" />,
-        title: "Recent Chats",
+        title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
             items={chatHistoryItems}

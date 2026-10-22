@@ -75,7 +75,7 @@ export function useAgentSelect(
       return {
         action: "wait",
         label: "Starting…",
-        note: "Wait for the current agent launch to finish.",
+        note: "Wait for the current agent to finish starting.",
       };
     }
     return resolved;

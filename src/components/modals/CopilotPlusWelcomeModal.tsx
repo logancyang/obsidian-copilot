@@ -33,10 +33,10 @@ export function CopilotPlusWelcomeModalContent({
       </div>
       <div className="tw-flex tw-w-full tw-justify-end tw-gap-2">
         <Button variant="ghost" onClick={onCancel}>
-          Apply Later
+          Apply later
         </Button>
         <Button variant="default" onClick={onConfirm}>
-          Apply Now
+          Apply now
         </Button>
       </div>
     </div>

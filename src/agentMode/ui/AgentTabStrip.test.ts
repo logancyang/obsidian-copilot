@@ -122,7 +122,7 @@ describe("AgentTabStrip", () => {
         )
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Close session" }));
+      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
 
       expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
       expect(manager.closeSession).not.toHaveBeenCalled();
@@ -158,7 +158,7 @@ describe("AgentTabStrip", () => {
           React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
         )
       );
-      fireEvent.click(screen.getByRole("button", { name: "New agent session" }));
+      fireEvent.click(screen.getByRole("button", { name: "New chat" }));
       expect(manager.createSession).toHaveBeenCalledTimes(1);
       expect(refreshLatestVersion).not.toHaveBeenCalled();
       finishCreation();

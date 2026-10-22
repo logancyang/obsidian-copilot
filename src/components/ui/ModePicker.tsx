@@ -60,7 +60,7 @@ export function ModePicker({ override, className }: ModePickerProps) {
               "tw-text-red/70 hover:tw-text-red/100 focus-visible:tw-text-red/100",
             className
           )}
-          title="Operational mode"
+          title="Mode"
         >
           <span className="tw-truncate">{triggerLabel}</span>
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
