@@ -23,7 +23,7 @@ export interface CodeDiffLine {
 
 export type DiffSegment =
   | { kind: "markdown"; markdown: string; continuesList?: true }
-  | { kind: "block"; change: "deleted" | "inserted"; markdown: string }
+  | { kind: "block"; change: "deleted" | "inserted"; markdown: string; continuesList?: true }
   | { kind: "code"; lines: CodeDiffLine[] };
 
 const EMPTY_PLAN: readonly DiffSegment[] = Object.freeze([]);
@@ -110,16 +110,26 @@ export async function buildRenderedDiffPlan(
         });
         break;
       case "deleted":
-        segments.push({ kind: "block", change: "deleted", markdown: pairing.before.text });
+        segments.push({
+          kind: "block",
+          change: "deleted",
+          markdown: pairing.before.text,
+          continuesList: pairing.before.continuesList,
+        });
         break;
       case "inserted":
-        segments.push({ kind: "block", change: "inserted", markdown: pairing.after.text });
+        segments.push({
+          kind: "block",
+          change: "inserted",
+          markdown: pairing.after.text,
+          continuesList: pairing.after.continuesList,
+        });
         break;
       default:
         segments.push(...modifiedSegments(pairing.before, pairing.after));
     }
   }
-  const collapsed = collapseMarkdown(segments);
+  const collapsed = collapseSegments(segments);
   // Rendering hides whitespace-only edits such as blank lines or marked spaces, so show those verbatim.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const rendersChange = collapsed.some(
@@ -155,17 +165,19 @@ function modifiedSegments(before: MarkdownBlock, after: MarkdownBlock): DiffSegm
   ];
 }
 
-function collapseMarkdown(segments: readonly DiffSegment[]): DiffSegment[] {
+// A run of blocks with the same change renders as one region, so its paragraphs keep their gaps
+// inside one highlight and its list items stay one list.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/751
+function collapseSegments(segments: readonly DiffSegment[]): DiffSegment[] {
   const collapsed: DiffSegment[] = [];
   for (const segment of segments) {
-    if (segment.kind !== "markdown") {
-      collapsed.push(segment);
-      continue;
-    }
     const previous = collapsed[collapsed.length - 1];
-    if (previous?.kind === "markdown") {
+    if (
+      (previous?.kind === "markdown" && segment.kind === "markdown") ||
+      (previous?.kind === "block" && segment.kind === "block" && previous.change === segment.change)
+    ) {
       collapsed[collapsed.length - 1] = {
-        kind: "markdown",
+        ...previous,
         markdown: `${previous.markdown}${segment.continuesList ? "\n" : "\n\n"}${segment.markdown}`,
       };
       continue;
