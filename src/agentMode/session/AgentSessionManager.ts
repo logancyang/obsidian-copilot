@@ -141,6 +141,11 @@ function hasRunningTask(session: AgentSession): boolean {
   return session.getTasks().some((task) => task.status === "running");
 }
 
+// A subagent ends its own work, but a background command such as a server or a watcher may never end, so only subagents hold a restart; it runs at the next status change, after the reply that reports the subagent. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+function hasRunningSubagent(session: AgentSession): boolean {
+  return session.getTasks().some((task) => task.kind === "subagent" && task.status === "running");
+}
+
 export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
 export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
@@ -1571,6 +1576,8 @@ export class AgentSessionManager {
       if (nextId) this.lastActiveByScope.set(closedScope, nextId);
     }
     this.notify();
+    // Closing an idle chat ends its subagents without a status change, so a restart they held runs now. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    void this.flushDeferredBackendRestartIfReady(session.backendId);
   }
 
   setActiveSession(id: string): void {
@@ -2358,6 +2365,8 @@ export class AgentSessionManager {
         tasksRunning = !tasksRunning;
         this.notify();
       },
+      // A dropped connection ends an idle chat's subagents with no reply to wait for and no status change. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+      onDisconnected: () => void this.flushDeferredBackendRestartIfReady(session.backendId),
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
         const isRunning = next === "running";
@@ -2519,7 +2528,12 @@ export class AgentSessionManager {
     return Array.from(this.sessions.values()).some((session) => {
       if (session.backendId !== backendId) return false;
       const status = session.getStatus();
-      return status === "starting" || status === "running" || status === "awaiting_permission";
+      return (
+        status === "starting" ||
+        status === "running" ||
+        status === "awaiting_permission" ||
+        hasRunningSubagent(session)
+      );
     });
   }
 

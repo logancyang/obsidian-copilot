@@ -143,3 +143,7 @@ export function resultFrame(overrides: Record<string, unknown> = {}): SDKMessage
 export function commandLifecycle(commandUuid: string, state: string): SDKMessage {
   return { type: "command_lifecycle", command_uuid: commandUuid, state } as unknown as SDKMessage;
 }
+
+export function systemInit(): SDKMessage {
+  return { type: "system", subtype: "init", session_id: "irrelevant" } as unknown as SDKMessage;
+}

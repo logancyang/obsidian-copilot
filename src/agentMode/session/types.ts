@@ -275,7 +275,7 @@ export type SessionUpdate =
   | { sessionUpdate: "plan_usage_update"; planUsage: PlanUsage | null }
   | { sessionUpdate: "message_delivered"; promptId: string }
   | { sessionUpdate: "messages_withdrawn"; promptIds: string[] }
-  | { sessionUpdate: "turn_started"; turnId: string }
+  | { sessionUpdate: "turn_started"; turnId: string; startedAt?: number }
   | ({ sessionUpdate: "turn_ended" } & TurnEnd)
   | { sessionUpdate: "session_disconnected"; error: Error }
   | ({ sessionUpdate: "task_started" } & TaskStart)

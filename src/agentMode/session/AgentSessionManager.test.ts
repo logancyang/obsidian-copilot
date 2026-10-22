@@ -163,9 +163,10 @@ interface MockSessionTestHandle {
   setStatus(status: MockSessionStatus): void;
   setMessages(messages: { message: string }[], notify?: boolean): void;
   setHasUserVisibleMessages(value: boolean): void;
-  setTaskStatuses(statuses: AgentTask["status"][]): void;
+  setTaskStatuses(statuses: AgentTask["status"][], kinds?: AgentTask["kind"][]): void;
   setPendingPermissionCount(count: number): void;
   setQueuedPromptCount(count: number): void;
+  disconnect(): void;
 }
 
 const sessionTestHandles = new Map<string, MockSessionTestHandle>();
@@ -202,6 +203,7 @@ function makeMockSession(overrides: {
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
     onTasksChanged?: () => void;
+    onDisconnected?: () => void;
   }>();
   const session = {
     internalId: overrides.internalId,
@@ -271,11 +273,11 @@ function makeMockSession(overrides: {
     setHasUserVisibleMessages: (value) => {
       hasUserVisibleMessages = value;
     },
-    setTaskStatuses: (statuses) => {
+    setTaskStatuses: (statuses, kinds = []) => {
       tasks = statuses.map((taskStatus, i) => ({
         taskId: `task-${i}`,
         toolCallId: `tool-${i}`,
-        kind: "subagent",
+        kind: kinds[i] ?? "subagent",
         description: `Task ${i}`,
         status: taskStatus,
       }));
@@ -286,6 +288,9 @@ function makeMockSession(overrides: {
     },
     setQueuedPromptCount: (count) => {
       queuedPrompts = Array.from({ length: count }, (_, i) => ({ id: `prompt-${i}` }));
+    },
+    disconnect: () => {
+      for (const l of listeners) l.onDisconnected?.();
     },
   });
   return session;
@@ -1620,6 +1625,27 @@ describe("AgentSessionManager", () => {
         await mgr.closeSession(a.internalId);
 
         expect(proc.closeSession).toHaveBeenCalledWith({ sessionId: a.getBackendSessionId() });
+      });
+
+      it("runs a held Reload once the idle chat whose subagent held it is closed, since nothing on that chat can change status again (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const a = await mgr.createSession();
+        getSessionTestHandle(a).setTaskStatuses(["running"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
+        await mgr.applyHeldConfigChange("opencode");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        await mgr.closeSession(a.internalId, { releaseBackend: true });
+        await shutDown;
+
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 still closes the chat when the backend cannot release its session", async () => {
@@ -3089,6 +3115,64 @@ describe("AgentSessionManager", () => {
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
         expect(mgr.getActiveSession()).not.toBe(first);
         expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+      });
+
+      it("restarts at once while only a background command runs, since a command may never end (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        getSessionTestHandle(first).setTaskStatuses(["running"], ["command"]);
+
+        await mgr.restartBackend("opencode", "skills changed");
+
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("holds a Reload while a background subagent runs and restarts after the reply the agent starts once it ends, even with a background command still running (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const handle = getSessionTestHandle(first);
+        handle.setTaskStatuses(["running", "running"], ["subagent", "command"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
+
+        await mgr.applyHeldConfigChange("opencode");
+        handle.setTaskStatuses(["completed", "running"], ["subagent", "command"]);
+        handle.setStatus("running");
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(true);
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        handle.setStatus("idle");
+        await shutDown;
+
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("runs a held Reload once an idle chat's connection drops while its subagent runs, since no reply about the subagent can follow (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const handle = getSessionTestHandle(first);
+        handle.setTaskStatuses(["running"]);
+        await mgr.noteSpawnConfigChanged("opencode", "skills changed");
+        await mgr.applyHeldConfigChange("opencode");
+        expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+        const shutDown = new Promise<void>((resolve) =>
+          mockBackendShutdown.mockImplementationOnce(async () => {
+            resolve();
+            return undefined;
+          })
+        );
+        handle.setTaskStatuses(["stopped"]);
+        handle.disconnect();
+        await shutDown;
+
+        expect(mgr.hasHeldConfigChange("opencode")).toBe(false);
+        expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/121 interrupts a busy turn when a privacy-boundary restart cannot be deferred", async () => {

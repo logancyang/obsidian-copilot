@@ -1,34 +1,16 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
-import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "obsidian";
 import * as React from "react";
 
-jest.mock("@/plusUtils", () => ({
-  useCanUseMultiAgent: jest.fn(),
-  navigateToPlusPage: jest.fn(),
-}));
-
 jest.mock("@/settings/model", () => ({
   useSettingsValue: jest.fn().mockReturnValue({ autosaveChat: true }),
 }));
 
-const mockUseCanUseMultiAgent = useCanUseMultiAgent as jest.MockedFunction<
-  typeof useCanUseMultiAgent
->;
 const mockUseSettingsValue = useSettingsValue as jest.Mock;
-const mockNavigateToPlusPage = navigateToPlusPage as jest.MockedFunction<typeof navigateToPlusPage>;
-
-function renderControls({ showMultiAgentUpsell = true } = {}) {
-  return render(
-    <TooltipProvider>
-      <AgentChatControls onNewChat={() => {}} showMultiAgentUpsell={showMultiAgentUpsell} />
-    </TooltipProvider>
-  );
-}
 
 function renderSessionControls(
   props: Partial<React.ComponentProps<typeof AgentChatControls>> = {}
@@ -54,8 +36,6 @@ function openMoreActions(): HTMLElement {
   return screen.getByRole("menu");
 }
 
-const UPSELL_COPY = "Mention multiple agents with @ (needs Plus tier or above)";
-
 describe("AgentChatControls", () => {
   beforeAll(() => {
     if (!("PointerEvent" in window)) {
@@ -72,38 +52,7 @@ describe("AgentChatControls", () => {
       mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
     });
 
-    it("offers the multi-agent upsell when the user is not entitled", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(false);
-      renderControls();
-
-      expect(screen.queryByText(UPSELL_COPY)).not.toBeNull();
-    });
-
-    it("leaves the left slot empty when the user is already entitled", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
-      renderControls();
-
-      expect(screen.queryByText(UPSELL_COPY)).toBeNull();
-    });
-
-    it("withholds the upsell from a caller that does not opt in, even when unentitled", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(false);
-      renderControls({ showMultiAgentUpsell: false });
-
-      expect(screen.queryByText(UPSELL_COPY)).toBeNull();
-    });
-
-    it("opens the multi-agent Plus destination when the upsell is clicked", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(false);
-      renderControls();
-
-      fireEvent.click(screen.getByText(UPSELL_COPY));
-
-      expect(mockNavigateToPlusPage).toHaveBeenCalledWith("multi_agent");
-    });
-
     it("does not show a lone link control before a session exists https://github.com/logancyang/obsidian-copilot/issues/3271", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       render(
         <TooltipProvider>
           <AgentChatControls />
@@ -113,7 +62,6 @@ describe("AgentChatControls", () => {
     });
 
     it("keeps the bar to the usage meter, New Chat, Save Chat as Note, Chat History, and More Actions", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
       renderSessionControls({
         usageMeter: <span title="Context usage" />,
@@ -132,18 +80,15 @@ describe("AgentChatControls", () => {
       ]);
     });
 
-    it("shows the running-tasks count at the start of the bar, before the upsell (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(false);
+    it("shows the running-tasks count alone at the start of the bar (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
       const { container } = renderSessionControls({
         tasksIndicator: <span>2 tasks running</span>,
-        showMultiAgentUpsell: true,
       });
 
-      expect(container.textContent?.startsWith(`2 tasks running${UPSELL_COPY}`)).toBe(true);
+      expect(container.firstElementChild?.firstElementChild?.textContent).toBe("2 tasks running");
     });
 
     it("copies the chat link from the More Actions menu", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const onCopyChatLink = jest.fn();
       renderSessionControls({ onCopyChatLink });
 
@@ -153,7 +98,6 @@ describe("AgentChatControls", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link and Add to bookmarks in an empty chat and explains on hover that a message is needed", async () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({ onSetChatBookmarked });
 
@@ -171,7 +115,6 @@ describe("AgentChatControls", () => {
     });
 
     it("bookmarks the open chat from the More Actions menu", async () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({
         getChatBookmarkState: async () => "not-bookmarked",
@@ -185,7 +128,6 @@ describe("AgentChatControls", () => {
     });
 
     it("opens the More Actions menu in the chat's own window when another window is active", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       renderSessionControls();
       const otherWindowDocument = document.implementation.createHTMLDocument();
       const globals = window as unknown as { activeDocument: Document };
@@ -200,7 +142,6 @@ describe("AgentChatControls", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 reports an error about the open chat from the More Actions menu", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const onReportError = jest.fn();
       renderSessionControls({ onReportError });
 
@@ -212,7 +153,6 @@ describe("AgentChatControls", () => {
     });
 
     it("offers a Save Chat as Note button in the bar only when autosave is off", () => {
-      mockUseCanUseMultiAgent.mockReturnValue(true);
       const onSaveAsNote = jest.fn();
       mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
       const { unmount } = renderSessionControls({ onSaveAsNote });

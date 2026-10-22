@@ -20,6 +20,7 @@ import {
   FakeClaudeQuery,
   SessionEventRecorder,
   resultFrame,
+  systemInit,
   textDelta,
   userEcho,
 } from "./testing/fakeClaudeQuery";
@@ -326,6 +327,20 @@ describe("claudeLiveQuery", () => {
         await recorder.waitFor("turn_ended");
 
         expect(lifecycle(recorder.updates())).toEqual(["turn_started", "turn_ended"]);
+      });
+
+      it(`dates a turn the agent begins on its own from Claude's turn announcement, not from its first output (${ISSUE_175})`, async () => {
+        const now = jest.spyOn(Date, "now");
+        try {
+          const { fake, recorder } = startLive();
+          now.mockReturnValueOnce(1_000).mockReturnValue(9_000);
+          fake.emit(systemInit(), textDelta("A subagent finished."), resultFrame());
+          const started = await recorder.waitFor("turn_started");
+
+          expect(started.startedAt).toBe(1_000);
+        } finally {
+          now.mockRestore();
+        }
       });
 
       it("ends the turn with Claude's message when a success-shaped result reports an error", async () => {

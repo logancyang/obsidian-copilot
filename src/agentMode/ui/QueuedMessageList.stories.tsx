@@ -25,7 +25,7 @@ export const ImageOnly: StoryObj<Props> = {
   },
 };
 
-export const QueuedForNextStep: StoryObj<Props> = {
+export const ReadAtNextStep: StoryObj<Props> = {
   args: {
     delivering: [
       { id: "steer-1", text: "Only summarize the first two notes." },
@@ -34,7 +34,7 @@ export const QueuedForNextStep: StoryObj<Props> = {
   },
 };
 
-export const QueuedWithWithdraw: StoryObj<Props> = {
+export const ReadAtNextStepWithWithdraw: StoryObj<Props> = {
   args: {
     delivering: [
       { id: "steer-1", text: "Only summarize the first two notes." },
@@ -56,7 +56,7 @@ export const HeldUntilAgentFinishes: StoryObj<Props> = {
   },
 };
 
-export const QueuedAndHeld: StoryObj<Props> = {
+export const ReadAtNextStepAndHeld: StoryObj<Props> = {
   args: {
     delivering: [{ id: "steer", text: "Only summarize the first two notes." }],
     held: [{ id: "compact", text: "/compact", rawInput: "/compact" }],

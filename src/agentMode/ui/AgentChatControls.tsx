@@ -14,8 +14,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { navigateToPlusPage, useCanUseMultiAgent } from "@/plusUtils";
 import { useSettingsValue } from "@/settings/model";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import {
@@ -26,7 +24,6 @@ import {
   Link,
   MessageCirclePlus,
   MoreHorizontal,
-  Sparkles,
 } from "lucide-react";
 import React, { useCallback, useState } from "react";
 
@@ -67,7 +64,6 @@ interface AgentChatControlsProps {
   onReportError?: () => void;
   usageMeter?: React.ReactNode;
   tasksIndicator?: React.ReactNode;
-  showMultiAgentUpsell?: boolean;
 }
 
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
@@ -88,10 +84,8 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onReportError,
   usageMeter,
   tasksIndicator,
-  showMultiAgentUpsell = false,
 }) => {
   const settings = useSettingsValue();
-  const canUseMultiAgent = useCanUseMultiAgent();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
   );
@@ -105,22 +99,6 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
       <div className="tw-ml-1 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
         {tasksIndicator}
-        {showMultiAgentUpsell && !canUseMultiAgent && (
-          <Button
-            variant="ghost2"
-            size="fit"
-            className={cn(
-              "tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-text-ui-smaller tw-text-muted",
-              "hover:tw-text-normal"
-            )}
-            onClick={() => navigateToPlusPage("multi_agent")}
-          >
-            <Sparkles className="tw-size-3 tw-shrink-0" />
-            <span className="tw-truncate">
-              Mention multiple agents with @ (needs Plus tier or above)
-            </span>
-          </Button>
-        )}
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}

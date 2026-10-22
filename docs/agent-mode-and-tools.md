@@ -124,7 +124,7 @@ With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit
 
 When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
-When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and opencode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels unanswered requests.
+When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and opencode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels the agent's unanswered requests. A background task's request stays until you answer it or stop that task.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 
@@ -142,15 +142,15 @@ Agent Chat keeps each conversation separate:
 
 - Select **+** for another session. Each tab keeps its own history, draft, attachments, and queued follow-ups.
 - Select **New Chat** to reset the current tab.
-- Select **Stop** to cancel the current turn. Queued follow-ups return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. Queued content comes before the current draft, and custom commands return as their expanded text.
+- Select **Stop** to cancel the current turn. Messages the agent has not read yet return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. They come before the current draft, and custom commands return as their expanded text. Background tasks keep running.
 - Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
 - Hover a chat in **Recent Chats** and select **Pin chat** to keep it at the top of the list, above a divider. The most recently pinned chat comes first, and pinned chats keep their order when you use them or change how history is sorted. Select **Unpin chat** to return it to its usual place. The pin is saved in the chat's Markdown note, so it lasts across restarts and appears in both the global and the Project list. Pinning a chat that has no note yet saves it as a note first, even when autosave is off. **Chat History** inside a conversation ignores pins.
-- The bar above the composer holds **New Chat**, **Save Chat as Note** (when autosave is off), **Chat History**, and **More Actions** (⋯). **More Actions** has **Copy chat link**, **Add to bookmarks**, and **Report error**. **Copy chat link** and **Add to bookmarks** stay dimmed until you send the chat's first message.
+- The bar above the composer holds **New Chat**, **Save Chat as Note** (when autosave is off), **Chat History**, and **More Actions** (⋯), and starts with a task count, such as **2 tasks running**, while background tasks run. **More Actions** has **Copy chat link**, **Add to bookmarks**, and **Report error**. **Copy chat link** and **Add to bookmarks** stay dimmed until you send the chat's first message.
 - To bookmark the open chat in Obsidian's **Bookmarks** pane, select **More Actions** above the composer and choose **Add to bookmarks**. To bookmark a chat without opening it, hover it in **Recent Chats**, select **More actions** (or right-click the row), and choose **Add to bookmarks**. The bookmark uses the chat's title, and clicking it opens the chat in Agent Chat. A chat that has no note yet is saved as one first, even when autosave is off. Choose **Remove from bookmarks** to remove it. Deleting the chat from **Recent Chats** also removes its bookmark, while renaming the chat keeps the bookmark's title. While the **Bookmarks** core plugin is turned off, **Add to bookmarks** is dimmed, with an info icon explaining why. Selecting it opens **Settings → Core plugins** filtered to **Bookmarks** so you can turn it on.
 - Select **More Actions** above the composer and choose **Report error** to open **Report an issue** for the current chat, with its screenshot and agent details ready. See [Reporting from Agent Chat](troubleshooting-and-faq.md#reporting-from-agent-chat).
 - Select **More actions** above the composer and choose **Copy chat link** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen the chat in the same vault. The link points to the conversation's Markdown note, so Copilot saves the note first if it does not exist yet, including when autosave is off. The link keeps working after the note is renamed. To copy a link without opening the chat, hover it in **Recent Chats**, select **More actions**, and choose **Copy chat link**. A chat that has no note yet is saved as one first.
 - Properties you add to an Agent chat note stay when Copilot saves the chat again. Copilot updates only the properties it manages: the agent, session, project, token usage, and tags.
-- A spinner marks a chat while its agent is responding. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
+- A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
 - Deleting an Agent chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, and opencode may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
@@ -191,11 +191,25 @@ A model can only write so much in one reply. When a reply runs out of room partw
 
 If the reply still stops early, it ends with a **Stopped early** notice that names the cause: the model hit its output limit, the agent hit its step limit, or the model's safety system stopped it. The last step may not have run. Send another message to continue.
 
-Any step the agent left unfinished when its turn ended shows as failed, including in chats you reopen from history.
+A step cut short by **Stop** shows as stopped. Any other step the agent left unfinished when its turn ended shows as failed, including in chats you reopen from history.
+
+## While the agent works
+
+### Send a message
+
+You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** interrupts the agent and sends your message at once. With Codex and opencode, the message waits with **Sends when the agent finishes**.
+
+### Background subagents and commands
+
+Claude runs subagents and long commands in the background, so you can keep chatting. When one finishes, Claude replies with its result on its own.
+
+- Hover the task count above the composer, such as **2 tasks running**, to see each running task.
+- Select a task, or its card in the chat, to open its view: a subagent's steps or a command's output. Select **Back to chat** or press Escape to return.
+- Select **Stop task** on a task to end only that task.
 
 ## Review what a turn changed
 
-When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files.
+When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files. A subagent's edits show on a card in that subagent's view instead.
 
 Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, including the blank lines between paragraphs, so you can see the exact wording the agent changed without leaving Obsidian. The tab is read-only and never writes to your vault; use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
 

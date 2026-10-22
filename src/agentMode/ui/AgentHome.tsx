@@ -37,6 +37,7 @@ import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
+import { useComposerFocusAfterTaskView } from "@/agentMode/ui/hooks/useComposerFocusAfterTaskView";
 import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
@@ -113,7 +114,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     (taskId: string) => setOpenedTask({ sessionId, taskId }),
     [sessionId]
   );
-  const handleCloseTask = useCallback(() => setOpenedTask(null), []);
   const handleStopTask = useCallback(
     (taskId: string) => {
       backend.stopTask(taskId).catch((e: unknown) => logWarn("[AgentMode] stop task failed", e));
@@ -124,6 +124,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     openedTask?.sessionId === sessionId
       ? tasks.find((task) => task.taskId === openedTask.taskId)
       : undefined;
+  const markTaskViewClosedByUser = useComposerFocusAfterTaskView(detailTask !== undefined);
+  const handleCloseTask = useCallback(() => {
+    markTaskViewClosedByUser();
+    setOpenedTask(null);
+  }, [markTaskViewClosedByUser]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -760,7 +765,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             container={rootEl}
                           />
                         }
-                        showMultiAgentUpsell
                       />
                       {composerNode}
                     </div>

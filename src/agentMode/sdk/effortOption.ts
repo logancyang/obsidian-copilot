@@ -7,7 +7,7 @@ import {
   type Options,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import { logInfo, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 
 export function synthesizeEffortConfigOption(
   modelInfo: ModelInfo | undefined,
@@ -78,10 +78,6 @@ export async function probeClaudeSdkCatalog(
     logWarn("[AgentMode] Claude SDK init probe failed", e);
     return [];
   } finally {
-    try {
-      await probe.interrupt();
-    } catch (error) {
-      logInfo("[AgentMode] Claude SDK init probe did not interrupt cleanly", error);
-    }
+    probe.close();
   }
 }

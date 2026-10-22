@@ -2389,6 +2389,25 @@ describe("AgentSession", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 times a reply the agent starts on its own from when the agent began the turn", async () => {
+        const now = jest.spyOn(Date, "now").mockReturnValue(100_000);
+        try {
+          const mock = makeMockBackend();
+          const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+          const session = makeSession(mock);
+
+          emit({ sessionUpdate: "turn_started", turnId: "notification", startedAt: 92_000 });
+          emit(replayText("agent_message_chunk", "The subagent finished."));
+          now.mockReturnValue(101_000);
+          emit({ sessionUpdate: "turn_ended", turnId: "notification", stopReason: "end_turn" });
+
+          await waitFor(() => expect(aiMessage(session)?.turnStopReason).toBe("end_turn"));
+          expect(aiMessage(session)?.turnDurationMs).toBe(9_000);
+        } finally {
+          now.mockRestore();
+        }
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 settles a prompt the agent withdrew as cancelled", async () => {
         const mock = makeMockBackend();
         let promptId = "";
@@ -5609,6 +5628,28 @@ describe("AgentSession", () => {
         expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
       });
 
+      it("fires onDisconnected when the agent's connection drops, after the session ends its running tasks (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-1",
+          kind: "subagent",
+          description: "Survey",
+        });
+        const taskStatusesAtDisconnect: string[][] = [];
+        subscribeTo(session, {
+          onDisconnected: () =>
+            taskStatusesAtDisconnect.push(session.getTasks().map((task) => task.status)),
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+        mock.emitUpdate({ sessionUpdate: "session_disconnected", error: new Error("exited") });
+
+        expect(taskStatusesAtDisconnect).toEqual([["stopped"]]);
+      });
+
       describe("streamed-token notifications", () => {
         let rafQueue: FrameRequestCallback[];
 
@@ -6082,11 +6123,7 @@ describe("AgentSession", () => {
         });
 
         expect(session.getTasks()).toEqual([
-          expect.objectContaining({
-            status: "completed",
-            summary: "13 words in total.",
-            progress: { toolName: "Bash", toolUses: 1 },
-          }),
+          expect.objectContaining({ status: "completed", summary: "13 words in total." }),
         ]);
         expect(card()).toMatchObject({
           status: "completed",
@@ -6094,7 +6131,33 @@ describe("AgentSession", () => {
         });
         const finalCard = card();
         expect(finalCard?.kind === "tool_call" ? finalCard.output : "not a card").toBeUndefined();
-        expect(onTasksChanged).toHaveBeenCalledTimes(3);
+        expect(onTasksChanged).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 keeps the same task list without notifying task listeners when a progress frame only updates usage, and shows the usage on the launching card", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { turn, run } = launchTurn(mock, session);
+        run(AGENT_CARD, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "turn_ended", turnId: "launch", stopReason: "end_turn" });
+        await turn;
+        mock.emitUpdate({ sessionUpdate: "task_progress", taskId: "task-1", model: "haiku-9" });
+        const before = session.getTasks();
+        const onTasksChanged = jest.fn();
+        subscribeTo(session, { onTasksChanged });
+
+        mock.emitUpdate({
+          sessionUpdate: "task_progress",
+          taskId: "task-1",
+          model: "haiku-9",
+          progress: { toolUses: 4, durationMs: 12_000 },
+        });
+
+        expect(session.getTasks()).toBe(before);
+        expect(onTasksChanged).not.toHaveBeenCalled();
+        expect(aiMessage(session)?.parts?.find((p) => p.kind === "tool_call")).toMatchObject({
+          progress: { toolUses: 4, durationMs: 12_000 },
+        });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 records a running task's model and output file from progress without touching its launching card", async () => {
@@ -6324,6 +6387,46 @@ describe("AgentSession", () => {
 
         expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
           expect.objectContaining({ kind: "tool_call", id: "tool-bash", status: "cancelled" }),
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps a tool call its task's end cut short stopped when the cut call's failed result arrives afterwards, as after a disconnect, and still shows a late successful result", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const taskUpdate = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", taskToolCallId: "tool-agent", update });
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tool-agent",
+          kind: "subagent",
+          description: "Wait",
+        });
+        for (const toolCallId of ["tool-bash", "tool-write"]) {
+          taskUpdate({
+            sessionUpdate: "tool_call",
+            toolCallId,
+            title: toolCallId,
+            kind: "execute",
+            status: "in_progress",
+          });
+        }
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" });
+
+        taskUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-bash",
+          status: "failed",
+        });
+        taskUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-write",
+          status: "completed",
+        });
+
+        expect(session.getTaskMessages("task-1")[0]?.parts).toEqual([
+          expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
+          expect.objectContaining({ id: "tool-write", status: "completed" }),
         ]);
       });
     });

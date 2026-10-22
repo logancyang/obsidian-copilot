@@ -13,6 +13,7 @@ import {
 } from "@/agentMode/ui/taskDisplay";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { Bot, Loader2, Square, Terminal } from "lucide-react";
 import React, { useRef, useState } from "react";
@@ -77,7 +78,9 @@ export const RunningTasksIndicator: React.FC<RunningTasksIndicatorProps> = ({
         container={container}
         side="top"
         align="start"
-        className="tw-w-96 tw-max-w-[calc(100vw-2rem)] tw-p-1"
+        collisionBoundary={container}
+        collisionPadding={8}
+        className="tw-w-96 tw-max-w-[var(--radix-popover-content-available-width)] tw-p-1"
         onPointerEnter={show}
         onPointerLeave={hideSoon}
         onOpenAutoFocus={(event) => event.preventDefault()}
@@ -123,7 +126,11 @@ const RunningTaskRow: React.FC<RunningTaskRowProps> = ({ task, status, onOpen })
   return (
     <button
       type="button"
-      className="tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5 tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-modifier-hover"
+      className={cn(
+        "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-flex-col tw-items-stretch tw-gap-0.5",
+        "tw-rounded tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
+        "hover:tw-bg-modifier-hover focus-visible:tw-bg-modifier-hover"
+      )}
       onClick={onOpen}
     >
       <span className="tw-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-sm">

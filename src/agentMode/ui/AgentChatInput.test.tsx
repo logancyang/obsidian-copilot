@@ -987,7 +987,7 @@ describe("AgentChatInput", () => {
         acceptsMidTurnMessages: true,
       });
       expect(backend.sendMessage).not.toHaveBeenCalled();
-      expect(screen.getByText("Queued")).toBeTruthy();
+      expect(screen.getByText("The agent reads these at its next step")).toBeTruthy();
       expect(screen.getByText("Sends when the agent finishes")).toBeTruthy();
 
       rerender(

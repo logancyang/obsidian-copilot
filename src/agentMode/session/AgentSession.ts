@@ -9,7 +9,6 @@ import {
   AgentToolKind,
   AgentQuestionAnswers,
   AgentTodoListEntry,
-  AgentToolProgress,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -124,7 +123,6 @@ const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
 
 export interface AgentTask extends TaskStart {
   status: "running" | TaskEndStatus;
-  progress?: AgentToolProgress;
   model?: string;
   outputFile?: string;
   summary?: string;
@@ -194,6 +192,7 @@ export interface AgentSessionListener {
   onNeedsAttentionChanged?(needsAttention: boolean): void;
   onTasksChanged?(): void;
   onQueuedPromptsChanged?(): void;
+  onDisconnected?(): void;
 }
 
 export interface ProjectContextUpdates {
@@ -1371,7 +1370,7 @@ export class AgentSession {
         this.applyTaskUpdate(update);
         return;
       case "turn_started":
-        this.startTurn(update.turnId);
+        this.startTurn(update.turnId, update.startedAt);
         return;
       case "turn_ended":
         this.endTurn(update);
@@ -1538,12 +1537,12 @@ export class AgentSession {
     }
   }
 
-  private startTurn(turnId: string): void {
+  private startTurn(turnId: string, startedAt?: number): void {
     if (this.cancelledPromptDrain) return;
     // A turn that starts after Stop runs a message kept through it, so the stopped prompt's cancellation must not drop its output. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
     if (this.abortController?.signal.aborted) this.abortController = null;
     this.openTurnId = turnId;
-    if (!this.placeholderId) this.openReply();
+    if (!this.placeholderId) this.openReply(false, startedAt);
     this.recomputeStatusIfChanged();
   }
 
@@ -1579,6 +1578,13 @@ export class AgentSession {
     this.endCancelledPromptDrain();
     if (this.placeholderId || this.pendingPrompts.size > 0) this.failReply(error);
     this.withdrawPrompts([...this.pendingPrompts.keys()]);
+    for (const l of this.listeners) {
+      try {
+        l.onDisconnected?.();
+      } catch (e) {
+        logWarn(`[AgentMode] disconnect listener threw`, e);
+      }
+    }
   }
 
   private applyTaskUpdate(
@@ -1604,14 +1610,14 @@ export class AgentSession {
     const task = this.tasks.get(update.taskId);
     if (!task) return;
     if (update.sessionUpdate === "task_progress") {
-      const progress = update.progress ? { ...task.progress, ...update.progress } : task.progress;
-      this.tasks.set(task.taskId, {
-        ...task,
-        progress,
-        model: update.model ?? task.model,
-        outputFile: update.outputFile ?? task.outputFile,
-      });
-      this.updateLaunchCard({ toolCallId: task.toolCallId, progress });
+      // Usage counts show only on the launching card, so a usage-only frame leaves task cards alone. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+      if (update.progress) {
+        this.updateLaunchCard({ toolCallId: task.toolCallId, progress: update.progress });
+      }
+      const model = update.model ?? task.model;
+      const outputFile = update.outputFile ?? task.outputFile;
+      if (model === task.model && outputFile === task.outputFile) return;
+      this.tasks.set(task.taskId, { ...task, model, outputFile });
       return this.publishTasks();
     }
     this.tasks.set(task.taskId, {
@@ -1705,7 +1711,15 @@ export class AgentSession {
         const existing = store
           .getMessage(messageId)
           ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
-        const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
+        // A call cut short by its task's end fails afterwards on a disconnect; it reads stopped, as after Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+        const cutShort =
+          existing?.kind === "tool_call" &&
+          existing.status === "cancelled" &&
+          update.status === "failed";
+        const merged = mergeToolCallUpdate(
+          existing,
+          cutShort ? { ...update, status: "cancelled" } : this.withEndedTaskStatus(update)
+        );
         this.observeToolResult(this.filesOfTask(toolCallId), merged, update);
         changed = store.upsertAgentPart(messageId, merged);
         break;
@@ -1770,8 +1784,8 @@ export class AgentSession {
     this.stoppedPromptIds = EMPTY_PROMPT_IDS;
   }
 
-  private openReply(continuesTurn = false): string {
-    this.replyStartedAtMs = Date.now();
+  private openReply(continuesTurn = false, startedAtMs = Date.now()): string {
+    this.replyStartedAtMs = startedAtMs;
     this.placeholderId = this.store.addMessage({
       message: "",
       sender: AI_SENDER,

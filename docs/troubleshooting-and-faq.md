@@ -73,7 +73,7 @@ Do not delete `data.json`: it contains the vault's Keychain namespace. Use the i
 
 Look for **Permission required** or **Question from agent**. Review the inputs or diff, then choose an offered option. Another session tab may show an attention indicator.
 
-Permission choices depend on the active agent. **Stop** cancels the current turn, including unanswered requests. Review every persistent permission carefully.
+Permission choices depend on the active agent. **Stop** cancels the current turn, including the agent's unanswered requests. A background task's request stays until you answer it or stop that task. Review every persistent permission carefully.
 
 ### You cannot switch agents in the current session
 
