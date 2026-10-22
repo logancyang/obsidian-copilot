@@ -37,7 +37,7 @@ import {
   parseWithMiyo,
 } from "@/miyo/miyoParseTool";
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
-import { createOpenArtifactsTools, readLocalText } from "@/openArtifacts/openArtifactsTools";
+import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
 import {
@@ -239,7 +239,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           getLicenseKey: () => getSettings().plusLicenseKey.trim(),
           getVaultBase: () => getVaultBase(app),
           openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
-          readText: (path) => readLocalText(app, path),
         }),
       ]
     ),

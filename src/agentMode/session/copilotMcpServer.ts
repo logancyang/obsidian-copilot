@@ -15,7 +15,9 @@ export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
 export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 
 const MCP_PATH = "/mcp";
-const MAX_REQUEST_BYTES = 64 * 1024;
+// openartifacts_publish takes a whole page as an argument, and OpenArtifacts accepts pages up to 10 MB.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const LATEST_PROTOCOL_VERSION = "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
   "2025-11-25",

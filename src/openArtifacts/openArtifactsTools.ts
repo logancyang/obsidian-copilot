@@ -1,16 +1,7 @@
-import {
-  OPENARTIFACTS_DOC_ID_PATTERN,
-  OPENARTIFACTS_MAX_HTML_BYTES,
-} from "@/openArtifacts/constants";
+import { OPENARTIFACTS_DOC_ID_PATTERN } from "@/openArtifacts/constants";
 import type { OpenArtifactsModalResult } from "@/components/modals/OpenArtifactsModal";
-import {
-  PRIVATE_UNSUPPORTED_MESSAGE,
-  type OpenArtifactsClient,
-} from "@/openArtifacts/OpenArtifactsClient";
-import {
-  createOpenArtifactsDocument,
-  OpenArtifactsDocumentTooLargeError,
-} from "@/openArtifacts/openArtifactsDocument";
+import type { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
+import { createOpenArtifactsDocument } from "@/openArtifacts/openArtifactsDocument";
 import { getOpenArtifactsDocId } from "@/openArtifacts/openArtifactsFrontmatter";
 import {
   missingLicenseFailure,
@@ -18,9 +9,9 @@ import {
   type OpenArtifactsPublisher,
 } from "@/openArtifacts/OpenArtifactsPublisher";
 import type { OpenArtifactsAction, OpenArtifactsReceipt } from "@/openArtifacts/types";
+import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
-import { requireNodeModule } from "@/utils/desktopRuntime";
-import { isAbsolutePath, toVaultRelative } from "@/utils/vaultPath";
+import { toVaultRelative } from "@/utils/vaultPath";
 import { type App, normalizePath, TFile } from "obsidian";
 
 export const OPENARTIFACTS_PUBLISH_TOOL_NAME = "openartifacts_publish";
@@ -41,54 +32,41 @@ const NOTE_PATH_PROPERTY = {
   type: "string",
   description: "The Markdown note the page renders, relative to the vault root.",
 };
-// Claude Code defers MCP tools behind tool search, so only publish, the way in, is always loaded; the others are found by name when needed.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-const ALWAYS_LOAD = Object.freeze({ "anthropic/alwaysLoad": true });
 const WRITES = Object.freeze({ readOnlyHint: false, destructiveHint: false, openWorldHint: true });
 
 export const OPENARTIFACTS_PUBLISH_TOOL = Object.freeze({
   name: OPENARTIFACTS_PUBLISH_TOOL_NAME,
-  description: `Publish one local HTML file as an OpenArtifacts page, or as the next version of an existing page (docId). A new page is private: only the user and people added with ${OPENARTIFACTS_SHARE_TOOL_NAME} can open it. For a Markdown note, first write one complete HTML file rendering it, with Obsidian syntax such as wikilinks, callouts, embeds and Mermaid turned into plain HTML, to a temporary file outside the vault, and pass the note as notePath: Copilot updates the page the note links to and records the link in the note, so don't edit its openartifacts property. Relay any warning or guidance in the result. Report a failure to the user; never retry it or publish another way on your own.`,
+  description: `Publish a page to OpenArtifacts, or a new version of one (docId). A new page is private, only the user and people added with ${OPENARTIFACTS_SHARE_TOOL_NAME} can open it, and Copilot opens it in the user's browser. To publish a Markdown note, write one complete HTML page rendering it, with Obsidian syntax such as wikilinks, callouts, embeds and Mermaid turned into plain HTML, and pass it as html with the note as notePath: Copilot updates the page the note links to and records the link in the note, so don't edit its openartifacts property. Relay any warning or guidance in the result.`,
   inputSchema: {
     type: "object",
     properties: {
-      path: {
-        type: "string",
-        description: "The .html file: an absolute path, or one relative to the vault root.",
-      },
+      html: { type: "string", description: "The complete page." },
       title: { type: "string" },
-      access: {
-        type: "string",
-        enum: ["private", "public"],
-        description: 'Who can open a new page. Defaults to "private".',
-      },
       notePath: NOTE_PATH_PROPERTY,
       docId: {
         ...DOC_ID_PROPERTY,
         description: "The page to update.",
       },
     },
-    required: ["path", "title"],
+    required: ["title", "html"],
   },
   annotations: WRITES,
-  _meta: ALWAYS_LOAD,
 });
 
 export const OPENARTIFACTS_SHARE_TOOL = Object.freeze({
   name: OPENARTIFACTS_SHARE_TOOL_NAME,
-  description: `See or change who can open one of the user's OpenArtifacts pages, only when the user asks; never guess an email address. "link": "invited" makes the page private, "anyone" opens it to anyone with the link. "add" invites an email, approves that address's pending request, or changes the role of someone already added.`,
+  description: `See or change who can open one of the user's OpenArtifacts pages, only when the user asks; never guess an email address. "add" invites an email, approves that address's pending request, or changes the role of someone already added. Only the user can open a page to anyone with the link, from Share on the page.`,
   inputSchema: {
     type: "object",
     properties: {
       docId: DOC_ID_PROPERTY,
-      action: { type: "string", enum: ["list", "link", "add", "remove", "decline"] },
+      action: { type: "string", enum: ["list", "add", "remove", "decline"] },
       email: { type: "string", description: "For add, remove and decline." },
       role: {
         type: "string",
         enum: ["view", "comment"],
         description: 'For add. Defaults to "comment"; "view" cannot comment.',
       },
-      link: { type: "string", enum: ["anyone", "invited"], description: "For link only." },
     },
     required: ["docId", "action"],
   },
@@ -97,7 +75,7 @@ export const OPENARTIFACTS_SHARE_TOOL = Object.freeze({
 
 export const OPENARTIFACTS_OPEN_TOOL = Object.freeze({
   name: OPENARTIFACTS_OPEN_TOOL_NAME,
-  description: `Open one of the user's OpenArtifacts pages in their browser, signed in as its owner, after a private publish or when the user asks. No link is returned.`,
+  description: `Open one of the user's OpenArtifacts pages in their browser, signed in as its owner. No link is returned.`,
   inputSchema: {
     type: "object",
     properties: { docId: DOC_ID_PROPERTY },
@@ -159,7 +137,7 @@ const RETRY_IN_DIALOG =
 
 // Every user gets the tools; without a key, each call answers with the upgrade offer instead.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-const NO_LICENSE_TEXT = failureText(missingLicenseFailure("publish"), false);
+const NO_LICENSE_TEXT = failureText(missingLicenseFailure("publish"));
 
 type ToolResult = { text: string; isError: boolean };
 
@@ -172,7 +150,6 @@ export interface OpenArtifactsTool {
 export type OpenArtifactsToolClient = Pick<
   OpenArtifactsClient,
   | "getAccess"
-  | "setLinkAccess"
   | "addPerson"
   | "removePerson"
   | "declineRequest"
@@ -192,7 +169,6 @@ export interface OpenArtifactsToolDeps {
   getLicenseKey: () => string;
   getVaultBase: () => string | null;
   openInBrowser: (url: string) => void;
-  readText: (path: string) => Promise<string>;
 }
 
 export function createOpenArtifactsTools(deps: OpenArtifactsToolDeps): OpenArtifactsTool[] {
@@ -209,7 +185,7 @@ export function createOpenArtifactsTools(deps: OpenArtifactsToolDeps): OpenArtif
       try {
         return await run(input, licenseKey);
       } catch (error) {
-        return failure(failureText(operationFailure("publish", error), false));
+        return failure(failureText(operationFailure("publish", error)));
       }
     },
   });
@@ -222,73 +198,64 @@ export function createOpenArtifactsTools(deps: OpenArtifactsToolDeps): OpenArtif
   ];
 }
 
-export async function readLocalText(app: App, path: string): Promise<string> {
-  const fs = isAbsolutePath(path)
-    ? requireNodeModule<typeof import("node:fs")>("fs").promises
-    : null;
-  const size = fs
-    ? (await fs.stat(path)).size
-    : (await app.vault.adapter.stat(normalizePath(path)))?.size;
-  if (size !== undefined && size > OPENARTIFACTS_MAX_HTML_BYTES) {
-    throw new OpenArtifactsDocumentTooLargeError(size);
-  }
-  return fs ? fs.readFile(path, "utf8") : app.vault.adapter.read(normalizePath(path));
-}
-
 async function publish(
   input: Record<string, unknown>,
   licenseKey: string,
   deps: OpenArtifactsToolDeps
 ): Promise<ToolResult> {
-  const path = text(input.path);
+  const html = typeof input.html === "string" ? input.html : "";
   const title = text(input.title);
-  if (!path || !title) return failure("path and title must be non-empty strings.");
-  if (!/\.html?$/i.test(path)) return failure("path must name an .html file.");
-  if (input.access !== undefined && input.access !== "private" && input.access !== "public") {
-    return failure('access must be "private" or "public".');
-  }
+  if (!title || !html.trim()) return failure("Pass a title, and the complete page as html.");
   const docIdArg = input.docId === undefined ? null : docIdOf(input.docId);
   if (docIdArg === undefined) return failure("docId is not an OpenArtifacts document id.");
   const note = input.notePath === undefined ? null : findNote(input.notePath, deps);
   if (note === undefined)
     return failure(`notePath ${String(input.notePath)} is not a Markdown note in this vault.`);
 
-  let html: string;
-  try {
-    html = await deps.readText(path);
-  } catch (error) {
-    return failure(`Could not read ${path}: ${err2String(error)}`);
-  }
   const document = createOpenArtifactsDocument(title, html);
   const linked = note ? await getOpenArtifactsDocId(deps.app, note) : null;
   if (note && docIdArg && linked !== docIdArg) return failure(mismatch(note, linked, docIdArg));
   const docId = note ? linked : docIdArg;
-  if (docId && input.access !== undefined) {
-    return failure(
-      "access applies only to a new page; an update keeps who can open it. Call again without access."
-    );
-  }
 
-  const privateCreate = !docId && input.access !== "public";
-  const linkAccess = privateCreate ? "invited" : undefined;
+  // An agent creates only private pages and cannot open one to anyone: that is the user's click in Share on the page.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
   const action = docId ? "update" : "publish";
   const result = note
-    ? await deps.publisher.execute(note, docId, action, async () => document, linkAccess)
+    ? await deps.publisher.execute(note, docId, action, async () => document, "invited")
     : await settle(action, () =>
         docId
           ? deps.client.update(docId, document, licenseKey)
-          : deps.publisher.create(document, licenseKey, linkAccess)
+          : deps.publisher.create(document, licenseKey, "invited")
       );
   if (result.kind === "failure" || result.action !== action) {
-    return failure(failureText(result, privateCreate));
+    return failure(failureText(result));
   }
+  const opened = action === "publish" && (await openNewPage(result.receipt, licenseKey, deps));
   return {
     text: JSON.stringify({
       ...result.receipt,
+      ...(opened && { opened }),
       ...persistenceWarning(result),
     }),
     isError: false,
   };
+}
+
+// A private page asks its owner to sign in, so Copilot opens a new one signed in rather than leaving that to the agent.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+async function openNewPage(
+  receipt: OpenArtifactsReceipt | undefined,
+  licenseKey: string,
+  { client, openInBrowser }: OpenArtifactsToolDeps
+): Promise<boolean> {
+  if (!receipt) return false;
+  try {
+    openInBrowser(await client.openAsOwner(receipt.docId, licenseKey));
+    return true;
+  } catch (error) {
+    logWarn(`[OpenArtifacts] Could not open ${receipt.docId}: ${err2String(error)}`);
+    return false;
+  }
 }
 
 async function share(
@@ -299,17 +266,13 @@ async function share(
   const docId = docIdOf(input.docId);
   if (!docId) return failure("docId must be an OpenArtifacts document id.");
   const email = text(input.email);
-  const { action, role, link } = input;
+  const { action, role } = input;
   if (role !== undefined && (action !== "add" || (role !== "view" && role !== "comment"))) {
     return failure('role is "view" or "comment", and only with add.');
   }
   let access;
   if (action === "list") {
     access = await client.getAccess(docId, licenseKey);
-  } else if (action === "link") {
-    if (link !== "anyone" && link !== "invited")
-      return failure('link must be "anyone" or "invited".');
-    access = await client.setLinkAccess(docId, link, licenseKey);
   } else if (action === "add" || action === "remove" || action === "decline") {
     if (!email) return failure(`${action} needs an email.`);
     access =
@@ -319,7 +282,7 @@ async function share(
           ? await client.removePerson(docId, email, licenseKey)
           : await client.declineRequest(docId, email, licenseKey);
   } else {
-    return failure('action must be "list", "link", "add", "remove" or "decline".');
+    return failure('action must be "list", "add", "remove" or "decline".');
   }
   return { text: JSON.stringify(access), isError: false };
 }
@@ -434,7 +397,7 @@ async function unpublish(
     ? await deps.publisher.execute(note, docId, "delete", NO_DOCUMENT)
     : await settle("delete", () => deps.client.delete(docId, licenseKey));
   if (result.kind === "failure" || result.action !== "delete") {
-    return failure(failureText(result, false));
+    return failure(failureText(result));
   }
   return {
     text: JSON.stringify({ docId, status: "unpublished", ...persistenceWarning(result) }),
@@ -464,20 +427,14 @@ async function settle(
   }
 }
 
-function failureText(result: OpenArtifactsModalResult, privateCreate: boolean): string {
+function failureText(result: OpenArtifactsModalResult): string {
   // A note's stored result answers every later call on it, whatever that call asked, until Retry save or a reload clears it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
   if (result.kind !== "failure") {
     return `Nothing was sent: an earlier OpenArtifacts action on this note is unfinished. ${persistenceWarning(result).warning}`;
   }
   const advice = result.upgradeUrl ? ` Give the user this upgrade link: ${result.upgradeUrl}` : "";
-  const refusedPrivate =
-    (result.upgradeUrl && !result.accessNotice) || result.message === PRIVATE_UNSUPPORTED_MESSAGE;
-  const publicly =
-    privateCreate && refusedPrivate
-      ? ` Publish it with access "public" only if the user asks.`
-      : "";
-  return `OpenArtifacts: ${result.message}${advice}${publicly} Report this to the user; don't retry it on your own.`;
+  return `OpenArtifacts: ${result.message}${advice} Report this to the user; don't retry it or publish another way on your own.`;
 }
 
 function persistenceWarning(result: OpenArtifactsModalResult): { warning?: string } {

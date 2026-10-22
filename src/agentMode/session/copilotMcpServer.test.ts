@@ -393,7 +393,7 @@ describe("copilotMcpServer", () => {
       expect(result.status).toBe(405);
     });
 
-    it("rejects a request body over 64 KiB of UTF-8 without raising a card, even when it has fewer characters", async () => {
+    it("rejects a request body over 16 MiB of UTF-8 without raising a card, even when it has fewer characters", async () => {
       const handler = jest.fn().mockReturnValue("shown");
       const channel = await server.connect("session-a", handler);
 
@@ -401,7 +401,7 @@ describe("copilotMcpServer", () => {
         channel,
         rpc(5, "tools/call", {
           name: "send_feedback",
-          arguments: { ...COMPLAINT, repro: "界".repeat(30_000) },
+          arguments: { ...COMPLAINT, repro: "界".repeat(6_000_000) },
         })
       );
 
