@@ -2,6 +2,7 @@ import {
   BLOCK_MOVED,
   IMAGE_REMOVED_AND_ADDED,
   NON_MARKDOWN_FILE,
+  REMOVED_LIST_ITEM,
   TASK_BLOCK_INSERTED,
   TASK_CHECKBOX_TOGGLED,
   WORDING_CHANGE,
@@ -91,6 +92,27 @@ describe("RenderedDiff", () => {
 
       await waitFor(() => expect(framedAlt("deleted")).toEqual(["Q2 chart"]));
       expect(framedAlt("inserted")).toEqual(["Q3 chart"]);
+    });
+
+    it("renders every segment under one Obsidian Markdown root so block margins collapse between segments as they do in the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+      const { container } = render(diffElement(BLOCK_MOVED));
+
+      await waitFor(() => expect(container.querySelector("[data-change=inserted]")).not.toBeNull());
+      const roots = container.querySelectorAll(".markdown-rendered");
+      expect(roots).toHaveLength(1);
+      expect(roots[0]).toBe(container.firstElementChild);
+    });
+
+    it("drops the list margins between segments that split one list so a removed middle item sits as close as its siblings (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+      const { container } = render(diffElement(REMOVED_LIST_ITEM));
+
+      await waitFor(() => expect(container.querySelector("[data-change=deleted]")).not.toBeNull());
+      const [first, deleted, last] = Array.from(container.firstElementChild!.children, (segment) =>
+        segment.hasAttribute("data-change") ? segment.firstElementChild! : segment
+      );
+      expect(first.className).toBe("[&>:last-child]:tw-mb-0");
+      expect(deleted.className).toBe("[&>:first-child]:tw-mt-0 [&>:last-child]:tw-mb-0");
+      expect(last.className).toBe("[&>:first-child]:tw-mt-0");
     });
 
     it("shows a non-Markdown file as tinted verbatim lines without rendering it as Markdown", async () => {

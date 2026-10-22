@@ -31,6 +31,22 @@ describe("Markdown", () => {
       expect(container.firstElementChild?.classList.contains("tw-p-2")).toBe(true);
     });
 
+    it("leaves Obsidian Markdown styling to the enclosing rendered root when nested", async () => {
+      jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
+        target.textContent = text;
+      });
+
+      const { container } = render(
+        <AppContext.Provider value={new App()}>
+          <Markdown className="tw-p-2" nested sourcePath="" text="Release notes" />
+        </AppContext.Provider>
+      );
+
+      await waitFor(() => expect(container.textContent).toBe("Release notes"));
+      expect(container.firstElementChild?.classList.contains("markdown-rendered")).toBe(false);
+      expect(container.firstElementChild?.classList.contains("tw-p-2")).toBe(true);
+    });
+
     it(`runs post-render handling only after Obsidian finishes for ${ISSUE_URL}`, async () => {
       let finishRender: (() => void) | undefined;
       jest.mocked(renderMarkdown).mockImplementation(

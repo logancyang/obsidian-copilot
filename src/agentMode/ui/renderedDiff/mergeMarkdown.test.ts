@@ -249,12 +249,17 @@ describe("mergeMarkdown", () => {
       });
     });
 
-    it("renders a created file as inserted blocks only", async () => {
+    it("renders a created file as one inserted region so its paragraph gaps stay inside one highlight and its list stays one list (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
       const plan = await buildRenderedDiffPlan(app, FILE_CREATED.before, FILE_CREATED.after, true);
 
-      expect(
-        plan.every((segment) => segment.kind === "block" && segment.change === "inserted")
-      ).toBe(true);
+      expect(plan).toEqual([
+        {
+          kind: "block",
+          change: "inserted",
+          markdown:
+            "# Migration review\n\nAttendees: Ana, Bo, Kit.\n\n- Runbook is drafted\n- Rollback still open",
+        },
+      ]);
     });
 
     it("renders an emptied file as deleted blocks only", async () => {
@@ -310,7 +315,12 @@ describe("mergeMarkdown", () => {
           kind: "markdown",
           markdown: "- Who owns the migration runbook?\n- What does the rollback look like?",
         },
-        { kind: "block", change: "inserted", markdown: "- How long do we keep the old index?" },
+        {
+          kind: "block",
+          change: "inserted",
+          markdown: "- How long do we keep the old index?",
+          continuesList: true,
+        },
       ]);
     });
 
@@ -319,7 +329,12 @@ describe("mergeMarkdown", () => {
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         { kind: "markdown", markdown: "- Who owns the migration runbook?" },
-        { kind: "block", change: "deleted", markdown: "- Do we still need the staging vault?" },
+        {
+          kind: "block",
+          change: "deleted",
+          markdown: "- Do we still need the staging vault?",
+          continuesList: true,
+        },
         { kind: "markdown", markdown: "- What does the rollback look like?", continuesList: true },
       ]);
     });
@@ -342,8 +357,14 @@ describe("mergeMarkdown", () => {
         {
           kind: "markdown",
           markdown: "- [ ] Draft the migration runbook\n- [ ] Book the review slot",
+          continuesList: true,
         },
-        { kind: "block", change: "deleted", markdown: "- [ ] Send the invite" },
+        {
+          kind: "block",
+          change: "deleted",
+          markdown: "- [ ] Send the invite",
+          continuesList: true,
+        },
       ]);
     });
 
@@ -363,7 +384,7 @@ describe("mergeMarkdown", () => {
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         { kind: "markdown", markdown: "1. Draft\n2. Review\n3. Ship" },
-        { kind: "block", change: "inserted", markdown: "4. Announce" },
+        { kind: "block", change: "inserted", markdown: "4. Announce", continuesList: true },
       ]);
     });
 

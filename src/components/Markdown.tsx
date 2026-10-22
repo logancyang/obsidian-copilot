@@ -7,6 +7,7 @@ import * as React from "react";
 
 export interface MarkdownProps {
   className?: string;
+  nested?: boolean;
   onRendered?: (container: HTMLElement) => void;
   sourcePath: string;
   text: string;
@@ -14,6 +15,7 @@ export interface MarkdownProps {
 
 export function Markdown({
   className,
+  nested,
   onRendered,
   sourcePath,
   text,
@@ -28,7 +30,7 @@ export function Markdown({
     const component = new Component();
     let cancelled = false;
     component.load();
-    target.classList.add("markdown-rendered");
+    if (!nested) target.classList.add("markdown-rendered");
     target.replaceChildren();
     void renderMarkdown(app, text, target, sourcePath, component)
       .then(() => {
@@ -45,7 +47,7 @@ export function Markdown({
       component.unload();
       target.replaceChildren();
     };
-  }, [app, onRendered, sourcePath, text]);
+  }, [app, nested, onRendered, sourcePath, text]);
 
   return <div className={cn(className)} ref={targetRef} />;
 }

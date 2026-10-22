@@ -44,11 +44,15 @@ export function RenderedDiff({
   return (
     // Strikethrough marks deletions here, so completed tasks drop Obsidian's done strike at every nesting depth.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-    <div className="[--checklist-done-decoration:none]">
+    // One rendered root spans every segment, so Obsidian's margins collapse between segments as they
+    // do between blocks of the note instead of being cut at each segment's first and last child.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
+    <div className="markdown-rendered [--checklist-done-decoration:none]">
       {plan.segments.map((segment, index) => (
         <DiffSegmentView
           // eslint-disable-next-line @eslint-react/no-array-index-key -- the plan is rebuilt whole whenever the file content changes and nothing reorders it, so position is a segment identity
           key={index}
+          continued={continuesList(plan.segments[index + 1])}
           path={path}
           segment={segment}
         />
@@ -58,12 +62,24 @@ export function RenderedDiff({
 }
 
 interface DiffSegmentViewProps {
+  continued: boolean;
   path: string;
   segment: DiffSegment;
 }
 
-function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactElement {
+function continuesList(segment: DiffSegment | undefined): boolean {
+  return segment !== undefined && segment.kind !== "code" && segment.continuesList === true;
+}
+
+function DiffSegmentView({ continued, path, segment }: DiffSegmentViewProps): React.ReactElement {
   if (segment.kind === "code") return <CodeDiffView lines={segment.lines} />;
+  // Items of one list split across segments render as separate lists, so the list margins between
+  // them go to keep the items as close as their siblings.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
+  const listJoins = cn(
+    segment.continuesList && "[&>:first-child]:tw-mt-0",
+    continued && "[&>:last-child]:tw-mb-0"
+  );
   if (segment.kind === "block") {
     return (
       <div
@@ -75,6 +91,8 @@ function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactEl
         )}
       >
         <Markdown
+          className={listJoins}
+          nested
           onRendered={BLOCK_DECORATORS[segment.change]}
           sourcePath={path}
           text={segment.markdown}
@@ -82,7 +100,15 @@ function DiffSegmentView({ path, segment }: DiffSegmentViewProps): React.ReactEl
       </div>
     );
   }
-  return <Markdown onRendered={decorateMarkdown} sourcePath={path} text={segment.markdown} />;
+  return (
+    <Markdown
+      className={listJoins}
+      nested
+      onRendered={decorateMarkdown}
+      sourcePath={path}
+      text={segment.markdown}
+    />
+  );
 }
 
 const BLOCK_DECORATORS: Record<Change, (container: HTMLElement) => void> = {
