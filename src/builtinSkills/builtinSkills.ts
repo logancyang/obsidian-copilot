@@ -569,7 +569,7 @@ note's \`openartifacts\` property (the part after \`/d/\`).
 
 People the user lets comment select text on the page and leave comments. Each one is a thread
 on a quoted passage. Do this when the user asks to address, answer or work through the comments
-on a page, and before revising a page that is already published. Take the \`docId\` as in step 4.
+on a page. Take the \`docId\` as in step 4.
 
 1. Call \`openartifacts_comments\` with \`action: "list"\` (open threads; \`state\` and \`since\`
    narrow or widen it). It returns JSON: \`version\` and \`latestVersion\`, and for each thread its
@@ -613,7 +613,8 @@ people already saved cannot be recalled, then end your turn. On a clear yes, cal
 \`openartifacts_unpublish\` with the \`docId\`, and with the note as \`notePath\` when the page
 came from one; the tool then removes the note's link to the page. If the tool says the note does
 not link to that page, nothing was withdrawn: stop and ask the user. Otherwise report that the
-page is gone. Never tell the user to delete the page at its public URL.
+page is gone, and relay any \`warning\` as in step 3. Never tell the user to delete the page at
+its public URL.
 `,
   files: [{ path: `themes/${OPENARTIFACTS_DEFAULT_THEME}.md`, content: RESEARCH_MEMO_THEME }],
 };
