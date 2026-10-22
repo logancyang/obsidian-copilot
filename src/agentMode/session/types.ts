@@ -182,7 +182,7 @@ export type AgentToolKind =
   | "switch_mode"
   | "other";
 
-export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed";
+export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
 export type AgentToolCallOutput =
   | { type: "text"; text: string }
@@ -457,6 +457,11 @@ export interface CancelInput {
   sessionId: SessionId;
 }
 
+export interface WithdrawInput {
+  sessionId: SessionId;
+  promptId: string;
+}
+
 export type SessionUpdateHandler = (event: SessionEvent) => void;
 
 export interface BackendProcess {
@@ -474,6 +479,7 @@ export interface BackendProcess {
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<void>;
   cancel(params: CancelInput): Promise<void>;
+  withdraw?(params: WithdrawInput): Promise<boolean>;
   closeSession?(params: { sessionId: SessionId }): Promise<void>;
   setSessionModel(params: { sessionId: SessionId; modelId: string }): Promise<BackendState>;
   isSetSessionModelSupported(): boolean | null;

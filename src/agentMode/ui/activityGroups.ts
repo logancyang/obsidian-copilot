@@ -151,9 +151,14 @@ export function summarizeActivity(
     if (member.part.status === "failed") failed++;
     const family = fileFamilyFor(member.part);
     if (!family) continue;
-    // A failed edit left the note unchanged, so it is not an edited file.
+    // A failed or stopped edit left the note unchanged, so it is not an edited file.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/691
-    if (family === "edit" && member.part.status === "failed") continue;
+    if (
+      family === "edit" &&
+      (member.part.status === "failed" || member.part.status === "cancelled")
+    ) {
+      continue;
+    }
     if (!fileCounts.has(family)) {
       fileOrder.push(family);
       fileCounts.set(family, { paths: new Set(), withoutPath: 0 });

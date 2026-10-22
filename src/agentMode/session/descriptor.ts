@@ -107,6 +107,10 @@ export interface BackendDescriptor {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/509
   readonly midTurnDelivery?: boolean;
 
+  // A backend that can take back a message the agent has not read yet withdraws every such message at Stop and offers to withdraw each one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/747
+  readonly withdraw?: boolean;
+
   getInstallState(settings: CopilotSettings): InstallState;
 
   getResolvedBinaryPath?(settings: CopilotSettings): string | null;

@@ -378,6 +378,19 @@ describe("activityGroups", () => {
       expect(line).toBe("Ran 2 commands, read 1 file");
     });
 
+    it("does not count a stopped edit as an edited file or as a failure (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      const { line, failed } = summarizeActivity([
+        member("a", {
+          vendorToolName: "Edit",
+          status: "cancelled",
+          input: { file_path: "plan.md" },
+        }),
+        member("b", { vendorToolName: "Bash", status: "cancelled" }),
+      ]);
+      expect(line).toBe("Ran 2 commands");
+      expect(failed).toBe(0);
+    });
+
     it("reports no failures for a clean group", () => {
       expect(summarizeActivity([member("a", { vendorToolName: "Bash" })]).failed).toBe(0);
     });

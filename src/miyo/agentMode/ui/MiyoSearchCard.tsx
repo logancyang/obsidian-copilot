@@ -28,18 +28,22 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({
   const listId = useId();
   const running = status === "pending" || status === "in_progress";
   const failed = status === "failed";
+  const stopped = status === "cancelled";
   const label = running
     ? "Searching with Miyo"
     : failed
       ? "Miyo search failed"
-      : "Searched with Miyo";
+      : stopped
+        ? "Miyo search stopped"
+        : "Searched with Miyo";
   const outcome =
-    running || failed || notes === null
+    running || failed || stopped || notes === null
       ? null
       : notes.length === 0
         ? "No notes"
         : pluralize(notes.length, "note");
-  const listed = !running && !failed && notes !== null && notes.length > 0 ? notes : null;
+  const listed =
+    !running && !failed && !stopped && notes !== null && notes.length > 0 ? notes : null;
   const expandable = listed !== null;
 
   return (

@@ -517,6 +517,31 @@ describe("AgentMessageStore", () => {
     });
   });
 
+  describe("stopToolCalls()", () => {
+    it("marks every pending or running tool call stopped, except the ones to keep and those already finished (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      const call = (callId: string, status: "pending" | "in_progress" | "completed") =>
+        store.upsertAgentPart(id, { kind: "tool_call", id: callId, title: callId, status });
+      call("next", "pending");
+      call("bash", "in_progress");
+      call("agent", "in_progress");
+      call("read", "completed");
+
+      expect(store.stopToolCalls(id, new Set(["agent"]))).toBe(true);
+
+      expect(
+        store.getMessage(id)?.parts?.map((p) => (p.kind === "tool_call" ? [p.id, p.status] : null))
+      ).toEqual([
+        ["next", "cancelled"],
+        ["bash", "cancelled"],
+        ["agent", "in_progress"],
+        ["read", "completed"],
+      ]);
+      expect(store.stopToolCalls(id, new Set(["agent"]))).toBe(false);
+    });
+  });
+
   describe("findMessageIdWithToolCall()", () => {
     it("returns the message owning a tool call, or undefined", () => {
       const store = new AgentMessageStore();

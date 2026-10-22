@@ -388,6 +388,18 @@ export class AgentMessageStore {
     return true;
   }
 
+  stopToolCalls(id: string, keepToolCallIds: ReadonlySet<string>): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    const stops = (p: AgentMessagePart): boolean =>
+      p.kind === "tool_call" &&
+      (p.status === "pending" || p.status === "in_progress") &&
+      !keepToolCallIds.has(p.id);
+    if (!msg?.parts?.some(stops)) return false;
+    msg.parts = msg.parts.map((p) => (stops(p) ? { ...p, status: "cancelled" as const } : p));
+    this.touch(msg);
+    return true;
+  }
+
   findMessageIdWithToolCall(toolCallId: string): string | undefined {
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const msg = this.messages[i];

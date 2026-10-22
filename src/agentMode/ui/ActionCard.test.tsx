@@ -50,6 +50,39 @@ describe("ActionCard", () => {
       expect(screen.queryByRole("link")).toBeNull();
     });
 
+    it("renders a stopped command in the past tense with a stop mark, and a stopped edit as Didn't edit (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
+      const { container } = render(
+        <ActionCard
+          part={readTool({
+            id: "bash",
+            vendorToolName: "Bash",
+            title: "Run sleep",
+            input: { command: "sleep 9" },
+            status: "cancelled",
+          })}
+          open={false}
+          onToggle={jest.fn()}
+        />
+      );
+      render(
+        <ActionCard
+          part={readTool({
+            vendorToolName: "Edit",
+            title: "Edit plan.md",
+            input: { file_path: "plan.md" },
+            status: "cancelled",
+          })}
+          open={false}
+          onToggle={jest.fn()}
+        />
+      );
+
+      expect(container.textContent).toMatch(/^Ran /);
+      expect(container.querySelector(".lucide-circle-stop")).toBeTruthy();
+      expect(container.querySelector(".tw-animate-spin")).toBeNull();
+      expect(screen.getByText("Didn't edit plan.md")).toBeTruthy();
+    });
+
     it("renders an in-progress read as plain text without a link", () => {
       render(
         <ActionCard part={readTool({ status: "in_progress" })} open={false} onToggle={jest.fn()} />

@@ -7,6 +7,7 @@ type Uuid = `${string}-${string}-${string}-${string}-${string}`;
 export class FakeClaudeQuery implements AsyncIterable<SDKMessage> {
   readonly inputs: SDKUserMessage[] = [];
   readonly interrupt = jest.fn(async () => undefined);
+  readonly cancelAsyncMessage = jest.fn(async (_uuid: string) => false);
   readonly close = jest.fn(() => this.output.end());
   readonly setModel = jest.fn(async () => undefined);
   readonly setPermissionMode = jest.fn(async () => undefined);
@@ -136,4 +137,8 @@ export function resultFrame(overrides: Record<string, unknown> = {}): SDKMessage
     session_id: "irrelevant",
     ...overrides,
   } as unknown as SDKMessage;
+}
+
+export function commandLifecycle(commandUuid: string, state: string): SDKMessage {
+  return { type: "command_lifecycle", command_uuid: commandUuid, state } as unknown as SDKMessage;
 }

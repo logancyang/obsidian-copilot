@@ -531,6 +531,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       isLoading={isLoading}
       queuedPrompts={queuedPrompts}
       acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
+      canWithdrawMessages={backend.canWithdrawMessages()}
       hasPendingPlanPermission={hasPendingPlanPermission}
       modelPickerOverride={modelPickerOverride ?? undefined}
       modePickerOverride={modePickerOverride ?? undefined}

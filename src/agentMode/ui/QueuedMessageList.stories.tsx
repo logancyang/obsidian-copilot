@@ -34,6 +34,16 @@ export const QueuedForNextStep: StoryObj<Props> = {
   },
 };
 
+export const QueuedWithWithdraw: StoryObj<Props> = {
+  args: {
+    delivering: [
+      { id: "steer-1", text: "Only summarize the first two notes." },
+      { id: "steer-2", text: "Keep each summary to one line." },
+    ],
+    onWithdraw: () => {},
+  },
+};
+
 export const HeldUntilAgentFinishes: StoryObj<Props> = {
   args: {
     held: [

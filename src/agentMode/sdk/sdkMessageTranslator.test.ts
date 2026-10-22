@@ -433,6 +433,35 @@ describe("sdkMessageTranslator", () => {
       expect(out[0].update).toMatchObject({ status: "failed" });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 shows a tool call Claude stopped before it ran as stopped, while a call the user rejected stays failed", () => {
+      const cancelText =
+        "The user doesn't want to take this action right now. STOP what you are doing and wait for the user to tell you how to proceed.";
+      const out = translateSdkMessage(
+        {
+          type: "user",
+          message: {
+            content: [
+              { type: "tool_result", tool_use_id: "tu-cut", content: cancelText, is_error: true },
+              { type: "tool_result", tool_use_id: "tu-denied", content: "No.", is_error: true },
+            ],
+          } as never,
+          tool_result_meta: [
+            { id: "tu-cut", non_execution_kind: "cancelled" },
+            { id: "tu-denied", non_execution_kind: "user-rejected" },
+          ],
+          parent_tool_use_id: null,
+          session_id: SESSION_ID,
+        } as never,
+        SESSION_ID,
+        createTranslatorState()
+      );
+
+      expect(out.map((e) => e.update)).toEqual([
+        expect.objectContaining({ toolCallId: "tu-cut", status: "cancelled" }),
+        expect.objectContaining({ toolCallId: "tu-denied", status: "failed" }),
+      ]);
+    });
+
     it("forwards the pre-edit file content an Edit result carries, keyed by the edited file", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(
@@ -1581,6 +1610,25 @@ describe("sdkMessageTranslator", () => {
         status: "failed",
         content: [{ type: "content", content: { type: "text", text: "File does not exist." } }],
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 replays a tool call Claude stopped before it ran as stopped, and leaves it stopped when the replay ends", () => {
+      const jsonl = transcript(
+        assistantEntry([
+          { type: "tool_use", id: "tool-cut", name: "Bash", input: { command: "ls" } },
+        ]),
+        userEntry(
+          "u-1",
+          [{ type: "tool_result", tool_use_id: "tool-cut", content: "Stopped.", is_error: true }],
+          { toolDenialKind: "cancelled" }
+        )
+      );
+
+      const updates = replay(jsonl).filter((u) => u.sessionUpdate === "tool_call_update");
+
+      expect(updates).toEqual([
+        expect.objectContaining({ toolCallId: "tool-cut", status: "cancelled" }),
+      ]);
     });
 
     it(`marks a tool call the transcript never answered as failed once the replay ends, so it does not show as running forever (${ISSUE_643})`, () => {

@@ -1300,16 +1300,19 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("cancel()", () => {
-      it("interrupts the chat's live query", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 interrupts the chat's live query, withdrawing every message Claude has not read yet, and keeps it open so the next message continues the same query", async () => {
         queryMock.mockImplementation(silent());
         const proc = makeProc();
         const { sessionId } = await proc.newSession({ cwd: "/vault" });
         await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
 
         await proc.cancel({ sessionId });
+        await proc.prompt({ sessionId, promptId: "p2", prompt: [{ type: "text", text: "next" }] });
 
         expect(fakes[0].interrupt).toHaveBeenCalledTimes(1);
         expect(fakes[0].close).not.toHaveBeenCalled();
+        expect(queryMock).toHaveBeenCalledTimes(1);
+        expect((await fakes[0].nextInput(1)).uuid).toBe("p2");
       });
 
       it(`waits for a query that is still starting, so Stop pressed during setup still interrupts it (${ISSUE_175})`, async () => {
@@ -1331,6 +1334,33 @@ describe("ClaudeSdkBackendProcess", () => {
         await Promise.all([sending, cancelling]);
 
         expect(fakes[0].interrupt).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("withdraw()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 asks Claude to cancel the queued message by its prompt id and reports whether it did", async () => {
+        queryMock.mockImplementation(silent());
+        const proc = makeProc();
+        const events: SessionEvent[] = [];
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        proc.registerSessionHandler(sessionId, (event) => events.push(event));
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
+        fakes[0].cancelAsyncMessage.mockResolvedValue(true);
+
+        await expect(proc.withdraw({ sessionId, promptId: "p1" })).resolves.toBe(true);
+
+        expect(fakes[0].cancelAsyncMessage).toHaveBeenCalledWith("p1");
+        expect(events.map((e) => e.update)).toContainEqual({
+          sessionUpdate: "messages_withdrawn",
+          promptIds: ["p1"],
+        });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 reports nothing withdrawn for a chat whose query is not running", async () => {
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await expect(proc.withdraw({ sessionId, promptId: "p1" })).resolves.toBe(false);
       });
     });
 

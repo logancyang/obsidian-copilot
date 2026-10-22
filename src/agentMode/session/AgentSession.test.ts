@@ -5,7 +5,7 @@ import { logWarn } from "@/logger";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
-import { FileSystemAdapter, type App } from "obsidian";
+import { FileSystemAdapter, Notice, type App } from "obsidian";
 import {
   AgentSession,
   type AgentSessionListener,
@@ -291,6 +291,12 @@ function startSession(
 function midTurnDescriptor(): BackendDescriptor {
   return { midTurnDelivery: true } as unknown as BackendDescriptor;
 }
+
+function withdrawingDescriptor(): BackendDescriptor {
+  return { midTurnDelivery: true, withdraw: true } as unknown as BackendDescriptor;
+}
+
+const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
 
 function recordPrompts(mock: MockBackend): PromptInput[] {
   const sent: PromptInput[] = [];
@@ -2270,21 +2276,24 @@ describe("AgentSession", () => {
         expect(order[2]).toContain("third");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 drops a queued message from the list and fails its send when the backend refuses it", async () => {
+      it(`returns a queued message the backend refuses to the composer, fails its send, and tells the user (${ISSUE_747})`, async () => {
         const mock = makeMockBackend();
         const sent = recordPrompts(mock);
         const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
         session.sendPrompt("first");
         await waitFor(() => expect(sent).toHaveLength(1));
         mock.asBackend.prompt = () => Promise.reject(new Error("pipe closed"));
+        jest.mocked(Notice).mockClear();
 
         const steer = session.sendPrompt("second");
 
         await expect(steer.turn).rejects.toThrow("pipe closed");
         expect(session.getQueuedPrompts()).toEqual([]);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
+        expect(Notice).toHaveBeenCalledWith("Failed to send message. Please try again.");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 clears queued messages the agent withdraws, such as when it exits", async () => {
+      it(`clears queued messages the agent withdraws, such as when it exits, and hands them back for the composer (${ISSUE_747})`, async () => {
         const mock = makeMockBackend();
         const sent = recordPrompts(mock);
         const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
@@ -2296,6 +2305,7 @@ describe("AgentSession", () => {
 
         await expect(steer.turn).resolves.toBe("cancelled");
         expect(session.getQueuedPrompts()).toEqual([]);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 shows the reply at send, fills it once the turn starts, and stays running from send to the turn's end", async () => {
@@ -3537,6 +3547,142 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it(`shows the tool calls Stop cut off as stopped, while the card of a background task launched in that turn keeps running (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("run things");
+        for (const [toolCallId, status] of [
+          ["tc-bash", "in_progress"],
+          ["tc-next", "pending"],
+          ["tc-agent", "in_progress"],
+        ] as const) {
+          mock.emitUpdate({ sessionUpdate: "tool_call", toolCallId, title: toolCallId, status });
+        }
+        mock.emitUpdate({
+          sessionUpdate: "task_started",
+          taskId: "task-1",
+          toolCallId: "tc-agent",
+          kind: "subagent",
+          description: "Research",
+        });
+
+        await session.cancel();
+        finishPrompt("cancelled");
+        await turn;
+
+        expect(aiMessage(session)?.parts?.map((p) => p.kind === "tool_call" && p.status)).toEqual([
+          "cancelled",
+          "cancelled",
+          "in_progress",
+        ]);
+      });
+
+      it(`returns the messages a withdrawing backend takes back at Stop to the composer in send order, and never shows or runs them (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        const first = session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        const second = session.sendPrompt("second");
+        const third = session.sendPrompt("third");
+        await waitFor(() => expect(sent).toHaveLength(3));
+        mock.cancel.mockImplementation(async () => {
+          emit({
+            sessionUpdate: "messages_withdrawn",
+            promptIds: [sent[1].promptId, sent[2].promptId],
+          });
+        });
+
+        await session.cancel();
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "cancelled" });
+
+        await expect(first.turn).resolves.toBe("cancelled");
+        await expect(second.turn).resolves.toBe("cancelled");
+        await expect(third.turn).resolves.toBe("cancelled");
+        expect(session.getQueuedPrompts()).toEqual([]);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second", "third"]);
+        expect(bubbles(session).map((b) => b.message)).not.toContain("second");
+      });
+
+      it(`withdraws at Stop a queued message that is still waiting to be handed to a withdrawing backend, so it never reaches the agent (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const order: string[] = [];
+        let acceptSecond!: () => void;
+        mock.asBackend.prompt = (input) => {
+          order.push(promptText(input));
+          if (order.length !== 2) return Promise.resolve();
+          return new Promise<void>((resolve) => (acceptSecond = resolve));
+        };
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        session.sendPrompt("second");
+        const third = session.sendPrompt("third");
+        await waitFor(() => expect(order).toHaveLength(2));
+
+        await session.cancel();
+        acceptSecond();
+
+        await expect(third.turn).resolves.toBe("cancelled");
+        expect(order).toHaveLength(2);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["third"]);
+      });
+
+      it(`ends the stopped turn's wait when its prompt is withdrawn even after a second Stop cancelled a send waiting behind it, so later sends go out (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        await session.cancel();
+        const waiting = session.sendPrompt("second");
+
+        await session.cancel();
+        await waiting.turn;
+        mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [sent[0].promptId] });
+        session.sendPrompt("third");
+
+        await waitFor(() => expect(sent).toHaveLength(2));
+        expect(promptText(sent[1])).toContain("third");
+      });
+
+      it(`keeps a send made right after Stop behind the stopped turn's end even once its queued messages are withdrawn, so that turn's late output never lands in the new reply (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        const first = session.sendPrompt("first");
+        await waitFor(() => expect(sent).toHaveLength(1));
+        emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
+        emit({ sessionUpdate: "turn_started", turnId: "t1" });
+        emit({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-bash",
+          title: "Bash",
+          status: "in_progress",
+        });
+        session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        await session.cancel();
+        emit({ sessionUpdate: "messages_withdrawn", promptIds: [sent[1].promptId] });
+        await first.turn;
+        session.sendPrompt("next");
+        emit({ sessionUpdate: "tool_call_update", toolCallId: "tc-bash", status: "failed" });
+        expect(sent).toHaveLength(2);
+        emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "cancelled" });
+
+        await waitFor(() => expect(sent).toHaveLength(3));
+        expect(aiMessages(session).map((m) => m.parts?.length ?? 0)).toEqual([1, 0]);
+        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
+          id: "tc-bash",
+          status: "cancelled",
+        });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 keeps a message queued for the agent's next step through Stop, and shows its turn when the agent runs it", async () => {
         const mock = makeMockBackend();
         const emit = (update: SessionEvent["update"]) => mock.emitUpdate(update);
@@ -3942,7 +4088,7 @@ describe("AgentSession", () => {
         expect(ai[1]?.parts?.[0]).toMatchObject({
           kind: "tool_call",
           id: "tc-cancelled",
-          status: "in_progress",
+          status: "cancelled",
         });
 
         resolvePrompts[1]({ stopReason: "cancelled" });
@@ -3991,6 +4137,198 @@ describe("AgentSession", () => {
 
         finishPrompt("cancelled");
         await turn;
+      });
+    });
+
+    describe("withdrawPrompt()", () => {
+      function queueTwo(mock: MockBackend) {
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        const second = session.sendPrompt("second");
+        return { sent, session, second };
+      }
+
+      it(`asks the backend to withdraw a queued message by its id, and once it does the message leaves the list and goes back to the composer (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const { sent, session, second } = queueTwo(mock);
+        await waitFor(() => expect(sent).toHaveLength(2));
+        const withdraw = jest.fn(async ({ promptId }: { promptId: string }) => {
+          mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+          return true;
+        });
+        mock.asBackend.withdraw = withdraw;
+
+        await session.withdrawPrompt(second.userMessageId);
+
+        expect(withdraw).toHaveBeenCalledWith({
+          sessionId: "acp-1",
+          promptId: second.userMessageId,
+        });
+        await expect(second.turn).resolves.toBe("cancelled");
+        expect(session.getQueuedPrompts()).toEqual([]);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
+      });
+
+      it(`shows a message the backend can no longer withdraw as sent in the transcript at once, and its later echo adds nothing (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const { sent, session, second } = queueTwo(mock);
+        await waitFor(() => expect(sent).toHaveLength(2));
+        mock.asBackend.withdraw = async () => false;
+
+        await session.withdrawPrompt(second.userMessageId);
+        const shown = bubbles(session).filter((b) => b.sender === USER_SENDER);
+        mock.emitUpdate({ sessionUpdate: "message_delivered", promptId: second.userMessageId });
+
+        expect(shown).toEqual([
+          { sender: USER_SENDER, message: "first" },
+          { sender: USER_SENDER, message: "second" },
+        ]);
+        expect(session.getQueuedPrompts()).toEqual([]);
+        expect(session.takeWithdrawnPrompts()).toEqual([]);
+        expect(bubbles(session).filter((b) => b.sender === USER_SENDER)).toEqual(shown);
+      });
+
+      it(`takes back a queued message that is still waiting to be handed over without asking the backend, and never sends it (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        let acceptFirst!: () => void;
+        const sent: string[] = [];
+        mock.asBackend.prompt = (input) => {
+          sent.push(promptText(input));
+          return new Promise<void>((resolve) => (acceptFirst = resolve));
+        };
+        const withdraw = jest.fn(async () => true);
+        mock.asBackend.withdraw = withdraw;
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        const second = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(1));
+
+        await session.withdrawPrompt(second.userMessageId);
+        acceptFirst();
+
+        await expect(second.turn).resolves.toBe("cancelled");
+        expect(withdraw).not.toHaveBeenCalled();
+        expect(sent).toHaveLength(1);
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
+      });
+
+      it(`sends a web page in full again when the only message that carried it was withdrawn before the agent read it (${ISSUE_747})`, async () => {
+        const processContextWebTabs = jest
+          .fn()
+          .mockResolvedValue(
+            "<active_web_tab>\n<content>\nPAGE BODY\n</content>\n</active_web_tab>"
+          );
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
+          const mock = makeMockBackend();
+          const { sent, session } = queueTwo(mock);
+          const context = {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com/page", title: "Page", isActive: true }],
+          };
+          const withPage = session.sendPrompt("third", context);
+          await waitFor(() => expect(sent).toHaveLength(3));
+          mock.asBackend.withdraw = async ({ promptId }) => {
+            mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+            return true;
+          };
+          await session.withdrawPrompt(withPage.userMessageId);
+
+          session.sendPrompt("third", context);
+
+          await waitFor(() => expect(sent).toHaveLength(4));
+          expect(promptText(sent[3])).toContain("PAGE BODY");
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
+
+      it(`sends a web page in full again when its message was withdrawn while the page was still being read (${ISSUE_747})`, async () => {
+        const page = "<active_web_tab>\n<content>\nPAGE BODY\n</content>\n</active_web_tab>";
+        let finishReading!: (block: string) => void;
+        const processContextWebTabs = jest
+          .fn()
+          .mockReturnValueOnce(new Promise<string>((resolve) => (finishReading = resolve)))
+          .mockResolvedValue(page);
+        const getInstance = jest
+          .spyOn(ContextProcessor, "getInstance")
+          .mockReturnValue({ processContextWebTabs } as never);
+        try {
+          const mock = makeMockBackend();
+          const { sent, session } = queueTwo(mock);
+          await waitFor(() => expect(sent).toHaveLength(2));
+          const context = {
+            notes: [],
+            urls: [],
+            webTabs: [{ url: "https://example.com/page", title: "Page", isActive: true }],
+          };
+          const withPage = session.sendPrompt("third", context);
+          await waitFor(() => expect(processContextWebTabs).toHaveBeenCalledTimes(1));
+          await session.withdrawPrompt(withPage.userMessageId);
+          finishReading(page);
+          await expect(withPage.turn).resolves.toBe("cancelled");
+
+          session.sendPrompt("third", context);
+
+          await waitFor(() => expect(sent).toHaveLength(3));
+          expect(promptText(sent[2])).toContain("PAGE BODY");
+        } finally {
+          getInstance.mockRestore();
+        }
+      });
+    });
+
+    describe("takeWithdrawnPrompts()", () => {
+      it(`hands over each withdrawn message once, in send order with its context and images, then nothing (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        const image = { type: "image" as const, mimeType: "image/png", data: "AQID" };
+        session.sendPrompt("second", undefined, [image]);
+        session.sendPrompt("third");
+        await waitFor(() => expect(sent).toHaveLength(3));
+
+        mock.emitUpdate({
+          sessionUpdate: "messages_withdrawn",
+          promptIds: [sent[2].promptId, sent[1].promptId],
+        });
+
+        expect(session.takeWithdrawnPrompts()).toEqual([
+          expect.objectContaining({ text: "second", promptContent: [image] }),
+          expect.objectContaining({ text: "third" }),
+        ]);
+        expect(session.takeWithdrawnPrompts()).toEqual([]);
+      });
+
+      it(`hands back the queued messages a disconnect withdrew (${ISSUE_747})`, async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        session.sendPrompt("first");
+        session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        mock.emitUpdate({ sessionUpdate: "session_disconnected", error: new Error("exited") });
+
+        expect(session.takeWithdrawnPrompts().map((p) => p.text)).toEqual(["second"]);
+      });
+    });
+
+    describe("canWithdrawPrompts()", () => {
+      it(`reports whether the backend can take back messages the agent has not read (${ISSUE_747})`, () => {
+        const mock = makeMockBackend();
+
+        expect(
+          makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor }).canWithdrawPrompts()
+        ).toBe(true);
+        expect(
+          makeSession(mock, { getDescriptor: () => OpencodeBackendDescriptor }).canWithdrawPrompts()
+        ).toBe(false);
       });
     });
 

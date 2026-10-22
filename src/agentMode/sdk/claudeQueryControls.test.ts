@@ -6,7 +6,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { cancelQueuedMessage, interruptAndCancelQueued } from "./claudeQueryControls";
+import { cancelQueuedMessage } from "./claudeQueryControls";
 
 type ControlPayload = Record<string, unknown>;
 
@@ -125,25 +125,6 @@ function startRealQuery(responsesBySubtype: Record<string, Record<string, unknow
 }
 
 describe("claudeQueryControls", () => {
-  describe("interruptAndCancelQueued()", () => {
-    it("sends the installed SDK's interrupt request with cancel_queued and resolves to the CLI's receipt of cancelled message uuids", async () => {
-      const { query, cli, close } = startRealQuery({
-        interrupt: { still_queued: [], cancelled: [QUEUED_UUID] },
-      });
-
-      try {
-        const receipt = await interruptAndCancelQueued(query);
-
-        expect(cli.receivedControlRequests).toEqual([
-          { subtype: "interrupt", cancel_queued: true },
-        ]);
-        expect(receipt).toEqual({ still_queued: [], cancelled: [QUEUED_UUID] });
-      } finally {
-        close();
-      }
-    });
-  });
-
   describe("cancelQueuedMessage()", () => {
     it("sends the installed SDK's cancel_async_message request for the uuid and resolves to whether the CLI withdrew it", async () => {
       const { query, cli, close } = startRealQuery({
