@@ -235,7 +235,10 @@ function AccessPanel({
     try {
       win.open(await access.open(docId), "_blank", "noopener,noreferrer");
     } catch (caught) {
-      setError({ message: errorText(caught) });
+      setError({
+        message: errorText(caught),
+        upgradeUrl: caught instanceof OpenArtifactsClientError ? caught.upgradeUrl : undefined,
+      });
     }
   };
 
@@ -367,21 +370,19 @@ export function OpenArtifactsModalContent({
             ? "OpenArtifacts access required"
             : `${actionLabel(result.action)} failed`}
         </div>
-        <p className="tw-m-0 tw-text-muted">
-          {result.message}
-          {result.upgradeUrl && (
-            <>
-              {" "}
-              <a href={result.upgradeUrl} target="_blank" rel="noopener noreferrer">
-                Upgrade
-              </a>
-            </>
-          )}
-        </p>
+        <p className="tw-m-0 tw-text-muted">{result.message}</p>
         <div className="tw-flex tw-justify-end tw-gap-2">
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
+          {/* The upgrade is the screen's one way forward, so it is the primary action. https://github.com/Brevilabs/obsidian-copilot-private/issues/746 */}
+          {result.upgradeUrl && (
+            <Button asChild>
+              <a href={result.upgradeUrl} target="_blank" rel="noopener noreferrer">
+                Upgrade to Copilot Plus
+              </a>
+            </Button>
+          )}
           {result.retryable && (
             <Button onClick={retry} disabled={working}>
               {working ? "Retrying…" : "Retry"}

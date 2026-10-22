@@ -25,7 +25,6 @@ import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
 } from "@/agentMode/backends/shared/builtinSkillEnv";
-import { getVaultBase } from "@/utils/vaultPath";
 import { urlDestination } from "@/modelManagement";
 import type { Destination } from "@/types/destination";
 import type {
@@ -346,7 +345,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
-      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion, getVaultBase(args.app) ?? ""),
+      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

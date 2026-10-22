@@ -299,7 +299,7 @@ describe("OpenArtifactsModal", () => {
         );
       });
 
-      it(`${ISSUE} shows an Upgrade link on a failed first private publish and creates nothing`, async () => {
+      it(`${ISSUE} offers Upgrade to Copilot Plus as the main action on a failed first private publish and creates nothing`, async () => {
         const onConfirm = createConfirmMock().mockResolvedValue({
           kind: "failure",
           action: "publish",
@@ -315,7 +315,7 @@ describe("OpenArtifactsModal", () => {
         await clickButton("Yes, publish");
 
         expect(await screen.findByText(/does not include private sharing/)).toBeTruthy();
-        const link = screen.getByRole("link", { name: "Upgrade" });
+        const link = screen.getByRole("link", { name: "Upgrade to Copilot Plus" });
         expect(link.getAttribute("href")).toBe(
           "https://www.obsidiancopilot.com/pricing?utm_medium=openartifacts_private_sharing"
         );
@@ -336,7 +336,7 @@ describe("OpenArtifactsModal", () => {
         await clickButton("Yes, publish");
 
         expect(await screen.findByText("Nope.")).toBeTruthy();
-        expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull();
+        expect(screen.queryByRole("link", { name: /Upgrade/ })).toBeNull();
       });
 
       it("allows native close while a confirmed action is pending", async () => {

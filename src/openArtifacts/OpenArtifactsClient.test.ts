@@ -1,4 +1,8 @@
-import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import {
+  ACCESS_UPGRADE_URL,
+  OpenArtifactsClient,
+  OpenArtifactsClientError,
+} from "@/openArtifacts/OpenArtifactsClient";
 import { OPENARTIFACTS_API_ORIGIN } from "@/openArtifacts/constants";
 import type { OpenArtifactsDocument } from "@/openArtifacts/types";
 import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsidian";
@@ -31,6 +35,7 @@ async function expectClientError(
     code: string;
     status: number | null;
     retryable: boolean;
+    upgradeUrl?: string;
   }
 ): Promise<void> {
   try {
@@ -95,26 +100,43 @@ describe("OpenArtifactsClient", () => {
           "unauthorized",
           "That license key is not valid for publishing.",
           false,
+          ACCESS_UPGRADE_URL,
         ],
         [
           "an ineligible plan",
           401,
           "unauthorized",
-          "Publishing is currently limited to lifetime license holders.",
+          "Publishing requires a paid plan.",
           false,
+          ACCESS_UPGRADE_URL,
         ],
-        ["an oversized document", 413, "too_large", "That push is too large to accept.", false],
-        ["a quota limit", 429, "quota_exceeded", "You have used all of today's pushes.", false],
+        [
+          "an oversized document",
+          413,
+          "too_large",
+          "That push is too large to accept.",
+          false,
+          undefined,
+        ],
+        [
+          "a quota limit",
+          429,
+          "quota_exceeded",
+          "You have used all of today's pushes.",
+          false,
+          undefined,
+        ],
         [
           "a license validation outage",
           500,
           "internal",
           "License validation is temporarily unavailable.",
           true,
+          undefined,
         ],
       ])(
-        "preserves the structured error for %s",
-        async (_case, status, code, message, retryable) => {
+        "preserves the structured error for %s, with the upgrade link on an access refusal",
+        async (_case, status, code, message, retryable, upgradeUrl) => {
           mockedRequestUrl.mockResolvedValue(response(status, { error: { code, message } }));
 
           await expectClientError(
@@ -124,6 +146,7 @@ describe("OpenArtifactsClient", () => {
               code,
               status,
               retryable,
+              upgradeUrl,
             }
           );
         }

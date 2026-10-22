@@ -2,7 +2,7 @@ import type {
   OpenArtifactsModalOptions,
   OpenArtifactsModalResult,
 } from "@/components/modals/OpenArtifactsModal";
-import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import { ACCESS_UPGRADE_URL, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { OpenArtifactsDocumentTooLargeError } from "@/openArtifacts/openArtifactsDocument";
 import type { OpenArtifactsLedgerEntry } from "@/openArtifacts/openArtifactsLedger";
@@ -881,14 +881,15 @@ describe("OpenArtifactsPublisher", () => {
         expect(harness.client.publish).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers the upgrade link when OpenArtifacts refuses the key", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 keeps the client's upgrade link when OpenArtifacts refuses the key", async () => {
         const harness = createHarness();
         harness.client.publish.mockRejectedValue(
           new OpenArtifactsClientError(
             "Publishing requires a paid plan.",
             "unauthorized",
             401,
-            false
+            false,
+            ACCESS_UPGRADE_URL
           )
         );
 

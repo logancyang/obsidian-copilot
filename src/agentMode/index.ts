@@ -37,11 +37,7 @@ import {
   parseWithMiyo,
 } from "@/miyo/miyoParseTool";
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
-import {
-  createOpenArtifactsTools,
-  OPENARTIFACTS_TOOL_NAMES,
-  readLocalText,
-} from "@/openArtifacts/openArtifactsTools";
+import { createOpenArtifactsTools, readLocalText } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
 import {
@@ -137,7 +133,7 @@ export function isCopilotToolOn(toolName: string, settings: CopilotSettings): bo
       ? isMiyoParseActive(settings)
       : toolName === MIYO_SEARCH_TOOL_NAME
         ? isMiyoSearchActive(settings)
-        : OPENARTIFACTS_TOOL_NAMES.includes(toolName);
+        : true;
 }
 
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {

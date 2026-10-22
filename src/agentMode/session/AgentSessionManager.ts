@@ -1747,7 +1747,7 @@ export class AgentSessionManager {
     cwd: string
   ): Promise<ReadonlyArray<AgentMcpServer>> {
     const server = this.opts.copilotMcpServer;
-    if (!server?.hasEnabledTools()) return EMPTY_MCP_SERVERS;
+    if (!server) return EMPTY_MCP_SERVERS;
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;

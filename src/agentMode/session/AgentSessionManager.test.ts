@@ -462,11 +462,9 @@ const FEEDBACK_CHANNEL = Object.freeze({
 });
 
 function buildCopilotMcpServer({
-  toolsOn = true,
   connect = jest.fn(async () => FEEDBACK_CHANNEL),
-}: { toolsOn?: boolean; connect?: jest.Mock } = {}) {
+}: { connect?: jest.Mock } = {}) {
   return {
-    hasEnabledTools: jest.fn(() => toolsOn),
     connect,
     disconnect: jest.fn(),
     dispose: jest.fn(),
@@ -981,18 +979,6 @@ describe("AgentSessionManager", () => {
         const onOffer = copilotMcpServer.connect.mock.calls[0][1] as (draft: unknown) => string;
         expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
         expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
-      });
-
-      it("starts a session without Copilot's MCP server while no hosted tool is on", async () => {
-        const copilotMcpServer = buildCopilotMcpServer({ toolsOn: false });
-        const mgr = buildManager({ copilotMcpServer });
-
-        await mgr.createSession();
-
-        expect(copilotMcpServer.connect).not.toHaveBeenCalled();
-        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
-          expect.objectContaining({ mcpServers: [] })
-        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {

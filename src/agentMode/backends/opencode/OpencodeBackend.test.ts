@@ -4,7 +4,6 @@ import * as path from "path";
 import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { OPENCODE_COPILOT_PLUGIN_SOURCE } from "./opencodeCopilotPlugin";
 import { updateAgentModeBackendFields } from "@/settings/model";
-import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
 import type { OpencodeBackendSettings } from "@/settings/model";
 import type {
@@ -998,7 +997,6 @@ describe("OpencodeBackend", () => {
         expect(desc.command).toBe("/path/to/opencode");
         expect(desc.args).toEqual(["acp", "--print-logs"]);
         expect(desc.cwd).toBe("/vault/abs");
-        expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault/abs");
         expect(desc.env.OPENCODE_CONFIG_CONTENT).toBeDefined();
         const cfg: GeneratedOpencodeConfig = JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string);
         expect(cfg.providers.anthropic.settings).toEqual({ apiKey: "anth-xyz" });

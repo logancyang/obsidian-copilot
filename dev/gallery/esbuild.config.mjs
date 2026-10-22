@@ -15,7 +15,6 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "dev/gallery/main.js",
-  loader: { ".md": "text" },
   plugins: [nodeModuleShim, svgrPlugin],
   define: {
     global: "window",

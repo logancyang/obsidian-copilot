@@ -150,7 +150,6 @@ export class OpencodeBackend implements AcpBackend {
 
     const builtinSkillEnv = await buildBuiltinSkillEnv(
       this.#deps.clientVersion,
-      ctx.vaultBasePath,
       selfHostSearchChannel
     );
 

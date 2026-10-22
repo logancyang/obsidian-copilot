@@ -92,7 +92,6 @@ const SEND_FEEDBACK_HOSTED_TOOL: ServerTool = Object.freeze({
 type ToolSwitch = (toolName: string) => boolean;
 
 export interface CopilotMcpServer {
-  hasEnabledTools(): boolean;
   connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer>;
   disconnect(sessionKey: string): void;
   dispose(): void;
@@ -118,9 +117,6 @@ export function createCopilotMcpServer(
   let disposed = false;
 
   return Object.freeze({
-    hasEnabledTools(): boolean {
-      return hostedTools.some((tool) => isToolOn(tool.definition.name));
-    },
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>

@@ -1,5 +1,4 @@
 import { getSettings, resetSettings, setSettings, updateSetting } from "@/settings/model";
-import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
@@ -79,14 +78,13 @@ describe("CodexBackend", () => {
         useCodexSettings({ binaryPath: "/usr/local/bin/codex-acp" });
       });
 
-      it("launches the validated adapter entry with the workspace root in its environment", async () => {
+      it("launches the validated adapter entry", async () => {
         const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(desc.command).toBe(
           "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
         );
         expect(desc.args).toEqual([]);
-        expect(desc.env[OPENARTIFACTS_WORKSPACE_ROOT_ENV]).toBe("/vault");
       });
 
       it("encodes the shared product prompt with the question-card steering byte for byte", async () => {

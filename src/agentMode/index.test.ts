@@ -358,19 +358,6 @@ describe("agentMode", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 always hands sessions Copilot's MCP server, since the OpenArtifacts tools have no switch", () => {
-      mockSettings = {
-        ...mockSettings,
-        agentMode: { ...mockSettings.agentMode, offerFeedbackCards: false },
-        enableMiyo: false,
-        isPaidUser: false,
-        plusLicenseKey: "",
-      };
-      createAgentSessionManager({} as App, plugin);
-      const { copilotMcpServer } = jest.mocked(AgentSessionManager).mock.calls[0][2];
-
-      expect(copilotMcpServer?.hasEnabledTools()).toBe(true);
-    });
     it(`refreshes a spawn-config backend when a model's published effort levels change ${LINEUP_ISSUE}`, () => {
       createAgentSessionManager({} as App, plugin);
 
@@ -592,25 +579,7 @@ describe("isCopilotToolOn()", () => {
     }
   );
 
-  it.each([
-    ["a Plus user", { isPaidUser: true, plusLicenseKey: "plus-key" }],
-    ["a user with no key", { isPaidUser: false, plusLicenseKey: "" }],
-  ])(
-    "https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers every OpenArtifacts tool to %s",
-    (_user, update) => {
-      for (const name of [
-        "openartifacts_publish",
-        "openartifacts_share",
-        "openartifacts_open",
-        "openartifacts_comments",
-        "openartifacts_unpublish",
-      ]) {
-        expect(isCopilotToolOn(name, off(update))).toBe(true);
-      }
-    }
-  );
-
-  it("offers no tool it does not host", () => {
-    expect(isCopilotToolOn("unknown_tool", off({}))).toBe(false);
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers the OpenArtifacts tools to every user", () => {
+    expect(isCopilotToolOn("openartifacts_publish", off({ plusLicenseKey: "" }))).toBe(true);
   });
 });

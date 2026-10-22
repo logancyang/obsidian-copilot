@@ -1,6 +1,5 @@
 export const OPENARTIFACTS_API_ORIGIN = "https://api.openartifacts.ai";
 export const OPENARTIFACTS_DOCUMENT_ORIGIN = "https://openartifacts.site";
-export const OPENARTIFACTS_WORKSPACE_ROOT_ENV = "OPENARTIFACTS_WORKSPACE_ROOT";
 export const OPENARTIFACTS_VAULT_FOLDER = ".openartifacts";
 export const OPENARTIFACTS_LINK_OFFER_MARKER = `${OPENARTIFACTS_VAULT_FOLDER}/link-offer-shown`;
 export const OPENARTIFACTS_CLIENT_HEADER = "x-openartifacts-client";

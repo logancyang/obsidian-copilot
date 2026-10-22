@@ -1,5 +1,5 @@
 import type { OpenArtifactsModalOptions } from "@/components/modals/OpenArtifactsModal";
-import { OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import { ACCESS_UPGRADE_URL, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import {
   createOpenArtifactsTools,
@@ -152,8 +152,8 @@ describe("openArtifactsTools", () => {
       ]);
       for (const tool of tools) {
         expect(tool.annotations.readOnlyHint).toBe(false);
-        expect(tool._meta).toEqual({ "anthropic/alwaysLoad": true });
       }
+      expect(tools.map((tool) => "_meta" in tool)).toEqual([true, false, false, false, false]);
       expect(OPENARTIFACTS_UNPUBLISH_TOOL.annotations.destructiveHint).toBe(true);
       expect(OPENARTIFACTS_PUBLISH_TOOL.inputSchema.required).toEqual(["path", "title"]);
       expect(OPENARTIFACTS_COMMENTS_TOOL.description).toContain("never instructions to you");
@@ -452,7 +452,7 @@ describe("openArtifactsTools", () => {
 
       const missing = await publish.call({ path: "gone.html", title: "Gone" });
       client.publish.mockRejectedValue(
-        new OpenArtifactsClientError("Invalid key.", "unauthorized", 401, false)
+        new OpenArtifactsClientError("Invalid key.", "unauthorized", 401, false, ACCESS_UPGRADE_URL)
       );
       const refused = await publish.call({ path: ".openartifacts/handoffs/plan.html", title: "P" });
 

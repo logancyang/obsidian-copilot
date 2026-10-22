@@ -37,6 +37,13 @@ const AMBIGUOUS_PUBLISH_MESSAGE =
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/707
 export const PRIVATE_UNAVAILABLE_CODE = "private_unavailable";
 
+// Every refusal of access, in the dialog or from an agent, offers the same upgrade link.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+export const ACCESS_UPGRADE_URL = createProductUrl(
+  PRODUCT_URLS.COPILOT_PRICING,
+  "openartifacts_access"
+);
+
 export class OpenArtifactsClientError extends Error {
   constructor(
     message: string,
@@ -446,7 +453,9 @@ function errorFromResponse(response: RequestUrlResponse): OpenArtifactsClientErr
     code === "internal" || response.status >= 500,
     response.status === 402 && limit === "privateSharing"
       ? privateSharingUpgradeUrl(upgradeUrl)
-      : undefined
+      : response.status === 401 && code === "unauthorized"
+        ? ACCESS_UPGRADE_URL
+        : undefined
   );
 }
 
