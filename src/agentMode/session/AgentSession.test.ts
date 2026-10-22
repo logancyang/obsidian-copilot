@@ -5909,6 +5909,44 @@ describe("AgentSession", () => {
         });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/748 keeps the launching card of a stopped command started inside a subagent stopped when the command's failed result arrives after the stop", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const fromSubagent = (update: SessionEvent["update"]) =>
+          mock.emit({ sessionId: "acp-1", update, taskToolCallId: "tool-agent" });
+        mock.emitUpdate(TASK_STARTED);
+        fromSubagent({
+          sessionUpdate: "tool_call",
+          toolCallId: "tool-bash",
+          title: "npm test",
+          kind: "execute",
+          status: "in_progress",
+        });
+        fromSubagent({
+          sessionUpdate: "task_started",
+          taskId: "task-2",
+          toolCallId: "tool-bash",
+          kind: "command",
+          description: "npm test",
+        });
+
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-2", status: "stopped" });
+        fromSubagent({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tool-bash",
+          status: "failed",
+          content: [{ type: "content", content: { type: "text", text: "Command was stopped" } }],
+        });
+
+        expect(
+          session.getTaskMessages("task-1")[0]?.parts?.find((p) => p.kind === "tool_call")
+        ).toMatchObject({
+          id: "tool-bash",
+          status: "cancelled",
+          output: [{ type: "text", text: "Command was stopped" }],
+        });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 applies a task update reported from inside a task to the task, not to its messages", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });

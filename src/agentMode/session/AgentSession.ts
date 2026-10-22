@@ -1493,16 +1493,7 @@ export class AgentSession {
       case "tool_call_update": {
         if (targetMessageId !== placeholderId) this.currentTurnShowedActivityElsewhere = true;
         const existing = this.findToolCallPart(targetMessageId, update.toolCallId);
-        // A task's end decides its launching card's status; the tool's result can arrive after a stop and must not turn it into a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
-        const taskStatus = [...this.tasks.values()].find(
-          (task) => task.toolCallId === update.toolCallId
-        )?.status;
-        const merged = mergeToolCallUpdate(
-          existing,
-          taskStatus && taskStatus !== "running"
-            ? { ...update, status: LAUNCH_CARD_STATUS[taskStatus] }
-            : update
-        );
+        const merged = mergeToolCallUpdate(existing, this.withEndedTaskStatus(update));
         // A late update to an earlier turn's call must not count as this turn's edit.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
         if (!isPriorToolUpdate && merged.kind === "tool_call") {
@@ -1643,6 +1634,18 @@ export class AgentSession {
     this.publishTasks();
   }
 
+  // A task's end decides its launching card's status; the tool's result can arrive after a stop and must not turn it into a failure. https://github.com/Brevilabs/obsidian-copilot-private/issues/748
+  private withEndedTaskStatus<T extends { toolCallId: string }>(
+    update: T
+  ): T | (T & { status: AgentToolStatus }) {
+    const taskStatus = [...this.tasks.values()].find(
+      (task) => task.toolCallId === update.toolCallId
+    )?.status;
+    return taskStatus && taskStatus !== "running"
+      ? { ...update, status: LAUNCH_CARD_STATUS[taskStatus] }
+      : update;
+  }
+
   private updateLaunchCard(delta: ToolCallDelta): void {
     for (const store of [this.store, ...this.taskContent.values()]) {
       const messageId = store.findMessageIdWithToolCall(delta.toolCallId);
@@ -1687,7 +1690,10 @@ export class AgentSession {
         const existing = store
           .getMessage(messageId)
           ?.parts?.find((part) => part.kind === "tool_call" && part.id === update.toolCallId);
-        changed = store.upsertAgentPart(messageId, mergeToolCallUpdate(existing, update));
+        changed = store.upsertAgentPart(
+          messageId,
+          mergeToolCallUpdate(existing, this.withEndedTaskStatus(update))
+        );
         break;
       }
       default:
