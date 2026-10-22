@@ -13,7 +13,11 @@ import type {
   TurnEnd,
 } from "@/agentMode/session/types";
 import { createFanoutTurn, FanoutOrchestrator, type FanoutHost } from "./FanoutOrchestrator";
-import { FANOUT_ALL_FAILED_SUMMARY } from "./fanoutTypes";
+import {
+  FANOUT_AGENT_TIMEOUT_ERROR,
+  FANOUT_AGENT_TIMEOUT_MS,
+  FANOUT_ALL_FAILED_SUMMARY,
+} from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -33,6 +37,8 @@ interface MockProc {
   emit: (event: SessionEvent) => void;
   setSessionMode: jest.Mock;
   cancel: jest.Mock;
+  closeSession: jest.Mock;
+  cancelled: () => Promise<void>;
   resolvePrompt: () => void;
   rejectPrompt: (err: unknown) => void;
   endTurnsAtOnce: (onPrompt?: () => void) => void;
@@ -67,7 +73,10 @@ function makeMockProc(sessionId: string): MockProc {
     if (next) apply(next);
   };
   const setSessionMode = jest.fn(async () => ({ model: null, mode: null }));
-  const cancel = jest.fn(async () => undefined);
+  let markCancelled!: () => void;
+  const cancelledOnce = new Promise<void>((resolve) => (markCancelled = resolve));
+  const cancel = jest.fn(async () => markCancelled());
+  const closeSession = jest.fn(async () => undefined);
   const proc = {
     isRunning: () => true,
     onExit: () => () => {},
@@ -81,6 +90,7 @@ function makeMockProc(sessionId: string): MockProc {
     newSession: jest.fn(() => Promise.resolve({ sessionId, state: emptyState() })),
     prompt: jest.fn(acceptPrompt),
     cancel,
+    closeSession,
     setSessionModel: jest.fn(async () => ({ model: null, mode: null })),
     isSetSessionModelSupported: () => true,
     setSessionMode,
@@ -97,6 +107,8 @@ function makeMockProc(sessionId: string): MockProc {
     emit: (event) => handler?.(event),
     setSessionMode,
     cancel,
+    closeSession,
+    cancelled: () => cancelledOnce,
     resolvePrompt: () => settleOldest((p) => p.resolve()),
     rejectPrompt: (err) => settleOldest((p) => p.reject(err)),
     endTurnsAtOnce: (onPrompt) =>
@@ -136,6 +148,10 @@ function opencodeEnabling(baseModelIds: string[]): BackendDescriptor {
         credentialState: "ok" as const,
       })),
   };
+}
+
+function update(sessionId: string, sessionUpdate: SessionEvent["update"]): SessionEvent {
+  return { sessionId, update: sessionUpdate };
 }
 
 function textChunk(sessionId: string, text: string): SessionEvent {
@@ -320,7 +336,7 @@ describe("FanoutOrchestrator", () => {
         expect(procs.get("opencode")!.setSessionMode).not.toHaveBeenCalled();
       });
 
-      it("cancels EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 cancels and closes EVERY in-flight sub-session and lands each slot terminal-cancelled on abort", async () => {
         const { host, procs } = makeHost({
           claude: { sessionId: "s-claude" },
           codex: { sessionId: "s-codex" },
@@ -339,10 +355,189 @@ describe("FanoutOrchestrator", () => {
 
         expect(procs.get("claude")!.cancel).toHaveBeenCalledWith({ sessionId: "s-claude" });
         expect(procs.get("codex")!.cancel).toHaveBeenCalledWith({ sessionId: "s-codex" });
+        expect(procs.get("claude")!.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
+        expect(procs.get("codex")!.closeSession).toHaveBeenCalledWith({ sessionId: "s-codex" });
         expect(turn.answers.claude.status).toBe("cancelled");
         expect(turn.answers.codex.status).toBe("cancelled");
         expect(procs.get("claude")!.promptCount()).toBe(1);
         expect(turn.summary.status).toBe("pending");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 closes every answer and summary sub-session once it is final, including a failed one", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const runPromise = new FanoutOrchestrator(host).run(runInput(["claude", "codex"]));
+
+        await Promise.all([procs.get("claude")!.prompted(1), procs.get("codex")!.prompted(1)]);
+        procs.get("claude")!.emit(textChunk("s-claude", "ok"));
+        procs.get("claude")!.resolvePrompt();
+        procs.get("codex")!.rejectPrompt(new Error("backend boom"));
+        await procs.get("claude")!.prompted(2);
+        procs.get("claude")!.resolvePrompt();
+        await runPromise;
+
+        expect(procs.get("claude")!.closeSession.mock.calls).toEqual([
+          [{ sessionId: "s-claude" }],
+          [{ sessionId: "s-claude" }],
+        ]);
+        expect(procs.get("codex")!.closeSession).toHaveBeenCalledWith({ sessionId: "s-codex" });
+      });
+
+      it(`waits for an answer's background task and includes the reply that reports it as a new paragraph, leaving the task's own text out (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        const claude = procs.get("claude")!;
+        const runPromise = new FanoutOrchestrator(host).run(runInput(["claude", "codex"]));
+
+        await Promise.all([claude.prompted(1), procs.get("codex")!.prompted(1)]);
+        claude.emit(update("s-claude", { sessionUpdate: "turn_started", turnId: "t1" }));
+        claude.emit(textChunk("s-claude", "Launched a helper."));
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "task_started",
+            taskId: "task-1",
+            toolCallId: "call-1",
+            kind: "subagent",
+            description: "Read Welcome",
+          })
+        );
+        claude.resolvePrompt();
+        procs.get("codex")!.resolvePrompt();
+        await procs.get("codex")!.cancelled();
+        claude.emit({ ...textChunk("s-claude", "helper's own notes"), taskToolCallId: "call-1" });
+        claude.emit(
+          update("s-claude", { sessionUpdate: "task_ended", taskId: "task-1", status: "completed" })
+        );
+        claude.emit(update("s-claude", { sessionUpdate: "turn_started", turnId: "t2" }));
+        claude.emit(textChunk("s-claude", "REPORT: it says hello."));
+        claude.emit(
+          update("s-claude", { sessionUpdate: "turn_ended", turnId: "t2", stopReason: "end_turn" })
+        );
+        await claude.prompted(2);
+        claude.resolvePrompt();
+        const turn = await runPromise;
+
+        expect(turn.answers.claude).toEqual({
+          backendId: "claude",
+          status: "done",
+          text: "Launched a helper.\n\nREPORT: it says hello.",
+        });
+      });
+
+      it(`ends an answer whose background task never ends at the per-agent timeout, keeping its text and closing its sub-session (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        jest.useFakeTimers();
+        try {
+          const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+          const claude = procs.get("claude")!;
+          const runPromise = new FanoutOrchestrator(host).run(runInput(["claude"]));
+
+          await claude.prompted(1);
+          claude.emit(textChunk("s-claude", "Launched a helper."));
+          claude.emit(
+            update("s-claude", {
+              sessionUpdate: "task_started",
+              taskId: "task-1",
+              toolCallId: "call-1",
+              kind: "subagent",
+              description: "Never finishes",
+            })
+          );
+          claude.resolvePrompt();
+          await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
+          const turn = await runPromise;
+
+          expect(turn.answers.claude).toEqual({
+            backendId: "claude",
+            status: "error",
+            text: "Launched a helper.",
+            error: expect.stringContaining(FANOUT_AGENT_TIMEOUT_ERROR),
+          });
+          expect(claude.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
+      it(`ends an answer waiting on a background task with the disconnect error when the agent exits, keeping its text (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const claude = procs.get("claude")!;
+        const runPromise = new FanoutOrchestrator(host).run(runInput(["claude"]));
+
+        await claude.prompted(1);
+        claude.emit(textChunk("s-claude", "Launched a helper."));
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "task_started",
+            taskId: "task-1",
+            toolCallId: "call-1",
+            kind: "subagent",
+            description: "Slow helper",
+          })
+        );
+        claude.resolvePrompt();
+        claude.emit(
+          update("s-claude", { sessionUpdate: "task_ended", taskId: "task-1", status: "stopped" })
+        );
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "session_disconnected",
+            error: new Error("Claude exited"),
+          })
+        );
+        const turn = await runPromise;
+
+        expect(turn.answers.claude).toEqual({
+          backendId: "claude",
+          status: "error",
+          text: "Launched a helper.",
+          error: expect.stringContaining("Claude exited"),
+        });
+      });
+
+      it(`stops waiting for a background task on abort and closes the sub-session so the task ends with it (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const claude = procs.get("claude")!;
+        const controller = new AbortController();
+        const runPromise = new FanoutOrchestrator(host).run(
+          runInput(["claude"], { signal: controller.signal })
+        );
+
+        await claude.prompted(1);
+        claude.emit(
+          update("s-claude", {
+            sessionUpdate: "task_started",
+            taskId: "task-1",
+            toolCallId: "call-1",
+            kind: "subagent",
+            description: "Slow helper",
+          })
+        );
+        claude.resolvePrompt();
+        controller.abort();
+        const turn = await runPromise;
+
+        expect(turn.answers.claude.status).toBe("cancelled");
+        expect(claude.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
+      });
+
+      it(`closes the sub-session on abort when the stopped prompt never starts a turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)`, async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+        const claude = procs.get("claude")!;
+        const controller = new AbortController();
+        const runPromise = new FanoutOrchestrator(host).run(
+          runInput(["claude"], { signal: controller.signal })
+        );
+
+        await claude.prompted(1);
+        controller.abort();
+        const turn = await runPromise;
+
+        expect(turn.answers.claude.status).toBe("cancelled");
+        expect(claude.closeSession).toHaveBeenCalledWith({ sessionId: "s-claude" });
       });
 
       it("lands a brief all-failed note (no fabricated summary) when zero agents succeed", async () => {
