@@ -86,7 +86,7 @@ describe("RunningTasksIndicator", () => {
     expect(await screen.findByText("line 1")).toBeTruthy();
   });
 
-  it(`shows a subagent waiting on its permission request as needing approval (${ISSUE_749})`, () => {
+  it(`shows a subagent waiting on its permission request as needing approval, in words since it shares the running spinner (${ISSUE_749})`, () => {
     const permission: PermissionPrompt = {
       sessionId: "s",
       requester: { taskId: "task-1" },
@@ -95,7 +95,7 @@ describe("RunningTasksIndicator", () => {
     };
     renderIndicator({ defaultOpen: true, permissions: [permission] });
 
-    expect(screen.getByText("Needs approval")).toBeTruthy();
+    expect(screen.getByText("Needs approval").classList.contains("tw-sr-only")).toBe(false);
   });
 
   it(`follows a command's output file so its row shows the latest line (${ISSUE_749})`, async () => {

@@ -123,10 +123,10 @@ describe("TaskDetailView", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
-  it(`stays open when its subagent ends and shows the final status (${ISSUE_749})`, () => {
+  it(`stays open when its subagent ends and shows the final status by its check (${ISSUE_749})`, () => {
     renderDetail({ task: makeTask({ status: "completed" }), messages: SUBAGENT_MESSAGES });
 
-    expect(screen.getByText("Completed").classList.contains("tw-sr-only")).toBe(false);
+    expect(screen.getByText("Completed").classList.contains("tw-sr-only")).toBe(true);
     expect(screen.getByTestId("trail").getAttribute("data-streaming")).toBe("false");
   });
 

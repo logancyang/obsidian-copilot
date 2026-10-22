@@ -16,16 +16,16 @@ export interface TaskCardProps {
   onOpen: (toolCallId: string) => void;
 }
 
-// The spinner alone shows a running task; only final states need words on screen. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
+// Each status icon speaks for itself except "Needs approval", which shares the running spinner. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
 export const TaskStatusMark: React.FC<{ status: TaskDisplayStatus; className?: string }> = ({
   status,
   className,
 }) => (
   <span className={cn("tw-flex tw-shrink-0 tw-items-center tw-gap-1 tw-text-xs", className)}>
-    {status === "running" ? (
-      <span className="tw-sr-only">{taskStatusLabel(status)}</span>
-    ) : (
+    {status === "needs_approval" ? (
       taskStatusLabel(status)
+    ) : (
+      <span className="tw-sr-only">{taskStatusLabel(status)}</span>
     )}
     <StatusBadge status={taskBadgeStatus(status)} />
   </span>
