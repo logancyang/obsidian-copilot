@@ -5,13 +5,9 @@ import { logWarn } from "@/logger";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
 import { waitFor } from "@testing-library/react";
-import { FileSystemAdapter, type App, type TFile } from "obsidian";
+import { FileSystemAdapter, type App } from "obsidian";
 import {
   AgentSession,
-  buildPromptBlocks,
-  buildUserDisplayContent,
-  tryReadExitPlanModeCall,
-  withReadOnlyPreamble,
   type AgentSessionListener,
   type AgentSessionStartOptions,
   type AgentSessionStateOptions,
@@ -20,11 +16,12 @@ import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plus
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
-import { FANOUT_READONLY_PREAMBLE, type FanoutTurn } from "./fanout/fanoutTypes";
+import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentChatMessage,
   AgentToolCallOutput,
@@ -33,8 +30,6 @@ import type {
   BackendState,
   CopilotMode,
   EnabledModelEntry,
-  PermissionOption,
-  PermissionPrompt,
   SessionEvent,
   SessionUpdateHandler,
   StopReason,
@@ -286,44 +281,6 @@ function aiMessages(session: AgentSession) {
 
 function aiMessage(session: AgentSession) {
   return aiMessages(session)[0];
-}
-
-const ALLOW_OR_REJECT_OPTIONS: PermissionOption[] = [
-  { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
-  { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
-];
-
-function writePermissionRequest(): PermissionPrompt {
-  return {
-    sessionId: "acp-1",
-    toolCall: {
-      toolCallId: "tc-write",
-      kind: "edit",
-      status: "pending",
-      title: "Write",
-      rawInput: { file_path: "note.md", content: "updated" },
-    },
-    options: ALLOW_OR_REJECT_OPTIONS,
-  };
-}
-
-function planPermissionRequest(
-  toolCallId: string,
-  rawInput: Record<string, unknown>
-): PermissionPrompt {
-  return {
-    sessionId: "acp-1",
-    toolCall: {
-      toolCallId,
-      kind: "switch_mode",
-      status: "pending",
-      title: "ExitPlanMode",
-      rawInput,
-      vendorToolName: "ExitPlanMode",
-      isPlanProposal: true,
-    },
-    options: ALLOW_OR_REJECT_OPTIONS,
-  };
 }
 
 function subscribeTo(session: AgentSession, listener: Partial<AgentSessionListener> = {}) {
@@ -622,109 +579,6 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 turns replayed user and agent frames into one user bubble and one agent bubble", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "test", "u1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "Hello", "a1"));
-        mock.emitUpdate(replayText("agent_message_chunk", " there", "a1"));
-
-        expect(bubbles(session)).toEqual([
-          { sender: USER_SENDER, message: "test" },
-          { sender: AI_SENDER, message: "Hello there" },
-        ]);
-        expect(session.store.getDisplayMessages().map((m) => m.timestamp)).toEqual([null, null]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 folds several replayed agent messages between two user messages into one agent bubble", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "first", "u1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "one ", "a1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "two", "a2"));
-        mock.emitUpdate(replayText("user_message_chunk", "second", "u2"));
-        mock.emitUpdate(replayText("agent_message_chunk", "three", "a3"));
-
-        expect(bubbles(session)).toEqual([
-          { sender: USER_SENDER, message: "first" },
-          { sender: AI_SENDER, message: "one two" },
-          { sender: USER_SENDER, message: "second" },
-          { sender: AI_SENDER, message: "three" },
-        ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 joins user chunks that share a message id and splits chunks that have none", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "one prompt ", "u1"));
-        mock.emitUpdate(replayText("user_message_chunk", "in two chunks", "u1"));
-        mock.emitUpdate(replayText("user_message_chunk", "cancelled"));
-        mock.emitUpdate(replayText("user_message_chunk", "next"));
-        session.completeResume(emptyState());
-
-        expect(bubbles(session).map((b) => b.message)).toEqual([
-          "one prompt in two chunks",
-          "cancelled",
-          "next",
-        ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 shows a replayed user message that spans chunks only once it ends, stripped of its prompt envelope, so the raw context is never displayed", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(
-          replayText(
-            "user_message_chunk",
-            "<copilot-context>ctx</copilot-context>\n<user-message>\nlist ",
-            "u1"
-          )
-        );
-        expect(bubbles(session)).toEqual([]);
-
-        mock.emitUpdate(replayText("user_message_chunk", "the files\n</user-message>", "u1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "a.md", "a1"));
-
-        expect(bubbles(session)).toEqual([
-          { sender: USER_SENDER, message: "list the files" },
-          { sender: AI_SENDER, message: "a.md" },
-        ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 renders replayed thoughts, tool calls with their updates, and plans as parts of the agent bubble", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "do it", "u1"));
-        mock.emitUpdate(replayText("agent_thought_chunk", "thinking", "a1"));
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "t1",
-          title: "read",
-          kind: "read",
-          status: "in_progress",
-        });
-        mock.emitUpdate({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "t1",
-          status: "completed",
-        });
-        mock.emitUpdate({
-          sessionUpdate: "plan",
-          entries: [{ content: "step", status: "pending", priority: "medium" }],
-        });
-        mock.emitUpdate(replayText("agent_message_chunk", "done", "a2"));
-
-        const ai = session.store.getDisplayMessages()[1];
-        expect(session.store.getDisplayMessages()).toHaveLength(2);
-        expect(ai.parts?.map((p) => p.kind)).toEqual(["thought", "tool_call", "plan", "text"]);
-        const tool = ai.parts?.find((p) => p.kind === "tool_call");
-        expect(tool).toMatchObject({ id: "t1", status: "completed" });
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 attaches a replayed compaction to the reply it followed, ahead of the next user message, without a dropped-update warning", () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);
@@ -755,107 +609,6 @@ describe("AgentSession", () => {
         expect(logWarn).not.toHaveBeenCalled();
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 opens a reply bubble for a replayed compaction that no reply precedes", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
-        mock.emitUpdate({
-          sessionUpdate: "compaction",
-          id: "c1",
-          status: "completed",
-          trigger: "auto",
-        });
-        session.completeResume(emptyState());
-
-        const [user, reply] = session.store.getDisplayMessages();
-        expect(user.sender).toBe(USER_SENDER);
-        expect(reply.sender).toBe(AI_SENDER);
-        expect(reply.parts?.map((p) => p.kind)).toEqual(["compaction"]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 upserts a replayed compaction's later status over its earlier one", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
-        mock.emitUpdate({
-          sessionUpdate: "compaction",
-          id: "c1",
-          status: "in_progress",
-          trigger: "auto",
-        });
-        mock.emitUpdate({
-          sessionUpdate: "compaction",
-          id: "c1",
-          status: "completed",
-          trigger: "auto",
-        });
-        session.completeResume(emptyState());
-
-        const parts = session.store.getDisplayMessages()[1].parts;
-        expect(parts).toHaveLength(1);
-        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "completed" });
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 settles a replayed compaction that never reports an end as cancelled so no spinner shows", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "hello", "u1"));
-        mock.emitUpdate({
-          sessionUpdate: "compaction",
-          id: "c1",
-          status: "in_progress",
-          trigger: "manual",
-        });
-        session.completeResume(emptyState());
-
-        const parts = session.store.getDisplayMessages()[1].parts;
-        expect(parts?.[0]).toMatchObject({ kind: "compaction", status: "cancelled" });
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 fails a replayed tool call that never finished once its turn closes", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "Write the note", "u1"));
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "w1",
-          title: "write",
-          status: "pending",
-        });
-        mock.emitUpdate(replayText("user_message_chunk", "Try again", "u2"));
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "w2",
-          title: "write",
-          status: "pending",
-        });
-        session.completeResume(emptyState());
-
-        expect(aiMessages(session).map((m) => m.parts)).toEqual([
-          [expect.objectContaining({ id: "w1", status: "failed" })],
-          [expect.objectContaining({ id: "w2", status: "failed" })],
-        ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/739 shows no user bubble for the plugin's own output-limit continuation in a replayed chat", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "Write the note", "u1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "Writing.", "a1"));
-        mock.emitUpdate(replayText("user_message_chunk", OUTPUT_LIMIT_CONTINUATION_PROMPT, "u2"));
-        mock.emitUpdate(replayText("agent_message_chunk", "Done.", "a2"));
-        session.completeResume(emptyState());
-
-        expect(bubbles(session).filter((b) => b.sender === USER_SENDER)).toEqual([
-          { sender: USER_SENDER, message: "Write the note" },
-        ]);
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 keeps the meter reading a replayed compaction's post-compaction tokens would otherwise overwrite", () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);
@@ -877,45 +630,6 @@ describe("AgentSession", () => {
           contextWindow: 200_000,
           updatedAt: 1,
         });
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 dates replayed bubbles from their frames' times and times the agent's turn from its prompt to its last frame", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-        const prompt = Date.parse("2026-10-03T19:31:18.000Z");
-        const reply = Date.parse("2026-10-03T19:31:22.000Z");
-        const turnEnd = Date.parse("2026-10-03T19:31:30.500Z");
-
-        mock.emitUpdate(replayText("user_message_chunk", "read it", "u1"), prompt);
-        mock.emitUpdate(replayText("agent_thought_chunk", "reading", "a1"), reply);
-        mock.emitUpdate(
-          { sessionUpdate: "tool_call", toolCallId: "t1", title: "read", status: "in_progress" },
-          reply + 1_000
-        );
-        mock.emitUpdate(
-          { sessionUpdate: "tool_call_update", toolCallId: "t1", status: "completed" },
-          reply + 2_000
-        );
-        mock.emitUpdate(replayText("agent_message_chunk", "done", "a2"), turnEnd);
-        session.completeResume(emptyState());
-
-        const [user, ai] = session.store.getDisplayMessages();
-        expect(user.timestamp?.epoch).toBe(prompt);
-        expect(ai.timestamp?.epoch).toBe(reply);
-        expect(ai.turnDurationMs).toBe(turnEnd - prompt);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 leaves replayed bubbles undated and untimed when their frames carry no time", () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-
-        mock.emitUpdate(replayText("user_message_chunk", "test", "u1"));
-        mock.emitUpdate(replayText("agent_message_chunk", "Hello", "a1"));
-        session.completeResume(emptyState());
-
-        const messages = session.store.getDisplayMessages();
-        expect(messages.map((m) => m.timestamp)).toEqual([null, null]);
-        expect(messages[1].turnDurationMs).toBeUndefined();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 does not open a plan-approval card for a replayed ExitPlanMode call", async () => {
@@ -4104,72 +3818,6 @@ describe("AgentSession", () => {
         }
       );
 
-      it.each([
-        ["still running", { status: "in_progress" as const }],
-        ["skipped", { status: "skipped" as const }],
-        ["failed", { status: "failed" as const, error: "boom" }],
-        ["completed without a post-compaction count", { status: "completed" as const }],
-      ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/635 leaves the meter alone for a compaction that is %s",
-        async (_label, snapshot) => {
-          const mock = makeMockBackend();
-          const finishPrompt = holdPrompt(mock);
-          const session = makeSession(mock);
-          mock.emitUpdate({
-            sessionUpdate: "usage_update",
-            usage: { usedTokens: 103_000, contextWindow: 200_000, updatedAt: 1 },
-          });
-          const { turn } = session.sendPrompt("/compact");
-
-          mock.emitUpdate({
-            sessionUpdate: "compaction",
-            id: "c1",
-            trigger: "manual",
-            ...snapshot,
-          });
-
-          expect(session.getSessionUsage()).toEqual({
-            usedTokens: 103_000,
-            contextWindow: 200_000,
-            updatedAt: 1,
-          });
-          finishPrompt();
-          await turn;
-        }
-      );
-
-      it("lets a fuller snapshot's contextWindow replace an earlier one", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
-        });
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 6000, contextWindow: 1_000_000, updatedAt: 2 },
-        });
-        expect(session.getSessionUsage()?.contextWindow).toBe(1_000_000);
-      });
-
-      it("ignores a used-only fallback once an occupancy snapshot exists", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 5000, contextWindow: 200_000, updatedAt: 1 },
-        });
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 6000, updatedAt: 2 },
-        });
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 5000,
-          contextWindow: 200_000,
-          updatedAt: 1,
-        });
-      });
-
       it("keeps the last positive usage when a stopped turn reports zero (https://github.com/logancyang/obsidian-copilot/issues/2975)", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -4234,6 +3882,25 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("getPlanUsage()", () => {
+      it("starts null and stores an incoming plan_usage_update, notifying subscribers", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+        expect(session.getPlanUsage()).toBeNull();
+        const planUsage = {
+          windows: [{ id: "five_hour", label: "5h", percent: 40 }],
+          updatedAt: 1,
+        };
+
+        mock.emitUpdate({ sessionUpdate: "plan_usage_update", planUsage });
+
+        expect(session.getPlanUsage()).toBe(planUsage);
+        expect(onMessagesChanged).toHaveBeenCalled();
+      });
+    });
+
     describe("seedSessionUsage()", () => {
       it("seeds usage from persisted history and re-notifies", () => {
         const mock = makeMockBackend();
@@ -4254,104 +3921,6 @@ describe("AgentSession", () => {
           usage: { usedTokens: 2000, contextWindow: 200_000, updatedAt: 10 },
         });
         expect(session.getSessionUsage()?.usedTokens).toBe(2000);
-      });
-
-      it("fills a seeded snapshot's missing window from the backend catalog (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-        const mock = makeMockBackend();
-        const readContextWindow = jest.fn(async () => 1_048_576);
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "state_changed",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(readContextWindow).toHaveBeenCalledWith("copilot-plus/gemini-3-pro");
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 27_514,
-          updatedAt: 1,
-          contextWindow: 1_048_576,
-        });
-      });
-
-      it("fills the window for a chat seeded into a still-starting session (https://github.com/logancyang/obsidian-copilot-preview/issues/193)", async () => {
-        const mock = makeMockBackend();
-        const readContextWindow = jest.fn(async () => 1_048_576);
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = readContextWindow;
-        mock.newSession.mockResolvedValueOnce({
-          sessionId: "acp-1",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-        const session = startSession(mock);
-
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await session.ready;
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 27_514,
-          updatedAt: 1,
-          contextWindow: 1_048_576,
-        });
-      });
-
-      it("leaves a live snapshot alone when the seed's window answer arrives late", async () => {
-        let release!: (window: number) => void;
-        const mock = makeMockBackend();
-        (mock.asBackend as { readContextWindow?: unknown }).readContextWindow = jest.fn(
-          () => new Promise((resolve) => (release = resolve))
-        );
-        const session = makeSession(mock);
-        mock.emitUpdate({
-          sessionUpdate: "state_changed",
-          state: {
-            model: {
-              current: { baseModelId: "copilot-plus/gemini-3-pro", effort: null },
-              apply: { kind: "setModel" },
-              availableModels: [],
-            },
-            mode: null,
-          },
-        });
-        session.seedSessionUsage({ usedTokens: 27_514, updatedAt: 1 });
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        mock.emitUpdate({
-          sessionUpdate: "usage_update",
-          usage: { usedTokens: 31_000, contextWindow: 200_000, updatedAt: 2 },
-        });
-        release(1_048_576);
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-
-        expect(session.getSessionUsage()).toEqual({
-          usedTokens: 31_000,
-          contextWindow: 200_000,
-          updatedAt: 2,
-        });
-      });
-
-      it("leaves usage untouched when the seed is undefined", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        session.seedSessionUsage(undefined);
-        expect(session.getSessionUsage()).toBeNull();
       });
     });
 
@@ -4760,47 +4329,6 @@ describe("AgentSession", () => {
     });
 
     describe("getCurrentPlan()", () => {
-      it("keeps the plan revision but tracks the new pending tool call when an identical plan body is proposed again", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const planBody = "# proposed plan body";
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "tc-plan-A",
-          title: "ExitPlanMode",
-          kind: "other",
-          status: "pending",
-          rawInput: { plan: planBody },
-          vendorToolName: "ExitPlanMode",
-          isPlanProposal: true,
-        });
-        const first = session.getCurrentPlan();
-        expect(first?.pendingToolCallId).toBe("tc-plan-A");
-        expect(first?.permissionGated).toBe(true);
-        expect(first?.revision).toBe(1);
-
-        mock.emitUpdate({
-          sessionUpdate: "tool_call",
-          toolCallId: "tc-plan-B",
-          title: "ExitPlanMode",
-          kind: "other",
-          status: "pending",
-          rawInput: { plan: planBody },
-          vendorToolName: "ExitPlanMode",
-          isPlanProposal: true,
-        });
-        const second = session.getCurrentPlan();
-        expect(second?.pendingToolCallId).toBe("tc-plan-B");
-        expect(second?.permissionGated).toBe(true);
-        expect(second?.revision).toBe(1);
-
-        finishPrompt();
-        await turn;
-      });
-
       it("does not promote completed plan-file writes into proposal cards", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -4886,71 +4414,6 @@ describe("AgentSession", () => {
       });
     });
 
-    describe("handlePlanProposalPermission()", () => {
-      it("publishes a gated plan from an ExitPlanMode permission request", async () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "claude" });
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-from-permission", {
-            plan: "# permission plan body",
-            planFilePath: "/Users/test/.claude/plans/plan.md",
-          })
-        );
-
-        const plan = session.getCurrentPlan();
-        expect(plan?.body).toBe("# permission plan body");
-        expect(plan?.permissionGated).toBe(true);
-        expect(plan?.pendingToolCallId).toBe("tc-plan-from-permission");
-        expect(plan?.sourceFilePath).toBe("/Users/test/.claude/plans/plan.md");
-
-        session.resolvePlanProposalPermission("tc-plan-from-permission", false);
-        await decisionPromise;
-      });
-    });
-
-    describe("resolvePlanProposalPermission()", () => {
-      it("resolves with a reject option and the deny message when the plan is denied with feedback", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-deny-msg", { plan: "# x" })
-        );
-
-        session.resolvePlanProposalPermission("tc-plan-deny-msg", false, "please drop step 2");
-        const decision = await decisionPromise;
-
-        expect(decision.outcome).toEqual({ outcome: "selected", optionId: "reject_once" });
-        expect(decision.denyMessage).toBe("please drop step 2");
-
-        finishPrompt();
-        await turn;
-      });
-
-      it("resolves with the allow option and no deny message when the plan is approved", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        const session = makeSession(mock, { backendId: "claude" });
-        const { turn } = session.sendPrompt("plan something");
-
-        const decisionPromise = session.handlePlanProposalPermission(
-          planPermissionRequest("tc-plan-allow", { plan: "# x" })
-        );
-
-        session.resolvePlanProposalPermission("tc-plan-allow", true, "should be ignored");
-        const decision = await decisionPromise;
-
-        expect(decision.outcome).toEqual({ outcome: "selected", optionId: "allow_once" });
-        expect(decision.denyMessage).toBeUndefined();
-
-        finishPrompt();
-        await turn;
-      });
-    });
-
     describe("handleToolPermission()", () => {
       it("marks an active turn as awaiting permission while an inline tool card is pending", async () => {
         const mock = makeMockBackend();
@@ -5005,35 +4468,6 @@ describe("AgentSession", () => {
 
         finishPrompt();
         await turn;
-      });
-
-      it("withdraws an ACP question when its request signal aborts (https://github.com/Brevilabs/obsidian-copilot-private/issues/551)", async () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "codex" });
-        const controller = new AbortController();
-        const answers = session.handleAskUserQuestion({
-          sessionId: "acp-1",
-          requestId: "rpc-1",
-          questions: [
-            { question: "Approach", answerKey: "approach", options: [{ label: "Simple" }] },
-          ],
-          signal: controller.signal,
-        });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(1);
-        controller.abort();
-        await expect(answers).resolves.toEqual({});
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-        session.resolveAskUserQuestion("rpc-1", { approach: "Simple" });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-      });
-    });
-
-    describe("getPendingAskUserQuestions()", () => {
-      it("returns the shared empty array when no AskUserQuestion is pending", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock, { backendId: "claude" });
-        expect(session.getPendingAskUserQuestions()).toHaveLength(0);
-        expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
       });
     });
 
@@ -5212,339 +4646,6 @@ describe("AgentSession", () => {
           { content: "step B", status: "pending" },
         ]);
       });
-
-      it("dedupes identical lists (synthesized + real plan channel) by content signature", () => {
-        const mock = makeMockBackend();
-        const session = makeLiveSession(mock);
-        let notified = 0;
-        subscribeTo(session, { onCurrentTodoListChanged: () => notified++ });
-        const entries = [{ content: "same", status: "pending", priority: "high" }];
-        mock.emit(planUpdate(entries));
-        const snapshot = session.getCurrentTodoList();
-        mock.emit(planUpdate([{ content: "same", status: "pending", priority: "low" }]));
-        expect(notified).toBe(1);
-        expect(session.getCurrentTodoList()).toBe(snapshot);
-      });
-
-      it("clears to null on an empty plan and on dispose", async () => {
-        const mock = makeMockBackend();
-        const session = makeLiveSession(mock);
-        mock.emit(planUpdate([{ content: "only", status: "pending" }]));
-        expect(session.getCurrentTodoList()).not.toBeNull();
-
-        mock.emit(planUpdate([]));
-        expect(session.getCurrentTodoList()).toBeNull();
-
-        mock.emit(planUpdate([{ content: "again", status: "pending" }]));
-        await session.dispose();
-        expect(session.getCurrentTodoList()).toBeNull();
-      });
-    });
-  });
-
-  describe("buildPromptBlocks()", () => {
-    // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
-    const makeFile = (path: string) => ({ path }) as unknown as TFile;
-
-    it("returns the message as plain text when no context, or only empty context, is attached", () => {
-      expect(buildPromptBlocks("hello")).toEqual([{ type: "text", text: "hello" }]);
-      expect(buildPromptBlocks("hello", { notes: [], urls: [] })).toEqual([
-        { type: "text", text: "hello" },
-      ]);
-    });
-
-    it("wraps the message with note paths offered as context to open when needed", () => {
-      const blocks = buildPromptBlocks("summarize them", {
-        notes: [makeFile("daily/2026-04-28.md"), makeFile("projects/copilot.md")],
-        urls: [],
-      });
-      expect(blocks).toHaveLength(1);
-      expect(blocks[0].type).toBe("text");
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("<copilot-context>");
-      expect(text).toContain("- daily/2026-04-28.md");
-      expect(text).toContain("- projects/copilot.md");
-      expect(text).toContain("open them if you need their contents");
-      expect(text).not.toContain("use the Read tool");
-      expect(text).toContain("</copilot-context>");
-      expect(text).toContain("<user-message>\nsummarize them\n</user-message>");
-    });
-
-    it("inlines selected text excerpts with path and line range", () => {
-      const blocks = buildPromptBlocks("explain", {
-        notes: [],
-        urls: [],
-        selectedTextContexts: [
-          {
-            id: "s1",
-            sourceType: "note",
-            notePath: "projects/copilot.md",
-            noteTitle: "copilot",
-            startLine: 12,
-            endLine: 18,
-            content: "line one\nline two",
-          },
-        ],
-      });
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("Selected excerpts");
-      expect(text).toContain("- projects/copilot.md (lines 12-18):");
-      expect(text).toContain("  line one");
-      expect(text).toContain("  line two");
-    });
-
-    it("inlines a Reading view excerpt without claiming source lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-      const blocks = buildPromptBlocks("explain", {
-        notes: [],
-        urls: [],
-        selectedTextContexts: [
-          {
-            id: "reading-excerpt",
-            sourceType: "note",
-            notePath: "projects/copilot.md",
-            noteTitle: "copilot",
-            content: "Rendered note passage",
-            startLine: 0,
-            endLine: 0,
-          },
-        ],
-      });
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("- projects/copilot.md:\n  Rendered note passage");
-      expect(text).not.toContain("(lines");
-    });
-
-    it("appends image content blocks after the text envelope", () => {
-      const blocks = buildPromptBlocks("here", undefined, [
-        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
-      ]);
-      expect(blocks).toEqual([
-        { type: "text", text: "here" },
-        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
-      ]);
-    });
-
-    it("combines envelope, text, and content blocks in order", () => {
-      const blocks = buildPromptBlocks(
-        "look at this",
-        {
-          notes: [makeFile("a.md")],
-          urls: [],
-        },
-        [
-          { type: "text", text: "<attached-pdf path='b.pdf'>parsed body</attached-pdf>" },
-          { type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" },
-        ]
-      );
-      expect(blocks).toHaveLength(3);
-      expect(blocks[0].type).toBe("text");
-      const head = (blocks[0] as { type: "text"; text: string }).text;
-      expect(head).toContain("<copilot-context>");
-      expect(head).toContain("- a.md");
-      expect(head).toContain("<user-message>\nlook at this\n</user-message>");
-      expect(blocks[1]).toEqual({
-        type: "text",
-        text: "<attached-pdf path='b.pdf'>parsed body</attached-pdf>",
-      });
-      expect(blocks[2]).toEqual({ type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" });
-    });
-
-    it("serializes web-source selected text excerpts as <web_selected_text>", () => {
-      const blocks = buildPromptBlocks("explain", {
-        notes: [],
-        urls: [],
-        selectedTextContexts: [
-          {
-            id: "w1",
-            sourceType: "web",
-            title: "Example",
-            url: "https://example.com",
-            content: "web snippet",
-          },
-        ],
-      });
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("<web_selected_text>");
-      expect(text).toContain("<title>Example</title>");
-      expect(text).toContain("<url>https://example.com</url>");
-      expect(text).toContain("web snippet");
-      expect(text).toContain("<user-message>\nexplain\n</user-message>");
-    });
-
-    it("emits plain text when the web-tab block is empty/whitespace", () => {
-      const blocks = buildPromptBlocks("hi", undefined, undefined, "   ");
-      expect(blocks).toEqual([{ type: "text", text: "hi" }]);
-    });
-
-    it("orders the envelope, web selections, and web-tab block before the message", () => {
-      const webTabBlock = "<web_tab_context>\n<url>https://x.dev</url>\n</web_tab_context>";
-      const blocks = buildPromptBlocks(
-        "look",
-        {
-          notes: [makeFile("a.md")],
-          urls: [],
-          selectedTextContexts: [
-            { id: "w1", sourceType: "web", title: "W", url: "https://w.dev", content: "snip" },
-          ],
-        },
-        undefined,
-        webTabBlock
-      );
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      const envelopePos = text.indexOf("<copilot-context>");
-      const selectionPos = text.indexOf("<web_selected_text>");
-      const webTabPos = text.indexOf("<web_tab_context>");
-      const messagePos = text.indexOf("<user-message>");
-      expect(envelopePos).toBeGreaterThanOrEqual(0);
-      expect(envelopePos).toBeLessThan(selectionPos);
-      expect(selectionPos).toBeLessThan(webTabPos);
-      expect(webTabPos).toBeLessThan(messagePos);
-    });
-
-    it("prepends the project-context block ahead of the attached context and message", () => {
-      const projectContextBlock =
-        "<project_context>\n## Included folders\n- `/vault/Papers`\n</project_context>";
-      const blocks = buildPromptBlocks(
-        "go",
-        { notes: [makeFile("a.md")], urls: [] },
-        undefined,
-        undefined,
-        projectContextBlock
-      );
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("<project_context>");
-      expect(text).toContain("`/vault/Papers`");
-      expect(text.indexOf("<project_context>")).toBeLessThan(text.indexOf("<copilot-context>"));
-      expect(text.indexOf("<copilot-context>")).toBeLessThan(text.indexOf("<user-message>"));
-    });
-
-    it("injects the project-context-updates note after the manifest, before the message", () => {
-      const updatesBlock =
-        "<project_context_updates>\nsources may have changed\n</project_context_updates>";
-      const blocks = buildPromptBlocks(
-        "go",
-        { notes: [makeFile("a.md")], urls: [] },
-        undefined,
-        undefined,
-        "<project_context>\nmanifest\n</project_context>",
-        undefined,
-        updatesBlock
-      );
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).toContain("<project_context_updates>");
-      expect(text.indexOf("<project_context>")).toBeLessThan(
-        text.indexOf("<project_context_updates>")
-      );
-      expect(text.indexOf("<project_context_updates>")).toBeLessThan(
-        text.indexOf("<user-message>")
-      );
-    });
-
-    it("omits the project-context and updates blocks when none are provided (later turns)", () => {
-      const blocks = buildPromptBlocks("go", { notes: [makeFile("a.md")], urls: [] });
-      const text = (blocks[0] as { type: "text"; text: string }).text;
-      expect(text).not.toContain("<project_context>");
-      expect(text).not.toContain("<project_context_updates>");
-    });
-  });
-
-  describe("buildUserDisplayContent()", () => {
-    it("returns undefined when there are no images", () => {
-      expect(buildUserDisplayContent("hi")).toBeUndefined();
-      expect(buildUserDisplayContent("hi", [])).toBeUndefined();
-      expect(buildUserDisplayContent("hi", [{ type: "text", text: "x" }])).toBeUndefined();
-    });
-
-    it("puts the prompt text first, then an image_url entry per image", () => {
-      expect(
-        buildUserDisplayContent("describe these", [
-          { type: "image", mimeType: "image/png", data: "AAA=" },
-          { type: "image", mimeType: "image/jpeg", data: "BBB=" },
-        ])
-      ).toEqual([
-        { type: "text", text: "describe these" },
-        { type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } },
-        { type: "image_url", image_url: { url: "data:image/jpeg;base64,BBB=" } },
-      ]);
-    });
-
-    it("omits the text entry for an image-only message", () => {
-      expect(
-        buildUserDisplayContent("   ", [{ type: "image", mimeType: "image/png", data: "AAA=" }])
-      ).toEqual([{ type: "image_url", image_url: { url: "data:image/png;base64,AAA=" } }]);
-    });
-  });
-
-  describe("withReadOnlyPreamble()", () => {
-    it("leads the first text block with the read-only instruction", () => {
-      const out = withReadOnlyPreamble([{ type: "text", text: "the question" }]);
-      expect(out).toEqual([{ type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\nthe question` }]);
-    });
-
-    it("inserts a leading text block when the prompt has none (image-only)", () => {
-      const out = withReadOnlyPreamble([{ type: "image", mimeType: "image/png", data: "x" }]);
-      expect(out[0]).toEqual({ type: "text", text: FANOUT_READONLY_PREAMBLE });
-      expect(out).toHaveLength(2);
-    });
-  });
-
-  describe("tryReadExitPlanModeCall()", () => {
-    it("returns the plan body when isPlanProposal is true", () => {
-      const out = tryReadExitPlanModeCall({
-        kind: "other",
-        rawInput: { plan: "# do the thing" },
-        isPlanProposal: true,
-      });
-      expect(out).toEqual({ plan: "# do the thing", planFilePath: undefined });
-    });
-
-    it("falls back to ACP kind=switch_mode when isPlanProposal is unset", () => {
-      const out = tryReadExitPlanModeCall({
-        kind: "switch_mode",
-        rawInput: { plan: "## plan body", planFilePath: "/abs/plan.md" },
-      });
-      expect(out).toEqual({ plan: "## plan body", planFilePath: "/abs/plan.md" });
-    });
-
-    it("returns null when rawInput.plan is missing — content gate is load-bearing", () => {
-      expect(
-        tryReadExitPlanModeCall({
-          kind: "switch_mode",
-          rawInput: { planFilePath: "/abs/plan.md" },
-          isPlanProposal: true,
-        })
-      ).toBeNull();
-    });
-
-    it("returns null when rawInput.plan is not a string", () => {
-      expect(
-        tryReadExitPlanModeCall({
-          kind: "switch_mode",
-          rawInput: { plan: 42 },
-        })
-      ).toBeNull();
-    });
-
-    it("returns null when neither isPlanProposal nor switch_mode kind matches", () => {
-      expect(
-        tryReadExitPlanModeCall({
-          kind: "edit",
-          rawInput: { plan: "looks like a plan but isn't tagged as one" },
-        })
-      ).toBeNull();
-    });
-
-    it("ignores planFilePath when it isn't a string", () => {
-      const out = tryReadExitPlanModeCall({
-        kind: "switch_mode",
-        rawInput: { plan: "body", planFilePath: 12 },
-      });
-      expect(out).toEqual({ plan: "body", planFilePath: undefined });
-    });
-
-    it("handles null/undefined rawInput without throwing", () => {
-      expect(tryReadExitPlanModeCall({ kind: "switch_mode", rawInput: null })).toBeNull();
-      expect(tryReadExitPlanModeCall({ kind: "switch_mode", rawInput: undefined })).toBeNull();
     });
   });
 });

@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER, WEB_SELECTED_TEXT_TAG } from "@/constants";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
@@ -7,28 +7,21 @@ import {
   AgentMcpServer,
   AgentMessagePart,
   AgentToolKind,
-  AgentPlanEntry,
   AgentQuestionAnswers,
   AgentTodoListEntry,
-  AgentToolCallOutput,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
   BackendProcess,
   BackendState,
   CopilotMode,
-  CompactionSnapshot,
   CurrentPlan,
   EnabledModelEntry,
   ModelSelection,
   NewAgentChatMessage,
-  PERMISSION_ALLOW_KINDS,
-  PERMISSION_REJECT_KINDS,
   PermissionDecision,
-  PermissionOptionKind,
   PermissionPrompt,
   PlanDecisionAction,
-  PlanSummary,
   PromptContent,
   PromptInput,
   PromptOutput,
@@ -37,18 +30,13 @@ import {
   PlanUsage,
   SessionUsage,
   StopReason,
-  ToolCallContent,
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
   TurnFileChange,
 } from "@/agentMode/session/types";
-import {
-  isNoteSelectedTextContext,
-  isWebSelectedTextContext,
-  MessageContext,
-} from "@/types/message";
-import { err2String, formatDateTime, type FormattedDateTime } from "@/utils";
+import { MessageContext } from "@/types/message";
+import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import type { App, DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
@@ -67,8 +55,6 @@ import {
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
-import { ContextProcessor } from "@/contextProcessor";
-import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
 import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
@@ -77,7 +63,6 @@ import {
 } from "@/agentMode/session/conversationHistory";
 import {
   buildPriorFanoutContextBlock,
-  FANOUT_READONLY_PREAMBLE,
   isDirectAnswerTurn,
   renderFanoutComposite,
   serializeFanoutComposite,
@@ -93,9 +78,25 @@ import {
   pickEnabledModel,
 } from "@/agentMode/session/enabledModelSelection";
 import {
+  buildPromptBlocks,
+  buildUserDisplayContent,
+  extractText,
   OUTPUT_LIMIT_CONTINUATION_PROMPT,
-  stripUserMessageWrapper,
+  serializeWebTabContext,
+  withReadOnlyPreamble,
 } from "@/agentMode/session/promptEnvelope";
+import { buildEmptyTurnMessage, formatPromptFailure } from "@/agentMode/session/promptFailure";
+import {
+  findToolCallPart,
+  mergeToolCallUpdate,
+  planToPart,
+  toolCallToPart,
+  tryReadExitPlanModeCall,
+  upsertCompactionPart,
+} from "@/agentMode/session/messageParts";
+import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
+import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
+import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
 import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -103,11 +104,7 @@ import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedba
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
-const MAX_TOOL_OUTPUT_TEXT_CHARS = 256_000;
 const CANCELLED_TURN_QUIET_MS = 1_000;
-const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
-const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
-const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 
 interface TurnFileCapture {
@@ -248,41 +245,15 @@ export class AgentSession {
   private resumeSelection: ModelSelection | undefined;
   private resumeMode: CopilotMode | null | undefined;
   private settleReady: () => void = () => {};
-  private historyOpen = false;
-  private historyUser: { wireId: string | undefined; raw: string; occurredAt?: number } | null =
-    null;
-  private historyAiId: string | null = null;
-  private historyTurnStartedAt: number | undefined;
-  private pendingPlanResolvers = new Map<
-    string,
-    {
-      request: PermissionPrompt;
-      resolve: (resp: PermissionDecision) => void;
-    }
-  >();
-  private pendingToolResolvers = new Map<
-    string,
-    {
-      request: PermissionPrompt;
-      resolve: (resp: PermissionDecision) => void;
-    }
-  >();
-  private pendingQuestionResolvers = new Map<
-    string,
-    {
-      request: AskUserQuestionPrompt;
-      resolve: (answers: AgentQuestionAnswers) => void;
-    }
-  >();
-  private currentPlan: CurrentPlan | null = null;
-  private currentTodoList: AgentTodoListEntry[] | null = null;
-  private currentTodoListSignature: string | null = null;
-  private currentUsage: SessionUsage | null = null;
+  private readonly historyReplay = new SessionHistoryReplay({
+    store: this.store,
+    scheduleNotifyMessages: () => this.scheduleNotifyMessages(),
+    applyTodoList: (entries) => this.requests.applyTodoList(entries),
+  });
+  private readonly requests: InteractiveRequests;
+  private readonly usageTracker: UsageTracker;
   private feedbackOffer: FeedbackOffer | null = null;
 
-  private currentPlanUsage: PlanUsage | null = null;
-  private planSeq = 0;
-  private decidedPlanToolCallIds = new Set<string>();
   private needsAttention = false;
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
@@ -303,12 +274,28 @@ export class AgentSession {
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
+    this.requests = new InteractiveRequests({
+      store: this.store,
+      internalId: this.internalId,
+      getReplyId: () => this.placeholderId,
+      hasLeftPlanMode: () => this.hasLeftPlanMode(),
+      recomputeStatus: () => this.recomputeStatusIfChanged(),
+      notifyMessages: () => this.notifyMessages(),
+      notifyPlanChanged: () => this.notifyCurrentPlanChanged(),
+      notifyTodoListChanged: () => this.notifyCurrentTodoListChanged(),
+    });
+    this.usageTracker = new UsageTracker({
+      backend: this.backend,
+      getModelId: () => this.currentState?.model?.current.baseModelId,
+      whenReady: () => this.ready,
+      notifyMessages: () => this.notifyMessages(),
+    });
     if ("backendSessionId" in opts) {
       this.backendSessionId = opts.backendSessionId;
       this.resumeSelection = opts.defaultModelSelection;
       this.resumeMode = opts.defaultMode;
       // The backend replays the chat as live-shaped updates until its load response; collect them from the first frame. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-      this.historyOpen = true;
+      this.historyReplay.start();
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
@@ -323,7 +310,7 @@ export class AgentSession {
   }
 
   completeResume(state: BackendState | null): void {
-    this.endHistory();
+    this.historyReplay.end();
     this.currentState = state;
     const settle = () => {
       this.startupSettled = true;
@@ -399,7 +386,7 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modelId,
     });
-    this.dropUsageWindowOnModelChange(next);
+    this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
   }
@@ -499,7 +486,7 @@ export class AgentSession {
       configId,
       value,
     });
-    this.dropUsageWindowOnModelChange(next);
+    this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
@@ -559,12 +546,7 @@ export class AgentSession {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
     if (this.backendSessionId === null || !this.startupSettled) return "starting";
-    if (
-      this.pendingPlanResolvers.size +
-        this.pendingToolResolvers.size +
-        this.pendingQuestionResolvers.size >
-      0
-    ) {
+    if (this.requests.hasPending()) {
       return "awaiting_permission";
     }
     if (this.abortController !== null) return "running";
@@ -1027,14 +1009,8 @@ export class AgentSession {
     this.settledStream = null;
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
-    if (this.pendingToolResolvers.size > 0) {
-      this.flushResolvers(this.pendingToolResolvers);
-      this.notifyMessages();
-    }
-    if (this.pendingQuestionResolvers.size > 0) {
-      this.flushQuestionResolvers();
-      this.notifyMessages();
-    }
+    this.requests.rejectToolPermissions();
+    this.requests.withdrawQuestions();
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
     } catch (e) {
@@ -1061,13 +1037,7 @@ export class AgentSession {
     this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
-    this.flushResolvers(this.pendingPlanResolvers);
-    this.flushResolvers(this.pendingToolResolvers);
-    this.flushQuestionResolvers();
-    this.decidedPlanToolCallIds.clear();
-    this.currentPlan = null;
-    this.currentTodoList = null;
-    this.currentTodoListSignature = null;
+    this.requests.dispose();
     this.settledStream = null;
     this.cancelledPromptDrain = null;
     this.cancelledMessageIds.clear();
@@ -1078,42 +1048,19 @@ export class AgentSession {
   }
 
   handlePlanProposalPermission(request: PermissionPrompt): Promise<PermissionDecision> {
-    const toolCallId = request.toolCall.toolCallId;
-    const exitPlan = tryReadExitPlanModeCall({
-      kind: request.toolCall.kind,
-      rawInput: request.toolCall.rawInput,
-      isPlanProposal: request.toolCall.isPlanProposal,
-    });
-    if (exitPlan) {
-      this.publishGatedPlan(toolCallId, exitPlan);
-    }
-    return new Promise<PermissionDecision>((resolve) => {
-      this.pendingPlanResolvers.set(toolCallId, { request, resolve });
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handlePlanProposalPermission(request);
   }
 
   resolvePlanProposalPermission(toolCallId: string, allow: boolean, denyMessage?: string): void {
-    const entry = this.pendingPlanResolvers.get(toolCallId);
-    if (!entry) return;
-    this.pendingPlanResolvers.delete(toolCallId);
-    const base = decisionFor(
-      entry.request,
-      allow ? PERMISSION_ALLOW_KINDS : PERMISSION_REJECT_KINDS
-    );
-    const decision: PermissionDecision = !allow && denyMessage ? { ...base, denyMessage } : base;
-    entry.resolve(decision);
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
+    this.requests.resolvePlanProposalPermission(toolCallId, allow, denyMessage);
   }
 
   getCurrentPlan(): CurrentPlan | null {
-    return this.currentPlan;
+    return this.requests.getCurrentPlan();
   }
 
   getCurrentTodoList(): AgentTodoListEntry[] | null {
-    return this.currentTodoList;
+    return this.requests.getCurrentTodoList();
   }
 
   getReportEvidence(): FeedbackEvidence {
@@ -1161,87 +1108,15 @@ export class AgentSession {
   }
 
   getSessionUsage(): SessionUsage | null {
-    return this.currentUsage;
+    return this.usageTracker.getSessionUsage();
   }
 
   getPlanUsage(): PlanUsage | null {
-    return this.currentPlanUsage;
+    return this.usageTracker.getPlanUsage();
   }
 
   seedSessionUsage(usage: SessionUsage | undefined): void {
-    if (!usage) return;
-    this.currentUsage = usage;
-    this.notifyMessages();
-    // A persisted snapshot can predate the model's window being known — hosted models
-    // never carry one on the wire, and older chats were saved before windows were
-    // filled in at all — so without this a reopened chat shows a bare count until its
-    // next turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-    if (usage.contextWindow === undefined) void this.fillSeededContextWindow(usage);
-  }
-
-  private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
-    if (!this.backend.readContextWindow) return;
-    // A chat with no resumable backend session is seeded into a freshly created one,
-    // BEFORE its `newSession` has resolved — so at call time the model is not known
-    // yet. Wait for startup to settle rather than silently skipping, or exactly those
-    // older chats would stay count-only until their next turn
-    // (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-    try {
-      await this.ready;
-    } catch {
-      return;
-    }
-    const wireModelId = this.currentState?.model?.current.baseModelId ?? null;
-    if (!wireModelId) return;
-    let contextWindow: number | null = null;
-    try {
-      contextWindow = await this.backend.readContextWindow(wireModelId);
-    } catch {
-      return;
-    }
-    if (!contextWindow) return;
-    if (this.currentUsage !== seeded) return;
-    if (this.currentState?.model?.current.baseModelId !== wireModelId) return;
-    this.currentUsage = { ...seeded, contextWindow };
-    this.notifyMessages();
-  }
-
-  private applyUsageUpdate(usage: SessionUsage): void {
-    // Some backends use zero as an empty terminal snapshot after cancellation.
-    // It does not measure consumed context, so wait for a positive reading.
-    // https://github.com/logancyang/obsidian-copilot/issues/2975
-    if (!usage.usedTokens) return;
-    if (usage.contextWindow === undefined && this.currentUsage?.contextWindow !== undefined) {
-      return;
-    }
-    this.currentUsage = usage;
-    this.notifyMessages();
-  }
-
-  // Compaction reports the new context size directly, so it bypasses applyUsageUpdate's guards.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-  private applyCompactedUsage(compaction: CompactionSnapshot): boolean {
-    if (compaction.status !== "completed" || compaction.postTokens === undefined) return false;
-    this.currentUsage = {
-      usedTokens: compaction.postTokens,
-      contextWindow: this.currentUsage?.contextWindow,
-      updatedAt: Date.now(),
-    };
-    return true;
-  }
-
-  /**
-   * Drop the held context window when the model changes, keeping the count. `applyUsageUpdate`
-   * ignores windowless snapshots while a windowed one is held, so a stale window would stick.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/193
-   */
-  private dropUsageWindowOnModelChange(next: BackendState | null): void {
-    const before = this.currentState?.model?.current.baseModelId;
-    const after = next?.model?.current.baseModelId;
-    if (!before || !after || before === after) return;
-    if (this.currentUsage?.contextWindow === undefined) return;
-    this.currentUsage = { ...this.currentUsage, contextWindow: undefined };
-    this.notifyMessages();
+    void this.usageTracker.seedSessionUsage(usage);
   }
 
   finalizePlanDecision(
@@ -1249,183 +1124,47 @@ export class AgentSession {
     decision?: PlanDecisionAction,
     feedbackText?: string
   ): boolean {
-    if (!this.currentPlan || this.currentPlan.id !== proposalId) return false;
-    if (this.currentPlan.pendingToolCallId) {
-      this.decidedPlanToolCallIds.add(this.currentPlan.pendingToolCallId);
-      if (decision) {
-        const summary =
-          decision === "approve"
-            ? "Approved plan"
-            : decision === "reject"
-              ? "Rejected plan"
-              : `Requested plan changes: ${feedbackText ?? "Feedback sent"}`;
-        // ACP may report only a titleless completion after the user decides.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
-        this.recordUserResponse(this.currentPlan.pendingToolCallId, summary);
-      }
-    }
-    this.currentPlan = null;
-    this.notifyCurrentPlanChanged();
-    return true;
-  }
-
-  private setCurrentPlan(next: Omit<CurrentPlan, "id" | "revision" | "decision">): void {
-    if (!this.currentPlan) {
-      this.planSeq += 1;
-      this.currentPlan = {
-        ...next,
-        id: `plan-${this.internalId}-${this.planSeq}`,
-        revision: 1,
-        decision: "pending",
-      };
-      this.notifyCurrentPlanChanged();
-      return;
-    }
-    const prev = this.currentPlan;
-    const bodyChanged = prev.body !== next.body;
-    const changed =
-      bodyChanged ||
-      prev.title !== next.title ||
-      prev.sourceFilePath !== next.sourceFilePath ||
-      prev.permissionGated !== next.permissionGated ||
-      prev.pendingToolCallId !== next.pendingToolCallId ||
-      prev.decision !== "pending";
-    if (!changed) return;
-    this.currentPlan = {
-      ...prev,
-      ...next,
-      revision: bodyChanged ? prev.revision + 1 : prev.revision,
-      decision: "pending",
-    };
-    this.notifyCurrentPlanChanged();
+    return this.requests.finalizePlanDecision(proposalId, decision, feedbackText);
   }
 
   clearCurrentPlanIfModeLeft(): void {
-    if (!this.currentPlan) return;
-    const descriptor = this.getDescriptor?.();
-    if (!descriptor) return;
-    if (!descriptor.getModeMapping) return;
-    if (this.isCurrentlyInPlanMode()) return;
-    const pending = this.currentPlan.pendingToolCallId;
-    if (pending) {
-      this.resolvePlanProposalPermission(pending, false);
-      this.decidedPlanToolCallIds.add(pending);
-    }
-    this.currentPlan = null;
-    this.notifyCurrentPlanChanged();
+    this.requests.clearCurrentPlanIfModeLeft();
   }
 
   hasPendingPlanPermission(): boolean {
-    return this.pendingPlanResolvers.size > 0;
+    return this.requests.hasPendingPlanPermission();
   }
 
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
-    const toolCallId = request.toolCall.toolCallId;
     this.observeToolCall(request.toolCall.kind, toolCallTarget(request.toolCall));
-    return new Promise<PermissionDecision>((resolve) => {
-      this.pendingToolResolvers.set(toolCallId, { request, resolve });
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handleToolPermission(request);
   }
 
   resolveToolPermission(toolCallId: string, optionId: string): void {
-    const entry = this.pendingToolResolvers.get(toolCallId);
-    if (!entry) return;
-    this.pendingToolResolvers.delete(toolCallId);
-    entry.resolve({ outcome: { outcome: "selected", optionId } });
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
+    this.requests.resolveToolPermission(toolCallId, optionId);
   }
 
   getPendingToolPermissions(): PermissionPrompt[] {
-    if (this.pendingToolResolvers.size === 0) return EMPTY_PERMISSIONS;
-    return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
+    return this.requests.getPendingToolPermissions();
   }
 
   handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
-    const requestId = request.requestId;
-    if (request.signal?.aborted) return Promise.resolve(EMPTY_ANSWERS);
-    return new Promise<AgentQuestionAnswers>((resolve) => {
-      this.pendingQuestionResolvers.set(requestId, { request, resolve });
-      // ACP timeout and cancellation withdraw the card without an answer.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-      request.signal?.addEventListener(
-        "abort",
-        () => this.resolveAskUserQuestion(requestId, EMPTY_ANSWERS),
-        { once: true }
-      );
-      this.recomputeStatusIfChanged();
-      this.notifyMessages();
-    });
+    return this.requests.handleAskUserQuestion(request);
   }
 
   resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void {
-    const entry = this.pendingQuestionResolvers.get(requestId);
-    if (!entry) return;
-    this.pendingQuestionResolvers.delete(requestId);
-    const responses = entry.request.questions.flatMap((question) => {
-      const answer = answers[question.answerKey ?? question.question];
-      return answer ? [{ question: question.question, answer }] : [];
-    });
-    // ACP elicitation may have no tool call of its own; record the submitted
-    // answers in the current assistant turn.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
-    if (responses.length > 0) {
-      const summary = `Answered: ${responses.map(({ answer }) => answer).join("; ")}`;
-      const detail = responses.map(({ question, answer }) => `${question}: ${answer}`).join("\n");
-      this.recordUserResponse(requestId, summary, detail);
-    }
-    entry.resolve(answers);
-    this.recomputeStatusIfChanged();
-    this.notifyMessages();
-  }
-
-  private recordUserResponse(toolCallId: string, summary: string, detail?: string): void {
-    const messageId = this.store.findMessageIdWithToolCall(toolCallId) ?? this.placeholderId;
-    if (!messageId) return;
-    const previous = this.findToolCallPart(messageId, toolCallId);
-    const part: AgentMessagePart = {
-      ...(previous?.kind === "tool_call" ? previous : {}),
-      kind: "tool_call",
-      id: toolCallId,
-      title: summary,
-      status: "completed",
-      userResponse: summary,
-      ...(detail ? { output: [{ type: "text", text: detail }] } : {}),
-    };
-    if (this.store.upsertAgentPart(messageId, part)) this.notifyMessages();
+    this.requests.resolveAskUserQuestion(requestId, answers);
   }
 
   getPendingAskUserQuestions(): AskUserQuestionPrompt[] {
-    if (this.pendingQuestionResolvers.size === 0) return EMPTY_QUESTIONS;
-    return Array.from(this.pendingQuestionResolvers.values(), (e) => e.request);
-  }
-
-  private flushResolvers(
-    map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
-  ): void {
-    for (const { request, resolve } of map.values()) {
-      resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
-    }
-    map.clear();
-    this.recomputeStatusIfChanged();
-  }
-
-  private flushQuestionResolvers(): void {
-    for (const { resolve } of this.pendingQuestionResolvers.values()) {
-      resolve(EMPTY_ANSWERS);
-    }
-    this.pendingQuestionResolvers.clear();
-    this.recomputeStatusIfChanged();
+    return this.requests.getPendingAskUserQuestions();
   }
 
   private handleSessionEvent(event: SessionEvent): void {
     const update = event.update;
     // A user message echoed outside the replay is already shown from the prompt that sent it. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-    if (update.sessionUpdate === "user_message_chunk" && !this.historyOpen) return;
-    if (this.historyOpen && this.appendHistory(update, event.occurredAt)) {
-      this.extendHistoryTurn(event.occurredAt);
+    if (update.sessionUpdate === "user_message_chunk" && !this.historyReplay.isOpen()) return;
+    if (this.historyReplay.append(update, event.occurredAt)) {
       return;
     }
     const toolOwnerMessageId =
@@ -1468,9 +1207,7 @@ export class AgentSession {
       }
     }
 
-    if (update.sessionUpdate === "plan" && this.applyCurrentTodoList(update.entries)) {
-      this.notifyCurrentTodoListChanged();
-    }
+    if (update.sessionUpdate === "plan") this.requests.applyTodoList(update.entries);
 
     if (update.sessionUpdate === "session_info_update") {
       // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
@@ -1480,7 +1217,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
-      this.dropUsageWindowOnModelChange(update.state);
+      this.usageTracker.dropUsageWindowOnModelChange(update.state);
       this.currentState = update.state;
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
@@ -1493,12 +1230,11 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "usage_update") {
-      this.applyUsageUpdate(update.usage);
+      this.usageTracker.applyUsageUpdate(update.usage);
       return;
     }
     if (update.sessionUpdate === "plan_usage_update") {
-      this.currentPlanUsage = update.planUsage;
-      this.notifyMessages();
+      this.usageTracker.applyPlanUsage(update.planUsage);
       return;
     }
 
@@ -1542,7 +1278,7 @@ export class AgentSession {
           isPlanProposal: update.isPlanProposal,
         });
         if (exitPlan) {
-          this.publishGatedPlan(update.toolCallId, exitPlan);
+          this.requests.publishGatedPlan(update.toolCallId, exitPlan);
           if (this.store.upsertAgentPart(targetMessageId, toolCallToPart(update))) {
             this.scheduleNotifyMessages();
           }
@@ -1577,7 +1313,7 @@ export class AgentSession {
             isPlanProposal: update.isPlanProposal,
           });
           if (exitPlan) {
-            this.publishGatedPlan(merged.id, exitPlan);
+            this.requests.publishGatedPlan(merged.id, exitPlan);
           }
         }
         if (this.store.upsertAgentPart(targetMessageId, merged)) {
@@ -1592,8 +1328,8 @@ export class AgentSession {
         return;
       }
       case "compaction": {
-        const upserted = this.upsertCompactionPart(targetMessageId, update);
-        const metered = this.applyCompactedUsage(update);
+        const upserted = upsertCompactionPart(this.store, targetMessageId, update);
+        const metered = this.usageTracker.applyCompactedUsage(update);
         if (upserted || metered) this.scheduleNotifyMessages();
         return;
       }
@@ -1603,137 +1339,6 @@ export class AgentSession {
         );
         return;
     }
-  }
-
-  // Frames replayed before the load response are the chat's past turns, not a turn in flight. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-  private appendHistory(update: SessionEvent["update"], occurredAt: number | undefined): boolean {
-    switch (update.sessionUpdate) {
-      case "user_message_chunk": {
-        const text = extractText(update.content);
-        const current = this.historyUser;
-        if (current && update.messageId !== undefined && current.wireId === update.messageId) {
-          current.raw += text;
-          return true;
-        }
-        if (!text.trim()) return true;
-        this.flushHistoryUser();
-        this.closeHistoryTurn();
-        this.historyUser = { wireId: update.messageId, raw: text, occurredAt };
-        this.historyTurnStartedAt = occurredAt;
-        return true;
-      }
-      case "agent_message_chunk":
-      case "agent_thought_chunk": {
-        const text = extractText(update.content);
-        if (!text) return true;
-        const id = this.historyAiBubbleId(occurredAt);
-        const appended =
-          update.sessionUpdate === "agent_message_chunk"
-            ? this.store.appendAgentText(id, text)
-            : this.store.appendAgentThought(id, text);
-        if (appended) this.scheduleNotifyMessages();
-        return true;
-      }
-      case "tool_call":
-        if (
-          this.store.upsertAgentPart(this.historyAiBubbleId(occurredAt), toolCallToPart(update))
-        ) {
-          this.scheduleNotifyMessages();
-        }
-        return true;
-      case "tool_call_update": {
-        const id =
-          this.store.findMessageIdWithToolCall(update.toolCallId) ??
-          this.historyAiBubbleId(occurredAt);
-        const merged = mergeToolCallUpdate(this.findToolCallPart(id, update.toolCallId), update);
-        if (this.store.upsertAgentPart(id, merged)) this.scheduleNotifyMessages();
-        return true;
-      }
-      case "plan":
-        if (this.store.upsertAgentPart(this.historyAiBubbleId(occurredAt), planToPart(update))) {
-          this.scheduleNotifyMessages();
-        }
-        // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-        if (this.applyCurrentTodoList(update.entries)) this.notifyCurrentTodoListChanged();
-        return true;
-      case "compaction": {
-        // A replayed compaction is already over, so one that never reports an end settles as cancelled rather than spinning. https://github.com/Brevilabs/obsidian-copilot-private/issues/638
-        const settled: CompactionSnapshot =
-          update.status === "in_progress" ? { ...update, status: "cancelled" } : update;
-        if (this.upsertCompactionPart(this.historyAiBubbleId(occurredAt), settled)) {
-          this.scheduleNotifyMessages();
-        }
-        return true;
-      }
-      default:
-        return false;
-    }
-  }
-
-  private upsertCompactionPart(messageId: string, update: CompactionSnapshot): boolean {
-    const existing = this.store
-      .getMessage(messageId)
-      ?.parts?.find((p) => p.kind === "compaction" && p.id === update.id);
-    const startedAtMs = existing?.kind === "compaction" ? existing.startedAtMs : Date.now();
-    return this.store.upsertAgentPart(messageId, compactionToPart(update, startedAtMs));
-  }
-
-  // A prompt's context envelope stays hidden until its wrapper is complete, so a user bubble waits for the message to end. https://github.com/Brevilabs/obsidian-copilot-private/issues/602
-  private flushHistoryUser(): void {
-    const pending = this.historyUser;
-    this.historyUser = null;
-    if (!pending) return;
-    // The plugin's own continuation is not something the user typed. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-    if (stripUserMessageWrapper(pending.raw).trim() === OUTPUT_LIMIT_CONTINUATION_PROMPT) return;
-    this.store.addMessage({
-      message: stripUserMessageWrapper(pending.raw),
-      sender: USER_SENDER,
-      timestamp: historyTimestamp(pending.occurredAt),
-      isVisible: true,
-    });
-    this.scheduleNotifyMessages();
-  }
-
-  private historyAiBubbleId(occurredAt: number | undefined): string {
-    if (this.historyAiId) return this.historyAiId;
-    this.flushHistoryUser();
-    const startedAt = this.historyTurnStartedAt;
-    this.historyAiId = this.store.addMessage({
-      message: "",
-      sender: AI_SENDER,
-      timestamp: historyTimestamp(occurredAt),
-      isVisible: true,
-      parts: [],
-      turnDurationMs:
-        startedAt === undefined || occurredAt === undefined
-          ? undefined
-          : Math.max(0, occurredAt - startedAt),
-    });
-    return this.historyAiId;
-  }
-
-  // A replayed turn lasts from its prompt to its last timed frame; frames from an agent that sends no times leave it untimed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-  private extendHistoryTurn(occurredAt: number | undefined): void {
-    const startedAt = this.historyTurnStartedAt;
-    if (!this.historyAiId || startedAt === undefined || occurredAt === undefined) return;
-    if (this.store.extendTurnDuration(this.historyAiId, occurredAt - startedAt)) {
-      this.scheduleNotifyMessages();
-    }
-  }
-
-  private endHistory(): void {
-    this.flushHistoryUser();
-    this.historyOpen = false;
-    this.closeHistoryTurn();
-    this.historyTurnStartedAt = undefined;
-  }
-
-  // A replayed turn is over, so a step it never finished did not run. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
-  private closeHistoryTurn(): void {
-    if (this.historyAiId && this.store.settleOpenParts(this.historyAiId)) {
-      this.scheduleNotifyMessages();
-    }
-    this.historyAiId = null;
   }
 
   private resolveContentTarget(messageId: string | undefined): string | null {
@@ -1820,29 +1425,12 @@ export class AgentSession {
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
-    const msg = this.store.getMessage(messageId);
-    return msg?.parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
+    return findToolCallPart(this.store, messageId, toolCallId);
   }
 
-  private publishGatedPlan(
-    toolCallId: string,
-    info: { plan: string; planFilePath?: string }
-  ): void {
-    if (this.decidedPlanToolCallIds.has(toolCallId)) return;
-    const stale = this.currentPlan?.pendingToolCallId;
-    if (stale && stale !== toolCallId) this.resolvePlanProposalPermission(stale, false);
-    const title = derivePlanTitleFromMarkdown(info.plan);
-    this.setCurrentPlan({
-      body: info.plan,
-      title,
-      sourceFilePath: info.planFilePath,
-      permissionGated: true,
-      pendingToolCallId: toolCallId,
-    });
-  }
-
-  private isCurrentlyInPlanMode(): boolean {
-    return this.currentState?.mode?.current === "plan";
+  private hasLeftPlanMode(): boolean {
+    if (!this.getDescriptor?.()?.getModeMapping) return false;
+    return this.currentState?.mode?.current !== "plan";
   }
 
   private recomputeStatusIfChanged(): void {
@@ -1923,18 +1511,6 @@ export class AgentSession {
     }
   }
 
-  private applyCurrentTodoList(entries: AgentPlanEntry[]): boolean {
-    const next: AgentTodoListEntry[] = entries.map((e) => ({
-      content: e.content,
-      status: e.status,
-    }));
-    const signature = next.length > 0 ? JSON.stringify(next) : null;
-    if (signature === this.currentTodoListSignature) return false;
-    this.currentTodoList = next.length > 0 ? next : null;
-    this.currentTodoListSignature = signature;
-    return true;
-  }
-
   private notifyCurrentTodoListChanged(): void {
     for (const l of this.listeners) {
       try {
@@ -1954,329 +1530,4 @@ export class AgentSession {
       }
     }
   }
-}
-
-function buildEmptyTurnMessage(backendId: BackendId, stopReason: StopReason): string {
-  return `${backendId} finished the turn without returning any assistant text or tool activity (stop reason: ${stopReason}). Try again, or switch models if this repeats.`;
-}
-
-function formatPromptFailure(err: unknown): string {
-  const base = err2String(err);
-  const providerMessage = extractProviderErrorMessage(err);
-  if (!providerMessage || base.includes(providerMessage)) return base;
-  return `${base}\n${providerMessage}`;
-}
-
-function extractProviderErrorMessage(err: unknown): string | null {
-  const found = findProviderErrorPayload(err, new Set<unknown>());
-  if (!found) return null;
-  const type = typeof found.type === "string" ? found.type : "ProviderError";
-  const message = typeof found.message === "string" ? found.message : null;
-  if (!message) return type;
-  return `${type}: ${message}`;
-}
-
-function findProviderErrorPayload(
-  value: unknown,
-  seen: Set<unknown>
-): { type?: unknown; message?: unknown } | null {
-  if (value === null || typeof value !== "object") return null;
-  if (seen.has(value)) return null;
-  seen.add(value);
-  const record = value as Record<string, unknown>;
-  const directError = record.error;
-  if (directError && typeof directError === "object") {
-    const errorRecord = directError as Record<string, unknown>;
-    if (typeof errorRecord.message === "string" || typeof errorRecord.type === "string") {
-      return { type: errorRecord.type, message: errorRecord.message };
-    }
-  }
-  if (typeof record.message === "string") {
-    const parsed = tryParseJsonObject(record.message);
-    if (parsed) {
-      const nested = findProviderErrorPayload(parsed, seen);
-      if (nested) return nested;
-    }
-  }
-  if (record.data) {
-    const nested = findProviderErrorPayload(record.data, seen);
-    if (nested) return nested;
-  }
-  if (Array.isArray(record.errors)) {
-    for (const item of record.errors) {
-      const nested = findProviderErrorPayload(item, seen);
-      if (nested) return nested;
-    }
-  }
-  const cause = record.cause;
-  if (cause) return findProviderErrorPayload(cause, seen);
-  return null;
-}
-
-function tryParseJsonObject(s: string): Record<string, unknown> | null {
-  const t = s.trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const v = JSON.parse(t);
-    return v && typeof v === "object" ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-type DisplayContentItem =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
-
-export function buildUserDisplayContent(
-  displayText: string,
-  promptContent?: PromptContent[]
-): DisplayContentItem[] | undefined {
-  const images = (promptContent ?? []).filter(
-    (p): p is Extract<PromptContent, { type: "image" }> => p.type === "image"
-  );
-  if (images.length === 0) return undefined;
-  const content: DisplayContentItem[] = [];
-  if (displayText.trim()) content.push({ type: "text", text: displayText });
-  for (const img of images) {
-    content.push({
-      type: "image_url",
-      image_url: { url: `data:${img.mimeType};base64,${img.data}` },
-    });
-  }
-  return content;
-}
-
-export function buildPromptBlocks(
-  displayText: string,
-  context?: MessageContext,
-  content?: PromptContent[],
-  webTabBlock?: string,
-  projectContextBlock?: string | null,
-  leadingContextBlock?: string | null,
-  projectContextUpdatesBlock?: string | null
-): PromptContent[] {
-  const sections = [
-    projectContextBlock?.trim() || null,
-    projectContextUpdatesBlock?.trim() || null,
-    leadingContextBlock?.trim() || null,
-    buildContextEnvelope(context),
-    buildWebSelectionBlocks(context),
-    webTabBlock?.trim() || null,
-  ].filter((s): s is string => Boolean(s));
-  const head = sections.length > 0 ? sections.join("\n\n") : null;
-  const headText = head
-    ? `${head}\n\n<user-message>\n${displayText}\n</user-message>`
-    : displayText;
-  const extras = content ?? [];
-  if (extras.length === 0) return [{ type: "text", text: headText }];
-  return [{ type: "text", text: headText }, ...extras];
-}
-
-export function withReadOnlyPreamble(blocks: PromptContent[]): PromptContent[] {
-  const i = blocks.findIndex((b) => b.type === "text");
-  if (i === -1) return [{ type: "text", text: FANOUT_READONLY_PREAMBLE }, ...blocks];
-  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
-  const out = blocks.slice();
-  out[i] = { type: "text", text: `${FANOUT_READONLY_PREAMBLE}\n\n${block.text}` };
-  return out;
-}
-
-async function serializeWebTabContext(context: MessageContext | undefined): Promise<string> {
-  const webTabs = context?.webTabs;
-  if (!webTabs || webTabs.length === 0) return "";
-  return (await ContextProcessor.getInstance().processContextWebTabs(webTabs)).trim();
-}
-
-function buildWebSelectionBlocks(context: MessageContext | undefined): string | null {
-  const selections = (context?.selectedTextContexts ?? []).filter(isWebSelectedTextContext);
-  if (selections.length === 0) return null;
-  return selections
-    .map((s) =>
-      [
-        `<${WEB_SELECTED_TEXT_TAG}>`,
-        `<title>${escapeXml(s.title)}</title>`,
-        `<url>${escapeXml(s.url)}</url>`,
-        `<content>\n${escapeXml(s.content)}\n</content>`,
-        `</${WEB_SELECTED_TEXT_TAG}>`,
-      ].join("\n")
-    )
-    .join("\n\n");
-}
-
-function buildContextEnvelope(context: MessageContext | undefined): string | null {
-  if (!context) return null;
-  const notePaths = (context.notes ?? []).map((n) => n.path).filter(Boolean);
-  const excerpts = (context.selectedTextContexts ?? []).filter(isNoteSelectedTextContext);
-  if (notePaths.length === 0 && excerpts.length === 0) return null;
-
-  const lines: string[] = [
-    "<copilot-context>",
-    "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
-  ];
-  if (notePaths.length > 0) {
-    lines.push("", "Notes:");
-    for (const p of notePaths) lines.push(`- ${p}`);
-  }
-  if (excerpts.length > 0) {
-    lines.push("", "Selected excerpts (already inlined; no need to re-read):");
-    for (const e of excerpts) {
-      const location = e.startLine > 0 ? ` (lines ${e.startLine}-${e.endLine})` : "";
-      lines.push(`- ${e.notePath}${location}:`);
-      for (const l of e.content.split("\n")) lines.push(`  ${l}`);
-    }
-  }
-  lines.push("</copilot-context>");
-  return lines.join("\n");
-}
-
-function extractText(content: PromptContent): string {
-  if (content.type === "text") return content.text;
-  return "";
-}
-
-function toolCallToPart(
-  call: ToolCallSnapshot & { sessionUpdate?: "tool_call" }
-): AgentMessagePart {
-  return {
-    kind: "tool_call",
-    id: call.toolCallId,
-    title: call.title,
-    toolKind: call.kind,
-    status: call.status ?? "pending",
-    input: call.rawInput,
-    output: extractToolCallOutputs(call.content),
-    locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
-    vendorToolName: call.vendorToolName,
-    mcpServer: call.mcpServer,
-    parentToolCallId: call.parentToolCallId,
-    progress: call.progress,
-  };
-}
-
-export function tryReadExitPlanModeCall(args: {
-  kind?: string;
-  rawInput: unknown;
-  isPlanProposal?: boolean;
-}): { plan: string; planFilePath?: string } | null {
-  const raw = args.rawInput as { plan?: unknown; planFilePath?: unknown } | null | undefined;
-  const plan = raw?.plan;
-  if (typeof plan !== "string") return null;
-  if (!args.isPlanProposal && args.kind !== "switch_mode") return null;
-  const planFilePath = typeof raw?.planFilePath === "string" ? raw.planFilePath : undefined;
-  return { plan, planFilePath };
-}
-
-function derivePlanTitleFromMarkdown(md: string): string {
-  for (const line of md.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    return trimmed.replace(/^#+\s*/, "").slice(0, 80);
-  }
-  return "Plan proposal";
-}
-
-function mergeToolCallUpdate(
-  existing: AgentMessagePart | undefined,
-  upd: ToolCallDelta & { sessionUpdate?: "tool_call_update" }
-): AgentMessagePart {
-  const base: AgentMessagePart =
-    existing && existing.kind === "tool_call"
-      ? existing
-      : {
-          kind: "tool_call",
-          id: upd.toolCallId,
-          title: upd.title ?? "Tool call",
-          status: "pending",
-        };
-  if (base.kind !== "tool_call") return base;
-  return {
-    ...base,
-    title: upd.title ?? base.title,
-    toolKind: upd.kind ?? base.toolKind,
-    status: upd.status ?? base.status,
-    input: upd.rawInput !== undefined ? upd.rawInput : base.input,
-    output:
-      upd.content !== undefined && upd.content !== null
-        ? extractToolCallOutputs(upd.content)
-        : base.output,
-    locations:
-      upd.locations !== undefined && upd.locations !== null
-        ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
-        : base.locations,
-    vendorToolName: upd.vendorToolName ?? base.vendorToolName,
-    mcpServer: upd.mcpServer ?? base.mcpServer,
-    parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
-    progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
-  };
-}
-
-function extractToolCallOutputs(
-  content: ToolCallContent[] | null | undefined
-): AgentToolCallOutput[] | undefined {
-  if (!content) return undefined;
-  const outputs: AgentToolCallOutput[] = [];
-  for (const item of content) {
-    if (item.type === "content" && item.content.type === "text") {
-      outputs.push(capToolOutputText(item.content.text));
-    } else if (item.type === "diff") {
-      outputs.push({
-        type: "diff",
-        path: item.path,
-        oldText: item.oldText ?? null,
-        newText: item.newText,
-      });
-    }
-  }
-  return outputs.length > 0 ? outputs : undefined;
-}
-
-function capToolOutputText(text: string): AgentToolCallOutput {
-  if (text.length <= MAX_TOOL_OUTPUT_TEXT_CHARS) return { type: "text", text };
-  const omitted = text.length - MAX_TOOL_OUTPUT_TEXT_CHARS;
-  return {
-    type: "text",
-    text:
-      text.slice(0, MAX_TOOL_OUTPUT_TEXT_CHARS) +
-      `\n\n[Display trimmed: ${omitted.toLocaleString()} more characters. The agent received the full output.]`,
-  };
-}
-
-function decisionFor(
-  req: PermissionPrompt,
-  kinds: ReadonlyArray<PermissionOptionKind>
-): PermissionDecision {
-  for (const k of kinds) {
-    const opt = req.options.find((o) => o.kind === k);
-    if (opt) return { outcome: { outcome: "selected", optionId: opt.optionId } };
-  }
-  return { outcome: { outcome: "cancelled" } };
-}
-
-function planToPart(plan: PlanSummary & { sessionUpdate?: "plan" }): AgentMessagePart {
-  return {
-    kind: "plan",
-    entries: plan.entries.map((e) => ({
-      content: e.content,
-      priority: e.priority,
-      status: e.status,
-    })),
-  };
-}
-
-function compactionToPart(update: CompactionSnapshot, startedAtMs: number): AgentMessagePart {
-  return {
-    kind: "compaction",
-    id: update.id,
-    status: update.status,
-    trigger: update.trigger,
-    error: update.error,
-    preTokens: update.preTokens,
-    postTokens: update.postTokens,
-    startedAtMs,
-  };
-}
-
-function historyTimestamp(occurredAt: number | undefined): FormattedDateTime | null {
-  return occurredAt === undefined ? null : formatDateTime(new Date(occurredAt));
 }
