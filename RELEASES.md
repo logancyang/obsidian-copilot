@@ -2,6 +2,8 @@
 
 # v4.0.16 - Background tasks in Claude chats, compact, Miyo search and OpenArtifacts improvements
 
+[![Demo video: Obsidian Copilot 4.0.16: Background Tasks in Claude Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/github-thumbnail-6a06171f.png)](https://youtube.com/shorts/4B04T53tiYk)
+
 In Agent Chat, Claude now runs subagents and long commands in the background and replies again when each one finishes. Messages you send while it works reach it at its next step, so you can change course without stopping it.
 
 This release also adds `/compact` command to Agent Chat, improves Miyo search experience and quality, and lets agents publish private OpenArtifacts pages and manage them for you.
