@@ -20,12 +20,11 @@ type AgentChatMessagesProps = React.ComponentProps<typeof AgentChatMessages>;
 
 const mockSingleMessageRender = jest.fn();
 const mockTrailRender = jest.fn();
-const mockScrollState = { paused: false, onResume: jest.fn(), containerMinHeight: 0 };
+const mockScrollState = { paused: false, onResume: jest.fn() };
 
 jest.mock("@/hooks/useChatScrolling", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useChatScrolling: () => ({
-    containerMinHeight: mockScrollState.containerMinHeight,
     scrollContainerCallbackRef: jest.fn(),
     contentCallbackRef: jest.fn(),
     onScroll: jest.fn(),
@@ -233,7 +232,6 @@ describe("AgentChatMessages", () => {
       mockSingleMessageRender.mockClear();
       mockTrailRender.mockClear();
       mockScrollState.paused = false;
-      mockScrollState.containerMinHeight = 0;
       mockScrollState.onResume.mockClear();
     });
 
@@ -260,15 +258,6 @@ describe("AgentChatMessages", () => {
       expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
         text.indexOf("next question")
       );
-    });
-
-    it("keeps the streaming reply's viewport height when the feedback card attaches to it", () => {
-      mockScrollState.containerMinHeight = 480;
-      renderMessages(FEEDBACK_TRANSCRIPT.slice(0, 2), true, { feedbackOffer: FEEDBACK_OFFER });
-
-      const row = screen.getByTestId("agent-feedback-card").closest("[data-message-key]");
-      expect(row?.getAttribute("data-message-key")).toBe("reply-1");
-      expect((row as HTMLElement).style.minHeight).toBe("480px");
     });
 
     it("hides a dismissed feedback card", () => {

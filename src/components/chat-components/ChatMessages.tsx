@@ -1,7 +1,6 @@
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
-import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
@@ -38,7 +37,6 @@ const ChatMessages = memo(
     onDelete,
   }: ChatMessagesProps) => {
     const {
-      containerMinHeight,
       scrollContainerCallbackRef,
       contentCallbackRef,
       onScroll,
@@ -65,20 +63,9 @@ const ChatMessages = memo(
           scrollToEnd={scrollToEnd}
         >
           {chatHistory.map((message, index) => {
-            const visibleMessages = chatHistory.filter((m) => m.isVisible);
-            const isLastMessage = index === visibleMessages.length - 1;
-            const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
-
             return (
               message.isVisible && (
-                <div
-                  key={getMessageKey(message, index)}
-                  data-message-key={getMessageKey(message, index)}
-                  className="tw-w-full"
-                  style={{
-                    minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
-                  }}
-                >
+                <div key={getMessageKey(message, index)} className="tw-w-full">
                   <ChatSingleMessage
                     message={message}
                     sourcePath={sourcePath}
@@ -93,12 +80,7 @@ const ChatMessages = memo(
             );
           })}
           {currentAiMessage ? (
-            <div
-              className="tw-w-full"
-              style={{
-                minHeight: `${containerMinHeight}px`,
-              }}
-            >
+            <div className="tw-w-full">
               <ChatSingleMessage
                 key={streamingMessageId ?? "ai_message_streaming"}
                 message={{
@@ -114,12 +96,7 @@ const ChatMessages = memo(
               />
             </div>
           ) : loading ? (
-            <div
-              className="tw-w-full"
-              style={{
-                minHeight: `${containerMinHeight}px`,
-              }}
-            >
+            <div className="tw-w-full">
               <BottomLoadingIndicator label={loadingMessage} />
             </div>
           ) : null}

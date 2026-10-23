@@ -24,14 +24,8 @@ const userMessage = (id: string): ChatMessage => ({
 });
 
 function ChatScrollHarness({ chatHistory }: { chatHistory: ChatMessage[] }) {
-  const {
-    containerMinHeight,
-    scrollContainerCallbackRef,
-    contentCallbackRef,
-    onScroll,
-    isScrollPaused,
-    scrollToEnd,
-  } = useChatScrolling({ chatHistory });
+  const { scrollContainerCallbackRef, contentCallbackRef, onScroll, isScrollPaused, scrollToEnd } =
+    useChatScrolling({ chatHistory });
   const setContainerRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (node) {
@@ -56,9 +50,7 @@ function ChatScrollHarness({ chatHistory }: { chatHistory: ChatMessage[] }) {
 
   return (
     <div ref={setContainerRef} onScroll={onScroll} data-testid="transcript">
-      <div ref={contentCallbackRef} style={{ minHeight: containerMinHeight }}>
-        {chatHistory.map((message) => message.message)}
-      </div>
+      <div ref={contentCallbackRef}>{chatHistory.map((message) => message.message)}</div>
       {isScrollPaused && (
         <button type="button" onClick={scrollToEnd}>
           Scroll to end

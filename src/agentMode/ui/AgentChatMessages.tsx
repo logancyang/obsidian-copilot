@@ -71,12 +71,10 @@ function lastAssistant(visible: AgentChatMessage[]): AgentChatMessage | undefine
 
 interface AgentMessageRowProps {
   message: AgentChatMessage;
-  messageKey: string;
   app: App;
   sourcePath: string;
   isLatestAssistant: boolean;
   isStreaming: boolean;
-  minHeight?: number;
   trailingCard?: React.ReactNode;
 }
 
@@ -85,12 +83,10 @@ interface AgentMessageRowProps {
 // https://github.com/logancyang/obsidian-copilot/issues/3343
 const AgentMessageRow = memo(function AgentMessageRow({
   message,
-  messageKey,
   app,
   sourcePath,
   isLatestAssistant,
   isStreaming,
-  minHeight,
   trailingCard,
 }: AgentMessageRowProps) {
   const adaptedMessage = toChatMessageView(message);
@@ -112,11 +108,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
   const fanoutTurn = isAssistant ? message.fanout : undefined;
 
   return (
-    <div
-      data-message-key={messageKey}
-      className="tw-w-full"
-      style={{ minHeight: minHeight !== undefined ? `${minHeight}px` : "auto" }}
-    >
+    <div className="tw-w-full">
       {fanoutTurn ? (
         <div className="tw-px-3 tw-pt-2">
           <FanoutMessageCard
@@ -181,7 +173,6 @@ const AgentChatMessages = memo(
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const {
-      containerMinHeight,
       scrollContainerCallbackRef,
       contentCallbackRef,
       onScroll,
@@ -259,14 +250,9 @@ const AgentChatMessages = memo(
           scrollToEnd={scrollToEnd}
         >
           {visible.map((message, index) => {
-            const shouldApplyMinHeight =
-              index === visible.length - 1 && message.sender !== USER_SENDER && !showPlanCard;
-            const messageKey = getMessageKey(adapted[index], index);
-
             return (
               <AgentMessageRow
-                key={messageKey}
-                messageKey={messageKey}
+                key={getMessageKey(adapted[index], index)}
                 message={message}
                 app={app}
                 sourcePath={sourcePath}
@@ -274,7 +260,6 @@ const AgentChatMessages = memo(
                   message.sender !== USER_SENDER && message.id === latestAssistant?.id
                 }
                 isStreaming={message.id === streamingMessageId}
-                minHeight={shouldApplyMinHeight ? containerMinHeight : undefined}
                 trailingCard={index === feedbackCardIndex ? feedbackCard : undefined}
               />
             );
