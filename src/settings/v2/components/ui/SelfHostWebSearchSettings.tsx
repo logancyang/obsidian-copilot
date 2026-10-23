@@ -68,8 +68,8 @@ export const SelfHostWebSearchSettings: React.FC<SelfHostWebSearchSettingsProps>
     <>
       <SettingItem
         type="select"
-        title="Web Search Provider"
-        description="Your key turns this into an agent skill parameter."
+        title="Web search provider"
+        description="Agents search the web through this provider with your API key."
         value={provider}
         onChange={(value) => onProviderChange(value as SelfHostSearchProvider)}
         options={SEARCH_PROVIDER_OPTIONS}

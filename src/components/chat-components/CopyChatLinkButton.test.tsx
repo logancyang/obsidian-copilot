@@ -12,7 +12,7 @@ describe("CopyChatLinkButton", () => {
           <CopyChatLinkButton onCopyLink={onCopyLink} />
         </TooltipProvider>
       );
-      fireEvent.click(screen.getByTitle("Copy Chat Link"));
+      fireEvent.click(screen.getByTitle("Copy chat link"));
       expect(onCopyLink).toHaveBeenCalledTimes(1);
     });
 
@@ -22,7 +22,7 @@ describe("CopyChatLinkButton", () => {
           <CopyChatLinkButton />
         </TooltipProvider>
       );
-      expect(screen.getByTitle("Copy Chat Link")).toHaveProperty("disabled", true);
+      expect(screen.getByTitle("Copy chat link")).toHaveProperty("disabled", true);
     });
   });
 });

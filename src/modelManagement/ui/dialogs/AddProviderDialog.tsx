@@ -96,7 +96,7 @@ export const AddProviderContent: React.FC<AddProviderContentProps> = ({
         {local.length > 0 && (
           <section data-testid="add-provider-local">
             <div className="tw-mb-2 tw-text-ui-smaller tw-font-medium tw-uppercase tw-tracking-wide tw-text-muted">
-              Self Host
+              Self-host
             </div>
             <div className="tw-flex tw-flex-col tw-gap-0.5">
               {local.map((t) => (

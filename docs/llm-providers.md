@@ -10,21 +10,21 @@ Settings show where each source sends your requests. Hover the small icon next t
 
 | Model source                        | Quick Chat | Agent Chat                                 |
 | ----------------------------------- | ---------- | ------------------------------------------ |
-| **Copilot-hosted models**           | Yes        | opencode                                   |
-| **Your API key or endpoint (BYOK)** | Yes        | opencode, when the provider is shown there |
-| **Models reported by opencode**     | No         | opencode                                   |
+| **Copilot-hosted models**           | Yes        | OpenCode                                   |
+| **Your API key or endpoint (BYOK)** | Yes        | OpenCode, when the provider is shown there |
+| **Models reported by OpenCode**     | No         | OpenCode                                   |
 | **Claude Code account**             | No         | Claude                                     |
 | **Codex account**                   | No         | Codex                                      |
 
-Models reported by opencode are routed to their backing provider. Free
-opencode Zen models show a warning because that provider may log or train on
+Models reported by OpenCode are routed to their backing provider. Free
+OpenCode Zen models show a warning because that provider may log or train on
 prompts; review its terms before sending sensitive content.
 
 ## Copilot-hosted models
 
 Lite, Plus, and included Supporter access can provide Copilot-hosted models.
 You do not need an API key from an AI provider. Enter your license under
-**Settings → Copilot → Basic → Copilot License**, then select **Apply**.
+**Settings → Copilot → Basic → Copilot license**, then select **Apply**.
 
 Without a license, Copilot models appear with a lock. Click a locked row or its
 lock icon in a model picker or model settings to open the
@@ -34,7 +34,7 @@ enable a model; a license is still required to use it.
 Licensed models can appear in both places:
 
 - **Basic → Agents → Quick Chat** for regular Copilot chat on desktop, or **Basic → Quick Chat models** on mobile.
-- **Basic → Agents → opencode** for Agent Chat.
+- **Basic → Agents → OpenCode** for Agent Chat.
 
 They do not appear under Claude or Codex, because those agents use their own
 accounts and models. The available Copilot lineup changes over time, so use the
@@ -71,22 +71,22 @@ The provider list and model catalog are loaded in the app, so this guide does
 not keep a fixed provider or model count. If the endpoint cannot list its
 models, you can enter a model ID yourself.
 
-New chat models are enabled for Quick Chat and opencode by default. You can
+New chat models are enabled for Quick Chat and OpenCode by default. You can
 curate each list independently:
 
 - **Basic → Agents → Quick Chat** controls **Quick Chat models** and its
   **Default model**.
-- **Basic → Agents → opencode** controls the models opencode can use and its
+- **Basic → Agents → OpenCode** controls the models OpenCode can use and its
   **Default model**.
 
 For enabled, routable models, Copilot passes the saved key and any custom
-endpoint override to opencode when it starts. A model that opencode cannot route
-is left out of the opencode list, but may still work in Quick Chat.
+endpoint override to OpenCode when it starts. A model that OpenCode cannot route
+is left out of the OpenCode list, but may still work in Quick Chat.
 
 ### Local and Custom Endpoints
 
 Inside **BYOK → Add a provider**, choose **Ollama** or **LM Studio** from the
-**Self Host** group to use their local OpenAI-compatible servers. This does not
+**Self-host** group to use their local OpenAI-compatible servers. This does not
 require a Self-Host license. Their API key is optional, and Copilot fills in the
 usual local URL:
 
@@ -115,7 +115,7 @@ Claude and Codex are Agent Chat backends, not BYOK providers:
 
 Copilot discovers the models reported by each agent and lets you enable them
 under **Basic → Agents → Claude** or **Basic → Agents → Codex**. Those models
-stay inside their respective agents; they do not become Quick Chat or opencode
+stay inside their respective agents; they do not become Quick Chat or OpenCode
 models.
 
 An OpenAI API key is different from a ChatGPT subscription, just as an

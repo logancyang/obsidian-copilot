@@ -187,7 +187,7 @@ describe("OpencodeInstallModal", () => {
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       expect(
         screen.getByPlaceholderText<HTMLInputElement>("/absolute/path/to/opencode").value
       ).toBe(EXISTING_BINARY_PATH);
@@ -213,7 +213,7 @@ describe("OpencodeInstallModal", () => {
         installDeferred().resolve({ version: "2.0.3", path: "/managed/opencode" });
       });
       publish({ kind: "idle" });
-      expect(noticeMessages()).toContain("opencode v2.0.3 installed.");
+      expect(noticeMessages()).toContain("OpenCode v2.0.3 installed.");
       expect(screen.getByRole("button", { name: "Download & install" })).toBeTruthy();
     });
 
@@ -261,12 +261,12 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.22" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update to v2.0.22" }));
       });
 
       expect(upgradeManaged).toHaveBeenCalledTimes(1);
       expect(upgradeCustomBinary).not.toHaveBeenCalled();
-      expect(noticeMessages()).toContain("opencode upgraded to v2.0.22.");
+      expect(noticeMessages()).toContain("OpenCode updated to v2.0.22.");
     });
     it("drops a failed upgrade's reason once an install has replaced the binary", async () => {
       setOpencodeSettings({
@@ -278,7 +278,7 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("tar exited with 1"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.22" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update to v2.0.22" }));
       });
       expect(screen.getByText("tar exited with 1")).toBeTruthy();
 
@@ -303,7 +303,7 @@ describe("OpencodeInstallModal", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Reinstall" }));
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.22" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update to v2.0.22" }));
       });
 
       expect(screen.getAllByRole("progressbar")).toHaveLength(1);
@@ -321,11 +321,11 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.22" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update to v2.0.22" }));
       });
 
       expect(screen.queryByText("Aborted")).toBeNull();
-      expect(screen.getByRole("button", { name: "Upgrade to v2.0.22" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Update to v2.0.22" })).toBeTruthy();
     });
 
     it("drops a failed upgrade's reason once another binary is applied", async () => {
@@ -338,11 +338,11 @@ describe("OpencodeInstallModal", () => {
       upgradeManaged.mockRejectedValue(new Error("GitHub API rate-limited"));
       renderContainer(manager);
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Upgrade to v2.0.22" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update to v2.0.22" }));
       });
       expect(screen.getByText("GitHub API rate-limited")).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/opencode"), {
         target: { value: "/opt/homebrew/bin/opencode" },
       });
@@ -363,7 +363,7 @@ describe("OpencodeInstallModal", () => {
       renderContainer(manager);
 
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Run opencode upgrade" }));
+        fireEvent.click(screen.getByRole("button", { name: "Update OpenCode" }));
       });
 
       expect(upgradeCustomBinary).toHaveBeenCalledTimes(1);
@@ -374,7 +374,7 @@ describe("OpencodeInstallModal", () => {
       const { manager, setCustomBinaryPath } = makeManager();
       renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/opencode"), {
         target: { value: "/usr/local/bin/opencode" },
       });
@@ -383,7 +383,7 @@ describe("OpencodeInstallModal", () => {
       });
 
       expect(setCustomBinaryPath).toHaveBeenCalledWith("/usr/local/bin/opencode");
-      expect(noticeMessages()).toContain("Custom opencode binary path saved.");
+      expect(noticeMessages()).toContain("Custom OpenCode path saved.");
     });
 
     it("shows the manager's rejection reason when a custom path fails validation", async () => {
@@ -391,7 +391,7 @@ describe("OpencodeInstallModal", () => {
       setCustomBinaryPath.mockRejectedValue(new Error("not executable"));
       renderContainer(manager);
 
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       fireEvent.change(screen.getByPlaceholderText("/absolute/path/to/opencode"), {
         target: { value: "/bad/opencode" },
       });
@@ -400,7 +400,7 @@ describe("OpencodeInstallModal", () => {
       });
 
       expect(screen.getByText("not executable")).toBeTruthy();
-      expect(noticeMessages()).not.toContain("Custom opencode binary path saved.");
+      expect(noticeMessages()).not.toContain("Custom OpenCode path saved.");
     });
 
     it("clears the persisted custom path through the manager", async () => {
@@ -417,7 +417,7 @@ describe("OpencodeInstallModal", () => {
       });
 
       expect(setCustomBinaryPath).toHaveBeenCalledWith(null);
-      expect(noticeMessages()).toContain("Custom opencode path cleared.");
+      expect(noticeMessages()).toContain("Custom OpenCode path cleared.");
     });
 
     it("explains a clear that lost the binary-path lock instead of failing silently", async () => {
@@ -435,7 +435,7 @@ describe("OpencodeInstallModal", () => {
       });
 
       expect(noticeMessages().join(" ")).toContain("Couldn't clear the custom path");
-      expect(noticeMessages()).not.toContain("Custom opencode path cleared.");
+      expect(noticeMessages()).not.toContain("Custom OpenCode path cleared.");
     });
 
     it("names the operation that won when a download loses the race", async () => {
@@ -472,7 +472,7 @@ describe("OpencodeInstallModal", () => {
         await mockConfirmModals[0].onConfirm();
       });
       expect(uninstall).toHaveBeenCalledTimes(1);
-      expect(noticeMessages()).toContain("opencode uninstalled (freed 2.0 KB).");
+      expect(noticeMessages()).toContain("OpenCode uninstalled (freed 2.0 KB).");
     });
   });
 });

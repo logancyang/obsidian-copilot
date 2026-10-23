@@ -975,7 +975,7 @@ export class AgentSessionManager {
   private resolveSessionCwd(projectId: ProjectScopeId): string {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
-      throw new Error("Agent Mode requires desktop Obsidian (FileSystemAdapter).");
+      throw new Error("Agent Chat requires Obsidian on desktop.");
     }
     return resolveScopeCwd(adapter.getBasePath(), projectId);
   }
@@ -2519,7 +2519,7 @@ export class AgentSessionManager {
           this.scopeSeq++;
         }
       }
-      this.setLastError(`${descriptor.displayName} backend exited unexpectedly.`);
+      this.setLastError(`${descriptor.displayName} stopped unexpectedly.`);
       this.notify();
     });
   }

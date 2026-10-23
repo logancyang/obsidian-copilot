@@ -36,7 +36,7 @@ export class CodexBackend implements AcpBackend {
     const settings = getSettings();
     const descriptor = buildSimpleSpawnDescriptor(
       settings.agentMode?.backends?.codex?.binaryPath,
-      "Codex adapter path not configured. Open Agent Mode settings and install or detect @agentclientprotocol/codex-acp.",
+      "Codex isn't set up. Install or detect it in Settings → Copilot → Basic → Agents.",
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
         ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath)),

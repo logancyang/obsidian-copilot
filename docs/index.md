@@ -1,21 +1,21 @@
 # Copilot for Obsidian V4
 
-Copilot V4 starts with **Agent Chat**, where opencode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with your approval. Quick Ask, Copilot Commands, and Quick Chat remain available for smaller jobs and mobile use.
+Copilot V4 starts with **Agent Chat**, where OpenCode, Claude Code, or Codex can read your vault, use tools, and complete multi-step work with your approval. Quick Ask, Copilot Commands, and Quick Chat remain available for smaller jobs and mobile use.
 
 ## Start here
 
 1. Install Copilot from Obsidian's Community Plugins.
-2. Open **Settings → Copilot → Basic → Agents**. Follow [Getting Started with Copilot V4](getting-started.md) to download managed opencode or Codex, or auto-detect Claude Code.
-3. Run **Open Copilot Agent Chat Window**. A ready default agent opens automatically; if **Select your agent** appears, choose an **Installed** agent and select **Start chat**.
+2. Open **Settings → Copilot → Basic → Agents**. Follow [Getting Started with Copilot V4](getting-started.md) to download managed OpenCode or Codex, or auto-detect Claude Code.
+3. Run **Open Copilot Agent Chat window**. A ready default agent opens automatically; if **Select your agent** appears, choose an **Installed** agent and select **Start chat**.
 
-For most people, opencode is the best starting point. Copilot can install and manage both opencode and the Codex adapter; Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Agent Chat](agent-mode-windows-setup.md).
+For most people, OpenCode is the best starting point. Copilot can install and manage both OpenCode and the Codex adapter; Claude Code and Codex use their existing command-line accounts. Windows users can also follow [Windows setup for Agent Chat](agent-mode-windows-setup.md).
 
 ## Agent Chat
 
 - [Agent Chat](agent-mode-and-tools.md) explains agents, models, permissions, sessions, and safe use.
-- [Choose an agent](agent-mode-and-tools.md#choose-an-agent) for opencode, Claude Code, or Codex.
+- [Choose an agent](agent-mode-and-tools.md#choose-an-agent) for OpenCode, Claude Code, or Codex.
 - [Ask multiple agents](agent-mode-and-tools.md#multi-agent-answers) to research or review the same question in parallel.
-- [Share Skills across agents](agent-mode-and-tools.md#skills-across-agents) so one reusable workflow works in opencode, Claude Code, and Codex.
+- [Share Skills across agents](agent-mode-and-tools.md#skills-across-agents) so one reusable workflow works in OpenCode, Claude Code, and Codex.
 - [Projects](projects.md) give ongoing work its own instructions, context, and chat history.
 - [Context and Mentions](context-and-mentions.md) add notes, selections, folders, URLs, and other agents to a request.
 - [Instructions for Agent Chat and Quick Chat](system-prompts.md) and [`AGENTS.md` examples](agents-md-examples.md) set durable guidance for your vault and projects.
@@ -28,7 +28,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 
 ## Models, plans, and Miyo
 
-- [Model Sources and BYOK](llm-providers.md) covers Copilot-hosted models, BYOK for opencode and Quick Chat, and local endpoints.
+- [Model Sources and BYOK](llm-providers.md) covers Copilot-hosted models, BYOK for OpenCode and Quick Chat, and local endpoints.
 - [Models, Effort, and Permissions](models-and-parameters.md) explains model selection, defaults, approval behavior, and reasoning effort.
 - [Miyo: Local-First Search and AI Ownership](vault-search-and-indexing.md) brings more powerful local-first search and AI ownership to your knowledge.
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md) compares free and paid access, hosted features, privacy, and self-hosting.
@@ -37,7 +37,7 @@ For most people, opencode is the best starting point. Copilot can install and ma
 
 ## Settings
 
-[Copilot Settings](settings.md) walks through every tab in the order it appears in Obsidian: **Basic**, **BYOK**, **Miyo**, **Skills**, **Command**, **Self-Host**, and **Advanced**.
+[Copilot Settings](settings.md) walks through every tab in the order it appears in Obsidian: **Basic**, **BYOK**, **Miyo**, **Skills**, **Commands**, **Self-Host**, and **Advanced**.
 
 ## Help
 

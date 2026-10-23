@@ -156,7 +156,7 @@ describe("useAgentSelect", () => {
       expect(result.current.cta).toEqual({
         action: "wait",
         label: "Starting…",
-        note: "Wait for the current agent launch to finish.",
+        note: "Wait for the current agent to finish starting.",
       });
       act(() => result.current.runCta());
       expect(manager.setDefaultBackend).not.toHaveBeenCalled();

@@ -179,7 +179,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
             {currentModel ? (
               <ModelDisplay model={currentModel} iconSize={8} />
             ) : (
-              <span className="tw-truncate">Select Model</span>
+              <span className="tw-truncate">Select model</span>
             )}
             {currentEffortLabel && (
               <>

@@ -43,7 +43,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
   request,
   onResolve,
   toolName,
-  requester = "Agent Mode",
+  requester = "The agent",
 }) => {
   const { toolCall, options } = request;
   const [busy, setBusy] = useState(false);
@@ -86,7 +86,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
         </p>
         {toolCall.kind ? (
           <p className="tw-m-0 tw-text-xs tw-text-muted">
-            Kind: <code>{toolCall.kind}</code>
+            Type: <code>{toolCall.kind}</code>
           </p>
         ) : null}
 
@@ -107,7 +107,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
           </div>
         ) : inputJson ? (
           <details>
-            <summary className="tw-cursor-pointer tw-text-xs tw-text-muted">Show inputs</summary>
+            <summary className="tw-cursor-pointer tw-text-xs tw-text-muted">Show details</summary>
             <pre className="tw-mt-1 tw-max-h-48 tw-overflow-auto tw-rounded tw-bg-primary tw-p-2 tw-text-xs">
               {inputJson}
             </pre>

@@ -71,7 +71,7 @@ export const OpencodeConfigContainer: React.FC<{
       .install()
       .then(({ version }) => {
         forgetUpgradeOutcome();
-        new Notice(`opencode v${version} installed.`);
+        new Notice(`OpenCode v${version} installed.`);
       })
       .catch((err: unknown) => {
         if (err instanceof AbortError || (err as Error)?.name === "AbortError") return;
@@ -93,7 +93,7 @@ export const OpencodeConfigContainer: React.FC<{
         try {
           await manager.uninstall();
           forgetUpgradeOutcome();
-          new Notice(`opencode uninstalled${bytes > 0 ? ` (freed ${formatBytes(bytes)})` : ""}.`);
+          new Notice(`OpenCode uninstalled${bytes > 0 ? ` (freed ${formatBytes(bytes)})` : ""}.`);
         } catch (e) {
           logError("[AgentMode] uninstall failed", e);
           new Notice(`Uninstall failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -117,7 +117,7 @@ export const OpencodeConfigContainer: React.FC<{
     action
       .then(({ version }) => {
         setUpgradeRun({ kind: "idle" });
-        new Notice(`opencode upgraded to v${version}.`);
+        new Notice(`OpenCode updated to v${version}.`);
       })
       .catch((err: unknown) => {
         if (err instanceof AbortError || (err as Error)?.name === "AbortError") {
@@ -142,7 +142,7 @@ export const OpencodeConfigContainer: React.FC<{
         return e instanceof Error ? e.message : String(e);
       }
       forgetUpgradeOutcome();
-      new Notice("Custom opencode binary path saved.");
+      new Notice("Custom OpenCode path saved.");
       return null;
     },
     [manager, forgetUpgradeOutcome]
@@ -156,7 +156,7 @@ export const OpencodeConfigContainer: React.FC<{
       return;
     }
     forgetUpgradeOutcome();
-    new Notice("Custom opencode path cleared.");
+    new Notice("Custom OpenCode path cleared.");
   }, [manager, forgetUpgradeOutcome]);
 
   return (

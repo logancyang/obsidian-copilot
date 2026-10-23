@@ -15,7 +15,7 @@ export const LegacyChatPromptsNoticeView: React.FC<LegacyChatPromptsNoticeViewPr
 
   return (
     <div className="tw-mb-3 tw-rounded-md tw-border tw-border-border tw-bg-secondary tw-px-3 tw-py-2 tw-text-ui-smaller tw-text-muted">
-      Agent Mode now reads your instructions from <code>AGENTS.md</code>. Your{" "}
+      Agent Chat now reads your instructions from <code>AGENTS.md</code>. Your{" "}
       {promptCount === 1 ? "saved system prompt is" : `${promptCount} saved system prompts are`}{" "}
       still in <code>{folderPath}</code> — open one there and paste anything you want the agent to
       keep following.

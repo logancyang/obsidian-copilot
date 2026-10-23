@@ -11,7 +11,7 @@ export interface CommandModelSelectProps {
 export function CommandModelSelect({ value, options, onChange }: CommandModelSelectProps) {
   return (
     <div className="tw-flex tw-flex-col tw-gap-2">
-      <Label htmlFor="modelKey">Model (Optional)</Label>
+      <Label htmlFor="modelKey">Model (optional)</Label>
       <div className="tw-group tw-relative tw-w-full">
         <select
           id="modelKey"

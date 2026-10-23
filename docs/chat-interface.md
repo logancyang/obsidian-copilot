@@ -2,11 +2,11 @@
 
 Quick Chat is Copilot V4's lightweight conversation view. Use it for a short question, rewrite, or discussion that does not need agent tools or a project workspace.
 
-On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat Window** from the command palette. On mobile, where Agent Chat is unavailable, Quick Chat is the main conversation view. See [Agent Chat](agent-mode-and-tools.md).
+On desktop, start with **Agent Chat** for multi-step work, reusable Skills, permissioned file changes, or project context. Click **Open Copilot Agent Chat** in the ribbon or run **Open Copilot Agent Chat window** from the command palette. On mobile, where Agent Chat is unavailable, Quick Chat is the main conversation view. See [Agent Chat](agent-mode-and-tools.md).
 
 ## Open Quick Chat
 
-Run **Open Copilot Chat Window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
+Run **Open Copilot Quick Chat window** from the command palette. On mobile, the Copilot ribbon button opens Quick Chat because Agent Chat requires desktop Obsidian.
 
 In a mobile workspace tab, the message box stays above the software keyboard and Obsidian's bottom navigation bar as you open and close the keyboard.
 
@@ -46,7 +46,7 @@ Manage saved commands under **Settings → Copilot → Command**. See [Copilot C
 
 ## Send and manage messages
 
-Press **Enter** to send by default. You can switch this to **Shift + Enter** under **Settings → Copilot → Basic → General → Send Shortcut**. Use the stop button to interrupt a response.
+Press **Enter** to send by default. You can switch this to **Shift + Enter** under **Settings → Copilot → Basic → General → Send shortcut**. Use the stop button to interrupt a response.
 
 The chat follows the latest response as it grows. Scroll up to read earlier messages without being pulled back down. A round down-arrow appears near the bottom of the chat; select it, or scroll to the end, to follow the response again.
 
@@ -63,19 +63,19 @@ After a response, the token counter in the top bar shows the context used for th
 
 ## Start or reopen a chat
 
-Use **New Chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and attaches the active web tab again, plus the active note unless **Auto-attach active note** is off.
+Use **New chat** in the top bar or run **New Copilot Quick Chat**. Starting over clears the current messages and attaches the active web tab again, plus the active note unless **Auto-attach active note** is off.
 
-Use **Chat History** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
+Use **Chat history** to search saved conversations, reopen one, rename it, open its Markdown source, or delete it. Continuing a reopened conversation updates its existing note, including after the note has been renamed or while its source is open.
 
-Select **Copy Chat Link** beside **New Chat** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen that chat in the same vault. The button becomes available once the chat has a message and is disabled while a response is streaming. If the chat has no conversation note yet, for example because autosave is off, Copilot saves one first. The link still works if the conversation note is renamed.
+Select **Copy chat link** beside **New chat** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen that chat in the same vault. The button becomes available once the chat has a message and is disabled while a response is streaming. If the chat has no conversation note yet, for example because autosave is off, Copilot saves one first. The link still works if the conversation note is renamed.
 
-**Autosave Chat as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save Chat as Note** in the top bar. Change autosave and **Conversation Filename Template** under **Settings → Copilot → Basic → Saving conversations**.
+**Autosave chats as Markdown** is enabled by default. Copilot saves after each user message and response under `<Copilot folder>/copilot-conversations/`. If autosave is off, use **Save chat as note** in the top bar. Change autosave and **Chat note name template** under **Settings → Copilot → Basic → Saving chats**.
 
 Uploaded images are embedded in saved conversation notes. Copilot stores the image files under `<Copilot folder>/copilot-conversations/attachments/`, not in your vault attachment folder, and saves each unique image once per conversation. Identical images in the same conversation reuse the saved attachment, including when it has been deleted. Later saves preserve attachment links updated by Obsidian or an attachment organizer; deleting a saved attachment leaves a missing image instead of recreating the file.
 
 ## Chat settings
 
-Use **Chat Settings** (gear) to choose a **System Prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
+Use **Chat settings** (gear) to choose a **System prompt** for the current chat or reset the session choice. These settings do not configure Agent Chat, which reads `AGENTS.md` instead. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
 
 ## Quick Ask
 

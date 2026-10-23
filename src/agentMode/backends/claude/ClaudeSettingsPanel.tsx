@@ -24,7 +24,7 @@ export const ClaudeSettingsPanel: React.FC<Props> = () => {
       <SettingItem
         type="switch"
         title="Show extended thinking"
-        description="Stream the model's reasoning blocks during a turn. Increases token usage."
+        description="Show the model's reasoning as it works. Uses more tokens."
         checked={Boolean(settings.agentMode?.backends?.claude?.enableThinking)}
         onCheckedChange={(checked) => updateClaudeFields({ enableThinking: checked })}
       />

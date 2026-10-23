@@ -106,7 +106,7 @@ describe("RelevantNoteRow", () => {
       const onAddToChat = jest.fn();
       renderRow({ onAddToChat });
 
-      fireEvent.click(screen.getByTitle("Add to Chat"));
+      fireEvent.click(screen.getByTitle("Add to chat"));
 
       expect(onAddToChat).toHaveBeenCalledTimes(1);
     });

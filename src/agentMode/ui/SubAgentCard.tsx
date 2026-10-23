@@ -73,7 +73,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
       ) : null}
       {truncated ? (
         <div className="tw-text-xs tw-text-muted">
-          Nested sub-agent — expand the parent to drill in.
+          This subagent's steps are nested too deep to show here.
         </div>
       ) : (
         childNodes.map((c, i) => renderNode(c, i))

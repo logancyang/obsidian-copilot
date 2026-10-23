@@ -38,16 +38,16 @@ describe("CopilotPlusWelcomeModal", () => {
       expect(container.textContent).not.toMatch(/default mode\b|embedding model:|rebuild/i);
     });
 
-    it("confirms on Apply Now and declines on Apply Later, never both", () => {
+    it("confirms on Apply now and declines on Apply later, never both", () => {
       const onConfirm = jest.fn();
       const onCancel = jest.fn();
       render(<CopilotPlusWelcomeModalContent onConfirm={onConfirm} onCancel={onCancel} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Apply Now" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply now" }));
       expect(onConfirm).toHaveBeenCalledTimes(1);
       expect(onCancel).not.toHaveBeenCalled();
 
-      fireEvent.click(screen.getByRole("button", { name: "Apply Later" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply later" }));
       expect(onCancel).toHaveBeenCalledTimes(1);
       expect(onConfirm).toHaveBeenCalledTimes(1);
     });

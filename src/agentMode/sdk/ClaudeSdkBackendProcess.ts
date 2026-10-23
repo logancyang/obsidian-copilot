@@ -120,9 +120,9 @@ const STATIC_SDK_MODES: RawModeState = {
   availableModes: [
     { id: "default", name: "Default" },
     { id: "plan", name: "Plan" },
-    { id: "acceptEdits", name: "Accept Edits" },
+    { id: "acceptEdits", name: "Accept edits" },
     { id: "auto", name: "Auto" },
-    { id: "bypassPermissions", name: "Bypass Permissions" },
+    { id: "bypassPermissions", name: "Bypass permissions" },
   ],
 };
 

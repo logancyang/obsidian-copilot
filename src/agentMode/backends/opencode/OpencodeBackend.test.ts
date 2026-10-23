@@ -975,7 +975,7 @@ describe("OpencodeBackend", () => {
       it("rejects when no binary is installed", async () => {
         const backend = new OpencodeBackend(NO_MODELS_DEPS);
         await expect(backend.buildSpawnDescriptor({ vaultBasePath: "/vault" })).rejects.toThrow(
-          /binary not installed/
+          /isn't installed/
         );
       });
 

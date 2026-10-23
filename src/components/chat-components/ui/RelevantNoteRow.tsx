@@ -169,7 +169,7 @@ function RelevantNoteHoverCard({
             className="tw-flex-1 tw-gap-1.5"
           >
             <PlusCircle className="tw-size-4" />
-            Add to Chat
+            Add to chat
           </Button>
           <Button
             variant="default"
@@ -265,7 +265,7 @@ export function RelevantNoteRow({
             <Button
               variant="ghost2"
               size="icon"
-              title="Add to Chat"
+              title="Add to chat"
               className="tw-size-6 tw-p-0"
               onClick={(e) => {
                 e.stopPropagation();

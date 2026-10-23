@@ -764,7 +764,7 @@ function ContextManage({
           ? [
               {
                 id: "ignoreFiles:all",
-                name: "Ignore Files",
+                name: "Ignore files",
                 type: "ignoreFiles",
                 count: ignoreItems.files.size,
               },
@@ -1065,7 +1065,7 @@ function ContextManage({
     if (activeSection === "extensions" && activeItem) {
       return `Extension: ${activeItem}`;
     }
-    if (activeSection === "ignoreFiles") return "Ignore Files";
+    if (activeSection === "ignoreFiles") return "Ignore files";
     return "All Categories";
   };
 
@@ -1145,7 +1145,7 @@ function ContextManage({
         <ResizablePanel defaultSize={isMobile ? "35%" : "30%"} minSize="20%" maxSize="40%">
           <div className="tw-flex tw-h-full tw-flex-col">
             <div className="tw-border-b tw-p-4">
-              <h2 className="tw-text-lg tw-font-semibold">File Context</h2>
+              <h2 className="tw-text-lg tw-font-semibold">File context</h2>
             </div>
 
             <ScrollArea className="tw-max-h-[500px] tw-flex-1">
@@ -1237,7 +1237,7 @@ function ContextManage({
                 <div>
                   <SectionHeader
                     IconComponent={XIcon}
-                    title="Ignore Files"
+                    title="Ignore files"
                     iconColorClassName="tw-text-context-manager-red"
                     onAddClick={groupHandlers.add.ignoreFile}
                   />

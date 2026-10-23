@@ -60,7 +60,7 @@ describe("OpencodeConfigView", () => {
     it("labels the upgrade button with the opencode upgrade command when the custom binary is the active source", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
-      expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Update OpenCode" })).toBeTruthy();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/569 labels the upgrade button with the managed version it will install when the managed binary is outdated", () => {
@@ -69,7 +69,7 @@ describe("OpencodeConfigView", () => {
         activeSource: "managed",
       });
 
-      expect(screen.getByRole("button", { name: "Upgrade to v2.0.3" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Update to v2.0.3" })).toBeTruthy();
     });
   });
 });

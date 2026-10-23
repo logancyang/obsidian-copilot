@@ -13,7 +13,7 @@ export interface FrameRecord {
 
 const LOG_FILE_NAME = "acp-frames.ndjson";
 const ROTATED_FILE_NAME = "acp-frames.old.ndjson";
-const DESKTOP_UNAVAILABLE_PATH = "(Agent Mode frame logs are desktop-only)";
+const DESKTOP_UNAVAILABLE_PATH = "(the agent activity log is desktop-only)";
 const LOG_DIR_PREFIX = ["obsidian-copilot", "acp-frames"] as const;
 // Owner-only modes: the log holds full prompt/tool/note content in plaintext,
 // and on Linux os.tmpdir() can be a world-readable shared /tmp.

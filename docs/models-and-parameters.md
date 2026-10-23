@@ -8,9 +8,9 @@ enabled, then choose the default for new chats.
 
 | Model source                            | Where you can use it                                              |
 | --------------------------------------- | ----------------------------------------------------------------- |
-| Copilot-hosted models from your license | Quick Chat and **opencode**                                       |
-| Your API key or endpoint (BYOK)         | Quick Chat and **opencode**, when opencode supports that provider |
-| Models reported by opencode             | **opencode** only                                                 |
+| Copilot-hosted models from your license | Quick Chat and **OpenCode**                                       |
+| Your API key or endpoint (BYOK)         | Quick Chat and **OpenCode**, when OpenCode supports that provider |
+| Models reported by OpenCode             | **OpenCode** only                                                 |
 | Models reported by Claude Code          | **Claude** only                                                   |
 | Models reported by Codex                | **Codex** only                                                    |
 
@@ -22,8 +22,8 @@ a BYOK provider, or connect an agent account.
 
 Open **Settings → Copilot → Basic → Agents**.
 
-1. Set **Default backend** to the agent you want when a new Agent Chat opens.
-2. Select **opencode**, **Claude**, **Codex**, or **Quick Chat**.
+1. Set **Default agent** to the agent you want when a new Agent Chat opens.
+2. Select **OpenCode**, **Claude**, **Codex**, or **Quick Chat**.
 3. Turn on the models you want shown in that experience's model picker.
 4. Choose **Default model**. For an agent, **Agent default** leaves the choice
    to that agent.
@@ -32,20 +32,20 @@ Open **Settings → Copilot → Basic → Agents**.
 
 The four lists are independent:
 
-- **opencode** can combine Copilot-hosted models, compatible BYOK models, and
-  models reported by opencode.
+- **OpenCode** can combine Copilot-hosted models, compatible BYOK models, and
+  models reported by OpenCode.
 - **Claude** and **Codex** show only models reported by their installed tools.
   Their CLI accounts own access and billing; BYOK models are not added to these
   lists.
 - **Quick Chat models** contains Copilot-hosted and BYOK chat models. Agent-owned
   models do not appear here.
 
-New BYOK chat models start enabled for both Quick Chat and opencode. You can
+New BYOK chat models start enabled for both Quick Chat and OpenCode. You can
 turn either copy off without affecting the other. Models newly reported by an
 agent may also appear switched off until you enable them.
 
-For Copilot-hosted models in opencode, the effort picker shows the levels that
-model supports. BYOK model choices follow opencode's model catalog; a custom
+For Copilot-hosted models in OpenCode, the effort picker shows the levels that
+model supports. BYOK model choices follow OpenCode's model catalog; a custom
 endpoint with no published levels uses low, medium, and high when its model is
 marked as reasoning-capable.
 
@@ -61,7 +61,7 @@ an empty session, choosing a model from another installed agent switches that
 session to the other agent. After the conversation has started, the picker
 stays with the current agent.
 
-In the **opencode** group, models from a custom provider appear as
+In the **OpenCode** group, models from a custom provider appear as
 `Provider name/Model name`, using the display name you gave the provider, so
 the same model from two endpoints stays distinguishable. If the provider's
 display name is blank, the picker shows the provider's internal ID instead.
@@ -79,7 +79,7 @@ In **Quick Chat**, the picker shows only enabled **Quick Chat models**. Its
 
 | Experience     | Choices available now                                                                                                                                                                                                                            |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **opencode**   | Model; effort when the model reports it; **Default** or **Auto** permissions. **Plan** is not available.                                                                                                                                         |
+| **OpenCode**   | Model; effort when the model reports it; **Default** or **Auto** permissions. **Plan** is not available.                                                                                                                                         |
 | **Claude**     | Model; effort when supported; **Default**, **Plan**, and **Auto** permissions. **Auto mode permissions** controls what Auto may approve. **Show extended thinking** controls whether reasoning blocks are displayed; it is separate from effort. |
 | **Codex**      | Model; effort when reported; whichever of **Default**, **Plan**, and **Auto** the installed adapter supports.                                                                                                                                    |
 | **Quick Chat** | Model only. Agent effort and permission controls do not apply.                                                                                                                                                                                   |
@@ -89,7 +89,7 @@ before editing, and **Auto** uses the selected agent's automatic permission
 behavior.
 
 Copilot V4 does not expose temperature, top-p, or similar tuning in these model
-lists. Quick Chat uses your vault-root `AGENTS.md` by default. **Chat Settings**
+lists. Quick Chat uses your vault-root `AGENTS.md` by default. **Chat settings**
 can select a saved prompt for that session; it does not add Agent Chat effort
 or permission controls.
 

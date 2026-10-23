@@ -16,16 +16,14 @@ export type OpencodeConfigViewProps = ManagedBinaryConfigProps;
 export const OpencodeConfigView: React.FC<OpencodeConfigViewProps> = (props) => (
   <ManagedBinaryConfigView
     {...props}
-    title="Configure opencode"
+    title="Configure OpenCode"
     binaryName="opencode"
-    managedDescription="Let Copilot download and manage the official opencode binary."
-    customDescription="Point Agent Mode at a binary you already have on disk. Useful for self-builders or air-gapped machines."
+    managedDescription="Let Copilot download and update OpenCode for you."
+    customDescription="Use an OpenCode installation you already have on this computer."
     customPathPlaceholder="/absolute/path/to/opencode"
-    customPathNotFoundHint="opencode not found. Install it natively (`~/.opencode/bin/opencode[.exe]`), via bun/npm, or paste a custom path manually."
+    customPathNotFoundHint="OpenCode wasn't found. Install it, or paste the path to an existing installation."
     upgradeLabel={
-      props.activeSource === "custom"
-        ? "Run opencode upgrade"
-        : `Upgrade to v${props.managed.version}`
+      props.activeSource === "custom" ? "Update OpenCode" : `Update to v${props.managed.version}`
     }
   />
 );

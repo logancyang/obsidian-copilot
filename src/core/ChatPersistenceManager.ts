@@ -210,7 +210,7 @@ export class ChatPersistenceManager {
       return targetFile ?? { path: savedPath };
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
-      new Notice("Failed to save chat as note. Check console for details.");
+      new Notice("Failed to save chat as note. Check the Copilot log for details.");
       return null;
     }
   }
@@ -225,7 +225,7 @@ export class ChatPersistenceManager {
       return messages;
     } catch (error) {
       logError("[ChatPersistenceManager] Error loading chat:", error);
-      new Notice("Failed to load chat history. Check console for details.");
+      new Notice("Failed to load chat history. Check the Copilot log for details.");
       return [];
     }
   }

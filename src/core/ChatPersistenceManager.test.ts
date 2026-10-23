@@ -223,7 +223,7 @@ describe("ChatPersistenceManager", () => {
 
         expect(await saveMessages([chatMessage("Hello")])).toBeNull();
         expect(Notice).toHaveBeenCalledWith(
-          "Failed to save chat as note. Check console for details."
+          "Failed to save chat as note. Check the Copilot log for details."
         );
       });
 
@@ -539,7 +539,7 @@ describe("ChatPersistenceManager", () => {
         expect(mockApp.vault.create).not.toHaveBeenCalled();
         expect(mockApp.vault.adapter.write).not.toHaveBeenCalled();
         expect(Notice).toHaveBeenCalledWith(
-          "Failed to save chat as note. Check console for details."
+          "Failed to save chat as note. Check the Copilot log for details."
         );
       });
     });
@@ -698,7 +698,7 @@ Nature's quiet song`);
 
         expect(await persistenceManager.loadChat(mockTFile({ path: "gone.md" }))).toEqual([]);
         expect(Notice).toHaveBeenCalledWith(
-          "Failed to load chat history. Check console for details."
+          "Failed to load chat history. Check the Copilot log for details."
         );
       });
 

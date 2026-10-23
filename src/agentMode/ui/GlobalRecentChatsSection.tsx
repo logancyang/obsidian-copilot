@@ -238,7 +238,7 @@ function RecentChatMenu({
         {isSessionOpen && onCloseSession && (
           <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
             <Power />
-            Close session
+            Close chat
           </DropdownMenuItem>
         )}
         <DropdownMenuItem
@@ -351,7 +351,7 @@ const RecentChatRow = memo(function RecentChatRow({
           </RowActionButton>
           {isSessionOpen && onCloseSession && (
             <RowActionButton
-              label="Close session"
+              label="Close chat"
               onClick={() => safeAsyncHandler(onCloseSession)(item.id)}
             >
               <Power className="tw-size-3" />

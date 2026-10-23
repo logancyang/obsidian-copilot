@@ -7,7 +7,7 @@ const meta = {
   title: "Settings/Agent Backend Header",
   component: AgentBackendHeader,
   args: {
-    displayName: "opencode",
+    displayName: "OpenCode",
     Icon: Terminal,
     installState: {
       kind: "incompatible",
@@ -78,7 +78,7 @@ export const InstalledPaths: StoryObj<AgentBackendHeaderProps> = {
     <>
       {[
         {
-          displayName: "opencode",
+          displayName: "OpenCode",
           resolvedPath: "~/.local/share/copilot/binaries/opencode/1.2.3/opencode",
         },
         { displayName: "Claude", resolvedPath: "/usr/local/bin/claude" },

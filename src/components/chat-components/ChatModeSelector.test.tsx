@@ -27,11 +27,11 @@ describe("ChatModeSelector", () => {
         />
       );
 
-      expect(screen.getAllByText("chat (free)")).toHaveLength(2);
-      expect(screen.getByText("copilot plus")).toBeTruthy();
+      expect(screen.getAllByText("Chat (free)")).toHaveLength(2);
+      expect(screen.getByText("Copilot Plus")).toBeTruthy();
       expect(screen.queryByText(/vault QA/i)).toBeNull();
 
-      fireEvent.click(screen.getByText("copilot plus"));
+      fireEvent.click(screen.getByText("Copilot Plus"));
       expect(onModeChange).toHaveBeenCalledWith(ChainType.COPILOT_PLUS_CHAIN);
     });
 
@@ -47,7 +47,7 @@ describe("ChatModeSelector", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("chat (free)"));
+      fireEvent.click(screen.getByText("Chat (free)"));
       expect(onModeChange).toHaveBeenCalledWith(ChainType.LLM_CHAIN);
     });
 
@@ -63,7 +63,7 @@ describe("ChatModeSelector", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("copilot plus"));
+      fireEvent.click(screen.getByText("Copilot Plus"));
       expect(onPlusUpsell).toHaveBeenCalledTimes(1);
     });
   });

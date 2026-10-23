@@ -49,8 +49,8 @@ export const SelfHostSettings: React.FC = () => {
           title="Enable Self-Host Mode"
           description={
             <span className="tw-inline-flex tw-items-center tw-gap-1.5">
-              Route LLMs, embeddings and document understanding through your own endpoints.
-              <HelpTooltip content="Believer / Supporter only. Use your own infrastructure for full control and offline use. Stays available offline until your entitlement expires." />
+              Use your own servers for chat models, embeddings, and document processing.
+              <HelpTooltip content="Believer / Supporter only. Use your own infrastructure for full control and offline use. Stays available offline until your license expires." />
             </span>
           }
           checked={selfHostOn}
@@ -92,7 +92,7 @@ export const SelfHostSettings: React.FC = () => {
 
           <SettingItem
             type="password"
-            title="Supadata API Key"
+            title="Supadata API key"
             description={
               <span>
                 YouTube transcripts via Supadata. <SignUpLink href={SUPADATA_SIGNUP_URL} />
@@ -110,7 +110,9 @@ export const SelfHostSettings: React.FC = () => {
             type="custom"
             title="LLM & embedding models"
             description={
-              <span>Add local / self-hosted models as an OpenAI-compatible endpoint in BYOK.</span>
+              <span>
+                Add local or self-hosted models as an OpenAI-compatible provider on the BYOK tab.
+              </span>
             }
           >
             <Button

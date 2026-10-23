@@ -128,7 +128,7 @@ descriptor will keep growing; that's by design.
 
 The default debug log truncates each frame's payload to 400 chars. For
 diagnostic frame logs with larger payload summaries, turn on
-**Settings → Advanced → Log Full Agent Mode Frames**.
+**Settings → Advanced → Debugging & support → Agent activity log**.
 
 When enabled, every parsed frame is appended as one NDJSON line outside the
 vault, under the OS temp directory:
@@ -153,7 +153,7 @@ SDK turns appear in the same file.
 Useful queries:
 
 ```bash
-LOG="<path shown in Settings → Advanced → Agent Mode Frame Log>"
+LOG="<path shown in Settings → Advanced → Agent activity log>"
 
 # count frames by method
 jq -r .method "$LOG" | sort | uniq -c | sort -rn

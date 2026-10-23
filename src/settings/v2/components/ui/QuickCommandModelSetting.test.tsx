@@ -20,7 +20,7 @@ describe("QuickCommandModelSetting", () => {
       fireEvent.change(screen.getByRole("combobox"), { target: { value: "b" } });
       expect(onChange).toHaveBeenCalledWith("b");
     });
-    it("never lets the user pick Select Model back once a default is chosen (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
+    it("never lets the user pick Select model back once a default is chosen (https://github.com/Brevilabs/obsidian-copilot-private/issues/616)", () => {
       render(
         <QuickCommandModelSetting
           value="a"
@@ -28,7 +28,7 @@ describe("QuickCommandModelSetting", () => {
           onChange={() => undefined}
         />
       );
-      expect(screen.getByRole<HTMLOptionElement>("option", { name: "Select Model" }).disabled).toBe(
+      expect(screen.getByRole<HTMLOptionElement>("option", { name: "Select model" }).disabled).toBe(
         true
       );
     });
@@ -40,7 +40,7 @@ describe("QuickCommandModelSetting", () => {
           onChange={() => undefined}
         />
       );
-      expect(screen.getByDisplayValue("Select Model")).not.toBeNull();
+      expect(screen.getByDisplayValue("Select model")).not.toBeNull();
     });
   });
 });

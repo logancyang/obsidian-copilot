@@ -65,7 +65,7 @@ export interface ManagedBinaryConfigViewProps extends ManagedBinaryConfigProps {
 
 const SOURCE_OPTIONS: SegmentedControlOption<ManagedBinarySource>[] = [
   { label: "Managed by Copilot", value: "managed" },
-  { label: "My own binary", value: "custom" },
+  { label: "My own installation", value: "custom" },
 ];
 
 interface ManagedBinaryInstallProps {
@@ -106,7 +106,7 @@ const ManagedBinaryInstall: React.FC<ManagedBinaryInstallProps> = ({
         <dd className="tw-font-mono">{managed.platform}</dd>
         <dt className="tw-text-muted">Version</dt>
         <dd className="tw-font-mono">v{managed.version} (pinned)</dd>
-        <dt className="tw-text-muted">Destination</dt>
+        <dt className="tw-text-muted">Location</dt>
         <dd className="tw-break-all tw-font-mono">{managed.destination}</dd>
       </dl>
       {run.kind === "error" && (
@@ -187,7 +187,7 @@ export const ManagedBinaryConfigView: React.FC<ManagedBinaryConfigViewProps> = (
   >
     <ConfigSection>
       <SegmentedControl
-        aria-label={`${binaryName} binary source`}
+        aria-label={`${binaryName} installation source`}
         className={cn("tw-self-start")}
         options={SOURCE_OPTIONS}
         value={source}

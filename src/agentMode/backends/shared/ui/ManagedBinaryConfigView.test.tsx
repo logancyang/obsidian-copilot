@@ -49,15 +49,13 @@ const renderView = (
   const onSourceChange = jest.fn();
   const view = render(
     <ManagedBinaryConfigView
-      title="Configure opencode"
+      title="Configure OpenCode"
       binaryName="opencode"
       managedDescription="Download opencode."
       customDescription="Use your own binary."
       customPathPlaceholder="/absolute/path/to/opencode"
       customPathNotFoundHint="No binary found."
-      upgradeLabel={
-        overrides.activeSource === "custom" ? "Run opencode upgrade" : "Upgrade to latest"
-      }
+      upgradeLabel={overrides.activeSource === "custom" ? "Update OpenCode" : "Upgrade to latest"}
       state={{ kind: "absent" }}
       source="managed"
       onSourceChange={onSourceChange}
@@ -99,13 +97,16 @@ describe("ManagedBinaryConfigView", () => {
       });
       expect(actions.saveCustomPath).not.toHaveBeenCalled();
     });
-    it("offers the two binary sources as one mutually exclusive choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
+    it("offers the two installation sources as one mutually exclusive choice (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView();
 
-      const group = screen.getByRole("radiogroup", { name: "opencode binary source" });
+      const group = screen.getByRole("radiogroup", { name: "opencode installation source" });
       const options = screen.getAllByRole("radio");
       expect(group.contains(options[0])).toBe(true);
-      expect(options.map((o) => o.textContent)).toEqual(["Managed by Copilot", "My own binary"]);
+      expect(options.map((o) => o.textContent)).toEqual([
+        "Managed by Copilot",
+        "My own installation",
+      ]);
       expect(options.map((o) => o.getAttribute("aria-checked"))).toEqual(["true", "false"]);
     });
 
@@ -151,9 +152,9 @@ describe("ManagedBinaryConfigView", () => {
       });
       expect(screen.getByText("Configuring…")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-      expect(screen.getByRole<HTMLButtonElement>("radio", { name: "My own binary" }).disabled).toBe(
-        true
-      );
+      expect(
+        screen.getByRole<HTMLButtonElement>("radio", { name: "My own installation" }).disabled
+      ).toBe(true);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 removes retained downloads without replacing a custom selection", () => {
@@ -247,7 +248,7 @@ describe("ManagedBinaryConfigView", () => {
       });
 
       const customSource = screen.getByRole<HTMLButtonElement>("radio", {
-        name: "My own binary",
+        name: "My own installation",
       });
       expect(customSource.disabled).toBe(true);
       fireEvent.click(customSource);
@@ -342,7 +343,7 @@ describe("ManagedBinaryConfigView", () => {
     it("labels the upgrade as the custom binary's own command when that is the active source (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       renderView({ state: { ...OUTDATED, source: "custom" }, activeSource: "custom" });
 
-      expect(screen.getByRole("button", { name: "Run opencode upgrade" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Update OpenCode" })).toBeTruthy();
     });
 
     it("replaces the upgrade button with its progress while the upgrade runs (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {

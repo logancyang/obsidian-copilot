@@ -13,7 +13,7 @@ describe("CommandModelSelect", () => {
         />
       );
       expect(screen.getByDisplayValue("Default model")).not.toBeNull();
-      fireEvent.change(screen.getByLabelText("Model (Optional)"), { target: { value: "gpt4o" } });
+      fireEvent.change(screen.getByLabelText("Model (optional)"), { target: { value: "gpt4o" } });
       expect(onChange).toHaveBeenCalledWith("gpt4o");
     });
   });
