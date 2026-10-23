@@ -197,14 +197,14 @@ export class ReportIssueModal extends Modal {
       { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
       {
         id: "activityLog",
-        label: "Agent Mode activity log",
+        label: "Agent activity log",
         description: activityLogOn ? undefined : "turned off in Settings → Advanced",
         defaultChecked: activityLogOn,
       },
       {
         id: "chatLog",
         label: "Copilot log",
-        description: "includes Agent Mode backend errors",
+        description: "includes agent errors",
         // OpenCode 2's server errors reach only this log, and reporters skipped it unchecked.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/649
         defaultChecked: true,
@@ -213,7 +213,7 @@ export class ReportIssueModal extends Modal {
     if (this.params.activeBackend === OPENCODE_BACKEND_ID) {
       sources.push({
         id: "opencodeLog",
-        label: "OpenCode backend log",
+        label: "OpenCode log",
         description: "may include unrelated sessions",
         // A report opened from a chat is about that chat, so it ticks the log Settings leaves off for privacy.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
@@ -373,11 +373,11 @@ export class ReportIssueModal extends Modal {
 async function activityLogRequest(): Promise<ReportLogRequest> {
   const base = { id: "activityLog", name: FRAME_LOG_NAME };
   if (!getSettings().agentMode.debugFullFrames) {
-    return { ...base, unavailableReason: "The Agent Mode activity log is turned off." };
+    return { ...base, unavailableReason: "The agent activity log is turned off." };
   }
   const path = await frameSink.getValidatedPath();
   return path === null
-    ? { ...base, unavailableReason: "The Agent Mode activity log's location is unavailable." }
+    ? { ...base, unavailableReason: "The agent activity log's location is unavailable." }
     : { ...base, path };
 }
 

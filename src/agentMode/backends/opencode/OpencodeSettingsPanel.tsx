@@ -13,7 +13,7 @@ export const OpencodeSettingsPanel: React.FC<Props> = () => {
   const settings = useSettingsValue();
   return (
     <EnvOverridesSetting
-      backendDisplayName="opencode"
+      backendDisplayName="OpenCode"
       value={settings.agentMode?.backends?.opencode?.envOverrides}
       onChange={(next) => updateAgentModeBackendFields("opencode", { envOverrides: next })}
       hintExamples={["XDG_CONFIG_HOME", "HTTPS_PROXY"]}

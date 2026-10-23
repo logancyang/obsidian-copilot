@@ -36,7 +36,7 @@ describe("ChatHistoryPopover", () => {
       fireEvent.click(screen.getByText("History"));
       expect(screen.queryByText(/^Summary for/)).toBeNull();
 
-      fireEvent.click(screen.getAllByTitle("delete file")[0]);
+      fireEvent.click(screen.getAllByTitle("Delete file")[0]);
 
       expect(screen.getAllByText(/^Summary for/)).toHaveLength(1);
     });
@@ -58,7 +58,7 @@ describe("ChatHistoryPopover", () => {
       );
       fireEvent.click(screen.getByText("History"));
       expect(screen.getAllByLabelText("Session live")).toHaveLength(1);
-      const button = screen.getByRole("button", { name: "Close session" });
+      const button = screen.getByRole("button", { name: "Close chat" });
       fireEvent.keyDown(button, { key: "Enter" });
       await act(async () => fireEvent.click(button));
       expect(onCloseSession).toHaveBeenCalledWith(history[0].id);
@@ -70,7 +70,7 @@ describe("ChatHistoryPopover", () => {
         </ChatHistoryPopover>
       );
       expect(screen.queryByLabelText("Session live")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Close session" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Close chat" })).toBeNull();
       expect(screen.getByText("Open research")).toBeTruthy();
       expect(screen.getByText("Saved research")).toBeTruthy();
       await act(async () =>

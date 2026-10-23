@@ -44,7 +44,7 @@ interface ReadinessBadgeProps {
 const CONFIG_STATUS_BADGES: Record<InstallState["kind"], InstallBadgeSpec> = {
   ready: { label: "Ready", variant: "success", showCheck: true },
   absent: { label: "Not set up", variant: "outline" },
-  incompatible: { label: "Upgrade required", variant: "destructive", showAlert: true },
+  incompatible: { label: "Update required", variant: "destructive", showAlert: true },
   checking: { label: "Checking…", variant: "outline" },
   error: { label: "Error", variant: "destructive" },
 };

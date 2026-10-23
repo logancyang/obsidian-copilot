@@ -318,13 +318,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       const leaf = service.getActiveLeaf() ?? service.getLastActiveLeaf();
 
       if (!leaf) {
-        new Notice("No active Web Tab found");
+        new Notice("No active web tab found");
         return;
       }
 
       const selectedMarkdown = await service.getSelectedMarkdown(leaf);
       if (!selectedMarkdown.trim()) {
-        new Notice("No text selected in Web Tab");
+        new Notice("No text selected in the web tab");
         return;
       }
 
@@ -370,7 +370,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
     const isPaidUser = await checkIsPaidUser(plugin.app, { trigger: "tool_call" });
     if (!isPaidUser) {
-      new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
+      new Notice("Download YouTube transcript is a Copilot Plus feature");
       return;
     }
 

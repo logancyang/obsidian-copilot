@@ -116,7 +116,7 @@ const OPENCODE_LOCAL_PROVIDER_IDS = new Set(["lmstudio", "ollama"]);
 function opencodeProviderDestination(providerId: string): Destination {
   if (providerId === OPENCODE_ZEN_PROVIDER_ID) return { kind: "cloud", label: "OpenCode Zen" };
   if (OPENCODE_LOCAL_PROVIDER_IDS.has(providerId)) {
-    return { kind: "local", label: `The ${providerId} server set in opencode` };
+    return { kind: "local", label: `The ${providerId} server set in OpenCode` };
   }
   return { kind: "cloud", label: providerId };
 }

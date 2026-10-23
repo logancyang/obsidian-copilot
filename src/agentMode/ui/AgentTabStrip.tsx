@@ -194,13 +194,13 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
             size="icon"
             onClick={handleNew}
             disabled={isCreating}
-            aria-label="New agent session"
+            aria-label="New chat"
             className="tw-my-1 tw-shrink-0"
           >
             <Plus className="tw-size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>New agent session</TooltipContent>
+        <TooltipContent>New chat</TooltipContent>
       </Tooltip>
     </div>
   );
@@ -370,7 +370,7 @@ const BrandIcon: React.FC<BrandIconProps> = ({
         <Button
           variant="ghost2"
           size="icon"
-          aria-label="Close session"
+          aria-label="Close chat"
           onClick={(e) => {
             e.stopPropagation();
             onCloseOnHover();
@@ -410,7 +410,7 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
           variant="ghost2"
           size="icon"
           className="tw-my-1 tw-shrink-0"
-          aria-label={`Show ${sessions.length} more session${sessions.length === 1 ? "" : "s"}`}
+          aria-label={`Show ${sessions.length} more chat${sessions.length === 1 ? "" : "s"}`}
         >
           <MoreHorizontal className="tw-size-4" />
         </Button>
@@ -463,7 +463,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
       <Button
         variant="ghost2"
         size="icon"
-        aria-label="Close session"
+        aria-label="Close chat"
         onClick={(e) => {
           e.stopPropagation();
           onClose();

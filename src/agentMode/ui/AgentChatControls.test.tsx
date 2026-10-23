@@ -32,7 +32,7 @@ function renderSessionControls(
 }
 
 function openMoreActions(): HTMLElement {
-  fireEvent.pointerDown(screen.getByTitle("More Actions"), { button: 0, ctrlKey: false });
+  fireEvent.pointerDown(screen.getByTitle("More actions"), { button: 0, ctrlKey: false });
   return screen.getByRole("menu");
 }
 
@@ -58,10 +58,10 @@ describe("AgentChatControls", () => {
           <AgentChatControls />
         </TooltipProvider>
       );
-      expect(screen.queryByTitle("More Actions")).toBeNull();
+      expect(screen.queryByTitle("More actions")).toBeNull();
     });
 
-    it("keeps the bar to the usage meter, New Chat, Save Chat as Note, Chat History, and More Actions", () => {
+    it("keeps the bar to the usage meter, New chat, Save chat as note, Chat history, and More actions", () => {
       mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
       renderSessionControls({
         usageMeter: <span title="Context usage" />,
@@ -73,10 +73,10 @@ describe("AgentChatControls", () => {
       );
       expect(titles).toEqual([
         "Context usage",
-        "New Chat",
-        "Save Chat as Note",
-        "Chat History",
-        "More Actions",
+        "New chat",
+        "Save chat as note",
+        "Chat history",
+        "More actions",
       ]);
     });
 
@@ -88,7 +88,7 @@ describe("AgentChatControls", () => {
       expect(container.firstElementChild?.firstElementChild?.textContent).toBe("2 tasks running");
     });
 
-    it("copies the chat link from the More Actions menu", () => {
+    it("copies the chat link from the More actions menu", () => {
       const onCopyChatLink = jest.fn();
       renderSessionControls({ onCopyChatLink });
 
@@ -114,7 +114,7 @@ describe("AgentChatControls", () => {
       expect(onSetChatBookmarked).not.toHaveBeenCalled();
     });
 
-    it("bookmarks the open chat from the More Actions menu", async () => {
+    it("bookmarks the open chat from the More actions menu", async () => {
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({
         getChatBookmarkState: async () => "not-bookmarked",
@@ -127,7 +127,7 @@ describe("AgentChatControls", () => {
       expect(onSetChatBookmarked).toHaveBeenCalledWith(true);
     });
 
-    it("opens the More Actions menu in the chat's own window when another window is active", () => {
+    it("opens the More actions menu in the chat's own window when another window is active", () => {
       renderSessionControls();
       const otherWindowDocument = document.implementation.createHTMLDocument();
       const globals = window as unknown as { activeDocument: Document };
@@ -141,27 +141,27 @@ describe("AgentChatControls", () => {
       expect(otherWindowDocument.querySelector('[role="menu"]')).toBeNull();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 reports an error about the open chat from the More Actions menu", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 reports an error about the open chat from the More actions menu", () => {
       const onReportError = jest.fn();
       renderSessionControls({ onReportError });
 
-      const item = within(openMoreActions()).getByRole("menuitem", { name: "Report error" });
+      const item = within(openMoreActions()).getByRole("menuitem", { name: "Report an issue" });
       expect(item.getAttribute("aria-disabled")).toBeNull();
       fireEvent.click(item);
 
       expect(onReportError).toHaveBeenCalledTimes(1);
     });
 
-    it("offers a Save Chat as Note button in the bar only when autosave is off", () => {
+    it("offers a Save chat as note button in the bar only when autosave is off", () => {
       const onSaveAsNote = jest.fn();
       mockUseSettingsValue.mockReturnValue({ autosaveChat: true });
       const { unmount } = renderSessionControls({ onSaveAsNote });
-      expect(screen.queryByTitle("Save Chat as Note")).toBeNull();
+      expect(screen.queryByTitle("Save chat as note")).toBeNull();
       unmount();
 
       mockUseSettingsValue.mockReturnValue({ autosaveChat: false });
       renderSessionControls({ onSaveAsNote });
-      fireEvent.click(screen.getByTitle("Save Chat as Note"));
+      fireEvent.click(screen.getByTitle("Save chat as note"));
 
       expect(onSaveAsNote).toHaveBeenCalledTimes(1);
     });

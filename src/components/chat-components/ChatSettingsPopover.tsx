@@ -95,13 +95,13 @@ export function ChatSettingsPopover() {
             </Button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Chat Settings</TooltipContent>
+        <TooltipContent>Chat settings</TooltipContent>
       </Tooltip>
       <PopoverContent className="tw-w-80 tw-rounded-md tw-p-0" align="end">
         <div className="tw-flex tw-max-h-[500px] tw-flex-col">
           <div className="tw-shrink-0 tw-border-b tw-px-4">
             <div className="tw-flex tw-items-center tw-justify-between">
-              <h3 className="tw-font-semibold">Chat Settings</h3>
+              <h3 className="tw-font-semibold">Chat settings</h3>
               <Button variant="ghost" size="sm" onClick={handleReset} className="tw-h-8 tw-text-xs">
                 <RotateCcw className="tw-mr-1 tw-size-3" />
                 Reset
@@ -116,7 +116,7 @@ export function ChatSettingsPopover() {
               <div className="tw-space-y-2">
                 <div className="tw-flex tw-flex-col tw-gap-2">
                   <Label htmlFor="system-prompt" className="tw-text-sm sm:tw-min-w-fit">
-                    System Prompt
+                    System prompt
                   </Label>
                   <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 sm:tw-flex-1">
                     <QuickChatPromptSelect
@@ -149,7 +149,7 @@ export function ChatSettingsPopover() {
                 <div className="tw-space-y-1.5">
                   <div className="tw-flex tw-items-center tw-justify-between">
                     <Label htmlFor="disable-builtin" className="tw-text-sm tw-font-medium">
-                      Disable Builtin System Prompt
+                      Disable built-in system prompt
                     </Label>
                     <SettingSwitch
                       checked={disableBuiltin}
@@ -158,9 +158,9 @@ export function ChatSettingsPopover() {
                     />
                   </div>
                   <div className="tw-pr-12 tw-text-xs tw-leading-relaxed tw-text-muted">
-                    Disables the builtin system prompt and only uses your custom system prompt.{" "}
+                    Disables the built-in system prompt and only uses your custom system prompt.{" "}
                     <span className="tw-text-xs tw-text-error">
-                      WARNING: This may break expected functionality.
+                      Warning: this may break expected functionality.
                     </span>
                   </div>
                 </div>
@@ -175,7 +175,7 @@ export function ChatSettingsPopover() {
                       <div className="tw-flex-1 tw-space-y-2">
                         <div className="tw-space-y-1">
                           <div className="tw-text-xs tw-font-semibold tw-text-error">
-                            Copilot Plus Features Will Become Unavailable
+                            Copilot Plus features will become unavailable
                           </div>
                           <div className="tw-flex tw-flex-col  tw-items-center tw-gap-2 tw-text-xs tw-leading-relaxed tw-text-muted">
                             <div>
@@ -196,7 +196,7 @@ export function ChatSettingsPopover() {
                               onClick={confirmDisableBuiltin}
                               className="tw-h-7 tw-text-xs"
                             >
-                              Disable Builtin
+                              Disable built-in
                             </Button>
                             <Button
                               size="sm"
@@ -221,7 +221,7 @@ export function ChatSettingsPopover() {
           <div className="tw-shrink-0 tw-rounded-md tw-bg-primary tw-px-4 tw-py-1">
             <div className="tw-flex tw-flex-row tw-flex-wrap">
               <span className="tw-text-xs tw-text-normal">
-                <span className=" tw-italic">System Prompt and Disable Builtin System Prompt</span>{" "}
+                <span className=" tw-italic">System prompt and Disable built-in system prompt</span>{" "}
                 <strong>apply to this chat session only</strong>.
               </span>
             </div>

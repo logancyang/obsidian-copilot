@@ -10,24 +10,24 @@ Your sent messages display Markdown formatting, including headings, lists, code 
 
 ## Choose an agent
 
-Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configure at least one agent, then choose the **Default backend** for new chats.
+Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configure at least one agent, then choose the **Default agent** for new chats.
 
 | Agent        | Best starting point                             | Where model access comes from                                              |
 | ------------ | ----------------------------------------------- | -------------------------------------------------------------------------- |
-| **opencode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
+| **OpenCode** | Recommended for most people                     | Copilot-hosted models, your API providers, or local OpenAI-compatible APIs |
 | **Claude**   | You already use Claude Code                     | Your Claude Code installation and Anthropic account                        |
 | **Codex**    | You already use the Codex CLI and Codex account | Your Codex CLI login through the `codex-acp` adapter                       |
 
-For opencode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own binary** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own binary.
+For OpenCode and Codex, **Managed by Copilot** uses the version Copilot tests. **My own installation** remains available, but other versions may not work correctly with Copilot. The Configure dialog reminds you of this when you choose your own installation.
 
 A one-agent chat can work without a Copilot license when you bring your own model access. An eligible paid plan adds Copilot-hosted models and cloud-backed features. [Compare Copilot plans](copilot-plus-and-self-host.md).
 
-### opencode
+### OpenCode
 
-opencode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
+OpenCode is the most flexible choice because it can use Copilot-hosted, BYOK, and local models.
 
-1. In the **opencode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Progress shows elapsed time while connecting, downloaded bytes during transfer, then extraction, verification, and activation.
-2. If you already installed it, choose **My own binary** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
+1. In the **OpenCode** tab, open **Configure**, choose **Managed by Copilot**, then click **Download & install**. Progress shows elapsed time while connecting, downloaded bytes during transfer, then extraction, verification, and activation.
+2. If you already installed it, choose **My own installation** in **Configure**, then select **Auto-detect** or enter the absolute path and click **Apply**.
 3. Enable the models you want to see and choose a **Default model**.
 
 Managed installs download and verify a pinned OpenCode release directly. You do not need to install npm, Bun, Node, or a separate archive tool. Copilot accepts your own OpenCode 2.0.21 or newer binary.
@@ -36,7 +36,7 @@ If OpenCode's internal service stops responding, Copilot refreshes it. The faile
 
 There are three ways to provide model access:
 
-- **Copilot-hosted:** add your license under **Basic → Copilot License**. Models included with your plan appear automatically.
+- **Copilot-hosted:** add your license under **Basic → Copilot license**. Models included with your plan appear automatically.
 - **Your API key:** open [**Settings → Copilot → BYOK**](settings.md#byok), add a provider, and configure its models. Copilot stores supported secrets in the Obsidian Keychain.
 - **Local:** add an OpenAI-compatible endpoint from software such as Ollama or LM Studio under **BYOK**.
 
@@ -72,7 +72,7 @@ For an existing or manually installed `@agentclientprotocol/codex-acp` adapter, 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Choose **Download & install** under **Managed by Copilot**. Copilot shows elapsed time while connecting, downloaded bytes during transfer, then labels extraction, verification, and activation while it prepares Codex. It keeps your current installation until the replacement is ready. You do not need Node.js or npm.
 3. Click **Sign in**, finish authentication in your browser, and return to Obsidian. If the browser does not open, click **Open sign-in page**. You can cancel or retry sign-in. Existing credentials are reused when you use the same Codex profile.
-4. If you prefer your own adapter, use **My own binary** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
+4. If you prefer your own adapter, use **My own installation** to Auto-detect it or enter its absolute path. You remain responsible for upgrades to that binary.
 5. Enable the models you want and choose a default.
 
 The **Authentication** section shows your signed-in ChatGPT email and plan when Codex provides them. Select **Sign out** beside the account to switch accounts. API-key authentication and accounts without an email show the signed-in badge without an email. An installed agent shows **Sign in required** until it is authenticated.
@@ -87,7 +87,7 @@ For Windows-specific installation help, see [Windows setup for Agent Chat](agent
 
 ### Start a chat
 
-Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat Window** from the command palette. From an open note, select the Copilot icon beside the note's view controls to open Agent Chat with that note attached to your next message. If Agent Chat is already open, the icon brings it into view; otherwise, it opens in the right sidebar. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
+Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** from the command palette. From an open note, select the Copilot icon beside the note's view controls to open Agent Chat with that note attached to your next message. If Agent Chat is already open, the icon brings it into view; otherwise, it opens in the right sidebar. If the default agent is missing, its custom binary is outdated or unusable, or it is not signed in, Copilot opens **Select your agent** with the reason and a **Configure** action. You can also choose another working agent and select **Start chat**. If an agent is still starting, wait for that launch to finish before starting another agent. **Configure** remains available while you wait. If you already have a chat open, Copilot keeps the conversation and your unsent draft visible and shows a warning above the chat.
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
@@ -118,13 +118,13 @@ The permission picker shows only choices supported by the current agent:
 | **Plan** | Drafts a plan and waits for your approval before editing when the current agent supports this choice |
 | **Auto** | Reduces approval prompts according to the current agent's automatic permission rule                  |
 
-opencode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
+OpenCode supports **Safe** and **Auto**. Claude supports **Safe**, **Plan**, and **Auto**. Codex shows the choices supported by the installed adapter. Claude also has an **Auto mode permissions** setting that controls how much Auto may approve.
 
 With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit files in the working directory; the adapter asks before editing external files or using the internet. **Auto** uses automatic review within the same workspace-write sandbox, without enabling full access. **Plan** uses Auto's approval preset while Codex drafts a plan and waits for your approval. Once you approve it, Codex continues in **Auto** mode to implement the plan.
 
 When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
-When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and opencode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels the agent's unanswered requests. A background task's request stays until you answer it or stop that task.
+When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and OpenCode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels the agent's unanswered requests. A background task's request stays until you answer it or stop that task.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 
@@ -141,17 +141,17 @@ Your vault or project is the agent's working directory, not a security sandbox. 
 Agent Chat keeps each conversation separate:
 
 - Select **+** for another session. Each tab keeps its own history, draft, attachments, and queued follow-ups.
-- Select **New Chat** to reset the current tab.
+- Select **New chat** to reset the current tab.
 - Select **Stop** to cancel the current turn. Messages the agent has not read yet return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. They come before the current draft, and custom commands return as their expanded text. Background tasks keep running.
-- Use **Recent Chats** from the Agent Chat home screen, or **Chat History** inside a conversation, to resume saved work. The **Recent Chats** list can be scrolled or searched.
-- Hover a chat in **Recent Chats** and select **Pin chat** to keep it at the top of the list, above a divider. The most recently pinned chat comes first, and pinned chats keep their order when you use them or change how history is sorted. Select **Unpin chat** to return it to its usual place. The pin is saved in the chat's Markdown note, so it lasts across restarts and appears in both the global and the Project list. Pinning a chat that has no note yet saves it as a note first, even when autosave is off. **Chat History** inside a conversation ignores pins.
-- The bar above the composer holds **New Chat**, **Save Chat as Note** (when autosave is off), **Chat History**, and **More Actions** (⋯), and starts with a task count, such as **2 tasks running**, while background tasks run. **More Actions** has **Copy chat link**, **Add to bookmarks**, and **Report error**. **Copy chat link** and **Add to bookmarks** stay dimmed until you send the chat's first message.
-- To bookmark the open chat in Obsidian's **Bookmarks** pane, select **More Actions** above the composer and choose **Add to bookmarks**. To bookmark a chat without opening it, hover it in **Recent Chats**, select **More actions** (or right-click the row), and choose **Add to bookmarks**. The bookmark uses the chat's title, and clicking it opens the chat in Agent Chat. A chat that has no note yet is saved as one first, even when autosave is off. Choose **Remove from bookmarks** to remove it. Deleting the chat from **Recent Chats** also removes its bookmark, while renaming the chat keeps the bookmark's title. While the **Bookmarks** core plugin is turned off, **Add to bookmarks** is dimmed, with an info icon explaining why. Selecting it opens **Settings → Core plugins** filtered to **Bookmarks** so you can turn it on.
-- Select **More Actions** above the composer and choose **Report error** to open **Report an issue** for the current chat, with its screenshot and agent details ready. See [Reporting from Agent Chat](troubleshooting-and-faq.md#reporting-from-agent-chat).
-- Select **More actions** above the composer and choose **Copy chat link** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen the chat in the same vault. The link points to the conversation's Markdown note, so Copilot saves the note first if it does not exist yet, including when autosave is off. The link keeps working after the note is renamed. To copy a link without opening the chat, hover it in **Recent Chats**, select **More actions**, and choose **Copy chat link**. A chat that has no note yet is saved as one first.
+- Use **Recent chats** from the Agent Chat home screen, or **Chat history** inside a conversation, to resume saved work. The **Recent chats** list can be scrolled or searched.
+- Hover a chat in **Recent chats** and select **Pin chat** to keep it at the top of the list, above a divider. The most recently pinned chat comes first, and pinned chats keep their order when you use them or change how history is sorted. Select **Unpin chat** to return it to its usual place. The pin is saved in the chat's Markdown note, so it lasts across restarts and appears in both the global and the Project list. Pinning a chat that has no note yet saves it as a note first, even when autosave is off. **Chat history** inside a conversation ignores pins.
+- The bar above the composer holds **New chat**, **Save chat as note** (when autosave is off), **Chat history**, and **More actions** (⋯), and starts with a task count, such as **2 tasks running**, while background tasks run. **More actions** has **Copy chat link**, **Add to bookmarks**, and **Report an issue**. **Copy chat link** and **Add to bookmarks** stay dimmed until you send the chat's first message.
+- To bookmark the open chat in Obsidian's **Bookmarks** pane, select **More actions** above the composer and choose **Add to bookmarks**. To bookmark a chat without opening it, hover it in **Recent chats**, select **More actions** (or right-click the row), and choose **Add to bookmarks**. The bookmark uses the chat's title, and clicking it opens the chat in Agent Chat. A chat that has no note yet is saved as one first, even when autosave is off. Choose **Remove from bookmarks** to remove it. Deleting the chat from **Recent chats** also removes its bookmark, while renaming the chat keeps the bookmark's title. While the **Bookmarks** core plugin is turned off, **Add to bookmarks** is dimmed, with an info icon explaining why. Selecting it opens **Settings → Core plugins** filtered to **Bookmarks** so you can turn it on.
+- Select **More actions** above the composer and choose **Report an issue** to report a problem with the current chat, with its screenshot and agent details ready. See [Reporting from Agent Chat](troubleshooting-and-faq.md#reporting-from-agent-chat).
+- Select **More actions** above the composer and choose **Copy chat link** to copy an `obsidian://` link to the current conversation. Paste it into another note to reopen the chat in the same vault. The link points to the conversation's Markdown note, so Copilot saves the note first if it does not exist yet, including when autosave is off. The link keeps working after the note is renamed. To copy a link without opening the chat, hover it in **Recent chats**, select **More actions**, and choose **Copy chat link**. A chat that has no note yet is saved as one first.
 - Properties you add to an Agent chat note stay when Copilot saves the chat again. Copilot updates only the properties it manages: the agent, session, project, token usage, and tags.
-- A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close session** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
-- Deleting an Agent chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, and opencode may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
+- A spinner marks a chat while its agent is responding or one of its background tasks runs. Closing a chat's tab keeps it running. When the response stops but the session remains live, a small blue dot appears on the bottom-right corner of the chat icon. Hover the row and select **Close chat** to release that session. Saved history stays available to reopen, and other chats keep running. If the agent does not support closing individual sessions or release fails, the chat stays marked live with an error.
+- Deleting an Agent chat removes Copilot's chat note and its entry in Copilot's chat history. Claude Code, Codex, and OpenCode may keep their own copy of the conversation on your computer. Copilot does not delete or change those files, so you can still resume the chat in that agent's own tool. The confirmation and the notice after the delete both say this. Deleting an open chat closes it and stops any reply in progress.
 - Add the active note, selected text, other notes, folders, a Copilot Web Viewer tab, or supported images. You can also mention a note with `[[Note title]]`.
 - Hover the context ring beside the send controls to see how much of the model's context window is in use. The ring stays empty until the agent reports usage, and a stopped response keeps the last reported reading. If the connected account reports usage limits, the same panel shows the available limit and reset time.
 
@@ -183,7 +183,7 @@ Agents also compact on their own when the context window fills up. Either way, t
 
 When a finished compaction reports its new size, the context ring drops to that size instead of keeping the reading from before it.
 
-Reopening a Codex or opencode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
+Reopening a Codex or OpenCode chat from chat history shows its past compactions again, each in the place it happened. A compaction that never finished shows as **Compaction cancelled**. Reopening does not change the context ring.
 
 ### When a reply stops early
 
@@ -197,7 +197,7 @@ A step cut short by **Stop** shows as stopped. Any other step the agent left unf
 
 ### Send a message
 
-You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** interrupts the agent and sends your message at once. With Codex and opencode, the message waits with **Sends when the agent finishes**.
+You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** interrupts the agent and sends your message at once. With Codex and OpenCode, the message waits with **Sends when the agent finishes**.
 
 ### Background subagents and commands
 
@@ -235,27 +235,27 @@ The default model and effort saved for each mentioned agent are used for its ans
 
 ## Skills across agents
 
-Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to opencode, Claude, and Codex without maintaining three copies.
+Skills are reusable instruction packets built around a `SKILL.md` file. One Skill can be made available to OpenCode, Claude, and Codex without maintaining three copies.
 
 1. Open [**Settings → Copilot → Skills**](settings.md#skills).
-2. Find a Skill and toggle the opencode, Claude, or Codex icons for the agents that should use it.
+2. Find a Skill and toggle the OpenCode, Claude, or Codex icons for the agents that should use it.
 3. Type `/` in Agent Chat to choose it, or describe the task and let the agent select an enabled Skill.
 
 Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
 
-The **Built-in Skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your Skills**.
+The **Built-in skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your skills**.
 
 Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, YouTube transcripts, and X posts.
 
-The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in Skills** to route those requests through Copilot instead.
+The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in skills** to route those requests through Copilot instead.
 
-The Obsidian Skills (`obsidian-markdown`, `obsidian-bases`, `json-canvas`, and `obsidian-cli`) start turned on for opencode in new installs, and `obsidian-bases` also for Codex. Turn them on for other agents in **Built-in Skills**. `obsidian-cli` works only while **Command line interface** is on in Obsidian's **Settings → General**; while it is off, agents do not receive that Skill.
+The Obsidian Skills (`obsidian-markdown`, `obsidian-bases`, `json-canvas`, and `obsidian-cli`) start turned on for OpenCode in new installs, and `obsidian-bases` also for Codex. Turn them on for other agents in **Built-in skills**. `obsidian-cli` works only while **Command line interface** is on in Obsidian's **Settings → General**; while it is off, agents do not receive that Skill.
 
 While **Miyo document processing** is on, which is the default, agents read PDF and EPUB files through Copilot's Miyo parse tool, which asks the connected Miyo to parse them and does not need Plus access. The tool is available only while Miyo is connected. With a remote Miyo server, files in the vault parse on that server, and files outside the vault can't be parsed. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. With **Miyo document processing** off, agents read documents with their own tools.
 
 Built-in skill preferences record only the skills and agents that are turned off. New skills use the defaults, and content updates keep your saved choices. Copilot fully manages built-in skill folders. Updating a built-in skill replaces its entire folder; removing it deletes the folder. Both operations remove any files you added inside it. Keep custom skills and files in separate folders. When a skill is retired, Copilot also clears its saved preferences. A renamed skill starts with fresh defaults. If file permissions prevent removal, Copilot reports the failure and keeps your disabled preference. After you restore access, Copilot retries cleanup when skills refresh or the plugin reloads.
 
-In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results. If the web-search Skill is turned off, turn on `copilot-web-search` in **Built-in Skills** to give OpenCode web search in Self-Host Mode.
+In Self-Host Mode with OpenCode selected, Agent Chat's built-in web-search Skill uses the search provider selected under **Settings → Copilot → Self-Host**. Provider credentials stay inside Obsidian rather than being passed to OpenCode, and the feature does not require Obsidian's command line interface. Copilot disables OpenCode's native web-search and web-fetch tools so they cannot bypass that route. Full-page web fetching is unavailable through OpenCode in Self-Host Mode because the supported search providers do not share a page-fetch interface; Agent Chat can still use the configured provider's search results. If the web-search Skill is turned off, turn on `copilot-web-search` in **Built-in skills** to give OpenCode web search in Self-Host Mode.
 
 If you set a custom `OPENCODE_CONFIG_CONTENT` for OpenCode, Self-Host Mode adds final deny rules for the native web tools in its top-level and per-agent `permissions`. Other permission rules in your custom configuration remain in their original order. Self-Host Mode does not start OpenCode with a custom configuration that uses the OpenCode 1 `permission`, `tools`, `agent`, or `mode` keys; write those settings as OpenCode 2 `permissions` and `agents` instead.
 
@@ -263,11 +263,11 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 
 ## Applying a settings change
 
-Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **config has changed** notice and a **Reload** action, and the chat keeps working in the meantime.
+Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **settings changed** notice and a **Reload** action, and the chat keeps working in the meantime.
 
 The notice names the agent that needs to reload. Changing Claude's enabled models does not ask you to reload OpenCode. Settings an agent can apply without restarting do not need a reload notice.
 
-Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent Chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
+Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
 
 Turning on Self-Host Mode never waits: it restarts the agent straight away, so no later step in the conversation can browse outside the new boundary. Changes to Miyo's **Search scope** and to the Miyo folders ticked under **Current vault** apply to the agent's next search, with no reload.
 
@@ -319,10 +319,10 @@ If your Copilot license is not linked to an OpenArtifacts account, the first new
 
 When an installed agent needs a supported version, select **Configure** in Basic → Agents. Agent Chat offers **Upgrade** if Copilot can upgrade that installation. Both surfaces show the same progress and failures, including upgrades started in Configure. If an upgrade fails, retry in Configure or use **Retry** in Agent Chat. A failed custom-path selection is reported in Configure and does not turn the upgrade action into a path-validation retry.
 
-Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent Chats until a text or agent-generated title is available.
+Image-only messages appear as "Image attachment" in the queue. Sessions with only images use the same fallback title in tabs and Recent chats until a text or agent-generated title is available.
 
 ### Managed runtime updates
 
 When Copilot loads, managed Codex and OpenCode runtimes update to the version shipped with Copilot before that agent starts. Agent Chat shows download progress, then opens a new chat when the agent is ready. Other agents remain usable during the download. A failed download leaves the previous supported runtime available and retries on a later load after 24 hours. Configure lets you retry immediately or select your own binary, which Copilot does not update automatically.
 
-Codex and OpenCode show **Upgrade required** when the installed runtime is below the minimum supported by Copilot. An unsuccessful update keeps that installation unavailable until you upgrade it; only an older runtime that still meets the minimum remains usable. Configure lets you retry immediately. A new minimum requirement permits a fresh automatic update attempt even if a previous attempt was postponed. Custom binaries require a manual update.
+Codex and OpenCode show **Update required** when the installed runtime is below the minimum supported by Copilot. An unsuccessful update keeps that installation unavailable until you upgrade it; only an older runtime that still meets the minimum remains usable. Configure lets you retry immediately. A new minimum requirement permits a fresh automatic update attempt even if a previous attempt was postponed. Custom binaries require a manual update.

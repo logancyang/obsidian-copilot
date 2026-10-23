@@ -178,7 +178,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(liveDots).toHaveLength(2);
       expect(liveDots[0].parentElement?.getAttribute("title")).toBe("Session is running");
       expect(screen.getByLabelText("Responding")).toBeTruthy();
-      const buttons = screen.getAllByRole("button", { name: "Close session" });
+      const buttons = screen.getAllByRole("button", { name: "Close chat" });
       expect(buttons).toHaveLength(2);
       fireEvent.keyDown(buttons[0], { key: "Enter" });
       await act(async () => {
@@ -385,7 +385,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(actions).toEqual(["Pin chat", "Open source note", "More actions"]);
     });
 
-    it("leads the hover actions with Close session when the chat's session is open", () => {
+    it("leads the hover actions with Close chat when the chat's session is open", () => {
       renderSection({
         items: [makeItem("chats/open.md", { title: "Open chat" })],
         openChatIds: new Set(["chats/open.md"]),
@@ -396,7 +396,7 @@ describe("GlobalRecentChatsSection", () => {
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Pin chat", "Close session", "Open source note", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Close chat", "Open source note", "More actions"]);
     });
 
     it("pins an unpinned chat from its Pin chat action without opening it", async () => {
@@ -552,7 +552,7 @@ describe("GlobalRecentChatsSection", () => {
       );
     });
 
-    it("adds Close session above Delete in the menu when the chat's session is open", () => {
+    it("adds Close chat above Delete in the menu when the chat's session is open", () => {
       renderSection({
         items: [makeItem("chats/open.md", { title: "Open chat" })],
         openChatIds: new Set(["chats/open.md"]),
@@ -565,7 +565,7 @@ describe("GlobalRecentChatsSection", () => {
         "Rename",
         "Copy chat link",
         "---",
-        "Close session",
+        "Close chat",
         "Delete",
       ]);
     });
@@ -605,7 +605,7 @@ describe("GlobalRecentChatsSection", () => {
       expect(onLoadChat).not.toHaveBeenCalled();
     });
 
-    it("closes the chosen chat's session when Close session is selected from the menu", async () => {
+    it("closes the chosen chat's session when Close chat is selected from the menu", async () => {
       const onCloseSession = jest.fn(noop);
       renderSection({
         items: [makeItem("chats/open.md", { title: "Open chat" })],
@@ -614,7 +614,7 @@ describe("GlobalRecentChatsSection", () => {
       });
 
       const menu = openMenuFromButton("Open chat");
-      await act(async () => chooseMenuItem(menu, "Close session"));
+      await act(async () => chooseMenuItem(menu, "Close chat"));
 
       expect(onCloseSession).toHaveBeenCalledWith("chats/open.md");
     });

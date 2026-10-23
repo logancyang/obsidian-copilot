@@ -1144,7 +1144,7 @@ describe("AgentSessionManager", () => {
         await mgr.createSession();
         (descriptor.getInstallState as jest.Mock).mockReturnValue({
           kind: "incompatible",
-          message: "Upgrade required",
+          message: "Update required",
         });
         await expect(mgr.createSession()).resolves.toBeDefined();
         expect(mockBackendStart).toHaveBeenCalledTimes(1);
@@ -1153,10 +1153,10 @@ describe("AgentSessionManager", () => {
       it("rejects an unsupported installation before starting its process (https://github.com/Brevilabs/obsidian-copilot-private/issues/531)", async () => {
         const mgr = buildManager({
           descriptor: buildDescriptor({
-            getInstallState: jest.fn(() => ({ kind: "incompatible", message: "Upgrade required" })),
+            getInstallState: jest.fn(() => ({ kind: "incompatible", message: "Update required" })),
           }),
         });
-        await expect(mgr.createSession()).rejects.toThrow("Upgrade required");
+        await expect(mgr.createSession()).rejects.toThrow("Update required");
         expect(mockBackendStart).not.toHaveBeenCalled();
       });
 
@@ -1837,7 +1837,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toEqual([thirdReplacement]);
       });
 
-      it("updates the manually saved file and drains later turns on New Chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
+      it("updates the manually saved file and drains later turns on New chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         const session = await mgr.createSession();
         const handle = getSessionTestHandle(session);
@@ -1922,7 +1922,7 @@ describe("AgentSessionManager", () => {
 
         expect(mgr.getSessions()).toEqual([]);
         expect(mgr.getActiveSession()).toBeNull();
-        expect(mgr.getLastError()).toMatch(/exited unexpectedly/);
+        expect(mgr.getLastError()).toMatch(/stopped unexpectedly/);
         expect(listener).toHaveBeenCalled();
       });
     });
@@ -5184,7 +5184,7 @@ describe("AgentSessionManager", () => {
             source: "custom",
             currentVersion: "1",
             minVersion: "2",
-            message: "Upgrade required",
+            message: "Update required",
           },
           createBackendProcess,
         });
@@ -5193,7 +5193,7 @@ describe("AgentSessionManager", () => {
         ).rejects.toThrow("Could not resume");
         expect(createBackendProcess).not.toHaveBeenCalled();
         expect(manager.getActiveSession()).toBeNull();
-        expect(manager.getLastError()).toContain("Upgrade required");
+        expect(manager.getLastError()).toContain("Update required");
       });
 
       it("applies persisted backend config and mode before returning a resumed session", async () => {

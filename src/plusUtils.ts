@@ -148,7 +148,7 @@ export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
 
 export function showMultiAgentUpgradePrompt(): void {
   new Notice(
-    "Multi-agent QA (@-mentioning more than one agent in a turn) is a Copilot Plus feature. Opening the upgrade page…",
+    "Multi-agent answers (@-mentioning more than one agent in a message) are a Copilot Plus feature. Opening the upgrade page…",
     8000
   );
   navigateToPlusPage("multi_agent");

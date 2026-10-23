@@ -8,7 +8,7 @@
 
 <p align="center"><strong>Agents for your Obsidian vault</strong></p>
 
-<p align="center">Copilot V4 brings opencode, Claude Code, and Codex into Obsidian for research, writing, and knowledge work.</p>
+<p align="center">Copilot V4 brings OpenCode, Claude Code, and Codex into Obsidian for research, writing, and knowledge work.</p>
 
 <p align="center">
   <a href="https://obsidian.md/blog/2024-goty-winners/"><img src="./images/llm-integration.svg" width="640" alt="Best LLM Integration Award"></a>
@@ -35,7 +35,7 @@
 
 **Agent** is the main Copilot experience for multi-step work. It can inspect notes, use tools, create Obsidian files, and continue across several turns with permissions you control.
 
-- **opencode (recommended):** Let Copilot download and manage it, then use Copilot-hosted models, your own provider key, or a local model.
+- **OpenCode (recommended):** Let Copilot download and manage it, then use Copilot-hosted models, your own provider key, or a local model.
 - **Claude Code:** Connect an existing installation. Copilot detects common install locations and uses your Claude Code login.
 - **Codex:** Connect Codex through the `@agentclientprotocol/codex-acp` adapter and use your existing Codex login.
 
@@ -47,14 +47,14 @@ Already pay for Claude or ChatGPT, or already have model API access? You can bri
 
 1. [Install Copilot](https://obsidian.md/plugins?id=copilot) from Obsidian Community Plugins.
 2. Open **Settings → Copilot → Basic → Agents**.
-3. Select **Download opencode**, connect Claude Code with **Auto-detect**, or let Copilot install its tested Codex adapter.
-4. Select the **Agent** ribbon icon, or run **Open Copilot Agent Chat Window**.
+3. Select **Download OpenCode**, connect Claude Code with **Auto-detect**, or let Copilot install its tested Codex adapter.
+4. Select the **Agent** ribbon icon, or run **Open Copilot Agent Chat window**.
 
 The [Getting Started guide](./docs/getting-started.md) covers each setup path, including managed and custom Codex adapters.
 
 ## Built around your vault
 
-- **Projects:** Give ongoing work its own instructions, reusable context, and chat history. A project works with opencode, Claude, or Codex. [Learn about Projects](./docs/projects.md).
+- **Projects:** Give ongoing work its own instructions, reusable context, and chat history. A project works with OpenCode, Claude, or Codex. [Learn about Projects](./docs/projects.md).
 - **Skills shared across agents:** Add a skill once, then enable it for each installed agent. Copilot also includes skills for Obsidian Markdown, Bases, Canvas, and the Obsidian CLI. [Learn about Skills](./docs/agent-mode-and-tools.md#skills-shared-across-agents).
 - **Commands:** Save repeatable prompts, run them with `/` in Agent, or expose them in the editor and Command palette. [Create a Command](./docs/custom-commands.md).
 - **Quick Ask:** Ask about a selection without leaving the note. Continue the conversation, replace text, insert the answer, or copy it. Quick Ask uses your Quick Chat model. [Set up Quick Ask](./docs/custom-commands.md#quick-ask).
@@ -64,10 +64,10 @@ For a short conversation that does not need an agent, use [Quick Chat](./docs/ch
 
 ## Use hosted, BYOK, or local models
 
-- **Copilot-hosted:** Add a Copilot license, then choose an available hosted model for opencode or Quick Chat. The model picker and dashboard show current access.
+- **Copilot-hosted:** Add a Copilot license, then choose an available hosted model for OpenCode or Quick Chat. The model picker and dashboard show current access.
 - **Bring your own key:** Add a cloud, local, or OpenAI-compatible provider under **Settings → Copilot → BYOK**. Keys are stored in this device's Obsidian Keychain, not in the vault's `data.json`.
 - **Claude and Codex accounts:** These agents use their own CLI login rather than a key from Copilot's BYOK settings.
-- **Models reported by opencode:** opencode routes them to their backing provider. Free opencode Zen models show a warning because that provider may log or train on prompts; review its terms before sending sensitive content.
+- **Models reported by OpenCode:** OpenCode routes them to their backing provider. Free OpenCode Zen models show a warning because that provider may log or train on prompts; review its terms before sending sensitive content.
 
 Your chosen route determines where prompts and included context are processed. Read [LLM Providers](./docs/llm-providers.md) for setup and [Copilot Plus and Self-Host](./docs/copilot-plus-and-self-host.md) for privacy and routing details.
 
@@ -103,7 +103,7 @@ Paid access can include Copilot-hosted models and cloud-backed tools. Multi-agen
 <details>
 <summary><strong>Can I use Copilot without a paid plan?</strong></summary>
 
-Yes. Connect Claude Code or Codex with its existing account, or use opencode and Quick Chat with your own API key or local model. Your provider may charge for its own usage.
+Yes. Connect Claude Code or Codex with its existing account, or use OpenCode and Quick Chat with your own API key or local model. Your provider may charge for its own usage.
 
 </details>
 

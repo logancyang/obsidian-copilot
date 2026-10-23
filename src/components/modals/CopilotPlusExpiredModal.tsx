@@ -40,7 +40,7 @@ export function CopilotPlusExpiredModalContent({
             navigateToPlusPage("expired_modal");
           }}
         >
-          Renew Now <ExternalLink className="tw-size-4" />
+          Renew now <ExternalLink className="tw-size-4" />
         </Button>
       </div>
     </div>

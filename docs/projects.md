@@ -2,7 +2,7 @@
 
 Projects are focused workspaces inside Agent Chat. Each Project keeps its own instructions, reusable context, and chat history, so ongoing work for a client, codebase, course, or research topic stays together.
 
-A Project works with opencode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
+A Project works with OpenCode, Claude, or Codex. It uses the agent, model, effort, and permission setting selected for the current chat. It does not lock you to a separate model.
 
 On the Agent Chat home screen, open **Projects** to browse your most recently used Projects. Scroll the list to see more, or use **Search projects** to find a Project by name or description. Search includes every Project, even those you have not scrolled to yet.
 
@@ -20,7 +20,7 @@ Each Project has a folder under `<Copilot folder>/projects/`. The default root i
 
 Open the Project info menu beside the name and select **AGENTS.md**. You can also choose **Edit project** from the Projects list and edit **Project instructions**. Both open the same Project file.
 
-Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with opencode, Claude, and Codex.
+Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with OpenCode, Claude, and Codex.
 
 Useful Project instructions include:
 
@@ -34,13 +34,13 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 
 ## Add reusable context
 
-For a new Project, **Context** appears below the composer. After the Project has chats, it appears as a **Context** tab beside **Recent Chats**.
+For a new Project, **Context** appears below the composer. After the Project has chats, it appears as a **Context** tab beside **Recent chats**.
 
 You can:
 
 - drag a vault file or folder into **Context**;
 - select **URL** to add a web page or YouTube video; or
-- select **Manage** or **Manage Context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore Files**.
+- select **Manage** or **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
 
 Tags match tags stored in note properties. Properties can target notes by a frontmatter field, such as `Topics: Physics`.
 
@@ -56,17 +56,17 @@ The agent opens a saved web page with its own web tool or Copilot's web fetch Sk
 
 > **Private Projects:** When a chat starts, Copilot does not upload a Project's files or fetch its links. The list of file paths and links goes to the selected model as part of the first message. A link's address goes to Brevilabs only when the agent fetches it through a Copilot-hosted Skill. If a Project must not send task content to Brevilabs, use Markdown and document files with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
 
-**Ignore Files** controls which files are listed in the Project's context. It is not a file permission setting. An agent can still find an ignored file through its own tools when the file is inside a location that agent can access.
+**Ignore files** controls which files are listed in the Project's context. It is not a file permission setting. An agent can still find an ignored file through its own tools when the file is inside a location that agent can access.
 
 ## Work with Project chats
 
 Inside a Project:
 
-- **Recent Chats** and **Chat History** show that Project's conversations.
-- **New Chat** starts a clean conversation with the latest Project instructions and context.
+- **Recent chats** and **Chat history** show that Project's conversations.
+- **New chat** starts a clean conversation with the latest Project instructions and context.
 - **Leave project** returns to the Agent Chat home screen.
 
-From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, or **Delete** it. The global **Recent Chats** list on the Agent Chat home screen includes conversations from across Projects.
+From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, or **Delete** it. The global **Recent chats** list on the Agent Chat home screen includes conversations from across Projects.
 
 Deleting a Project removes its Copilot Project configuration. It does not delete your ordinary vault notes or conversation notes already saved in the vault.
 

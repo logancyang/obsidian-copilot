@@ -257,10 +257,10 @@ function agentDisplayName(agents: ReadonlyArray<AgentBrand>, id: BackendId): str
 function computeChips(skill: Skill): ChipSpec[] {
   const chips: ChipSpec[] = [];
   if (skill.disableModelInvocation === true) {
-    chips.push({ variant: "warn", label: "model-invoke off" });
+    chips.push({ variant: "warn", label: "manual only" });
   }
   if (skill.userInvocable === false) {
-    chips.push({ variant: "default", label: "hidden from /" });
+    chips.push({ variant: "default", label: "hidden from slash menu" });
   }
   if (skill.model !== undefined && skill.model.length > 0) {
     chips.push({ variant: "solid", label: `claude · ${truncateModel(skill.model)}` });
@@ -451,7 +451,7 @@ function runProactiveConsolidate(args: RunProactiveConsolidateArgs): Promise<voi
     resolvedName = manager.resolveCanonicalNameForMigration(args.skill.name);
   } catch (err) {
     new Notice(
-      `Could not consolidate ${args.skill.name}: ${err instanceof Error ? err.message : String(err)}`
+      `Could not merge ${args.skill.name}: ${err instanceof Error ? err.message : String(err)}`
     );
     return Promise.resolve();
   }
@@ -471,10 +471,10 @@ function runProactiveConsolidate(args: RunProactiveConsolidateArgs): Promise<voi
   const commit = async (suppressFuture: boolean): Promise<void> => {
     const result = await manager.consolidateMirroredSkill(args.skill, suppressFuture);
     if (!result.ok && result.reason !== "eperm") {
-      new Notice(`Could not consolidate ${args.skill.name}: ${result.reason}`);
+      new Notice(`Could not merge ${args.skill.name}: ${result.reason}`);
       return;
     }
-    new Notice(`Consolidated ${args.skill.name} into ${canonicalFolderRel}/.`);
+    new Notice(`Merged ${args.skill.name} into ${canonicalFolderRel}/.`);
   };
 
   if (manager.getSuppressMigrationConfirm()) {

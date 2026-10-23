@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
-const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(Agent Mode frame logs are desktop-only)";
+const DESKTOP_UNAVAILABLE_FRAME_LOG_PATH = "(the agent activity log is desktop-only)";
 
 export const AdvancedSettings: React.FC = () => {
   const app = useApp();
@@ -72,7 +72,7 @@ export const AdvancedSettings: React.FC = () => {
 
   const handleOpenFrameLog = useCallback(async () => {
     if (!isDesktopRuntime()) {
-      new Notice("Agent Mode frame logs are available on desktop only.");
+      new Notice("The agent activity log is available on desktop only.");
       return;
     }
     try {
@@ -80,22 +80,22 @@ export const AdvancedSettings: React.FC = () => {
       await acpFrameSink.open();
       setFrameLogPath(acpFrameSink.getPath());
     } catch {
-      new Notice("Failed to open Agent Mode frame log.");
+      new Notice("Failed to open the agent activity log.");
     }
   }, []);
 
   const handleClearFrameLog = useCallback(async () => {
     if (!isDesktopRuntime()) {
-      new Notice("Agent Mode frame logs are available on desktop only.");
+      new Notice("The agent activity log is available on desktop only.");
       return;
     }
     try {
       const { acpFrameSink } = await import("@/agentMode");
       await acpFrameSink.clear();
       setFrameLogPath(acpFrameSink.getPath());
-      new Notice("Agent Mode frame log cleared.");
+      new Notice("Agent activity log cleared.");
     } catch {
-      new Notice("Failed to clear Agent Mode frame log.");
+      new Notice("Failed to clear the agent activity log.");
     }
   }, []);
 
@@ -151,7 +151,7 @@ export const AdvancedSettings: React.FC = () => {
       <SettingSection label="Others">
         <SettingItem
           type="custom"
-          title="API Key Storage"
+          title="API key storage"
           description={
             !keychainAvailable ? (
               <>

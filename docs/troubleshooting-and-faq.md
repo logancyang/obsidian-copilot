@@ -16,11 +16,11 @@ Copilot ran into an error while loading and stayed off for this session. To see 
 
 ## Agent Chat setup
 
-### opencode shows “Not set up” or “Error”
+### OpenCode shows “Not set up” or “Error”
 
-1. Open **Basic → Agents → opencode**.
+1. Open **Basic → Agents → OpenCode**.
 2. Open **Configure → Managed by Copilot** and select **Download & install**. If it fails, read the displayed error and retry.
-3. If opencode is already installed, open **Configure → My own binary** and select **Auto-detect**. If detection misses it, enter its absolute path and choose **Apply**.
+3. If OpenCode is already installed, open **Configure → My own binary** and select **Auto-detect**. If detection misses it, enter its absolute path and choose **Apply**.
 
 Use **Configure → Managed by Copilot** to reinstall or uninstall it. Setup is complete at **Ready**.
 
@@ -38,7 +38,7 @@ Copilot connects through `codex-acp`, not the `codex` executable alone. Manual i
 
 1. Open **Basic → Agents → Codex → Configure**.
 2. Choose **Download & install** under **Managed by Copilot**. If this first installation fails, read the error in Configure, fix the reported problem, then choose **Download & install** again. Failed updates of an already-managed adapter show the same error in Settings and Agent Chat. Open **Configure** in Settings to retry, or use **Retry** in Agent Chat.
-3. For an adapter you manage yourself, choose **My own binary**, then **Auto-detect** or enter the absolute path to `codex-acp` on macOS/Linux or its `dist\index.js` on Windows. Copilot does not update custom binaries.
+3. For an adapter you manage yourself, choose **My own installation**, then **Auto-detect** or enter the absolute path to `codex-acp` on macOS/Linux or its `dist\index.js` on Windows. Copilot does not update custom binaries.
 4. Click **Sign in** and finish authentication in your browser. If it does not open, click **Open sign-in page**. Cancel or retry if needed. Managed Codex includes its runtime; Node.js and npm are not required.
 
 You can also choose **Sign in to Codex** on the Agent Chat status card. For terminal login, run your configured adapter with `cli login` using the same `CODEX_HOME` as Copilot.
@@ -53,9 +53,9 @@ Open **Basic → Agents → Quick Chat**, enable a model, and choose a **Default
 
 - **Add API key:** edit that provider under **BYOK**.
 - **Not offered by agent:** the active agent no longer advertises that saved model. Select one it currently offers.
-- A locked Copilot-hosted model requires an active license under **Basic → Copilot License**. **Invalid license key** means that key was not accepted.
+- A locked Copilot-hosted model requires an active license under **Basic → Copilot license**. **Invalid license key** means that key was not accepted.
 
-Claude and Codex models come from their CLI accounts; BYOK serves opencode and Quick Chat. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
+Claude and Codex models come from their CLI accounts; BYOK serves OpenCode and Quick Chat. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
 
 ### Keys disappeared, or “API Key Storage” says “Unavailable”
 
@@ -63,7 +63,7 @@ V4 stores secrets in the Obsidian Keychain.
 
 - **Unavailable:** update Obsidian to 1.11.4 or newer.
 - **No API keys found in this device's Obsidian Keychain:** re-enter them. Keys are per device and do not follow a synced vault.
-- To remove every stored secret, use **Advanced → API Key Storage → Delete All Keys**.
+- To remove every stored secret, use **Advanced → API key storage → Delete All Keys**.
 
 Do not delete `data.json`: it contains the vault's Keychain namespace. Use the in-app reset; it does not delete Keychain entries.
 
@@ -77,13 +77,13 @@ Permission choices depend on the active agent. **Stop** cancels the current turn
 
 ### You cannot switch agents in the current session
 
-An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent Chats** for earlier work.
+An Agent Chat keeps its original backend after work begins. Create an empty chat to choose another. Use **Recent chats** for earlier work.
 
 ### A skill or skill command is missing
 
 In **Settings → Copilot → Skills**, confirm the skill has a valid `SKILL.md` and is enabled for your agent. Toggle the agent off and on to recreate its link.
 
-On Windows, **Windows needs Developer Mode for multi-agent fanout** means you must enable **Settings → Privacy & security → For developers → Developer Mode** (or run Obsidian as administrator), then toggle again. The same repair works when vault sync replaces a link.
+On Windows, **Turn on Windows Developer Mode to share skills with your agents** means you must enable **Settings → Privacy & security → For developers → Developer Mode** (or run Obsidian as administrator), then toggle again. The same repair works when vault sync replaces a link.
 
 Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
@@ -95,7 +95,7 @@ Open **Settings → Copilot → Miyo**.
 - **Register this vault with Miyo:** choose **Register & connect** on the same computer. For a remote connection or mobile device, register the vault in Miyo first, then retry.
 - **Chat sources are not set up:** this belongs to the separate **Search chat** row and does not block Agent Chat vault search. Configure chat sources only if you want ChatGPT or Claude history search.
 
-Under **Powered by Miyo**, check that **Semantic search for agents** is on. Start a new chat after changing it; Claude, Codex and opencode then search through Copilot's Miyo search tool.
+Under **Powered by Miyo**, check that **Semantic search for agents** is on. Start a new chat after changing it; Claude, Codex and OpenCode then search through Copilot's Miyo search tool.
 
 ## Quick Ask does not open or has no model
 
@@ -108,18 +108,18 @@ See [Copilot Commands and Quick Ask](custom-commands.md#quick-ask) for selection
 
 ## Logs and bug reports
 
-Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. Turn on **Debug Mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
+Use **Advanced → Debugging & support → Report an issue** for any Copilot problem, Agent Chat or Quick Chat alike. Turn on **Debug mode** in the same section first and reproduce the problem, so the logs you send actually contain it.
 
 ### Filing a report
 
-1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Obsidian window, the **Agent Mode activity log**, the regular Copilot chat log, and the opencode log when opencode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.
+1. **Describe what went wrong, and tick what to include.** The sources on offer are a screenshot of the Obsidian window, the **Agent activity log**, the regular Copilot chat log, and the OpenCode log when OpenCode is your backend. Anything you tick that turns out to have nothing to collect is listed on the next page with the reason, so you never have to guess whether it was gathered.
 2. **Let Copilot prepare the report.** The review page shows **Preparing report…** until the zip is ready. Copilot briefly hides open dialogs, including Settings, to photograph the window behind them, reads and cleans the logs you asked for, and packs everything into one zip on your own computer — the zip is the only file it writes.
 3. **Review what was packed, then upload.** Copilot lists what actually went into the zip, source by source, with the finished file's size and, beside anything skipped or failed, the reason. **Show zip** opens the file in your file manager if you want to look inside. Uploading is a separate click — **Upload & open issue** — and nothing leaves your machine until you press it. **Cancel** here deletes the zip unless you have already chosen **Open issue anyway**.
 4. **Finish the issue in your browser.** As soon as the upload lands, Copilot opens a prefilled GitHub issue with the report ID already in the body, closes the dialog, and shows a short notice. If your browser could not be opened, the notice carries the report ID and a link to the issue page instead. Nothing is filed until you press Submit in your browser.
 
 ### Reporting from Agent Chat
 
-When something goes wrong in an Agent Chat, select **More Actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
+When something goes wrong in an Agent Chat, select **More actions** (⋯) above the composer and choose **Report error**. **Report an issue** opens for that chat without going through Settings: the screenshot is of the Obsidian window, every available attachment starts ticked, and the description ends with which agent, model and chat the report came from. Write what went wrong above that line, then continue with the steps above.
 
 When you tell Agent Chat it got something wrong, or the agent notices its own mistake, it may draft a report for you. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
 
@@ -156,13 +156,13 @@ That deletion covers the uploaded copy only. The zip on your own computer is you
 
 ### Collecting logs by hand
 
-Run **Copilot: Create log file** from the command palette to save the Copilot log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent Mode activity log**.
+Run **Copilot: Open Copilot log file** from the command palette to save the Copilot log into your vault as a note and open it. The Agent Chat log can be opened or cleared under **Advanced → Debugging & support → Agent activity log**.
 
 Logs and screenshots can contain prompts, note contents, paths, and tool inputs. Review them before attaching anything to a public issue.
 
 ## What works on mobile?
 
-Agent Chat, including opencode, Claude, Codex, Projects, and Skill execution, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
+Agent Chat, including OpenCode, Claude, Codex, Projects, and Skill execution, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 

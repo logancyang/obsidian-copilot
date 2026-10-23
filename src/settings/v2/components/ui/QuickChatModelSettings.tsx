@@ -24,22 +24,22 @@ export const QuickChatModelSettings: React.FC<QuickChatModelSettingsProps> = ({
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-py-4">
       <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
       <span className="tw-text-xs tw-text-muted">
-        Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
+        Models shown in the chat model picker. Add providers on the BYOK tab.
       </span>
     </div>
     <SettingItem
       type="select"
       title="Default model"
       description="The model new chats start with. Pick from your enabled Quick Chat models."
-      value={defaultModelId ?? "Select Model"}
+      value={defaultModelId ?? "Select model"}
       onChange={(value) => {
-        if (value === "Select Model") return;
+        if (value === "Select model") return;
         onDefaultModelChange(value);
       }}
       options={
         defaultModelId !== undefined
           ? options
-          : [{ label: "Select Model", value: "Select Model" }, ...options]
+          : [{ label: "Select model", value: "Select model" }, ...options]
       }
       placeholder="Model"
     />

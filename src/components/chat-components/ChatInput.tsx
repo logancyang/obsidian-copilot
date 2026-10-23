@@ -804,7 +804,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   className="tw-text-muted"
                   onClick={onEditCancel}
                 >
-                  <span>cancel</span>
+                  <span>Cancel</span>
                 </Button>
               )}
               {editMode ? (
@@ -815,7 +815,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   onClick={() => onSendMessage()}
                 >
                   <CornerDownLeft className="!tw-size-3" />
-                  <span>save</span>
+                  <span>Save</span>
                 </Button>
               ) : (
                 <ChatSendButton

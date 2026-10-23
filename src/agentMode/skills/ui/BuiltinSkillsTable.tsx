@@ -43,9 +43,9 @@ export function BuiltinSkillsTable({
   onToggleAgent,
 }: BuiltinSkillsTableProps) {
   return (
-    <section aria-label="Built-in Skills" className="tw-space-y-3">
+    <section aria-label="Built-in skills" className="tw-space-y-3">
       <div role="heading" aria-level={3} className="tw-text-left tw-text-base tw-font-semibold">
-        Built-in Skills
+        Built-in skills
       </div>
       {error && (
         <div role="alert" className="tw-text-ui-smaller tw-text-error">

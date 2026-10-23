@@ -153,13 +153,13 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
 
         <div className="tw-flex tw-justify-end tw-gap-2">
           <Button variant="ghost" onClick={handleDownloadAnother}>
-            Download Another
+            Download another
           </Button>
           <Button variant="default" onClick={() => void handleCopyToClipboard()}>
-            Copy to Clipboard
+            Copy to clipboard
           </Button>
           <Button variant="default" onClick={() => void handleInsertToNote()}>
-            Insert at Cursor
+            Insert at cursor
           </Button>
           <Button variant="secondary" onClick={onClose}>
             Close
@@ -205,7 +205,7 @@ export class YoutubeTranscriptModal extends Modal {
   constructor(app: App) {
     super(app);
     // @ts-ignore
-    this.setTitle("Download YouTube Script (plus)");
+    this.setTitle("Download YouTube transcript");
   }
 
   onOpen() {

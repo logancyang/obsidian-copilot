@@ -148,7 +148,7 @@ describe("CodexInstallModal", () => {
       fixture.manager.downloadsSize.mockRejectedValue(new Error("Invalid home directory"));
       await fixture.render();
       expect(screen.getByText("Unavailable")).toBeTruthy();
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       fireEvent.change(screen.getByRole("textbox"), { target: { value: "/my/codex-acp" } });
       await act(async () => fireEvent.click(screen.getByRole("button", { name: "Apply" })));
       expect(fixture.manager.setCustomBinaryPath).toHaveBeenCalledWith("/my/codex-acp");
@@ -173,7 +173,7 @@ describe("CodexInstallModal", () => {
       expect(screen.getByRole<HTMLInputElement>("textbox").value).toBe("/my/codex-acp");
       fireEvent.click(screen.getByRole("radio", { name: "Managed by Copilot" }));
       expect(screen.queryByRole("textbox")).toBeNull();
-      fireEvent.click(screen.getByRole("radio", { name: "My own binary" }));
+      fireEvent.click(screen.getByRole("radio", { name: "My own installation" }));
       expect(screen.getByRole<HTMLInputElement>("textbox").value).toBe("/my/codex-acp");
       expect(getSettings().agentMode.backends?.codex?.binaryPath).toBe("/my/codex-acp");
       expect(fixture.manager.setCustomBinaryPath).not.toHaveBeenCalled();
@@ -243,7 +243,7 @@ describe("CodexInstallModal", () => {
         expect(
           screen
             .getByRole("radio", {
-              name: operation === "install" ? "Managed by Copilot" : "My own binary",
+              name: operation === "install" ? "Managed by Copilot" : "My own installation",
             })
             .getAttribute("aria-checked")
         ).toBe("true");
@@ -292,13 +292,13 @@ describe("CodexInstallModal", () => {
       jest.mocked(CodexBackendDescriptor.getInstallState).mockReturnValue({
         kind: "incompatible",
         source: "managed",
-        message: "Upgrade required",
+        message: "Update required",
         currentVersion: "1.9.0-r1",
         minVersion: "1.10.0-r1",
       });
       const fixture = makeManager();
       await fixture.render();
-      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Upgrade" })));
+      await act(async () => fireEvent.click(screen.getByRole("button", { name: "Update" })));
       expect(fixture.manager.install).toHaveBeenCalledTimes(1);
     });
 

@@ -878,7 +878,7 @@ export class AgentSession {
         if (!entitled) {
           showMultiAgentUpgradePrompt();
           return this.turns.refuse(
-            "Multi-agent QA is a Copilot Plus feature. Upgrade to mention more than one agent in a turn."
+            "Multi-agent answers are a Copilot Plus feature. Upgrade to mention more than one agent in a message."
           );
         }
 

@@ -42,7 +42,7 @@ export default class CopilotView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Copilot (Quick Chat)";
+    return "Copilot Quick Chat";
   }
 
   async onOpen(): Promise<void> {

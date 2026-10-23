@@ -39,7 +39,7 @@ export interface CategoryOption extends TypeaheadOption {
 const AGENTS_CATEGORY: CategoryOption = {
   key: "agents",
   title: "Agents",
-  subtitle: "Ask another coding agent this turn",
+  subtitle: "Ask another agent this turn",
   category: "agents",
   icon: <Bot className="tw-size-4" />,
 };
@@ -54,7 +54,7 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
   },
   {
     key: "webTabs",
-    title: "Web Tabs",
+    title: "Web tabs",
     subtitle: "Reference open browser tabs",
     category: "webTabs",
     icon: <Globe className="tw-size-4" />,

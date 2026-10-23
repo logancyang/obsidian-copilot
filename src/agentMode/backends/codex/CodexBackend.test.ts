@@ -219,7 +219,7 @@ describe("CodexBackend", () => {
 
         await expect(
           new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
-        ).rejects.toThrow(/Codex adapter path not configured/);
+        ).rejects.toThrow(/Codex isn't set up/);
       });
     });
 

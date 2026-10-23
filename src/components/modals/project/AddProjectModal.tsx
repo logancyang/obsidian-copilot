@@ -184,7 +184,7 @@ export function AddProjectModalContent({
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       <div className="tw-shrink-0 tw-px-4 tw-pb-2 tw-pt-4">
-        <div className="tw-text-xl tw-font-bold tw-text-normal">Edit Project</div>
+        <div className="tw-text-xl tw-font-bold tw-text-normal">Edit project</div>
         <p className="tw-mt-1 tw-text-sm tw-text-muted">
           Configure your project settings and context sources
         </p>
@@ -193,10 +193,10 @@ export function AddProjectModalContent({
       <ScrollArea className="tw-min-h-0 tw-flex-1">
         <div className="tw-flex tw-flex-col tw-gap-6 tw-p-4">
           <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
-            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Basic Info</h3>
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Basic info</h3>
             <div className="tw-flex tw-flex-col tw-gap-3">
               <FormField
-                label="Project Name"
+                label="Project name"
                 required
                 error={touched.name && !formData.name}
                 errorMessage="Project name is required"
@@ -229,7 +229,7 @@ export function AddProjectModalContent({
           </div>
 
           <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
-            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Context Sources</h3>
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Context sources</h3>
             <ProjectContextSourceEditor
               contextSource={formData.contextSource}
               onChange={handleContextChange}

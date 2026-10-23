@@ -92,7 +92,7 @@ describe("ChatModelEnableList", () => {
       models = [];
       backends = {};
       render(<ChatModelEnableList />);
-      expect(screen.getByText(/No models configured yet/)).not.toBeNull();
+      expect(screen.getByText(/No models yet/)).not.toBeNull();
     });
     it("reports failed model changes without an unhandled rejection", async () => {
       const error = new Error("save failed");

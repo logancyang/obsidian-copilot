@@ -294,7 +294,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] setupProvider failed", err);
-      new Notice("Failed to save provider. See console for details.");
+      new Notice("Failed to save provider. Check the Copilot log for details.");
     } finally {
       setSaving(false);
     }
@@ -329,7 +329,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
       onClose();
     } catch (err) {
       logError("[ConfigureProviderDialog] save changes failed", err);
-      new Notice("Failed to save changes. See console for details.");
+      new Notice("Failed to save changes. Check the Copilot log for details.");
     } finally {
       setSaving(false);
     }

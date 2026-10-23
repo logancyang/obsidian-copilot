@@ -29,11 +29,11 @@ export const MISSING_KEY_LABEL = "Add API key";
 
 export function handlePickerSwitchError(err: unknown, action: "model" | "effort" | "mode"): void {
   if (err instanceof MethodUnsupportedError) {
-    new Notice(`This agent doesn't support runtime ${action} switching.`);
+    new Notice(`This agent doesn't support switching ${action} switching.`);
     return;
   }
   logError(`[AgentMode] ${action} apply failed`, err);
-  new Notice(`Failed to switch ${action}. See console for details.`);
+  new Notice(`Failed to switch ${action}. Check the Copilot log for details.`);
 }
 
 const AGENT_PROVIDER = "agent";
@@ -334,7 +334,9 @@ function runCrossBackendPick(
       manager.setDefaultBackend(targetBackendId);
     } catch (err) {
       logError("[AgentMode] cross-backend pick failed", err);
-      new Notice(`Failed to start ${targetDescriptor.displayName}. See console for details.`);
+      new Notice(
+        `Failed to start ${targetDescriptor.displayName}. Check the Copilot log for details.`
+      );
     }
   })();
 }
@@ -360,7 +362,7 @@ export function buildModelOnChange(
     }
     const baseModelId = resolveBaseModelId(entry);
     if (!baseModelId) {
-      new Notice("Could not resolve a model id for this selection.");
+      new Notice("Couldn't find that model. Pick another one.");
       return;
     }
 
@@ -378,7 +380,7 @@ export function buildModelOnChange(
     }
     manager.setDefaultBackend(targetBackendId);
     if (activeChatUIState?.canSwitchModel() === false) {
-      new Notice("This agent doesn't support runtime model switching.");
+      new Notice("This agent doesn't support switching models mid-chat.");
       return;
     }
     manager.applySelection({ baseModelId }).catch((err) => {
@@ -448,7 +450,7 @@ function buildCommitSelection(
       return;
     }
     if (activeChatUIState?.canSwitchModel() === false) {
-      new Notice("This agent doesn't support runtime model switching.");
+      new Notice("This agent doesn't support switching models mid-chat.");
       return;
     }
     manager.applySelection({ baseModelId, effort }).catch((err) => {

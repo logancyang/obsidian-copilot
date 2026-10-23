@@ -20,7 +20,7 @@ export function QuickCommandModelSetting({
       value={value ?? ""}
       onChange={onChange}
       options={options}
-      placeholder="Select Model"
+      placeholder="Select model"
     />
   );
 }

@@ -14,14 +14,14 @@ export function CopyChatLinkButton({ onCopyLink }: CopyChatLinkButtonProps) {
         <Button
           variant="ghost2"
           size="icon"
-          title="Copy Chat Link"
+          title="Copy chat link"
           disabled={!onCopyLink}
           onClick={() => void onCopyLink?.()}
         >
           <Link className="tw-size-4" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Copy Chat Link</TooltipContent>
+      <TooltipContent>Copy chat link</TooltipContent>
     </Tooltip>
   );
 }

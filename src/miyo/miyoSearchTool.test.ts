@@ -55,9 +55,11 @@ describe("miyoSearchTool", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/736 tells the agent when to use it, how to read a result and what to do when it fails, without naming a skill or script", () => {
       const { description } = MIYO_SEARCH_TOOL;
 
+      expect(description).toContain("Use it to find notes you don't know about yet");
       expect(description).toContain(
-        "Use it for any request the notes might answer, alongside grep"
+        "Never use it to locate or read a note you already know, one that is attached, named, open or found earlier in this conversation"
       );
+      expect(description).toContain("Use it alongside grep for exact names and terms");
       expect(description).toContain(
         "or everything Miyo has when Copilot's search scope is Unrestricted"
       );

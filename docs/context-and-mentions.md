@@ -12,7 +12,7 @@ Context is the material Copilot gives an AI with your request. Choose the shorte
 
 ## Add context to Agent Chat
 
-Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web Tabs**, or **Images**. Web tabs come from Copilot's desktop Web Viewer.
+Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web tabs**, or **Images**. Web tabs come from Copilot's desktop Web Viewer.
 
 You can also select the Copilot icon in a note's header. Agent Chat opens with that specific note attached to the current draft. The attachment stays with the draft if you switch notes before sending.
 
@@ -55,7 +55,7 @@ With active Plus access, type `@`, open **Agents**, and select one or more other
 
 Multi-agent answers are designed for read-only research, second opinions, and review, but retrieval Skills can still run trusted scripts under an agent's permissions. They are not a security sandbox. Use a normal single-agent turn when you want files changed. Mentioning only the current agent behaves like a normal turn.
 
-Agent mentions select opencode, Claude, or Codex. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
+Agent mentions select OpenCode, Claude, or Codex. They are different from note, folder, and web context mentions. See [Multi-agent answers](agent-mode-and-tools.md#multi-agent-answers) for permissions and model behavior.
 
 ## Reuse context with Projects
 
@@ -63,11 +63,11 @@ For material that should be prepared for more than one chat, create a [Project](
 
 - drag in a vault file or folder;
 - add a web page or YouTube URL; or
-- select **Manage Context** to add links, tags, properties, folders, files, and ignored files.
+- select **Manage context** to add links, tags, properties, folders, files, and ignored files.
 
 Project context is prepared for every new chat in that Project. If preparation is still running when you send a message, Copilot queues the message and starts it when the context is ready.
 
-Saved context is a focus aid, not a permission boundary. The agent can still inspect other files available through its tools. **Ignore Files** excludes files from prepared Project context but does not block an agent from reading them.
+Saved context is a focus aid, not a permission boundary. The agent can still inspect other files available through its tools. **Ignore files** excludes files from prepared Project context but does not block an agent from reading them.
 
 One-turn attachments remain one-turn attachments inside a Project. Start a new Project chat after changing saved context or Project instructions when you want the latest version applied.
 

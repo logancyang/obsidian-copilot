@@ -84,7 +84,7 @@ export class OpencodeBackend implements AcpBackend {
     const binaryPath = settings.agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
       throw new Error(
-        "opencode binary not installed. Open Agent Mode settings and install it before starting a session."
+        "OpenCode isn't installed. Install it in Settings → Copilot → Basic → Agents, then start a new chat."
       );
     }
 

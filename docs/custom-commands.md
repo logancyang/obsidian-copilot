@@ -13,25 +13,25 @@ Commands appear when you type `/` in Quick Chat or Agent Chat. Skills appear onl
 | **Copilot command** | A short, repeatable prompt with optional note variables                      | [**Settings → Copilot → Command**](settings.md#command) |
 | **Skill**           | A reusable agent workflow that can include instructions and supporting files | [**Settings → Copilot → Skills**](settings.md#skills)   |
 
-Skills can be shared with opencode, Claude, and Codex. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
+Skills can be shared with OpenCode, Claude, and Codex. Commands stay inside Copilot and also work from the editor and Obsidian command palette. If a command and skill have the same name, the skill takes the slash-menu spot.
 
 ## Create a command
 
 1. Open [**Settings → Copilot → Command**](settings.md#command).
-2. Click **Add Cmd**.
+2. Click **Add command**.
 3. Enter a **Name** and **Prompt**.
-4. Optionally choose **Model (Optional)**, **Show in context menu**, and **Show in slash menu**.
+4. Optionally choose **Model (optional)**, **Show in context menu**, and **Show in slash menu**.
 5. Click **Save**.
 
 Choose **Default model** to use **Default quick command model** from **Settings → Copilot → Command**. A command-specific model applies to editor and command-palette runs. A slash run uses the model selected for that Quick Chat or Agent Chat.
 
 If a saved command’s selected model or the shared default is unavailable, configure it in **Settings → Copilot → Command**, then rerun the command. Copilot does not substitute your chat model or another enabled model, and changing the popup picker does not retry the original command. Quick Ask and Quick Command keep your unsent input while you choose a model.
 
-Use **Generate Default** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Custom Prompts Sort Strategy** controls their order in the slash menu.
+Use **Generate defaults** for a starter set. You can edit, duplicate, delete, or drag commands to reorder them. **Command sort order** controls their order in the slash menu.
 
 ### Add note context to a prompt
 
-With **Custom Prompt Templating** enabled, these variables add vault context:
+With **Command templating** enabled, these variables add vault context:
 
 | Variable           | Adds                                                       |
 | ------------------ | ---------------------------------------------------------- |
@@ -79,7 +79,7 @@ Quick Command is also unavailable in Source mode.
 
 ## Where commands are stored
 
-Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Command** settings tab in sync. Change the root under [**Settings → Copilot → Basic → Copilot folder location**](settings.md#basic).
+Each command is a Markdown file in `<Copilot folder>/copilot-custom-prompts/`. The filename is the command name, and Copilot keeps file changes and the **Commands** settings tab in sync. Change the root under [**Settings → Copilot → Basic → Copilot folder location**](settings.md#basic).
 
 When upgrading from older command settings, Copilot migrates supported commands to these files. If a name cannot be migrated, Copilot keeps it under the `unsupported/` subfolder and shows a startup notice.
 

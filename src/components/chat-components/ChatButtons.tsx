@@ -42,7 +42,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
       ) : (
         <>
           {hasSources && (
-            <MessageActionButton label="Show Sources" icon={LibraryBig} onClick={onShowSources} />
+            <MessageActionButton label="Show sources" icon={LibraryBig} onClick={onShowSources} />
           )}
           <MessageActionButton
             label="Insert / Replace at cursor"

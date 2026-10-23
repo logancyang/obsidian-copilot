@@ -252,7 +252,7 @@ export function ProjectContextSourceEditor({
           {solidManageButton ? (
             <Button size="sm" className="tw-gap-1.5" onClick={onManage}>
               <Settings className="tw-size-3.5" />
-              Manage Context
+              Manage context
             </Button>
           ) : (
             <Button

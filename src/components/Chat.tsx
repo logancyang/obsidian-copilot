@@ -293,7 +293,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       await chatUIState.saveChat(currentModelKey);
     } catch (error) {
       logError("Error saving chat as note:", err2String(error));
-      new Notice("Failed to save chat as note. Check console for details.");
+      new Notice("Failed to save chat as note. Check the Copilot log for details.");
     }
   }, [app, chatUIState, currentModelKey]);
 

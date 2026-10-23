@@ -53,7 +53,7 @@ function renderFlow(overrides: Partial<ReportIssueFlowProps> = {}) {
       { id: "screenshot", label: "Screenshot of the Obsidian window", defaultChecked: true },
       {
         id: "activityLog",
-        label: "Agent Mode activity log",
+        label: "Agent activity log",
         description: "Newest 2 MB of the log",
         defaultChecked: true,
       },

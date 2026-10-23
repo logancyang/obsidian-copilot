@@ -95,7 +95,7 @@ describe("AgentModeStatus", () => {
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
       expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByText("Claude session error")).toBeTruthy();
+      expect(screen.getByText("Claude ran into a problem")).toBeTruthy();
       expect(screen.getByText(error)).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(manager.getOrCreateActiveSession).toHaveBeenCalledTimes(1);
@@ -151,13 +151,11 @@ describe("AgentModeStatus", () => {
 
       const { rerender } = render(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+      fireEvent.click(screen.getByRole("button", { name: "Update" }));
       expect(run).toHaveBeenCalledWith(plugin);
       managedInstallState = { kind: "running", label: "Downloading… 50%" };
       rerender(<AgentModeStatus plugin={plugin} onInstallClick={jest.fn()} />);
-      expect(screen.getByRole("button", { name: "Upgrading…" }).hasAttribute("disabled")).toBe(
-        true
-      );
+      expect(screen.getByRole("button", { name: "Updating…" }).hasAttribute("disabled")).toBe(true);
       expect(screen.getByText("Updating Claude…")).toBeTruthy();
       expect(screen.getByText("Downloading… 50%")).toBeTruthy();
 
@@ -225,7 +223,7 @@ describe("AgentModeStatus", () => {
 
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
-      expect(screen.getByText("Claude config has changed")).toBeTruthy();
+      expect(screen.getByText("Claude settings changed")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Reload" }));
       expect(manager.applyHeldConfigChange).toHaveBeenCalledWith("claude");
     });
@@ -249,7 +247,7 @@ describe("AgentModeStatus", () => {
     it("Retry applies corrected config when a failed session has a held change (https://github.com/Brevilabs/obsidian-copilot-private/issues/475)", () => {
       const manager = {
         subscribe: jest.fn(() => () => {}),
-        getLastError: jest.fn(() => "Claude backend exited unexpectedly."),
+        getLastError: jest.fn(() => "Claude stopped unexpectedly."),
         getOrCreateActiveSession: jest.fn().mockResolvedValue({}),
         hasHeldConfigChange: jest.fn(() => true),
         isBackendRestartPending: jest.fn(() => false),
@@ -259,7 +257,7 @@ describe("AgentModeStatus", () => {
 
       render(<AgentModeStatus manager={manager} plugin={plugin} onInstallClick={jest.fn()} />);
 
-      expect(screen.getByText("Claude session error")).toBeTruthy();
+      expect(screen.getByText("Claude ran into a problem")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Reload" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
       expect(manager.applyHeldConfigChange).toHaveBeenCalledWith("claude");

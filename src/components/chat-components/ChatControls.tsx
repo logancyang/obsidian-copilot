@@ -65,11 +65,11 @@ export function ChatControls({
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
+            <Button variant="ghost2" size="icon" title="New chat" onClick={onNewChat}>
               <MessageCirclePlus className="tw-size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>New Chat</TooltipContent>
+          <TooltipContent>New chat</TooltipContent>
         </Tooltip>
         <CopyChatLinkButton onCopyLink={onCopyChatLink} />
         <ChatSettingsPopover />
@@ -79,13 +79,13 @@ export function ChatControls({
               <Button
                 variant="ghost2"
                 size="icon"
-                title="Save Chat as Note"
+                title="Save chat as note"
                 onClick={() => void onSaveAsNote()}
               >
                 <Download className="tw-size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Save Chat as Note</TooltipContent>
+            <TooltipContent>Save chat as note</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>
@@ -97,17 +97,17 @@ export function ChatControls({
             onOpenSourceFile={onOpenSourceFile}
           >
             <TooltipTrigger asChild>
-              <Button variant="ghost2" size="icon" title="Chat History" onClick={onLoadHistory}>
+              <Button variant="ghost2" size="icon" title="Chat history" onClick={onLoadHistory}>
                 <History className="tw-size-4" />
               </Button>
             </TooltipTrigger>
           </ChatHistoryPopover>
-          <TooltipContent>Chat History</TooltipContent>
+          <TooltipContent>Chat history</TooltipContent>
         </Tooltip>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="icon" title="Advanced Settings">
+            <Button variant="ghost2" size="icon" title="Advanced settings">
               <MoreHorizontal className="tw-size-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -121,7 +121,7 @@ export function ChatControls({
             >
               <div className="tw-flex tw-items-center tw-gap-2">
                 <CheckCircle className="tw-size-4" />
-                Auto-accept Edits
+                Auto-accept edits
               </div>
               <SettingSwitch checked={settings.autoAcceptEdits} />
             </DropdownMenuItem>

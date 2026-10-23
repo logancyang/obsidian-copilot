@@ -86,8 +86,8 @@ export const AgentSettings: React.FC = () => {
       <SettingSection label="Agents">
         <SettingItem
           type="select"
-          title="Default backend"
-          description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
+          title="Default agent"
+          description="The agent new chats start with. Picking another agent's model in a chat also changes this."
           value={activeBackendValue}
           onChange={(value) =>
             setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
