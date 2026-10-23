@@ -73,16 +73,6 @@ describe("copilotMcpServer", () => {
 
     afterEach(() => server.dispose());
 
-    it("reports whether any hosted tool is switched on, following the switch as it changes", () => {
-      let on = true;
-      server.dispose();
-      server = createCopilotMcpServer((toolName) => toolName === "send_feedback" && on, []);
-
-      expect(server.hasEnabledTools()).toBe(true);
-      on = false;
-      expect(server.hasEnabledTools()).toBe(false);
-    });
-
     it("hands each session a loopback MCP server named obsidian-copilot with its own bearer token", async () => {
       const first = await server.connect("session-a", jest.fn());
       const second = await server.connect("session-b", jest.fn());
@@ -151,14 +141,13 @@ describe("copilotMcpServer", () => {
       });
     });
 
-    it("lists only a hosted tool and reports tools enabled when send_feedback is off", async () => {
+    it("lists only a hosted tool when send_feedback is off", async () => {
       server.dispose();
       server = createCopilotMcpServer((toolName) => toolName === "lookup", [lookupTool()]);
       const channel = await server.connect("session-a", jest.fn());
 
       const result = await post(channel, rpc(2, "tools/list"));
 
-      expect(server.hasEnabledTools()).toBe(true);
       expect(result.body).toEqual({
         jsonrpc: "2.0",
         id: 2,
@@ -404,7 +393,7 @@ describe("copilotMcpServer", () => {
       expect(result.status).toBe(405);
     });
 
-    it("rejects a request body over 64 KiB of UTF-8 without raising a card, even when it has fewer characters", async () => {
+    it("rejects a request body over 16 MiB of UTF-8 without raising a card, even when it has fewer characters", async () => {
       const handler = jest.fn().mockReturnValue("shown");
       const channel = await server.connect("session-a", handler);
 
@@ -412,7 +401,7 @@ describe("copilotMcpServer", () => {
         channel,
         rpc(5, "tools/call", {
           name: "send_feedback",
-          arguments: { ...COMPLAINT, repro: "界".repeat(30_000) },
+          arguments: { ...COMPLAINT, repro: "界".repeat(6_000_000) },
         })
       );
 

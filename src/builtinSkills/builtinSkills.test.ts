@@ -11,12 +11,6 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "./builtinSkills";
-import {
-  OPENARTIFACTS_AGENT_HANDOFF_DIR,
-  OPENARTIFACTS_API_ORIGIN,
-  OPENARTIFACTS_MAX_HTML_BYTES,
-  OPENARTIFACTS_WORKSPACE_ROOT_ENV,
-} from "@/openArtifacts/constants";
 
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
   isObsidianCliEnabled: jest.fn(() => true),
@@ -58,7 +52,6 @@ describe("builtinSkills", () => {
         "copilot-web-fetch",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
-        "openartifacts-publish",
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
@@ -207,170 +200,6 @@ describe("builtinSkills", () => {
       expect(scriptOf("copilot-fetch-x", ".ps1")).toContain('Invoke-Relay "/twitter4llm"');
     });
 
-    it("records the page in the Markdown note as its own step, before the report", () => {
-      const md = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish")!.skillMd;
-      const record = md.indexOf("### Record the page in the note");
-      const report = md.indexOf("### Report");
-      expect(record).toBeGreaterThan(md.indexOf("## 3. Publish"));
-      expect(report).toBeGreaterThan(record);
-      expect(md.slice(record, report)).toContain(
-        "`openartifacts` frontmatter property to the receipt's `url`"
-      );
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/394 publishes over HTTPS with the injected license key and never touches the Obsidian CLI", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
-      expect(skill).toBeDefined();
-      expect(skill!.version).toBe(9);
-
-      expect(skill!.files.map((file) => file.path)).toEqual([
-        "themes/research-memo.md",
-        "openartifacts-publish.sh",
-        "openartifacts-publish.cmd",
-        "openartifacts-publish.ps1",
-      ]);
-
-      const md = skill!.skillMd;
-      expect(md).toContain(PLUS_ENV.licenseKey);
-      expect(md).toContain(
-        `$${OPENARTIFACTS_WORKSPACE_ROOT_ENV}/${OPENARTIFACTS_AGENT_HANDOFF_DIR}/`
-      );
-      expect(md).toContain(`\`${OPENARTIFACTS_MAX_HTML_BYTES}\` bytes`);
-      expect(md).toContain("clickable Markdown link to the exact HTML file");
-      expect(md).toContain("`[page name.html](/.openartifacts/handoffs/page%20name.html)`");
-      expect(md).toContain("Then end your turn");
-      expect(md).toContain("Never publish in the same turn that generated the HTML");
-      expect(md).toContain("Never simulate the user's approval");
-      expect(md).toContain("`openartifacts` frontmatter property");
-      expect(md).toContain("Themes are optional");
-      expect(md).toMatch(/a missing theme must never block publishing/);
-      expect(md).toContain("Report that message verbatim");
-      expect(md).toContain("unshare <docId>");
-      expect(md).toContain(
-        'sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" publish'
-      );
-      expect(md).toContain(
-        '& "/absolute/path/to/this/skill/directory/openartifacts-publish.cmd" publish'
-      );
-      for (const gone of [
-        "require_escalated",
-        "openArtifactsAgentBridge",
-        "shared-publishing-rules",
-        "sandbox",
-        "modal",
-        "protected",
-      ]) {
-        expect(md).not.toContain(gone);
-      }
-
-      for (const script of [
-        scriptOf("openartifacts-publish", ".sh"),
-        scriptOf("openartifacts-publish", ".ps1"),
-      ]) {
-        expect(script).toContain(PLUS_ENV.licenseKey);
-        expect(script).toContain(OPENARTIFACTS_API_ORIGIN);
-        expect(script).toContain("OPENARTIFACTS_API_HOST");
-        expect(script).toContain("/api/v1/docs");
-        expect(script).toContain("Bearer");
-        expect(script).toContain("^[0-9abcdefghjkmnpqrstvwxyz]{16}$");
-        expect(script).not.toContain("COPILOT_OBSIDIAN_CLI");
-        expect(script).not.toContain("eval");
-        expect(script).not.toContain("OPENARTIFACTS_TOKEN");
-        expect(script).not.toContain("node ");
-      }
-      expect(scriptOf("openartifacts-publish", ".cmd")).toContain(
-        '-File "%~dp0openartifacts-publish.ps1"'
-      );
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/707 asks who can open a new page, shares through the wrapper, and never sends linkAccess on create", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
-      expect(skill).toBeDefined();
-      expect(skill!.version).toBe(9);
-
-      const md = skill!.skillMd;
-      expect(md).toContain(
-        "Who should be able to open it? Reply **publish** for anyone with the link, or name people, for example **publish for alice@acme.com**, to share it only with them."
-      );
-      expect(md).toContain("share <docId> add");
-      expect(md).toContain("share <docId> decline");
-      expect(md).toContain("share <docId> link invited");
-      expect(md).toContain("People who opened it while it was public may have kept a copy.");
-      expect(md).toContain("Published privately: {url}. Only you and {addresses} can open it.");
-      expect(md).toContain("Manage who can open it: {manageUrl}");
-      expect(md).toContain("Nothing was published.");
-      expect(md).toContain('Report an update as "Updated: {url}."');
-      expect(md).not.toContain("Report a public publish as");
-      expect(md).toContain("After `link invited` makes a public page private");
-      expect(md).not.toContain("removes the new page");
-      expect(md).not.toContain("Share dialog");
-
-      for (const path of ["openartifacts-publish.sh", "openartifacts-publish.ps1"]) {
-        const script = skill!.files.find((file) => file.path === path)!.content;
-        expect(script).toContain("/api/v1/private-docs");
-        expect(script).toContain("Nothing was published.");
-        expect(script).toContain("Not found, or this server does not support private documents.");
-        expect(script).not.toContain('linkAccess":"invited');
-        expect(script).not.toContain("linkAccess = 'invited'");
-      }
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3196 formats filename-derived page titles in title case without duplicating an equivalent opening H1", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
-      expect(skill).toBeDefined();
-
-      const md = skill!.skillMd;
-      expect(md).toContain("Use the note's file name without `.md` as its page title");
-      expect(md).toMatch(/Convert the filename-derived title to\s+title case/);
-      expect(md).toMatch(/both the HTML\s+`<title>` and a visible `<h1>`/);
-      expect(md).toContain("above the rendered note body");
-      expect(md).toMatch(/already starts with an\s+equivalent `<h1>`/);
-      expect(md).toContain("do not add another heading");
-      expect(md).toMatch(/Preserve all remaining note\s+content/);
-      expect(md).toMatch(/do not edit the\s+source Markdown to add the heading/);
-      expect(md).toContain("same complete HTML file");
-      expect(md).toMatch(/wrap\s+naturally on narrow screens/);
-      expect(md).toContain("Never truncate the title");
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3196 honors an explicit no-title request by omitting the added H1", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
-      expect(skill).toBeDefined();
-
-      const md = skill!.skillMd;
-      expect(md).toMatch(/If the user explicitly asks for no\s+title/);
-      expect(md).toContain("do not add the `<h1>`");
-      expect(md).toContain("Keep the HTML `<title>` as browser metadata");
-      expect(md).toMatch(/preserve any\s+authored opening heading as note content/);
-    });
-
-    it("publishes an existing HTML file unchanged through the same wrapper https://github.com/logancyang/obsidian-copilot/issues/3294", () => {
-      const skill = BUILTIN_SKILLS.find((item) => item.name === "openartifacts-publish");
-      expect(skill).toBeDefined();
-
-      const md = skill!.skillMd;
-      expect(md).toContain("existing Markdown note or local HTML file");
-      expect(md).toContain("### Existing HTML file");
-      expect(md).toMatch(/Pass that original HTML file path directly to\s+the wrapper/);
-      expect(md).toContain("do not convert it to Markdown");
-      expect(md).toMatch(/do\s+not render, rewrite, or copy it/);
-      expect(md).toContain("never delete the original HTML file");
-      expect(md).toMatch(
-        /every reference to a local file[\s\S]*`srcset`[\s\S]*`poster`[\s\S]*CSS `url\(\.\.\.\)`[\s\S]*name each reference in the review message[\s\S]*will\s+not load on the published page because only the HTML file is uploaded[\s\S]*warning\s+does\s+not block publication[\s\S]*make the file self-contained or approve publishing\s+anyway[\s\S]*wait for the user to update the file[\s\S]*repeat steps 1 and 2 before accepting\s+publication approval/
-      );
-      expect(md).toContain(
-        'sh "/absolute/path/to/this/skill/directory/openartifacts-publish.sh" publish "/absolute/path/to/page.html" "Page title"'
-      );
-      expect(md).toMatch(/For an existing HTML file on Windows, replace the handoff path/);
-      expect(md).toContain("Success returns the same server receipt");
-      expect(md).toMatch(
-        /take the `docId` from an OpenArtifacts link the\s+user supplies or the receipt URL reported earlier/
-      );
-      expect(md).toMatch(
-        /remove each `openartifacts` or `symposium` property\s+only when that property's own link has the same document id/
-      );
-    });
-
     it("keeps every SKILL.md frontmatter version in sync with the numeric version", () => {
       for (const skill of BUILTIN_SKILLS) {
         expect(skill.skillMd).toContain(`copilot-builtin-version: "${skill.version}"`);
@@ -386,7 +215,6 @@ describe("builtinSkills", () => {
         "copilot-web-fetch",
         "copilot-youtube-transcript",
         "copilot-fetch-x",
-        "openartifacts-publish",
       ]);
       for (const skill of scripted) {
         expect(skill.skillMd).toContain(

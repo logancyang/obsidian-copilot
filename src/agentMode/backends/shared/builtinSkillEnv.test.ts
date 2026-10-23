@@ -12,7 +12,6 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/builtinSkills/builtinSkills";
-import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -73,10 +72,6 @@ describe("builtinSkillEnv", () => {
       expect(await buildBuiltinSkillEnv()).toEqual({ MIYO_URL: "http://192.168.1.10:8742" });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/337 keeps the existing raw workspace key for retained managed wrappers", () => {
-      expect(OPENARTIFACTS_WORKSPACE_ROOT_ENV).toBe("OPENARTIFACTS_WORKSPACE_ROOT");
-    });
-
     it.each([
       [
         "Current vault with ticked folders",
@@ -88,9 +83,9 @@ describe("builtinSkillEnv", () => {
       async (_scope, settings) => {
         mockGetSettings.mockReturnValue({ isPaidUser: false, ...settings });
 
-        const env = await buildBuiltinSkillEnv("", "/vault/root");
+        const env = await buildBuiltinSkillEnv("");
 
-        expect(env).toEqual({ [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root" });
+        expect(env).toEqual({});
         expect(Object.keys(env).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))).toEqual([]);
       }
     );
@@ -112,12 +107,11 @@ describe("builtinSkillEnv", () => {
       });
 
       expect(
-        await buildBuiltinSkillEnv("", "/vault/root", {
+        await buildBuiltinSkillEnv("", {
           url: "http://127.0.0.1:1234/search",
           token: "session-token",
         })
       ).toEqual({
-        [OPENARTIFACTS_WORKSPACE_ROOT_ENV]: "/vault/root",
         [SELF_HOST_WEB_SEARCH_ENV]: "1",
         [SELF_HOST_WEB_SEARCH_URL_ENV]: "http://127.0.0.1:1234/search",
         [SELF_HOST_WEB_SEARCH_TOKEN_ENV]: "session-token",

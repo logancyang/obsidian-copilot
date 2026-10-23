@@ -8,7 +8,11 @@ import {
 } from "@/components/modals/OpenArtifactsModal";
 import { logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import {
+  ACCESS_UPGRADE_URL,
+  OpenArtifactsClient,
+  OpenArtifactsClientError,
+} from "@/openArtifacts/OpenArtifactsClient";
 import {
   OpenArtifactsFrontmatterParseError,
   getOpenArtifactsDocId,
@@ -74,7 +78,7 @@ interface OpenArtifactsPublisherDependencies {
 }
 
 const MISSING_LICENSE_MESSAGE =
-  "Add a Copilot Plus license key in Settings before publishing with OpenArtifacts.";
+  "OpenArtifacts comes with Copilot Plus. If you have it, add your license key in Copilot Settings.";
 const BUSY_MESSAGE = "An OpenArtifacts action is already in progress for this note.";
 
 async function loadConfiguredLicenseKey(): Promise<string> {
@@ -95,7 +99,21 @@ async function buildDocumentWithComponent(
   }
 }
 
-function operationFailure(action: OpenArtifactsAction, error: unknown): OpenArtifactsFailureResult {
+export function missingLicenseFailure(action: OpenArtifactsAction): OpenArtifactsFailureResult {
+  return {
+    kind: "failure",
+    action,
+    message: MISSING_LICENSE_MESSAGE,
+    accessNotice: true,
+    retryable: false,
+    upgradeUrl: ACCESS_UPGRADE_URL,
+  };
+}
+
+export function operationFailure(
+  action: OpenArtifactsAction,
+  error: unknown
+): OpenArtifactsFailureResult {
   if (
     error instanceof OpenArtifactsFrontmatterParseError ||
     error instanceof OpenArtifactsPropertyConflictError
@@ -212,6 +230,11 @@ export class OpenArtifactsPublisher {
         initialResult = operationFailure("publish", error);
       }
     }
+    // Without a key nothing can be published, so the dialog opens on the upgrade offer.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+    if (!initialResult && !(await this.loadLicenseKey().catch(() => ""))) {
+      initialResult = missingLicenseFailure("publish");
+    }
     if (this.disposed) {
       return;
     }
@@ -226,7 +249,13 @@ export class OpenArtifactsPublisher {
       onConfirm: openingResult
         ? () => Promise.resolve(openingResult)
         : (action, ownerDocument, linkAccess) =>
-            this.execute(file, docId, action, ownerDocument, linkAccess),
+            this.execute(
+              file,
+              docId,
+              action,
+              () => this.buildDocument(file, ownerDocument),
+              linkAccess
+            ),
       onClosed: () => this.modals.delete(modal),
     });
     this.modals.add(modal);
@@ -242,7 +271,13 @@ export class OpenArtifactsPublisher {
     const withKey = async <T>(call: (licenseKey: string) => Promise<T>): Promise<T> => {
       const licenseKey = await this.loadLicenseKey().catch(() => "");
       if (!licenseKey) {
-        throw new OpenArtifactsClientError(MISSING_LICENSE_MESSAGE, "unauthorized", 401, false);
+        throw new OpenArtifactsClientError(
+          MISSING_LICENSE_MESSAGE,
+          "unauthorized",
+          401,
+          false,
+          ACCESS_UPGRADE_URL
+        );
       }
       return call(licenseKey);
     };
@@ -277,11 +312,15 @@ export class OpenArtifactsPublisher {
     this.blockedPublishResults.clear();
   }
 
-  private async execute(
+  /**
+   * The one publish, update and delete flow for a note, shared by the dialog and the agent tools.
+   * https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+   */
+  async execute(
     file: TFile,
     expectedDocId: string | null,
     action: OpenArtifactsAction,
-    ownerDocument: Document,
+    buildDocument: () => Promise<OpenArtifactsDocument>,
     linkAccess?: OpenArtifactsLinkAccess
   ): Promise<OpenArtifactsModalResult> {
     const expectedAction: OpenArtifactsAction = expectedDocId ? "update" : "publish";
@@ -323,13 +362,7 @@ export class OpenArtifactsPublisher {
         licenseKey = "";
       }
       if (!licenseKey) {
-        return {
-          kind: "failure",
-          action: resolvedAction,
-          message: MISSING_LICENSE_MESSAGE,
-          accessNotice: true,
-          retryable: false,
-        };
+        return missingLicenseFailure(resolvedAction);
       }
 
       if (resolvedAction === "delete" && !docId) {
@@ -360,28 +393,13 @@ export class OpenArtifactsPublisher {
           return await this.removeLocalIdentity(file, docId!);
         }
 
-        const document = await this.buildDocument(file, ownerDocument);
+        const document = await buildDocument();
         const preRequestDocId = await getOpenArtifactsDocId(this.app, file);
         if (preRequestDocId !== docId) {
           return identityChangedFailure(resolvedAction);
         }
         if (!docId) {
-          const receipt = await this.client.publish(
-            document,
-            licenseKey,
-            linkAccess === "invited" ? "invited" : undefined,
-            await this.isLinkOfferPending()
-          );
-          // The marker stops every later create from asking, so the offer shows once per vault.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/696
-          if (receipt.guidance) {
-            await this.markLinkOfferShown().catch((error) =>
-              logWarn(
-                "[OpenArtifacts] Could not record that the account-link offer was shown",
-                error
-              )
-            );
-          }
+          const receipt = await this.create(document, licenseKey, linkAccess);
           await this.recordPublishedReceipt(file, document, receipt);
           return await this.savePublishedIdentity(file, receipt);
         }
@@ -420,6 +438,27 @@ export class OpenArtifactsPublisher {
         return failure;
       }
     });
+  }
+
+  async create(
+    document: OpenArtifactsDocument,
+    licenseKey: string,
+    linkAccess?: OpenArtifactsLinkAccess
+  ): Promise<OpenArtifactsReceipt> {
+    const receipt = await this.client.publish(
+      document,
+      licenseKey,
+      linkAccess === "invited" ? "invited" : undefined,
+      await this.isLinkOfferPending()
+    );
+    // The marker stops every later create from asking, so the offer shows once per vault.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/696
+    if (receipt.guidance) {
+      await this.markLinkOfferShown().catch((error) =>
+        logWarn("[OpenArtifacts] Could not record that the account-link offer was shown", error)
+      );
+    }
+    return receipt;
   }
 
   private async recordPublishedReceipt(

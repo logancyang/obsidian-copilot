@@ -7,7 +7,6 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/builtinSkills/builtinSkills";
-import { OPENARTIFACTS_WORKSPACE_ROOT_ENV } from "@/openArtifacts/constants";
 import {
   COPILOT_OBSIDIAN_CLI_ENV,
   resolveObsidianCliPath,
@@ -27,14 +26,11 @@ const EMPTY_MANAGED_ENV: Readonly<Record<string, string>> = Object.freeze({});
 
 export async function buildBuiltinSkillEnv(
   clientVersion = "",
-  workspaceRootAbs = "",
   selfHostSearchChannel?: Readonly<{ url: string; token: string }>
 ): Promise<Readonly<Record<string, string>>> {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const settings = getSettings();
   const env: Record<string, string> = {};
-
-  if (workspaceRootAbs) env[OPENARTIFACTS_WORKSPACE_ROOT_ENV] = workspaceRootAbs;
 
   const obsidianCliPath = resolveObsidianCliPath({
     platform: process.platform,

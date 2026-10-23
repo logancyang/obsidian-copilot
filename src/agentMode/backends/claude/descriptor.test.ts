@@ -263,7 +263,7 @@ describe("descriptor", () => {
       };
 
       const env = await process.opts.getManagedEnv?.();
-      expect(env).toEqual({ OPENARTIFACTS_WORKSPACE_ROOT: "/active-vault" });
+      expect(env).toEqual({});
     });
   });
 

@@ -1,4 +1,8 @@
-import { OpenArtifactsClient, OpenArtifactsClientError } from "@/openArtifacts/OpenArtifactsClient";
+import {
+  ACCESS_UPGRADE_URL,
+  OpenArtifactsClient,
+  OpenArtifactsClientError,
+} from "@/openArtifacts/OpenArtifactsClient";
 import { OPENARTIFACTS_API_ORIGIN } from "@/openArtifacts/constants";
 import type { OpenArtifactsDocument } from "@/openArtifacts/types";
 import { requestUrl, type RequestUrlParam, type RequestUrlResponse } from "obsidian";
@@ -31,6 +35,7 @@ async function expectClientError(
     code: string;
     status: number | null;
     retryable: boolean;
+    upgradeUrl?: string;
   }
 ): Promise<void> {
   try {
@@ -95,26 +100,43 @@ describe("OpenArtifactsClient", () => {
           "unauthorized",
           "That license key is not valid for publishing.",
           false,
+          ACCESS_UPGRADE_URL,
         ],
         [
           "an ineligible plan",
           401,
           "unauthorized",
-          "Publishing is currently limited to lifetime license holders.",
+          "Publishing requires a paid plan.",
           false,
+          ACCESS_UPGRADE_URL,
         ],
-        ["an oversized document", 413, "too_large", "That push is too large to accept.", false],
-        ["a quota limit", 429, "quota_exceeded", "You have used all of today's pushes.", false],
+        [
+          "an oversized document",
+          413,
+          "too_large",
+          "That push is too large to accept.",
+          false,
+          undefined,
+        ],
+        [
+          "a quota limit",
+          429,
+          "quota_exceeded",
+          "You have used all of today's pushes.",
+          false,
+          undefined,
+        ],
         [
           "a license validation outage",
           500,
           "internal",
           "License validation is temporarily unavailable.",
           true,
+          undefined,
         ],
       ])(
-        "preserves the structured error for %s",
-        async (_case, status, code, message, retryable) => {
+        "preserves the structured error for %s, with the upgrade link on an access refusal",
+        async (_case, status, code, message, retryable, upgradeUrl) => {
           mockedRequestUrl.mockResolvedValue(response(status, { error: { code, message } }));
 
           await expectClientError(
@@ -124,6 +146,7 @@ describe("OpenArtifactsClient", () => {
               code,
               status,
               retryable,
+              upgradeUrl,
             }
           );
         }
@@ -585,6 +608,122 @@ describe("OpenArtifactsClient", () => {
           await expect(new OpenArtifactsClient().getAccess(DOC_ID, "k")).rejects.toMatchObject({
             code: "malformed_response",
           });
+        });
+      });
+
+      describe("people and requests", () => {
+        const AGENT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/746";
+        const base = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/access`;
+
+        it(`${AGENT_ISSUE} changes one encoded address per call and sends a role only when one is named`, async () => {
+          const client = new OpenArtifactsClient();
+          mockedRequestUrl.mockResolvedValue(response(200, ACCESS));
+
+          await client.addPerson(DOC_ID, "a+b@c.co", "k");
+          await client.addPerson(DOC_ID, "a@b.co", "k", "view");
+          await client.removePerson(DOC_ID, "a@b.co", "k");
+          await client.declineRequest(DOC_ID, "bob@other.com", "k");
+
+          expect(
+            mockedRequestUrl.mock.calls.map((_call, i) => [sent(i).method, sent(i).url])
+          ).toEqual([
+            ["PUT", `${base}/people/a%2Bb%40c.co`],
+            ["PUT", `${base}/people/a%40b.co`],
+            ["DELETE", `${base}/people/a%40b.co`],
+            ["DELETE", `${base}/requests/bob%40other.com`],
+          ]);
+          expect(sent(0).body).toBeUndefined();
+          expect(JSON.parse(sent(1).body as string)).toEqual({ role: "view" });
+        });
+
+        it(`${AGENT_ISSUE} returns the Access the server answered and maps a 404 to private_unavailable`, async () => {
+          const client = new OpenArtifactsClient();
+          mockedRequestUrl.mockResolvedValueOnce(response(200, ACCESS));
+          await expect(client.removePerson(DOC_ID, "a@b.co", "k")).resolves.toEqual(ACCESS);
+
+          mockedRequestUrl.mockResolvedValueOnce(response(404));
+          await expect(client.declineRequest(DOC_ID, "a@b.co", "k")).rejects.toMatchObject({
+            code: "private_unavailable",
+            status: 404,
+          });
+        });
+      });
+
+      describe("threads", () => {
+        const AGENT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/746";
+        const base = `${OPENARTIFACTS_API_ORIGIN}/api/v1/docs/${DOC_ID}/threads`;
+        const THREAD = { threadId: "th_1", state: "resolved", resolution: { atVersion: 2 } };
+
+        it(`${AGENT_ISSUE} lists threads with only the filters given`, async () => {
+          const client = new OpenArtifactsClient();
+          const list = { docId: DOC_ID, version: 2, latestVersion: 2, threads: [THREAD] };
+          mockedRequestUrl.mockResolvedValue(response(200, list));
+
+          await expect(client.listThreads(DOC_ID, "k")).resolves.toEqual(list);
+          await client.listThreads(DOC_ID, "k", {
+            state: "open",
+            since: "2026-10-01T00:00:00+02:00",
+          });
+
+          expect(sent(0)).toMatchObject({ method: "GET", url: base });
+          expect(sent(1).url).toBe(`${base}?state=open&since=2026-10-01T00%3A00%3A00%2B02%3A00`);
+        });
+
+        it(`${AGENT_ISSUE} rejects a thread list without a threads array as malformed`, async () => {
+          mockedRequestUrl.mockResolvedValue(response(200, { docId: DOC_ID, threads: [null] }));
+
+          await expect(new OpenArtifactsClient().listThreads(DOC_ID, "k")).rejects.toMatchObject({
+            code: "malformed_response",
+          });
+        });
+
+        it(`${AGENT_ISSUE} replies, resolves with an optional version and reopens on the thread routes`, async () => {
+          const client = new OpenArtifactsClient();
+          mockedRequestUrl.mockResolvedValueOnce(response(201, { commentId: "cm_1" }));
+          mockedRequestUrl.mockResolvedValue(response(200, THREAD));
+
+          await expect(client.replyToThread(DOC_ID, "th_1", "Fixed in v2.", "k")).resolves.toEqual({
+            commentId: "cm_1",
+          });
+          await client.resolveThread(DOC_ID, "th_1", "k", 2);
+          await client.resolveThread(DOC_ID, "th_1", "k");
+          await expect(client.reopenThread(DOC_ID, "th_1", "k")).resolves.toEqual(THREAD);
+
+          expect(
+            mockedRequestUrl.mock.calls.map((_call, i) => [
+              sent(i).method,
+              sent(i).url,
+              sent(i).body,
+            ])
+          ).toEqual([
+            ["POST", `${base}/th_1/comments`, JSON.stringify({ body: "Fixed in v2." })],
+            ["POST", `${base}/th_1/resolve`, JSON.stringify({ version: 2 })],
+            ["POST", `${base}/th_1/resolve`, "{}"],
+            ["POST", `${base}/th_1/reopen`, undefined],
+          ]);
+        });
+
+        it(`${AGENT_ISSUE} maps any 404 to the reference client's comments message`, async () => {
+          mockedRequestUrl.mockResolvedValue(response(404));
+
+          await expectClientError(new OpenArtifactsClient().listThreads(DOC_ID, "k"), {
+            message: "Not found, or this server does not support comments.",
+            code: "not_found",
+            status: 404,
+            retryable: false,
+          });
+        });
+
+        it(`${AGENT_ISSUE} passes a thread cap refusal through with its server message`, async () => {
+          mockedRequestUrl.mockResolvedValue(
+            response(402, {
+              error: { code: "limit_reached", message: "Thread cap.", limit: "threads" },
+            })
+          );
+
+          await expect(
+            new OpenArtifactsClient().replyToThread(DOC_ID, "th_1", "x", "k")
+          ).rejects.toMatchObject({ status: 402, code: "limit_reached", message: "Thread cap." });
         });
       });
 

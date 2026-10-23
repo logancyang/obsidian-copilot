@@ -169,6 +169,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
@@ -364,6 +365,10 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       }
     });
 
+    const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
+    this.openArtifactsPublisher = openArtifactsPublisher;
+    this.register(() => openArtifactsPublisher.dispose());
+
     if (agentMode) {
       const [
         {
@@ -458,13 +463,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
-    const openArtifactsPublisher = new OpenArtifactsPublisher(this.app);
     const publishFile = (file: TFile): void => {
       void openArtifactsPublisher
         .open(file)
         .catch((error) => logError("Failed to open OpenArtifacts publishing.", error));
     };
-    this.register(() => openArtifactsPublisher.dispose());
     registerCommands(this, publishFile);
 
     this.registerEvent(

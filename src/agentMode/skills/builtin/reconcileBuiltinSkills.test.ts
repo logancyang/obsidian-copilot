@@ -199,7 +199,9 @@ describe("reconcileBuiltinSkills", () => {
     });
     it(`starts a replacement with defaults and retires its predecessor independently of old preferences ${ISSUE}`, async () => {
       const retired = RETIRED_BUILTIN_SKILLS[0];
-      const replacement = BUILTIN_SKILLS.find((skill) => skill.name === "openartifacts-publish")!;
+      const replacement = BUILTIN_SKILLS.find(
+        (skill) => skill.name === "copilot-youtube-transcript"
+      )!;
       const f = fixture({ [retired.name]: { disabled: true, disabledAgents: ["codex"] } });
       f.files.set(
         f.path(retired.name),

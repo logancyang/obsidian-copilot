@@ -15,7 +15,9 @@ export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
 export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 
 const MCP_PATH = "/mcp";
-const MAX_REQUEST_BYTES = 64 * 1024;
+// openartifacts_publish takes a whole page as an argument, and OpenArtifacts accepts pages up to 10 MB.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/746
+const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const LATEST_PROTOCOL_VERSION = "2025-06-18";
 const SUPPORTED_PROTOCOL_VERSIONS = new Set([
   "2025-11-25",
@@ -92,7 +94,6 @@ const SEND_FEEDBACK_HOSTED_TOOL: ServerTool = Object.freeze({
 type ToolSwitch = (toolName: string) => boolean;
 
 export interface CopilotMcpServer {
-  hasEnabledTools(): boolean;
   connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer>;
   disconnect(sessionKey: string): void;
   dispose(): void;
@@ -118,9 +119,6 @@ export function createCopilotMcpServer(
   let disposed = false;
 
   return Object.freeze({
-    hasEnabledTools(): boolean {
-      return hostedTools.some((tool) => isToolOn(tool.definition.name));
-    },
     async connect(sessionKey: string, onOffer: FeedbackOfferHandler): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>

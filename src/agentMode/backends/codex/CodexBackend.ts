@@ -39,7 +39,7 @@ export class CodexBackend implements AcpBackend {
       "Codex isn't set up. Install or detect it in Settings → Copilot → Basic → Agents.",
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
-        ...(await buildBuiltinSkillEnv(this.clientVersion, ctx.vaultBasePath)),
+        ...(await buildBuiltinSkillEnv(this.clientVersion)),
         // The supported adapter derives its initial ACP mode from this variable.
         // User env overrides still win.
         // The adapter's "read-only" mode asks before each workspace edit, like
