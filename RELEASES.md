@@ -1,5 +1,44 @@
 # Release Notes
 
+# v4.0.16 - Background tasks in Claude chats, compact, Miyo search and OpenArtifacts improvements
+
+[![Demo video: Obsidian Copilot 4.0.16: Background Tasks in Claude Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/github-thumbnail-6a06171f.png)](https://youtube.com/shorts/4B04T53tiYk)
+
+In Agent Chat, Claude now runs subagents and long commands in the background and replies again when each one finishes. Messages you send while it works reach it at its next step, so you can change course without stopping it.
+
+This release also adds `/compact` command to Agent Chat, improves Miyo search experience and quality, and lets agents publish private OpenArtifacts pages and manage them for you.
+
+## ✨ Enhancements
+
+- Claude runs subagents and long commands in the background, so you can keep chatting while they work and stop any one of them on its own. ([#3767](https://github.com/logancyang/obsidian-copilot/pull/3767), [#3772](https://github.com/logancyang/obsidian-copilot/pull/3772), [#3774](https://github.com/logancyang/obsidian-copilot/pull/3774), @zeroliu)
+- Send Claude a message while it works to change course without stopping it. ([#3768](https://github.com/logancyang/obsidian-copilot/pull/3768), [#3770](https://github.com/logancyang/obsidian-copilot/pull/3770), @zeroliu)
+- Type `/compact` in Agent Chat to summarize a long chat so the agent can keep going. ([#3601](https://github.com/logancyang/obsidian-copilot/pull/3601), [#3606](https://github.com/logancyang/obsidian-copilot/pull/3606), [#3607](https://github.com/logancyang/obsidian-copilot/pull/3607), [#3608](https://github.com/logancyang/obsidian-copilot/pull/3608), @zeroliu)
+- Miyo search results are highlighted with a new card, and you can see which notes Miyo found. Agents also read long PDFs and EPUBs in full through Miyo. ([#3648](https://github.com/logancyang/obsidian-copilot/pull/3648), [#3784](https://github.com/logancyang/obsidian-copilot/pull/3784), [#3649](https://github.com/logancyang/obsidian-copilot/pull/3649), [#3726](https://github.com/logancyang/obsidian-copilot/pull/3726), @zeroliu)
+- With Copilot Plus, ask an agent to publish a note to OpenArtifacts as a private page, share it with people you name, or update it to address their comments. ([#3790](https://github.com/logancyang/obsidian-copilot/pull/3790), @logancyang)
+- Agents get Obsidian links, Bases, and Canvas files right more often. ([#3653](https://github.com/logancyang/obsidian-copilot/pull/3653), @zeroliu)
+- Agent edits are easier to review, because the diff looks like your note in reading view. ([#3815](https://github.com/logancyang/obsidian-copilot/pull/3815), [#3810](https://github.com/logancyang/obsidian-copilot/pull/3810), [#3651](https://github.com/logancyang/obsidian-copilot/pull/3651), @zeroliu)
+- Turn off **Auto-attach active note** in **Settings → Copilot → Basic** to start new chats without the open note. ([#3750](https://github.com/logancyang/obsidian-copilot/pull/3750), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Saved agent chats pick up where they left off on another computer. ([#3654](https://github.com/logancyang/obsidian-copilot/pull/3654), @zeroliu)
+- Each agent chat's history saves to a single note, even after the agent restarts. ([#3743](https://github.com/logancyang/obsidian-copilot/pull/3743), @zeroliu)
+- The API keys Copilot stores in Obsidian's Keychain have stable, readable names that stay the same on every device that syncs Copilot's settings. ([#3627](https://github.com/logancyang/obsidian-copilot/pull/3627), @zeroliu)
+- Agents save new notes to an `outputs/` folder only in project chats. ([#3802](https://github.com/logancyang/obsidian-copilot/pull/3802), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- If you sync Copilot's settings across devices, update Copilot on all of them. A device still on 4.0.15 can lose its saved API keys. ([#3627](https://github.com/logancyang/obsidian-copilot/pull/3627), @zeroliu)
+- Claude chats need Claude Code 2.1.281 or newer. Copilot no longer creates `CLAUDE.md` files, because Claude now reads `AGENTS.md` directly. ([#3740](https://github.com/logancyang/obsidian-copilot/pull/3740), @zeroliu)
+- Miyo search, Miyo document reading, and OpenArtifacts publishing are now built into Copilot, so they no longer appear as skills in **Settings → Copilot → Skills**. ([#3677](https://github.com/logancyang/obsidian-copilot/pull/3677), [#3726](https://github.com/logancyang/obsidian-copilot/pull/3726), [#3790](https://github.com/logancyang/obsidian-copilot/pull/3790), @zeroliu, @logancyang)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.15 - Review agent edits, pin and bookmark chats, and report issues from Agent Chat
 
 [![Demo video: Obsidian Copilot 4.0.15: Review Agent Edits, Pin and Bookmark Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.15/IH6EvcazpgA-horizontal-fdf439fd.png)](https://youtube.com/shorts/IH6EvcazpgA?feature=share)
