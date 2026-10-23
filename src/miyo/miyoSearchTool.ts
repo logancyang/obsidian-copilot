@@ -9,8 +9,8 @@ import { err2String } from "@/utils";
 
 export const MIYO_SEARCH_TOOL_NAME = "miyo_search";
 
-const NOTE_LIMIT = 20;
-const MAX_VARIANTS = 2;
+export const MIYO_SEARCH_NOTE_LIMIT = 20;
+export const MIYO_SEARCH_MAX_VARIANTS = 2;
 // Codex cuts the middle out of any MCP output over about 10K tokens (40,000 UTF-8 bytes) and Claude Code saves
 // output over its own cap to a file, either of which leaves the agent a result that no longer parses.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
@@ -18,7 +18,7 @@ const OUTPUT_BUDGET_BYTES = 32_000;
 
 export const MIYO_SEARCH_TOOL = Object.freeze({
   name: MIYO_SEARCH_TOOL_NAME,
-  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Use it to find notes you don't know about yet when your reply needs the user's facts, decisions, plans or past writing on a topic. Never use it to locate or read a note you already know, one that is attached, named, open or found earlier in this conversation: open that note directly. A request that only acts on such a note, like publishing, renaming, moving, formatting or rewriting it, needs no search. Use it alongside grep for exact names and terms, with the user's full question as query, or, when the message is a command, a skill invocation or pasted text rather than a question, the question you need the notes to answer. Searches the active vault plus the extra Miyo folders enabled in Copilot settings, or everything Miyo has when Copilot's search scope is Unrestricted. Returns up to ${NOTE_LIMIT} notes as { path, content } excerpts. A path is relative to the active vault, so you can open and link it as is. A note with a folder field lives in that Miyo folder outside the vault and its path is relative to that folder: use its content, cite it as folder and path in plain text, and don't open or link it. Cite the path of any note you use. If the search fails, continue with keyword search and don't retry in a loop.`,
+  description: `Semantic search over the user's notes: finds notes by meaning, not only exact words. Use it to find notes you don't know about yet when your reply needs the user's facts, decisions, plans or past writing on a topic. Never use it to locate or read a note you already know, one that is attached, named, open or found earlier in this conversation: open that note directly. A request that only acts on such a note, like publishing, renaming, moving, formatting or rewriting it, needs no search. Use it alongside grep for exact names and terms, with the user's full question as query, or, when the message is a command, a skill invocation or pasted text rather than a question, the question you need the notes to answer. Searches the active vault plus the extra Miyo folders enabled in Copilot settings, or everything Miyo has when Copilot's search scope is Unrestricted. Returns up to ${MIYO_SEARCH_NOTE_LIMIT} notes as { path, content } excerpts. A path is relative to the active vault, so you can open and link it as is. A note with a folder field lives in that Miyo folder outside the vault and its path is relative to that folder: use its content, cite it as folder and path in plain text, and don't open or link it. Cite the path of any note you use. If the search fails, continue with keyword search and don't retry in a loop.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -26,7 +26,7 @@ export const MIYO_SEARCH_TOOL = Object.freeze({
       variants: {
         type: "array",
         items: { type: "string" },
-        maxItems: MAX_VARIANTS,
+        maxItems: MIYO_SEARCH_MAX_VARIANTS,
         description: "Other phrasings of the same question.",
       },
     },
@@ -66,11 +66,14 @@ export async function runMiyoSearch(
   const input = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
   const query = typeof input.query === "string" ? input.query.trim() : "";
   if (!query) return failure("query must be a non-empty string.");
+  const settings = getSettings();
+  const noteLimit = Math.min(settings.miyoSearchMaxResults, MIYO_SEARCH_NOTE_LIMIT);
   const variants = Array.isArray(input.variants)
-    ? input.variants.filter((v): v is string => typeof v === "string").slice(0, MAX_VARIANTS)
+    ? input.variants
+        .filter((v): v is string => typeof v === "string")
+        .slice(0, Math.min(settings.miyoSearchMaxVariants, MIYO_SEARCH_MAX_VARIANTS))
     : [];
 
-  const settings = getSettings();
   const unrestricted = settings.miyoSearchAll === true;
   const vaultName = getVaultName();
   // Ticked folders widen only Current vault scope.
@@ -94,10 +97,11 @@ export async function runMiyoSearch(
     const skipped = extraFolders.filter((name) => !searched.extraFolders.includes(name));
     return {
       text: serialize(
-        toNotes(searched.response.results ?? [], vaultName),
+        toNotes(searched.response.results ?? [], vaultName, noteLimit),
         skipped.length > 0
           ? `Miyo has no folder ${skipped.map((name) => `"${name}"`).join(", ")} ticked in Copilot settings, so it was not searched.`
-          : undefined
+          : undefined,
+        Math.floor((OUTPUT_BUDGET_BYTES * noteLimit) / MIYO_SEARCH_NOTE_LIMIT)
       ),
       isError: false,
     };
@@ -114,13 +118,17 @@ function failure(text: string): MiyoSearchToolResult {
 
 // Miyo ranks chunks, so one long note can fill them all; grouping by note keeps the other notes visible.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
-function toNotes(chunks: readonly MiyoSearchResult[], vaultName: string): FileResult[] {
+function toNotes(
+  chunks: readonly MiyoSearchResult[],
+  vaultName: string,
+  noteLimit: number
+): FileResult[] {
   const excerptsByPath = new Map<string, string[]>();
   for (const { path, chunk_text } of chunks) {
     const text = (chunk_text ?? "").replace(/^[\s\S]*?NOTE BLOCK CONTENT:/, "").trim();
     excerptsByPath.set(path, [...(excerptsByPath.get(path) ?? []), ...(text ? [text] : [])]);
   }
-  return [...excerptsByPath].slice(0, NOTE_LIMIT).map(([path, excerpts]) => ({
+  return [...excerptsByPath].slice(0, noteLimit).map(([path, excerpts]) => ({
     ...locate(path, vaultName),
     content: excerpts.join("\n\n"),
   }));
@@ -136,13 +144,19 @@ function locate(path: string, vaultName: string): Pick<FileResult, "folder" | "p
 
 // Every note keeps its path while their content shrinks together until the whole JSON fits the budget.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/734
-function serialize(notes: readonly FileResult[], note: string | undefined): string {
-  let contentCap = Math.floor(OUTPUT_BUDGET_BYTES / Math.max(notes.length, 1));
+// The budget shrinks with a lower result cap, since fewer notes would otherwise each grow to fill it.
+// https://github.com/logancyang/obsidian-copilot/issues/3825
+function serialize(
+  notes: readonly FileResult[],
+  note: string | undefined,
+  budgetBytes: number
+): string {
+  let contentCap = Math.floor(budgetBytes / Math.max(notes.length, 1));
   let text: string;
   do {
     const results = notes.map((note) => ({ ...note, content: note.content.slice(0, contentCap) }));
     text = JSON.stringify({ results, count: results.length, ...(note ? { note } : {}) });
     contentCap = Math.floor(contentCap * 0.8);
-  } while (new TextEncoder().encode(text).length > OUTPUT_BUDGET_BYTES && contentCap > 0);
+  } while (new TextEncoder().encode(text).length > budgetBytes && contentCap > 0);
   return text;
 }

@@ -160,6 +160,13 @@ function deferred<T>() {
 }
 
 describe("MiyoSettings", () => {
+  beforeAll(() => {
+    window.ResizeObserver = jest.fn(() => ({
+      observe: jest.fn(),
+      unobserve: jest.fn(),
+      disconnect: jest.fn(),
+    }));
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     currentSettings = { ...DEFAULT_SETTINGS, enableMiyoSearchSkill: false };
@@ -244,6 +251,41 @@ describe("MiyoSettings", () => {
       fireEvent.click(toggle());
       rerender(<MiyoSettings />);
       expect(screen.queryByLabelText("Search scope")).toBeNull();
+    });
+
+    it("shows Maximum results and Search variants at their saved values only while Semantic search for agents is on — https://github.com/logancyang/obsidian-copilot/issues/3825", async () => {
+      currentSettings = {
+        ...currentSettings,
+        enableMiyo: true,
+        miyoSearchMaxResults: 7,
+        miyoSearchMaxVariants: 1,
+      };
+      const { rerender } = render(<MiyoSettings />);
+      await act(async () => {});
+      expect(screen.queryByText("Maximum results")).toBeNull();
+      expect(screen.queryByText("Search variants")).toBeNull();
+
+      fireEvent.click(toggle());
+      rerender(<MiyoSettings />);
+
+      expect(screen.getByText("Maximum results")).toBeTruthy();
+      expect(screen.getByText("Search variants")).toBeTruthy();
+      expect(
+        screen.getAllByRole("slider").map((slider) => slider.getAttribute("aria-valuenow"))
+      ).toEqual(["7", "1"]);
+    });
+
+    it("saves the result cap and variant count the user sets — https://github.com/logancyang/obsidian-copilot/issues/3825", async () => {
+      currentSettings = { ...currentSettings, enableMiyo: true, enableMiyoSearchSkill: true };
+      render(<MiyoSettings />);
+      await act(async () => {});
+      const [maxResults, variants] = screen.getAllByRole("slider");
+
+      fireEvent.keyDown(maxResults, { key: "Home" });
+      fireEvent.keyDown(variants, { key: "ArrowLeft" });
+
+      expect(updateSetting).toHaveBeenCalledWith("miyoSearchMaxResults", 1);
+      expect(updateSetting).toHaveBeenCalledWith("miyoSearchMaxVariants", 1);
     });
     it("lists the connected Miyo host's other folders under Current vault scope, ticked as saved and without this vault — https://github.com/logancyang/obsidian-copilot/issues/3508", async () => {
       currentSettings = {
