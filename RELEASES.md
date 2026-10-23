@@ -11,12 +11,29 @@ This release also adds `/compact` command to Agent Chat, improves Miyo search ex
 ## ✨ Enhancements
 
 - Claude runs subagents and long commands in the background, so you can keep chatting while they work and stop any one of them on its own. ([#3767](https://github.com/logancyang/obsidian-copilot/pull/3767), [#3772](https://github.com/logancyang/obsidian-copilot/pull/3772), [#3774](https://github.com/logancyang/obsidian-copilot/pull/3774), @zeroliu)
+
+  ![Agent Chat with 2 tasks running above the message box and its list open, showing two general-purpose agents auditing 2025 and 2026 action items, each with a stop button](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/background-tasks-list-d4a3e2ca.png)
+
 - Send Claude a message while it works to change course without stopping it. ([#3768](https://github.com/logancyang/obsidian-copilot/pull/3768), [#3770](https://github.com/logancyang/obsidian-copilot/pull/3770), @zeroliu)
+
+  ![Agent Chat while Claude works, with "Actually, only the ones about the grant." waiting above the message box under The agent reads these at its next step](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/message-waiting-for-next-step-ae8b8086.png)
+
 - Type `/compact` in Agent Chat to summarize a long chat so the agent can keep going. ([#3601](https://github.com/logancyang/obsidian-copilot/pull/3601), [#3606](https://github.com/logancyang/obsidian-copilot/pull/3606), [#3607](https://github.com/logancyang/obsidian-copilot/pull/3607), [#3608](https://github.com/logancyang/obsidian-copilot/pull/3608), @zeroliu)
+
+  ![Agent Chat with /compact typed in the message box and the command menu showing compact, Summarize this chat to free up context](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/compact-command-367fce7a.png)
+
 - Miyo search results are highlighted with a new card, and you can see which notes Miyo found. Agents also read long PDFs and EPUBs in full through Miyo. ([#3648](https://github.com/logancyang/obsidian-copilot/pull/3648), [#3784](https://github.com/logancyang/obsidian-copilot/pull/3784), [#3649](https://github.com/logancyang/obsidian-copilot/pull/3649), [#3726](https://github.com/logancyang/obsidian-copilot/pull/3726), @zeroliu)
-- With Copilot Plus, ask an agent to publish a note to OpenArtifacts as a private page, share it with people you name, or update it to address their comments. ([#3790](https://github.com/logancyang/obsidian-copilot/pull/3790), @logancyang)
-- Agents get Obsidian links, Bases, and Canvas files right more often. ([#3653](https://github.com/logancyang/obsidian-copilot/pull/3653), @zeroliu)
+
+  ![Searched with Miyo card open to the 20 notes it found, above an answer whose links to those notes carry the Miyo mark](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/miyo-search-card-14a33ea4.png)
+
 - Agent edits are easier to review, because the diff looks like your note in reading view. ([#3815](https://github.com/logancyang/obsidian-copilot/pull/3815), [#3810](https://github.com/logancyang/obsidian-copilot/pull/3810), [#3651](https://github.com/logancyang/obsidian-copilot/pull/3651), @zeroliu)
+
+  ![Diff tab for Riverside bike network proposal in reading-view type, with the old summary struck through in red and the new one highlighted in green](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/turn-diff-reading-view-26eee7ab.png)
+
+- With Copilot Plus, ask an agent to publish a note to OpenArtifacts as a private page, share it with people you name, or update it to address their comments. ([#3790](https://github.com/logancyang/obsidian-copilot/pull/3790), @logancyang)
+
+- Agents get Obsidian links, Bases, and Canvas files right more often. ([#3653](https://github.com/logancyang/obsidian-copilot/pull/3653), @zeroliu)
+
 - Turn off **Auto-attach active note** in **Settings → Copilot → Basic** to start new chats without the open note. ([#3750](https://github.com/logancyang/obsidian-copilot/pull/3750), @zeroliu)
 
 ## 🛠️ Bug Fixes
