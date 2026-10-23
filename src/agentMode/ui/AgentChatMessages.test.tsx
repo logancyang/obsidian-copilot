@@ -364,6 +364,22 @@ describe("AgentChatMessages", () => {
       expect(screen.getByText("3s")).toBeTruthy();
     });
 
+    it("shows a finished reply's duration without a live timer while the agent keeps working on its subagents https://github.com/Brevilabs/obsidian-copilot-private/issues/757", () => {
+      renderMessages(
+        [
+          assistantMessage("launch-reply", 1_000, {
+            message: "LAUNCHED",
+            turnStopReason: "end_turn",
+            turnDurationMs: 12_000,
+          }),
+        ],
+        true
+      );
+
+      expect(screen.getByText("12s")).toBeTruthy();
+      expect(screen.queryByText("Agent is working")).toBeNull();
+    });
+
     it("passes the message timestamp to a structured trail without a duration", () => {
       const timestamp = "2026/08/07 20:31:10";
       renderMessages(
