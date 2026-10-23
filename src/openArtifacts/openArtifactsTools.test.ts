@@ -137,7 +137,7 @@ const json = (result: { text: string }) => JSON.parse(result.text) as Record<str
 
 describe("openArtifactsTools", () => {
   describe("tool definitions", () => {
-    it(`${ISSUE} names five always-loaded tools whose annotations admit that they write`, () => {
+    it(`${ISSUE} names five tools, none always loaded, whose annotations admit that they write`, () => {
       const tools = [
         OPENARTIFACTS_PUBLISH_TOOL,
         OPENARTIFACTS_SHARE_TOOL,
@@ -616,7 +616,7 @@ describe("openArtifactsTools", () => {
         expect(kept.comments).toEqual(replies.slice(0, kept.comments.length));
         expect(kept.omittedComments).toBe(count - kept.comments.length);
         expect(kept.omittedComments).toBeGreaterThan(0);
-        expect(part.next).toContain("offset 1");
+        expect(part.next).toContain("the same arguments and offset 1");
       }
     );
 

@@ -354,7 +354,7 @@ function pageThreads(list: { threads: Record<string, unknown>[] }, offset: numbe
       threads: page,
       total: threads.length,
       ...(end < threads.length && {
-        next: `Call ${OPENARTIFACTS_COMMENTS_TOOL_NAME} again with offset ${end} for the next threads.`,
+        next: `Call ${OPENARTIFACTS_COMMENTS_TOOL_NAME} again with the same arguments and offset ${end} for the next threads.`,
       }),
     });
   const end = fitting(threads, offset, byteLength(render([], threads.length)) + 200);
