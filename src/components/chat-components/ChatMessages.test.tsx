@@ -7,7 +7,6 @@ const mockScrollState = { paused: false, onResume: jest.fn() };
 
 jest.mock("@/hooks/useChatScrolling", () => ({
   useChatScrolling: jest.fn(() => ({
-    containerMinHeight: 0,
     scrollContainerCallbackRef: jest.fn(),
     contentCallbackRef: jest.fn(),
     onScroll: jest.fn(),

@@ -12,7 +12,6 @@ interface UseChatScrollingOptions {
 }
 
 interface UseChatScrollingReturn {
-  containerMinHeight: number;
   scrollContainerCallbackRef: (node: HTMLDivElement | null) => void;
   contentCallbackRef: (node: HTMLDivElement | null) => void;
   onScroll: () => void;
@@ -24,53 +23,16 @@ interface UseChatScrollingReturn {
 export const useChatScrolling = ({
   chatHistory,
 }: UseChatScrollingOptions): UseChatScrollingReturn => {
-  const [containerMinHeight, setContainerMinHeight] = useState(0);
   const [isScrollPaused, setIsScrollPaused] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const isFollowingRef = useRef(true);
   const lastScrollTopRef = useRef(0);
-  const chatHistoryRef = useRef(chatHistory);
-  chatHistoryRef.current = chatHistory;
 
   const getMessageKey = useCallback((message: ChatMessage, index: number): string => {
     return `message-${message.id || message.timestamp?.epoch || index}`;
   }, []);
-
-  const calculateDynamicMinHeight = useCallback(() => {
-    if (!scrollContainerRef.current) return 0;
-
-    const messagesContainer = scrollContainerRef.current;
-    const containerHeight = messagesContainer.clientHeight;
-
-    const history = chatHistoryRef.current;
-    const lastUserMessageIndex = history
-      .map((msg, idx) => ({ msg, idx }))
-      .filter(({ msg }) => msg.isVisible && msg.sender === USER_SENDER)
-      .pop()?.idx;
-
-    let lastUserMessageHeight = 0;
-
-    if (lastUserMessageIndex !== undefined) {
-      const lastUserMessageKey = getMessageKey(history[lastUserMessageIndex], lastUserMessageIndex);
-      const lastUserMessageElement = messagesContainer.querySelector(
-        `[data-message-key="${lastUserMessageKey}"]`
-      );
-
-      if (lastUserMessageElement) {
-        lastUserMessageHeight = lastUserMessageElement.getBoundingClientRect().height;
-      } else {
-        const messageLength = history[lastUserMessageIndex].message.length;
-        const estimatedLines = Math.ceil(messageLength / 80);
-        lastUserMessageHeight = Math.max(60, estimatedLines * 24);
-      }
-    }
-
-    const minHeight = Math.max(100, containerHeight - lastUserMessageHeight);
-
-    return minHeight;
-  }, [getMessageKey]);
 
   const alignToEnd = useCallback(() => {
     const node = scrollContainerRef.current;
@@ -106,9 +68,7 @@ export const useChatScrolling = ({
       scrollContainerRef.current = node;
 
       if (node) {
-        setContainerMinHeight(calculateDynamicMinHeight());
         const resizeObserver = new ResizeObserver(() => {
-          setContainerMinHeight(calculateDynamicMinHeight());
           // Markdown and images can grow after React commits the streaming message, and a
           // taller viewport can reach the end without firing a scroll event.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/277
@@ -119,7 +79,7 @@ export const useChatScrolling = ({
         resizeObserverRef.current = resizeObserver;
       }
     },
-    [calculateDynamicMinHeight, scrollToEnd]
+    [scrollToEnd]
   );
 
   const contentCallbackRef = useCallback((node: HTMLDivElement | null) => {
@@ -130,12 +90,8 @@ export const useChatScrolling = ({
   }, []);
 
   useLayoutEffect(() => {
-    if (scrollContainerRef.current && chatHistory.length > 0) {
-      const newCalculatedMinHeight = calculateDynamicMinHeight();
-      setContainerMinHeight(newCalculatedMinHeight);
-    }
     if (isFollowingRef.current) alignToEnd();
-  }, [chatHistory, calculateDynamicMinHeight, alignToEnd]);
+  }, [chatHistory, alignToEnd]);
 
   useEffect(() => {
     return () => {
@@ -170,7 +126,6 @@ export const useChatScrolling = ({
   }, [chatHistory, scrollToEnd]);
 
   return {
-    containerMinHeight,
     scrollContainerCallbackRef,
     contentCallbackRef,
     onScroll,
