@@ -41,6 +41,7 @@ const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 const ISSUE_726 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/726";
+const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
 const AGENT = "opencode";
 const ALL_OBSIDIAN_FORMAT_SKILLS_LINE =
   "Before writing Obsidian syntax, load its skill and follow it over memory: obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files, json-canvas for .canvas files.";
@@ -385,6 +386,15 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT);
       expect(prompt).toContain(
         "If neither finds support, say the vault does not cover it; for external topics, then search the web."
+      );
+    });
+
+    it(`works on an attached, named or already-found note directly instead of searching for it (${ISSUE_3816})`, () => {
+      updateSetting("enableMiyo", true);
+      updateSetting("enableMiyoSearchSkill", true);
+      const prompt = buildAgentSystemPrompt(AGENT);
+      expect(prompt).toContain(
+        "To read or act on a note already attached, named or found in this conversation, or to create, move or rename notes by name or path, work on them directly instead of searching."
       );
     });
 
