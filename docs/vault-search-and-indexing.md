@@ -24,6 +24,8 @@ With **Semantic search for agents** on, agents search your notes with Miyo and f
 
 Each Miyo search appears in the chat as a card with the query and, when available, how many notes it found, or why the search failed.
 
+Two settings in the Miyo tab shape each agent search. **Maximum results** sets the most notes one search returns, from 1 to 20; lower it if you use a local model with a small context window. **Search variants** sets how many rephrasings of the question a search can add, from 0 to 2.
+
 Links in the answer to notes Miyo found get a small Miyo logo.
 
 ## Connect Miyo

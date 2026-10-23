@@ -30,6 +30,8 @@ function setup(
       ({
         miyoSearchAll: false,
         miyoExtraSearchFolders: [],
+        miyoSearchMaxResults: 20,
+        miyoSearchMaxVariants: 2,
         miyoConnectionMode: "local",
         miyoServerUrl: "",
         ...settings,
@@ -249,6 +251,29 @@ describe("miyoSearchTool", () => {
       expect(results[19].path).toBe("other-18.md");
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3825 stops at the result cap set in settings and shrinks the output budget with it", async () => {
+      const chunks = Array.from({ length: 20 }, (_, i) =>
+        chunk({ path: `step-1/note-${i}.md`, chunk_text: "x".repeat(10_000) })
+      );
+      const { deps } = setup({ miyoSearchMaxResults: 5 }, { chunks });
+
+      const result = await runMiyoSearch({ query: "q" }, deps);
+
+      const { results, count } = JSON.parse(result.text) as {
+        results: { path: string }[];
+        count: number;
+      };
+      expect(count).toBe(5);
+      expect(results.map((r) => r.path)).toEqual([
+        "note-0.md",
+        "note-1.md",
+        "note-2.md",
+        "note-3.md",
+        "note-4.md",
+      ]);
+      expect(new TextEncoder().encode(result.text).length).toBeLessThanOrEqual(8_000);
+    });
+
     it.each([
       ["quotes and newlines", '"quoted"\n' + "x".repeat(50_000)],
       ["three-byte characters", "笔记".repeat(25_000)],
@@ -379,6 +404,26 @@ describe("miyoSearchTool", () => {
         expect.objectContaining({ variants: ["one", "two"] })
       );
     });
+
+    it.each([
+      [1, ["one"]],
+      [0, []],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/3825 passes at most %i variants when settings allow that many",
+      async (miyoSearchMaxVariants, expected) => {
+        const { client, deps } = setup({ miyoSearchMaxVariants });
+
+        await runMiyoSearch({ query: "q", variants: ["one", "two"] }, deps);
+
+        expect(client.search).toHaveBeenCalledWith(
+          BASE_URL,
+          "step-1",
+          "q",
+          1000,
+          expect.objectContaining({ variants: expected })
+        );
+      }
+    );
 
     it("ignores variants that are not an array of strings", async () => {
       const { client, deps } = setup();

@@ -269,7 +269,7 @@ The notice names the agent that needs to reload. Changing Claude's enabled model
 
 Choose **Reload** when you want the change to take effect. The agent restarts and reopens every chat using that agent, keeping each chat’s history and anything you had typed but not sent. During a running turn the reload waits for that turn to finish. If the agent cannot reopen a conversation, that tab starts a fresh chat and the old one remains under Recent chats. If a chat failed to start, correct its settings and choose **Retry** to apply them.
 
-Turning on Self-Host Mode never waits: it restarts the agent straight away, so no later step in the conversation can browse outside the new boundary. Changes to Miyo's **Search scope** and to the Miyo folders ticked under **Current vault** apply to the agent's next search, with no reload.
+Turning on Self-Host Mode never waits: it restarts the agent straight away, so no later step in the conversation can browse outside the new boundary. Changes to Miyo's **Search scope**, the Miyo folders ticked under **Current vault**, **Maximum results** and **Search variants** apply to the agent's next search, with no reload.
 
 ## Related
 

@@ -467,6 +467,20 @@ describe("model", () => {
       expect(settings.miyoExtraSearchFolders).toEqual(["Research", "Archive"]);
     });
 
+    it("gives an install saved before Miyo search limits existed 20 results and 2 variants, and keeps saved limits — https://github.com/logancyang/obsidian-copilot/issues/3825", () => {
+      const persisted = { ...DEFAULT_SETTINGS } as Partial<CopilotSettings>;
+      delete persisted.miyoSearchMaxResults;
+      delete persisted.miyoSearchMaxVariants;
+
+      expect(sanitizeSettings(persisted as CopilotSettings)).toMatchObject({
+        miyoSearchMaxResults: 20,
+        miyoSearchMaxVariants: 2,
+      });
+      expect(
+        sanitizeSettings({ ...DEFAULT_SETTINGS, miyoSearchMaxResults: 7, miyoSearchMaxVariants: 0 })
+      ).toMatchObject({ miyoSearchMaxResults: 7, miyoSearchMaxVariants: 0 });
+    });
+
     it("defaults the startup notice marker without inheriting the Agent Home dismissal", () => {
       const persisted = { ...DEFAULT_SETTINGS, lastDismissedVersion: "4.1.0" };
       delete (persisted as Partial<CopilotSettings>).lastShownStartupVersion;
