@@ -22,7 +22,6 @@ This release also adds `/compact` command to Agent Chat, improves Miyo search ex
 - Saved agent chats pick up where they left off on another computer. ([#3654](https://github.com/logancyang/obsidian-copilot/pull/3654), @zeroliu)
 - Each agent chat's history saves to a single note, even after the agent restarts. ([#3743](https://github.com/logancyang/obsidian-copilot/pull/3743), @zeroliu)
 - The API keys Copilot stores in Obsidian's Keychain have stable, readable names that stay the same on every device that syncs Copilot's settings. ([#3627](https://github.com/logancyang/obsidian-copilot/pull/3627), @zeroliu)
-- Agents keep going when a long reply hits the model's output limit. ([#3732](https://github.com/logancyang/obsidian-copilot/pull/3732), @logancyang)
 - Agents save new notes to an `outputs/` folder only in project chats. ([#3802](https://github.com/logancyang/obsidian-copilot/pull/3802), @zeroliu)
 
 ## ⚠️ Compatibility Notes
