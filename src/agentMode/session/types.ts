@@ -277,6 +277,7 @@ export type SessionUpdate =
   | { sessionUpdate: "messages_withdrawn"; promptIds: string[] }
   | { sessionUpdate: "turn_started"; turnId: string; startedAt?: number }
   | ({ sessionUpdate: "turn_ended" } & TurnEnd)
+  | { sessionUpdate: "busy_changed"; busy: boolean }
   | { sessionUpdate: "session_disconnected"; error: Error }
   | ({ sessionUpdate: "task_started" } & TaskStart)
   | {
