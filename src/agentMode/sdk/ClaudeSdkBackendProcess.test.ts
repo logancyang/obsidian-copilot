@@ -792,6 +792,23 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
+      it("asks Claude to report its session state, so the chat knows when its subagents and the replies about them are done, and keeps the backend's env overrides (https://github.com/Brevilabs/obsidian-copilot-private/issues/757)", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getEnvOverrides: () => ({ CLAUDE_CONFIG_DIR: "/config" }) });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as {
+          options: { env?: Record<string, string> };
+        };
+        expect(options.env).toEqual({
+          ...process.env,
+          CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+          CLAUDE_CONFIG_DIR: "/config",
+        });
+      });
+
       it("auto-allows only read tools so Write and Edit follow the session's permission mode and reach Copilot's prompt in Default mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/690)", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc();

@@ -298,6 +298,7 @@ function withdrawingDescriptor(): BackendDescriptor {
 
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
+const ISSUE_757 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/757";
 
 function recordPrompts(mock: MockBackend): PromptInput[] {
   const sent: PromptInput[] = [];
@@ -3817,6 +3818,42 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
+      it(`${ISSUE_757} stops the agent and every running subagent while only subagents work, and leaves a background command running`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor });
+        const stopTask = jest.fn(async ({ taskId }: { taskId: string }) => {
+          mock.emitUpdate({ sessionUpdate: "task_ended", taskId, status: "stopped" });
+        });
+        mock.asBackend.stopTask = stopTask;
+        for (const [taskId, kind] of [
+          ["agent-1", "subagent"],
+          ["agent-2", "subagent"],
+          ["server", "command"],
+          ["agent-done", "subagent"],
+        ] as const) {
+          mock.emitUpdate({
+            sessionUpdate: "task_started",
+            taskId,
+            toolCallId: `tool-${taskId}`,
+            kind,
+            description: taskId,
+          });
+        }
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "agent-done", status: "completed" });
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+
+        await session.cancel();
+
+        expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
+        expect(stopTask.mock.calls.map(([input]) => input.taskId)).toEqual(["agent-1", "agent-2"]);
+        expect(session.getTasks().map((t) => [t.taskId, t.status])).toEqual([
+          ["agent-1", "stopped"],
+          ["agent-2", "stopped"],
+          ["server", "running"],
+          ["agent-done", "completed"],
+        ]);
+      });
+
       it(`shows the tool calls Stop cut off as stopped, while the card of a background task launched in that turn keeps running (${ISSUE_747})`, async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
@@ -5681,6 +5718,53 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
         expect(session.getPendingToolPermissions()).toHaveLength(1);
         expect(await session.sendPrompt("meanwhile").turn).toBe("end_turn");
+      });
+
+      it(`${ISSUE_757} stays running after a reply ends while the agent reports itself busy with its subagents, and goes idle only when the agent reports idle`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const statusChanges: string[] = [];
+        subscribeTo(session, { onStatusChanged: (status) => statusChanges.push(status) });
+
+        const { turn } = session.sendPrompt("launch two subagents");
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+        await turn;
+        expect(session.getStatus()).toBe("running");
+
+        mock.emitUpdate({ sessionUpdate: "turn_started", turnId: "report-a" });
+        mock.emitUpdate({
+          sessionUpdate: "turn_ended",
+          turnId: "report-a",
+          stopReason: "end_turn",
+        });
+        expect(session.getStatus()).toBe("running");
+
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: false });
+        expect(session.getStatus()).toBe("idle");
+        expect(statusChanges).toEqual(["running", "idle"]);
+      });
+
+      it(`${ISSUE_757} awaits permission when a subagent asks while the agent is busy only with its subagents`, () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+
+        void session.handleToolPermission({
+          ...writePermissionRequest(),
+          requester: { taskId: "task-1" },
+        });
+
+        expect(session.getStatus()).toBe("awaiting_permission");
+      });
+
+      it(`${ISSUE_757} goes idle when the agent disconnects while it reported itself busy`, () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+
+        mock.emitUpdate({ sessionUpdate: "session_disconnected", error: new Error("exited") });
+
+        expect(session.getStatus()).toBe("idle");
       });
     });
 
