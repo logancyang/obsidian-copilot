@@ -15,15 +15,6 @@ jest.mock("@langchain/anthropic", () => {
   }
   return { ChatAnthropic };
 });
-jest.mock("@langchain/groq", () => {
-  class ChatGroq {
-    static configs: unknown[] = [];
-    constructor(config: unknown) {
-      ChatGroq.configs.push(config);
-    }
-  }
-  return { ChatGroq };
-});
 jest.mock("@langchain/google-genai", () => {
   class ChatGoogleGenerativeAI {
     static configs: unknown[] = [];
@@ -239,39 +230,6 @@ describe("chatModelManager", () => {
         );
       });
 
-      it("sends no output cap for a model that carries no limit of its own (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
-          configs: Array<Record<string, unknown>>;
-        };
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(
-          bridgedModel({
-            name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.GROQ,
-            apiKey: "gq-key",
-          })
-        );
-
-        expect("maxTokens" in (GroqMock.configs.at(-1) ?? {})).toBe(false);
-      });
-
-      it("honors an explicit per-model output limit when one is set (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
-          configs: Array<{ maxTokens?: number }>;
-        };
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(
-          bridgedModel({
-            name: "llama-3.3-70b-versatile",
-            provider: ChatModelProviders.GROQ,
-            apiKey: "gq-key",
-            maxTokens: 8192,
-          })
-        );
-
-        expect(GroqMock.configs.at(-1)?.maxTokens).toBe(8192);
-      });
-
       it("leaves an Anthropic model with no resolved ceiling to the client's own per-model default (https://github.com/logancyang/obsidian-copilot-preview/issues/312)", async () => {
         const AnthropicMock = jest.requireMock("@langchain/anthropic").ChatAnthropic as {
           configs: Array<{ maxTokens?: number }>;
@@ -286,22 +244,6 @@ describe("chatModelManager", () => {
         );
 
         expect(AnthropicMock.configs.at(-1)?.maxTokens).toBeUndefined();
-      });
-
-      it("strips a versioned Groq base URL because the client appends /openai/v1 itself", async () => {
-        const GroqMock = jest.requireMock("@langchain/groq").ChatGroq as {
-          configs: Array<{ baseUrl?: string }>;
-        };
-        const model = bridgedModel({
-          name: "llama-3.3-70b-versatile",
-          provider: ChatModelProviders.GROQ,
-          apiKey: "gq-key",
-          baseUrl: "https://api.groq.com/openai/v1",
-        });
-
-        await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
-
-        expect(GroqMock.configs.at(-1)?.baseUrl).toBe("https://api.groq.com");
       });
     });
 

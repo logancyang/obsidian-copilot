@@ -1,5 +1,5 @@
 /**
- * Legacy chat (Google, Groq) needs the host-only base URL; opencode needs the versioned one.
+ * Google chat needs the host-only base URL; opencode needs the versioned one.
  * Persisted rows keep whatever the user pasted and each consumer normalizes.
  * https://github.com/logancyang/obsidian-copilot-preview/issues/152
  */
@@ -13,12 +13,6 @@ export function googleHostBaseUrl(baseUrl: string | undefined): string | undefin
   const trimmed = trimBaseUrl(baseUrl);
   if (!trimmed) return undefined;
   return trimmed.replace(/\/v1(beta)?$/i, "") || undefined;
-}
-
-export function groqHostBaseUrl(baseUrl: string | undefined): string | undefined {
-  const trimmed = trimBaseUrl(baseUrl);
-  if (!trimmed) return undefined;
-  return trimmed.replace(/(\/openai\/v1|\/openai|\/v1)$/i, "") || undefined;
 }
 
 const CATALOG_DEFAULT_ORIGINS: Record<string, string> = {

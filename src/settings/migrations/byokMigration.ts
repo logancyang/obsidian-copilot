@@ -52,7 +52,7 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
     catalogProviderId: "xai",
     opencodeRoutable: true,
   },
-  [ChatModelProviders.GROQ]: {
+  groq: {
     providerType: "openai-compatible",
     catalogProviderId: "groq",
     opencodeRoutable: true,
@@ -98,13 +98,14 @@ function providerMetaFor(provider: string): ProviderMetadata | undefined {
 }
 
 function defaultBaseUrlFor(provider: string): string | undefined {
+  if (provider === "groq") return "https://api.groq.com/openai/v1";
   const url = providerMetaFor(provider)?.curlBaseURL;
   if (!url || url.includes("<") || url.includes("{")) return undefined;
   return url;
 }
 
 function displayNameFor(provider: string): string {
-  return providerMetaFor(provider)?.label ?? provider;
+  return provider === "groq" ? "Groq" : (providerMetaFor(provider)?.label ?? provider);
 }
 
 function buildExtras(
@@ -133,7 +134,10 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
   if (!model.enabled) return null;
   if (model.isEmbeddingModel ?? EMBEDDING_ID.test(model.name)) return null;
 
-  const keyField = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
+  const keyField =
+    model.provider === "groq"
+      ? "groqApiKey"
+      : ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const rawKey = keyField ? settings[keyField] : undefined;
   const topLevelKey = typeof rawKey === "string" ? rawKey.trim() : "";
   const apiKey = model.apiKey?.trim() || topLevelKey || undefined;

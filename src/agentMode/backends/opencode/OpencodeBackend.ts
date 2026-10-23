@@ -24,11 +24,11 @@ import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServi
 import type { Config } from "@opencode/schema/config";
 import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
 
-export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
+export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders | "groq", string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
   [ChatModelProviders.OPENAI]: "openai",
   [ChatModelProviders.GOOGLE]: "google",
-  [ChatModelProviders.GROQ]: "groq",
+  groq: "groq",
   [ChatModelProviders.MISTRAL]: "mistral",
   [ChatModelProviders.DEEPSEEK]: "deepseek",
   [ChatModelProviders.OPENROUTERAI]: "openrouter",

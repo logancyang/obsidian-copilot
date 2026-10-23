@@ -11,7 +11,6 @@ import type { ConfiguredModel, Provider } from "@/modelManagement/types/persiste
 
 export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   openai: ChatModelProviders.OPENAI,
-  groq: ChatModelProviders.GROQ,
   mistral: ChatModelProviders.MISTRAL,
   openrouter: ChatModelProviders.OPENROUTERAI,
   deepseek: ChatModelProviders.DEEPSEEK,
@@ -81,6 +80,12 @@ export function configuredModelToCustomModel(params: {
   const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
   const chatProvider = mapProviderTypeToChatModelProvider(provider);
+  let baseUrl = provider.baseUrl;
+  if (provider.origin.kind === "byok" && provider.origin.catalogProviderId === "groq") {
+    // Groq users report removing /openai/v1 to make chat work; keep the compatible path at the chat boundary. https://github.com/logancyang/obsidian-copilot-preview/issues/152
+    const base = (baseUrl ?? "").trim().replace(/\/+$/, "") || "https://api.groq.com";
+    baseUrl = `${base.replace(/(\/openai\/v1|\/openai|\/v1)$/i, "")}/openai/v1`;
+  }
   const maxTokens =
     chatProvider === ChatModelProviders.ANTHROPIC && info.limits?.output
       ? DEFAULT_MAX_OUTPUT_TOKENS
@@ -96,7 +101,7 @@ export function configuredModelToCustomModel(params: {
     provider: chatProvider,
     displayName: info.displayName,
     enabled: true,
-    baseUrl: provider.baseUrl,
+    baseUrl,
     apiKey: trimmedKey,
     requiresApiKey,
     // https://github.com/logancyang/obsidian-copilot-preview/issues/313:
