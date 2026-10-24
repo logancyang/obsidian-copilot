@@ -421,6 +421,35 @@ describe("AgentSetupApi", () => {
       expect(h.enabledFor("claude")).not.toContain(opusId);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3569 preserves an enabled model included in the next OpenCode discovery snapshot", async () => {
+      const h = makeHarness();
+      const reg = await h.api.registerAgentProvider({
+        agentType: "opencode",
+        providerType: "openai-compatible",
+        displayName: "OpenCode",
+        apiKey: null,
+        wireModelIds: ["local/qwen3", "old/removed-model"],
+        autoEnrollModelIds: ["local/qwen3"],
+      });
+      const localModelId = h.configuredModelId(reg.providerId, "local/qwen3");
+      const removedModelId = h.configuredModelId(reg.providerId, "old/removed-model");
+
+      const result = await h.api.syncAgentModels({
+        agentType: "opencode",
+        wireModelIds: ["cloud/new-model", "local/qwen3"],
+      });
+
+      expect(result).toEqual({
+        added: [h.configuredModelId(reg.providerId, "cloud/new-model")],
+        removed: [removedModelId],
+      });
+      expect(h.models.get(localModelId)).toMatchObject({
+        configuredModelId: localModelId,
+        info: { id: "local/qwen3" },
+      });
+      expect(h.enabledFor("opencode")).toEqual([localModelId]);
+    });
+
     it("changes nothing when the reported list matches the stored models", async () => {
       const h = makeHarness();
       await h.api.registerAgentProvider({
