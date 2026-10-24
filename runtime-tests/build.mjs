@@ -45,6 +45,29 @@ const obsidianShimPlugin = {
   },
 };
 
+/**
+ * Serve Copilot's `Markdown` component as its source text. The real one hands
+ * the text to Obsidian's renderer after mount, which a static render never
+ * reaches, so a rendered chat component would show an empty box where its
+ * answer is.
+ */
+const markdownTextPlugin = {
+  name: "markdown-text",
+  setup(build) {
+    build.onResolve({ filter: /^@\/components\/Markdown$/ }, () => ({
+      path: "markdown-text",
+      namespace: "markdown-text",
+    }));
+    build.onLoad({ filter: /.*/, namespace: "markdown-text" }, () => ({
+      contents:
+        'import { createElement } from "react";\n' +
+        "export function Markdown({ className, text }) { return createElement('div', { className }, text); }\n",
+      loader: "js",
+      resolveDir: repoRoot,
+    }));
+  },
+};
+
 await esbuild.build({
   // Flat output names, so `__dirname` inside the bundle is always `.build/`.
   entryPoints: [
@@ -76,7 +99,7 @@ await esbuild.build({
   // Cucumber must be the CLI's own instance, or `Given`/`When`/`Then` would
   // register into a second copy the runner never reads.
   external: ["@cucumber/cucumber"],
-  plugins: [obsidianShimPlugin, svgrPlugin],
+  plugins: [obsidianShimPlugin, markdownTextPlugin, svgrPlugin],
   loader: { ".md": "text" },
   tsconfig: resolve(repoRoot, "tsconfig.json"),
   define: { "process.env.NODE_ENV": '"production"' },
