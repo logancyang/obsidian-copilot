@@ -1,6 +1,7 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "jsdom",
+  ...(process.env.COPILOT_JEST_MAX_WORKERS && { maxWorkers: process.env.COPILOT_JEST_MAX_WORKERS }),
   roots: ["<rootDir>/src", "<rootDir>/dev", "<rootDir>/scripts"],
   transform: {
     "^.+\\.(js|jsx|ts|tsx)$": "ts-jest",
