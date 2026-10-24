@@ -64,6 +64,16 @@ The upstream review packages are pinned in `package.json`. Update those versions
 
 Maintainers should also read the [review-gate maintenance guide](./internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md) before changing review rules, severities, or fixtures.
 
+#### Limiting Jest Workers
+
+`npm test` starts one Jest worker per CPU core, minus one, and each worker can use 2 GB of memory or more. A full run can use up all the RAM on a 16 GB machine. To cap the number of workers, set `COPILOT_JEST_MAX_WORKERS` in your shell profile:
+
+```bash
+export COPILOT_JEST_MAX_WORKERS=2
+```
+
+It takes a number (`2`) or a share of your CPU cores (`50%`). When it's unset, Jest uses its default. Passing `--maxWorkers` on the command line overrides it for that run.
+
 #### Fast Iteration with `npm run test:vault` (macOS)
 
 If you work across multiple worktrees or just want one command to build and load the plugin into a test vault, use `npm run test:vault`. It runs `npm install`, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the worktree into the vault's `.obsidian/plugins/copilot/` folder, and reloads the plugin in Obsidian via its CLI.
