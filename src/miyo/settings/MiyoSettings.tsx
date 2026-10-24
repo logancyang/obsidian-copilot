@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SettingSection } from "@/components/ui/setting-section";
+import { SettingSlider } from "@/components/ui/setting-slider";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { useApp } from "@/context";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
+import { MIYO_SEARCH_MAX_VARIANTS, MIYO_SEARCH_NOTE_LIMIT } from "@/miyo/miyoSearchTool";
 import { type CapabilityStatus, refreshMiyoStatus } from "@/miyo/miyoStatusStore";
 import {
   getExtraSearchFolderOptions,
@@ -565,6 +567,42 @@ export const MiyoSettings: React.FC = () => {
                     />
                   )}
                 </div>
+              )}
+
+              {searchActive && (
+                <CapabilityRow
+                  title="Maximum results"
+                  description="The most notes one search returns to the agent. Fewer uses less context."
+                  control={
+                    <SettingSlider
+                      value={settings.miyoSearchMaxResults}
+                      onChange={(value) => updateSetting("miyoSearchMaxResults", value)}
+                      min={1}
+                      max={MIYO_SEARCH_NOTE_LIMIT}
+                      step={1}
+                      disabled={!capabilitiesEnabled}
+                      className="tw-w-full sm:tw-w-[300px]"
+                    />
+                  }
+                />
+              )}
+
+              {searchActive && (
+                <CapabilityRow
+                  title="Search variants"
+                  description="How many rephrasings of the question one search can add."
+                  control={
+                    <SettingSlider
+                      value={settings.miyoSearchMaxVariants}
+                      onChange={(value) => updateSetting("miyoSearchMaxVariants", value)}
+                      min={0}
+                      max={MIYO_SEARCH_MAX_VARIANTS}
+                      step={1}
+                      disabled={!capabilitiesEnabled}
+                      className="tw-w-full sm:tw-w-[300px]"
+                    />
+                  }
+                />
               )}
 
               <MiyoStatusRow
