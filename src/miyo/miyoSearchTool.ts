@@ -29,6 +29,12 @@ export const MIYO_SEARCH_TOOL = Object.freeze({
         maxItems: MAX_VARIANTS,
         description: "Other phrasings of the same question.",
       },
+      paths: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Keep only notes whose path contains one of these, ignoring case. Use only when the user limits the search to a folder or path.",
+      },
     },
     required: ["query"],
   },
@@ -66,9 +72,8 @@ export async function runMiyoSearch(
   const input = (args && typeof args === "object" ? args : {}) as Record<string, unknown>;
   const query = typeof input.query === "string" ? input.query.trim() : "";
   if (!query) return failure("query must be a non-empty string.");
-  const variants = Array.isArray(input.variants)
-    ? input.variants.filter((v): v is string => typeof v === "string").slice(0, MAX_VARIANTS)
-    : [];
+  const variants = strings(input.variants).slice(0, MAX_VARIANTS);
+  const paths = strings(input.paths);
 
   const settings = getSettings();
   const unrestricted = settings.miyoSearchAll === true;
@@ -86,6 +91,7 @@ export async function runMiyoSearch(
       (folderNames) =>
         client.search(baseUrl, folderName, query, MIYO_SEARCH_CANDIDATE_LIMIT, {
           variants,
+          paths,
           folderNames,
         }),
       folderName,
@@ -106,6 +112,10 @@ export async function runMiyoSearch(
       `Miyo search failed. Continue with keyword search and tell the user to open Miyo. Details: ${err2String(error)}`
     );
   }
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
 function failure(text: string): MiyoSearchToolResult {

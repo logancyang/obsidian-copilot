@@ -41,10 +41,13 @@ function setup(
 
 describe("miyoSearchTool", () => {
   describe("MIYO_SEARCH_TOOL", () => {
-    it("requires a query, accepts at most two variants, and is read-only and always loaded", () => {
+    it("requires a query, accepts at most two variants and optional path filters, and is read-only and always loaded", () => {
       expect(MIYO_SEARCH_TOOL.inputSchema).toMatchObject({
         required: ["query"],
-        properties: { variants: { type: "array", maxItems: 2 } },
+        properties: {
+          variants: { type: "array", maxItems: 2 },
+          paths: { type: "array", items: { type: "string" } },
+        },
       });
       expect(MIYO_SEARCH_TOOL).toMatchObject({
         annotations: { readOnlyHint: true },
@@ -91,6 +94,7 @@ describe("miyoSearchTool", () => {
 
       expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "hiking trip", 1000, {
         variants: [],
+        paths: [],
         folderNames: undefined,
       });
       expect(result.isError).toBe(false);
@@ -275,6 +279,7 @@ describe("miyoSearchTool", () => {
 
       expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "q", 1000, {
         variants: [],
+        paths: [],
         folderNames: ["step-1", "Research", "ChatGPT"],
       });
     });
@@ -291,6 +296,7 @@ describe("miyoSearchTool", () => {
       expect(client.search).toHaveBeenCalledTimes(2);
       expect(client.search).toHaveBeenLastCalledWith(BASE_URL, "step-1", "q", 1000, {
         variants: [],
+        paths: [],
         folderNames: ["step-1", "Research"],
       });
       expect(result.isError).toBe(false);
@@ -336,6 +342,7 @@ describe("miyoSearchTool", () => {
 
       expect(client.search).toHaveBeenCalledWith(BASE_URL, undefined, "q", 1000, {
         variants: [],
+        paths: [],
         folderNames: undefined,
       });
     });
@@ -394,6 +401,42 @@ describe("miyoSearchTool", () => {
         "q",
         1000,
         expect.objectContaining({ variants: ["one"] })
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/759 narrows the search to notes whose path contains any of the given paths, within the ticked folders", async () => {
+      const { client, deps } = setup({ miyoExtraSearchFolders: ["Research"] });
+
+      await runMiyoSearch({ query: "q", paths: ["Projects/Acme", "meetings"] }, deps);
+
+      expect(client.search).toHaveBeenCalledWith(BASE_URL, "step-1", "q", 1000, {
+        variants: [],
+        paths: ["Projects/Acme", "meetings"],
+        folderNames: ["step-1", "Research"],
+      });
+    });
+
+    it("ignores paths that are not an array of strings", async () => {
+      const { client, deps } = setup();
+
+      await runMiyoSearch({ query: "q", paths: "Projects" }, deps);
+      await runMiyoSearch({ query: "q", paths: ["Projects", 2, null] }, deps);
+
+      expect(client.search).toHaveBeenNthCalledWith(
+        1,
+        BASE_URL,
+        "step-1",
+        "q",
+        1000,
+        expect.objectContaining({ paths: [] })
+      );
+      expect(client.search).toHaveBeenNthCalledWith(
+        2,
+        BASE_URL,
+        "step-1",
+        "q",
+        1000,
+        expect.objectContaining({ paths: ["Projects"] })
       );
     });
 
