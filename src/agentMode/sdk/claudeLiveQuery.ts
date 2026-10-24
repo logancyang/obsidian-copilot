@@ -131,6 +131,11 @@ export class ClaudeLiveQuery {
       else this.withdraw([cancelled]);
       return;
     }
+    // Claude stays busy after a reply that launched subagents until it has reported on each of them. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+    if (msg.type === "system" && msg.subtype === "session_state_changed") {
+      this.emit({ sessionUpdate: "busy_changed", busy: msg.state !== "idle" });
+      return;
+    }
     // Claude announces each turn with an init frame, well before a reply it starts on its own streams, so that reply's duration counts from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (msg.type === "system" && msg.subtype === "init" && !this.openTurnId) {
       this.turnBeganAt = Date.now();

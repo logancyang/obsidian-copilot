@@ -356,10 +356,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       ? { type: "adaptive", display: "summarized" }
       : { type: "disabled" };
     const envOverrides = this.opts.getEnvOverrides?.();
-    const extraEnv = { ...managedEnv, ...envOverrides };
-    if (Object.keys(extraEnv).length > 0) {
-      options.env = { ...process.env, ...extraEnv };
-    }
+    options.env = {
+      ...process.env,
+      // Claude reports when it has finished its subagents and its replies about them only when asked. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+      CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
+      ...managedEnv,
+      ...envOverrides,
+    };
 
     if (this.sessions.get(sessionId) !== session) {
       throw new Error(`Session ${sessionId} closed before its prompt was sent`);

@@ -42,6 +42,7 @@ function readSdkFixture(name: string): FixtureFrame[] {
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
 const ISSUE_195 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/195";
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
+const ISSUE_757 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/757";
 
 interface Harness {
   live: ClaudeLiveQuery;
@@ -90,6 +91,8 @@ function lifecycle(updates: SessionUpdate[]): string[] {
         return [`task_started ${update.taskId ?? `launch ${update.toolCallId}`}`];
       case "task_ended":
         return [`task_ended ${update.taskId} ${update.status}`];
+      case "busy_changed":
+        return [update.busy ? "busy" : "idle"];
       default:
         return [];
     }
@@ -105,6 +108,16 @@ function taskFrame(subtype: string, fields: Record<string, unknown>): SDKMessage
     session_id: SESSION_ID,
     uuid: `uuid-${subtype}`,
     ...fields,
+  } as unknown as SDKMessage;
+}
+
+function sessionState(state: "idle" | "running" | "requires_action"): SDKMessage {
+  return {
+    type: "system",
+    subtype: "session_state_changed",
+    state,
+    session_id: SESSION_ID,
+    uuid: `uuid-state-${state}`,
   } as unknown as SDKMessage;
 }
 
@@ -229,6 +242,40 @@ describe("claudeLiveQuery", () => {
           "turn_started",
           "turn_ended",
         ]);
+      });
+
+      it(`reports Claude busy from its first reply until it has reported on its last subagent, across the replies in between (${ISSUE_757})`, async () => {
+        const frames = readSdkFixture("claude-live-subagents-session-state");
+        const echo = frames.find((frame) => frame.tag === "user:echo")!;
+        const { live, fake, recorder } = startLive();
+
+        live.push(echo.payload.uuid!, "launch two subagents");
+        fake.emit(...frames.map((frame) => frame.payload));
+        await recorder.waitFor("busy_changed", (update) => !update.busy);
+
+        expect(
+          lifecycle(recorder.updates()).filter(
+            (line) => !line.startsWith("task_") && !line.startsWith("delivered")
+          )
+        ).toEqual([
+          "busy",
+          "turn_started",
+          "turn_ended",
+          "turn_started",
+          "turn_ended",
+          "turn_started",
+          "turn_ended",
+          "idle",
+        ]);
+      });
+
+      it(`reports Claude busy while it waits on the user, and idle only when its session state says so (${ISSUE_757})`, async () => {
+        const { fake, recorder } = startLive();
+
+        fake.emit(sessionState("running"), sessionState("requires_action"), sessionState("idle"));
+        await recorder.waitFor("busy_changed", (update) => !update.busy);
+
+        expect(lifecycle(recorder.updates())).toEqual(["busy", "busy", "idle"]);
       });
 
       it(`routes a subagent's content to its task by the tool call that launched it, never to a main-agent reply (${ISSUE_175})`, async () => {
