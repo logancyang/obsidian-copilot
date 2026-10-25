@@ -34,6 +34,16 @@ function mapNpmToProviderType(npm: string | undefined): ProviderType {
   }
 }
 
+function readReasoningEfforts(options: unknown): string[] | undefined {
+  if (!Array.isArray(options)) return undefined;
+  const effortOption: unknown = options.find(
+    (option) => isPlainObject(option) && option.type === "effort"
+  );
+  if (!isPlainObject(effortOption) || !Array.isArray(effortOption.values)) return undefined;
+  const efforts = effortOption.values.filter((value): value is string => typeof value === "string");
+  return efforts.length > 0 ? efforts : undefined;
+}
+
 function transformModel(wire: WireModel): ModelInfo | null {
   if (typeof wire.id !== "string") return null;
   const info: ModelInfo = {
@@ -60,6 +70,8 @@ function transformModel(wire: WireModel): ModelInfo | null {
   }
 
   if (typeof wire.reasoning === "boolean") info.reasoning = wire.reasoning;
+  const efforts = readReasoningEfforts(wire.reasoning_options);
+  if (efforts) info.reasoningEfforts = efforts;
   if (typeof wire.tool_call === "boolean") info.toolCall = wire.tool_call;
   if (looksLikeEmbeddingModel(`${wire.id} ${typeof wire.family === "string" ? wire.family : ""}`)) {
     info.isEmbedding = true;

@@ -96,6 +96,7 @@ export interface CustomModel {
   openAIOrgId?: string;
 
   reasoningEffort?: ReasoningEffort;
+  reasoningEfforts?: readonly string[];
 }
 
 export function setModelKey(modelKey: string) {

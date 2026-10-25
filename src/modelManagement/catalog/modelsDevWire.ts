@@ -3,6 +3,7 @@ export interface WireModel {
   name?: string;
   family?: string;
   reasoning?: boolean;
+  reasoning_options?: unknown;
   tool_call?: boolean;
   attachment?: boolean;
   temperature?: boolean;

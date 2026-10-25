@@ -26,8 +26,6 @@ import { ChatLMStudio } from "./ChatLMStudio";
 import { BrevilabsClient } from "./brevilabsClient";
 import type { SafetySetting } from "@google/generative-ai";
 
-const OPENAI_GPT_MODEL_NAME = /^gpt-\d/;
-
 const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
   { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" } as SafetySetting,
   { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" } as SafetySetting,
@@ -143,6 +141,12 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
           organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
+        // Chat Completions rejects tools alongside a reasoning effort, so Copilot Plus failed on GPT-6. Quick Chat runs at effort none only where the catalog lists it (Astra rejects none); modelKwargs because LangChain drops `reasoning` for model names it does not recognize.
+        // https://github.com/logancyang/obsidian-copilot/issues/3835
+        useResponsesApi: true,
+        ...(customModel.reasoningEfforts?.includes("none") && {
+          modelKwargs: { reasoning: { effort: "none" } },
+        }),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: customModel.apiKey || "",
@@ -391,30 +395,14 @@ export default class ChatModelManager {
       throw new MissingApiKeyError(`API key is not provided for the model: ${model.name}.`);
     }
 
-    return this.instantiateChatModel(
-      model,
-      model.provider as ChatModelProviders,
-      this.getProviderConstructor(model)
-    );
+    return this.instantiateChatModel(model, this.getProviderConstructor(model));
   }
 
   private async instantiateChatModel(
     model: CustomModel,
-    vendor: ChatModelProviders,
     AIConstructor: ChatConstructorType
   ): Promise<BaseChatModel> {
-    const modelConfig = await this.getModelConfig(model);
-
-    const constructorConfig: Record<string, unknown> = { ...modelConfig };
-    if (
-      OPENAI_GPT_MODEL_NAME.test(model.name) &&
-      (vendor === ChatModelProviders.OPENAI || vendor === ChatModelProviders.OPENAI_FORMAT)
-    ) {
-      // Chat Completions rejects tools alongside a reasoning effort, and Quick Chat runs at effort none; modelKwargs because LangChain drops `reasoning` for names it does not recognize (gpt-6).
-      // https://github.com/logancyang/obsidian-copilot/issues/3835
-      constructorConfig.useResponsesApi = true;
-      constructorConfig.modelKwargs = { reasoning: { effort: "none" } };
-    }
+    const constructorConfig: Record<string, unknown> = { ...(await this.getModelConfig(model)) };
 
     if (
       (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
