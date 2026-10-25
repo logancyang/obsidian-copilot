@@ -225,17 +225,6 @@ describe("configuredModelToCustomModel", () => {
       expect(custom.capabilities).toEqual([ModelCapability.REASONING, ModelCapability.VISION]);
     });
 
-    it("carries the reasoning effort levels the catalog published for the model", () => {
-      const custom = configuredModelToCustomModel({
-        provider: provider({ origin: { kind: "byok", catalogProviderId: "openai" } }),
-        configuredModel: configuredModel({
-          info: { id: "gpt-6-astra", displayName: "GPT-6 Astra", reasoningEfforts: ["low", "max"] },
-        }),
-        apiKey: "sk",
-      });
-      expect(custom.reasoningEfforts).toEqual(["low", "max"]);
-    });
-
     it("copies the OpenAI organization id from provider extras", () => {
       const openai = configuredModelToCustomModel({
         provider: provider({

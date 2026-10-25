@@ -107,6 +107,5 @@ export function configuredModelToCustomModel(params: {
     capabilities,
     maxTokens,
     openAIOrgId: extraString(extras, "openAIOrgId"),
-    reasoningEfforts: info.reasoningEfforts,
   };
 }

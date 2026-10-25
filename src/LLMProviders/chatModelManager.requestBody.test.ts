@@ -196,7 +196,7 @@ describe("chatModelManager", () => {
         expect(attempts).toBe(1);
       });
 
-      it("sends an OpenAI model with tools to the Responses API at effort none when its catalog lists none (https://github.com/logancyang/obsidian-copilot/issues/3835)", async () => {
+      it("sends an OpenAI model with tools to the Responses API at the model's default effort (https://github.com/logancyang/obsidian-copilot/issues/3835)", async () => {
         const request = captureRequest(RESPONSES_API_RESPONSE);
 
         await sendWithTools(
@@ -204,24 +204,6 @@ describe("chatModelManager", () => {
             name: "gpt-6-luna",
             provider: ChatModelProviders.OPENAI,
             baseUrl: "https://openai.invalid/v1",
-            reasoningEfforts: ["none", "low", "medium", "high"],
-          })
-        );
-
-        expect(request().url).toBe("https://openai.invalid/v1/responses");
-        expect(request().body.reasoning).toEqual({ effort: "none" });
-        expect(request().body.tools).toEqual([expect.objectContaining({ name: "webSearch" })]);
-      });
-
-      it("sends an OpenAI model whose catalog omits none to the Responses API at its default effort (https://github.com/logancyang/obsidian-copilot/issues/3835)", async () => {
-        const request = captureRequest(RESPONSES_API_RESPONSE);
-
-        await sendWithTools(
-          wireModel({
-            name: "gpt-6-astra",
-            provider: ChatModelProviders.OPENAI,
-            baseUrl: "https://openai.invalid/v1",
-            reasoningEfforts: ["low", "medium", "high"],
           })
         );
 
@@ -233,7 +215,7 @@ describe("chatModelManager", () => {
       it("keeps an OpenAI-compatible endpoint on Chat Completions with no reasoning effort, whatever the model name", async () => {
         const request = captureRequest(OPENAI_RESPONSE);
 
-        await send(wireModel({ name: "gpt-5.6", reasoningEfforts: ["none", "low"] }));
+        await send(wireModel({ name: "gpt-5.6" }));
 
         expect(request().url).toBe("https://provider.invalid/v1/chat/completions");
         expect(request().body).not.toHaveProperty("reasoning");

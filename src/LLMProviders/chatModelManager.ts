@@ -141,12 +141,9 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
           organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
-        // Chat Completions rejects tools alongside a reasoning effort, so Copilot Plus failed on GPT-6. Quick Chat runs at effort none only where the catalog lists it (Astra rejects none); modelKwargs because LangChain drops `reasoning` for model names it does not recognize.
+        // Chat Completions rejects tools alongside a reasoning effort, so Copilot Plus failed on GPT-6; the Responses API accepts tools at the model's default effort.
         // https://github.com/logancyang/obsidian-copilot/issues/3835
         useResponsesApi: true,
-        ...(customModel.reasoningEfforts?.includes("none") && {
-          modelKwargs: { reasoning: { effort: "none" } },
-        }),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: customModel.apiKey || "",

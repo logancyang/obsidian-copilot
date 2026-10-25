@@ -92,29 +92,6 @@ describe("catalogTransform", () => {
       expect(model.cost).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 });
     });
 
-    it("reads the effort levels a model publishes in reasoning_options and ignores other option types", () => {
-      const wire = makeWire({
-        openai: {
-          id: "openai",
-          name: "OpenAI",
-          models: {
-            "gpt-6-astra": {
-              id: "gpt-6-astra",
-              reasoning: true,
-              reasoning_options: [
-                { type: "mode", values: ["pro"] },
-                { type: "effort", values: ["low", "medium", 3, "max"] },
-              ],
-            },
-            "gpt-6-luna": { id: "gpt-6-luna", reasoning: true, reasoning_options: "none" },
-          },
-        },
-      });
-      const [provider] = transformWireToCatalog(wire);
-      expect(provider.models["gpt-6-astra"].reasoningEfforts).toEqual(["low", "medium", "max"]);
-      expect(provider.models["gpt-6-luna"].reasoningEfforts).toBeUndefined();
-    });
-
     it("omits optional fields when the wire lacks them", () => {
       const wire = makeWire({
         ollamaish: {
