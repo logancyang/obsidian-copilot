@@ -10,13 +10,12 @@ import {
 import { logError, logInfo, logWarn } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { getModelInfo, safeFetchNoThrow } from "@/utils";
-import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
+import { googleHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
@@ -56,7 +55,6 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENROUTERAI]: ChatOpenRouter,
   [ChatModelProviders.OLLAMA]: ChatOllama,
   [ChatModelProviders.LM_STUDIO]: ChatOpenRouter,
-  [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
@@ -85,7 +83,6 @@ export default class ChatModelManager {
     [ChatModelProviders.ANTHROPIC]: () => getSettings().anthropicApiKey,
     [ChatModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [ChatModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
-    [ChatModelProviders.GROQ]: () => getSettings().groqApiKey,
     [ChatModelProviders.XAI]: () => getSettings().xaiApiKey,
     [ChatModelProviders.OLLAMA]: () => "default-key",
     [ChatModelProviders.LM_STUDIO]: () => "default-key",
@@ -198,11 +195,6 @@ export default class ChatModelManager {
             ? customModel.reasoningEffort
             : undefined,
         enablePromptCaching: customModel.enablePromptCaching ?? true,
-      },
-      [ChatModelProviders.GROQ]: {
-        apiKey: customModel.apiKey || "",
-        model: modelName,
-        baseUrl: groqHostBaseUrl(customModel.baseUrl),
       },
       [ChatModelProviders.OLLAMA]: {
         model: modelName,

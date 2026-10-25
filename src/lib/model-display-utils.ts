@@ -10,7 +10,6 @@ export type ModelApiKeySettings = Pick<
   | "anthropicApiKey"
   | "openAIApiKey"
   | "googleApiKey"
-  | "groqApiKey"
   | "openRouterAiApiKey"
   | "cohereApiKey"
   | "xaiApiKey"

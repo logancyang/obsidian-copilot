@@ -48,7 +48,7 @@ describe("byokMigration", () => {
             model({ name: "gemini-2.5-pro", provider: ChatModelProviders.GOOGLE }),
             model({ name: "x-ai/grok-4.3", provider: ChatModelProviders.OPENROUTERAI }),
             model({ name: "grok-4", provider: ChatModelProviders.XAI }),
-            model({ name: "llama-3.3-70b", provider: ChatModelProviders.GROQ }),
+            model({ name: "llama-3.3-70b", provider: "groq" }),
             model({ name: "mistral-large", provider: ChatModelProviders.MISTRAL }),
             model({ name: "deepseek-chat", provider: ChatModelProviders.DEEPSEEK }),
           ],

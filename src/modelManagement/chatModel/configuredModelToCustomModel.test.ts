@@ -42,7 +42,6 @@ describe("configuredModelToCustomModel", () => {
     it("maps an openai-compatible BYOK provider to the chat provider of its catalog id", () => {
       const cases: Array<[string, ChatModelProviders]> = [
         ["openai", ChatModelProviders.OPENAI],
-        ["groq", ChatModelProviders.GROQ],
         ["mistral", ChatModelProviders.MISTRAL],
         ["openrouter", ChatModelProviders.OPENROUTERAI],
         ["deepseek", ChatModelProviders.DEEPSEEK],
@@ -93,6 +92,22 @@ describe("configuredModelToCustomModel", () => {
   });
 
   describe("configuredModelToCustomModel()", () => {
+    it("routes a saved host-only Groq provider through the compatible API (https://github.com/logancyang/obsidian-copilot-preview/issues/152)", () => {
+      const custom = configuredModelToCustomModel({
+        provider: provider({
+          baseUrl: "https://api.groq.com",
+          origin: { kind: "byok", catalogProviderId: "groq" },
+        }),
+        configuredModel: configuredModel(),
+        apiKey: "fake-key",
+      });
+
+      expect(custom).toMatchObject({
+        provider: ChatModelProviders.OPENAI_FORMAT,
+        baseUrl: "https://api.groq.com/openai/v1",
+      });
+    });
+
     it("uses the wire id as the model name and the stored display name", () => {
       const custom = configuredModelToCustomModel({
         provider: provider({ providerType: "anthropic" }),

@@ -17,14 +17,15 @@ const DISPLAY_NAME_TO_LEGACY_PROVIDER: Record<string, ChatModelProviders> = {
 };
 
 function getLegacyChatModelKeys(entry: ResolvedChatBackendEntry): readonly string[] {
-  const providers = new Set<ChatModelProviders>([
-    mapProviderTypeToChatModelProvider(entry.provider),
-  ]);
+  const providers = new Set<string>([mapProviderTypeToChatModelProvider(entry.provider)]);
   if (entry.provider.origin.kind === "copilot-plus") {
     providers.add(ChatModelProviders.COPILOT_PLUS);
   }
   if (entry.provider.origin.kind === "byok" && entry.provider.origin.catalogProviderId) {
-    const catalogProvider = CATALOG_ID_TO_CHAT_PROVIDER[entry.provider.origin.catalogProviderId];
+    const catalogProvider =
+      entry.provider.origin.catalogProviderId === "groq"
+        ? "groq"
+        : CATALOG_ID_TO_CHAT_PROVIDER[entry.provider.origin.catalogProviderId];
     if (catalogProvider) providers.add(catalogProvider);
   }
   const displayProvider = DISPLAY_NAME_TO_LEGACY_PROVIDER[entry.provider.displayName.toLowerCase()];
