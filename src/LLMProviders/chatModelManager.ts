@@ -26,6 +26,8 @@ import { ChatLMStudio } from "./ChatLMStudio";
 import { BrevilabsClient } from "./brevilabsClient";
 import type { SafetySetting } from "@google/generative-ai";
 
+const OPENAI_GPT_MODEL_NAME = /^gpt-\d/;
+
 const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
   { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" } as SafetySetting,
   { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" } as SafetySetting,
@@ -141,7 +143,6 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
           organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: customModel.apiKey || "",
@@ -250,7 +251,6 @@ export default class ChatModelManager {
               ? safeFetchNoThrow
               : undefined,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.SILICONFLOW]: {
         modelName: modelName,
@@ -259,7 +259,6 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
@@ -306,33 +305,6 @@ export default class ChatModelManager {
     };
 
     return finalConfig as ModelConfig;
-  }
-
-  private getOpenAISpecialConfig(
-    modelName: string,
-    maxTokens: number | undefined,
-    customModel?: CustomModel
-  ): Record<string, unknown> {
-    const modelInfo = getModelInfo(modelName);
-
-    const config: Record<string, unknown> = {
-      ...(maxTokens === undefined ? {} : { maxTokens }),
-    };
-
-    if ((modelInfo.isOSeries || modelInfo.isGPT5) && customModel?.reasoningEffort) {
-      config.reasoning = {
-        effort: customModel.reasoningEffort,
-      };
-
-      if (modelInfo.isGPT5 && customModel?.verbosity) {
-        const verbosityValue = customModel.verbosity;
-        config.text = {
-          verbosity: verbosityValue,
-        };
-      }
-    }
-
-    return config;
   }
 
   public buildModelMap() {
@@ -432,15 +404,16 @@ export default class ChatModelManager {
     AIConstructor: ChatConstructorType
   ): Promise<BaseChatModel> {
     const modelConfig = await this.getModelConfig(model);
-    const modelInfo = getModelInfo(model.name);
 
     const constructorConfig: Record<string, unknown> = { ...modelConfig };
     if (
-      modelInfo.isGPT5 &&
+      OPENAI_GPT_MODEL_NAME.test(model.name) &&
       (vendor === ChatModelProviders.OPENAI || vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
+      // Chat Completions rejects tools alongside a reasoning effort, and Quick Chat runs at effort none; modelKwargs because LangChain drops `reasoning` for names it does not recognize (gpt-6).
+      // https://github.com/logancyang/obsidian-copilot/issues/3835
       constructorConfig.useResponsesApi = true;
-      logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${vendor})`);
+      constructorConfig.modelKwargs = { reasoning: { effort: "none" } };
     }
 
     if (

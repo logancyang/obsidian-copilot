@@ -29,7 +29,7 @@ import { createLocalSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { createUpdateMemoryTool } from "@/tools/memoryTools";
 import { err2String, extractChatHistory } from "@/utils";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
-import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { getApiErrorMessage, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
@@ -136,7 +136,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     const planningMessages = [
       {
-        role: getMessageRole(chatModel),
+        role: "system",
         content: planningPrompt,
       },
       {
@@ -520,7 +520,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const systemMessage = baseMessages.find((m) => m.role === "system");
     if (systemMessage) {
       messages.push({
-        role: getMessageRole(chatModel),
+        role: "system",
         content: systemMessage.content,
       });
     }
