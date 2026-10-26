@@ -9,7 +9,6 @@ import {
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
-import { isOSeriesModel } from "@/utils";
 import { resolveChatBackendModel, type ModelManagementApi } from "@/modelManagement";
 import { MissingModelKeyError } from "@/error";
 import { App } from "obsidian";
@@ -146,9 +145,7 @@ export default class ChainManager {
 
     this.validateChatModel();
 
-    const chatModel = this.chatModelManager.getChatModel();
-
-    if (ignoreSystemMessage || isOSeriesModel(chatModel)) {
+    if (ignoreSystemMessage) {
       void this.createChainWithNewModel(false).catch((err) =>
         logError("createChainWithNewModel failed", err)
       );

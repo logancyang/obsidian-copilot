@@ -35,11 +35,46 @@ const ANTHROPIC_RESPONSE = JSON.stringify({
 // https://github.com/logancyang/obsidian-copilot/issues/2959
 const RETIRED_SAMPLING_PARAMS = ["temperature", "top_p", "frequency_penalty"];
 
-function captureRequestBody(responseText: string): () => Record<string, unknown> {
-  let captured: Record<string, unknown> = {};
+const RESPONSES_API_RESPONSE = JSON.stringify({
+  id: "resp_1",
+  object: "response",
+  created_at: 1,
+  model: "gpt-6-luna",
+  status: "completed",
+  output: [
+    {
+      type: "message",
+      id: "msg_1",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "ok", annotations: [] }],
+    },
+  ],
+  usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+});
+
+const SEARCH_TOOL = {
+  type: "function",
+  function: {
+    name: "webSearch",
+    description: "Search the web",
+    parameters: { type: "object", properties: { query: { type: "string" } } },
+  },
+};
+
+interface CapturedRequest {
+  url: string;
+  body: Record<string, unknown>;
+}
+
+function captureRequest(responseText: string): () => CapturedRequest {
+  let captured: CapturedRequest = { url: "", body: {} };
   const parsedResponse = JSON.parse(responseText) as Record<string, unknown>;
-  setRequestUrlImpl((request: { body?: string }) => {
-    captured = request.body ? (JSON.parse(request.body) as Record<string, unknown>) : {};
+  setRequestUrlImpl((request: { url: string; body?: string }) => {
+    captured = {
+      url: request.url,
+      body: request.body ? (JSON.parse(request.body) as Record<string, unknown>) : {},
+    };
     return Promise.resolve({
       status: 200,
       text: responseText,
@@ -49,6 +84,11 @@ function captureRequestBody(responseText: string): () => Record<string, unknown>
     });
   });
   return () => captured;
+}
+
+function captureRequestBody(responseText: string): () => Record<string, unknown> {
+  const request = captureRequest(responseText);
+  return () => request().body;
 }
 
 function wireModel(overrides: Partial<CustomModel> = {}): CustomModel {
@@ -80,6 +120,12 @@ function respondWithBadRequest(message: string): void {
 async function send(model: CustomModel): Promise<void> {
   const instance = await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
   await instance.invoke("hi");
+}
+
+async function sendWithTools(model: CustomModel): Promise<void> {
+  const instance = await ChatModelManager.getInstance().createModelInstanceFromBridged(model);
+  if (!instance.bindTools) throw new Error(`${model.name} cannot bind tools`);
+  await instance.bindTools([SEARCH_TOOL]).invoke("hi");
 }
 
 describe("chatModelManager", () => {
@@ -148,6 +194,32 @@ describe("chatModelManager", () => {
         await expect(send(wireModel())).rejects.toThrow();
 
         expect(attempts).toBe(1);
+      });
+
+      it("sends an OpenAI model with tools to the Responses API at the model's default effort (https://github.com/logancyang/obsidian-copilot/issues/3835)", async () => {
+        const request = captureRequest(RESPONSES_API_RESPONSE);
+
+        await sendWithTools(
+          wireModel({
+            name: "gpt-6-luna",
+            provider: ChatModelProviders.OPENAI,
+            baseUrl: "https://openai.invalid/v1",
+          })
+        );
+
+        expect(request().url).toBe("https://openai.invalid/v1/responses");
+        expect(request().body).not.toHaveProperty("reasoning");
+        expect(request().body.tools).toEqual([expect.objectContaining({ name: "webSearch" })]);
+      });
+
+      it("keeps an OpenAI-compatible endpoint on Chat Completions with no reasoning effort, whatever the model name", async () => {
+        const request = captureRequest(OPENAI_RESPONSE);
+
+        await send(wireModel({ name: "gpt-5.6" }));
+
+        expect(request().url).toBe("https://provider.invalid/v1/chat/completions");
+        expect(request().body).not.toHaveProperty("reasoning");
+        expect(request().body).not.toHaveProperty("reasoning_effort");
       });
 
       it("sends an explicit per-model output limit when the model carries one", async () => {

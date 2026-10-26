@@ -141,7 +141,9 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
           organization: customModel.openAIOrgId || settings.openAIOrgId,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
+        // Chat Completions rejects tools alongside a reasoning effort, so Copilot Plus failed on GPT-6; the Responses API accepts tools at the model's default effort.
+        // https://github.com/logancyang/obsidian-copilot/issues/3835
+        useResponsesApi: true,
       },
       [ChatModelProviders.ANTHROPIC]: {
         anthropicApiKey: customModel.apiKey || "",
@@ -250,7 +252,6 @@ export default class ChatModelManager {
               ? safeFetchNoThrow
               : undefined,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.SILICONFLOW]: {
         modelName: modelName,
@@ -259,7 +260,6 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
-        ...this.getOpenAISpecialConfig(modelName, maxTokens, customModel),
       },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
@@ -306,33 +306,6 @@ export default class ChatModelManager {
     };
 
     return finalConfig as ModelConfig;
-  }
-
-  private getOpenAISpecialConfig(
-    modelName: string,
-    maxTokens: number | undefined,
-    customModel?: CustomModel
-  ): Record<string, unknown> {
-    const modelInfo = getModelInfo(modelName);
-
-    const config: Record<string, unknown> = {
-      ...(maxTokens === undefined ? {} : { maxTokens }),
-    };
-
-    if ((modelInfo.isOSeries || modelInfo.isGPT5) && customModel?.reasoningEffort) {
-      config.reasoning = {
-        effort: customModel.reasoningEffort,
-      };
-
-      if (modelInfo.isGPT5 && customModel?.verbosity) {
-        const verbosityValue = customModel.verbosity;
-        config.text = {
-          verbosity: verbosityValue,
-        };
-      }
-    }
-
-    return config;
   }
 
   public buildModelMap() {
@@ -419,29 +392,14 @@ export default class ChatModelManager {
       throw new MissingApiKeyError(`API key is not provided for the model: ${model.name}.`);
     }
 
-    return this.instantiateChatModel(
-      model,
-      model.provider as ChatModelProviders,
-      this.getProviderConstructor(model)
-    );
+    return this.instantiateChatModel(model, this.getProviderConstructor(model));
   }
 
   private async instantiateChatModel(
     model: CustomModel,
-    vendor: ChatModelProviders,
     AIConstructor: ChatConstructorType
   ): Promise<BaseChatModel> {
-    const modelConfig = await this.getModelConfig(model);
-    const modelInfo = getModelInfo(model.name);
-
-    const constructorConfig: Record<string, unknown> = { ...modelConfig };
-    if (
-      modelInfo.isGPT5 &&
-      (vendor === ChatModelProviders.OPENAI || vendor === ChatModelProviders.OPENAI_FORMAT)
-    ) {
-      constructorConfig.useResponsesApi = true;
-      logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${vendor})`);
-    }
+    const constructorConfig: Record<string, unknown> = { ...(await this.getModelConfig(model)) };
 
     if (
       (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&

@@ -751,29 +751,7 @@ export async function checkLatestVersion(): Promise<{
   }
 }
 
-export function isOSeriesModel(model: BaseChatModel | string): boolean {
-  if (typeof model === "string") {
-    return model.startsWith("o1") || model.startsWith("o3") || model.startsWith("o4");
-  }
-
-  const m = model as unknown as Record<string, unknown>;
-  const modelName: string = (m.modelName as string) || (m.model as string) || "";
-  return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
-}
-
-function isGPT5Model(model: BaseChatModel | string): boolean {
-  if (typeof model === "string") {
-    return model.startsWith("gpt-5");
-  }
-
-  const m = model as unknown as Record<string, unknown>;
-  const modelName: string = (m.modelName as string) || (m.model as string) || "";
-  return modelName.startsWith("gpt-5");
-}
-
 export interface ModelInfo {
-  isOSeries: boolean;
-  isGPT5: boolean;
   isThinkingEnabled: boolean;
   usesAdaptiveThinking: boolean;
 }
@@ -783,8 +761,6 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
   const modelName: string =
     typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";
 
-  const isOSeries = isOSeriesModel(modelName);
-  const isGPT5 = isGPT5Model(modelName);
   const isThinkingEnabled =
     modelName.startsWith("claude-3-7-sonnet") ||
     modelName.startsWith("claude-sonnet-4") ||
@@ -794,15 +770,9 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
   const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
 
   return {
-    isOSeries,
-    isGPT5,
     isThinkingEnabled,
     usesAdaptiveThinking,
   };
-}
-
-export function getMessageRole(model: BaseChatModel | string): "system" | "human" {
-  return isOSeriesModel(model) ? "human" : "system";
 }
 
 export function extractTextFromChunk(content: unknown): string {
