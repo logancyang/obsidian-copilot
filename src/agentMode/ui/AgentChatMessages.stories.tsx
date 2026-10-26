@@ -228,6 +228,32 @@ export const StoppedCommand: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
+export const FinishedReplyWhileSubagentsRun: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "launch-request",
+        sender: "user",
+        message: "Research both vendors in parallel and compare them when you're done.",
+      },
+      {
+        ...message,
+        id: "launch-reply",
+        message:
+          "I started two subagents, one per vendor. I'll compare them once both report back.",
+        turnStopReason: "end_turn",
+        turnDurationMs: 13_000,
+      },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 export const MessageDeliveredMidTurn: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,
