@@ -97,6 +97,8 @@ export interface CopilotSettings {
   enableMiyoSearchSkill: boolean;
   miyoSearchAll: boolean;
   miyoExtraSearchFolders: string[];
+  miyoSearchMaxResults: number;
+  miyoSearchMaxVariants: number;
   relevantNotesLiveUpdate: boolean;
   miyoServerUrl: string;
   miyoConnectionMode?: "local" | "remote";
@@ -565,6 +567,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.miyoExtraSearchFolders = normalizeMiyoFolderNames(
     settingsToSanitize.miyoExtraSearchFolders
   );
+
+  if (!Number.isInteger(sanitizedSettings.miyoSearchMaxResults)) {
+    sanitizedSettings.miyoSearchMaxResults = DEFAULT_SETTINGS.miyoSearchMaxResults;
+  }
+
+  if (!Number.isInteger(sanitizedSettings.miyoSearchMaxVariants)) {
+    sanitizedSettings.miyoSearchMaxVariants = DEFAULT_SETTINGS.miyoSearchMaxVariants;
+  }
 
   if (typeof sanitizedSettings.relevantNotesLiveUpdate !== "boolean") {
     sanitizedSettings.relevantNotesLiveUpdate = DEFAULT_SETTINGS.relevantNotesLiveUpdate;
