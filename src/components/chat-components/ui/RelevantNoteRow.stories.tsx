@@ -139,6 +139,15 @@ export const WeakMatch: StoryObj<RelevantNoteRowProps> = {
   args: { note: entry("Interview notes", 0.28) },
 };
 
+export const NestedFolder: StoryObj<RelevantNoteRowProps> = {
+  args: {
+    note: {
+      note: { path: "Agents/skills/meeting-notes/SKILL.md", title: "SKILL" },
+      metadata: { score: 0.78, hasOutgoingLinks: false, hasBacklinks: false },
+    },
+  },
+};
+
 export const LinkedBothWays: StoryObj<RelevantNoteRowProps> = {
   args: {
     note: entry("Product research", 0.72, { hasOutgoingLinks: true, hasBacklinks: true }),

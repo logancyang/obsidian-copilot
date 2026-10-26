@@ -86,6 +86,23 @@ describe("RelevantNoteRow", () => {
       expect(screen.getByText("86%")).toBeTruthy();
     });
 
+    it("shows the vault folder that holds the note under its title", () => {
+      renderRow({
+        note: {
+          ...entry(),
+          note: { path: "Skills/writing/SKILL.md", title: "SKILL" },
+        },
+      });
+
+      expect(screen.getByText("Skills/writing")).toBeTruthy();
+    });
+
+    it("shows / as the folder of a note at the vault root", () => {
+      renderRow();
+
+      expect(screen.getByText("/")).toBeTruthy();
+    });
+
     it("marks a note that is linked in either direction", () => {
       renderRow({ note: entry({ hasOutgoingLinks: true, hasBacklinks: true }) });
 

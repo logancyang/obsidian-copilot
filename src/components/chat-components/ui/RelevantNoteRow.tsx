@@ -5,6 +5,7 @@ import { useApp } from "@/context";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { type RelevantNoteEntry } from "@/miyo/findRelevantNotes";
+import { parentDir } from "@/utils/pathUtils";
 import { ArrowRight, FileInput, FileOutput, FileText, PlusCircle } from "lucide-react";
 import { TFile } from "obsidian";
 import React, { useCallback, useEffect, useState } from "react";
@@ -288,6 +289,8 @@ export function RelevantNoteRow({
             </Button>
           </div>
         </div>
+
+        <div className="tw-truncate tw-text-xs tw-text-muted">{parentDir(note.note.path)}</div>
 
         <RelevanceMeter score={similarity} animated={animated} className="tw-mt-1.5" />
       </div>
