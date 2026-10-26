@@ -144,8 +144,8 @@ describe("azureRemovalMigration", () => {
       const plan = planAzureRemoval(
         settingsWith({
           activeModels: [
-            { name: "gpt-4o", provider: "azure openai", enabled: true, isBuiltIn: false },
-            { name: "gpt-5", provider: "openai", enabled: true, isBuiltIn: false },
+            { name: "gpt-4o", provider: "azure openai", enabled: true },
+            { name: "gpt-5", provider: "openai", enabled: true },
           ],
           defaultModelKey: "gpt-4o|azure openai",
         })

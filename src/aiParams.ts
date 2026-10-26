@@ -74,9 +74,7 @@ export interface CustomModel {
   requiresApiKey?: boolean;
   enabled: boolean;
   isEmbeddingModel?: boolean;
-  isBuiltIn?: boolean;
   enableCors?: boolean;
-  core?: boolean;
   stream?: boolean;
   streamUsage?: boolean;
   maxTokens?: number;

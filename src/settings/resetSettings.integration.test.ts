@@ -1,6 +1,6 @@
 import type { App } from "obsidian";
 
-import { BUILTIN_CHAT_MODELS, DEFAULT_SETTINGS } from "@/constants";
+import { DEFAULT_SETTINGS } from "@/constants";
 import { KeychainService } from "@/services/keychainService";
 import {
   loadSettingsWithKeychain,
@@ -69,16 +69,7 @@ describe("model", () => {
       KeychainService.getInstance(app).setVaultId(VAULT_ID);
     });
 
-    it("keeps every credential — top-level, builtin/custom model, BYOK and signed-in Plus provider — reachable through reset, persistence, and a fresh hydration cycle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
-      const builtin = BUILTIN_CHAT_MODELS[0];
-      const builtinRow: CustomModel = {
-        name: builtin.name,
-        provider: builtin.provider,
-        apiKey: "sk-builtin-override",
-        baseUrl: "https://proxy.example.test/v1",
-        enabled: false,
-        displayName: "My renamed model",
-      };
+    it("keeps every credential — top-level, legacy model, BYOK and signed-in Plus provider — reachable through reset, persistence, and a fresh hydration cycle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", async () => {
       const customRow: CustomModel = {
         name: "custom-gpt",
         provider: "openai",
@@ -98,7 +89,7 @@ describe("model", () => {
         plusLicenseKey: "lic-12345",
         entitlementToken: "test-stale-entitlement-token",
         autoAcceptEdits: true,
-        activeModels: [builtinRow, customRow],
+        activeModels: [customRow],
         providers: {
           byok_openai: makeProvider({ apiKeyKeychainId: BYOK_POINTER }),
           plus_1: makeProvider({
@@ -147,12 +138,6 @@ describe("model", () => {
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.openAIOrgId).toBe("org-123");
       expect(reloaded.autoAcceptEdits).toBe(DEFAULT_SETTINGS.autoAcceptEdits);
-
-      const reloadedBuiltin = reloaded.activeModels.find((m) => m.name === builtin.name);
-      expect(reloadedBuiltin?.apiKey).toBe("sk-builtin-override");
-      expect(reloadedBuiltin?.baseUrl).toBe("https://proxy.example.test/v1");
-      expect(reloadedBuiltin?.enabled).toBe(true);
-      expect(reloadedBuiltin?.displayName).toBeUndefined();
 
       const reloadedCustom = reloaded.activeModels.find((m) => m.name === "custom-gpt");
       expect(reloadedCustom?.apiKey).toBe("sk-model-key");

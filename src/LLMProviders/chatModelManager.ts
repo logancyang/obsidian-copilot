@@ -1,15 +1,14 @@
-import { CustomModel, getModelKey, ModelConfig } from "@/aiParams";
+import { CustomModel, ModelConfig } from "@/aiParams";
 import {
   BREVILABS_MODELS_BASE_URL,
-  BUILTIN_CHAT_MODELS,
   ChatModelProviders,
   DEFAULT_OLLAMA_NUM_CTX,
   ModelCapability,
   ProviderInfo,
 } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
-import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { getModelInfo, safeFetchNoThrow } from "@/utils";
+import { getSettings } from "@/settings/model";
+import { safeFetchNoThrow } from "@/utils";
 import { googleHostBaseUrl, groqHostBaseUrl } from "@/utils/providerBaseUrl";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -70,39 +69,8 @@ export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
   private static activeModel: CustomModel | null = null;
-  private static modelMap: Record<
-    string,
-    {
-      hasApiKey: boolean;
-    }
-  >;
 
-  private static readonly ANTHROPIC_THINKING_BUDGET_TOKENS = 2048;
-
-  private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
-    [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
-    [ChatModelProviders.GOOGLE]: () => getSettings().googleApiKey,
-    [ChatModelProviders.ANTHROPIC]: () => getSettings().anthropicApiKey,
-    [ChatModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
-    [ChatModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
-    [ChatModelProviders.GROQ]: () => getSettings().groqApiKey,
-    [ChatModelProviders.XAI]: () => getSettings().xaiApiKey,
-    [ChatModelProviders.OLLAMA]: () => "default-key",
-    [ChatModelProviders.LM_STUDIO]: () => "default-key",
-    [ChatModelProviders.OPENAI_FORMAT]: () => "default-key",
-    [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
-    [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
-    [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
-    [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
-  } as const;
-
-  private constructor() {
-    this.buildModelMap();
-    subscribeToSettingsChange(() => {
-      this.buildModelMap();
-      this.validateCurrentModel();
-    });
-  }
+  private constructor() {}
 
   static getInstance(): ChatModelManager {
     if (!ChatModelManager.instance) {
@@ -115,8 +83,6 @@ export default class ChatModelManager {
     const settings = getSettings();
 
     const modelName = customModel.name;
-    const modelInfo = getModelInfo(modelName);
-    const { isThinkingEnabled, usesAdaptiveThinking } = modelInfo;
     const maxTokens = customModel.maxTokens;
     const openAIFormatIsKeyless = customModel.requiresApiKey === false && !customModel.apiKey;
 
@@ -155,14 +121,6 @@ export default class ChatModelManager {
           },
           fetch: customModel.enableCors ? safeFetchNoThrow : undefined,
         },
-        ...(isThinkingEnabled && {
-          thinking: usesAdaptiveThinking
-            ? { type: "adaptive" as const, display: "summarized" as const }
-            : {
-                type: "enabled" as const,
-                budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
-              },
-        }),
       },
       [ChatModelProviders.COHEREAI]: {
         modelName,
@@ -308,46 +266,12 @@ export default class ChatModelManager {
     return finalConfig as ModelConfig;
   }
 
-  public buildModelMap() {
-    const activeModels = getSettings().activeModels;
-    ChatModelManager.modelMap = {};
-    const modelMap = ChatModelManager.modelMap;
-
-    const allModels = activeModels ?? BUILTIN_CHAT_MODELS;
-
-    allModels.forEach((model) => {
-      if (model.enabled) {
-        if (!Object.values(ChatModelProviders).includes(model.provider as ChatModelProviders)) {
-          logWarn(`Unknown provider: ${model.provider} for model: ${model.name}`);
-          return;
-        }
-
-        const hasCredentials = this.hasProviderCredentials(model);
-        const modelKey = getModelKeyFromModel(model);
-        modelMap[modelKey] = {
-          hasApiKey: hasCredentials,
-        };
-      }
-    });
-  }
-
-  private hasProviderCredentials(
-    model: CustomModel,
-    allowLegacyCredentialFallback: boolean = true
-  ): boolean {
-    if (
-      model.requiresApiKey === false &&
-      (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT
-    ) {
-      return true;
-    }
-
-    const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
-    if (!getDefaultApiKey) {
-      return Boolean(model.apiKey);
-    }
-
-    return Boolean(model.apiKey || (allowLegacyCredentialFallback ? getDefaultApiKey() : ""));
+  private hasProviderCredentials(model: CustomModel): boolean {
+    return (
+      Boolean(model.apiKey) ||
+      (model.requiresApiKey === false &&
+        (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
+    );
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
@@ -383,7 +307,7 @@ export default class ChatModelManager {
   }
 
   async createModelInstanceFromBridged(model: CustomModel): Promise<BaseChatModel> {
-    if (!this.hasProviderCredentials(model, false)) {
+    if (!this.hasProviderCredentials(model)) {
       if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
         throw new MissingPlusLicenseError(
           "Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
@@ -429,26 +353,8 @@ export default class ChatModelManager {
     return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? this.estimateTokens(inputStr);
   }
 
-  private validateCurrentModel(): void {
-    if (!ChatModelManager.chatModel) return;
-
-    const currentModelKey = getModelKey();
-    if (!currentModelKey) return;
-
-    const selectedModel = ChatModelManager.modelMap[currentModelKey];
-
-    if (selectedModel && !selectedModel.hasApiKey) {
-      ChatModelManager.chatModel = null;
-      ChatModelManager.activeModel = null;
-      logInfo("Failed to reinitialize model due to missing API key");
-    }
-  }
-
   findModelByName(modelName: string): CustomModel | undefined {
-    if (ChatModelManager.activeModel?.name === modelName) {
-      return ChatModelManager.activeModel;
-    }
-    const settings = getSettings();
-    return settings.activeModels.find((model) => model.name === modelName);
+    const activeModel = ChatModelManager.activeModel;
+    return activeModel?.name === modelName ? activeModel : undefined;
   }
 }

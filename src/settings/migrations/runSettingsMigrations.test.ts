@@ -42,7 +42,6 @@ function keyedAnthropicVault(settingsVersion: number | undefined): CopilotSettin
       name: "claude-sonnet-4-5",
       provider: ChatModelProviders.ANTHROPIC,
       enabled: true,
-      isBuiltIn: false,
     },
   ]);
 }
@@ -149,7 +148,7 @@ describe("settingsMigrations", () => {
               },
             },
           },
-          [{ name: "gpt-4o", provider: "github-copilot", enabled: true, isBuiltIn: false }]
+          [{ name: "gpt-4o", provider: "github-copilot", enabled: true }]
         );
         const { api, setupProvider, removeProvider } = makeApi();
 
@@ -289,7 +288,7 @@ describe("settingsMigrations", () => {
 
     it("v9: drops GitHub Copilot models and selections for a v8 vault", async () => {
       seedVault({ settingsVersion: 8, defaultModelKey: "gpt-4o|github-copilot" }, [
-        { name: "gpt-4o", provider: "github-copilot", enabled: true, isBuiltIn: false },
+        { name: "gpt-4o", provider: "github-copilot", enabled: true },
       ]);
       const { api } = makeApi();
 

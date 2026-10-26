@@ -46,7 +46,6 @@ function model(overrides: Partial<CustomModel>): CustomModel {
     name: "test-model",
     provider: ChatModelProviders.OPENAI,
     enabled: true,
-    isBuiltIn: false,
     ...overrides,
   };
 }

@@ -1,6 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
-import { getModelKeyFromModel } from "@/lib/model-key";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
@@ -13,11 +12,10 @@ import type {
   PersistedCopilotPlusCatalog,
   Provider,
 } from "@/modelManagement";
-import { MODEL_SECRET_FIELDS, TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
+import { TOP_LEVEL_SECRET_FIELDS } from "@/services/settingsSecretTransforms";
 import { isNotificationSoundId, type NotificationSoundId } from "@/utils/notificationSoundCatalog";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
-  BUILTIN_CHAT_MODELS,
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
@@ -272,7 +270,7 @@ export function setSettings(
 ) {
   settingsStore.set(settingsAtom, (prev) => {
     const partial = typeof settings === "function" ? settings(prev) : settings;
-    return mergeActiveChatModelsWithCoreModels({ ...prev, ...partial });
+    return { ...prev, ...partial };
   });
 }
 
@@ -323,16 +321,6 @@ export function getSettings(): Readonly<CopilotSettings> {
   return settingsStore.get(settingsAtom);
 }
 
-// Non-secret routing fields stay out of `MODEL_SECRET_FIELDS` (persist-time stripping would blank them),
-// but a key without its `baseUrl` could be sent to the provider's default host after reset:
-// https://github.com/logancyang/obsidian-copilot-preview/issues/259
-const MODEL_CREDENTIAL_BUNDLE_FIELDS = [
-  ...MODEL_SECRET_FIELDS,
-  "baseUrl",
-  "enableCors",
-  "openAIOrgId",
-] as const satisfies readonly (keyof CustomModel)[];
-
 // Session proof, not a credential: it is bound to `settings.userId`, which reset replaces, so a
 // carried-over token could never verify again:
 // https://github.com/logancyang/obsidian-copilot-preview/issues/259
@@ -353,44 +341,6 @@ const TOP_LEVEL_CREDENTIAL_BUNDLE_FIELDS: readonly string[] = [
 function carriesConfiguration(field: string, value: unknown): boolean {
   if (field === "enableCors") return typeof value === "boolean";
   return typeof value === "string" && value.length > 0;
-}
-
-function withPreservedModelCredential(defaultModel: CustomModel, source: CustomModel): CustomModel {
-  const merged = { ...defaultModel } as unknown as Record<string, unknown>;
-  const sourceRecord = source as unknown as Record<string, unknown>;
-  for (const field of MODEL_CREDENTIAL_BUNDLE_FIELDS) {
-    const value = sourceRecord[field];
-    if (carriesConfiguration(field, value)) {
-      merged[field] = value;
-    }
-  }
-  return merged as unknown as CustomModel;
-}
-
-function preserveModelCredentials(
-  defaultModels: CustomModel[],
-  currentModels: CustomModel[]
-): CustomModel[] {
-  const currentByKey = new Map(currentModels.map((model) => [getModelKeyFromModel(model), model]));
-  const defaultKeys = new Set(defaultModels.map((model) => getModelKeyFromModel(model)));
-
-  const restoredBuiltIns = defaultModels.map((defaultModel) => {
-    const previous = currentByKey.get(getModelKeyFromModel(defaultModel));
-    return previous ? withPreservedModelCredential(defaultModel, previous) : defaultModel;
-  });
-
-  // Reason: every custom row is kept, including apparently keyless ones. The
-  // keychain is the sole secret store, so an empty in-memory `apiKey` is
-  // ambiguous — it means either "no credential" or "this session's keychain
-  // read failed". Dropping the row on that signal would strand the keychain
-  // entry with no `name|provider` identity left to reattach it to. Reset is not
-  // a cleanup tool, so it errs toward keeping rows.
-  // https://github.com/logancyang/obsidian-copilot-preview/issues/259
-  const customModels = currentModels.filter(
-    (model) => !defaultKeys.has(getModelKeyFromModel(model))
-  );
-
-  return [...restoredBuiltIns, ...customModels];
 }
 
 // Selection is by pointer truthiness, not `requiresApiKey`: Plus creates its provider with
@@ -432,7 +382,7 @@ export function resetSettings(): void {
   }
   const preservedProviders = preserveProvidersWithCredentials(current.providers);
   const preservedProviderIds = new Set(Object.keys(preservedProviders));
-  const defaultSettingsWithBuiltIns = {
+  const resetValues = {
     ...DEFAULT_SETTINGS,
     ...preservedTopLevelSecrets,
     // Reason: reset is not a sign-out event. Flipping `isPaidUser` to the
@@ -450,10 +400,9 @@ export function resetSettings(): void {
     // https://github.com/logancyang/obsidian-copilot-preview/issues/259
     isPaidUser: current.isPaidUser,
     entitlementExpiresAt: current.entitlementExpiresAt,
-    activeModels: preserveModelCredentials(
-      BUILTIN_CHAT_MODELS.map((model) => ({ ...model, enabled: true })),
-      current.activeModels ?? []
-    ),
+    // Legacy rows stay: dropping one would strand its keychain entry with no `name|provider` identity to reattach it to.
+    // https://github.com/logancyang/obsidian-copilot-preview/issues/259
+    activeModels: current.activeModels ?? [],
     providers: preservedProviders,
     configuredModels: preserveConfiguredModelsForProviders(
       current.configuredModels,
@@ -466,7 +415,7 @@ export function resetSettings(): void {
     copilotPlusCatalog: current.copilotPlusCatalog ?? EMPTY_COPILOT_PLUS_CATALOG,
     copilotRootHistory: preservedRootHistory,
   };
-  setSettings(defaultSettingsWithBuiltIns);
+  setSettings(resetValues);
 }
 
 export function subscribeToSettingsChange(
@@ -1205,49 +1154,4 @@ function sanitizeDeviceProfiles(raw: unknown): Record<string, DeviceAgentProfile
     if (profile) out[key] = profile;
   }
   return Object.keys(out).length > 0 ? out : undefined;
-}
-
-function mergeActiveChatModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
-  settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
-  return settings;
-}
-
-function mergeActiveModels(
-  existingActiveModels: CustomModel[],
-  builtInModels: CustomModel[]
-): CustomModel[] {
-  const modelMap = new Map<string, CustomModel>();
-
-  builtInModels
-    .filter((model) => model.core)
-    .forEach((model) => {
-      modelMap.set(getModelKeyFromModel(model), { ...model });
-    });
-
-  existingActiveModels.forEach((model) => {
-    const key = getModelKeyFromModel(model);
-    const existingModel = modelMap.get(key);
-    if (existingModel) {
-      const builtInModel = builtInModels.find(
-        (m) => m.name === model.name && m.provider === model.provider
-      );
-      if (builtInModel) {
-        modelMap.set(key, {
-          ...builtInModel,
-          ...model,
-          isBuiltIn: true,
-          believerExclusive: builtInModel.believerExclusive,
-        });
-      } else {
-        modelMap.set(key, {
-          ...model,
-          isBuiltIn: existingModel.isBuiltIn,
-        });
-      }
-    } else {
-      modelMap.set(key, model);
-    }
-  });
-
-  return Array.from(modelMap.values());
 }

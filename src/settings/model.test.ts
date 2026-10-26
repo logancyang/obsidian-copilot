@@ -4,7 +4,6 @@ import {
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
-  BUILTIN_CHAT_MODELS,
 } from "@/constants";
 import {
   normalizeMiyoFolderNames,
@@ -19,7 +18,6 @@ import {
   toVisibleCopilotFolder,
   validateCopilotFolder,
   CopilotSettings,
-  getModelKeyFromModel,
 } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
 
@@ -1058,39 +1056,6 @@ describe("model", () => {
       expect(settingsStore.get(settingsAtom).copilotPlusCatalog).toEqual(catalog);
     });
 
-    it.each([false, true])(
-      "preserves a builtin model's credential routing, including enableCors=%s, while resetting its preferences (https://github.com/logancyang/obsidian-copilot-preview/issues/259)",
-      (enableCors) => {
-        const customGpt4: CustomModel = {
-          ...BUILTIN_CHAT_MODELS[0],
-          enabled: false,
-          apiKey: "sk-saved",
-          baseUrl: "https://proxy.example.test/v1",
-          openAIOrgId: "org-model",
-          enableCors,
-          displayName: "My renamed model",
-        };
-        settingsStore.set(settingsAtom, {
-          ...DEFAULT_SETTINGS,
-          activeModels: [customGpt4],
-        });
-
-        resetSettings();
-
-        const after = settingsStore.get(settingsAtom);
-        const restored = after.activeModels.find(
-          (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
-        );
-        expect(restored).toBeDefined();
-        expect(restored!.apiKey).toBe("sk-saved");
-        expect(restored!.baseUrl).toBe("https://proxy.example.test/v1");
-        expect(restored!.openAIOrgId).toBe("org-model");
-        expect(restored!.enableCors).toBe(enableCors);
-        expect(restored!.enabled).toBe(BUILTIN_CHAT_MODELS[0].enabled);
-        expect(restored!.displayName).toBe(BUILTIN_CHAT_MODELS[0].displayName);
-      }
-    );
-
     it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       const withKey: CustomModel = {
         name: "my-llama",
@@ -1182,26 +1147,6 @@ describe("model", () => {
       const after = settingsStore.get(settingsAtom);
       expect(after.openAIApiKey).toBe("sk-openai");
       expect(after.openAIOrgId).toBe(DEFAULT_SETTINGS.openAIOrgId);
-    });
-
-    it("filters out null/undefined model secrets", () => {
-      const modelWithNull: CustomModel = {
-        ...BUILTIN_CHAT_MODELS[0],
-        apiKey: null as unknown as string,
-      };
-      settingsStore.set(settingsAtom, {
-        ...DEFAULT_SETTINGS,
-        activeModels: [modelWithNull],
-      });
-
-      resetSettings();
-
-      const after = settingsStore.get(settingsAtom);
-      const restored = after.activeModels.find(
-        (m) => getModelKeyFromModel(m) === getModelKeyFromModel(BUILTIN_CHAT_MODELS[0])
-      );
-      expect(restored).toBeDefined();
-      expect(restored!.apiKey).toBe(BUILTIN_CHAT_MODELS[0].apiKey);
     });
 
     it("preserves configured models belonging to preserved providers (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {

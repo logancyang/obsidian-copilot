@@ -11,7 +11,7 @@ import {
 } from "@/utils/chatDeepLink";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
-import { CustomModel, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
+import { setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -82,7 +82,6 @@ import {
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   type CopilotSettings,
-  getModelKeyFromModel,
   getSettings,
   setSettings,
   subscribeToSettingsChange,
@@ -1196,28 +1195,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   // https://github.com/logancyang/obsidian-copilot/issues/2539
   async saveData(data: unknown): Promise<void> {
     return super.saveData(dehydrateDeviceProfile(data as CopilotSettings, getDeviceId(this.app)));
-  }
-
-  mergeActiveModels(
-    existingActiveModels: CustomModel[],
-    builtInModels: CustomModel[]
-  ): CustomModel[] {
-    const modelMap = new Map<string, CustomModel>();
-
-    existingActiveModels.forEach((model) => {
-      const key = getModelKeyFromModel(model);
-      const existingModel = modelMap.get(key);
-      if (existingModel) {
-        modelMap.set(key, {
-          ...model,
-          isBuiltIn: existingModel.isBuiltIn || model.isBuiltIn,
-        });
-      } else {
-        modelMap.set(key, model);
-      }
-    });
-
-    return Array.from(modelMap.values());
   }
 
   async loadCopilotChatHistory() {
