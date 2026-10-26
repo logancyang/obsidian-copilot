@@ -1,7 +1,7 @@
 import { AI_SENDER } from "@/constants";
 import { logWarn } from "@/logger";
 import type { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
-import type { FileCaptures } from "@/agentMode/session/turnFileChanges";
+import { FileCaptures } from "@/agentMode/session/turnFileChanges";
 import type {
   BackendId,
   PromptContent,
@@ -78,7 +78,7 @@ export class TurnTracker {
     turnStartedAtMs: number;
   } | null = null;
   private showedActivityElsewhere = false;
-  private turnFiles: FileCaptures = new Map();
+  private turnFiles = new FileCaptures();
 
   constructor(private readonly deps: TurnTrackerDeps) {}
 
@@ -132,7 +132,7 @@ export class TurnTracker {
     this.currentMessageIds = new Set();
     if (!continuesTurn) {
       this.showedActivityElsewhere = false;
-      this.turnFiles = new Map();
+      this.turnFiles = new FileCaptures();
     }
     this.deps.notifyMessages();
     return this.placeholderId;
@@ -477,7 +477,7 @@ export class TurnTracker {
     this.deps.endLaunches(stopReason === "cancelled" ? "stopped" : "failed");
     // A turn whose file changes cannot be captured, such as one with a malformed agent diff, must still end. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     const turnFiles = this.turnFiles;
-    this.turnFiles = new Map();
+    this.turnFiles = new FileCaptures();
     const filesChanged = await this.deps
       .captureFileChanges(turnFiles, placeholderId, turnDiff)
       .catch((err: unknown) => {
