@@ -212,6 +212,17 @@ export function buildPickerEntries(
     const backendModels = catalog?.availableModels ?? null;
     const hasNoCatalog = catalog === null;
     const preloadStatus = manager.getPreloadStatus(descriptor.id);
+    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
+      entries.push(
+        ...lockedCopilotEntries(settings.copilotPlusCatalog, {
+          group: descriptor.displayName,
+          backendId: descriptor.id,
+        })
+      );
+    }
+    // An agent the user never installed must not promote its models, least of all to a licensed user.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/765
+    if (!isActiveBackend && descriptor.getInstallState(settings).kind === "absent") continue;
     const sectionStart = entries.length;
     appendBackendSection(entries, descriptor, {
       backendModels,
@@ -237,16 +248,6 @@ export function buildPickerEntries(
       for (let i = sectionStart; i < entries.length; i++) {
         entries[i]._needsSelfHostWarning = true;
       }
-    }
-    if (descriptor.routesCopilotModels && shouldPreviewCopilotModels(settings.providers)) {
-      entries.splice(
-        sectionStart,
-        0,
-        ...lockedCopilotEntries(settings.copilotPlusCatalog, {
-          group: descriptor.displayName,
-          backendId: descriptor.id,
-        })
-      );
     }
   }
 
