@@ -238,7 +238,9 @@ const AgentChatMessages = memo(
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
-    const streamingMessageId = isLoading ? latestAssistant?.id : undefined;
+    // The chat keeps running while Claude waits on its subagents with no reply open, so only an unfinished reply gets the live timer. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+    const streamingMessageId =
+      isLoading && !latestAssistant?.turnStopReason ? latestAssistant?.id : undefined;
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">

@@ -124,7 +124,7 @@ With Codex, **Safe** uses the adapter's **Ask for approval** preset. It can edit
 
 When Codex presents a plan, you can **Approve** it, **Reject** it, or type feedback in the plan card. Feedback starts a new chat turn so Codex can revise the plan; review the new proposal before approving it. If you ask Codex to save the plan to a note, approve the revised plan to let it create the note.
 
-When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and OpenCode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. Stopping the turn cancels the agent's unanswered requests. A background task's request stays until you answer it or stop that task.
+When an action needs approval, Agent Chat displays a **Permission required** card with the proposed change or tool input. Choose one of the temporary or persistent allow or deny options offered by that agent. The one-time allow is highlighted. Hover an "always" option to see what it covers and how long it lasts: Claude names its rule and the settings file it saves to, and Codex and OpenCode say when they save a rule for later chats. Claude offers "Allow always" only when it has a rule to save. **Stop** cancels the unanswered requests of the agent and of Claude's subagents.
 
 When Claude or Codex asks a set of questions, answer the current tab and select **Next**. On the final tab, **Submit** becomes available after every question has an answer. You can use the tabs to review or skip ahead. **Cancel** dismisses the entire request. If Codex withdraws or times out the question, its card disappears.
 
@@ -142,7 +142,7 @@ Agent Chat keeps each conversation separate:
 
 - Select **+** for another session. Each tab keeps its own history, draft, attachments, and queued follow-ups.
 - Select **New chat** to reset the current tab.
-- Select **Stop** to cancel the current turn. Messages the agent has not read yet return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. They come before the current draft, and custom commands return as their expanded text. Background tasks keep running.
+- Select **Stop** to cancel the current turn. Messages the agent has not read yet return to the message box, with their notes, web pages, agent mentions, and images, so you can edit or resend them. They come before the current draft, and custom commands return as their expanded text. With Claude, Stop also ends running subagents. Background commands keep running.
 - Use **Recent chats** from the Agent Chat home screen, or **Chat history** inside a conversation, to resume saved work. The **Recent chats** list can be scrolled or searched.
 - Hover a chat in **Recent chats** and select **Pin chat** to keep it at the top of the list, above a divider. The most recently pinned chat comes first, and pinned chats keep their order when you use them or change how history is sorted. Select **Unpin chat** to return it to its usual place. The pin is saved in the chat's Markdown note, so it lasts across restarts and appears in both the global and the Project list. Pinning a chat that has no note yet saves it as a note first, even when autosave is off. **Chat history** inside a conversation ignores pins.
 - The bar above the composer holds **New chat**, **Save chat as note** (when autosave is off), **Chat history**, and **More actions** (⋯), and starts with a task count, such as **2 tasks running**, while background tasks run. **More actions** has **Copy chat link**, **Add to bookmarks**, and **Report an issue**. **Copy chat link** and **Add to bookmarks** stay dimmed until you send the chat's first message.
@@ -201,7 +201,7 @@ You can type and send while the agent works. With Claude, the message waits abov
 
 ### Background subagents and commands
 
-Claude runs subagents and long commands in the background unless it needs to wait on one, so you can keep chatting. A task appears as soon as Claude starts launching it. When one finishes, Claude replies with its result on its own.
+Claude runs subagents and long commands in the background unless it needs to wait on one, so you can keep chatting. A task appears as soon as Claude starts launching it. When one finishes, Claude replies with its result on its own. The chat shows **Stop** until every subagent has finished and Claude has replied about it.
 
 - Hover the task count above the composer, such as **2 tasks running**, to see each running task.
 - Select a task, or its card in the chat, to open its view: a subagent's steps or a command's output. Select **Back to chat** or press Escape to return.

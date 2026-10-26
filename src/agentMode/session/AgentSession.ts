@@ -246,6 +246,7 @@ export class AgentSession {
   private cachedStatus: AgentSessionStatus = "starting";
   private startupFailed = false;
   private startupSettled = false;
+  private agentBusy = false;
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
@@ -588,12 +589,13 @@ export class AgentSession {
     if (this.disposed) return "closed";
     if (this.startupFailed) return "error";
     if (this.backendSessionId === null || !this.startupSettled) return "starting";
-    const mainTurnRunning = this.turns.isMainTurnRunning();
-    // A background task can ask while the main agent is idle; its request must not hold the composer or show Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (mainTurnRunning && this.requests.hasPending()) {
+    // The chat is not finished while its subagents work, although the agent's replies end between them. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+    const working = this.turns.isMainTurnRunning() || this.agentBusy;
+    // A background task can ask while the agent is idle; its request must not hold the composer or show Stop. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    if (working && this.requests.hasPending()) {
       return "awaiting_permission";
     }
-    if (mainTurnRunning) return "running";
+    if (working) return "running";
     if (this.turns.hasLastTurnFailed()) return "error";
     return "idle";
   }
@@ -1030,14 +1032,26 @@ export class AgentSession {
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
     this.turns.stop(this.canWithdrawPrompts());
-    // Stop ends the main agent's turn only, so a background task's request stays answerable. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
+    // A subagent's requests close when Stop ends its task. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
     this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
-    try {
-      await this.backend.cancel({ sessionId: this.backendSessionId });
-    } catch (e) {
-      logWarn(`[AgentMode] cancel notification failed`, e);
-    }
+    const sessionId = this.backendSessionId;
+    // The chat shows Stop until its subagents finish, so Stop ends them too; a background command such as a server keeps running. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+    const subagentIds = this.taskList.flatMap((task) =>
+      task.kind === "subagent" && task.status === "running" && task.taskId !== undefined
+        ? [task.taskId]
+        : []
+    );
+    await Promise.all([
+      this.backend.cancel({ sessionId }).catch((e: unknown) => {
+        logWarn(`[AgentMode] cancel notification failed`, e);
+      }),
+      ...subagentIds.map((taskId) =>
+        this.stopTask(taskId).catch((e: unknown) => {
+          logWarn(`[AgentMode] stopping subagent ${taskId} at Stop failed`, e);
+        })
+      ),
+    ]);
   }
 
   async releaseBackendSession(): Promise<void> {
@@ -1231,6 +1245,10 @@ export class AgentSession {
       case "turn_ended":
         this.turns.endTurn(update);
         return;
+      case "busy_changed":
+        this.agentBusy = update.busy;
+        this.recomputeStatusIfChanged();
+        return;
     }
     const toolOwnerMessageId =
       update.sessionUpdate === "tool_call_update"
@@ -1397,6 +1415,7 @@ export class AgentSession {
     for (const task of this.tasks.values()) {
       if (task.taskId === undefined && task.status === "running") this.endTask(task, "stopped");
     }
+    this.agentBusy = false;
     this.turns.disconnect(error);
     for (const l of this.listeners) {
       try {
