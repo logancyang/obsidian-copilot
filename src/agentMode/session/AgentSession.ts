@@ -102,7 +102,11 @@ import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
-import type { FeedbackEvidence, FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type {
+  FeedbackEvidence,
+  FeedbackOffer,
+  FeedbackOfferTrigger,
+} from "@/agentMode/session/feedback/feedbackOffer";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -305,6 +309,7 @@ export class AgentSession {
       captureFileChanges: (files, messageId, turnDiff) =>
         this.finalizeFileChanges(files, this.store, messageId, turnDiff),
       onTurnCompleted: () => void this.pollSessionTitle(),
+      onTurnFailed: (errorText) => this.offerTurnErrorReport(errorText),
     });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
@@ -1121,17 +1126,34 @@ export class AgentSession {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
     if (this.feedbackOffer) return "already_offered";
+    this.feedbackOffer = this.openFeedbackOffer("agent", draft);
+    this.notifyMessages();
+    return "shown";
+  }
+
+  // A failed reply leaves no agent turn to raise the card, so the session raises it with the error.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
+  private offerTurnErrorReport(errorText: string): void {
+    if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
+    this.feedbackOffer = this.openFeedbackOffer("turn_error", {
+      title: `Agent Chat reply failed on ${this.backendId}`,
+      whatHappened: errorText,
+      userSaid: "",
+      repro: "",
+    });
+  }
+
+  private openFeedbackOffer(trigger: FeedbackOfferTrigger, draft: FeedbackDraft): FeedbackOffer {
     const userMessages = this.store
       .getDisplayMessages()
       .filter((message) => message.sender === USER_SENDER);
-    this.feedbackOffer = {
+    return {
+      trigger,
       draft,
       evidence: this.getReportEvidence(),
       afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
       status: "open",
     };
-    this.notifyMessages();
-    return "shown";
   }
 
   dismissFeedbackOffer(): void {

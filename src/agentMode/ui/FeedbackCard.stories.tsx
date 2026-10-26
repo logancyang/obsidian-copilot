@@ -3,6 +3,7 @@ import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type { Meta, StoryObj } from "@/lib/story";
 
 const draft: FeedbackOffer = {
+  trigger: "agent",
   draft: {
     title: 'Replied in Swedish to an English "commit and push"',
     whatHappened: "The agent read a garbled request as Swedish and answered in Swedish.",
@@ -36,6 +37,21 @@ export const Draft: StoryObj<FeedbackCardProps> = {};
 
 export const AgentNoticedMistake: StoryObj<FeedbackCardProps> = {
   args: { offer: { ...draft, draft: { ...draft.draft, userSaid: "" } } },
+};
+
+export const FailedReply: StoryObj<FeedbackCardProps> = {
+  args: {
+    offer: {
+      ...draft,
+      trigger: "turn_error",
+      draft: {
+        title: "Agent Chat reply failed on opencode",
+        whatHappened: "Internal error: Internal service failure",
+        userSaid: "",
+        repro: "",
+      },
+    },
+  },
 };
 
 export const LongQuote: StoryObj<FeedbackCardProps> = {

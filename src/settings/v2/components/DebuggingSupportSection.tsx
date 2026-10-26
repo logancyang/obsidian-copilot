@@ -43,7 +43,7 @@ export const DebuggingSupportSection: React.FC<DebuggingSupportSectionProps> = (
     <SettingItem
       type="switch"
       title="Offer feedback reports in Agent Chat"
-      description="When something goes wrong in Agent Chat, the agent can draft a report for you to review. Nothing is sent unless you press Report."
+      description="When something goes wrong in Agent Chat, or a reply fails with an error, Copilot drafts a report for you to review. Nothing is sent unless you press Report."
       checked={offerFeedbackCards}
       onCheckedChange={onOfferFeedbackCardsChange}
     />

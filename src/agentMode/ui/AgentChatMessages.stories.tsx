@@ -413,6 +413,7 @@ export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
       },
     ],
     feedbackOffer: {
+      trigger: "agent",
       draft: {
         title: "Deleted a section when asked to tidy a note",
         whatHappened: "Asked to tidy a note, the agent removed its whole second section.",
