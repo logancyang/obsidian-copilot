@@ -1,60 +1,10 @@
 import type { CustomModel } from "@/aiParams";
-import { ChatModelProviders, ProviderInfo, ProviderSettingsKeyMap } from "@/constants";
-import type { Provider, SettingKeyProviders } from "@/constants";
-import type { CopilotSettings } from "@/settings/model";
+import { ProviderInfo } from "@/constants";
+import type { Provider } from "@/constants";
 
 export { err2String } from "@/errorFormat";
-
-export type ModelApiKeySettings = Pick<
-  CopilotSettings,
-  | "anthropicApiKey"
-  | "openAIApiKey"
-  | "googleApiKey"
-  | "groqApiKey"
-  | "openRouterAiApiKey"
-  | "cohereApiKey"
-  | "xaiApiKey"
-  | "plusLicenseKey"
-  | "mistralApiKey"
-  | "deepseekApiKey"
-  | "siliconflowApiKey"
->;
-
-const PROVIDERS_WITHOUT_API_KEYS: ReadonlySet<Provider> = new Set([
-  ChatModelProviders.OPENAI_FORMAT,
-  ChatModelProviders.OLLAMA,
-  ChatModelProviders.LM_STUDIO,
-  ChatModelProviders.COPILOT_PLUS,
-]);
 
 export function getProviderLabel(provider: string, model?: CustomModel): string {
   const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
   return baseLabel + (model?.believerExclusive && baseLabel === "Copilot" ? "(Believer)" : "");
-}
-
-export function checkModelApiKey(
-  model: CustomModel,
-  settings: Readonly<ModelApiKeySettings>
-): {
-  hasApiKey: boolean;
-  errorNotice?: string;
-} {
-  const provider = model.provider as ChatModelProviders;
-  const knownProvider = Object.prototype.hasOwnProperty.call(ProviderInfo, provider);
-  const needsApiKey = knownProvider && !PROVIDERS_WITHOUT_API_KEYS.has(provider);
-  const settingsKey = ProviderSettingsKeyMap[
-    provider as SettingKeyProviders
-  ] as keyof ModelApiKeySettings;
-  const hasApiKey = Boolean(model.apiKey || (settingsKey && settings[settingsKey]));
-
-  if (needsApiKey && !hasApiKey) {
-    return {
-      hasApiKey: false,
-      errorNotice:
-        `Please configure API Key for ${model.name} in settings first.` +
-        "\nPath: Settings > Copilot > BYOK",
-    };
-  }
-
-  return { hasApiKey: true };
 }

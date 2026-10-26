@@ -16,7 +16,6 @@ function model(overrides: Partial<CustomModel>): CustomModel {
     name: "test-model",
     provider: ChatModelProviders.OPENAI,
     enabled: true,
-    isBuiltIn: false,
     ...overrides,
   };
 }
@@ -226,7 +225,6 @@ describe("byokMigration", () => {
             model({
               name: "copilot-plus-flash",
               provider: ChatModelProviders.COPILOT_PLUS,
-              isBuiltIn: true,
             }),
             model({ name: "gpt-5", provider: "github-copilot" }),
           ],
@@ -252,8 +250,6 @@ describe("byokMigration", () => {
             model({
               name: "gpt-5.5",
               provider: ChatModelProviders.OPENAI,
-              isBuiltIn: true,
-              core: true,
             }),
           ],
           { openAIApiKey: "k" }

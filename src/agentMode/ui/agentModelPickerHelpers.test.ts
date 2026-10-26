@@ -964,7 +964,6 @@ describe("agentModelPickerHelpers", () => {
         name: baseModelId,
         provider: "agent",
         enabled: true,
-        isBuiltIn: false,
         displayName: baseModelId,
         _group: backendId,
         _backendId: backendId,
@@ -1042,7 +1041,6 @@ describe("agentModelPickerHelpers", () => {
           name: "no-backend",
           provider: "agent",
           enabled: true,
-          isBuiltIn: false,
           displayName: "x",
         },
       ];

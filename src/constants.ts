@@ -1,4 +1,3 @@
-import { CustomModel } from "@/aiParams";
 import { DEFAULT_BUILTIN_PREFERENCES } from "@/builtinSkills/builtinSkills";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
@@ -190,33 +189,6 @@ export enum ChatModels {
   // catalog has been read.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
-  GPT_5_5 = "gpt-5.5",
-  GPT_5_4_mini = "gpt-5.4-mini",
-  GPT_41 = "gpt-4.1",
-  GPT_41_mini = "gpt-4.1-mini",
-  GEMINI_3_PRO_PREVIEW = "gemini-3.1-pro-preview",
-  GEMINI_3_5_FLASH = "gemini-3.5-flash",
-  GEMINI_3_FLASH_LITE = "gemini-3.1-flash-lite",
-  GEMINI_PRO = "gemini-2.5-pro",
-  GEMINI_FLASH = "gemini-2.5-flash",
-  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
-  CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
-  CLAUDE_HAIKU_4_5 = "claude-haiku-4-5",
-  GROK_4_3 = "grok-4.3",
-  GROQ_LLAMA_8b = "llama3-8b-8192",
-  COMMAND_R = "command-r",
-  MISTRAL_TINY = "mistral-tiny-latest",
-  DEEPSEEK_REASONER = "deepseek-reasoner",
-  DEEPSEEK_CHAT = "deepseek-chat",
-  OPENROUTER_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
-  OPENROUTER_GEMINI_3_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
-  OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
-  OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
-  OPENROUTER_GPT_5_5 = "openai/gpt-5.5",
-  OPENROUTER_GPT_5_4_MINI = "openai/gpt-5.4-mini",
-  OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
-  SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
-  SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
 }
 
 export enum ChatModelProviders {
@@ -242,196 +214,6 @@ export enum ModelCapability {
   WEB_SEARCH = "websearch",
 }
 
-export const BUILTIN_CHAT_MODELS: CustomModel[] = [
-  {
-    name: ChatModels.COPILOT_PLUS_FLASH,
-    provider: ChatModelProviders.COPILOT_PLUS,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    plusExclusive: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_3_5_FLASH,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GPT_5_5,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GPT_5_4_mini,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.CLAUDE_SONNET_4_6,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_3_5_FLASH,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_3_FLASH_LITE,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GEMINI_FLASH,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_3_PRO_PREVIEW,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_2_5_PRO,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GPT_5_5,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GPT_5_4_MINI,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GROK_4_3,
-    provider: ChatModelProviders.XAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GROK_4_3,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GPT_41,
-    provider: ChatModelProviders.OPENAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GPT_41_mini,
-    provider: ChatModelProviders.OPENAI,
-    enabled: false,
-    isBuiltIn: true,
-    core: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.CLAUDE_OPUS_4_7,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.CLAUDE_HAIKU_4_5,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_3_PRO_PREVIEW,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_PRO,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.DEEPSEEK_CHAT,
-    provider: ChatModelProviders.DEEPSEEK,
-    enabled: false,
-    isBuiltIn: true,
-  },
-  {
-    name: ChatModels.DEEPSEEK_REASONER,
-    provider: ChatModelProviders.DEEPSEEK,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.SILICONFLOW_DEEPSEEK_V3,
-    provider: ChatModelProviders.SILICONFLOW,
-    enabled: false,
-    isBuiltIn: false,
-    baseUrl: "https://api.siliconflow.com/v1",
-  },
-  {
-    name: ChatModels.SILICONFLOW_DEEPSEEK_R1,
-    provider: ChatModelProviders.SILICONFLOW,
-    enabled: false,
-    isBuiltIn: false,
-    baseUrl: "https://api.siliconflow.com/v1",
-    capabilities: [ModelCapability.REASONING],
-  },
-];
-
 export type Provider = ChatModelProviders;
 
 export type SettingKeyProviders = Exclude<
@@ -444,7 +226,6 @@ export interface ProviderMetadata {
   host: string;
   curlBaseURL: string;
   keyManagementURL: string;
-  testModel?: ChatModels;
 }
 
 export const ProviderInfo: Record<Provider, ProviderMetadata> = {
@@ -453,56 +234,48 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://openrouter.ai/api/v1/",
     curlBaseURL: "https://openrouter.ai/api/v1",
     keyManagementURL: "https://openrouter.ai/keys",
-    testModel: ChatModels.OPENROUTER_GPT_5_4_MINI,
   },
   [ChatModelProviders.GOOGLE]: {
     label: "Gemini",
     host: "https://generativelanguage.googleapis.com",
     curlBaseURL: "https://generativelanguage.googleapis.com/v1beta",
     keyManagementURL: "https://makersuite.google.com/app/apikey",
-    testModel: ChatModels.GEMINI_FLASH,
   },
   [ChatModelProviders.ANTHROPIC]: {
     label: "Anthropic",
     host: "https://api.anthropic.com/",
     curlBaseURL: "https://api.anthropic.com",
     keyManagementURL: "https://console.anthropic.com/settings/keys",
-    testModel: ChatModels.CLAUDE_SONNET_4_6,
   },
   [ChatModelProviders.OPENAI]: {
     label: "OpenAI",
     host: "https://api.openai.com",
     curlBaseURL: "https://api.openai.com/v1",
     keyManagementURL: "https://platform.openai.com/api-keys",
-    testModel: ChatModels.GPT_5_5,
   },
   [ChatModelProviders.XAI]: {
     label: "XAI",
     host: "https://api.x.ai/v1",
     curlBaseURL: "https://api.x.ai/v1",
     keyManagementURL: "https://console.x.ai",
-    testModel: ChatModels.GROK_4_3,
   },
   [ChatModelProviders.GROQ]: {
     label: "Groq",
     host: "https://api.groq.com/openai",
     curlBaseURL: "https://api.groq.com/openai/v1",
     keyManagementURL: "https://console.groq.com/keys",
-    testModel: ChatModels.GROQ_LLAMA_8b,
   },
   [ChatModelProviders.COHEREAI]: {
     label: "Cohere",
     host: "https://api.cohere.ai/compatibility/v1",
     curlBaseURL: "https://api.cohere.ai/compatibility/v1",
     keyManagementURL: "https://dashboard.cohere.ai/api-keys",
-    testModel: ChatModels.COMMAND_R,
   },
   [ChatModelProviders.SILICONFLOW]: {
     label: "SiliconFlow",
     host: "https://api.siliconflow.com/v1",
     curlBaseURL: "https://api.siliconflow.com/v1",
     keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
-    testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",
@@ -527,14 +300,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     host: "https://api.mistral.ai/v1",
     curlBaseURL: "https://api.mistral.ai/v1",
     keyManagementURL: "https://console.mistral.ai/api-keys",
-    testModel: ChatModels.MISTRAL_TINY,
   },
   [ChatModelProviders.DEEPSEEK]: {
     label: "DeepSeek",
     host: "https://api.deepseek.com/",
     curlBaseURL: "https://api.deepseek.com",
     keyManagementURL: "https://platform.deepseek.com/api-keys",
-    testModel: ChatModels.DEEPSEEK_CHAT,
   },
   [ChatModelProviders.COPILOT_PLUS]: {
     label: "Copilot",
@@ -685,7 +456,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   deepseekApiKey: "",
   siliconflowApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
-  defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
+  defaultModelKey: "",
   contextTurns: 15,
   userSystemPrompt: "",
   openAIProxyBaseUrl: "",
@@ -708,7 +479,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxSourceChunks: DEFAULT_MAX_SOURCE_CHUNKS,
   enableInlineCitations: true,
   groqApiKey: "",
-  activeModels: BUILTIN_CHAT_MODELS,
+  activeModels: [],
   lexicalSearchRamLimit: 100,
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,

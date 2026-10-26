@@ -38,7 +38,6 @@ export function lockedCopilotEntries(
       provider: ChatModelProviders.COPILOT_PLUS,
       displayName: previewed.displayName || previewed.id,
       enabled: true,
-      isBuiltIn: false,
       _disabledReason: LICENSE_REQUIRED,
       _needsLicense: true,
       _subtitle: previewed.description,

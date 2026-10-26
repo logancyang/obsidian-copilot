@@ -138,7 +138,6 @@ export function synthesizeAgentEntry(
     name: baseModelId,
     provider: AGENT_PROVIDER,
     enabled: true,
-    isBuiltIn: false,
     displayName: humanName || baseModelId,
     capabilities,
     _group: descriptor.displayName,

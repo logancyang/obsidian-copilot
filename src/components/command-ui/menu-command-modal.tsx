@@ -12,7 +12,6 @@ import { ActionButtons } from "./action-buttons";
 import { ModelSettingsButton } from "./model-settings-button";
 import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "./constants";
 import { Button } from "@/components/ui/button";
-import { useSettingsValue } from "@/settings/model";
 
 interface MenuCommandModalProps {
   open: boolean;
@@ -27,7 +26,7 @@ interface MenuCommandModalProps {
   onFollowUpSubmit: () => void;
   selectedModel: string;
   onSelectModel: (modelKey: string) => void;
-  models?: ModelSelectorEntry[];
+  models: ModelSelectorEntry[];
   needsModel?: boolean;
   onOpenModelSettings?: (ownerWindow: Window) => void;
   onStop?: () => void;
@@ -73,7 +72,6 @@ export function MenuCommandModal({
   onIncludeNoteContextChange,
   renderMarkdown,
 }: MenuCommandModalProps) {
-  const settings = useSettingsValue();
   const actionState =
     contentState.type === "loading"
       ? "loading"
@@ -162,8 +160,7 @@ export function MenuCommandModal({
                 variant="ghost"
                 value={selectedModel}
                 onChange={onSelectModel}
-                models={models ?? settings.activeModels}
-                apiKeySettings={models ? undefined : settings}
+                models={models}
                 disabled={isBusy}
               />
               {onOpenModelSettings && (

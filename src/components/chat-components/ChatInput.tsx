@@ -1,8 +1,7 @@
 import { ChatSendButton } from "@/components/ui/ChatSendButton";
-import { useChainType, useModelKey } from "@/aiParams";
+import { useChainType } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
-import { useSettingsValue } from "@/settings/model";
 import type { CopilotMode } from "@/agentMode";
 import { isPlusChain } from "@/utils";
 import {
@@ -53,6 +52,10 @@ import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
   "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
+
+const NO_MODELS: ModelSelectorEntry[] = [];
+
+const NOOP = () => {};
 
 const DEFAULT_PLACEHOLDER =
   "Your AI assistant for Obsidian • @ to add context • / for custom prompts";
@@ -205,8 +208,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
-  const [currentModelKey, setCurrentModelKey] = useModelKey();
-  const settings = useSettingsValue();
   const [currentChain] = useChainType();
   const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
     const activeFile = app.workspace.getActiveFile();
@@ -755,14 +756,17 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
           ) : (
+            // Agent Mode has no model list until its session manager exists, so the slot stays empty and disabled.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/761
             <ModelSelector
               variant="ghost2"
               size="fit"
-              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
-              value={modelPickerOverride?.value ?? currentModelKey}
-              models={modelPickerOverride?.models ?? settings.activeModels}
-              apiKeySettings={modelPickerOverride ? undefined : settings}
-              onChange={modelPickerOverride?.onChange ?? setCurrentModelKey}
+              disabled={
+                modelPickerOverride?.disabled ?? (disableModelSwitch || !modelPickerOverride)
+              }
+              value={modelPickerOverride?.value ?? ""}
+              models={modelPickerOverride?.models ?? NO_MODELS}
+              onChange={modelPickerOverride?.onChange ?? NOOP}
               className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
           )}

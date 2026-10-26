@@ -82,7 +82,7 @@ function configuredModel(configuredModelId: string, providerId: string): Configu
 }
 
 function legacyModel(name: string, providerName: string): CustomModel {
-  return { name, provider: providerName, enabled: true, isBuiltIn: false };
+  return { name, provider: providerName, enabled: true };
 }
 
 function settingsWith(overrides: Partial<CopilotSettings> = {}): CopilotSettings {

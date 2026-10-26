@@ -12,16 +12,19 @@ import {
   type LexicalEditor,
 } from "lexical";
 import { AgentPillNode, $createAgentPillNode, $isAgentPillNode } from "./pills/AgentPillNode";
+import type { ModelSelector } from "@/components/ui/ModelSelector";
 let mockEditor: LexicalEditor;
+let mockModelSelectorProps: React.ComponentProps<typeof ModelSelector> | undefined;
 
 jest.mock("@/aiParams", () => ({
   useChainType: jest.fn().mockReturnValue(["agent"]),
-  useModelKey: jest.fn().mockReturnValue(["model", jest.fn()]),
 }));
-jest.mock("@/settings/model", () => ({
-  useSettingsValue: jest.fn().mockReturnValue({ activeModels: [] }),
+jest.mock("@/components/ui/ModelSelector", () => ({
+  ModelSelector: (props: React.ComponentProps<typeof ModelSelector>) => {
+    mockModelSelectorProps = props;
+    return null;
+  },
 }));
-jest.mock("@/components/ui/ModelSelector", () => ({ ModelSelector: () => null }));
 jest.mock("@/components/chat-components/ContextControl", () => ({ ContextControl: () => null }));
 jest.mock("@/components/chat-components/AddContextButton", () => ({
   AddContextButton: () => null,
@@ -103,6 +106,15 @@ describe("ChatInput", () => {
   afterAll(() => {
     URL.createObjectURL = createObjectURL;
     URL.revokeObjectURL = revokeObjectURL;
+  });
+  describe("ChatInput()", () => {
+    it("shows an empty, disabled model picker when the caller supplies no models, never the legacy built-in list (https://github.com/Brevilabs/obsidian-copilot-private/issues/761)", () => {
+      render(composer("", []).node);
+
+      expect(mockModelSelectorProps?.models).toEqual([]);
+      expect(mockModelSelectorProps?.value).toBe("");
+      expect(mockModelSelectorProps?.disabled).toBe(true);
+    });
   });
   describe("prependContent()", () => {
     it.each(["draft in progress", ""])(

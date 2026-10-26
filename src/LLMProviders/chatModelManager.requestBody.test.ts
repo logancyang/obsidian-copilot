@@ -167,6 +167,24 @@ describe("chatModelManager", () => {
         }
       });
 
+      it.each(["claude-opus-4-7", "claude-sonnet-4-6", "claude-opus-5"])(
+        "sends Anthropic model %s no thinking configuration, so it runs at the provider's default (https://github.com/Brevilabs/obsidian-copilot-private/issues/761)",
+        async (name) => {
+          const body = captureRequestBody(ANTHROPIC_RESPONSE);
+
+          await send(
+            wireModel({
+              name,
+              provider: ChatModelProviders.ANTHROPIC,
+              baseUrl: "https://anthropic.invalid",
+              maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+            })
+          );
+
+          expect(body()).not.toHaveProperty("thinking");
+        }
+      );
+
       it("surfaces a rejected request as the provider's own message rather than a connection failure (https://github.com/logancyang/obsidian-copilot/issues/2959)", async () => {
         respondWithBadRequest("invalid temperature: only 1 is allowed for this model");
 

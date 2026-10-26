@@ -8,7 +8,6 @@ import {
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { formatUsageCapError } from "@/utils/usageCapError";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
 import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
@@ -749,30 +748,6 @@ export async function checkLatestVersion(): Promise<{
       release: null,
     };
   }
-}
-
-export interface ModelInfo {
-  isThinkingEnabled: boolean;
-  usesAdaptiveThinking: boolean;
-}
-
-export function getModelInfo(model: BaseChatModel | string): ModelInfo {
-  const m = model as unknown as Record<string, unknown>;
-  const modelName: string =
-    typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";
-
-  const isThinkingEnabled =
-    modelName.startsWith("claude-3-7-sonnet") ||
-    modelName.startsWith("claude-sonnet-4") ||
-    modelName.startsWith("claude-opus-4");
-
-  const opusMinorMatch = modelName.match(/^claude-opus-4-(\d{1,2})(?:[-.]|$)/);
-  const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
-
-  return {
-    isThinkingEnabled,
-    usesAdaptiveThinking,
-  };
 }
 
 export function extractTextFromChunk(content: unknown): string {

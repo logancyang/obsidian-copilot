@@ -4,6 +4,8 @@ import ChatInput from "./ChatModeInput";
 import { ChatMessage } from "@/types/message";
 import { useActiveWebTabState } from "./hooks/useActiveWebTabState";
 import { appendUniqueFiles } from "@/utils/fileListUtils";
+import { useModelKey } from "@/aiParams";
+import { useChatModelPicker } from "./useChatModelPicker";
 
 interface InlineMessageEditorProps {
   initialValue: string;
@@ -21,6 +23,11 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
   app,
 }) => {
   const [inputMessage, setInputMessage] = useState(initialValue);
+  const [currentModelKey, setCurrentModelKey] = useModelKey();
+  const chatModelPicker = useChatModelPicker({
+    value: currentModelKey,
+    onChange: setCurrentModelKey,
+  });
 
   const [contextNotes, setContextNotes] = useState<TFile[]>(
     initialContext?.notes?.filter((note): note is TFile => note instanceof TFile) || []
@@ -93,6 +100,7 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
       onAddImage={handleAddImage}
       setSelectedImages={setSelectedImages}
       disableModelSwitch={false}
+      modelPickerOverride={chatModelPicker}
       selectedTextContexts={initialContext?.selectedTextContexts}
       onRemoveSelectedText={handleRemoveSelectedText}
       editMode={true}
