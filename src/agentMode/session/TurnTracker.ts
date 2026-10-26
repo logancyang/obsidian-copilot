@@ -42,6 +42,7 @@ export interface TurnTrackerDeps {
     turnDiff?: TurnDiff
   ) => Promise<boolean>;
   onTurnCompleted: () => void;
+  onTurnFailed: (errorText: string) => void;
 }
 
 interface PendingPrompt {
@@ -360,14 +361,12 @@ export class TurnTracker {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
     this.deps.store.settleOpenParts(placeholderId, "failed");
     this.deps.endLaunches("failed");
-    this.deps.store.markMessageError(
-      placeholderId,
-      formatPromptFailure(err),
-      Date.now() - this.replyStartedAtMs
-    );
+    const errorText = formatPromptFailure(err);
+    this.deps.store.markMessageError(placeholderId, errorText, Date.now() - this.replyStartedAtMs);
     this.placeholderId = null;
     this.currentMessageIds = new Set();
     this.lastTurnFailed = true;
+    this.deps.onTurnFailed(errorText);
     this.deps.notifyMessages();
   }
 

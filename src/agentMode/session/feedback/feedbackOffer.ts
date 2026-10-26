@@ -9,7 +9,10 @@ export interface FeedbackEvidence {
 
 export type FeedbackOfferStatus = "open" | "dismissed" | "reported";
 
+export type FeedbackOfferTrigger = "agent" | "turn_error";
+
 export interface FeedbackOffer {
+  trigger: FeedbackOfferTrigger;
   draft: FeedbackDraft;
   evidence: FeedbackEvidence;
   afterUserMessageId: string | null;
@@ -17,7 +20,12 @@ export interface FeedbackOffer {
   report?: { reportId: string; issueUrl: string };
 }
 
-export function formatFeedbackNote({ draft, evidence }: FeedbackOffer): string {
+export function formatFeedbackNote({ trigger, draft, evidence }: FeedbackOffer): string {
+  if (trigger === "turn_error") {
+    return [draft.title, "", `Error: ${draft.whatHappened}`, "", formatEvidence(evidence)].join(
+      "\n"
+    );
+  }
   const userSaid = draft.userSaid
     ? `"${draft.userSaid}"`
     : "The user didn't comment; the agent raised this.";

@@ -1044,6 +1044,15 @@ describe("TurnTracker", () => {
         expect(tracker.hasLastTurnFailed()).toBe(true);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 hands the shown error text to the session so it can offer a report", () => {
+        const { deps, tracker } = setup();
+        tracker.openReply();
+
+        tracker.failReply(new Error("rate limited"));
+
+        expect(deps.onTurnFailed).toHaveBeenCalledWith("rate limited");
+      });
+
       it("opens a reply to show the failure when none is open", () => {
         const { deps, tracker } = setup();
 

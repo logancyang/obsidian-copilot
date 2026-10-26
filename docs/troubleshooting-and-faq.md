@@ -123,7 +123,9 @@ When something goes wrong in an Agent Chat, select **More actions** (⋯) above 
 
 When you tell Agent Chat it got something wrong, or the agent notices its own mistake, it may draft a report for you. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
 
-- **Review & report** opens **Report an issue** with the agent's draft already in the description: what happened, what you said, steps to reproduce, and which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
+When a reply fails with an error, the same card appears under it, carrying the error.
+
+- **Review & report** opens **Report an issue** with the draft already in the description: what happened, what you said, and steps to reproduce, or the error for a failed reply, plus which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
 - **Dismiss** removes the card. Nothing is sent.
 - **Don't offer again** removes the card and turns off **Offer feedback reports in Agent Chat** in **Advanced → Debugging & support**.
 

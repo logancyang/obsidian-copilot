@@ -160,6 +160,7 @@ const chatBackend = {
 } as unknown as AgentChatBackend;
 
 const FEEDBACK_OFFER: FeedbackOffer = {
+  trigger: "agent",
   draft: {
     title: "Replied in Swedish to an English request",
     whatHappened: "The agent answered 'hej'.",

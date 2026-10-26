@@ -6093,6 +6093,60 @@ describe("AgentSession", () => {
       it("starts with no feedback card", () => {
         expect(makeSession(makeMockBackend()).getFeedbackOffer()).toBeNull();
       });
+
+      describe("after a failed reply", () => {
+        const failedSession = (offerFeedbackCards: boolean) => {
+          jest.mocked(getSettings).mockReturnValue({ agentMode: { offerFeedbackCards } } as never);
+          const mock = makeMockBackend();
+          mock.prompt.mockRejectedValue(new Error("model not supported: gemini-4"));
+          return makeSession(mock, { backendId: "opencode" });
+        };
+
+        afterEach(() => {
+          jest.mocked(getSettings).mockReturnValue({ agentMode: {} } as never);
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 opens a card with the error, anchored to the message whose reply failed", async () => {
+          const session = failedSession(true);
+
+          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
+
+          const userMessageId = session.store
+            .getDisplayMessages()
+            .find((message) => message.sender === USER_SENDER)?.id;
+          expect(session.getFeedbackOffer()).toEqual({
+            trigger: "turn_error",
+            draft: {
+              title: "Agent Chat reply failed on opencode",
+              whatHappened: "model not supported: gemini-4",
+              userSaid: "",
+              repro: "",
+            },
+            evidence: expect.objectContaining({ backendId: "opencode", sessionId: "acp-1" }),
+            afterUserMessageId: userMessageId,
+            status: "open",
+          });
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", async () => {
+          const session = failedSession(false);
+
+          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
+
+          expect(session.getFeedbackOffer()).toBeNull();
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps the session's one card when a later reply fails", async () => {
+          const session = failedSession(true);
+          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
+          session.dismissFeedbackOffer();
+          const first = session.getFeedbackOffer();
+
+          await expect(session.sendPrompt("again").turn).rejects.toThrow("model not supported");
+
+          expect(session.getFeedbackOffer()).toBe(first);
+        });
+      });
     });
 
     describe("offerFeedback()", () => {
@@ -6125,6 +6179,7 @@ describe("AgentSession", () => {
 
         expect(onMessagesChanged).toHaveBeenCalled();
         expect(session.getFeedbackOffer()).toEqual({
+          trigger: "agent",
           draft: DRAFT,
           evidence: {
             backendId: "codex",

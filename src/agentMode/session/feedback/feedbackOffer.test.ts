@@ -2,6 +2,7 @@ import { formatChatReportNote, formatFeedbackNote, type FeedbackOffer } from "./
 
 function offer(userSaid: string): FeedbackOffer {
   return {
+    trigger: "agent",
     draft: {
       title: "Replied in Swedish to an English request",
       whatHappened: "The agent answered 'hej' instead of English.",
@@ -40,6 +41,29 @@ describe("feedbackOffer", () => {
     it("says the agent raised it when the user did not comment", () => {
       expect(formatFeedbackNote(offer(""))).toContain(
         "What the user said: The user didn't comment; the agent raised this."
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 gives a failed reply's card only its title, the error and the evidence line", () => {
+      const failed: FeedbackOffer = {
+        ...offer(""),
+        trigger: "turn_error",
+        draft: {
+          title: "Agent Chat reply failed on claude",
+          whatHappened: "rate limited",
+          userSaid: "",
+          repro: "",
+        },
+      };
+
+      expect(formatFeedbackNote(failed)).toBe(
+        [
+          "Agent Chat reply failed on claude",
+          "",
+          "Error: rate limited",
+          "",
+          "Evidence: backend claude · model unknown · session ses_42 · 2026-10-08T22:13:52.669Z",
+        ].join("\n")
       );
     });
   });

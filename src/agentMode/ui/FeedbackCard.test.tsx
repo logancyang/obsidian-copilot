@@ -5,6 +5,7 @@ import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 
 const OPEN_OFFER: FeedbackOffer = {
+  trigger: "agent",
   draft: {
     title: "Replied in Swedish to an English request",
     whatHappened: "The agent answered 'hej'.",
