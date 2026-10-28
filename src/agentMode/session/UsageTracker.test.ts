@@ -247,18 +247,47 @@ describe("UsageTracker", () => {
         tracker.applyUsageUpdate(WINDOWED);
         notifyMessages.mockClear();
 
-        tracker.dropUsageWindowOnModelChange(stateOn("ollama/llama"));
+        void tracker.dropUsageWindowOnModelChange(stateOn("ollama/llama"));
 
         expect(tracker.getSessionUsage()).toEqual({ usedTokens: 5000, updatedAt: 1 });
         expect(notifyMessages).toHaveBeenCalledTimes(1);
+      });
+
+      it("fills the new model's window after the switch, so a reopened chat moved off the agent's start-up model keeps its total (https://github.com/Brevilabs/obsidian-copilot-private/issues/766)", async () => {
+        let modelId = "opencode/flint-40b-free";
+        const readContextWindow = jest.fn(async (id: string | null | undefined) =>
+          id === "copilot-plus/copilot-plus-flash" ? 1_048_576 : null
+        );
+        const { tracker } = makeTracker({
+          backend: backendWithWindow(readContextWindow),
+          getModelId: () => modelId,
+        });
+        await tracker.seedSessionUsage({
+          usedTokens: 17_974,
+          contextWindow: 1_048_576,
+          updatedAt: 1,
+        });
+
+        const refilled = tracker.dropUsageWindowOnModelChange(
+          stateOn("copilot-plus/copilot-plus-flash")
+        );
+        modelId = "copilot-plus/copilot-plus-flash";
+        await refilled;
+
+        expect(readContextWindow).toHaveBeenCalledWith("copilot-plus/copilot-plus-flash");
+        expect(tracker.getSessionUsage()).toEqual({
+          usedTokens: 17_974,
+          updatedAt: 1,
+          contextWindow: 1_048_576,
+        });
       });
 
       it("keeps the window when the model stays the same or either model is unknown", () => {
         const { tracker } = makeTracker();
         tracker.applyUsageUpdate(WINDOWED);
 
-        tracker.dropUsageWindowOnModelChange(stateOn("copilot-plus/gemini-3-pro"));
-        tracker.dropUsageWindowOnModelChange(null);
+        void tracker.dropUsageWindowOnModelChange(stateOn("copilot-plus/gemini-3-pro"));
+        void tracker.dropUsageWindowOnModelChange(null);
 
         expect(tracker.getSessionUsage()).toBe(WINDOWED);
       });

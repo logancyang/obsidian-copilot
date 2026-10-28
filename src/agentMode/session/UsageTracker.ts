@@ -40,10 +40,10 @@ export class UsageTracker {
     // never carry one on the wire, and older chats were saved before windows were
     // filled in at all — so without this a reopened chat shows a bare count until its
     // next turn (https://github.com/logancyang/obsidian-copilot-preview/issues/193).
-    if (usage.contextWindow === undefined) await this.fillSeededContextWindow(usage);
+    if (usage.contextWindow === undefined) await this.fillContextWindow(usage);
   }
 
-  private async fillSeededContextWindow(seeded: SessionUsage): Promise<void> {
+  private async fillContextWindow(seeded: SessionUsage): Promise<void> {
     if (!this.deps.backend.readContextWindow) return;
     // A chat with no resumable backend session is seeded into a freshly created one,
     // BEFORE its `newSession` has resolved — so at call time the model is not known
@@ -94,17 +94,18 @@ export class UsageTracker {
     return true;
   }
 
-  /**
-   * Drop the held context window when the model changes, keeping the count. `applyUsageUpdate`
-   * ignores windowless snapshots while a windowed one is held, so a stale window would stick.
-   * https://github.com/logancyang/obsidian-copilot-preview/issues/193
-   */
-  dropUsageWindowOnModelChange(next: BackendState | null): void {
+  // A stale window would stick because `applyUsageUpdate` ignores windowless snapshots while one
+  // is held. https://github.com/logancyang/obsidian-copilot-preview/issues/193
+  // Without a refill, a reopened chat switched off the agent's start-up model loses its total.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/766
+  async dropUsageWindowOnModelChange(next: BackendState | null): Promise<void> {
     const before = this.deps.getModelId();
     const after = next?.model?.current.baseModelId;
     if (!before || !after || before === after) return;
     if (this.sessionUsage?.contextWindow === undefined) return;
-    this.sessionUsage = { ...this.sessionUsage, contextWindow: undefined };
+    const dropped = { ...this.sessionUsage, contextWindow: undefined };
+    this.sessionUsage = dropped;
     this.deps.notifyMessages();
+    await this.fillContextWindow(dropped);
   }
 }
