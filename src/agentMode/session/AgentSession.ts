@@ -434,7 +434,7 @@ export class AgentSession {
       sessionId: this.backendSessionId,
       modelId,
     });
-    this.usageTracker.dropUsageWindowOnModelChange(next);
+    void this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
   }
@@ -534,7 +534,7 @@ export class AgentSession {
       configId,
       value,
     });
-    this.usageTracker.dropUsageWindowOnModelChange(next);
+    void this.usageTracker.dropUsageWindowOnModelChange(next);
     this.currentState = next;
     this.notifyModelChanged();
     this.clearCurrentPlanIfModeLeft();
@@ -1319,7 +1319,7 @@ export class AgentSession {
       return;
     }
     if (update.sessionUpdate === "state_changed") {
-      this.usageTracker.dropUsageWindowOnModelChange(update.state);
+      void this.usageTracker.dropUsageWindowOnModelChange(update.state);
       this.currentState = update.state;
       this.notifyModelChanged();
       this.clearCurrentPlanIfModeLeft();
