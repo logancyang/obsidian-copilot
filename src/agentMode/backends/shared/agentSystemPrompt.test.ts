@@ -279,11 +279,11 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`steers OpenCode to every Obsidian skill, Codex to Bases and Claude to none under default settings (${ISSUE_726})`, () => {
+    it(`steers OpenCode to every Obsidian skill, Codex to Markdown and Bases and Claude to none under default settings (${ISSUE_726}, https://github.com/logancyang/obsidian-copilot/issues/3868)`, () => {
       expect(buildAgentSystemPrompt("opencode")).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
       expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(buildAgentSystemPrompt("codex")).toContain(
-        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-bases for .base files.`
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files.`
       );
       expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);

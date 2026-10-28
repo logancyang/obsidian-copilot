@@ -112,7 +112,7 @@ describe("SkillsSettings", () => {
       jest.mocked(isObsidianCliEnabled).mockReturnValue(true);
     });
 
-    it("shows a new install's Obsidian skills off for Claude and Codex, except Bases for Codex, and an existing install's saved choices unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
+    it("shows a new install's Obsidian skills off for Claude and Codex, except Markdown and Bases for Codex, and an existing install's saved choices unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726 https://github.com/logancyang/obsidian-copilot/issues/3868", async () => {
       mockAgents = [
         { id: "opencode", displayName: "OpenCode", Icon: Bot },
         { id: "claude", displayName: "Claude", Icon: Bot },
@@ -132,7 +132,7 @@ describe("SkillsSettings", () => {
       };
       expect(state("obsidian-markdown for OpenCode")).toEqual(["true", "false"]);
       expect(state("obsidian-markdown for Claude")).toEqual(["false", "false"]);
-      expect(state("obsidian-markdown for Codex")).toEqual(["false", "false"]);
+      expect(state("obsidian-markdown for Codex")).toEqual(["true", "false"]);
       expect(state("obsidian-bases for Codex")).toEqual(["true", "false"]);
       expect(state("obsidian-bases for Claude")).toEqual(["false", "false"]);
 

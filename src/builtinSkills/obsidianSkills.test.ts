@@ -9,9 +9,9 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("offers the four skills to every agent but defaults them to OpenCode, and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("offers the four skills to every agent but defaults them to OpenCode, and Markdown and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
-        ["obsidian-markdown", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-markdown", { disabledAgents: ["claude"] }],
         ["obsidian-bases", { disabledAgents: ["claude"] }],
         ["json-canvas", { disabledAgents: ["claude", "codex"] }],
         ["obsidian-cli", { disabledAgents: ["claude", "codex"] }],

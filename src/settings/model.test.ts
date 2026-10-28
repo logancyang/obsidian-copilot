@@ -133,7 +133,7 @@ describe("model", () => {
           builtinPreferences: {
             "copilot-web-search": { disabled: true },
             "copilot-web-fetch": { disabled: true },
-            "obsidian-markdown": { disabledAgents: ["claude", "codex"] },
+            "obsidian-markdown": { disabledAgents: ["claude"] },
             "obsidian-bases": { disabledAgents: ["claude"] },
             "json-canvas": { disabledAgents: ["claude", "codex"] },
             "obsidian-cli": { disabledAgents: ["claude", "codex"] },
