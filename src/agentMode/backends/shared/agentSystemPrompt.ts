@@ -49,6 +49,10 @@ export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
+// Backups saved as .md inside the vault became duplicate notes in search and the graph.
+// https://github.com/logancyang/obsidian-copilot/issues/3868
+export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or give them a non-.md extension such as .md.bak, so they don't show up as notes.`;
+
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 // Agents filed cards about their own slips and about complaints over their answers, which the Copilot team can't act on, so only Copilot's own failures qualify.
@@ -85,6 +89,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
   parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
+  if (builtinPrompt) parts.push(COPILOT_VAULT_HYGIENE);
   if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);

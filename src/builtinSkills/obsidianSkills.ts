@@ -6,6 +6,7 @@ export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf58222
 // Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
 const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
 const FORMAT_SKILL_VERSION = 2;
+const MARKDOWN_SKILL_VERSION = 3;
 const OBSIDIAN_CLI_VERSION = 3;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
@@ -37,7 +38,7 @@ description: Create and edit Obsidian-specific Markdown syntax, including wikili
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "${FORMAT_SKILL_VERSION}"
+  copilot-builtin-version: "${MARKDOWN_SKILL_VERSION}"
   copilot-upstream-revision: "${OBSIDIAN_SKILLS_UPSTREAM_REVISION}"
 ---
 
@@ -115,6 +116,20 @@ Quote wikilinks used as YAML values. See
 Use <code>#nested/tag</code> for inline tags. Hide content from reading view with
 <code>%%inline comments%%</code> or a matching pair of <code>%%</code> markers on
 separate lines.
+
+## Render-safe math
+
+- In a table, write a pipe inside math as <code>\lvert</code>/<code>\rvert</code>
+  and anywhere else as <code>\|</code>; a bare <code>|</code> starts a new column.
+- When a script inserts <code>$$</code>, use a literal or function replacement
+  (JavaScript <code>replace</code> turns <code>$$</code> into <code>$</code>), then
+  recount the delimiters in every changed file.
+
+~~~markdown
+| Name | Formula |
+| --- | --- |
+| Absolute value | $\lvert x \rvert$ |
+~~~
 
 ## Attribution
 
@@ -836,7 +851,7 @@ const LICENSE_FILE = { path: "LICENSE", content: UPSTREAM_LICENSE } as const;
 
 const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
-  version: FORMAT_SKILL_VERSION,
+  version: MARKDOWN_SKILL_VERSION,
   defaultPreference: OPENCODE_ONLY,
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,
   files: [
