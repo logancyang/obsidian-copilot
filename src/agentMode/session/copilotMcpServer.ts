@@ -28,7 +28,9 @@ const SUPPORTED_PROTOCOL_VERSIONS = new Set([
 
 export const SEND_FEEDBACK_TOOL = Object.freeze({
   name: SEND_FEEDBACK_TOOL_NAME,
-  description: `Draft a bug report to the Copilot for Obsidian team when the user is clearly frustrated with you or Copilot (they complain, show annoyance, or keep correcting the same failure). Not for a question, correction or pushback you can simply answer, your own mistake or changed answer, a tool failure the user doesn't complain about, or the user venting about their own work or other topics.
+  // OpenCode's Code Mode catalog shows only the first ~120 characters of this description, so the opening carries the exclusion.
+  // https://github.com/logancyang/obsidian-copilot/issues/3866
+  description: `Draft a bug report to the Copilot for Obsidian team when Copilot itself fails, never for your own mistakes, answers or edits, even if the user is frustrated with them. Copilot fails when an obsidian-copilot tool, Copilot skill or attached context errors, a tool you need is missing, or the user reports Copilot crashing, erroring or losing chat text. Not for the user venting about their own work or other topics.
 
 The draft appears as a card the user reviews, edits, sends or dismisses; nothing is sent without their approval. The call returns at once: continue your reply and don't mention the card unless asked. At most once per problem.
 
