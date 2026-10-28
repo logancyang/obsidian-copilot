@@ -9,9 +9,9 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("offers the four skills to every agent but defaults them to OpenCode, and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("offers the four skills to every agent but defaults them to OpenCode, and Markdown and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
-        ["obsidian-markdown", { disabledAgents: ["claude", "codex"] }],
+        ["obsidian-markdown", { disabledAgents: ["claude"] }],
         ["obsidian-bases", { disabledAgents: ["claude"] }],
         ["json-canvas", { disabledAgents: ["claude", "codex"] }],
         ["obsidian-cli", { disabledAgents: ["claude", "codex"] }],
@@ -21,9 +21,9 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 2],
+        ["obsidian-markdown", 3],
         ["obsidian-bases", 2],
         ["json-canvas", 2],
         ["obsidian-cli", 3],
@@ -89,6 +89,17 @@ describe("obsidianSkills", () => {
       expect(md).not.toContain("ordinary Markdown is assumed knowledge");
       expect(md).toContain(
         "Put a block ID on its own line after a list or quote block, with a blank line\nbefore and after it; without the line before it marks only the last item."
+      );
+    });
+
+    it("escapes pipes inside table math and keeps scripted $$ replacements literal, the two math forms agents still broke on current text (https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
+      const md = skillMd("obsidian-markdown");
+      expect(md).toContain(
+        "In a table, write a pipe inside math as <code>\\lvert</code>/<code>\\rvert</code>\n  and anywhere else as <code>\\|</code>; a bare <code>|</code> starts a new column."
+      );
+      expect(md).toContain("| Absolute value | $\\lvert x \\rvert$ |");
+      expect(md).toContain(
+        "(JavaScript <code>replace</code> turns <code>$$</code> into <code>$</code>)"
       );
     });
 
