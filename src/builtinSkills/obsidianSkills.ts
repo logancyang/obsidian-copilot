@@ -852,7 +852,7 @@ const LICENSE_FILE = { path: "LICENSE", content: UPSTREAM_LICENSE } as const;
 const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
   version: MARKDOWN_SKILL_VERSION,
-  // Codex code mode writes $$ through JavaScript replace, which drops a $, unless this skill is loaded.
+  // Claude passed every render-safety eval case without this skill, so it stays off for Claude only.
   // https://github.com/logancyang/obsidian-copilot/issues/3868
   defaultPreference: { disabledAgents: ["claude"] },
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,

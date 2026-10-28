@@ -176,7 +176,7 @@ describe("agentSystemPrompt", () => {
     it(`tells every agent to keep backups and scratch files out of the vault or off .md, so they don't become duplicate notes, unless the builtin prompt is disabled (${ISSUE_3868})`, () => {
       for (const backendId of ["claude", "codex", "opencode"] as const) {
         expect(buildAgentSystemPrompt(backendId)).toContain(
-          "Keep backups and scratch files out of the vault, or give them a non-.md extension such as .md.bak, so they don't show up as notes."
+          "Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes."
         );
       }
       setDisableBuiltinSystemPrompt(true);

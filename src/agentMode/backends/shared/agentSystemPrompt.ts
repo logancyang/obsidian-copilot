@@ -51,7 +51,7 @@ export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vaul
 
 // Backups saved as .md inside the vault became duplicate notes in search and the graph.
 // https://github.com/logancyang/obsidian-copilot/issues/3868
-export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or give them a non-.md extension such as .md.bak, so they don't show up as notes.`;
+export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes.`;
 
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
