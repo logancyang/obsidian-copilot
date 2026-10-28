@@ -456,6 +456,24 @@ describe("OpencodeBackend", () => {
       expect(cfg.providers).toEqual({});
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/766 starts new sessions on an OpenCode-hosted model the user enabled and saved as the default", async () => {
+      const provider = makeProvider("opencode-provider", { kind: "agent", agentType: "opencode" });
+      const deps = makeDeps({
+        resolved: [
+          okEntry(makePlusProvider(), makeModel("p-plus", "copilot-plus-flash")),
+          okEntry(provider, makeModel("opencode-provider", "opencode/big-pickle")),
+        ],
+        keys: { "p-plus": "plus-token-123" },
+      });
+      updateAgentModeBackendFields("opencode", {
+        defaultModel: { baseModelId: "opencode/big-pickle", effort: null },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.model).toBe("opencode/big-pickle");
+    });
+
     it("skips a BYOK provider without a catalog id that is not OpenAI-compatible", async () => {
       const provider = makeProvider("p-google", { kind: "byok" }, { providerType: "google" });
       const deps = makeDeps({
