@@ -75,6 +75,8 @@ jest.mock("@/agentMode", () => ({
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
 
 import CopilotPlugin from "@/main";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import * as obsidianModule from "obsidian";
 import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
 import { DEFAULT_SETTINGS } from "@/constants";
@@ -620,6 +622,48 @@ describe("main", () => {
         const promise = new Promise<void>((done) => (resolve = done));
         return { promise, resolve };
       }
+
+      it.each([
+        ["Unknown", "4.0.16"],
+        ["4.0.15", "4.0.17-beta.2+build.42"],
+      ])(
+        "sends the manifest version %s → %s before async startup completes",
+        async (previous, version) => {
+          const client = BrevilabsClient.getInstance();
+          client.setPluginVersion(previous);
+          const settings = deferred();
+          const { plugin, finishStartup } = createLoadingPlugin(() => settings.promise);
+          plugin.manifest.version = version;
+          const request = jest.fn().mockResolvedValue({
+            status: 503,
+            headers: {},
+            text: "",
+            json: null,
+            arrayBuffer: new ArrayBuffer(0),
+          });
+
+          const { __setRequestUrlImpl: setRequestUrlImpl } = obsidianModule as unknown as {
+            __setRequestUrlImpl: (impl: unknown) => void;
+          };
+          setRequestUrlImpl(request);
+
+          try {
+            plugin.onload();
+            await client.getModels();
+
+            expect(request).toHaveBeenCalledWith(
+              expect.objectContaining({
+                method: "GET",
+                headers: { "X-Client-Version": version },
+              })
+            );
+          } finally {
+            settings.resolve();
+            await finishStartup();
+            setRequestUrlImpl(jest.fn().mockResolvedValue({ status: 200 }));
+          }
+        }
+      );
 
       it("returns before settings load so Obsidian can open the vault without waiting for Copilot https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
         const settings = deferred();
