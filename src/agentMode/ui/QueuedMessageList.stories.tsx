@@ -45,6 +45,19 @@ export const ReadAtNextStepWithActions: StoryObj<Props> = {
   },
 };
 
+export const LongMessageWithActions: StoryObj<Props> = {
+  args: {
+    delivering: [
+      {
+        id: "long",
+        text: "Before you finish, go back through every note in the Projects folder, pull out each open question you find along with the note it came from, group them by project, and list the groups in order of how recently each project was edited so the newest work comes first.",
+      },
+    ],
+    onWithdraw: () => {},
+    onSendNow: () => {},
+  },
+};
+
 export const HeldUntilAgentFinishes: StoryObj<Props> = {
   args: {
     held: [

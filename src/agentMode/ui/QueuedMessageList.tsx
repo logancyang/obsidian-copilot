@@ -1,7 +1,7 @@
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { QueuedPrompt } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
-import { Clock, CornerDownLeft, X } from "lucide-react";
+import { Clock, X } from "lucide-react";
 import React from "react";
 
 interface QueuedMessageListProps {
@@ -80,13 +80,12 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
             <Button
               variant="ghost2"
               size="fit"
-              className="tw-shrink-0 tw-text-muted"
+              className="tw-shrink-0 tw-whitespace-nowrap tw-text-muted"
               aria-label="Send queued message now"
               title="Stop the agent at its next step and handle this message next"
               onClick={() => onSendNow(m.id)}
             >
-              <CornerDownLeft className="!tw-size-3" />
-              <span>Send now</span>
+              Send now
             </Button>
           )}
           {onWithdraw && (
