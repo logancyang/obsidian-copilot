@@ -262,6 +262,8 @@ export class TurnTracker {
 
   stop(withdrawsUnsent: boolean): void {
     this.sendController?.abort();
+    // Stop outranks a Send now still taking its message back, so that message returns to the composer instead. https://github.com/Brevilabs/obsidian-copilot-private/issues/789
+    this.sendingNow.clear();
     // A message handed to the agent for its next step is the backend's to withdraw at Stop; a backend that cannot keeps it and runs it next. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
     const queued = new Set(this.queuedPrompts.map((p) => p.id));
     if (withdrawsUnsent) {

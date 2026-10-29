@@ -526,6 +526,22 @@ describe("TurnTracker", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 returns the prompt to the composer instead of resending it when Stop lands while Send now is taking it back", async () => {
+        const { deps, tracker } = setup();
+        runningTurn(tracker, "p1", "t1");
+        void tracker.queue(ALSO, false, async () => () => TEXT);
+        await deps.whenSent(ALSO.id);
+
+        await tracker.sendQueuedNow(ALSO.id, async () => {
+          tracker.stop(true);
+          tracker.withdrawPrompts([ALSO.id]);
+          return true;
+        });
+
+        expect(deps.resendNow).not.toHaveBeenCalled();
+        expect(tracker.takeWithdrawnPrompts()).toEqual([ALSO]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 returns a prompt withdrawn after Send now finished to the composer, like any withdrawal", async () => {
         const { deps, tracker } = setup();
         runningTurn(tracker, "p1", "t1");
