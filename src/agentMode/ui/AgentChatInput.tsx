@@ -303,9 +303,9 @@ export const AgentChatInput = memo(function AgentChatInput({
 
   // The session shows the message once it reaches the agent, so the composer neither waits nor holds it. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
   const sendMidTurn = useCallback(
-    (item: QueuedAgentMessage, interrupt: boolean) => {
+    (item: QueuedAgentMessage) => {
       try {
-        backend.sendMessage(item.text, item.context, item.promptContent, undefined, { interrupt });
+        backend.sendMessage(item.text, item.context, item.promptContent);
         if (item.rawInput) updateUserMessageHistory(item.rawInput);
       } catch (error) {
         logError("Error sending agent message:", error);
@@ -317,7 +317,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   );
 
   const handleSendMessage = useCallback(
-    async (webTabs?: WebTabContext[], interrupt = false) => {
+    async (webTabs?: WebTabContext[]) => {
       if (disabled) return;
       const text = inputMessage.trim();
       if (!text && selectedImages.length === 0) return;
@@ -405,7 +405,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           !isCompactCommand(item.text) &&
           !item.mentionedAgents
         ) {
-          sendMidTurn(item, interrupt);
+          sendMidTurn(item);
           return;
         }
         setQueuedMessages((q) => [...q, item]);
@@ -497,11 +497,9 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholder="Ask anything • @ to add context • / for commands"
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={safeAsyncHandler((meta) =>
-            handleSendMessage(meta?.webTabs, meta?.interrupt)
-          )}
+          handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
           isGenerating={loading}
-          canInterruptAndSend={acceptsMidTurnMessages}
+          canSendWhileGenerating
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
           onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}

@@ -197,7 +197,7 @@ A step cut short by **Stop** shows as stopped. Any other step the agent left unf
 
 ### Send a message
 
-You can type and send while the agent works. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. **Send now** interrupts the agent and sends your message at once. With Codex and OpenCode, the message waits with **Sends when the agent finishes**.
+You can type and send while the agent works. The button beside the message box is **Stop** while the box is empty and **Send** once it has text or an image. With Claude, the message waits above the message box under **The agent reads these at its next step**, then moves into the chat when the agent reads it. Select **Withdraw queued message** to take it back into the message box. With Codex and OpenCode, the message waits with **Sends when the agent finishes**.
 
 ### Background subagents and commands
 

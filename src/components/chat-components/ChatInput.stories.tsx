@@ -81,9 +81,9 @@ const meta = {
 export default meta;
 export const StoppedQueue: StoryObj = {};
 
-function RunningComposer({ canInterruptAndSend }: { canInterruptAndSend: boolean }) {
+function RunningComposer({ draft }: { draft: string }) {
   const app = useApp();
-  const [input, setInput] = React.useState("Only summarize the first two notes.");
+  const [input, setInput] = React.useState(draft);
   const [notes, setNotes] = React.useState<TFile[]>([]);
   const [images, setImages] = React.useState<File[]>([]);
   return (
@@ -106,17 +106,17 @@ function RunningComposer({ canInterruptAndSend }: { canInterruptAndSend: boolean
         handleSendMessage={() => setInput("")}
         onStopGenerating={() => undefined}
         isGenerating
-        canInterruptAndSend={canInterruptAndSend}
+        canSendWhileGenerating
         disableModelSwitch
       />
     </GalleryChatInputProvider>
   );
 }
 
-export const RunningWithSendNow: StoryObj = {
-  render: () => <RunningComposer canInterruptAndSend />,
+export const RunningWithDraft: StoryObj = {
+  render: () => <RunningComposer draft="Only summarize the first two notes." />,
 };
 
-export const RunningWithoutSendNow: StoryObj = {
-  render: () => <RunningComposer canInterruptAndSend={false} />,
+export const RunningWithoutDraft: StoryObj = {
+  render: () => <RunningComposer draft="" />,
 };
