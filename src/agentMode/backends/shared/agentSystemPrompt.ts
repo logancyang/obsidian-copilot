@@ -33,8 +33,8 @@ export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with the obsidian
 // https://github.com/logancyang/obsidian-copilot/issues/3816
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request. To read or act on a note already attached, named or found in this conversation, or to create, move or rename notes by name or path, work on them directly instead of searching. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
 
-// Asked for a diagram, agents drew Excalidraw drawings but never embedded them, and only this line keeps Mermaid or a
-// canvas when the user names one; it rides only while the Excalidraw tools are available.
+// Asked for a diagram, agents drew Excalidraw drawings with the tools but never embedded them in the note; naming
+// Mermaid and canvas keeps a format the user asks for. The line rides only while the Excalidraw tools are available.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 export const COPILOT_EXCALIDRAW_STEERING = `Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format.`;
 
