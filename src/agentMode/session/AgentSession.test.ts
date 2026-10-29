@@ -5705,6 +5705,22 @@ describe("AgentSession", () => {
         expect(session.isReplyRunning()).toBe(false);
         expect(session.getStatus()).toBe("running");
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 notifies status listeners when the reply ends while subagents keep the chat running, so the composer stops showing Stop", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const replyRunningSeen: boolean[] = [];
+        subscribeTo(session, {
+          onStatusChanged: () => replyRunningSeen.push(session.isReplyRunning()),
+        });
+
+        const { turn } = session.sendPrompt("launch a subagent");
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+        await turn;
+
+        expect(session.getStatus()).toBe("running");
+        expect(replyRunningSeen.at(-1)).toBe(false);
+      });
     });
 
     describe("getStatus()", () => {
@@ -5740,7 +5756,11 @@ describe("AgentSession", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });
         const statusChanges: string[] = [];
-        subscribeTo(session, { onStatusChanged: (status) => statusChanges.push(status) });
+        subscribeTo(session, {
+          onStatusChanged: (status) => {
+            if (statusChanges.at(-1) !== status) statusChanges.push(status);
+          },
+        });
 
         const { turn } = session.sendPrompt("launch two subagents");
         mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });

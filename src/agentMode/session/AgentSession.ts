@@ -248,6 +248,7 @@ export class AgentSession {
   private readonly getProjectContextUpdatesFn: (() => ProjectContextUpdates | null) | null;
   private readonly markProjectContextUpdatesDeliveredFn: ((epoch: number) => void) | null;
   private cachedStatus: AgentSessionStatus = "starting";
+  private cachedReplyRunning = false;
   private startupFailed = false;
   private startupSettled = false;
   private agentBusy = false;
@@ -1750,8 +1751,11 @@ export class AgentSession {
 
   private recomputeStatusIfChanged(): void {
     const next = this.getStatus();
-    if (next === this.cachedStatus) return;
+    const replyRunning = this.isReplyRunning();
+    // A reply can end while subagents keep the chat running; the composer must still swap Stop for Send. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
+    if (next === this.cachedStatus && replyRunning === this.cachedReplyRunning) return;
     this.cachedStatus = next;
+    this.cachedReplyRunning = replyRunning;
     for (const l of this.listeners) {
       try {
         l.onStatusChanged(next);
