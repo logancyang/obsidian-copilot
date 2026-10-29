@@ -284,13 +284,13 @@ describe("excalidrawTools", () => {
       });
     });
 
-    it("turns an exception from the plugin into an error result naming the drawing", async () => {
+    it(`${ISSUE_787} turns an exception from the plugin into an error naming the drawing and the fallback of decoding the file directly`, async () => {
       const api = fakeApi({
         sceneElements: jest.fn().mockRejectedValue(new Error("file is locked")),
       });
 
       expect(await toolsFor(api).read.call({ path: FLOW })).toEqual({
-        text: `Excalidraw failed on ${FLOW}: file is locked`,
+        text: `Excalidraw failed on ${FLOW}: file is locked. If this keeps failing, work on the file directly and write your own decoder for its compressed-json block.`,
         isError: true,
       });
     });

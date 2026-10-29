@@ -205,8 +205,10 @@ export function createExcalidrawTools(
       try {
         return await handler(api, input, path);
       } catch (error) {
+        // An exception here means the Excalidraw plugin's API no longer matches these tools; the fallback costs tokens only then.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
         return failure(
-          `Excalidraw failed on ${path}: ${error instanceof Error ? error.message : String(error)}`
+          `Excalidraw failed on ${path}: ${(error instanceof Error ? error.message : String(error)).replace(/\.?$/, ".")} If this keeps failing, work on the file directly and write your own decoder for its compressed-json block.`
         );
       }
     };
