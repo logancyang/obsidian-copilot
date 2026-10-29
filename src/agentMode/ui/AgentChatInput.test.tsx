@@ -44,7 +44,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
-        canSendWhileGenerating?: boolean;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -64,9 +63,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
-          <span data-testid="send-while-generating">
-            {props.canSendWhileGenerating ? "allowed" : "blocked"}
-          </span>
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
@@ -160,6 +156,7 @@ function inputNode(
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       isLoading={draft.loading}
+      isReplyRunning={draft.loading}
       queuedPrompts={[]}
       acceptsMidTurnMessages={false}
       hasPendingPlanPermission={false}
@@ -851,10 +848,10 @@ describe("AgentChatInput", () => {
         takeWithdrawnPrompts: () => [],
       } as unknown as AgentChatBackend;
       const draft = makeDraft({ loading: false });
-      const view = renderInput(backend, draft, { isLoading: true });
+      const view = renderInput(backend, draft, { isLoading: true, isReplyRunning: true });
 
       expect(screen.getByTestId("generating-state").textContent).toBe("running");
-      view.rerender(inputNode(backend, draft, { isLoading: false }));
+      view.rerender(inputNode(backend, draft, { isLoading: false, isReplyRunning: false }));
       expect(screen.getByTestId("generating-state").textContent).toBe("idle");
     });
 
@@ -923,16 +920,18 @@ describe("AgentChatInput", () => {
       expect(draft.input).toBe("keep this text");
     });
 
-    it.each([true, false])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/788 lets a draft be sent by tap while the agent works, whether or not the backend takes mid-turn input (%p)",
-      (acceptsMidTurnMessages) => {
-        renderInput(makeBackend(), makeDraft({ input: "do this next", loading: true }), {
-          acceptsMidTurnMessages,
-        });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 shows Stop only while the main reply runs, not while the chat waits on background subagents", () => {
+      const draft = makeDraft({ loading: false });
+      const backend = makeBackend();
 
-        expect(screen.getByTestId("send-while-generating").textContent).toBe("allowed");
-      }
-    );
+      const { rerender } = render(
+        inputNode(backend, draft, { isLoading: true, isReplyRunning: false })
+      );
+      expect(screen.getByTestId("generating-state").textContent).toBe("idle");
+
+      rerender(inputNode(backend, draft, { isLoading: true, isReplyRunning: true }));
+      expect(screen.getByTestId("generating-state").textContent).toBe("running");
+    });
 
     it.each([
       { scenario: "/compact", input: "/compact" },

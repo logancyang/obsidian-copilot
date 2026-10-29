@@ -106,7 +106,6 @@ function RunningComposer({ draft }: { draft: string }) {
         handleSendMessage={() => setInput("")}
         onStopGenerating={() => undefined}
         isGenerating
-        canSendWhileGenerating
         disableModelSwitch
       />
     </GalleryChatInputProvider>

@@ -56,6 +56,7 @@ interface AgentChatInputProps {
   updateUserMessageHistory: (newMessage: string) => void;
   isStarting: boolean;
   isLoading: boolean;
+  isReplyRunning: boolean;
   queuedPrompts: readonly QueuedPrompt[];
   acceptsMidTurnMessages: boolean;
   hasPendingPlanPermission: boolean;
@@ -156,6 +157,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   updateUserMessageHistory,
   isStarting,
   isLoading: loading,
+  isReplyRunning,
   queuedPrompts,
   acceptsMidTurnMessages,
   hasPendingPlanPermission,
@@ -498,10 +500,9 @@ export const AgentChatInput = memo(function AgentChatInput({
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
           handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
-          isGenerating={loading}
-          canSendWhileGenerating
+          isGenerating={isReplyRunning}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
-          onEscape={loading ? safeAsyncHandler(handleStopGenerating) : undefined}
+          onEscape={isReplyRunning ? safeAsyncHandler(handleStopGenerating) : undefined}
           onShiftTab={modePickerOverride ? onCycleMode : undefined}
           app={app}
           contextNotes={contextNotes}

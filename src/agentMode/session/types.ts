@@ -432,7 +432,6 @@ export interface PromptInput {
   sessionId: SessionId;
   promptId: string;
   prompt: PromptContent[];
-  interrupt?: boolean;
 }
 
 export interface QueuedPrompt {
@@ -464,6 +463,7 @@ export interface ListSessionsOutput {
 
 export interface CancelInput {
   sessionId: SessionId;
+  keepUnread?: boolean;
 }
 
 export interface WithdrawInput {

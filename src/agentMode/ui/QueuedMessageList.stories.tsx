@@ -34,13 +34,27 @@ export const ReadAtNextStep: StoryObj<Props> = {
   },
 };
 
-export const ReadAtNextStepWithWithdraw: StoryObj<Props> = {
+export const ReadAtNextStepWithActions: StoryObj<Props> = {
   args: {
     delivering: [
       { id: "steer-1", text: "Only summarize the first two notes." },
       { id: "steer-2", text: "Keep each summary to one line." },
     ],
     onWithdraw: () => {},
+    onSendNow: () => {},
+  },
+};
+
+export const LongMessageWithActions: StoryObj<Props> = {
+  args: {
+    delivering: [
+      {
+        id: "long",
+        text: "Before you finish, go back through every note in the Projects folder, pull out each open question you find along with the note it came from, group them by project, and list the groups in order of how recently each project was edited so the newest work comes first.",
+      },
+    ],
+    onWithdraw: () => {},
+    onSendNow: () => {},
   },
 };
 

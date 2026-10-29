@@ -72,7 +72,6 @@ export interface ChatInputProps {
     webTabs?: WebTabContext[];
   }) => void;
   isGenerating: boolean;
-  canSendWhileGenerating?: boolean;
   onStopGenerating: () => void;
   app: App;
   contextNotes: TFile[];
@@ -168,7 +167,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setInputMessage,
     handleSendMessage,
     isGenerating,
-    canSendWhileGenerating = false,
     onStopGenerating,
     app,
     contextNotes,
@@ -241,8 +239,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
 
   // A phone may have no Enter key, so a draft turns Stop into a Send that does what Enter does. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
   const showsStop =
-    isGenerating &&
-    !(canSendWhileGenerating && (inputMessage.trim().length > 0 || selectedImages.length > 0));
+    isGenerating && !(isAgentMode && (inputMessage.trim().length > 0 || selectedImages.length > 0));
 
   const onSendMessage = () => {
     if (editMode && onEditSave) {

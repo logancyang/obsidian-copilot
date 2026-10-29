@@ -579,21 +579,6 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("prompt()", () => {
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends an interrupt-and-send prompt to Claude at priority now", async () => {
-        queryMock.mockImplementation(silent());
-        const proc = makeProc();
-        const { sessionId } = await proc.newSession({ cwd: "/vault" });
-
-        await proc.prompt({
-          sessionId,
-          promptId: "p1",
-          prompt: [{ type: "text", text: "hi" }],
-          interrupt: true,
-        });
-
-        expect(await fakes[0].nextInput()).toMatchObject({ uuid: "p1", priority: "now" });
-      });
-
       it(`resolves once the prompt is queued on the chat's live query, which reports its delivery and turn when Claude echoes it (${ISSUE_175})`, async () => {
         queryMock.mockImplementation(silent());
         const proc = makeProc();
@@ -1322,6 +1307,19 @@ describe("ClaudeSdkBackendProcess", () => {
     });
 
     describe("cancel()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 interrupts the live query but leaves unread messages with Claude when asked to keep them", async () => {
+        queryMock.mockImplementation(silent());
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+        await proc.prompt({ sessionId, promptId: "p1", prompt: [{ type: "text", text: "hi" }] });
+        await proc.prompt({ sessionId, promptId: "p2", prompt: [{ type: "text", text: "next" }] });
+
+        await proc.cancel({ sessionId, keepUnread: true });
+
+        expect(fakes[0].interrupt).toHaveBeenCalledTimes(1);
+        expect(fakes[0].cancelAsyncMessage).not.toHaveBeenCalled();
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/747 interrupts the chat's live query, withdrawing every message Claude has not read yet, and keeps it open so the next message continues the same query", async () => {
         queryMock.mockImplementation(silent());
         const proc = makeProc();

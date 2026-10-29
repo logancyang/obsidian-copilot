@@ -265,11 +265,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       {
         promptId: params.promptId,
         prompt: summarizePromptContent(messageContent),
-        ...(params.interrupt ? { interrupt: true } : {}),
       },
       params.sessionId
     );
-    live.push(params.promptId, messageContent, params.interrupt === true);
+    live.push(params.promptId, messageContent);
   }
 
   // One query serves the whole chat, so background tasks outlive the turn that launched them.
@@ -410,7 +409,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const live = session?.live ?? (await session?.starting?.catch(() => undefined));
     if (!live) return;
     try {
-      await live.interrupt();
+      await live.interrupt(params.keepUnread !== true);
     } catch (e) {
       logWarn("[AgentMode] SDK query.interrupt() threw", e);
       logSdkError("→", "interrupt", { error: err2String(e) }, params.sessionId);

@@ -54,15 +54,13 @@ export class AgentChatUIState implements AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options?: { interrupt?: boolean }
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> } {
     const { userMessageId, turn } = this.session.sendPrompt(
       text,
       context,
       promptContent,
-      mentionedAgents,
-      options
+      mentionedAgents
     );
     this.notifyListeners();
     const wrapped = turn.then(
@@ -97,6 +95,14 @@ export class AgentChatUIState implements AgentChatBackend {
 
   async cancel(): Promise<void> {
     await this.session.cancel();
+  }
+
+  async sendWaitingNow(): Promise<void> {
+    await this.session.cancel({ keepUnread: true });
+  }
+
+  isReplyRunning(): boolean {
+    return this.session.isReplyRunning();
   }
 
   async deleteMessage(id: string): Promise<boolean> {

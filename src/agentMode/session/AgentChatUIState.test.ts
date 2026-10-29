@@ -375,6 +375,33 @@ describe("AgentChatUIState", () => {
     });
   });
 
+  describe("sendWaitingNow()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 interrupts the running reply and leaves the waiting messages with the agent", async () => {
+      const cancel = jest.fn(async () => undefined);
+      const prompt = jest.fn(async () => undefined);
+      const chat = liveChat({ midTurnDelivery: true, withdraw: true }, { prompt, cancel });
+      chat.sendMessage("list the notes");
+      chat.sendMessage("only the first two");
+      await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
+
+      await chat.sendWaitingNow();
+
+      expect(cancel).toHaveBeenCalledWith({ sessionId: "claude-session", keepUnread: true });
+      expect(chat.getQueuedPrompts().map((p) => p.text)).toEqual(["only the first two"]);
+    });
+  });
+
+  describe("isReplyRunning()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 follows whether the agent's reply is running", () => {
+      const chat = liveChat({ midTurnDelivery: true });
+      expect(chat.isReplyRunning()).toBe(false);
+
+      chat.sendMessage("list the notes");
+
+      expect(chat.isReplyRunning()).toBe(true);
+    });
+  });
+
   describe("takeWithdrawnPrompts()", () => {
     it("hands over the messages the agent withdrew, once (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
       const chat = liveChat({ midTurnDelivery: true });
