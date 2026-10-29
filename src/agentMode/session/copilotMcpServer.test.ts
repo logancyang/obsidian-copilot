@@ -176,6 +176,35 @@ describe("copilotMcpServer", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 returns a hosted tool's image after its text", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          lookupTool(
+            jest.fn().mockResolvedValue({
+              text: "Rendered Flow.excalidraw.md.",
+              isError: false,
+              image: { data: "iVBORw0KGgo=", mimeType: "image/png" },
+            })
+          ),
+        ]
+      );
+      const channel = await server.connect("session-a", jest.fn());
+
+      const result = await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: {} }));
+
+      expect(result.body).toMatchObject({
+        result: {
+          content: [
+            { type: "text", text: "Rendered Flow.excalidraw.md." },
+            { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+          ],
+          isError: false,
+        },
+      });
+    });
+
     it("marks a hosted tool's failed call as an error result", async () => {
       server.dispose();
       server = createCopilotMcpServer(

@@ -36,6 +36,8 @@ import {
   MIYO_PARSE_TURNED_OFF_TEXT,
   parseWithMiyo,
 } from "@/miyo/miyoParseTool";
+import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
+import { createExcalidrawTools, EXCALIDRAW_TOOL_NAMES } from "@/excalidraw/excalidrawTools";
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
@@ -126,14 +128,18 @@ function spawnModelConfigKey(
 
 // The OpenArtifacts tools have no switch: a user without Copilot Plus gets the upgrade offer when they call one.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-export function isCopilotToolOn(toolName: string, settings: CopilotSettings): boolean {
+// The Excalidraw tools follow the Excalidraw plugin rather than a setting, so they appear only where drawings can be made.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app: App): boolean {
   return toolName === SEND_FEEDBACK_TOOL_NAME
     ? settings.agentMode.offerFeedbackCards
     : toolName === MIYO_PARSE_TOOL_NAME
       ? isMiyoParseActive(settings)
       : toolName === MIYO_SEARCH_TOOL_NAME
         ? isMiyoSearchActive(settings)
-        : true;
+        : EXCALIDRAW_TOOL_NAMES.has(toolName)
+          ? getExcalidrawApi(app) !== null
+          : true;
 }
 
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
@@ -208,7 +214,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     persistenceManager,
     sessionIndex,
     copilotMcpServer: createCopilotMcpServer(
-      (toolName) => isCopilotToolOn(toolName, getSettings()),
+      (toolName) => isCopilotToolOn(toolName, getSettings(), app),
       [
         {
           definition: MIYO_SEARCH_TOOL,
@@ -240,6 +246,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           getVaultBase: () => getVaultBase(app),
           openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
         }),
+        ...createExcalidrawTools(() => getExcalidrawApi(app)),
       ]
     ),
   });

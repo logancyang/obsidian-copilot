@@ -538,6 +538,13 @@ describe("agentMode", () => {
 });
 
 describe("isCopilotToolOn()", () => {
+  const appWith = (excalidraw: unknown): App =>
+    ({
+      plugins: {
+        getPlugin: (id: string) => (id === "obsidian-excalidraw-plugin" ? excalidraw : null),
+      },
+    }) as unknown as App;
+  const noExcalidraw = appWith(null);
   const off = (update: Partial<CopilotSettings>): CopilotSettings =>
     ({
       agentMode: { offerFeedbackCards: false },
@@ -549,10 +556,11 @@ describe("isCopilotToolOn()", () => {
     expect(
       isCopilotToolOn(
         "send_feedback",
-        off({ agentMode: { offerFeedbackCards: true } as CopilotSettings["agentMode"] })
+        off({ agentMode: { offerFeedbackCards: true } as CopilotSettings["agentMode"] }),
+        noExcalidraw
       )
     ).toBe(true);
-    expect(isCopilotToolOn("send_feedback", off({}))).toBe(false);
+    expect(isCopilotToolOn("send_feedback", off({}), noExcalidraw)).toBe(false);
   });
 
   it.each([
@@ -562,7 +570,9 @@ describe("isCopilotToolOn()", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/736 offers miyo_search when %s",
     (_state, enableMiyo, enableMiyoSearchSkill, on) => {
-      expect(isCopilotToolOn("miyo_search", off({ enableMiyo, enableMiyoSearchSkill }))).toBe(on);
+      expect(
+        isCopilotToolOn("miyo_search", off({ enableMiyo, enableMiyoSearchSkill }), noExcalidraw)
+      ).toBe(on);
     }
   );
 
@@ -573,13 +583,37 @@ describe("isCopilotToolOn()", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/740 offers miyo_parse when %s",
     (_state, enableMiyo, enableMiyoDocumentProcessing, on) => {
-      expect(isCopilotToolOn("miyo_parse", off({ enableMiyo, enableMiyoDocumentProcessing }))).toBe(
-        on
-      );
+      expect(
+        isCopilotToolOn(
+          "miyo_parse",
+          off({ enableMiyo, enableMiyoDocumentProcessing }),
+          noExcalidraw
+        )
+      ).toBe(on);
     }
   );
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers the OpenArtifacts tools to every user", () => {
-    expect(isCopilotToolOn("openartifacts_publish", off({ plusLicenseKey: "" }))).toBe(true);
+    expect(
+      isCopilotToolOn("openartifacts_publish", off({ plusLicenseKey: "" }), noExcalidraw)
+    ).toBe(true);
   });
+
+  it.each([
+    ["Excalidraw 2.29 or later is enabled", { ea: { executeCLI: jest.fn() } }, true],
+    ["an Excalidraw older than 2.29 has no executeCLI", { ea: {} }, false],
+    ["Excalidraw is not enabled", null, false],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers the Excalidraw tools when %s",
+    (_state, excalidraw, on) => {
+      for (const name of [
+        "excalidraw_read",
+        "excalidraw_render",
+        "excalidraw_create",
+        "excalidraw_edit",
+      ]) {
+        expect(isCopilotToolOn(name, off({}), appWith(excalidraw))).toBe(on);
+      }
+    }
+  );
 });

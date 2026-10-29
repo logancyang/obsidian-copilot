@@ -261,6 +261,15 @@ If you set a custom `OPENCODE_CONFIG_CONTENT` for OpenCode, Self-Host Mode adds 
 
 On Windows, creating the folder links may require **Developer Mode** or administrator access. If a sync service replaces a link, toggle that Skill off and on for the affected agent to recreate it.
 
+## Excalidraw drawings
+
+While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and OpenCode read, draw, and edit Excalidraw drawings through Copilot's Excalidraw tools. The Excalidraw plugin builds each drawing, so labels stay inside their shapes and arrows stay attached when you move a shape. There is no skill to turn on.
+
+- Ask for a drawing by what it should show and where to save it, for example "Draw our release process as a flowchart in Drawings/Release.excalidraw.md". Creating a drawing never overwrites an existing file.
+- When the agent edits a drawing, Obsidian opens it in a tab and saves each change.
+- After drawing or editing, the agent looks at a picture of the result and fixes overlaps before it answers.
+- Codex asks you to approve each change to a drawing unless the chat is in **Auto**.
+
 ## Applying a settings change
 
 Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **settings changed** notice and a **Reload** action, and the chat keeps working in the meantime.
