@@ -106,8 +106,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     feedbackOffer,
     queuedPrompts,
     tasks,
+    isReplyRunning,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
+  const replyRunning = draft.loading || isReplyRunning;
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [openedTask, setOpenedTask] = useState<{ sessionId: string; toolCallId: string } | null>(
@@ -558,6 +560,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       isLoading={isLoading}
+      isReplyRunning={replyRunning}
       queuedPrompts={queuedPrompts}
       acceptsMidTurnMessages={backend.acceptsMidTurnMessages()}
       hasPendingPlanPermission={hasPendingPlanPermission}
@@ -579,6 +582,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     [backend]
   );
+  const handleSendWaitingNow = useCallback(() => {
+    backend.sendWaitingNow().catch((e: unknown) => logError("[AgentMode] send now failed", e));
+  }, [backend]);
   // The controls bar sits directly above the composer, so pending messages list above both. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
   const queuedMessagesNode =
     queuedPrompts.length > 0 || heldMessages.length > 0 ? (
@@ -587,6 +593,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         held={heldMessages}
         onRemove={handleRemoveHeldMessage}
         onWithdraw={backend.canWithdrawMessages() ? handleWithdrawMessage : undefined}
+        onSendNow={replyRunning ? handleSendWaitingNow : undefined}
       />
     ) : null;
 

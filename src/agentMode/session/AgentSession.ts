@@ -248,6 +248,7 @@ export class AgentSession {
   private readonly getProjectContextUpdatesFn: (() => ProjectContextUpdates | null) | null;
   private readonly markProjectContextUpdatesDeliveredFn: ((epoch: number) => void) | null;
   private cachedStatus: AgentSessionStatus = "starting";
+  private cachedReplyRunning = false;
   private startupFailed = false;
   private startupSettled = false;
   private agentBusy = false;
@@ -697,8 +698,7 @@ export class AgentSession {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options: { interrupt?: boolean } = {}
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -729,7 +729,7 @@ export class AgentSession {
       ) {
         throw new Error("Session already has a turn in flight");
       }
-      return this.queuePrompt(displayText, context, promptContent, options.interrupt === true);
+      return this.queuePrompt(displayText, context, promptContent);
     }
 
     const promptId = uuidv4();
@@ -795,11 +795,10 @@ export class AgentSession {
   private queuePrompt(
     text: string,
     context: MessageContext | undefined,
-    promptContent: PromptContent[] | undefined,
-    interrupt: boolean
+    promptContent: PromptContent[] | undefined
   ): { userMessageId: string; turn: Promise<StopReason> } {
     const prompt: QueuedPrompt = { id: uuidv4(), text, context, promptContent };
-    const turn = this.turns.queue(prompt, interrupt, async () => {
+    const turn = this.turns.queue(prompt, async () => {
       const webTabBlock =
         (context?.webTabs?.length ?? 0) > 0 ? await serializeWebTabContext(context) : "";
       return () => {
@@ -1032,31 +1031,24 @@ export class AgentSession {
     return this.getDisplayName?.(backendId) ?? backendId;
   }
 
-  async cancel(): Promise<void> {
+  // Stop ends only the main reply; each background task is stopped from the running-tasks list. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
+  async cancel(options: { keepUnread?: boolean } = {}): Promise<void> {
     const status = this.getStatus();
     if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
-    this.turns.stop(this.canWithdrawPrompts());
-    // A subagent's requests close when Stop ends its task. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
+    const keepUnread = options.keepUnread === true;
+    this.turns.stop(!keepUnread && this.canWithdrawPrompts());
     this.requests.rejectToolRequestsFrom("main");
     this.requests.withdrawQuestions();
-    const sessionId = this.backendSessionId;
-    // The chat shows Stop until its subagents finish, so Stop ends them too; a background command such as a server keeps running. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
-    const subagentIds = this.taskList.flatMap((task) =>
-      task.kind === "subagent" && task.status === "running" && task.taskId !== undefined
-        ? [task.taskId]
-        : []
-    );
-    await Promise.all([
-      this.backend.cancel({ sessionId }).catch((e: unknown) => {
+    await this.backend
+      .cancel({ sessionId: this.backendSessionId, ...(keepUnread ? { keepUnread } : {}) })
+      .catch((e: unknown) => {
         logWarn(`[AgentMode] cancel notification failed`, e);
-      }),
-      ...subagentIds.map((taskId) =>
-        this.stopTask(taskId).catch((e: unknown) => {
-          logWarn(`[AgentMode] stopping subagent ${taskId} at Stop failed`, e);
-        })
-      ),
-    ]);
+      });
+  }
+
+  isReplyRunning(): boolean {
+    return this.turns.isMainTurnRunning();
   }
 
   async releaseBackendSession(): Promise<void> {
@@ -1759,8 +1751,11 @@ export class AgentSession {
 
   private recomputeStatusIfChanged(): void {
     const next = this.getStatus();
-    if (next === this.cachedStatus) return;
+    const replyRunning = this.isReplyRunning();
+    // A reply can end while subagents keep the chat running; the composer must still swap Stop for Send. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
+    if (next === this.cachedStatus && replyRunning === this.cachedReplyRunning) return;
     this.cachedStatus = next;
+    this.cachedReplyRunning = replyRunning;
     for (const l of this.listeners) {
       try {
         l.onStatusChanged(next);

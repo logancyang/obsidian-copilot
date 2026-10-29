@@ -17,6 +17,7 @@ interface FakeBackendState {
   messages: AgentChatMessage[];
   isStarting: boolean;
   isTurnInFlight: boolean;
+  isReplyRunning: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList?: AgentTodoListEntry[] | null;
@@ -32,6 +33,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     messages: initial.messages ?? [],
     isStarting: initial.isStarting ?? false,
     isTurnInFlight: initial.isTurnInFlight ?? false,
+    isReplyRunning: initial.isReplyRunning ?? false,
     hasPendingPlanPermission: initial.hasPendingPlanPermission ?? false,
     currentPlan: initial.currentPlan ?? null,
     currentTodoList: initial.currentTodoList ?? null,
@@ -51,6 +53,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getMessages: () => state.messages,
     isStarting: () => state.isStarting,
     isTurnInFlight: () => state.isTurnInFlight,
+    isReplyRunning: () => state.isReplyRunning,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
     getCurrentTodoList: () => state.currentTodoList ?? null,
@@ -134,6 +137,7 @@ describe("useAgentChatRuntimeState", () => {
         fake.state.hasPendingPlanPermission = true;
         fake.state.queuedPrompts = [{ id: "steer", text: "Only the first two" }];
         fake.state.tasks = [RUNNING_TASK];
+        fake.state.isReplyRunning = true;
         fake.emit();
       });
 
@@ -142,6 +146,7 @@ describe("useAgentChatRuntimeState", () => {
       expect(result.current.queuedPrompts).toEqual([{ id: "steer", text: "Only the first two" }]);
       expect(result.current.isStarting).toBe(true);
       expect(result.current.hasPendingPlanPermission).toBe(true);
+      expect(result.current.isReplyRunning).toBe(true);
     });
 
     it("serves the new backend's state on the first render after the backend prop changes, never the previous backend's", () => {

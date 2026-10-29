@@ -2221,9 +2221,7 @@ describe("AgentSession", () => {
         emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
         emit({ sessionUpdate: "turn_started", turnId: "t1" });
         emit(replayText("agent_message_chunk", "First answer."));
-        const steer = session.sendPrompt("now this", undefined, undefined, undefined, {
-          interrupt: true,
-        });
+        const steer = session.sendPrompt("now this");
         await waitFor(() => expect(sent).toHaveLength(2));
         emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
         await waitFor(() => expect(session.getStatus()).toBe("idle"));
@@ -2241,18 +2239,6 @@ describe("AgentSession", () => {
           { sender: USER_SENDER, message: "now this" },
           { sender: AI_SENDER, message: "Second answer." },
         ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 asks the backend to interrupt the running turn for an interrupt-and-send message", async () => {
-        const mock = makeMockBackend();
-        const sent = recordPrompts(mock);
-        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
-        session.sendPrompt("first");
-        session.sendPrompt("plain steer");
-        session.sendPrompt("urgent", undefined, undefined, undefined, { interrupt: true });
-
-        await waitFor(() => expect(sent).toHaveLength(3));
-        expect(sent.map((input) => input.interrupt)).toEqual([undefined, undefined, true]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hands messages to the backend in the order they were sent, even while an earlier one is still being handed over", async () => {
@@ -3818,7 +3804,7 @@ describe("AgentSession", () => {
     });
 
     describe("cancel()", () => {
-      it(`${ISSUE_757} stops the agent and every running subagent while only subagents work, and leaves a background command running`, async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 stops only the agent's reply, leaving running subagents and background commands to the running-tasks list", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { getDescriptor: () => ClaudeBackendDescriptor });
         const stopTask = jest.fn(async ({ taskId }: { taskId: string }) => {
@@ -3845,13 +3831,28 @@ describe("AgentSession", () => {
         await session.cancel();
 
         expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
-        expect(stopTask.mock.calls.map(([input]) => input.taskId)).toEqual(["agent-1", "agent-2"]);
+        expect(stopTask).not.toHaveBeenCalled();
         expect(session.getTasks().map((t) => [t.taskId, t.status])).toEqual([
-          ["agent-1", "stopped"],
-          ["agent-2", "stopped"],
+          ["agent-1", "running"],
+          ["agent-2", "running"],
           ["server", "running"],
           ["agent-done", "completed"],
         ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 interrupts the reply but keeps waiting messages with the agent when asked to keep them, so it reads them next", async () => {
+        const mock = makeMockBackend();
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        session.sendPrompt("read this now");
+        await waitFor(() => expect(sent).toHaveLength(2));
+
+        await session.cancel({ keepUnread: true });
+
+        expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1", keepUnread: true });
+        expect(session.getQueuedPrompts().map((p) => p.text)).toEqual(["read this now"]);
+        expect(session.takeWithdrawnPrompts()).toEqual([]);
       });
 
       it(`shows the tool calls Stop cut off as stopped, while the card of a background task launched in that turn keeps running (${ISSUE_747})`, async () => {
@@ -5691,6 +5692,37 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("isReplyRunning()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 is true while the agent's reply runs and false once it ends, even while the chat still runs for its subagents", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+
+        const { turn } = session.sendPrompt("launch a subagent");
+        expect(session.isReplyRunning()).toBe(true);
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+        await turn;
+
+        expect(session.isReplyRunning()).toBe(false);
+        expect(session.getStatus()).toBe("running");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 notifies status listeners when the reply ends while subagents keep the chat running, so the composer stops showing Stop", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const replyRunningSeen: boolean[] = [];
+        subscribeTo(session, {
+          onStatusChanged: () => replyRunningSeen.push(session.isReplyRunning()),
+        });
+
+        const { turn } = session.sendPrompt("launch a subagent");
+        mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });
+        await turn;
+
+        expect(session.getStatus()).toBe("running");
+        expect(replyRunningSeen.at(-1)).toBe(false);
+      });
+    });
+
     describe("getStatus()", () => {
       it("reports 'error' after a failed turn and resets to 'running' on the next sendPrompt", async () => {
         const mock = makeMockBackend();
@@ -5724,7 +5756,11 @@ describe("AgentSession", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });
         const statusChanges: string[] = [];
-        subscribeTo(session, { onStatusChanged: (status) => statusChanges.push(status) });
+        subscribeTo(session, {
+          onStatusChanged: (status) => {
+            if (statusChanges.at(-1) !== status) statusChanges.push(status);
+          },
+        });
 
         const { turn } = session.sendPrompt("launch two subagents");
         mock.emitUpdate({ sessionUpdate: "busy_changed", busy: true });

@@ -15,6 +15,7 @@ export interface AgentChatRuntimeState {
   messages: AgentChatMessage[];
   isStarting: boolean;
   isTurnInFlight: boolean;
+  isReplyRunning: boolean;
   hasPendingPlanPermission: boolean;
   currentPlan: CurrentPlan | null;
   currentTodoList: AgentTodoListEntry[] | null;
@@ -37,6 +38,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       messages: backend.getMessages(),
       isStarting: backend.isStarting(),
       isTurnInFlight: backend.isTurnInFlight(),
+      isReplyRunning: backend.isReplyRunning(),
       hasPendingPlanPermission: backend.hasPendingPlanPermission(),
       currentPlan: backend.getCurrentPlan(),
       currentTodoList: backend.getCurrentTodoList(),

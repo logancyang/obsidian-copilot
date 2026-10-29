@@ -41,10 +41,9 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
-        handleSendMessage?: (meta?: { interrupt?: boolean }) => void;
+        handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
-        canInterruptAndSend?: boolean;
       },
       ref: React.ForwardedRef<import("@/components/chat-components/ChatInput").ChatInputHandle>
     ) => {
@@ -64,11 +63,6 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
-          {props.canInterruptAndSend && (
-            <button type="button" onClick={() => props.handleSendMessage?.({ interrupt: true })}>
-              send now
-            </button>
-          )}
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
@@ -162,6 +156,7 @@ function inputNode(
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       isLoading={draft.loading}
+      isReplyRunning={draft.loading}
       queuedPrompts={[]}
       acceptsMidTurnMessages={false}
       hasPendingPlanPermission={false}
@@ -853,10 +848,10 @@ describe("AgentChatInput", () => {
         takeWithdrawnPrompts: () => [],
       } as unknown as AgentChatBackend;
       const draft = makeDraft({ loading: false });
-      const view = renderInput(backend, draft, { isLoading: true });
+      const view = renderInput(backend, draft, { isLoading: true, isReplyRunning: true });
 
       expect(screen.getByTestId("generating-state").textContent).toBe("running");
-      view.rerender(inputNode(backend, draft, { isLoading: false }));
+      view.rerender(inputNode(backend, draft, { isLoading: false, isReplyRunning: false }));
       expect(screen.getByTestId("generating-state").textContent).toBe("idle");
     });
 
@@ -893,7 +888,7 @@ describe("AgentChatInput", () => {
 
       await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
       expect(jest.mocked(backend.sendMessage).mock.calls[0][0]).toBe("only the first two");
-      expect(jest.mocked(backend.sendMessage).mock.calls[0][4]).toEqual({ interrupt: false });
+      expect(jest.mocked(backend.sendMessage).mock.calls[0]).toHaveLength(3);
       expect(draft.setQueue).not.toHaveBeenCalled();
       expect(draft.setLoading).not.toHaveBeenCalled();
     });
@@ -925,17 +920,17 @@ describe("AgentChatInput", () => {
       expect(draft.input).toBe("keep this text");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 sends with interrupt from Send now, which only a backend taking mid-turn input offers", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/788 shows Stop only while the main reply runs, not while the chat waits on background subagents", () => {
+      const draft = makeDraft({ loading: false });
       const backend = makeBackend();
-      const draft = makeDraft({ input: "do this instead", loading: true });
 
-      const { rerender } = renderInput(backend, draft);
-      expect(screen.queryByText("send now")).toBeNull();
-      rerender(inputNode(backend, draft, { acceptsMidTurnMessages: true }));
-      fireEvent.click(screen.getByText("send now"));
+      const { rerender } = render(
+        inputNode(backend, draft, { isLoading: true, isReplyRunning: false })
+      );
+      expect(screen.getByTestId("generating-state").textContent).toBe("idle");
 
-      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
-      expect(jest.mocked(backend.sendMessage).mock.calls[0][4]).toEqual({ interrupt: true });
+      rerender(inputNode(backend, draft, { isLoading: true, isReplyRunning: true }));
+      expect(screen.getByTestId("generating-state").textContent).toBe("running");
     });
 
     it.each([

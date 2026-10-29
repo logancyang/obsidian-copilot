@@ -23,8 +23,7 @@ export interface AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options?: { interrupt?: boolean }
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> };
   acceptsMidTurnMessages(): boolean;
   getQueuedPrompts(): readonly QueuedPrompt[];
@@ -32,6 +31,7 @@ export interface AgentChatBackend {
   withdrawMessage(id: string): Promise<void>;
   takeWithdrawnPrompts(): readonly QueuedPrompt[];
   cancel(): Promise<void>;
+  sendWaitingNow(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
@@ -42,6 +42,7 @@ export interface AgentChatBackend {
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;
+  isReplyRunning(): boolean;
 
   getBackendState(): BackendState | null;
   canSwitchModel(): boolean | null;

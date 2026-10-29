@@ -170,7 +170,6 @@ export class TurnTracker {
   // A message sent while the agent works is shown only once it reaches the agent, at that point in the transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
   queue(
     prompt: QueuedPrompt,
-    interrupt: boolean,
     preparePrompt: () => Promise<() => PromptContent[]>
   ): Promise<StopReason> {
     this.setQueuedPrompts([...this.queuedPrompts, prompt]);
@@ -183,7 +182,7 @@ export class TurnTracker {
         if (!this.isQueued(prompt.id)) return "cancelled";
         const blocks = buildPrompt();
         const outcome = await this.submit(
-          { promptId: prompt.id, prompt: blocks, ...(interrupt ? { interrupt } : {}) },
+          { promptId: prompt.id, prompt: blocks },
           false,
           order.done
         );

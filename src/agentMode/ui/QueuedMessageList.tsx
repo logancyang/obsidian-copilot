@@ -9,6 +9,7 @@ interface QueuedMessageListProps {
   held: readonly QueuedAgentMessage[];
   onRemove: (id: string) => void;
   onWithdraw?: (id: string) => void;
+  onSendNow?: () => void;
 }
 
 interface RemoveButtonProps {
@@ -68,10 +69,30 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
   held,
   onRemove,
   onWithdraw,
+  onSendNow,
 }) => {
   return (
     <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
-      {delivering.length > 0 && <GroupCaption>The agent reads these at its next step</GroupCaption>}
+      {delivering.length > 0 && (
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+          <div className="tw-min-w-0 tw-flex-1 tw-truncate tw-px-1 tw-text-ui-smaller tw-text-muted">
+            The agent reads these at its next step
+          </div>
+          {/* Interrupting hands Claude every waiting message at once, so Send now belongs to the section, not to a row. https://github.com/Brevilabs/obsidian-copilot-private/issues/789 */}
+          {onSendNow && (
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-shrink-0 tw-whitespace-nowrap tw-text-ui-smaller tw-text-muted"
+              aria-label="Send waiting messages now"
+              title="Stop the agent's current reply and have it read these now"
+              onClick={onSendNow}
+            >
+              Send now
+            </Button>
+          )}
+        </div>
+      )}
       {delivering.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
           {onWithdraw && (

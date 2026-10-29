@@ -70,10 +70,8 @@ export interface ChatInputProps {
     contextNotes?: TFile[];
     contextFolders?: string[];
     webTabs?: WebTabContext[];
-    interrupt?: boolean;
   }) => void;
   isGenerating: boolean;
-  canInterruptAndSend?: boolean;
   onStopGenerating: () => void;
   app: App;
   contextNotes: TFile[];
@@ -169,7 +167,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     setInputMessage,
     handleSendMessage,
     isGenerating,
-    canInterruptAndSend = false,
     onStopGenerating,
     app,
     contextNotes,
@@ -240,7 +237,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     });
   };
 
-  const onSendMessage = (interrupt = false) => {
+  // A phone may have no Enter key, so a draft turns Stop into a Send that does what Enter does. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
+  const showsStop =
+    isGenerating && !(isAgentMode && (inputMessage.trim().length > 0 || selectedImages.length > 0));
+
+  const onSendMessage = () => {
     if (editMode && onEditSave) {
       onEditSave(inputMessage, {
         notes: contextNotes,
@@ -253,12 +254,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     const webTabsFromEditor = getWebTabsFromEditorSnapshot();
     const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
 
-    const interruptMeta = interrupt ? { interrupt } : {};
     if (!isCopilotPlus) {
-      handleSendMessage({
-        webTabs: allWebTabs,
-        ...interruptMeta,
-      });
+      handleSendMessage({ webTabs: allWebTabs });
       return;
     }
 
@@ -267,7 +264,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
       urls: contextUrls,
       contextFolders,
       webTabs: allWebTabs,
-      ...interruptMeta,
     });
   };
 
@@ -775,30 +771,15 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         <div className="tw-flex tw-items-center tw-gap-1">
           {!isGenerating && toolControls}
           {modePickerOverride && <ModePicker override={modePickerOverride} />}
-          {isGenerating ? (
-            <>
-              {canInterruptAndSend && (inputMessage.trim() || selectedImages.length > 0) && (
-                <Button
-                  variant="ghost2"
-                  size="fit"
-                  className="tw-text-muted"
-                  aria-label="Interrupt and send"
-                  title="Stop the agent at its next step and send this now"
-                  onClick={() => onSendMessage(true)}
-                >
-                  <CornerDownLeft className="!tw-size-3" />
-                  <span>Send now</span>
-                </Button>
-              )}
-              <Button
-                size="icon"
-                className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
-                aria-label="Stop generating"
-                onClick={() => onStopGenerating()}
-              >
-                <Square className="tw-size-3 tw-fill-current" />
-              </Button>
-            </>
+          {showsStop ? (
+            <Button
+              size="icon"
+              className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
+              aria-label="Stop generating"
+              onClick={() => onStopGenerating()}
+            >
+              <Square className="tw-size-3 tw-fill-current" />
+            </Button>
           ) : (
             <>
               {editMode && onEditCancel && (
