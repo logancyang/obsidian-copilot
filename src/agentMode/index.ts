@@ -9,7 +9,10 @@ import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
+import {
+  buildAgentSystemPrompt,
+  setExcalidrawToolsAvailable,
+} from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
@@ -174,12 +177,17 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const initializing = new Map<BackendId, Promise<void>>();
   const beforeBackendStart = async (id: BackendId): Promise<void> => {
     await initializing.get(id);
-    // Obsidian announces no change to its CLI toggle, so each agent start re-checks it.
+    // Obsidian announces no change to its CLI toggle or to a plugin being enabled, so each agent start re-checks both.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-    if (isObsidianCliEnabled() === seededWithCli) return;
-    await seedManagedBuiltins().catch((error) =>
-      logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
-    );
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+    const excalidrawChanged = setExcalidrawToolsAvailable(getExcalidrawApi(app) !== null);
+    if (isObsidianCliEnabled() !== seededWithCli) {
+      await seedManagedBuiltins().catch((error) =>
+        logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
+      );
+    } else if (!excalidrawChanged) {
+      return;
+    }
     refreshSystemPromptAffected();
   };
   const preloader = new AgentModelPreloader(
@@ -294,6 +302,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       }
     });
   }
+  setExcalidrawToolsAvailable(getExcalidrawApi(app) !== null);
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.restartOnSystemPromptChange) {

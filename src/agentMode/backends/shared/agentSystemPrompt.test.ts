@@ -8,6 +8,7 @@ import {
 import type { UserSystemPrompt } from "@/system-prompts/type";
 import {
   buildAgentSystemPrompt,
+  COPILOT_EXCALIDRAW_STEERING,
   COPILOT_FOLDER_MENTION_DIRECTIVE,
   COPILOT_MIYO_DOCUMENT_STEERING,
   COPILOT_MIYO_SEARCH_STEERING,
@@ -18,6 +19,7 @@ import {
   COPILOT_SKILL_FALLBACK,
   COPILOT_VAULT_HYGIENE,
   COPILOT_WEB_RESEARCH_STEERING,
+  setExcalidrawToolsAvailable,
 } from "./agentSystemPrompt";
 
 jest.mock("@/logger", () => ({
@@ -256,6 +258,20 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toMatch(/stay local|no cloud parsers/);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 steers diagrams to embedded Excalidraw drawings, keeping Mermaid or a canvas the user names, only while the Excalidraw tools are available", () => {
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_EXCALIDRAW_STEERING);
+
+      setExcalidrawToolsAvailable(true);
+      expect(buildAgentSystemPrompt(AGENT)).toContain(
+        "Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format."
+      );
+
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_EXCALIDRAW_STEERING);
+      setDisableBuiltinSystemPrompt(false);
+      setExcalidrawToolsAvailable(false);
+    });
+
     it(`never steers PDFs to the retired Plus copilot-read-pdf skill (${ISSUE_656})`, () => {
       setBuiltinPreferences({});
       for (const enableMiyoDocumentProcessing of [false, true]) {
@@ -470,6 +486,16 @@ describe("agentSystemPrompt", () => {
       expect(prompt).not.toMatch(/\/Users\/|[A-Z]:\\/);
       expect(prompt).not.toMatch(/\b20\d{2}-\d{2}-\d{2}\b/);
       expect(prompt).not.toMatch(/\bsession[-_ ]?id\b/i);
+    });
+  });
+
+  describe("setExcalidrawToolsAvailable()", () => {
+    afterEach(() => setExcalidrawToolsAvailable(false));
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 reports a change only when availability flips, so an unchanged agent start reloads nothing", () => {
+      expect(setExcalidrawToolsAvailable(true)).toBe(true);
+      expect(setExcalidrawToolsAvailable(true)).toBe(false);
+      expect(setExcalidrawToolsAvailable(false)).toBe(true);
     });
   });
 

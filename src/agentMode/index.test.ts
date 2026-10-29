@@ -34,9 +34,15 @@ jest.mock("@/utils/appPaths", () => ({
   copilotAppDataDir: () => "/tmp/copilot",
   getVaultId: () => "test-vault",
 }));
+let mockExcalidrawAvailable = false;
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${mockExcalidrawAvailable}`,
+  setExcalidrawToolsAvailable: (available: boolean) => {
+    const changed = available !== mockExcalidrawAvailable;
+    mockExcalidrawAvailable = available;
+    return changed;
+  },
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -260,6 +266,26 @@ describe("agentMode", () => {
       mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
       jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
       await expect(beforeBackendStart!("opencode")).resolves.toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {
+      let excalidraw: unknown = null;
+      const app = { plugins: { getPlugin: () => excalidraw } } as unknown as App;
+      createAgentSessionManager(app, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const passes = reconcile.mock.calls.length;
+
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
+
+      excalidraw = { ea: { executeCLI: jest.fn() } };
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+      expect(reconcile).toHaveBeenCalledTimes(passes);
     });
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
@@ -606,12 +632,7 @@ describe("isCopilotToolOn()", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers the Excalidraw tools when %s",
     (_state, excalidraw, on) => {
-      for (const name of [
-        "excalidraw_read",
-        "excalidraw_render",
-        "excalidraw_create",
-        "excalidraw_edit",
-      ]) {
+      for (const name of ["excalidraw_read", "excalidraw_render", "excalidraw_write"]) {
         expect(isCopilotToolOn(name, off({}), appWith(excalidraw))).toBe(on);
       }
     }

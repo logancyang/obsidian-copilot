@@ -2,13 +2,11 @@ import { outlineScene, type SceneElement } from "@/excalidraw/excalidrawOutline"
 
 export const EXCALIDRAW_READ_TOOL_NAME = "excalidraw_read";
 export const EXCALIDRAW_RENDER_TOOL_NAME = "excalidraw_render";
-export const EXCALIDRAW_CREATE_TOOL_NAME = "excalidraw_create";
-export const EXCALIDRAW_EDIT_TOOL_NAME = "excalidraw_edit";
+export const EXCALIDRAW_WRITE_TOOL_NAME = "excalidraw_write";
 export const EXCALIDRAW_TOOL_NAMES: ReadonlySet<string> = new Set([
   EXCALIDRAW_READ_TOOL_NAME,
   EXCALIDRAW_RENDER_TOOL_NAME,
-  EXCALIDRAW_CREATE_TOOL_NAME,
-  EXCALIDRAW_EDIT_TOOL_NAME,
+  EXCALIDRAW_WRITE_TOOL_NAME,
 ]);
 
 export const EXCALIDRAW_TURNED_OFF_TEXT =
@@ -51,10 +49,6 @@ const ELEMENT = {
   },
 };
 
-// Claude Code defers MCP tools behind tool search, hiding the descriptions that say to use these instead of writing files.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-const ALWAYS_LOAD = Object.freeze({ "anthropic/alwaysLoad": true });
-
 // Codex asks the user to approve MCP calls unless the tool is read-only, and reading or rendering changes nothing.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 const READ_ONLY = Object.freeze({
@@ -80,7 +74,6 @@ export const EXCALIDRAW_READ_TOOL = Object.freeze({
     required: ["path"],
   },
   annotations: READ_ONLY,
-  _meta: ALWAYS_LOAD,
 });
 
 export const EXCALIDRAW_RENDER_TOOL = Object.freeze({
@@ -88,35 +81,30 @@ export const EXCALIDRAW_RENDER_TOOL = Object.freeze({
   description: `Render a saved Excalidraw drawing as a PNG image. After creating or editing a drawing, look at it before you answer, and fix overlapping shapes, labels that overflow or miss their shape, crowded areas, and arrows that cut through shapes or labels.`,
   inputSchema: { type: "object", properties: { path: PATH }, required: ["path"] },
   annotations: READ_ONLY,
-  _meta: ALWAYS_LOAD,
 });
 
-export const EXCALIDRAW_CREATE_TOOL = Object.freeze({
-  name: EXCALIDRAW_CREATE_TOOL_NAME,
-  description: `Create a new Obsidian Excalidraw drawing. The Excalidraw plugin writes the file, binds each label to its shape and each arrow to both ends. Never write or patch Excalidraw files yourself: a hand-written file garbles labels and detaches arrows. It never overwrites an existing path.
+// One write tool for new and existing drawings: in the tool-design eval it drew as well as separate create and edit
+// tools, with fewer failed calls and fewer tokens for Codex.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export const EXCALIDRAW_WRITE_TOOL = Object.freeze({
+  name: EXCALIDRAW_WRITE_TOOL_NAME,
+  description: `Create or change an Obsidian Excalidraw drawing: pass elements for a new drawing, or operations for an existing one.
+
+New drawing (elements): Create a new Obsidian Excalidraw drawing. The Excalidraw plugin writes the file, binds each label to its shape and each arrow to both ends. Never write or patch Excalidraw files yourself: a hand-written file garbles labels and detaches arrows. It never overwrites an existing path.
 Give each shape a local id, type, x, y, width, height and label {text}; text inside a shape goes in label, never in a separate text element on top. Connect shapes with arrows whose start {id} and end {id} name shapes in this call; put the arrow's x,y on the source's edge and its last point on the target's edge, with bend points to route around other shapes. Use an arrow with endArrowhead null for a plain connector, never a line. Later elements are drawn on top: put a group's background rectangle before its members and a sticker after the shape it marks. Don't put connected shapes in a frame: frames clip arrows that leave them.
-Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). Follow the look of the vault's existing drawings. The reply maps your ids to the real ones.`,
-  inputSchema: {
-    type: "object",
-    properties: { path: PATH, elements: { type: "array", minItems: 1, items: ELEMENT } },
-    required: ["path", "elements"],
-  },
-  annotations: WRITES,
-  _meta: ALWAYS_LOAD,
-});
+Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). Follow the look of the vault's existing drawings. The reply maps your ids to the real ones.
 
-export const EXCALIDRAW_EDIT_TOOL = Object.freeze({
-  name: EXCALIDRAW_EDIT_TOOL_NAME,
-  description: `Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
+Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
 - {"op":"update","id":..,"set":{..}} moves (x, y), resizes, recolours (strokeColor, backgroundColor, strokeStyle), links (link) or renames. To rename, update the label's own text id with {"text": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again.
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
-- {"op":"add","elements":[..]} adds elements as in excalidraw_create, drawn on top. Its arrows can only attach to shapes added in the same operation.
+- {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation.
 - {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), label, dashed (true) and color.
 Make room before inserting by moving the shapes that follow. Keep every id you didn't mean to change: links and block references point at them.`,
   inputSchema: {
     type: "object",
     properties: {
       path: PATH,
+      elements: { type: "array", minItems: 1, items: ELEMENT },
       operations: {
         type: "array",
         minItems: 1,
@@ -140,10 +128,9 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
         },
       },
     },
-    required: ["path", "operations"],
+    required: ["path"],
   },
   annotations: WRITES,
-  _meta: ALWAYS_LOAD,
 });
 
 export interface ExcalidrawCliReply {
@@ -220,8 +207,7 @@ export function createExcalidrawTools(
   return Object.freeze([
     tool(EXCALIDRAW_READ_TOOL, read),
     tool(EXCALIDRAW_RENDER_TOOL, render),
-    tool(EXCALIDRAW_CREATE_TOOL, create),
-    tool(EXCALIDRAW_EDIT_TOOL, edit),
+    tool(EXCALIDRAW_WRITE_TOOL, write),
   ]);
 }
 
@@ -265,6 +251,16 @@ async function render(
     isError: false,
     image: { data: await api.renderPng(path), mimeType: "image/png" },
   };
+}
+
+async function write(
+  api: ExcalidrawApi,
+  input: Record<string, unknown>,
+  path: string
+): Promise<ExcalidrawToolResult> {
+  if (Array.isArray(input.elements)) return create(api, input, path);
+  if (Array.isArray(input.operations)) return edit(api, input, path);
+  return failure("Pass elements for a new drawing or operations for an existing one.");
 }
 
 async function create(

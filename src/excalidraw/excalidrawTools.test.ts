@@ -1,11 +1,10 @@
 import type { SceneElement } from "./excalidrawOutline";
 import {
   createExcalidrawTools,
-  EXCALIDRAW_CREATE_TOOL,
-  EXCALIDRAW_EDIT_TOOL,
   EXCALIDRAW_READ_TOOL,
   EXCALIDRAW_RENDER_TOOL,
   EXCALIDRAW_TURNED_OFF_TEXT,
+  EXCALIDRAW_WRITE_TOOL,
   type ExcalidrawApi,
 } from "./excalidrawTools";
 
@@ -50,33 +49,32 @@ function fakeApi(overrides: Partial<ExcalidrawApi> = {}): jest.Mocked<Excalidraw
 }
 
 function toolsFor(api: ExcalidrawApi | null) {
-  const [read, render, create, edit] = createExcalidrawTools(() => api);
-  return { read, render, create, edit };
+  const [read, render, write] = createExcalidrawTools(() => api);
+  return { read, render, write };
 }
 
 describe("excalidrawTools", () => {
   describe("tool definitions", () => {
-    it("marks read and render read-only and create and edit as writes, all loaded up front", () => {
+    it(`${ISSUE_787} offers read and render as read-only and one write tool, all behind the agent's tool search`, () => {
       expect(EXCALIDRAW_READ_TOOL.annotations.readOnlyHint).toBe(true);
       expect(EXCALIDRAW_RENDER_TOOL.annotations.readOnlyHint).toBe(true);
-      expect(EXCALIDRAW_CREATE_TOOL.annotations.readOnlyHint).toBe(false);
-      expect(EXCALIDRAW_EDIT_TOOL.annotations.readOnlyHint).toBe(false);
-      for (const tool of [
-        EXCALIDRAW_READ_TOOL,
-        EXCALIDRAW_RENDER_TOOL,
-        EXCALIDRAW_CREATE_TOOL,
-        EXCALIDRAW_EDIT_TOOL,
-      ]) {
-        expect(tool._meta).toEqual({ "anthropic/alwaysLoad": true });
-        expect(tool.inputSchema.required).toContain("path");
+      expect(EXCALIDRAW_WRITE_TOOL.annotations.readOnlyHint).toBe(false);
+      for (const tool of [EXCALIDRAW_READ_TOOL, EXCALIDRAW_RENDER_TOOL, EXCALIDRAW_WRITE_TOOL]) {
+        expect(tool).not.toHaveProperty("_meta");
+        expect(tool.inputSchema.required).toEqual(["path"]);
       }
+      expect(Object.keys(EXCALIDRAW_WRITE_TOOL.inputSchema.properties)).toEqual([
+        "path",
+        "elements",
+        "operations",
+      ]);
     });
 
     it(`${ISSUE_787} tells agents to draw through the tools instead of writing the file, and how draw order reads`, () => {
-      expect(EXCALIDRAW_CREATE_TOOL.description).toContain(
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
         "Never write or patch Excalidraw files yourself"
       );
-      expect(EXCALIDRAW_CREATE_TOOL.description).toContain("Later elements are drawn on top");
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain("Later elements are drawn on top");
       expect(EXCALIDRAW_READ_TOOL.description).toContain(
         "tucked under a filled shape is usually a stacking mistake"
       );
@@ -171,7 +169,7 @@ describe("excalidrawTools", () => {
         },
       ];
 
-      const result = await toolsFor(api).create.call({ path: FLOW, elements });
+      const result = await toolsFor(api).write.call({ path: FLOW, elements });
 
       const [request] = api.execute.mock.calls[0];
       expect(request).toEqual({
@@ -195,23 +193,33 @@ describe("excalidrawTools", () => {
           error: { code: "ALREADY_EXISTS", message: "Drawings/Flow.excalidraw.md exists" },
         }),
       });
-      const { create } = toolsFor(api);
+      const { write } = toolsFor(api);
 
-      expect(await create.call({ path: FLOW, elements: [{ type: "rectangle" }] })).toEqual({
+      expect(await write.call({ path: FLOW, elements: [{ type: "rectangle" }] })).toEqual({
         text: `Could not create ${FLOW}: ALREADY_EXISTS: Drawings/Flow.excalidraw.md exists`,
         isError: true,
       });
-      expect(await create.call({ path: FLOW, elements: [] })).toEqual({
+      expect(await write.call({ path: FLOW, elements: [] })).toEqual({
         text: "elements must be a non-empty array.",
         isError: true,
       });
+    });
+
+    it("asks for elements or operations when a write call has neither, without touching the plugin", async () => {
+      const api = fakeApi();
+
+      expect(await toolsFor(api).write.call({ path: FLOW })).toEqual({
+        text: "Pass elements for a new drawing or operations for an existing one.",
+        isError: true,
+      });
+      expect(api.execute).not.toHaveBeenCalled();
     });
 
     it("opens the drawing, reads its live revision and applies the operations against that revision", async () => {
       const api = fakeApi();
       const operations = [{ op: "update", id: "box1", set: { x: 40 } }];
 
-      const result = await toolsFor(api).edit.call({ path: FLOW, operations });
+      const result = await toolsFor(api).write.call({ path: FLOW, operations });
 
       expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual([
         "open",
@@ -236,7 +244,7 @@ describe("excalidrawTools", () => {
       const api = fakeApi();
       const labelled = { op: "connect", from: "box1", to: "box2", label: "No", dashed: true };
 
-      const result = await toolsFor(api).edit.call({ path: FLOW, operations: [labelled] });
+      const result = await toolsFor(api).write.call({ path: FLOW, operations: [labelled] });
 
       expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual(["open"]);
       expect(api.connectLabelled).toHaveBeenCalledWith(FLOW, labelled);
@@ -258,7 +266,10 @@ describe("excalidrawTools", () => {
       });
 
       expect(
-        await toolsFor(api).edit.call({ path: FLOW, operations: [{ op: "delete", ids: ["box9"] }] })
+        await toolsFor(api).write.call({
+          path: FLOW,
+          operations: [{ op: "delete", ids: ["box9"] }],
+        })
       ).toEqual({
         text: `No change made to ${FLOW}: INVALID_ARGUMENT: Unknown element id: box9`,
         isError: true,
@@ -270,7 +281,7 @@ describe("excalidrawTools", () => {
         connectLabelled: jest.fn().mockRejectedValue(new Error("No element with id gone.")),
       });
 
-      const result = await toolsFor(api).edit.call({
+      const result = await toolsFor(api).write.call({
         path: FLOW,
         operations: [
           { op: "add", elements: [{ id: "a", type: "rectangle" }] },
