@@ -1,3 +1,4 @@
+import { deferred } from "@/agentMode/session/testing/fakeTurnTrackerDeps";
 import type { SceneElement } from "./excalidrawOutline";
 import {
   createExcalidrawTools,
@@ -255,6 +256,74 @@ describe("excalidrawTools", () => {
       expect(result.text).toBe(
         `Edited ${FLOW}. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001). Connected box2 -> box1 with arrow Arr00001 (label Lbl00001).`
       );
+    });
+
+    it(`${ISSUE_787} holds a second write to the same drawing until the first has saved, so its scene snapshot cannot drop the first write's arrow`, async () => {
+      const firstConnecting = deferred();
+      const firstSaved = deferred<{ arrowId: string; labelId: string }>();
+      const api = fakeApi({
+        connectLabelled: jest
+          .fn()
+          .mockImplementationOnce(() => {
+            firstConnecting.resolve();
+            return firstSaved.promise;
+          })
+          .mockResolvedValue({ arrowId: "Arr00002", labelId: "Lbl00002" }),
+      });
+      const { write } = toolsFor(api);
+      const yes = { op: "connect", from: "box1", to: "box2", label: "Yes" };
+      const no = { op: "connect", from: "box2", to: "box1", label: "No" };
+
+      const first = write.call({ path: FLOW, operations: [yes] });
+      await firstConnecting.promise;
+      const second = write.call({ path: FLOW, operations: [no] });
+      expect(api.execute).toHaveBeenCalledTimes(1);
+
+      firstSaved.resolve({ arrowId: "Arr00001", labelId: "Lbl00001" });
+      expect((await first).isError).toBe(false);
+      expect((await second).text).toBe(
+        `Edited ${FLOW}. Connected box2 -> box1 with arrow Arr00002 (label Lbl00002).`
+      );
+      expect(api.connectLabelled.mock.calls).toEqual([
+        [FLOW, yes],
+        [FLOW, no],
+      ]);
+    });
+
+    it(`${ISSUE_787} finishes a write to another drawing while a write to the first drawing is still saving`, async () => {
+      const firstSaved = deferred<{ arrowId: string; labelId: string }>();
+      const api = fakeApi({
+        connectLabelled: jest.fn(async (path: string) =>
+          path === FLOW ? firstSaved.promise : { arrowId: "Arr00001", labelId: "Lbl00001" }
+        ),
+      });
+      const { write } = toolsFor(api);
+      const labelled = { op: "connect", from: "box1", to: "box2", label: "Yes" };
+
+      const first = write.call({ path: FLOW, operations: [labelled] });
+      const other = await write.call({
+        path: "Drawings/Other.excalidraw.md",
+        operations: [labelled],
+      });
+
+      expect(other.text).toBe(
+        "Edited Drawings/Other.excalidraw.md. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001)."
+      );
+      firstSaved.resolve({ arrowId: "Arr00001", labelId: "Lbl00001" });
+      expect((await first).isError).toBe(false);
+    });
+
+    it(`${ISSUE_787} still runs the next write to a drawing after the previous write failed`, async () => {
+      const api = fakeApi();
+      api.execute.mockRejectedValueOnce(new Error("view closed"));
+      const { write } = toolsFor(api);
+      const labelled = { op: "connect", from: "box1", to: "box2", label: "Yes" };
+
+      const failed = write.call({ path: FLOW, operations: [labelled] });
+      const next = write.call({ path: FLOW, operations: [labelled] });
+
+      expect((await failed).isError).toBe(true);
+      expect((await next).isError).toBe(false);
     });
 
     it(`${ISSUE_787} rejects bend points that are not [x, y] pairs before changing the drawing`, async () => {

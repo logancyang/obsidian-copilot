@@ -206,10 +206,23 @@ export function createExcalidrawTools(
     handler: Parameters<typeof run>[0]
   ): ExcalidrawTool =>
     Object.freeze({ definition, turnedOffText: EXCALIDRAW_TURNED_OFF_TEXT, call: run(handler) });
+  // Excalidraw publishes a scene snapshot taken before an async step, so two writes to one drawing from parallel tool calls
+  // or two chats would let the second drop the first's changes while both report success.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+  const writing = new Map<string, Promise<unknown>>();
+  const writeQueuedPerDrawing: Parameters<typeof run>[0] = (api, input, path) => {
+    const result = (writing.get(path) ?? Promise.resolve()).then(() => write(api, input, path));
+    const settled = result.catch(() => undefined);
+    writing.set(path, settled);
+    void settled.then(() => {
+      if (writing.get(path) === settled) writing.delete(path);
+    });
+    return result;
+  };
   return Object.freeze([
     tool(EXCALIDRAW_READ_TOOL, read),
     tool(EXCALIDRAW_RENDER_TOOL, render),
-    tool(EXCALIDRAW_WRITE_TOOL, write),
+    tool(EXCALIDRAW_WRITE_TOOL, writeQueuedPerDrawing),
   ]);
 }
 
