@@ -21,12 +21,12 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
+    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
         ["obsidian-markdown", 3],
         ["obsidian-bases", 2],
         ["json-canvas", 2],
-        ["obsidian-cli", 3],
+        ["obsidian-cli", 4],
       ]);
     });
 
@@ -242,6 +242,15 @@ describe("obsidianSkills", () => {
       expect(md).not.toContain("obsidian create name=");
       expect(md).not.toContain("obsidian search query=");
       expect(md).not.toContain(" silent ");
+    });
+
+    it("has a sandboxed agent rerun a CLI command with escalated permissions when it cannot find the running app, instead of telling the user to open Obsidian (https://github.com/logancyang/obsidian-copilot/issues/3666)", () => {
+      const md = skillMd("obsidian-cli");
+      expect(md).toContain(
+        "Copilot runs inside Obsidian, so Obsidian is running during your session."
+      );
+      expect(md).toContain('prints "The CLI is unable to find Obsidian"\ninside a sandbox');
+      expect(md).toContain("rerun\nthat command with escalated permissions");
     });
   });
 });

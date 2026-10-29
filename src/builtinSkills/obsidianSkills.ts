@@ -7,7 +7,7 @@ export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf58222
 const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
 const FORMAT_SKILL_VERSION = 2;
 const MARKDOWN_SKILL_VERSION = 3;
-const OBSIDIAN_CLI_VERSION = 3;
+const OBSIDIAN_CLI_VERSION = 4;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
 
@@ -663,6 +663,12 @@ the probe fails, continue with ordinary filesystem tools where they can satisfy
 the request. Briefly tell the user only when the missing runtime capability
 matters. Do not install Obsidian, change PATH, register the CLI, or raise the
 plugin's minimum Obsidian version on the user's behalf.
+
+Copilot runs inside Obsidian, so Obsidian is running during your session. If
+the probe or a later CLI command prints "The CLI is unable to find Obsidian"
+inside a sandbox, the sandbox is blocking the CLI's connection to the app: rerun
+that command with escalated permissions instead of telling the user to open
+Obsidian.
 
 The CLI requires a compatible Obsidian installer and a running app. Commands
 can differ by version, so inspect live help before using a command whose syntax
