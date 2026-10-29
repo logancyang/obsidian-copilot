@@ -9,10 +9,7 @@ import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import {
-  buildAgentSystemPrompt,
-  setExcalidrawToolsAvailable,
-} from "./backends/shared/agentSystemPrompt";
+import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
@@ -134,15 +131,19 @@ function spawnModelConfigKey(
 // The Excalidraw tools follow the Excalidraw plugin rather than a setting, so they appear only where drawings can be made.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app: App): boolean {
-  return toolName === SEND_FEEDBACK_TOOL_NAME
-    ? settings.agentMode.offerFeedbackCards
-    : toolName === MIYO_PARSE_TOOL_NAME
-      ? isMiyoParseActive(settings)
-      : toolName === MIYO_SEARCH_TOOL_NAME
-        ? isMiyoSearchActive(settings)
-        : EXCALIDRAW_TOOL_NAMES.has(toolName)
-          ? getExcalidrawApi(app) !== null
-          : true;
+  if (toolName === SEND_FEEDBACK_TOOL_NAME) {
+    return settings.agentMode.offerFeedbackCards;
+  }
+  if (toolName === MIYO_PARSE_TOOL_NAME) {
+    return isMiyoParseActive(settings);
+  }
+  if (toolName === MIYO_SEARCH_TOOL_NAME) {
+    return isMiyoSearchActive(settings);
+  }
+  if (EXCALIDRAW_TOOL_NAMES.has(toolName)) {
+    return getExcalidrawApi(app) !== null;
+  }
+  return true;
 }
 
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
@@ -180,13 +181,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // Obsidian announces no change to its CLI toggle or to a plugin being enabled, so each agent start re-checks both.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-    const excalidrawChanged = setExcalidrawToolsAvailable(getExcalidrawApi(app) !== null);
     if (isObsidianCliEnabled() !== seededWithCli) {
       await seedManagedBuiltins().catch((error) =>
         logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
       );
-    } else if (!excalidrawChanged) {
-      return;
     }
     refreshSystemPromptAffected();
   };
@@ -302,17 +300,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       }
     });
   }
-  setExcalidrawToolsAvailable(getExcalidrawApi(app) !== null);
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.restartOnSystemPromptChange) {
-      lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id));
+      lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id, app));
     }
   }
   const refreshSystemPromptAffected = (): void => {
     for (const descriptor of listBackendDescriptors()) {
       if (!descriptor.restartOnSystemPromptChange) continue;
-      const key = buildAgentSystemPrompt(descriptor.id);
+      const key = buildAgentSystemPrompt(descriptor.id, app);
       if (key === lastSystemPromptKeys.get(descriptor.id)) continue;
       lastSystemPromptKeys.set(descriptor.id, key);
       void manager

@@ -34,15 +34,9 @@ jest.mock("@/utils/appPaths", () => ({
   copilotAppDataDir: () => "/tmp/copilot",
   getVaultId: () => "test-vault",
 }));
-let mockExcalidrawAvailable = false;
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
-  buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${mockExcalidrawAvailable}`,
-  setExcalidrawToolsAvailable: (available: boolean) => {
-    const changed = available !== mockExcalidrawAvailable;
-    mockExcalidrawAvailable = available;
-    return changed;
-  },
+  buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",

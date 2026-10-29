@@ -3,6 +3,7 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { ChatModelProviders } from "@/constants";
 import { logInfo } from "@/logger";
+import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
@@ -46,6 +47,7 @@ export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Partial<Record<CopilotMode, stri
 };
 
 export interface OpencodeModelDeps {
+  app: App;
   providerRegistry: ProviderRegistry;
   backendConfigRegistry: BackendConfigRegistry;
   clientVersion?: string;
@@ -337,7 +339,7 @@ export async function buildOpencodeConfig(
   if (selfHost) permissions.push(...NATIVE_WEB_DENIES);
 
   const skillManagerReady = SkillManager.hasInstance();
-  const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id);
+  const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id, deps.app);
 
   if (!skillManagerReady) {
     logInfo(

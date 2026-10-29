@@ -1,4 +1,5 @@
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
+import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { detectBinary } from "@/utils/detectBinary";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
@@ -30,7 +31,10 @@ export class CodexBackend implements AcpBackend {
 
   private codexHome: string | null = null;
 
-  constructor(private readonly clientVersion = "") {}
+  constructor(
+    private readonly app: App,
+    private readonly clientVersion = ""
+  ) {}
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
@@ -50,7 +54,7 @@ export class CodexBackend implements AcpBackend {
     );
     descriptor.env.CODEX_CONFIG = mergeCodexConfigEnv(
       descriptor.env.CODEX_CONFIG,
-      buildAgentSystemPrompt("codex", CODEX_QUESTION_CARD_STEERING)
+      buildAgentSystemPrompt("codex", this.app, CODEX_QUESTION_CARD_STEERING)
     );
     const installed = inspectCodexAcpPackage(descriptor.command);
     const entryPath = installed.entryPath;

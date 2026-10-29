@@ -352,7 +352,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
         assertClaudeVersionSupported(claudePath, claudeChildEnv(getSettings())),
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
-      getSystemPromptAppend: () => buildAgentSystemPrompt("claude"),
+      getSystemPromptAppend: () => buildAgentSystemPrompt("claude", args.app),
     });
   },
 

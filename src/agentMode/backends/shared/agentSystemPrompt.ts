@@ -1,8 +1,10 @@
+import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
 import {
   builtinSkillUnavailableReason,
   isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
+import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
@@ -37,17 +39,6 @@ export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabl
 // Mermaid and canvas keeps a format the user asks for. The line rides only while the Excalidraw tools are available.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 export const COPILOT_EXCALIDRAW_STEERING = `Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format.`;
-
-// Whether the Excalidraw plugin is enabled is not a Copilot setting, so the agent manager records it at startup and
-// at each agent start.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-let excalidrawToolsAvailable = false;
-
-export function setExcalidrawToolsAvailable(available: boolean): boolean {
-  const changed = available !== excalidrawToolsAvailable;
-  excalidrawToolsAvailable = available;
-  return changed;
-}
 
 // OpenCode models skip a format skill whose description doesn't name their edit and write syntax Obsidian
 // can't render, and without the CLI skill they assume live app state such as open tabs is out of reach.
@@ -94,7 +85,11 @@ function buildFileEditPolicy(backendId: BackendId): string {
 // Settings-dependent lines go last so a toggle change leaves the cached prefix before them intact;
 // a backend's own fixed steering joins the always-on lines ahead of them.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/441
-export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: string): string {
+export function buildAgentSystemPrompt(
+  backendId: BackendId,
+  app: App,
+  backendSteering?: string
+): string {
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
@@ -110,7 +105,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
   if (builtinPrompt && isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
-  if (builtinPrompt && excalidrawToolsAvailable) parts.push(COPILOT_EXCALIDRAW_STEERING);
+  if (builtinPrompt && getExcalidrawApi(app) !== null) parts.push(COPILOT_EXCALIDRAW_STEERING);
   const enabledJobs = (jobs: typeof RELAY_SKILL_JOBS) =>
     jobs.filter(([skill]) => enabled(skill)).map(([skill, job]) => `${skill} for ${job}`);
   const relayJobs = enabledJobs(RELAY_SKILL_JOBS);
