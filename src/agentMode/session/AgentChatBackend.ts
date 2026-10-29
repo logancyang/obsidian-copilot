@@ -23,13 +23,13 @@ export interface AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options?: { interrupt?: boolean }
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> };
   acceptsMidTurnMessages(): boolean;
   getQueuedPrompts(): readonly QueuedPrompt[];
   canWithdrawMessages(): boolean;
   withdrawMessage(id: string): Promise<void>;
+  sendMessageNow(id: string): Promise<void>;
   takeWithdrawnPrompts(): readonly QueuedPrompt[];
   cancel(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;

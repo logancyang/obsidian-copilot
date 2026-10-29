@@ -54,15 +54,13 @@ export class AgentChatUIState implements AgentChatBackend {
     text: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options?: { interrupt?: boolean }
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { id: string; turn: Promise<void> } {
     const { userMessageId, turn } = this.session.sendPrompt(
       text,
       context,
       promptContent,
-      mentionedAgents,
-      options
+      mentionedAgents
     );
     this.notifyListeners();
     const wrapped = turn.then(
@@ -89,6 +87,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   withdrawMessage(id: string): Promise<void> {
     return this.session.withdrawPrompt(id);
+  }
+
+  sendMessageNow(id: string): Promise<void> {
+    return this.session.sendPromptNow(id);
   }
 
   takeWithdrawnPrompts(): readonly QueuedPrompt[] {

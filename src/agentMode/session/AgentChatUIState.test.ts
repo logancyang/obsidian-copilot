@@ -375,6 +375,21 @@ describe("AgentChatUIState", () => {
     });
   });
 
+  describe("sendMessageNow()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 asks the backend to take back a waiting message so it can be sent again at once", async () => {
+      const withdraw = jest.fn(async () => false);
+      const prompt = jest.fn(async () => undefined);
+      const chat = liveChat({ midTurnDelivery: true, withdraw: true }, { prompt, withdraw });
+      chat.sendMessage("list the notes");
+      const { id } = chat.sendMessage("only the first two");
+      await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
+
+      await chat.sendMessageNow(id);
+
+      expect(withdraw).toHaveBeenCalledWith({ sessionId: "claude-session", promptId: id });
+    });
+  });
+
   describe("takeWithdrawnPrompts()", () => {
     it("hands over the messages the agent withdrew, once (https://github.com/Brevilabs/obsidian-copilot-private/issues/747)", () => {
       const chat = liveChat({ midTurnDelivery: true });

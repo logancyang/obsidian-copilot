@@ -33,6 +33,7 @@ export interface TurnTrackerDeps {
   notifyMessages: () => void;
   notifyQueuedPrompts: () => void;
   promptsWithdrawn: (prompts: readonly QueuedPrompt[]) => void;
+  resendNow: (prompt: QueuedPrompt) => void;
   notifyStatus: () => void;
   runningTaskToolCallIds: () => ReadonlySet<string>;
   endLaunches: (status: TaskEndStatus) => void;
@@ -68,6 +69,7 @@ export class TurnTracker {
   private pendingPrompts = new Map<string, PendingPrompt>();
   private queuedPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
   private withdrawnPrompts: readonly QueuedPrompt[] = EMPTY_QUEUED_PROMPTS;
+  private readonly sendingNow = new Set<string>();
   private sendOrder: Promise<void> = Promise.resolve();
   private stopDrain: StopDrain | null = null;
   private cancelledMessageIds = new Set<string>();
@@ -236,6 +238,19 @@ export class TurnTracker {
     if (withdrawn === false) this.deliverPrompt(promptId);
   }
 
+  // Claude cannot reprioritize a message it already holds, so Send now takes it back and sends it again at once. https://github.com/Brevilabs/obsidian-copilot-private/issues/789
+  async sendQueuedNow(
+    promptId: string,
+    withdrawSent: () => Promise<boolean> | undefined
+  ): Promise<void> {
+    this.sendingNow.add(promptId);
+    try {
+      await this.withdrawQueued(promptId, withdrawSent);
+    } finally {
+      this.sendingNow.delete(promptId);
+    }
+  }
+
   refuse(message: string): TurnOutcome {
     const placeholderId = this.placeholderId!;
     this.deps.store.markMessageError(placeholderId, message);
@@ -307,13 +322,16 @@ export class TurnTracker {
     }
     const ids = new Set(promptIds);
     const withdrawn = this.queuedPrompts.filter((p) => ids.has(p.id));
+    const resent = withdrawn.filter((p) => this.sendingNow.has(p.id));
+    const restored = withdrawn.filter((p) => !this.sendingNow.has(p.id));
     // A message the agent never read goes back to the composer, so its text is not lost. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (withdrawn.length > 0) {
-      this.withdrawnPrompts = Object.freeze([...this.withdrawnPrompts, ...withdrawn]);
-      this.deps.promptsWithdrawn(withdrawn);
+    if (restored.length > 0) {
+      this.withdrawnPrompts = Object.freeze([...this.withdrawnPrompts, ...restored]);
     }
+    if (withdrawn.length > 0) this.deps.promptsWithdrawn(withdrawn);
     this.removeQueuedPrompts(promptIds);
     this.deps.notifyStatus();
+    for (const prompt of resent) this.deps.resendNow(prompt);
   }
 
   // The next send reconnects the agent, so the chat only reports the loss. https://github.com/Brevilabs/obsidian-copilot-private/issues/175

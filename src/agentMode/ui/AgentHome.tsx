@@ -579,6 +579,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     [backend]
   );
+  const handleSendMessageNow = useCallback(
+    (id: string) => {
+      backend.sendMessageNow(id).catch((e: unknown) => logError("[AgentMode] send now failed", e));
+    },
+    [backend]
+  );
   // The controls bar sits directly above the composer, so pending messages list above both. https://github.com/Brevilabs/obsidian-copilot-private/issues/749
   const queuedMessagesNode =
     queuedPrompts.length > 0 || heldMessages.length > 0 ? (
@@ -587,6 +593,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         held={heldMessages}
         onRemove={handleRemoveHeldMessage}
         onWithdraw={backend.canWithdrawMessages() ? handleWithdrawMessage : undefined}
+        onSendNow={backend.canWithdrawMessages() ? handleSendMessageNow : undefined}
       />
     ) : null;
 

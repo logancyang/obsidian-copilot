@@ -298,6 +298,11 @@ export class AgentSession {
           this.lastSentWebTabBlock = null;
         }
       },
+      resendNow: (prompt) => {
+        this.queuePrompt(prompt.text, prompt.context, prompt.promptContent, true).turn.catch(
+          (e: unknown) => logWarn("[AgentMode] Send now failed", e)
+        );
+      },
       notifyStatus: () => this.recomputeStatusIfChanged(),
       runningTaskToolCallIds: () =>
         new Set(
@@ -697,8 +702,7 @@ export class AgentSession {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>,
-    options: { interrupt?: boolean } = {}
+    mentionedAgents?: ReadonlyArray<BackendId>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -729,7 +733,7 @@ export class AgentSession {
       ) {
         throw new Error("Session already has a turn in flight");
       }
-      return this.queuePrompt(displayText, context, promptContent, options.interrupt === true);
+      return this.queuePrompt(displayText, context, promptContent, false);
     }
 
     const promptId = uuidv4();
@@ -780,6 +784,12 @@ export class AgentSession {
 
   withdrawPrompt(promptId: string): Promise<void> {
     return this.turns.withdrawQueued(promptId, () =>
+      this.backend.withdraw?.({ sessionId: this.backendSessionId!, promptId })
+    );
+  }
+
+  sendPromptNow(promptId: string): Promise<void> {
+    return this.turns.sendQueuedNow(promptId, () =>
       this.backend.withdraw?.({ sessionId: this.backendSessionId!, promptId })
     );
   }

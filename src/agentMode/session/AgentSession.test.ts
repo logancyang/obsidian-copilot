@@ -2221,9 +2221,7 @@ describe("AgentSession", () => {
         emit({ sessionUpdate: "message_delivered", promptId: sent[0].promptId });
         emit({ sessionUpdate: "turn_started", turnId: "t1" });
         emit(replayText("agent_message_chunk", "First answer."));
-        const steer = session.sendPrompt("now this", undefined, undefined, undefined, {
-          interrupt: true,
-        });
+        const steer = session.sendPrompt("now this");
         await waitFor(() => expect(sent).toHaveLength(2));
         emit({ sessionUpdate: "turn_ended", turnId: "t1", stopReason: "end_turn" });
         await waitFor(() => expect(session.getStatus()).toBe("idle"));
@@ -2241,18 +2239,6 @@ describe("AgentSession", () => {
           { sender: USER_SENDER, message: "now this" },
           { sender: AI_SENDER, message: "Second answer." },
         ]);
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 asks the backend to interrupt the running turn for an interrupt-and-send message", async () => {
-        const mock = makeMockBackend();
-        const sent = recordPrompts(mock);
-        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
-        session.sendPrompt("first");
-        session.sendPrompt("plain steer");
-        session.sendPrompt("urgent", undefined, undefined, undefined, { interrupt: true });
-
-        await waitFor(() => expect(sent).toHaveLength(3));
-        expect(sent.map((input) => input.interrupt)).toEqual([undefined, undefined, true]);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 hands messages to the backend in the order they were sent, even while an earlier one is still being handed over", async () => {
@@ -4659,6 +4645,50 @@ describe("AgentSession", () => {
         } finally {
           getInstance.mockRestore();
         }
+      });
+    });
+
+    describe("sendPromptNow()", () => {
+      async function queueTwo(mock: MockBackend) {
+        const sent = recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: withdrawingDescriptor });
+        session.sendPrompt("first");
+        const second = session.sendPrompt("second");
+        await waitFor(() => expect(sent).toHaveLength(2));
+        return { sent, session, second };
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 takes back a waiting message and sends it again at priority now, keeping it out of the composer", async () => {
+        const mock = makeMockBackend();
+        const { sent, session, second } = await queueTwo(mock);
+        mock.asBackend.withdraw = jest.fn(async ({ promptId }: { promptId: string }) => {
+          mock.emitUpdate({ sessionUpdate: "messages_withdrawn", promptIds: [promptId] });
+          return true;
+        });
+
+        await session.sendPromptNow(second.userMessageId);
+
+        await waitFor(() => expect(sent).toHaveLength(3));
+        expect(promptText(sent[2])).toBe("second");
+        expect(sent.map((input) => input.interrupt)).toEqual([undefined, undefined, true]);
+        await expect(second.turn).resolves.toBe("cancelled");
+        expect(session.getQueuedPrompts().map((p) => p.text)).toEqual(["second"]);
+        expect(session.takeWithdrawnPrompts()).toEqual([]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 sends nothing again when the agent already read the message", async () => {
+        const mock = makeMockBackend();
+        const { sent, session, second } = await queueTwo(mock);
+        mock.asBackend.withdraw = async () => false;
+
+        await session.sendPromptNow(second.userMessageId);
+
+        expect(sent).toHaveLength(2);
+        expect(session.getQueuedPrompts()).toEqual([]);
+        expect(bubbles(session).filter((b) => b.sender === USER_SENDER)).toEqual([
+          { sender: USER_SENDER, message: "first" },
+          { sender: USER_SENDER, message: "second" },
+        ]);
       });
     });
 

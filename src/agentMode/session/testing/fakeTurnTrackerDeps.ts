@@ -7,6 +7,7 @@ export interface FakeTurnTrackerDeps extends TurnTrackerDeps {
   notifyMessages: jest.MockedFunction<TurnTrackerDeps["notifyMessages"]>;
   notifyQueuedPrompts: jest.MockedFunction<TurnTrackerDeps["notifyQueuedPrompts"]>;
   promptsWithdrawn: jest.MockedFunction<TurnTrackerDeps["promptsWithdrawn"]>;
+  resendNow: jest.MockedFunction<TurnTrackerDeps["resendNow"]>;
   notifyStatus: jest.MockedFunction<TurnTrackerDeps["notifyStatus"]>;
   runningTaskToolCallIds: jest.MockedFunction<TurnTrackerDeps["runningTaskToolCallIds"]>;
   endLaunches: jest.MockedFunction<TurnTrackerDeps["endLaunches"]>;
@@ -34,6 +35,7 @@ export function fakeTurnTrackerDeps(): FakeTurnTrackerDeps {
     }),
     notifyQueuedPrompts: jest.fn(),
     promptsWithdrawn: jest.fn(),
+    resendNow: jest.fn(),
     notifyStatus: jest.fn(),
     runningTaskToolCallIds: jest.fn(() => new Set<string>()),
     endLaunches: jest.fn(),

@@ -96,6 +96,27 @@ describe("QueuedMessageList", () => {
       expect(onWithdraw).toHaveBeenCalledWith("steer-2");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 offers Send now on each message the agent reads at its next step, and never on a message Copilot holds", () => {
+      const onSendNow = jest.fn();
+      render(
+        <QueuedMessageList
+          delivering={[
+            { id: "steer-1", text: "Only the first two" },
+            { id: "steer-2", text: "Keep it short" },
+          ]}
+          held={[{ id: "compact", text: "/compact", rawInput: "/compact" }]}
+          onRemove={jest.fn()}
+          onSendNow={onSendNow}
+        />
+      );
+
+      const controls = screen.getAllByRole("button", { name: "Send queued message now" });
+      fireEvent.click(controls[1]);
+
+      expect(controls).toHaveLength(2);
+      expect(onSendNow).toHaveBeenCalledWith("steer-2");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 tells the user that messages Copilot holds send when the agent finishes", () => {
       render(
         <QueuedMessageList

@@ -34,13 +34,14 @@ export const ReadAtNextStep: StoryObj<Props> = {
   },
 };
 
-export const ReadAtNextStepWithWithdraw: StoryObj<Props> = {
+export const ReadAtNextStepWithActions: StoryObj<Props> = {
   args: {
     delivering: [
       { id: "steer-1", text: "Only summarize the first two notes." },
       { id: "steer-2", text: "Keep each summary to one line." },
     ],
     onWithdraw: () => {},
+    onSendNow: () => {},
   },
 };
 

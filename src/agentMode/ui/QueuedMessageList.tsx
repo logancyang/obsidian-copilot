@@ -1,7 +1,7 @@
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { QueuedPrompt } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
-import { Clock, X } from "lucide-react";
+import { Clock, CornerDownLeft, X } from "lucide-react";
 import React from "react";
 
 interface QueuedMessageListProps {
@@ -9,6 +9,7 @@ interface QueuedMessageListProps {
   held: readonly QueuedAgentMessage[];
   onRemove: (id: string) => void;
   onWithdraw?: (id: string) => void;
+  onSendNow?: (id: string) => void;
 }
 
 interface RemoveButtonProps {
@@ -68,12 +69,26 @@ export const QueuedMessageList: React.FC<QueuedMessageListProps> = ({
   held,
   onRemove,
   onWithdraw,
+  onSendNow,
 }) => {
   return (
     <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
       {delivering.length > 0 && <GroupCaption>The agent reads these at its next step</GroupCaption>}
       {delivering.map((m) => (
         <QueuedMessageRow key={m.id} message={m}>
+          {onSendNow && (
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-shrink-0 tw-text-muted"
+              aria-label="Send queued message now"
+              title="Stop the agent at its next step and handle this message next"
+              onClick={() => onSendNow(m.id)}
+            >
+              <CornerDownLeft className="!tw-size-3" />
+              <span>Send now</span>
+            </Button>
+          )}
           {onWithdraw && (
             <RemoveButton label="Withdraw queued message" onClick={() => onWithdraw(m.id)} />
           )}

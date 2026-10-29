@@ -492,6 +492,54 @@ describe("TurnTracker", () => {
       });
     });
 
+    describe("sendQueuedNow()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 sends a prompt the backend takes back again at once, instead of returning it to the composer", async () => {
+        const { deps, tracker } = setup();
+        runningTurn(tracker, "p1", "t1");
+        void tracker.queue(ALSO, false, async () => () => TEXT);
+        await deps.whenSent(ALSO.id);
+
+        await tracker.sendQueuedNow(ALSO.id, async () => {
+          tracker.withdrawPrompts([ALSO.id]);
+          return true;
+        });
+
+        expect(deps.resendNow).toHaveBeenCalledWith(ALSO);
+        expect(deps.promptsWithdrawn).toHaveBeenCalledWith([ALSO]);
+        expect(tracker.getQueuedPrompts()).toEqual([]);
+        expect(tracker.takeWithdrawnPrompts()).toEqual([]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 resends nothing when the agent already took the prompt, which shows as sent", async () => {
+        const { deps, tracker } = setup();
+        runningTurn(tracker, "p1", "t1");
+        void tracker.queue(ALSO, false, async () => () => TEXT);
+        await deps.whenSent(ALSO.id);
+
+        await tracker.sendQueuedNow(ALSO.id, async () => false);
+
+        expect(deps.resendNow).not.toHaveBeenCalled();
+        expect(tracker.getQueuedPrompts()).toEqual([]);
+        expect(transcript(deps.store).map(([sender, text]) => [sender, text])).toContainEqual([
+          USER_SENDER,
+          ALSO.text,
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/789 returns a prompt withdrawn after Send now finished to the composer, like any withdrawal", async () => {
+        const { deps, tracker } = setup();
+        runningTurn(tracker, "p1", "t1");
+        void tracker.queue(ALSO, false, async () => () => TEXT);
+        await deps.whenSent(ALSO.id);
+        await tracker.sendQueuedNow(ALSO.id, async () => true);
+
+        tracker.withdrawPrompts([ALSO.id]);
+
+        expect(deps.resendNow).not.toHaveBeenCalled();
+        expect(tracker.takeWithdrawnPrompts()).toEqual([ALSO]);
+      });
+    });
+
     describe("takeWithdrawnPrompts()", () => {
       it("returns the withdrawn prompts once and then the same empty list", () => {
         const { tracker } = setup();
