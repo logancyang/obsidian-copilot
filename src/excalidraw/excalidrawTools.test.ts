@@ -240,17 +240,40 @@ describe("excalidrawTools", () => {
       });
     });
 
-    it(`${ISSUE_787} builds labelled, dashed or coloured connections on the open drawing instead of sending them to apply`, async () => {
+    it(`${ISSUE_787} builds labelled, dashed, coloured or routed connections on the open drawing instead of sending them to apply`, async () => {
       const api = fakeApi();
       const labelled = { op: "connect", from: "box1", to: "box2", label: "No", dashed: true };
+      const routed = { op: "connect", from: "box2", to: "box1", via: [[540, 40]] };
 
-      const result = await toolsFor(api).write.call({ path: FLOW, operations: [labelled] });
+      const result = await toolsFor(api).write.call({ path: FLOW, operations: [labelled, routed] });
 
       expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual(["open"]);
-      expect(api.connectLabelled).toHaveBeenCalledWith(FLOW, labelled);
+      expect(api.connectLabelled.mock.calls).toEqual([
+        [FLOW, labelled],
+        [FLOW, routed],
+      ]);
       expect(result.text).toBe(
-        `Edited ${FLOW}. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001).`
+        `Edited ${FLOW}. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001). Connected box2 -> box1 with arrow Arr00001 (label Lbl00001).`
       );
+    });
+
+    it(`${ISSUE_787} rejects bend points that are not [x, y] pairs before changing the drawing`, async () => {
+      const api = fakeApi();
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        operations: [
+          { op: "delete", ids: ["box2"] },
+          { op: "connect", from: "box1", to: "box2", via: [{ x: 540, y: 40 }] },
+        ],
+      });
+
+      expect(result).toEqual({
+        text: "No change made: via must be a list of [x, y] points, such as [[540, 40]].",
+        isError: true,
+      });
+      expect(api.execute).not.toHaveBeenCalled();
+      expect(api.connectLabelled).not.toHaveBeenCalled();
     });
 
     it("reports a rejected apply as no change, with the plugin's reason", async () => {

@@ -9,9 +9,27 @@ const ELEMENTS = [{ id: "box1", type: "rectangle", x: 0, y: 0, width: 10, height
 function fakeEa() {
   const elements: Record<
     string,
-    { containerId?: string | null; boundElements?: Array<{ id: string; type: string }> }
+    {
+      containerId?: string | null;
+      boundElements?: Array<{ id: string; type: string }>;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      points?: number[][];
+    }
   > = {
-    Arr00001: { boundElements: [] },
+    Arr00001: {
+      boundElements: [],
+      x: 180,
+      y: 40,
+      width: 120,
+      height: 0,
+      points: [
+        [0, 0],
+        [120, 0],
+      ],
+    },
     Lbl00001: {},
   };
   const fresh = {
@@ -135,6 +153,33 @@ describe("excalidrawApi", () => {
       expect(elements.Arr00001.boundElements).toEqual([{ type: "text", id: "Lbl00001" }]);
       expect(fresh.addElementsToView).toHaveBeenCalledWith(false, false, true);
       expect(fresh.destroy).toHaveBeenCalled();
+    });
+
+    it(`${ISSUE_787} routes a connection through its bend points, keeping the ends where they attach to the shapes`, async () => {
+      const { ea, elements } = fakeEa();
+      const api = getExcalidrawApi(appWith(ea, [FLOW]))!;
+
+      await api.connectLabelled(FLOW, {
+        from: "box1",
+        to: "box2",
+        via: [
+          [240, 140],
+          [300, 140],
+        ],
+      });
+
+      expect(elements.Arr00001).toMatchObject({
+        x: 180,
+        y: 40,
+        width: 120,
+        height: 100,
+        points: [
+          [0, 0],
+          [60, 100],
+          [120, 100],
+          [120, 0],
+        ],
+      });
     });
 
     it(`${ISSUE_787} fails a connection whose save the drawing did not acknowledge, so the agent does not read a stale file`, async () => {

@@ -11,6 +11,11 @@ export const EXCALIDRAW_PLUGIN_ID = "obsidian-excalidraw-plugin";
 const EXCALIDRAW_VIEW_TYPE = "excalidraw";
 
 interface MutableElement {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  points?: number[][];
   containerId?: string | null;
   boundElements?: Array<{ id: string; type: string }> | null;
 }
@@ -119,13 +124,27 @@ export function getExcalidrawApi(app: App): ExcalidrawApi | null {
             endArrowHead: "arrow",
           }
         );
+        const arrow = fresh.getElement(arrowId);
+        if (connection.via?.length && arrow.points?.length) {
+          const route = [
+            arrow.points[0],
+            ...connection.via.map(([x, y]) => [x - arrow.x, y - arrow.y]),
+            arrow.points[arrow.points.length - 1],
+          ];
+          const xs = route.map(([x]) => x);
+          const ys = route.map(([, y]) => y);
+          Object.assign(arrow, {
+            points: route,
+            width: Math.max(...xs) - Math.min(...xs),
+            height: Math.max(...ys) - Math.min(...ys),
+          });
+        }
         let labelId: string | null = null;
         if (connection.label) {
           labelId = fresh.addText(0, 0, connection.label, {
             textAlign: "center",
             textVerticalAlign: "middle",
           });
-          const arrow = fresh.getElement(arrowId);
           fresh.getElement(labelId).containerId = arrowId;
           arrow.boundElements = [...(arrow.boundElements ?? []), { type: "text", id: labelId }];
         }

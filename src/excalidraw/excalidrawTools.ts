@@ -95,10 +95,10 @@ Give each shape a local id, type, x, y, width, height and label {text}; text ins
 Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). Follow the look of the vault's existing drawings. The reply maps your ids to the real ones.
 
 Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
-- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, recolours (strokeColor, backgroundColor, strokeStyle), links (link) or renames. To rename, update the label's own text id with {"text": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again.
+- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, recolours (strokeColor, backgroundColor, strokeStyle), links (link) or renames. To rename, update the label's own text id with {"text": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
-- {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation.
-- {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), label, dashed (true) and color.
+- {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation; connect existing shapes with connect.
+- {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), via (bend points [[x,y],..] to route it around shapes, as for a loop back), label, dashed (true) and color.
 Make room before inserting by moving the shapes that follow. Keep every id you didn't mean to change: links and block references point at them.`,
   inputSchema: {
     type: "object",
@@ -121,6 +121,7 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
             to: { type: "string" },
             fromSide: { enum: ["top", "bottom", "left", "right"] },
             toSide: { enum: ["top", "bottom", "left", "right"] },
+            via: { type: "array", items: { type: "array", items: { type: "number" } } },
             label: { type: "string" },
             dashed: { type: "boolean" },
             color: { type: "string" },
@@ -148,6 +149,7 @@ export interface LabelledConnection {
   label?: string;
   dashed?: boolean;
   color?: string;
+  via?: ReadonlyArray<readonly [number, number]>;
 }
 
 export interface ExcalidrawApi {
@@ -294,13 +296,17 @@ async function edit(
   const operations = input.operations.filter(
     (op): op is Record<string, unknown> => Boolean(op) && typeof op === "object"
   );
+  // A malformed bend point would write NaN coordinates into the user's drawing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+  if (operations.some((op) => op.op === "connect" && op.via !== undefined && !isRoute(op.via)))
+    return failure("No change made: via must be a list of [x, y] points, such as [[540, 40]].");
   const opened = await api.execute({ apiVersion: 1, command: "open", path });
   if (!opened.ok) return failure(`Could not open ${path}: ${describeFailure(opened)}`);
 
-  // The plugin's connect operation can't label, dash or colour an arrow, so those connections are built on the open drawing.
+  // The plugin's connect operation can't label, dash, colour or route an arrow, so those connections are built on the open drawing.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
   const styled = operations.filter(
-    (op) => op.op === "connect" && (op.label || op.dashed || op.color)
+    (op) => op.op === "connect" && (op.label || op.dashed || op.color || op.via)
   );
   const plain = operations.filter((op) => !styled.includes(op));
   const done: string[] = [];
@@ -337,6 +343,13 @@ async function edit(
     }
   }
   return { text: `Edited ${path}. ${done.join(" ")}`, isError: false };
+}
+
+function isRoute(via: unknown): boolean {
+  return (
+    Array.isArray(via) &&
+    via.every((point) => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite))
+  );
 }
 
 function requestId(): string {
