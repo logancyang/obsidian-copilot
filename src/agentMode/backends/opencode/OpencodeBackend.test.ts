@@ -456,6 +456,24 @@ describe("OpencodeBackend", () => {
       expect(cfg.providers).toEqual({});
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/766 starts new sessions on an OpenCode-hosted model the user enabled and saved as the default", async () => {
+      const provider = makeProvider("opencode-provider", { kind: "agent", agentType: "opencode" });
+      const deps = makeDeps({
+        resolved: [
+          okEntry(makePlusProvider(), makeModel("p-plus", "copilot-plus-flash")),
+          okEntry(provider, makeModel("opencode-provider", "opencode/big-pickle")),
+        ],
+        keys: { "p-plus": "plus-token-123" },
+      });
+      updateAgentModeBackendFields("opencode", {
+        defaultModel: { baseModelId: "opencode/big-pickle", effort: null },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.model).toBe("opencode/big-pickle");
+    });
+
     it("skips a BYOK provider without a catalog id that is not OpenAI-compatible", async () => {
       const provider = makeProvider("p-google", { kind: "byok" }, { providerType: "google" });
       const deps = makeDeps({
@@ -679,6 +697,43 @@ describe("OpencodeBackend", () => {
         limit: { context: 1024 * 1024 },
         variants: [],
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/766 starts new sessions on the saved default model instead of an OpenCode free model the user never enabled", async () => {
+      const deps = makeDeps({
+        resolved: [
+          okEntry(makePlusProvider(), makeModel("p-plus", "glm-5.2")),
+          okEntry(makePlusProvider(), makeModel("p-plus", "copilot-plus-flash")),
+        ],
+        keys: { "p-plus": "plus-token-123" },
+      });
+      updateAgentModeBackendFields("opencode", {
+        defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.model).toBe("copilot-plus/copilot-plus-flash");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/766 starts new sessions on the first runnable enabled model when the saved default cannot run", async () => {
+      const deps = makeDeps({
+        resolved: [okEntry(makePlusProvider(), makeModel("p-plus", "glm-5.2"))],
+        keys: { "p-plus": "plus-token-123" },
+      });
+      updateAgentModeBackendFields("opencode", {
+        defaultModel: { baseModelId: "copilot-plus/copilot-plus-flash", effort: null },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.model).toBe("copilot-plus/glm-5.2");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/766 leaves the startup model to OpenCode when no enabled model can run", async () => {
+      const cfg = await buildOpencodeConfig(getSettings(), makeDeps({ resolved: [] }));
+
+      expect(cfg).not.toHaveProperty("model");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 offers only the effort levels Copilot Plus published", async () => {

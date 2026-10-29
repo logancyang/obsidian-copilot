@@ -216,12 +216,16 @@ export async function buildOpencodeConfig(
   const providers: Record<string, ProviderConfig> = {};
   const modelsByProvider: Record<string, Record<string, ModelConfig>> = {};
   const injected: string[] = [];
+  const nativeRunnable: string[] = [];
 
   for (const entry of backendConfigRegistry.resolveEnabled("opencode")) {
     if (entry.state !== "ok") continue;
     const mapping = mapProviderToOpencodeId(entry.provider);
     if (!mapping) continue;
-    if (mapping.native) continue;
+    if (mapping.native) {
+      nativeRunnable.push(entry.configuredModel.info.id);
+      continue;
+    }
 
     const origin = entry.provider.origin;
     const catalogProviderId = origin.kind === "byok" ? origin.catalogProviderId : undefined;
@@ -355,7 +359,15 @@ export async function buildOpencodeConfig(
     );
   }
 
+  // `session/new` cannot name a model, so without this every session opens on an OpenCode free
+  // model the user never enabled before Copilot switches it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/766
+  const runnable = [...injected, ...nativeRunnable];
+  const savedDefault = s.agentMode?.backends?.opencode?.defaultModel?.baseModelId;
+  const startupModel = runnable.find((id) => id === savedDefault) ?? runnable[0];
+
   return {
+    ...(startupModel ? { model: startupModel } : {}),
     providers,
     // OpenCode's variant plugin guesses effort levels from model ids (glm-5.2
     // gains `max`) and merges them over configured variants, which cannot be

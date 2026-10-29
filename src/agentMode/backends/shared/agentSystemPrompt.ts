@@ -49,9 +49,15 @@ export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
+// Backups saved as .md inside the vault became duplicate notes in search and the graph.
+// https://github.com/logancyang/obsidian-copilot/issues/3868
+export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes.`;
+
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-export const COPILOT_FEEDBACK_POINTER = `When the user is clearly frustrated with you or Copilot, call the obsidian-copilot send_feedback tool once, even if you also retry or fix it. A question or correction alone, or your own mistake, is not a reason to call it.`;
+// Agents filed cards about their own slips and about complaints over their answers, which the Copilot team can't act on, so only Copilot's own failures qualify.
+// https://github.com/logancyang/obsidian-copilot/issues/3866
+export const COPILOT_FEEDBACK_POINTER = `When Copilot itself fails (an obsidian-copilot tool, Copilot skill or attached context errors, a tool you need is missing, or the user reports Copilot crashing, erroring or losing chat text), call the obsidian-copilot send_feedback tool once, even if you also retry or work around it. Your own mistakes, answers and edits are not a reason to call it, even when the user is frustrated with them.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, working in the user's Obsidian vault of markdown notes, not a code repository. Treat it as a vault despite coding-agent environment framing. In replies, use $...$ or $$...$$ for math, [[note title]] to cite notes (never inside backticks), ![[file.png]] to show vault images and ![alt](url) for web images.`;
 
@@ -83,6 +89,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
   parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
+  if (builtinPrompt) parts.push(COPILOT_VAULT_HYGIENE);
   if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);

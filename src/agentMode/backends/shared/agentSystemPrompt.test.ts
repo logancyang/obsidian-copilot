@@ -16,6 +16,7 @@ import {
   COPILOT_OBSIDIAN_FORMAT_LEAD,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
+  COPILOT_VAULT_HYGIENE,
   COPILOT_WEB_RESEARCH_STEERING,
 } from "./agentSystemPrompt";
 
@@ -42,6 +43,7 @@ const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
 const ISSUE_726 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/726";
 const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
+const ISSUE_3868 = "https://github.com/logancyang/obsidian-copilot/issues/3868";
 const AGENT = "opencode";
 const ALL_OBSIDIAN_FORMAT_SKILLS_LINE =
   "Before writing Obsidian syntax, load its skill and follow it over memory: obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files, json-canvas for .canvas files.";
@@ -134,7 +136,7 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT, steering);
 
       expect(prompt).toContain(
-        `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
+        `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${COPILOT_VAULT_HYGIENE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
       );
       expect(buildAgentSystemPrompt(AGENT)).not.toContain(steering);
       setDisableBuiltinSystemPrompt(true);
@@ -169,6 +171,16 @@ describe("agentSystemPrompt", () => {
       for (const backendId of ["claude", "codex", "opencode"] as const) {
         expect(buildAgentSystemPrompt(backendId)).not.toContain("200 lines");
       }
+    });
+
+    it(`tells every agent to keep backups and scratch files out of the vault or off .md, so they don't become duplicate notes, unless the builtin prompt is disabled (${ISSUE_3868})`, () => {
+      for (const backendId of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(backendId)).toContain(
+          "Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes."
+        );
+      }
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT)).not.toContain(COPILOT_VAULT_HYGIENE);
     });
 
     it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
@@ -267,11 +279,11 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`steers OpenCode to every Obsidian skill, Codex to Bases and Claude to none under default settings (${ISSUE_726})`, () => {
+    it(`steers OpenCode to every Obsidian skill, Codex to Markdown and Bases and Claude to none under default settings (${ISSUE_726}, https://github.com/logancyang/obsidian-copilot/issues/3868)`, () => {
       expect(buildAgentSystemPrompt("opencode")).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
       expect(buildAgentSystemPrompt("opencode")).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(buildAgentSystemPrompt("codex")).toContain(
-        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-bases for .base files.`
+        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files.`
       );
       expect(buildAgentSystemPrompt("codex")).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(buildAgentSystemPrompt("claude")).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
