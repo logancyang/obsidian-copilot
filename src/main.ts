@@ -212,6 +212,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   // startup work runs in the background and registers what needs loaded settings only after its
   // last await. https://github.com/logancyang/obsidian-copilot/issues/3518
   onload(): void {
+    this.brevilabsClient = BrevilabsClient.getInstance();
+    this.brevilabsClient.setPluginVersion(this.manifest.version);
     installRendererEventsShim();
     this.initialization = this.initialize().catch((error) => {
       // logError prints only when the debug setting is on, which a failed settings load never
@@ -340,8 +342,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     CustomCommandManager.getInstance(this.app);
     logFileManager.setApp(this.app);
 
-    this.brevilabsClient = BrevilabsClient.getInstance();
-    this.brevilabsClient.setPluginVersion(this.manifest.version);
     void verifyCachedEntitlement();
     if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
     this.registerInterval(
