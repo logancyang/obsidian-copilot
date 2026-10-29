@@ -171,6 +171,45 @@ describe("SkillsSettings", () => {
       ).toBe("false");
     });
 
+    it("tells the user to install and enable Excalidraw and locks the copilot-excalidraw agents while that plugin is not enabled https://github.com/Brevilabs/obsidian-copilot-private/issues/787", async () => {
+      mockAgents = [{ id: "claude", displayName: "Claude", Icon: Bot }];
+      mockInstallStates = { claude: { kind: "ready", source: "managed" } };
+      await act(async () => {
+        renderSettings(makeApp(false, []));
+      });
+      expect(
+        screen.getByLabelText("Install and enable the Excalidraw plugin to use this skill.")
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "copilot-excalidraw for Claude" })
+          .getAttribute("aria-disabled")
+      ).toBe("true");
+    });
+
+    it("offers copilot-excalidraw on for every agent while the Excalidraw plugin is enabled https://github.com/Brevilabs/obsidian-copilot-private/issues/787", async () => {
+      mockAgents = [
+        { id: "claude", displayName: "Claude", Icon: Bot },
+        { id: "codex", displayName: "Codex", Icon: Bot },
+      ];
+      mockInstallStates = {
+        claude: { kind: "ready", source: "managed" },
+        codex: { kind: "ready", source: "managed" },
+      };
+      await act(async () => {
+        renderSettings(makeApp(false, ["obsidian-excalidraw-plugin"]));
+      });
+      expect(
+        screen.queryByLabelText("Install and enable the Excalidraw plugin to use this skill.")
+      ).toBeNull();
+      for (const agent of ["Claude", "Codex"]) {
+        const button = screen.getByRole("button", { name: `copilot-excalidraw for ${agent}` });
+        expect([button.getAttribute("aria-pressed"), button.getAttribute("aria-disabled")]).toEqual(
+          ["true", "false"]
+        );
+      }
+    });
+
     it("renders only the changed built-in when preferences publish and discovery reruns https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {
       const Icon = jest.fn(() => <span />);
       mockAgents = [{ id: "claude", displayName: "Claude", Icon }];
@@ -626,7 +665,10 @@ describe("SkillsSettings", () => {
   });
 });
 
-function makeApp(indexRejectedSkill = false): App {
+function makeApp(
+  indexRejectedSkill = false,
+  enabledPlugins: readonly string[] = ["obsidian-excalidraw-plugin"]
+): App {
   const file = new (TFile as unknown as new (path: string) => TFile)(
     "copilot/skills/broken-skill/SKILL.md"
   );
@@ -656,6 +698,7 @@ function makeApp(indexRejectedSkill = false): App {
     internalPlugins: {
       getPluginById: jest.fn(() => ({ enabled: true, instance: { revealInFolder } })),
     },
+    plugins: { enabledPlugins: new Set(enabledPlugins) },
   } as unknown as App;
 }
 

@@ -31,6 +31,7 @@ jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
 let skillsFolder = "copilot/skills";
 let preferences: BuiltinPreferences = {};
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
+const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
 
 jest.mock("@/settings/model", () => ({
   sanitizeBuiltinPreferences: jest.requireActual("@/settings/model").sanitizeBuiltinPreferences,
@@ -228,6 +229,22 @@ describe("SkillManager", () => {
         ]);
         expect(composeDenyList(getManagedSkills(), "opencode", ["claude", "codex"])).toEqual([
           "obsidian-cli",
+        ]);
+      });
+      it(`links a synced copilot-excalidraw copy to no agent while the Excalidraw plugin is disabled, and to every available agent once it is enabled (${ISSUE_787})`, async () => {
+        const f = builtinFixture();
+        mockedDiscoverManagedSkills.mockResolvedValue(
+          discoveryResult([{ ...builtinSkill, name: "copilot-excalidraw" }])
+        );
+        await f.manager.refresh();
+        expect(getManagedSkills().map((skill) => [skill.name, skill.enabledAgents])).toEqual([
+          ["copilot-excalidraw", []],
+        ]);
+
+        f.enabledPlugins.add("obsidian-excalidraw-plugin");
+        await f.manager.refresh();
+        expect(getManagedSkills().map((skill) => [skill.name, skill.enabledAgents])).toEqual([
+          ["copilot-excalidraw", ["claude", "opencode"]],
         ]);
       });
       it(`applies durable opt-outs even when cleanup fails ${ISSUE}`, async () => {
@@ -722,7 +739,7 @@ describe("SkillManager", () => {
   });
 });
 
-function makeApp(): App & {
+function makeApp(enabledPlugins = new Set<string>()): App & {
   vault: App["vault"] & {
     on: jest.Mock<EventRef, [string, (...args: unknown[]) => void]>;
     offref: jest.Mock<void, [EventRef]>;
@@ -740,6 +757,7 @@ function makeApp(): App & {
       on: jest.fn((event: string, handler: (...args: unknown[]) => void) => ({ event, handler })),
       offref: jest.fn(),
     },
+    plugins: { enabledPlugins },
   } as unknown as App & {
     vault: App["vault"] & {
       on: jest.Mock<EventRef, [string, (...args: unknown[]) => void]>;
@@ -810,10 +828,11 @@ function builtinFixture() {
       return preferences;
     }
   );
+  const enabledPlugins = new Set<string>();
   const manager = SkillManager.initialize(
-    makeApp(),
+    makeApp(enabledPlugins),
     { claude: ".claude/skills", opencode: ".opencode/skills" },
     { prepare, availableAgents, savePreferences }
   );
-  return { manager, prepare, availableAgents, savePreferences };
+  return { manager, prepare, availableAgents, savePreferences, enabledPlugins };
 }

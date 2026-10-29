@@ -262,6 +262,27 @@ describe("agentMode", () => {
       await expect(beforeBackendStart!("opencode")).resolves.toBeUndefined();
     });
 
+    it("re-reconciles skills before an agent starts once the Excalidraw plugin was enabled or disabled since the last pass https://github.com/Brevilabs/obsidian-copilot-private/issues/787", async () => {
+      const enabledPlugins = new Set<string>();
+      createAgentSessionManager({ plugins: { enabledPlugins } } as unknown as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const passes = reconcile.mock.calls.length;
+
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes);
+
+      enabledPlugins.add("obsidian-excalidraw-plugin");
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes + 1);
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes + 1);
+
+      enabledPlugins.delete("obsidian-excalidraw-plugin");
+      await beforeBackendStart!("claude");
+      expect(reconcile).toHaveBeenCalledTimes(passes + 2);
+    });
+
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];

@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS } from "@/constants";
+import type { App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import {
@@ -26,9 +27,18 @@ function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   return file.content;
 }
 
-const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) => skill.name.startsWith("copilot-"));
+const RELAY_SKILLS = BUILTIN_SKILLS.filter((skill) =>
+  skill.files.some((file) => file.path.endsWith(".sh"))
+);
 
 const ISSUE_599 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/599";
+const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
+
+function appWithPlugins(...enabledPlugins: string[]): App {
+  return { plugins: { enabledPlugins: new Set(enabledPlugins) } } as unknown as App;
+}
+
+const EXCALIDRAW_APP = appWithPlugins("obsidian-excalidraw-plugin");
 
 function settingsWith(
   builtinPreferences: NonNullable<CopilotSettings["agentMode"]["skills"]["builtinPreferences"]>,
@@ -46,7 +56,7 @@ function settingsWith(
 
 describe("builtinSkills", () => {
   describe("BUILTIN_SKILLS", () => {
-    it("ships the approved Plus and Obsidian skills in a fixed order", () => {
+    it(`ships the approved Plus, Obsidian and Excalidraw skills in a fixed order (${ISSUE_787})`, () => {
       expect(BUILTIN_SKILLS.map((s) => s.name)).toEqual([
         "copilot-web-search",
         "copilot-web-fetch",
@@ -56,6 +66,7 @@ describe("builtinSkills", () => {
         "obsidian-bases",
         "json-canvas",
         "obsidian-cli",
+        "copilot-excalidraw",
       ]);
     });
 
@@ -249,22 +260,32 @@ describe("builtinSkills", () => {
   });
 
   describe("builtinSkillUnavailableReason()", () => {
-    it("leaves every skill available while Obsidian's command line interface is on", () => {
+    it("leaves every skill available while Obsidian's command line interface is on and the Excalidraw plugin is enabled", () => {
       mockIsObsidianCliEnabled.mockReturnValue(true);
       for (const skill of BUILTIN_SKILLS) {
-        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
+        expect(builtinSkillUnavailableReason(skill.name, EXCALIDRAW_APP)).toBeUndefined();
       }
     });
 
     it("makes only obsidian-cli unavailable, naming the Obsidian setting, while the command line interface is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
-      expect(builtinSkillUnavailableReason("obsidian-cli")).toBe(
+      expect(builtinSkillUnavailableReason("obsidian-cli", EXCALIDRAW_APP)).toBe(
         "Turn on Command line interface in Obsidian's Settings → General to use this skill."
       );
       for (const skill of BUILTIN_SKILLS.filter((skill) => skill.name !== "obsidian-cli")) {
-        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
+        expect(builtinSkillUnavailableReason(skill.name, EXCALIDRAW_APP)).toBeUndefined();
       }
       mockIsObsidianCliEnabled.mockReturnValue(true);
+    });
+
+    it(`makes only copilot-excalidraw unavailable, telling the user to install and enable Excalidraw, while that plugin is not enabled (${ISSUE_787})`, () => {
+      const withoutExcalidraw = appWithPlugins("dataview");
+      expect(builtinSkillUnavailableReason("copilot-excalidraw", withoutExcalidraw)).toBe(
+        "Install and enable the Excalidraw plugin to use this skill."
+      );
+      for (const skill of BUILTIN_SKILLS.filter((skill) => skill.name !== "copilot-excalidraw")) {
+        expect(builtinSkillUnavailableReason(skill.name, withoutExcalidraw)).toBeUndefined();
+      }
     });
   });
 
@@ -282,6 +303,12 @@ describe("builtinSkills", () => {
           expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, name, agent)).toBe(false);
         }
         expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(true);
+      }
+    });
+
+    it(`turns copilot-excalidraw on for every agent in a fresh install (${ISSUE_787})`, () => {
+      for (const agent of ["claude", "codex", "opencode"]) {
+        expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-excalidraw", agent)).toBe(true);
       }
     });
 

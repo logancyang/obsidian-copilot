@@ -1,10 +1,8 @@
 import type { BackendId } from "@/agentMode/session/types";
-import {
-  builtinSkillUnavailableReason,
-  isBuiltinSkillEnabledFor,
-} from "@/builtinSkills/builtinSkills";
+import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
 // Naming each skill's job makes the agent use it instead of native web tools, which bypass
@@ -82,9 +80,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
-    builtinPrompt &&
-    !builtinSkillUnavailableReason(skill) &&
-    isBuiltinSkillEnabledFor(settings, skill, backendId);
+    builtinPrompt && isBuiltinSkillEnabledFor(settings, skill, backendId);
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
@@ -104,7 +100,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   if (formatJobs.length > 0) {
     parts.push(`${COPILOT_OBSIDIAN_FORMAT_LEAD} ${formatJobs.join(", ")}.`);
   }
-  if (enabled("obsidian-cli")) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
+  if (enabled("obsidian-cli") && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
 
   return parts.join("\n\n");
 }

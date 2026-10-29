@@ -100,7 +100,7 @@ export const SkillsSettings: React.FC = () => {
       );
     const reason = collision
       ? "A skill with this name already exists in Your skills. Your file is kept unchanged."
-      : builtinSkillUnavailableReason(skill.name);
+      : builtinSkillUnavailableReason(skill.name, app);
     if (reason) unavailableReasons[skill.name] = reason;
   }
   const builtinRows = BUILTIN_ROWS.filter((skill) =>

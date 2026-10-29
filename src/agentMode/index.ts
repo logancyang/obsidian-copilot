@@ -7,7 +7,7 @@ import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
-import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import { BUILTIN_SKILLS, builtinSkillUnavailableReason } from "@/builtinSkills/builtinSkills";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
@@ -140,7 +140,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
-  let seededWithCli = false;
+  let seededAvailability = "";
+  const builtinAvailability = (): string =>
+    BUILTIN_SKILLS.map((skill) => builtinSkillUnavailableReason(skill.name, app) ?? "").join("\n");
   const availableSkillAgents = (): readonly string[] => {
     const states = Object.fromEntries(
       listBackendDescriptors()
@@ -159,6 +161,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       await reconcileBuiltinSkills({
         folder,
         fs: buildBuiltinSeedFs(app),
+        app,
         settings: getSettings(),
         availableAgents: availableSkillAgents(),
         registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
@@ -168,11 +171,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const initializing = new Map<BackendId, Promise<void>>();
   const beforeBackendStart = async (id: BackendId): Promise<void> => {
     await initializing.get(id);
-    // Obsidian announces no change to its CLI toggle, so each agent start re-checks it.
+    // Obsidian announces no change to its CLI toggle or to plugin enablement, so each agent start
+    // re-checks built-in skill availability.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-    if (isObsidianCliEnabled() === seededWithCli) return;
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+    if (builtinAvailability() === seededAvailability) return;
     await seedManagedBuiltins().catch((error) =>
-      logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
+      logError("[Skills] Refresh after a built-in skill availability change failed", error)
     );
     refreshSystemPromptAffected();
   };
@@ -329,7 +334,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   });
   const seedManagedBuiltins = async (): Promise<void> => {
-    seededWithCli = isObsidianCliEnabled();
+    seededAvailability = builtinAvailability();
     await skillManager.refresh(true);
   };
   subscribeToSettingsChange((prev, next) => {

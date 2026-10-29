@@ -2,6 +2,9 @@ import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import { readProperty } from "@/utils/obsidianInternals";
+import type { App } from "obsidian";
+import { EXCALIDRAW_SKILL } from "./excalidrawSkill";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 import { howToRunSection } from "./howToRunSection";
 
@@ -387,6 +390,7 @@ export const BUILTIN_SKILLS: readonly BuiltinSkill[] = [
   YOUTUBE_TRANSCRIPT,
   FETCH_X,
   ...OBSIDIAN_SKILLS,
+  EXCALIDRAW_SKILL,
 ];
 
 // Default-off is stored as an opt-out because older releases drop every other record,
@@ -400,12 +404,28 @@ export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
   )
 );
 
-// The CLI toggle is per device, so an unavailable skill keeps its synced files and loses only its
-// agent links and steering here. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-export function builtinSkillUnavailableReason(skillName: string): string | undefined {
-  return skillName === "obsidian-cli" && !isObsidianCliEnabled()
-    ? "Turn on Command line interface in Obsidian's Settings → General to use this skill."
-    : undefined;
+// Obsidian has no public API for enabled community plugins, so a changed shape reads as disabled.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+function isCommunityPluginEnabled(app: App, pluginId: string): boolean {
+  const enabledPlugins = readProperty(readProperty(app, "plugins"), "enabledPlugins");
+  return enabledPlugins instanceof Set && enabledPlugins.has(pluginId);
+}
+
+// The CLI toggle and plugin enablement are per device, so an unavailable skill keeps its synced files
+// and loses only its agent links and steering.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/726
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export function builtinSkillUnavailableReason(skillName: string, app: App): string | undefined {
+  if (skillName === "obsidian-cli" && !isObsidianCliEnabled()) {
+    return "Turn on Command line interface in Obsidian's Settings → General to use this skill.";
+  }
+  if (
+    skillName === "copilot-excalidraw" &&
+    !isCommunityPluginEnabled(app, "obsidian-excalidraw-plugin")
+  ) {
+    return "Install and enable the Excalidraw plugin to use this skill.";
+  }
+  return undefined;
 }
 
 export function isBuiltinSkillEnabledFor(

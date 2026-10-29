@@ -1,5 +1,6 @@
 import type { InstallState } from "@/agentMode/session/types";
 import type { CopilotSettings } from "@/settings/model";
+import type { App } from "obsidian";
 import { joinPosix } from "@/utils/pathUtils";
 import {
   BUILTIN_SKILLS,
@@ -19,13 +20,14 @@ export type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 export interface ReconcileBuiltinOptions {
   folder: string;
   fs: BuiltinSeedFs;
+  app: App;
   settings: CopilotSettings;
   availableAgents: readonly string[];
   registeredAgents: readonly string[];
 }
 
 export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): Promise<void> {
-  const { folder, fs, settings, availableAgents, registeredAgents } = options;
+  const { folder, fs, app, settings, availableAgents, registeredAgents } = options;
   const errors: string[] = [];
   // Retired skills are removed regardless of user overrides so cleanup can retry. https://github.com/logancyang/obsidian-copilot/issues/3022
   for (const skill of RETIRED_BUILTIN_SKILLS) {
@@ -42,7 +44,7 @@ export async function reconcileBuiltinSkills(options: ReconcileBuiltinOptions): 
   // deleting another device's tools. https://github.com/logancyang/obsidian-copilot/issues/3022
   const seed = BUILTIN_SKILLS.filter(
     (skill) =>
-      !builtinSkillUnavailableReason(skill.name) &&
+      !builtinSkillUnavailableReason(skill.name, app) &&
       enabledAgents[skill.name].some((agent) => availableAgents.includes(agent))
   );
   await seedBuiltinSkills({ skillsFolderRelPath: folder, fs, skills: seed, enabledAgents });

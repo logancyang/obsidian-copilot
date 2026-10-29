@@ -8,6 +8,7 @@ import {
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import type { BuiltinSeedFs } from "./seedBuiltinSkills";
+import type { App } from "obsidian";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
@@ -20,6 +21,7 @@ const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
+const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
 const INSTALLED_PLUS_READ_PDF_MD = `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus.
@@ -82,9 +84,11 @@ function fixture(preferences?: BuiltinPreferences) {
     agentMode: { ...DEFAULT_SETTINGS.agentMode, skills: { ...DEFAULT_SETTINGS.agentMode.skills } },
   };
   settings.agentMode.skills.builtinPreferences = preferences;
+  const enabledPlugins = new Set(["obsidian-excalidraw-plugin"]);
   const options = {
     folder,
     fs,
+    app: { plugins: { enabledPlugins } } as unknown as App,
     settings,
     availableAgents: [] as string[],
     registeredAgents: ["claude", "codex", "opencode"],
@@ -92,6 +96,7 @@ function fixture(preferences?: BuiltinPreferences) {
   return {
     files,
     dirs,
+    enabledPlugins,
     options,
     path: (name: string) => `${folder}/${name}/SKILL.md`,
   };
@@ -146,6 +151,31 @@ describe("reconcileBuiltinSkills", () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
       await reconcileBuiltinSkills(f.options);
       expect(f.files.get(f.path("obsidian-cli"))).toBe(content);
+    });
+
+    it(`seeds copilot-excalidraw and its outline script only while the Excalidraw plugin is enabled, and keeps a synced copy for devices without it (${ISSUE_787})`, async () => {
+      const f = fixture({});
+      f.options.availableAgents = ["claude"];
+      f.enabledPlugins.clear();
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path("copilot-excalidraw"))).toBe(false);
+      expect(f.files.has(f.path("obsidian-markdown"))).toBe(true);
+
+      f.enabledPlugins.add("obsidian-excalidraw-plugin");
+      await reconcileBuiltinSkills(f.options);
+      const content = f.files.get(f.path("copilot-excalidraw"));
+      expect(parseSkillFile(content!, "copilot-excalidraw").frontmatter.enabledAgents).toEqual([
+        "claude",
+        "codex",
+        "opencode",
+      ]);
+      expect(f.files.get(`${folder}/copilot-excalidraw/scripts/outline.md`)).toContain(
+        "ea.getSceneFromFile"
+      );
+
+      f.enabledPlugins.clear();
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.get(f.path("copilot-excalidraw"))).toBe(content);
     });
 
     it(`keeps canonical metadata stable across devices and retains existing files without a local agent ${ISSUE}`, async () => {
