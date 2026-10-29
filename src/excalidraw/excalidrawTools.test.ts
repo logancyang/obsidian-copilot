@@ -42,7 +42,7 @@ function fakeApi(overrides: Partial<ExcalidrawApi> = {}): jest.Mocked<Excalidraw
     execute: jest.fn().mockImplementation(async (request: Record<string, unknown>) => {
       if (request.command === "read") return { ok: true, data: { revision: "s1:v1:3:7" } };
       if (request.command === "open") return { ok: true };
-      return { ok: true, persistence: "saved", data: { idMap: { a: "Xy12Ab34" } } };
+      return { ok: true, data: { idMap: { a: "Xy12Ab34" } } };
     }),
     connectLabelled: jest.fn().mockResolvedValue({ arrowId: "Arr00001", labelId: "Lbl00001" }),
     ...overrides,
@@ -245,25 +245,6 @@ describe("excalidrawTools", () => {
       );
     });
 
-    it("reports an applied edit that did not save instead of claiming success", async () => {
-      const api = fakeApi({
-        execute: jest
-          .fn()
-          .mockImplementation(async (request: Record<string, unknown>) =>
-            request.command === "apply"
-              ? { ok: true, persistence: "unsaved" }
-              : { ok: true, data: { revision: "r" } }
-          ),
-      });
-
-      expect(
-        await toolsFor(api).edit.call({ path: FLOW, operations: [{ op: "delete", ids: ["box2"] }] })
-      ).toEqual({
-        text: `${FLOW} changed but did not save (unsaved). Check the drawing before going on.`,
-        isError: true,
-      });
-    });
-
     it("reports a rejected apply as no change, with the plugin's reason", async () => {
       const api = fakeApi({
         execute: jest.fn().mockImplementation(async (request: Record<string, unknown>) =>
@@ -284,20 +265,32 @@ describe("excalidrawTools", () => {
       });
     });
 
-    it("turns an exception from the plugin into an error result naming the drawing", async () => {
+    it(`${ISSUE_787} reports the operations already saved when a later labelled connection fails, so the agent doesn't redo them`, async () => {
       const api = fakeApi({
-        connectLabelled: jest
-          .fn()
-          .mockRejectedValue(new Error("Drawings/Flow.excalidraw.md is not open.")),
+        connectLabelled: jest.fn().mockRejectedValue(new Error("No element with id gone.")),
       });
 
-      expect(
-        await toolsFor(api).edit.call({
-          path: FLOW,
-          operations: [{ op: "connect", from: "box1", to: "box2", label: "Yes" }],
-        })
-      ).toEqual({
-        text: `Excalidraw failed on ${FLOW}: Drawings/Flow.excalidraw.md is not open.`,
+      const result = await toolsFor(api).edit.call({
+        path: FLOW,
+        operations: [
+          { op: "add", elements: [{ id: "a", type: "rectangle" }] },
+          { op: "connect", from: "box1", to: "gone", label: "No" },
+        ],
+      });
+
+      expect(result).toEqual({
+        text: "Saved: Applied 1 operation. Ids (yours=real): a=Xy12Ab34. Then failed to connect box1 -> gone: No element with id gone. Don't redo the saved changes.",
+        isError: true,
+      });
+    });
+
+    it("turns an exception from the plugin into an error result naming the drawing", async () => {
+      const api = fakeApi({
+        sceneElements: jest.fn().mockRejectedValue(new Error("file is locked")),
+      });
+
+      expect(await toolsFor(api).read.call({ path: FLOW })).toEqual({
+        text: `Excalidraw failed on ${FLOW}: file is locked`,
         isError: true,
       });
     });

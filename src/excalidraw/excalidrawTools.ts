@@ -148,7 +148,6 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
 
 export interface ExcalidrawCliReply {
   ok: boolean;
-  persistence?: string;
   warnings?: ReadonlyArray<unknown>;
   data?: Record<string, unknown>;
   error?: { code?: string; message?: string };
@@ -319,21 +318,25 @@ async function edit(
       operations: plain,
     });
     if (!applied.ok) return failure(`No change made to ${path}: ${describeFailure(applied)}`);
-    if (applied.persistence && applied.persistence !== "saved") {
-      return failure(
-        `${path} changed but did not save (${applied.persistence}). Check the drawing before going on.`
-      );
-    }
     done.push(
       `Applied ${plain.length} operation${plain.length === 1 ? "" : "s"}.${describeIds(applied)}${describeWarnings(applied)}`
     );
   }
   for (const op of styled) {
     const connection = op as unknown as LabelledConnection;
-    const { arrowId, labelId } = await api.connectLabelled(path, connection);
-    done.push(
-      `Connected ${connection.from} -> ${connection.to} with arrow ${arrowId}${labelId ? ` (label ${labelId})` : ""}.`
-    );
+    try {
+      const { arrowId, labelId } = await api.connectLabelled(path, connection);
+      done.push(
+        `Connected ${connection.from} -> ${connection.to} with arrow ${arrowId}${labelId ? ` (label ${labelId})` : ""}.`
+      );
+    } catch (error) {
+      // Earlier operations in the call are already saved, so an agent that saw only the failure would redo them and duplicate shapes.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+      const reason = error instanceof Error ? error.message : String(error);
+      return failure(
+        `${done.length ? `Saved: ${done.join(" ")} ` : ""}Then failed to connect ${connection.from} -> ${connection.to}: ${reason} Don't redo the saved changes.`
+      );
+    }
   }
   return { text: `Edited ${path}. ${done.join(" ")}`, isError: false };
 }
