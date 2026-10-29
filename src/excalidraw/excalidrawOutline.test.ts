@@ -183,8 +183,26 @@ describe("excalidrawOutline", () => {
       ];
 
       expect(outlineScene("Flow.excalidraw.md", elements)).toContain(
-        '  l: "Start" -> "Finish" [line, cannot bind]'
+        '  l: "Start" -- "Finish" [line, cannot bind]'
       );
+    });
+
+    it(`${ISSUE_787} writes an arrow drawn without arrowheads as an undirected connector, not a flow from one shape to the other`, () => {
+      const elements = withArrow(
+        [
+          ...labelled("a", "API", 0, 0, 180, 80),
+          ...labelled("b", "Database", 300, 0, 180, 80),
+          { ...boundArrow("e", "a", "b", 180, 40, 120, 0), endArrowhead: null },
+        ],
+        "e",
+        "a",
+        "b"
+      );
+
+      const outline = outlineScene("Architecture.excalidraw.md", elements);
+
+      expect(outline).toContain('  e: "API" -- "Database"');
+      expect(outline).not.toContain('"API" -> "Database"');
     });
 
     it("leaves out deleted elements", () => {

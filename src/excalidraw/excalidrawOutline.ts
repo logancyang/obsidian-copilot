@@ -184,7 +184,7 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
     (e) => e.type === "arrow" || (e.type === "line" && (e.points ?? []).length <= 6 && connects(e))
   );
   if (arrows.length) {
-    lines.push("Arrows (id: from -> to):");
+    lines.push("Arrows (id: from -> to; <-> both ways, -- no direction):");
     for (const a of arrows) {
       const pts = a.points?.length
         ? a.points
@@ -207,10 +207,14 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
       if ((sb && !back(sb)) || (eb && !back(eb))) loose.push("binding one-sided");
       const lt = boundText(a);
       const reversed = a.startArrowhead && !a.endArrowhead;
-      const both = a.startArrowhead && a.endArrowhead;
+      // A connector drawn without arrowheads has no direction, and reading it as one misstates the diagram.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+      const link = [" -- ", " -> ", " <-> "][
+        [a.startArrowhead, a.endArrowhead].filter(Boolean).length
+      ];
       const [from, to] = reversed ? [t, s] : [s, t];
       lines.push(
-        `  ${a.id}: ${name(from)}${both ? " <-> " : " -> "}${name(to)}${lt ? ` ${JSON.stringify(txt(lt))}` : ""}` +
+        `  ${a.id}: ${name(from)}${link}${name(to)}${lt ? ` ${JSON.stringify(txt(lt))}` : ""}` +
           `${a.strokeStyle && a.strokeStyle !== "solid" ? ` (${a.strokeStyle})` : ""}${loose.length ? ` [${loose.join(", ")}]` : ""}`
       );
     }
