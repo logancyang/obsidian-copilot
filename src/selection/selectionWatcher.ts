@@ -77,7 +77,12 @@ export function readingSelectionReport(app: App, doc: Document): SelectionReport
   };
 }
 
-export function watchSelections(plugin: Plugin): void {
+export type InputSelectionSource = (app: App) => (() => SelectionReport) | null;
+
+export function watchSelections(
+  plugin: Plugin,
+  inputSources: readonly InputSelectionSource[] = []
+): void {
   let timer: number | undefined;
   const schedule = (read: () => SelectionReport | null) => {
     window.clearTimeout(timer);
@@ -99,11 +104,22 @@ export function watchSelections(plugin: Plugin): void {
     })
   );
 
-  const watchDocument = (doc: Document) =>
+  const readInputSources = () => {
+    for (const source of inputSources) {
+      const read = source(plugin.app);
+      if (read) schedule(read);
+    }
+  };
+  const watchDocument = (doc: Document) => {
     plugin.registerDomEvent(doc, "selectionchange", () => {
       const report = readingSelectionReport(plugin.app, doc);
       if (report) schedule(() => report);
     });
+    // Canvas views such as Excalidraw select without a DOM selection, so they are read after each click or key.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/794
+    plugin.registerDomEvent(doc, "pointerup", readInputSources);
+    plugin.registerDomEvent(doc, "keyup", readInputSources);
+  };
   watchDocument(activeDocument);
   plugin.registerEvent(plugin.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
 }
