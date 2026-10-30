@@ -232,7 +232,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   prefetchEffortCatalog: prefetchConfigEfforts,
 
   createBackendProcess(args): BackendProcess {
-    return simpleBinaryBackendProcess(args, new CodexBackend(args.clientVersion));
+    return simpleBinaryBackendProcess(args, new CodexBackend(args.app, args.clientVersion));
   },
 
   SettingsPanel: CodexSettingsPanel,

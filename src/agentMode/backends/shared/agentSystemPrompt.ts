@@ -1,8 +1,10 @@
+import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
 import {
   builtinSkillUnavailableReason,
   isBuiltinSkillEnabledFor,
 } from "@/builtinSkills/builtinSkills";
+import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
@@ -32,6 +34,11 @@ export const COPILOT_MIYO_DOCUMENT_STEERING = `Read PDFs/EPUBs with the obsidian
 // Codex searched before every publish, rename or edit of a note it already had, so file operations on known notes skip the search.
 // https://github.com/logancyang/obsidian-copilot/issues/3816
 export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabled. For any request that may be answered from the user's notes, even one that sounds external or current, call the obsidian-copilot miyo_search tool and also grep/glob for any exact names, terms, tags or quoted phrases in the request. To read or act on a note already attached, named or found in this conversation, or to create, move or rename notes by name or path, work on them directly instead of searching. Merge the results by note path and open the strongest matches before answering. Search the vault with miyo_search, not the miyo CLI or another Miyo skill. If neither finds support, say the vault does not cover it; for external topics, then search the web.`;
+
+// Asked for a diagram, agents drew Excalidraw drawings with the tools but never embedded them in the note; naming
+// Mermaid and canvas keeps a format the user asks for. The line rides only while the Excalidraw tools are available.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export const COPILOT_EXCALIDRAW_STEERING = `Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format.`;
 
 // OpenCode models skip a format skill whose description doesn't name their edit and write syntax Obsidian
 // can't render, and without the CLI skill they assume live app state such as open tabs is out of reach.
@@ -78,7 +85,11 @@ function buildFileEditPolicy(backendId: BackendId): string {
 // Settings-dependent lines go last so a toggle change leaves the cached prefix before them intact;
 // a backend's own fixed steering joins the always-on lines ahead of them.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/441
-export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: string): string {
+export function buildAgentSystemPrompt(
+  backendId: BackendId,
+  app: App,
+  backendSteering?: string
+): string {
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
@@ -94,6 +105,7 @@ export function buildAgentSystemPrompt(backendId: BackendId, backendSteering?: s
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
   if (builtinPrompt && isMiyoSearchActive(settings)) parts.push(COPILOT_MIYO_SEARCH_STEERING);
+  if (builtinPrompt && getExcalidrawApi(app) !== null) parts.push(COPILOT_EXCALIDRAW_STEERING);
   const enabledJobs = (jobs: typeof RELAY_SKILL_JOBS) =>
     jobs.filter(([skill]) => enabled(skill)).map(([skill, job]) => `${skill} for ${job}`);
   const relayJobs = enabledJobs(RELAY_SKILL_JOBS);

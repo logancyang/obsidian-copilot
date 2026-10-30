@@ -194,6 +194,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return simpleBinaryBackendProcess(
       args,
       new OpencodeBackend({
+        app: args.app,
         providerRegistry,
         backendConfigRegistry,
         clientVersion: args.clientVersion,

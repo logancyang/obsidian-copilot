@@ -80,10 +80,16 @@ const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.
   unattributed: `Copilot couldn't tell which chat this came from, so nothing was shown. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
 });
 
+export interface HostedToolResult {
+  text: string;
+  isError: boolean;
+  image?: { data: string; mimeType: string };
+}
+
 export interface HostedTool {
   definition: { readonly name: string };
   turnedOffText: string;
-  call: (args: unknown) => Promise<{ text: string; isError: boolean }>;
+  call: (args: unknown) => Promise<HostedToolResult>;
 }
 
 type ServerTool = Omit<HostedTool, "call"> & Partial<Pick<HostedTool, "call">>;
@@ -242,7 +248,10 @@ async function callTool(
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
   if (tool.call) {
     const result = await tool.call(params.arguments);
-    return toolText(result.text, result.isError);
+    const reply = toolText(result.text, result.isError);
+    return result.image
+      ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }
+      : reply;
   }
   const draft = parseDraft(params.arguments);
   if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);

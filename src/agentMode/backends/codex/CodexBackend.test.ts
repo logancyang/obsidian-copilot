@@ -4,6 +4,7 @@ import { detectBinary } from "@/utils/detectBinary";
 import { setDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { CODEX_QUESTION_CARD_STEERING, CodexBackend } from "./CodexBackend";
 import * as codexVersion from "./codexVersion";
+import type { App } from "obsidian";
 
 jest.mock("@/utils/detectBinary", () => ({ detectBinary: jest.fn() }));
 
@@ -64,6 +65,8 @@ jest.mock("@/agentMode/skills", () => {
   };
 });
 
+const APP = {} as App;
+
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
@@ -79,7 +82,7 @@ describe("CodexBackend", () => {
       });
 
       it("launches the validated adapter entry", async () => {
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(desc.command).toBe(
           "/npm/lib/node_modules/@agentclientprotocol/codex-acp/dist/index.js"
@@ -88,17 +91,19 @@ describe("CodexBackend", () => {
       });
 
       it("encodes the shared product prompt with the question-card steering byte for byte", async () => {
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions).toBe(
-          buildAgentSystemPrompt("codex", CODEX_QUESTION_CARD_STEERING)
+          buildAgentSystemPrompt("codex", APP, CODEX_QUESTION_CARD_STEERING)
         );
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3536 steers Codex to the request_user_input card even when the built-in system prompt is disabled", async () => {
         setDisableBuiltinSystemPrompt(true);
         try {
-          const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+          const desc = await new CodexBackend(APP).buildSpawnDescriptor({
+            vaultBasePath: "/vault",
+          });
           const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
 
           expect(prompt).not.toContain("You are Obsidian Copilot");
@@ -112,7 +117,7 @@ describe("CodexBackend", () => {
       it("passes the plugin version to built-in Copilot Plus skills", async () => {
         setSettings({ isPaidUser: true, plusLicenseKey: "plus-token", userId: "user-1" });
 
-        const desc = await new CodexBackend("4.0.0-preview-260802").buildSpawnDescriptor({
+        const desc = await new CodexBackend(APP, "4.0.0-preview-260802").buildSpawnDescriptor({
           vaultBasePath: "/vault",
         });
 
@@ -120,7 +125,7 @@ describe("CodexBackend", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/618 starts Codex in the read-only mode that asks before workspace edits", async () => {
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(desc.env.INITIAL_AGENT_MODE).toBe("read-only");
       });
@@ -131,7 +136,7 @@ describe("CodexBackend", () => {
           envOverrides: { INITIAL_AGENT_MODE: "agent" },
         });
 
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
 
         expect(desc.env.INITIAL_AGENT_MODE).toBe("agent");
       });
@@ -148,7 +153,7 @@ describe("CodexBackend", () => {
           },
         });
 
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
         const config = JSON.parse(desc.env.CODEX_CONFIG as string);
 
         expect(config).toEqual(
@@ -168,7 +173,7 @@ describe("CodexBackend", () => {
           },
         });
 
-        const desc = await new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        const desc = await new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" });
         const prompt = JSON.parse(desc.env.CODEX_CONFIG as string).developer_instructions;
 
         expect(prompt).not.toContain("copilot-web-search");
@@ -180,7 +185,7 @@ describe("CodexBackend", () => {
         mockAdapterEntry.mockReturnValue("C:\\bundle\\codex-acp.exe");
         jest.mocked(detectBinary).mockClear();
 
-        const result = await new CodexBackend().buildSpawnDescriptor({
+        const result = await new CodexBackend(APP).buildSpawnDescriptor({
           vaultBasePath: "C:\\vault",
         });
 
@@ -196,7 +201,7 @@ describe("CodexBackend", () => {
         );
         try {
           await expect(
-            new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+            new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" })
           ).rejects.toThrow("2.0.0");
         } finally {
           minimum.restore();
@@ -209,7 +214,7 @@ describe("CodexBackend", () => {
         });
 
         await expect(
-          new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+          new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" })
         ).rejects.toThrow("unsupported Codex adapter");
         expect(mockAdapterEntry).toHaveBeenCalledWith("/usr/local/bin/codex-acp");
       });
@@ -218,14 +223,14 @@ describe("CodexBackend", () => {
         useCodexSettings();
 
         await expect(
-          new CodexBackend().buildSpawnDescriptor({ vaultBasePath: "/vault" })
+          new CodexBackend(APP).buildSpawnDescriptor({ vaultBasePath: "/vault" })
         ).rejects.toThrow(/Codex isn't set up/);
       });
     });
 
     describe("clientCapabilitiesMeta", () => {
       it("opts into Codex's own turn diff when the client initializes https://github.com/agentclientprotocol/codex-acp/issues/601", () => {
-        expect(new CodexBackend().clientCapabilitiesMeta).toEqual({ codex: { turnDiff: true } });
+        expect(new CodexBackend(APP).clientCapabilitiesMeta).toEqual({ codex: { turnDiff: true } });
       });
     });
 
@@ -243,14 +248,14 @@ describe("CodexBackend", () => {
           },
         };
 
-        expect(new CodexBackend().readTurnDiff(meta)).toEqual({
+        expect(new CodexBackend(APP).readTurnDiff(meta)).toEqual({
           root: "/repo",
           unifiedDiff: "diff --git a/vault/a.md b/vault/a.md\n",
         });
       });
 
       it("returns null when Codex withholds an oversized diff or the result carries none, as a cancelled turn or an older adapter sends https://github.com/agentclientprotocol/codex-acp/issues/601", () => {
-        const backend = new CodexBackend();
+        const backend = new CodexBackend(APP);
 
         expect(
           backend.readTurnDiff({

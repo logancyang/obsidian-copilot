@@ -35,8 +35,8 @@ jest.mock("@/utils/appPaths", () => ({
   getVaultId: () => "test-vault",
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
-  buildAgentSystemPrompt: (id: string) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}`,
+  buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -260,6 +260,26 @@ describe("agentMode", () => {
       mockRefresh.mockRejectedValueOnce(new Error("Disk unavailable"));
       jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
       await expect(beforeBackendStart!("opencode")).resolves.toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers a reload when the Excalidraw plugin is turned on between agent starts, so new chats gain the Excalidraw steering, without re-reconciling skills", async () => {
+      let excalidraw: unknown = null;
+      const app = { plugins: { getPlugin: () => excalidraw } } as unknown as App;
+      createAgentSessionManager(app, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      const { beforeBackendStart } = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      const passes = reconcile.mock.calls.length;
+
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
+
+      excalidraw = { ea: { executeCLI: jest.fn() } };
+      await beforeBackendStart!("claude");
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "system prompt changed"
+      );
+      expect(reconcile).toHaveBeenCalledTimes(passes);
     });
 
     it(`settles new-agent skills before refreshing that agent's installation ${ISSUE}`, async () => {
@@ -538,6 +558,13 @@ describe("agentMode", () => {
 });
 
 describe("isCopilotToolOn()", () => {
+  const appWith = (excalidraw: unknown): App =>
+    ({
+      plugins: {
+        getPlugin: (id: string) => (id === "obsidian-excalidraw-plugin" ? excalidraw : null),
+      },
+    }) as unknown as App;
+  const noExcalidraw = appWith(null);
   const off = (update: Partial<CopilotSettings>): CopilotSettings =>
     ({
       agentMode: { offerFeedbackCards: false },
@@ -549,10 +576,11 @@ describe("isCopilotToolOn()", () => {
     expect(
       isCopilotToolOn(
         "send_feedback",
-        off({ agentMode: { offerFeedbackCards: true } as CopilotSettings["agentMode"] })
+        off({ agentMode: { offerFeedbackCards: true } as CopilotSettings["agentMode"] }),
+        noExcalidraw
       )
     ).toBe(true);
-    expect(isCopilotToolOn("send_feedback", off({}))).toBe(false);
+    expect(isCopilotToolOn("send_feedback", off({}), noExcalidraw)).toBe(false);
   });
 
   it.each([
@@ -562,7 +590,9 @@ describe("isCopilotToolOn()", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/736 offers miyo_search when %s",
     (_state, enableMiyo, enableMiyoSearchSkill, on) => {
-      expect(isCopilotToolOn("miyo_search", off({ enableMiyo, enableMiyoSearchSkill }))).toBe(on);
+      expect(
+        isCopilotToolOn("miyo_search", off({ enableMiyo, enableMiyoSearchSkill }), noExcalidraw)
+      ).toBe(on);
     }
   );
 
@@ -573,13 +603,32 @@ describe("isCopilotToolOn()", () => {
   ])(
     "https://github.com/Brevilabs/obsidian-copilot-private/issues/740 offers miyo_parse when %s",
     (_state, enableMiyo, enableMiyoDocumentProcessing, on) => {
-      expect(isCopilotToolOn("miyo_parse", off({ enableMiyo, enableMiyoDocumentProcessing }))).toBe(
-        on
-      );
+      expect(
+        isCopilotToolOn(
+          "miyo_parse",
+          off({ enableMiyo, enableMiyoDocumentProcessing }),
+          noExcalidraw
+        )
+      ).toBe(on);
     }
   );
 
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/746 offers the OpenArtifacts tools to every user", () => {
-    expect(isCopilotToolOn("openartifacts_publish", off({ plusLicenseKey: "" }))).toBe(true);
+    expect(
+      isCopilotToolOn("openartifacts_publish", off({ plusLicenseKey: "" }), noExcalidraw)
+    ).toBe(true);
   });
+
+  it.each([
+    ["Excalidraw 2.29 or later is enabled", { ea: { executeCLI: jest.fn() } }, true],
+    ["an Excalidraw older than 2.29 has no executeCLI", { ea: {} }, false],
+    ["Excalidraw is not enabled", null, false],
+  ])(
+    "https://github.com/Brevilabs/obsidian-copilot-private/issues/787 offers the Excalidraw tools when %s",
+    (_state, excalidraw, on) => {
+      for (const name of ["excalidraw_read", "excalidraw_render", "excalidraw_write"]) {
+        expect(isCopilotToolOn(name, off({}), appWith(excalidraw))).toBe(on);
+      }
+    }
+  );
 });

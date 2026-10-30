@@ -36,6 +36,8 @@ import {
   MIYO_PARSE_TURNED_OFF_TEXT,
   parseWithMiyo,
 } from "@/miyo/miyoParseTool";
+import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
+import { createExcalidrawTools, EXCALIDRAW_TOOL_NAMES } from "@/excalidraw/excalidrawTools";
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
@@ -126,14 +128,22 @@ function spawnModelConfigKey(
 
 // The OpenArtifacts tools have no switch: a user without Copilot Plus gets the upgrade offer when they call one.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
-export function isCopilotToolOn(toolName: string, settings: CopilotSettings): boolean {
-  return toolName === SEND_FEEDBACK_TOOL_NAME
-    ? settings.agentMode.offerFeedbackCards
-    : toolName === MIYO_PARSE_TOOL_NAME
-      ? isMiyoParseActive(settings)
-      : toolName === MIYO_SEARCH_TOOL_NAME
-        ? isMiyoSearchActive(settings)
-        : true;
+// The Excalidraw tools follow the Excalidraw plugin rather than a setting, so they appear only where drawings can be made.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app: App): boolean {
+  if (toolName === SEND_FEEDBACK_TOOL_NAME) {
+    return settings.agentMode.offerFeedbackCards;
+  }
+  if (toolName === MIYO_PARSE_TOOL_NAME) {
+    return isMiyoParseActive(settings);
+  }
+  if (toolName === MIYO_SEARCH_TOOL_NAME) {
+    return isMiyoSearchActive(settings);
+  }
+  if (EXCALIDRAW_TOOL_NAMES.has(toolName)) {
+    return getExcalidrawApi(app) !== null;
+  }
+  return true;
 }
 
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
@@ -168,12 +178,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const initializing = new Map<BackendId, Promise<void>>();
   const beforeBackendStart = async (id: BackendId): Promise<void> => {
     await initializing.get(id);
-    // Obsidian announces no change to its CLI toggle, so each agent start re-checks it.
+    // Obsidian announces no change to its CLI toggle or to a plugin being enabled, so each agent start re-checks both.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-    if (isObsidianCliEnabled() === seededWithCli) return;
-    await seedManagedBuiltins().catch((error) =>
-      logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
-    );
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+    if (isObsidianCliEnabled() !== seededWithCli) {
+      await seedManagedBuiltins().catch((error) =>
+        logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
+      );
+    }
     refreshSystemPromptAffected();
   };
   const preloader = new AgentModelPreloader(
@@ -208,7 +220,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     persistenceManager,
     sessionIndex,
     copilotMcpServer: createCopilotMcpServer(
-      (toolName) => isCopilotToolOn(toolName, getSettings()),
+      (toolName) => isCopilotToolOn(toolName, getSettings(), app),
       [
         {
           definition: MIYO_SEARCH_TOOL,
@@ -240,6 +252,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           getVaultBase: () => getVaultBase(app),
           openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
         }),
+        ...createExcalidrawTools(() => getExcalidrawApi(app)),
       ]
     ),
   });
@@ -290,13 +303,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const lastSystemPromptKeys = new Map<BackendId, string>();
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.restartOnSystemPromptChange) {
-      lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id));
+      lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id, app));
     }
   }
   const refreshSystemPromptAffected = (): void => {
     for (const descriptor of listBackendDescriptors()) {
       if (!descriptor.restartOnSystemPromptChange) continue;
-      const key = buildAgentSystemPrompt(descriptor.id);
+      const key = buildAgentSystemPrompt(descriptor.id, app);
       if (key === lastSystemPromptKeys.get(descriptor.id)) continue;
       lastSystemPromptKeys.set(descriptor.id, key);
       void manager

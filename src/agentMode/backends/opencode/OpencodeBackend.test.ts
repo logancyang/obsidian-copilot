@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import type { App } from "obsidian";
 import { verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { OPENCODE_COPILOT_PLUGIN_SOURCE } from "./opencodeCopilotPlugin";
 import { updateAgentModeBackendFields } from "@/settings/model";
@@ -142,12 +143,15 @@ function okEntry(provider: Provider, model: ConfiguredModel): EnabledBackendEntr
   };
 }
 
+const APP = {} as App;
+
 function makeDeps(args: {
   resolved: EnabledBackendEntry[];
   keys?: Record<string, string | null>;
 }): OpencodeModelDeps {
   const keys = args.keys ?? {};
   return {
+    app: APP,
     backendConfigRegistry: {
       resolveEnabled: (backend: string) => (backend === "opencode" ? args.resolved : []),
     } as unknown as BackendConfigRegistry,
@@ -903,8 +907,8 @@ describe("OpencodeBackend", () => {
     it("gives both agents the shared product prompt, byte for byte", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
-      expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt("opencode"));
-      expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode"));
+      expect(cfg.agents["copilot-build"].system).toBe(buildAgentSystemPrompt("opencode", APP));
+      expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode", APP));
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for OpenCode in both agent prompts", async () => {
