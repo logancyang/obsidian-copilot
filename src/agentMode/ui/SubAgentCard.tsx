@@ -98,6 +98,7 @@ function countChildren(nodes: GroupedTrailNode[]): ChildCounts {
   for (const n of nodes) {
     if (n.type === "action" || n.type === "subagent") tools += 1;
     else if (n.type === "reasoning") reasoning += 1;
+    else if (n.type === "excalidrawDrawing") tools += n.members.length;
     else if (n.type === "activityGroup") {
       for (const m of n.members) {
         if (m.type === "action") tools += 1;

@@ -549,6 +549,24 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Ran 2 commands, read 1 file")).toBeTruthy();
   });
 
+  it("counts each call folded into a sub-agent's Excalidraw card as a tool (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    const board = { path: "Boards/Launch board.excalidraw.md", operations: [] };
+    renderTrail({
+      parts: [
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Draw it" },
+        }),
+        excalidrawToolCall("excalidraw_write", board, { id: "w1", parentToolCallId: "task1" }),
+        excalidrawToolCall("excalidraw_render", board, { id: "r1", parentToolCallId: "task1" }),
+      ],
+    });
+
+    fireEvent.click(screen.getByText('Explore · "Draw it"'));
+
+    expect(screen.getByText("2 tools")).toBeTruthy();
+  });
+
   it("keeps an opened tool visible when streaming turns it into a group", () => {
     const readWithOutput = {
       ...READ_A,
@@ -703,6 +721,33 @@ describe("AgentTrail", () => {
     expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Release plan" }));
     expect(openLinkText).toHaveBeenCalledWith("Drawings/Release plan.excalidraw.md", "", true);
+  });
+
+  it("shows an agent's uninterrupted work on one drawing as one card whose steps include a failed write's error (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    const board = { path: "Boards/Launch board.excalidraw.md", operations: [] };
+    renderTrail({
+      parts: [
+        excalidrawToolCall("excalidraw_write", board, { id: "w1" }),
+        excalidrawToolCall("excalidraw_render", board, { id: "render-1" }),
+        excalidrawToolCall("excalidraw_write", board, {
+          id: "w2",
+          status: "failed",
+          output: [{ type: "text", text: "INVALID_INPUT: Unsupported field" }],
+        }),
+        READ_A,
+        excalidrawToolCall("excalidraw_write", board, { id: "w3" }),
+        text("Updated the board."),
+      ],
+    });
+
+    expect(screen.getAllByText("Edited in Excalidraw")).toHaveLength(1);
+    expect(screen.getByText("1 failed")).toBeTruthy();
+    expect(screen.queryByText(/Unsupported field/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Excalidraw steps" }));
+    fireEvent.click(screen.getAllByText(/Excalidraw write/)[1]);
+
+    expect(screen.getByText(/Unsupported field/)).toBeTruthy();
   });
 
   describe("with task state from the session", () => {

@@ -14,7 +14,14 @@ export interface ActivityGroupNode {
   members: ActivityMember[];
 }
 
-export type GroupedTrailNode = RenderNode | ActivityGroupNode;
+export interface ExcalidrawDrawingNode {
+  type: "excalidrawDrawing";
+  id: string;
+  path: string | null;
+  members: ToolCallPart[];
+}
+
+export type GroupedTrailNode = RenderNode | ActivityGroupNode | ExcalidrawDrawingNode;
 
 function isInteractive(part: ToolCallPart): boolean {
   // A submitted response must remain visible after its action card closes.
@@ -42,6 +49,8 @@ export function foldActivityGroups(
   const out: GroupedTrailNode[] = [];
   let run: ActivityMember[] = [];
   let groupCount = 0;
+  let drawing: ExcalidrawDrawingNode | null = null;
+  let drawingCount = 0;
 
   const flush = () => {
     if (run.length === 0) return;
@@ -58,25 +67,40 @@ export function foldActivityGroups(
       case "reasoning":
         run.push(node);
         break;
-      case "action":
+      case "action": {
+        const excalidraw = excalidrawToolRun(node.part);
+        // One card per drawing between two messages, so an agent's write-render-fix loop reads as one change; a call
+        // whose path is unknown may target any drawing, so it never joins a card.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+        if (excalidraw?.path && drawing?.path === excalidraw.path) {
+          drawing.members.push(node.part);
+          break;
+        }
+        if (excalidraw) {
+          flush();
+          drawing = {
+            type: "excalidrawDrawing",
+            id: `drawing-${drawingCount++}`,
+            path: excalidraw.path,
+            members: [node.part],
+          };
+          out.push(drawing);
+          break;
+        }
         // A grouped Miyo search would be hidden behind "Ran N commands".
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-        // So would the card that shows Copilot's Excalidraw tools made or read a drawing.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-        if (
-          isInteractive(node.part) ||
-          miyoSearchRun(node.part) ||
-          excalidrawToolRun(node.part) ||
-          isStandalone(node.part)
-        ) {
+        if (isInteractive(node.part) || miyoSearchRun(node.part) || isStandalone(node.part)) {
           flush();
+          drawing = null;
           out.push(node);
         } else {
           run.push(node);
         }
         break;
+      }
       default:
         flush();
+        drawing = null;
         out.push(node);
     }
   }

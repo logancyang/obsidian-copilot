@@ -67,19 +67,102 @@ describe("activityGroups", () => {
       expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup"]);
     });
 
-    it("keeps an Excalidraw write or read out of the group so its card stays visible, while the render check stays grouped (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
-      const grouped = foldActivityGroups([
-        action("a", { vendorToolName: "Read" }),
-        action("b", { vendorToolName: "Grep" }),
-        {
+    describe("with Copilot's Excalidraw tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      const BOARD = "Boards/Launch board.excalidraw.md";
+      const draw = (
+        id: string,
+        overrides: Partial<ToolCallPart> = {},
+        path = BOARD
+      ): RenderNode => ({
+        type: "action",
+        part: excalidrawToolCall(
+          "excalidraw_write",
+          { path, operations: [] },
+          { id, ...overrides }
+        ),
+      });
+      const render = (id: string): RenderNode => ({
+        type: "action",
+        part: excalidrawToolCall("excalidraw_render", { path: BOARD }, { id }),
+      });
+      const drawingAt = (nodes: GroupedTrailNode[], index: number) => {
+        const node = nodes[index];
+        if (node.type !== "excalidrawDrawing") throw new Error(`node ${index} is ${node.type}`);
+        return node.members.map((part) => part.id);
+      };
+
+      it("folds a write-render-fix loop on one drawing into one card, grouping the other tools after it", () => {
+        const grouped = foldActivityGroups([
+          action("grep", { vendorToolName: "Grep" }),
+          draw("w1"),
+          render("r1"),
+          reasoning(),
+          draw("w2", { status: "failed" }),
+          action("read", { vendorToolName: "Read" }),
+          draw("w3"),
+          action("edit", { vendorToolName: "Edit" }),
+          draw("w4"),
+        ]);
+
+        expect(types(grouped)).toEqual(["action", "excalidrawDrawing", "activityGroup"]);
+        expect(drawingAt(grouped, 1)).toEqual(["w1", "r1", "w2", "w3", "w4"]);
+        expect(groupAt(grouped, 2).members.map((m) => m.type)).toEqual([
+          "reasoning",
+          "action",
+          "action",
+        ]);
+      });
+
+      it("opens the card with a failed first attempt so its retry joins it", () => {
+        const grouped = foldActivityGroups([
+          action("bash", { vendorToolName: "Bash" }),
+          draw("w1", { status: "failed" }),
+          draw("w2"),
+        ]);
+
+        expect(types(grouped)).toEqual(["action", "excalidrawDrawing"]);
+        expect(drawingAt(grouped, 1)).toEqual(["w1", "w2"]);
+      });
+
+      it("starts a new card after a message, so a later change never joins an earlier card", () => {
+        const grouped = foldActivityGroups([draw("w1"), prose("Sheet 1 is in."), draw("w2")]);
+
+        expect(types(grouped)).toEqual(["excalidrawDrawing", "text", "excalidrawDrawing"]);
+      });
+
+      it("gives each drawing its own card", () => {
+        const grouped = foldActivityGroups([
+          draw("w1"),
+          draw("w2", {}, "Boards/Other.excalidraw.md"),
+          draw("w3"),
+        ]);
+
+        expect(types(grouped)).toEqual([
+          "excalidrawDrawing",
+          "excalidrawDrawing",
+          "excalidrawDrawing",
+        ]);
+      });
+
+      it("gives each call whose drawing path is unknown its own card, since it may target a different drawing (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+        const unknown = (id: string): RenderNode => ({
           type: "action",
-          part: excalidrawToolCall("excalidraw_write", { path: "a.md", elements: [] }),
-        },
-        { type: "action", part: excalidrawToolCall("excalidraw_render") },
-        action("c", { vendorToolName: "Edit" }),
-        { type: "action", part: excalidrawToolCall("excalidraw_read") },
-      ]);
-      expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup", "action"]);
+          part: excalidrawToolCall("excalidraw_write", { operations: [] }, { id }),
+        });
+        const grouped = foldActivityGroups([unknown("w1"), unknown("w2")]);
+
+        expect(types(grouped)).toEqual(["excalidrawDrawing", "excalidrawDrawing"]);
+      });
+
+      it("opens a card for a render with no card to join, like any other Excalidraw call", () => {
+        const grouped = foldActivityGroups([
+          action("read", { vendorToolName: "Read" }),
+          render("r1"),
+          prose("The board looks right."),
+        ]);
+
+        expect(types(grouped)).toEqual(["action", "excalidrawDrawing", "text"]);
+      });
     });
 
     it("keeps a call the caller marks standalone out of the group, such as a task's launching call (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {

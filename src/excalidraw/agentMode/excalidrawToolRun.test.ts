@@ -1,5 +1,5 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { excalidrawToolRun } from "@/excalidraw/agentMode/excalidrawToolRun";
+import { excalidrawToolRun, summarizeDrawing } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
 import { EXCALIDRAW_TURNED_OFF_TEXT } from "@/excalidraw/excalidrawTools";
 
@@ -101,9 +101,24 @@ describe("excalidrawToolRun", () => {
       expect(excalidrawToolRun(part)?.path).toBeNull();
     });
 
-    it("returns null for a failed write so retries stay in the activity group (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    it("reads the agent's render check as a read of its drawing", () => {
+      expect(excalidrawToolRun(excalidrawToolCall("excalidraw_render", { path: PATH }))).toEqual({
+        action: "read",
+        status: "completed",
+        path: PATH,
+      });
+    });
+
+    it("reads an OpenCode call that writes and then renders as the write, so the drawing still gets its card (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      const part = opencodeCall(
+        `await tools["obsidian-copilot"].excalidraw_write({ path: "${PATH}", operations: [] });\nreturn tools["obsidian-copilot"].excalidraw_render({ path: "${PATH}" });`
+      );
+      expect(excalidrawToolRun(part)).toEqual({ action: "edit", status: "completed", path: PATH });
+    });
+
+    it("keeps a failed write's status so its card can count the failure", () => {
       const part = excalidrawToolCall("excalidraw_write", CREATE, { status: "failed" });
-      expect(excalidrawToolRun(part)).toBeNull();
+      expect(excalidrawToolRun(part)?.status).toBe("failed");
     });
 
     it("returns null for a write answered with the Excalidraw-turned-off text so its explanation stays visible (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
@@ -113,14 +128,66 @@ describe("excalidrawToolRun", () => {
       expect(excalidrawToolRun(part)).toBeNull();
     });
 
-    it.each([
-      ["the agent's render check", excalidrawToolCall("excalidraw_render")],
-      [
-        "a write on another server",
-        excalidrawToolCall("excalidraw_write", CREATE, { mcpServer: "other" }),
-      ],
-    ])("returns null for %s", (_name, part) => {
+    it("returns null for a write on another server", () => {
+      const part = excalidrawToolCall("excalidraw_write", CREATE, { mcpServer: "other" });
       expect(excalidrawToolRun(part)).toBeNull();
+    });
+  });
+
+  describe("summarizeDrawing()", () => {
+    const write = (status: ToolCallPart["status"], input: Record<string, unknown> = EDIT) =>
+      excalidrawToolCall("excalidraw_write", input, { status });
+
+    it("names the strongest change that went through, counting failed writes separately", () => {
+      expect(
+        summarizeDrawing([
+          write("failed", CREATE),
+          write("completed", CREATE),
+          excalidrawToolCall("excalidraw_render", { path: PATH }),
+          write("failed"),
+          write("completed"),
+        ])
+      ).toEqual({ action: "create", status: "completed", path: PATH, failed: 2 });
+    });
+
+    it("shows the drawing in progress while any of its calls runs, including a render check", () => {
+      expect(
+        summarizeDrawing([
+          write("completed"),
+          excalidrawToolCall("excalidraw_render", { path: PATH }, { status: "in_progress" }),
+        ]).status
+      ).toBe("in_progress");
+    });
+
+    it("reports a read-only stretch as a read", () => {
+      expect(
+        summarizeDrawing([
+          excalidrawToolCall("excalidraw_read", { path: PATH }),
+          excalidrawToolCall("excalidraw_render", { path: PATH }),
+        ])
+      ).toEqual({ action: "read", status: "completed", path: PATH, failed: 0 });
+    });
+
+    it("names a finished drawing by the calls that finished, not by a change that was stopped (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      expect(
+        summarizeDrawing([
+          excalidrawToolCall("excalidraw_read", { path: PATH }),
+          write("cancelled"),
+        ])
+      ).toEqual({ action: "read", status: "completed", path: PATH, failed: 0 });
+    });
+
+    it("reports a drawing as failed when none of its changes went through", () => {
+      expect(summarizeDrawing([write("failed"), write("failed")])).toEqual({
+        action: "edit",
+        status: "failed",
+        path: PATH,
+        failed: 2,
+      });
+    });
+
+    it("reports a drawing as stopped when its only change was cancelled", () => {
+      expect(summarizeDrawing([write("cancelled")]).status).toBe("cancelled");
     });
   });
 });
