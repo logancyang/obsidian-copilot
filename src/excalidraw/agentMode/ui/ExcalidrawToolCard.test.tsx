@@ -56,6 +56,7 @@ describe("ExcalidrawToolCard", () => {
       ["pending", "Drawing in Excalidraw"],
       ["in_progress", "Drawing in Excalidraw"],
       ["cancelled", "Excalidraw drawing stopped"],
+      ["failed", "Couldn't draw in Excalidraw"],
     ] as const)(
       "shows a %s call with its label and the drawing name as plain text, since the drawing may not exist yet",
       (status, label) => {

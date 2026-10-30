@@ -16,16 +16,19 @@ const LABELS = {
   create: {
     running: "Drawing in Excalidraw",
     completed: "Drew in Excalidraw",
+    failed: "Couldn't draw in Excalidraw",
     cancelled: "Excalidraw drawing stopped",
   },
   edit: {
     running: "Editing in Excalidraw",
     completed: "Edited in Excalidraw",
+    failed: "Couldn't edit in Excalidraw",
     cancelled: "Excalidraw edit stopped",
   },
   read: {
     running: "Reading Excalidraw drawing",
     completed: "Read Excalidraw drawing",
+    failed: "Couldn't read Excalidraw drawing",
     cancelled: "Excalidraw read stopped",
   },
 } as const;

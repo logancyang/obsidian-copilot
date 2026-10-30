@@ -113,7 +113,7 @@ describe("activityGroups", () => {
         ]);
       });
 
-      it("pulls a failed first attempt into the card its retry opens", () => {
+      it("opens the card with a failed first attempt so its retry joins it", () => {
         const grouped = foldActivityGroups([
           action("bash", { vendorToolName: "Bash" }),
           draw("w1", { status: "failed" }),
@@ -154,16 +154,15 @@ describe("activityGroups", () => {
         expect(types(grouped)).toEqual(["excalidrawDrawing", "excalidrawDrawing"]);
       });
 
-      it("leaves a failed write or render with no card to join as an ordinary row in the group", () => {
+      it("leaves a render with no card to join as an ordinary row in the group", () => {
         const grouped = foldActivityGroups([
           action("read", { vendorToolName: "Read" }),
           render("r1"),
-          draw("w1", { status: "failed" }),
-          prose("The plugin rejected it."),
+          prose("The board looks right."),
         ]);
 
         expect(types(grouped)).toEqual(["activityGroup", "text"]);
-        expect(groupAt(grouped, 0).members).toHaveLength(3);
+        expect(groupAt(grouped, 0).members).toHaveLength(2);
       });
     });
 

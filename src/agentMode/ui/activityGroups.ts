@@ -77,20 +77,12 @@ export function foldActivityGroups(
           break;
         }
         if (excalidraw && opensDrawingCard(excalidraw)) {
-          const earlier = run.flatMap((m) =>
-            excalidraw.path &&
-            m.type === "action" &&
-            excalidrawToolRun(m.part)?.path === excalidraw.path
-              ? [m.part]
-              : []
-          );
-          run = run.filter((m) => m.type !== "action" || !earlier.includes(m.part));
           flush();
           drawing = {
             type: "excalidrawDrawing",
             id: `drawing-${drawingCount++}`,
             path: excalidraw.path,
-            members: [...earlier, node.part],
+            members: [node.part],
           };
           out.push(drawing);
           break;

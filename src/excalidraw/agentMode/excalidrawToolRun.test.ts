@@ -143,19 +143,14 @@ describe("excalidrawToolRun", () => {
       ["a finished write", { action: "create", status: "completed" }],
       ["a running edit", { action: "edit", status: "in_progress" }],
       ["a read", { action: "read", status: "completed" }],
+      ["a failed write, so its retry joins the same card", { action: "edit", status: "failed" }],
     ] as const)("opens a card for %s", (_name, run) => {
       expect(opensDrawingCard({ ...run, path: PATH })).toBe(true);
     });
 
-    it.each([
-      ["a failed write, which changed nothing", { action: "edit", status: "failed" }],
-      ["a render check, which only looks", { action: "render", status: "completed" }],
-    ] as const)(
-      "does not open a card for %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)",
-      (_name, run) => {
-        expect(opensDrawingCard({ ...run, path: PATH })).toBe(false);
-      }
-    );
+    it("does not open a card for a render check, which only looks (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      expect(opensDrawingCard({ action: "render", status: "completed", path: PATH })).toBe(false);
+    });
   });
 
   describe("summarizeDrawing()", () => {
@@ -199,6 +194,15 @@ describe("excalidrawToolRun", () => {
           write("cancelled"),
         ])
       ).toEqual({ action: "read", status: "completed", path: PATH, failed: 0 });
+    });
+
+    it("reports a drawing as failed when none of its changes went through", () => {
+      expect(summarizeDrawing([write("failed"), write("failed")])).toEqual({
+        action: "edit",
+        status: "failed",
+        path: PATH,
+        failed: 2,
+      });
     });
 
     it("reports a drawing as stopped when its only change was cancelled", () => {

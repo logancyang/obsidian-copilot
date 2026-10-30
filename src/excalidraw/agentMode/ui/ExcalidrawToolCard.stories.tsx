@@ -38,6 +38,10 @@ export const Stopped: StoryObj<ExcalidrawToolCardProps> = {
   args: { status: "cancelled" },
 };
 
+export const Failed: StoryObj<ExcalidrawToolCardProps> = {
+  args: { action: "edit", status: "failed", path: "Boards/Launch board.excalidraw.md", failed: 2 },
+};
+
 export const EditedAfterFailedWrites: StoryObj<ExcalidrawToolCardProps> = {
   args: { action: "edit", path: "Boards/Launch board.excalidraw.md", failed: 2 },
 };

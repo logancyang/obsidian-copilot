@@ -10,7 +10,6 @@ import {
 
 export type ExcalidrawToolAction = "create" | "edit" | "read" | "render";
 export type ExcalidrawCardAction = Exclude<ExcalidrawToolAction, "render">;
-export type ExcalidrawCardStatus = Exclude<AgentToolStatus, "failed">;
 
 export interface ExcalidrawToolRun {
   action: ExcalidrawToolAction;
@@ -20,7 +19,7 @@ export interface ExcalidrawToolRun {
 
 export interface ExcalidrawDrawingSummary {
   action: ExcalidrawCardAction;
-  status: ExcalidrawCardStatus;
+  status: AgentToolStatus;
   path: string | null;
   failed: number;
 }
@@ -49,10 +48,10 @@ export function excalidrawToolRun(part: ToolCallPart): ExcalidrawToolRun | null 
   return { action, status: part.status, path };
 }
 
-// Agents retry a failed write and render to check their work, so only a read or write that went through shows the
-// drawing as touched. https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+// A render only checks the agent's work, so it joins a drawing's card but never opens one.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 export function opensDrawingCard(run: ExcalidrawToolRun): boolean {
-  return run.action !== "render" && run.status !== "failed";
+  return run.action !== "render";
 }
 
 const CARD_ACTION_STRENGTH: readonly ExcalidrawCardAction[] = ["create", "edit", "read"];
@@ -64,7 +63,9 @@ export function summarizeDrawing(parts: readonly ToolCallPart[]): ExcalidrawDraw
     ? "in_progress"
     : touched.some((run) => run.status === "completed")
       ? "completed"
-      : "cancelled";
+      : touched.some((run) => run.status === "failed")
+        ? "failed"
+        : "cancelled";
   const named =
     status === "completed" ? touched.filter((run) => run.status === "completed") : touched;
   const action = CARD_ACTION_STRENGTH.find((a) => named.some((run) => run.action === a)) ?? "read";
