@@ -111,6 +111,40 @@ with the commit, clean/dirty state, and bundle hash. A later build in the
 worktree does not mutate the deployed plugin; run `test:vault` again to deploy
 and reload the new build.
 
+## Test in a vault of your own
+
+Several agent sessions often drive the same Obsidian app at once. Deploying
+into a shared test vault replaces the build another session is testing, and
+every vault a session registers or addresses opens another Obsidian window.
+Give each session its own vault and remove it when you finish.
+
+1. Create the vault in your session's scratch directory, with a folder name no
+   other registered vault uses. Copy the shared test vault's `.obsidian/*.json`
+   except `workspace*.json`, only the plugin folders the test needs, and only
+   the notes it uses. A copied vault has no provider API keys; Claude Code and
+   Codex still run on their own sign-in.
+2. Deploy with `COPILOT_TEST_VAULT_PATH=<your vault> npm run test:vault`. It
+   registers, opens and trusts the folder.
+3. Agent binary choices are stored per device. To reuse the shared vault's,
+   copy its `obsidian-copilot:device-id:v1` value with
+   `app.loadLocalStorage(...)` there and `app.saveLocalStorage(...)` in your
+   vault, then reload Copilot.
+4. Pass `vault=<your vault>` on every call, and never address a vault another
+   session created: `vault=<name>` opens a closed vault in a new window.
+5. When you finish, close the window, unregister the vault and delete the
+   folder:
+
+```bash
+$OBS vault=<your vault> eval code='setTimeout(()=>require("@electron/remote").getCurrentWindow().close(),200); "closing"'
+$OBS eval code="require('electron').ipcRenderer.sendSync('vault-remove', '<absolute vault path>')"
+rm -rf "<absolute vault path>"
+```
+
+Obsidian refuses `vault-remove` while the vault's window is open. Send it
+without `vault=`, so it goes to a window that is already open instead of
+reopening one. `$OBS vaults verbose` no longer lists the vault once it is
+removed.
+
 ## Reset the test vault's settings
 
 ```bash
