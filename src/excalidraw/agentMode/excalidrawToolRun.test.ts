@@ -1,6 +1,7 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { excalidrawToolRun } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
+import { EXCALIDRAW_TURNED_OFF_TEXT } from "@/excalidraw/excalidrawTools";
 
 const PATH = "Incidents/Investigation playbook.excalidraw.md";
 const CREATE = { path: PATH, elements: [{ id: "a", type: "rectangle" }] };
@@ -67,6 +68,13 @@ describe("excalidrawToolRun", () => {
       expect(excalidrawToolRun(part)?.action).toBe("edit");
     });
 
+    it("reads an OpenCode write whose path and labels mention operations as a new drawing", () => {
+      const part = opencodeCall(
+        `return tools["obsidian-copilot"].excalidraw_write({ path: "operations.excalidraw.md", elements: [{ type: "text", text: "operations: []" }] });`
+      );
+      expect(excalidrawToolRun(part)?.action).toBe("create");
+    });
+
     it.each([
       ["Claude", excalidrawToolCall("excalidraw_read", { path: PATH })],
       ["Codex", codexCall("excalidraw_read", { path: PATH })],
@@ -95,6 +103,13 @@ describe("excalidrawToolRun", () => {
 
     it("returns null for a failed write so retries stay in the activity group (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
       const part = excalidrawToolCall("excalidraw_write", CREATE, { status: "failed" });
+      expect(excalidrawToolRun(part)).toBeNull();
+    });
+
+    it("returns null for a write answered with the Excalidraw-turned-off text so its explanation stays visible (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      const part = excalidrawToolCall("excalidraw_write", CREATE, {
+        output: [{ type: "text", text: EXCALIDRAW_TURNED_OFF_TEXT }],
+      });
       expect(excalidrawToolRun(part)).toBeNull();
     });
 
