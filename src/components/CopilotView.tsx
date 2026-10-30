@@ -1,6 +1,7 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { CHAT_VIEWTYPE } from "@/constants";
+import { recordViewTop } from "@/components/recordViewTop";
 import { ChatViewEventTarget, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { registerActiveLeafChangeBridge } from "@/utils/registerActiveLeafChangeBridge";
@@ -48,6 +49,10 @@ export default class CopilotView extends ItemView {
   async onOpen(): Promise<void> {
     this.viewRoot = mountPluginViewRoot(this.containerEl, this.app, () => this.renderTree());
     this.setupDrawerHideObserver();
+    if (Platform.isMobile) {
+      // Drawer views end above the keyboard; their top offset varies by Obsidian layout. https://github.com/Brevilabs/obsidian-copilot-private/issues/791
+      this.registerDomEvent(this.contentEl, "focusin", () => recordViewTop(this.contentEl));
+    }
 
     registerActiveLeafChangeBridge(this, this.eventTarget);
 

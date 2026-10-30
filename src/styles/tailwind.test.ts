@@ -3,7 +3,7 @@ import path from "path";
 
 describe("tailwind", () => {
   describe("Quick Chat host padding", () => {
-    it("keeps mobile main-tab input clear of the keyboard and bottom navigation and removes the phone sidebar keyboard gap without changing other hosts (https://github.com/Brevilabs/obsidian-copilot-private/issues/400)", () => {
+    it("keeps mobile main-tab input clear of the keyboard and bottom navigation (https://github.com/Brevilabs/obsidian-copilot-private/issues/400) and ends mobile drawer hosts at the keyboard with minimal padding (https://github.com/Brevilabs/obsidian-copilot-private/issues/791) without changing other hosts", () => {
       const css = readFileSync(path.join(__dirname, "tailwind.css"), "utf8").replace(
         /\/\*[\s\S]*?\*\//g,
         ""
@@ -38,11 +38,22 @@ describe("tailwind", () => {
           "is-mobile is-phone",
           "workspace-drawer mod-right",
           "copilot-chat-view",
-          ["max(var(--size-4-8), calc(var(--safe-area-inset-bottom) - var(--keyboard-height)))"],
+          ["var(--size-4-2)"],
         ],
-        ["is-mobile is-phone", "workspace-drawer mod-left", "copilot-chat-view", []],
+        [
+          "is-mobile is-tablet",
+          "workspace-drawer mod-right",
+          "copilot-chat-view",
+          ["var(--size-4-2)"],
+        ],
+        [
+          "is-mobile is-phone",
+          "workspace-drawer mod-left",
+          "copilot-chat-view",
+          ["var(--size-4-2)"],
+        ],
         ["", "workspace-drawer mod-right", "copilot-chat-view", []],
-        ["is-mobile", "workspace-drawer mod-right", "copilot-chat-view", []],
+        ["is-mobile", "workspace-drawer mod-right", "markdown", []],
         ["", "workspace-tab-container", "copilot-chat-view", []],
         ["is-mobile is-phone", "workspace-tab-container", "markdown", []],
       ] as const) {
@@ -68,8 +79,8 @@ describe("tailwind", () => {
             .map(({ maxHeight }) => maxHeight)
         ).toEqual(
           expected.map(() =>
-            container === "workspace-drawer mod-right"
-              ? "calc(100vh - max(var(--size-4-2), var(--safe-area-inset-top)) - var(--keyboard-height))"
+            container.startsWith("workspace-drawer")
+              ? "calc(100vh - var(--copilot-view-top, 0px) - var(--keyboard-height))"
               : undefined
           )
         );
