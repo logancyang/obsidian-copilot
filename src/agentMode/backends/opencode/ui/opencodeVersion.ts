@@ -5,7 +5,7 @@
 // Also check its edit, write and patch hooks still see each tool's file paths, or turn diffs
 // quietly fall back to snapshots that a fast write can overtake.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
-export const OPENCODE_PINNED_VERSION = "2.0.22";
+export const OPENCODE_PINNED_VERSION = "2.0.32";
 
 // Chat startup waits for the model catalog OpenCode sends after session/new, first sent in 2.0.21.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/625
