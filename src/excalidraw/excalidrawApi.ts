@@ -47,7 +47,7 @@ interface ExcalidrawAutomate {
     save: boolean,
     newElementsOnTop: boolean
   ): Promise<boolean>;
-  style: { strokeStyle: string; strokeColor: string };
+  style: { strokeStyle: string; strokeColor: string; roughness?: number; strokeWidth?: number };
   destroy(): void;
 }
 
@@ -114,6 +114,10 @@ export function getExcalidrawApi(app: App): ExcalidrawApi | null {
         fresh.copyViewElementsToEAforEditing([from, to]);
         fresh.style.strokeStyle = connection.dashed ? "dashed" : "solid";
         if (connection.color) fresh.style.strokeColor = connection.color;
+        // The plugin's own connect draws in the default style, so arrows added to a sketchy drawing came out clean.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
+        if (connection.roughness !== undefined) fresh.style.roughness = connection.roughness;
+        if (connection.strokeWidth !== undefined) fresh.style.strokeWidth = connection.strokeWidth;
         const arrowId = fresh.connectObjects(
           from.id,
           connection.fromSide ?? null,

@@ -10,6 +10,7 @@ import {
 } from "./excalidrawTools";
 
 const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
+const ISSUE_792 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/792";
 const FLOW = "Drawings/Flow.excalidraw.md";
 
 const START: SceneElement[] = [
@@ -67,6 +68,8 @@ describe("excalidrawTools", () => {
       expect(Object.keys(EXCALIDRAW_WRITE_TOOL.inputSchema.properties)).toEqual([
         "path",
         "elements",
+        "groups",
+        "icons",
         "operations",
       ]);
     });
@@ -113,6 +116,18 @@ describe("excalidrawTools", () => {
       const [json, missing] = result.text.split("\n");
       expect(JSON.parse(json).map((e: SceneElement) => e.id)).toEqual(["box1", "txt1"]);
       expect(missing).toBe("No element with id: nope");
+    });
+
+    it("returns every member of a group asked for by its group id", async () => {
+      const icon = [
+        { id: "s1", type: "line", x: 0, y: 0, width: 10, height: 10, groupIds: ["iconG"] },
+        { id: "s2", type: "ellipse", x: 0, y: 0, width: 10, height: 10, groupIds: ["iconG"] },
+      ];
+      const api = fakeApi({ sceneElements: jest.fn().mockResolvedValue([...START, ...icon]) });
+
+      const result = await toolsFor(api).read.call({ path: FLOW, ids: ["iconG"] });
+
+      expect(result).toEqual({ text: JSON.stringify(icon), isError: false });
     });
 
     it(`${ISSUE_787} refuses element JSON over 32,000 bytes, which Codex would cut in the middle`, async () => {
@@ -187,6 +202,161 @@ describe("excalidrawTools", () => {
       });
     });
 
+    it("passes font, roughness, fill, stroke width, opacity and roundness through to the plugin's create", async () => {
+      const api = fakeApi();
+      const elements = [
+        {
+          id: "a",
+          type: "rectangle",
+          roughness: 2,
+          fillStyle: "hachure",
+          strokeWidth: 2,
+          opacity: 80,
+          roundness: { type: 3 },
+          label: { text: "Start", fontFamily: 5, fontSize: 24 },
+        },
+        { type: "text", text: "Note", fontFamily: 1, fontSize: 28 },
+      ];
+
+      await toolsFor(api).write.call({ path: FLOW, elements });
+
+      expect(api.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ command: "create", elements })
+      );
+    });
+
+    it(`${ISSUE_792} groups elements of a new drawing right after creating it, by their real ids`, async () => {
+      const execute = jest.fn().mockImplementation(async (request: Record<string, unknown>) => {
+        if (request.command === "create")
+          return { ok: true, data: { idMap: { head: "Hd000001", eye: "Ey000001" } } };
+        if (request.command === "read") return { ok: true, data: { revision: "r1" } };
+        if (request.command === "apply") return { ok: true, data: { groupIds: ["Grp00001"] } };
+        return { ok: true };
+      });
+      const api = fakeApi({ execute });
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        elements: [
+          { id: "head", type: "rectangle" },
+          { id: "eye", type: "ellipse" },
+        ],
+        groups: [["head", "eye"]],
+      });
+
+      expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual([
+        "create",
+        "open",
+        "read",
+        "apply",
+      ]);
+      expect(execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({ operations: [{ op: "group", ids: ["Hd000001", "Ey000001"] }] })
+      );
+      expect(result).toEqual({
+        text: `Created ${FLOW}. Ids (yours=real): head=Hd000001, eye=Ey000001. Edited ${FLOW}. Applied 1 operation. New groups: Grp00001.`,
+        isError: false,
+      });
+    });
+
+    it(`${ISSUE_792} reports a created drawing whose grouping failed, so the agent groups it instead of creating it again`, async () => {
+      const api = fakeApi({
+        execute: jest.fn().mockImplementation(async (request: Record<string, unknown>) => {
+          if (request.command === "create") return { ok: true, data: { idMap: {} } };
+          if (request.command === "apply")
+            return { ok: false, error: { code: "NOT_FOUND", message: "missing element" } };
+          return { ok: true, data: { revision: "r1" } };
+        }),
+      });
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        elements: [{ type: "rectangle" }],
+        groups: [["nope"]],
+      });
+
+      expect(result).toEqual({
+        text: `Created ${FLOW}. Grouping failed; don't create it again. No change made to ${FLOW}: NOT_FOUND: missing element`,
+        isError: true,
+      });
+    });
+
+    it(`${ISSUE_792} creates a drawing with Lucide icons and reports each icon's group id`, async () => {
+      const execute = jest.fn().mockImplementation(async (request: Record<string, unknown>) =>
+        request.command === "status"
+          ? { ok: true, data: { lucideIcons: true } }
+          : {
+              ok: true,
+              data: {
+                idMap: { a: "Xy12Ab34" },
+                groupMap: { db: { icon: "lucide-database", groupId: "Grp00001" } },
+              },
+            }
+      );
+      const api = fakeApi({ execute });
+      const elements = [{ id: "a", type: "rectangle" }];
+      const icons = [{ id: "db", icon: "database", x: 20, y: 10, size: 48 }];
+
+      const result = await toolsFor(api).write.call({ path: FLOW, elements, icons });
+
+      expect(execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({ command: "create", elements, icons })
+      );
+      expect(result).toEqual({
+        text: `Created ${FLOW}. Ids (yours=real): a=Xy12Ab34. Icon groups (yours=group id): db=Grp00001.`,
+        isError: false,
+      });
+    });
+
+    it(`${ISSUE_792} sends an icon operation to the plugin's apply`, async () => {
+      const api = fakeApi({
+        execute: jest
+          .fn()
+          .mockImplementation(async (request: Record<string, unknown>) =>
+            request.command === "status"
+              ? { ok: true, data: { lucideIcons: true } }
+              : { ok: true, data: { revision: "s1:v1:3:7" } }
+          ),
+      });
+      const operations = [{ op: "lucide", id: "srv", icon: "server", x: 0, y: 0 }];
+
+      await toolsFor(api).write.call({ path: FLOW, operations });
+
+      expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual([
+        "status",
+        "open",
+        "read",
+        "apply",
+      ]);
+      expect(api.execute).toHaveBeenLastCalledWith(expect.objectContaining({ operations }));
+    });
+
+    it(`${ISSUE_792} refuses icons without changing the drawing when the installed Excalidraw can't add them`, async () => {
+      const api = fakeApi({
+        execute: jest.fn().mockResolvedValue({ ok: true, data: { version: "2.29.0" } }),
+      });
+      const { write } = toolsFor(api);
+      const refusal = {
+        text: "No change made: the installed Excalidraw plugin can't add Lucide icons. Draw without icons, or tell the user to update Excalidraw.",
+        isError: true,
+      };
+
+      expect(
+        await write.call({
+          path: FLOW,
+          elements: [{ type: "rectangle" }],
+          icons: [{ id: "db", icon: "database" }],
+        })
+      ).toEqual(refusal);
+      expect(
+        await write.call({ path: FLOW, operations: [{ op: "lucide", id: "db", icon: "database" }] })
+      ).toEqual(refusal);
+      expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual([
+        "status",
+        "status",
+      ]);
+    });
+
     it("reports the plugin's error code and message when create fails, and rejects an empty element list", async () => {
       const api = fakeApi({
         execute: jest.fn().mockResolvedValue({
@@ -241,20 +411,25 @@ describe("excalidrawTools", () => {
       });
     });
 
-    it(`${ISSUE_787} builds labelled, dashed, coloured or routed connections on the open drawing instead of sending them to apply`, async () => {
+    it(`${ISSUE_787} builds labelled, dashed, coloured, routed or restyled connections on the open drawing instead of sending them to apply`, async () => {
       const api = fakeApi();
       const labelled = { op: "connect", from: "box1", to: "box2", label: "No", dashed: true };
       const routed = { op: "connect", from: "box2", to: "box1", via: [[540, 40]] };
+      const sketchy = { op: "connect", from: "box1", to: "box2", roughness: 2 };
 
-      const result = await toolsFor(api).write.call({ path: FLOW, operations: [labelled, routed] });
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        operations: [labelled, routed, sketchy],
+      });
 
       expect(api.execute.mock.calls.map(([request]) => request.command)).toEqual(["open"]);
       expect(api.connectLabelled.mock.calls).toEqual([
         [FLOW, labelled],
         [FLOW, routed],
+        [FLOW, sketchy],
       ]);
       expect(result.text).toBe(
-        `Edited ${FLOW}. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001). Connected box2 -> box1 with arrow Arr00001 (label Lbl00001).`
+        `Edited ${FLOW}. Connected box1 -> box2 with arrow Arr00001 (label Lbl00001). Connected box2 -> box1 with arrow Arr00001 (label Lbl00001). Connected box1 -> box2 with arrow Arr00001 (label Lbl00001).`
       );
     });
 
