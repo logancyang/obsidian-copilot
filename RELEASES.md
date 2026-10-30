@@ -10,7 +10,7 @@ This release also lets you send messages right away in Claude agents and adds Mi
 
 ## ✨ Enhancements
 
-- Copilot agents can now create beautiful Excalidraw drawings, and read and edit the drawings you already have. A Copilot card in the chat shows each drawing they work on. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), [#3893](https://github.com/logancyang/obsidian-copilot/pull/3893), @zeroliu)
+- Copilot agents can now create beautiful Excalidraw drawings, and read and edit the drawings you already have. A Copilot card in the chat shows each drawing they work on. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), [#3893](https://github.com/logancyang/obsidian-copilot/pull/3893), [#3896](https://github.com/logancyang/obsidian-copilot/pull/3896), @zeroliu)
   ![Excalidraw flowchart of the six customer onboarding steps, color-coded by owner with a legend, drawn by an agent](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-drawing-08f8f5bf.png)
   ![Agent Chat with the request to draw the onboarding steps and a Drew in Excalidraw card for Customer onboarding](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-card-b42ac789.png)
 - Interrupt Claude's current reply and send your queued messages right away with **Send now**. ([#3884](https://github.com/logancyang/obsidian-copilot/pull/3884), @zeroliu)
