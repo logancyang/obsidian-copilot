@@ -15,6 +15,11 @@ export interface SceneElement {
   readonly originalText?: string;
   readonly name?: string | null;
   readonly fontSize?: number;
+  readonly fontFamily?: number;
+  readonly roughness?: number;
+  readonly fillStyle?: string;
+  readonly strokeWidth?: number;
+  readonly groupIds?: readonly string[];
   readonly backgroundColor?: string;
   readonly strokeColor?: string;
   readonly strokeStyle?: string;
@@ -40,7 +45,20 @@ const DEFAULT_STROKES = new Set(["#1e1e1e", "#000000"]);
 const MAX_OVERLAP_LINES = 40;
 
 export function outlineScene(path: string, sceneElements: readonly SceneElement[]): string[] {
-  const els = sceneElements.filter((e) => !e.isDeleted);
+  const all = sceneElements.filter((e) => !e.isDeleted);
+  // An icon arrives as a group of a dozen unlabelled strokes; listing each one would bury the diagram's real shapes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
+  const drawnGroups = new Map<string, SceneElement[]>();
+  for (const e of all) {
+    const g = e.groupIds?.[e.groupIds.length - 1];
+    if (g) drawnGroups.set(g, [...(drawnGroups.get(g) ?? []), e]);
+  }
+  for (const [g, members] of drawnGroups) {
+    if (members.some((m) => m.type === "text" || m.type === "arrow" || m.boundElements?.length))
+      drawnGroups.delete(g);
+  }
+  const grouped = new Set([...drawnGroups.values()].flat());
+  const els = all.filter((e) => !grouped.has(e));
   const byId = new Map(els.map((e) => [e.id, e]));
   const r = Math.round;
   const box = (e: SceneElement): Box => {
@@ -137,10 +155,33 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
   };
 
   const counts = new Map<string, number>();
-  for (const e of els) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
+  for (const e of all) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
   const lines = [
-    `${path}: ${els.length} elements (${[...counts].map(([k, v]) => `${k} ${v}`).join(", ")}). Positions are top-left x,y and width x height.`,
+    `${path}: ${all.length} elements (${[...counts].map(([k, v]) => `${k} ${v}`).join(", ")}). Positions are top-left x,y and width x height.`,
   ];
+  const usual = (
+    name: string,
+    pool: readonly SceneElement[],
+    value: (e: SceneElement) => string | number | undefined
+  ) => {
+    const tally = new Map<string | number, number>();
+    for (const v of pool.map(value)) if (v !== undefined) tally.set(v, (tally.get(v) ?? 0) + 1);
+    const top = [...tally].sort((p, q) => q[1] - p[1])[0];
+    return top ? [`${name} ${top[0]}`] : [];
+  };
+  const texts = all.filter((e) => e.type === "text");
+  const drawn = all.filter((e) => e.type !== "text");
+  const filled = all.filter(
+    (e) => SHAPE_TYPES.has(e.type) && e.backgroundColor && e.backgroundColor !== "transparent"
+  );
+  const look = [
+    ...usual("font", texts, (e) => e.fontFamily),
+    ...usual("font size", texts, (e) => e.fontSize),
+    ...usual("roughness", drawn, (e) => e.roughness),
+    ...usual("stroke width", drawn, (e) => e.strokeWidth),
+    ...usual("fill", filled, (e) => e.fillStyle),
+  ];
+  if (look.length) lines.push(`Usual style: ${look.join(", ")}.`);
 
   const groups = [...frames, ...shapes.filter((s) => regions.has(s.id))];
   if (groups.length) {
@@ -254,7 +295,30 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
     }
   }
 
-  lines.push(...overlaps(els, [...shapes, ...freeTexts], box, inside, area, ref));
+  const icons = [...drawnGroups].map(([id, members]) => {
+    const boxes = members.map(box);
+    const x = Math.min(...boxes.map((b) => b[0]));
+    const y = Math.min(...boxes.map((b) => b[1]));
+    const width = Math.max(...boxes.map((b) => b[2])) - x;
+    const height = Math.max(...boxes.map((b) => b[3])) - y;
+    return { id, type: "group", x, y, width, height, members };
+  });
+  if (icons.length) {
+    lines.push("Icons and drawn groups (group id, parts; pass the group id to read its members):");
+    for (const icon of icons) {
+      const b = box(icon);
+      const host = [...frames, ...shapes]
+        .filter((s) => inside(box(s), b))
+        .sort((p, q) => area(box(p)) - area(box(q)))[0];
+      lines.push(
+        `  ${icon.id} ${icon.members.length} parts ${size(b)}${host ? ` in ${name(host)}` : ""}`
+      );
+    }
+  }
+
+  const iconOnTop = new Map(icons.map((i) => [i.members[i.members.length - 1], i]));
+  const layered = all.map((e) => iconOnTop.get(e) ?? e);
+  lines.push(...overlaps(layered, [...shapes, ...freeTexts, ...icons], box, inside, area, ref));
   return lines;
 }
 

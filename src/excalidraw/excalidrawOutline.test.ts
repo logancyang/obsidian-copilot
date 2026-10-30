@@ -1,6 +1,7 @@
 import { outlineScene, type SceneElement } from "./excalidrawOutline";
 
 const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
+const ISSUE_792 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/792";
 
 function shape(
   id: string,
@@ -88,6 +89,94 @@ describe("excalidrawOutline", () => {
       expect(lines[0]).toBe(
         "Boards/Flow.excalidraw.md: 2 elements (rectangle 1, text 1). Positions are top-left x,y and width x height."
       );
+    });
+
+    it("states the drawing's most common font, font size, roughness, stroke width and fill style", () => {
+      const sketchy = {
+        roughness: 2,
+        strokeWidth: 2,
+        fillStyle: "hachure",
+        backgroundColor: "#ffec99",
+      };
+      const elements = [
+        ...labelled("a", "Plan", 0, 0, 180, 80, sketchy),
+        ...labelled("b", "Ship", 300, 0, 180, 80, sketchy),
+        shape("c", 0, 200, 80, 80, { roughness: 0, strokeWidth: 1 }),
+      ].map((e) => (e.type === "text" ? { ...e, fontFamily: 5, fontSize: 20 } : e));
+
+      expect(outlineScene("Plan.excalidraw.md", elements)).toContain(
+        "Usual style: font 5, font size 20, roughness 2, stroke width 2, fill hachure."
+      );
+    });
+
+    it(`${ISSUE_792} lists an icon's unlabelled parts as one group, inside the shape that holds it`, () => {
+      const icon = [
+        shape("i1", 50, 20, 40, 10, { type: "ellipse", groupIds: ["iconG"] }),
+        shape("i2", 50, 25, 0, 30, {
+          type: "line",
+          points: [
+            [0, 0],
+            [0, 30],
+          ],
+          groupIds: ["iconG"],
+        }),
+        shape("i3", 90, 25, 0, 30, {
+          type: "line",
+          points: [
+            [0, 0],
+            [0, 30],
+          ],
+          groupIds: ["iconG"],
+        }),
+      ];
+
+      const lines = outlineScene("Arch.excalidraw.md", [
+        ...labelled("db", "Orders DB", 0, 0, 140, 110),
+        ...icon,
+      ]);
+
+      expect(lines).toContain('  iconG 3 parts @50,20 40x35 in "Orders DB"');
+      expect(lines.join("\n")).not.toMatch(/ i[123] /);
+    });
+
+    it(`${ISSUE_792} counts the parts of icons and drawn groups toward the drawing's usual style`, () => {
+      const sketchy = {
+        roughness: 2,
+        strokeWidth: 3,
+        fillStyle: "hachure",
+        backgroundColor: "#ffec99",
+        groupIds: ["robot"],
+      };
+      const elements = [
+        shape("head", 0, 0, 60, 40, sketchy),
+        shape("eye", 10, 10, 10, 10, { ...sketchy, type: "ellipse" }),
+      ];
+
+      expect(outlineScene("Robot.excalidraw.md", elements)).toContain(
+        "Usual style: roughness 2, stroke width 3, fill hachure."
+      );
+    });
+
+    it(`${ISSUE_792} flags an icon drawn under a filled shape that covers it`, () => {
+      const elements = [
+        shape("i1", 40, 40, 30, 30, { type: "ellipse", groupIds: ["iconG"] }),
+        shape("i2", 50, 50, 10, 10, { groupIds: ["iconG"] }),
+        shape("panel", 0, 0, 300, 200, { backgroundColor: "#f1f3f5" }),
+      ];
+
+      expect(outlineScene("Board.excalidraw.md", elements)).toContain(
+        "  rectangle panel over group iconG, which sits inside it [hidden under a filled shape]"
+      );
+    });
+
+    it("keeps a group holding a label or an arrow in the regular listing", () => {
+      const lines = outlineScene(
+        "Arch.excalidraw.md",
+        labelled("a", "API", 0, 0, 140, 80, { groupIds: ["g1"] })
+      );
+
+      expect(lines).toContain('  a rectangle "API" @0,0 140x80 text a-t');
+      expect(lines.join("\n")).not.toContain("Icons and drawn groups");
     });
 
     it("lists each shape with its id, label, position, size, fill, link and the id of its label text", () => {

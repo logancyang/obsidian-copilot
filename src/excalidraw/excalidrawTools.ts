@@ -21,6 +21,37 @@ const PATH = {
   description: "Vault-relative path of the drawing, including .excalidraw.md or .excalidraw.",
 };
 
+const FONT = {
+  type: "integer",
+  description: "5 Excalifont, 1 Virgil, 2 Helvetica, 3 Cascadia, 6 Nunito, 8 Comic Shanns.",
+};
+
+const STYLE = {
+  strokeColor: { type: "string" },
+  backgroundColor: { type: "string" },
+  strokeStyle: { enum: ["solid", "dashed", "dotted"] },
+  fillStyle: { enum: ["hachure", "cross-hatch", "solid", "zigzag"] },
+  strokeWidth: { type: "number" },
+  roughness: { type: "number", description: "0 clean, 1 sketchy, 2 very sketchy." },
+  opacity: { type: "number", description: "0-100." },
+};
+
+const ICON = {
+  type: "object",
+  required: ["id", "icon"],
+  properties: {
+    id: { type: "string" },
+    icon: { type: "string", description: "Lucide icon name, such as database or server." },
+    x: { type: "number" },
+    y: { type: "number" },
+    size: { type: "number", description: "Width of the icon's square; 96 by default." },
+    strokeColor: { type: "string" },
+    strokeWidth: { type: "number" },
+    roughness: { type: "number" },
+    opacity: { type: "number" },
+  },
+};
+
 const ELEMENT = {
   type: "object",
   required: ["type"],
@@ -35,16 +66,26 @@ const ELEMENT = {
     height: { type: "number" },
     label: {
       type: "object",
-      properties: { text: { type: "string" } },
+      properties: {
+        text: { type: "string" },
+        fontFamily: FONT,
+        fontSize: { type: "number" },
+        verticalAlign: { enum: ["top", "middle", "bottom"] },
+      },
       description: "Text inside a shape or on an arrow.",
     },
     text: { type: "string", description: "Only for free-standing text elements." },
+    fontFamily: FONT,
+    fontSize: { type: "number" },
     start: { type: "object", properties: { id: { type: "string" } } },
     end: { type: "object", properties: { id: { type: "string" } } },
     points: { type: "array", items: { type: "array", items: { type: "number" } } },
-    strokeColor: { type: "string" },
-    backgroundColor: { type: "string" },
-    strokeStyle: { type: "string" },
+    ...STYLE,
+    roundness: {
+      type: ["object", "null"],
+      properties: { type: { enum: [2, 3] } },
+      description: "Rounded corners: {type: 3} for rectangles, {type: 2} for other shapes.",
+    },
     children: { type: "array", items: { type: "string" }, description: "Ids a frame holds." },
   },
 };
@@ -60,7 +101,7 @@ const WRITES = Object.freeze({ readOnlyHint: false, destructiveHint: false, open
 
 export const EXCALIDRAW_READ_TOOL = Object.freeze({
   name: EXCALIDRAW_READ_TOOL_NAME,
-  description: `Read an Obsidian Excalidraw drawing (.excalidraw.md or .excalidraw) as a compact outline: containers with their members; shapes with id, label, position (top-left x,y and width x height), colour and link; arrows as From -> To "label"; free text; and overlaps with draw order. Positions and draw order carry meaning: a sticker, badge or highlight normally sits on top of the shape it marks, and a large filled shape under smaller ones is a background or lane. A small shape or text tucked under a filled shape is usually a stacking mistake: go by where it sits and which shape it overlaps most, and tell the user it is partly hidden. Pass ids to get those elements' full JSON. Use this instead of opening or decoding the file.`,
+  description: `Read an Obsidian Excalidraw drawing (.excalidraw.md or .excalidraw) as a compact outline: containers with their members; shapes with id, label, position (top-left x,y and width x height), colour and link; arrows as From -> To "label"; free text; and overlaps with draw order. Positions and draw order carry meaning: a sticker, badge or highlight normally sits on top of the shape it marks, and a large filled shape under smaller ones is a background or lane. A small shape or text tucked under a filled shape is usually a stacking mistake: go by where it sits and which shape it overlaps most, and tell the user it is partly hidden. Pass ids, or a group id, to get those elements' full JSON. Use this instead of opening or decoding the file.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -92,19 +133,25 @@ export const EXCALIDRAW_WRITE_TOOL = Object.freeze({
 
 New drawing (elements): Create a new Obsidian Excalidraw drawing. The Excalidraw plugin writes the file, binds each label to its shape and each arrow to both ends. Never write or patch Excalidraw files yourself: a hand-written file garbles labels and detaches arrows. It never overwrites an existing path.
 Give each shape a local id, type, x, y, width, height and label {text}; text inside a shape goes in label, never in a separate text element on top. Connect shapes with arrows whose start {id} and end {id} name shapes in this call; put the arrow's x,y on the source's edge and its last point on the target's edge, with bend points to route around other shapes. Use an arrow with endArrowhead null for a plain connector, never a line. Later elements are drawn on top: put a group's background rectangle before its members and a sticker after the shape it marks. Don't put connected shapes in a frame: frames clip arrows that leave them.
-Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). Follow the look of the vault's existing drawings. The reply maps your ids to the real ones.
+Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). The reply maps your ids to the real ones.
+Groups: groups [[ids..], ..] makes each list one group.
+Icons: icons [{id, icon, x, y, size}] places Lucide icons as editable shapes, each in its own group. An unknown icon name rejects the whole call.
 
 Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
-- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, recolours (strokeColor, backgroundColor, strokeStyle), links (link) or renames. To rename, update the label's own text id with {"text": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
+- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, restyles (the element style fields except roundness), links (link) or renames. To rename or change a label's font, update the label's own text id with {"text": ..} or {"fontFamily": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
 - {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation; connect existing shapes with connect.
-- {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), via (bend points [[x,y],..] to route it around shapes, as for a loop back), label, dashed (true) and color.
+- {"op":"group","ids":[..]} puts existing elements, or ones added earlier in the same call, in one new group.
+- {"op":"lucide","id":..,"icon":..,"x":..,"y":..,"size":..} adds an icon as for a new drawing; the reply names its group id.
+- {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), via (bend points [[x,y],..] to route it around shapes, as for a loop back), label, dashed (true), color, roughness and strokeWidth.
 Make room before inserting by moving the shapes that follow. Keep every id you didn't mean to change: links and block references point at them.`,
   inputSchema: {
     type: "object",
     properties: {
       path: PATH,
       elements: { type: "array", minItems: 1, items: ELEMENT },
+      groups: { type: "array", items: { type: "array", items: { type: "string" } } },
+      icons: { type: "array", items: ICON },
       operations: {
         type: "array",
         minItems: 1,
@@ -112,7 +159,7 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
           type: "object",
           required: ["op"],
           properties: {
-            op: { enum: ["update", "delete", "add", "connect"] },
+            op: { enum: ["update", "delete", "add", "group", "lucide", "connect"] },
             id: { type: "string" },
             set: { type: "object" },
             ids: { type: "array", items: { type: "string" } },
@@ -122,9 +169,12 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
             fromSide: { enum: ["top", "bottom", "left", "right"] },
             toSide: { enum: ["top", "bottom", "left", "right"] },
             via: { type: "array", items: { type: "array", items: { type: "number" } } },
+            icon: { type: "string" },
             label: { type: "string" },
             dashed: { type: "boolean" },
             color: { type: "string" },
+            roughness: { type: "number" },
+            strokeWidth: { type: "number" },
           },
         },
       },
@@ -149,6 +199,8 @@ export interface LabelledConnection {
   label?: string;
   dashed?: boolean;
   color?: string;
+  roughness?: number;
+  strokeWidth?: number;
   via?: ReadonlyArray<readonly [number, number]>;
 }
 
@@ -239,9 +291,13 @@ async function read(
   if (!ids.length) return { text: outlineScene(path, elements).join("\n"), isError: false };
   const wanted = new Set(ids);
   const picked = elements.filter(
-    (e) => !e.isDeleted && (wanted.has(e.id) || (e.containerId && wanted.has(e.containerId)))
+    (e) =>
+      !e.isDeleted &&
+      (wanted.has(e.id) ||
+        (e.containerId && wanted.has(e.containerId)) ||
+        e.groupIds?.some((g) => wanted.has(g)))
   );
-  const missing = ids.filter((id) => !picked.some((e) => e.id === id));
+  const missing = ids.filter((id) => !picked.some((e) => e.id === id || e.groupIds?.includes(id)));
   const json = JSON.stringify(picked);
   if (new TextEncoder().encode(json).length > MAX_ELEMENT_JSON_BYTES) {
     return failure(
@@ -273,6 +329,16 @@ async function write(
   input: Record<string, unknown>,
   path: string
 ): Promise<ExcalidrawToolResult> {
+  const wantsIcons =
+    (Array.isArray(input.icons) && input.icons.length > 0) ||
+    (Array.isArray(input.operations) &&
+      input.operations.some((op) => (op as Record<string, unknown> | null)?.op === "lucide"));
+  // Excalidraw 2.29 has no icon support and rejects the request with a generic unsupported-field error.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
+  if (wantsIcons && !(await api.execute({ apiVersion: 1, command: "status" })).data?.lucideIcons)
+    return failure(
+      "No change made: the installed Excalidraw plugin can't add Lucide icons. Draw without icons, or tell the user to update Excalidraw."
+    );
   if (Array.isArray(input.elements)) return create(api, input, path);
   if (Array.isArray(input.operations)) return edit(api, input, path);
   return failure("Pass elements for a new drawing or operations for an existing one.");
@@ -291,12 +357,28 @@ async function create(
     requestId: requestId(),
     path,
     elements: input.elements,
+    ...(Array.isArray(input.icons) && input.icons.length ? { icons: input.icons } : {}),
   });
   if (!reply.ok) return failure(`Could not create ${path}: ${describeFailure(reply)}`);
-  return {
-    text: `Created ${path}.${describeIds(reply)}${describeWarnings(reply)}`,
-    isError: false,
-  };
+  const created = `Created ${path}.${describeIds(reply)}${describeWarnings(reply)}`;
+  const groups = Array.isArray(input.groups) ? input.groups.filter(Array.isArray) : [];
+  if (!groups.length) return { text: created, isError: false };
+  // The plugin's create can't group elements, so groups are applied to the new drawing right after it is created.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
+  const idMap = (reply.data?.idMap ?? {}) as Record<string, string>;
+  const grouped = await edit(
+    api,
+    {
+      operations: groups.map((ids) => ({
+        op: "group",
+        ids: ids.map((id) => idMap[String(id)] ?? id),
+      })),
+    },
+    path
+  );
+  return grouped.isError
+    ? failure(`${created} Grouping failed; don't create it again. ${grouped.text}`)
+    : { text: `${created} ${grouped.text}`, isError: false };
 }
 
 async function edit(
@@ -316,10 +398,17 @@ async function edit(
   const opened = await api.execute({ apiVersion: 1, command: "open", path });
   if (!opened.ok) return failure(`Could not open ${path}: ${describeFailure(opened)}`);
 
-  // The plugin's connect operation can't label, dash, colour or route an arrow, so those connections are built on the open drawing.
+  // The plugin's connect operation can't label, dash, colour, route or restyle an arrow, so those connections are built on the open drawing.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
   const styled = operations.filter(
-    (op) => op.op === "connect" && (op.label || op.dashed || op.color || op.via)
+    (op) =>
+      op.op === "connect" &&
+      (op.label ||
+        op.dashed ||
+        op.color ||
+        op.via ||
+        op.roughness !== undefined ||
+        op.strokeWidth !== undefined)
   );
   const plain = operations.filter((op) => !styled.includes(op));
   const done: string[] = [];
@@ -375,12 +464,20 @@ function describeFailure(reply: ExcalidrawCliReply): string {
 }
 
 function describeIds(reply: ExcalidrawCliReply): string {
-  const idMap = reply.data?.idMap;
-  if (!idMap || typeof idMap !== "object") return "";
-  const pairs = Object.entries(idMap as Record<string, unknown>).map(
-    ([local, real]) => `${local}=${String(real)}`
+  const pairs = (map: unknown, real: (value: unknown) => unknown) =>
+    map && typeof map === "object"
+      ? Object.entries(map as Record<string, unknown>).map(
+          ([local, value]) => `${local}=${String(real(value))}`
+        )
+      : [];
+  const ids = pairs(reply.data?.idMap, (id) => id);
+  const icons = pairs(reply.data?.groupMap, (icon) => (icon as { groupId?: unknown })?.groupId);
+  const groupIds = reply.data?.groupIds;
+  return (
+    (ids.length ? ` Ids (yours=real): ${ids.join(", ")}.` : "") +
+    (icons.length ? ` Icon groups (yours=group id): ${icons.join(", ")}.` : "") +
+    (Array.isArray(groupIds) && groupIds.length ? ` New groups: ${groupIds.join(", ")}.` : "")
   );
-  return pairs.length ? ` Ids (yours=real): ${pairs.join(", ")}.` : "";
 }
 
 function describeWarnings(reply: ExcalidrawCliReply): string {

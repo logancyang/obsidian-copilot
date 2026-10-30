@@ -3,6 +3,7 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { getExcalidrawApi } from "./excalidrawApi";
 
 const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
+const ISSUE_792 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/792";
 const FLOW = "Drawings/Flow.excalidraw.md";
 const ELEMENTS = [{ id: "box1", type: "rectangle", x: 0, y: 0, width: 10, height: 10 }];
 
@@ -153,6 +154,24 @@ describe("excalidrawApi", () => {
       expect(elements.Arr00001.boundElements).toEqual([{ type: "text", id: "Lbl00001" }]);
       expect(fresh.addElementsToView).toHaveBeenCalledWith(false, false, true);
       expect(fresh.destroy).toHaveBeenCalled();
+    });
+
+    it(`${ISSUE_792} draws the connecting arrow with the roughness and stroke width asked for`, async () => {
+      const { ea, fresh } = fakeEa();
+
+      await getExcalidrawApi(appWith(ea, [FLOW]))!.connectLabelled(FLOW, {
+        from: "box1",
+        to: "box2",
+        roughness: 2,
+        strokeWidth: 1,
+      });
+
+      expect(fresh.style).toEqual({
+        strokeStyle: "solid",
+        strokeColor: "#1e1e1e",
+        roughness: 2,
+        strokeWidth: 1,
+      });
     });
 
     it(`${ISSUE_787} routes a connection through its bend points, keeping the ends where they attach to the shapes`, async () => {
