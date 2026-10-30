@@ -193,7 +193,7 @@ describe("openVaultPath", () => {
       expect(app.workspace.openLinkText).not.toHaveBeenCalled();
     });
 
-    it("opens another tab on cmd/ctrl-click even when a tab already shows the note", () => {
+    it("opens another tab on cmd/ctrl-click even when a tab already shows the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", () => {
       const existing = leafShowing("Folder/Foo.md");
       const app = buildApp(VAULT, ["Folder/Foo.md"], [existing]);
       openVaultPath(app as unknown as App, "Folder/Foo.md", {
@@ -250,7 +250,7 @@ describe("openVaultPath", () => {
       expect(app.workspace.getLeaf).not.toHaveBeenCalled();
     });
 
-    it("opens another tab on middle-click even when a tab already shows the file", async () => {
+    it("opens another tab on middle-click even when a tab already shows the file (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", async () => {
       const app = buildApp(VAULT, ["Folder/Foo.md"], [leafShowing("Folder/Foo.md")]);
       const file = vaultFile("Folder/Foo.md");
       await openFileInTab(app as unknown as App, file, new MouseEvent("auxclick", { button: 1 }));

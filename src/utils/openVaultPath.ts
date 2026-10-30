@@ -40,6 +40,7 @@ export function openVaultPath(app: App, rawPath: string, opts: OpenVaultPathOpti
 
 export async function openFileInTab(app: App, file: TFile, event?: UserEvent): Promise<void> {
   const pane = event ? Keymap.isModEvent(event) : false;
+  // Cmd/Ctrl-click and middle-click ask for a new tab, so they skip reusing the open one: https://github.com/Brevilabs/obsidian-copilot-private/issues/796
   const openLeaf = pane ? undefined : findOpenLeaf(app, file);
   if (openLeaf) return focusLeaf(app, openLeaf, file, "");
   await app.workspace.getLeaf(pane || "tab").openFile(file);
@@ -67,6 +68,7 @@ function openLinkText(app: App, linkText: string, opts: OpenVaultPathOptions): v
   const pane = opts.event ? Keymap.isModEvent(opts.event) : false;
   const { filePath, anchor } = splitAnchor(linkText);
   const file = app.metadataCache.getFirstLinkpathDest(filePath, sourcePath);
+  // Cmd/Ctrl-click and middle-click ask for a new tab, so they skip reusing the open one: https://github.com/Brevilabs/obsidian-copilot-private/issues/796
   const openLeaf = file && !pane ? findOpenLeaf(app, file) : undefined;
   if (file && openLeaf) {
     focusLeaf(app, openLeaf, file, anchor).catch((error: unknown) =>
