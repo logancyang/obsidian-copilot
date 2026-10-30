@@ -681,7 +681,7 @@ describe("AgentTrail", () => {
     fireEvent.click(screen.getByRole("button", { name: /^a/ }));
 
     expect(screen.getByText("b")).toBeTruthy();
-    expect(openLinkText).toHaveBeenCalledWith("v/a.md", "", true);
+    expect(openLinkText).toHaveBeenCalledWith("v/a.md", "", "tab");
   });
 
   it("renders a failed Miyo search as a failed card with its reason and no badge paths (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
@@ -723,7 +723,7 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Drew in Excalidraw")).toBeTruthy();
     expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Release plan" }));
-    expect(openLinkText).toHaveBeenCalledWith("Drawings/Release plan.excalidraw.md", "", true);
+    expect(openLinkText).toHaveBeenCalledWith("Drawings/Release plan.excalidraw.md", "", "tab");
   });
 
   it("shows an agent's uninterrupted work on one drawing as one card whose steps include a failed write's error (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {

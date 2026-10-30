@@ -9,7 +9,7 @@ import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
-import { openFileInTab } from "@/utils/openVaultPath";
+import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { App, ItemView, Notice, Plugin, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import React, { type ReactNode } from "react";
@@ -133,7 +133,7 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange }) =
         deletions={state.deletions}
         changes={{ current: navigation.current, total, onStep: navigation.step }}
         onOpenNote={
-          state.status === "deleted" ? undefined : (event) => openNote(app, state.path, event)
+          state.status === "deleted" ? undefined : (pane) => openNote(app, state.path, pane)
         }
       />
       <ChangeScroller navigation={navigation}>
@@ -169,7 +169,7 @@ function turnDiffKey(turnId: string, path: string): string {
   return `${turnId}\n${path}`;
 }
 
-function openNote(app: App, path: string, event: MouseEvent): void {
+function openNote(app: App, path: string, pane: OpenPane): void {
   const file = app.vault.getAbstractFileByPath(path);
   // Opening a path whose file was renamed or deleted after the turn would create an empty note.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -177,7 +177,7 @@ function openNote(app: App, path: string, event: MouseEvent): void {
     new Notice(`${path} no longer exists.`);
     return;
   }
-  void openFileInTab(app, file, event).catch((error: unknown) =>
+  void openFileInTab(app, file, pane).catch((error: unknown) =>
     logError("[TurnDiffView] failed to open the note", error)
   );
 }

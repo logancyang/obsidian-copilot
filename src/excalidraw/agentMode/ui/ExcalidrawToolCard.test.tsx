@@ -49,7 +49,7 @@ describe("ExcalidrawToolCard", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Investigation playbook" }));
 
-      expect(onOpenDrawing).toHaveBeenCalledWith(PATH, expect.any(MouseEvent));
+      expect(onOpenDrawing).toHaveBeenCalledWith(PATH, false);
     });
 
     it.each([

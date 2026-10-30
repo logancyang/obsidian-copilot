@@ -83,7 +83,7 @@ export function ChatSettingsPopover() {
   const handleOpenSourceFile = () => {
     if (!displayValue) return;
     const filePath = getPromptFilePath(displayValue);
-    openVaultPath(app, filePath, { newLeaf: true });
+    openVaultPath(app, filePath);
   };
 
   return (

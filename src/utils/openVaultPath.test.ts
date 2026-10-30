@@ -1,4 +1,9 @@
-import { openFileInTab, openLinkClickProps, openVaultPath } from "@/utils/openVaultPath";
+import {
+  openFileInTab,
+  openLinkClickProps,
+  openVaultPath,
+  type OpenPane,
+} from "@/utils/openVaultPath";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -95,8 +100,8 @@ function buildApp(base = VAULT, indexedFiles: string[] = [], openLeaves: TestLea
   };
 }
 
-function open(app: TestApp, path: string, newLeaf = false): void {
-  openVaultPath(app as unknown as App, path, { newLeaf });
+function open(app: TestApp, path: string, pane?: OpenPane): void {
+  openVaultPath(app as unknown as App, path, { pane });
 }
 
 describe("openVaultPath", () => {
@@ -108,7 +113,7 @@ describe("openVaultPath", () => {
   it("converts an absolute in-vault path to vault-relative before openLinkText", () => {
     const app = buildApp();
     open(app, "/Users/me/vault/00_Inbox/Foo.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", false);
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", "tab");
     expect(openWithSystemDefault).not.toHaveBeenCalled();
   });
 
@@ -122,33 +127,33 @@ describe("openVaultPath", () => {
   it("passes a plain relative path through unchanged", () => {
     const app = buildApp();
     open(app, "00_Inbox/Foo.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", false);
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", "tab");
     expect(openWithSystemDefault).not.toHaveBeenCalled();
   });
 
   it("opens a root-relative link to an existing vault file through openLinkText", () => {
     const app = buildApp(VAULT, ["Folder/Foo.md"]);
     open(app, "/Folder/Foo.md");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "", false);
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "", "tab");
     expect(openWithSystemDefault).not.toHaveBeenCalled();
   });
 
   it("preserves the heading anchor on a root-relative vault link", () => {
     const app = buildApp(VAULT, ["Folder/Foo.md"]);
     open(app, "/Folder/Foo.md#Heading");
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md#Heading", "", false);
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md#Heading", "", "tab");
   });
 
-  it("propagates newLeaf to openLinkText", () => {
+  it("opens the note in the pane the caller asks for", () => {
     const app = buildApp();
-    open(app, "/Users/me/vault/00_Inbox/Foo.md", true);
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", true);
+    open(app, "/Users/me/vault/00_Inbox/Foo.md", "split");
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "", "split");
   });
 
   it("forwards an explicit sourcePath to openLinkText", () => {
     const app = buildApp();
     openVaultPath(app as unknown as App, "Some Note", { sourcePath: "source.md" });
-    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Some Note", "source.md", false);
+    expect(app.workspace.openLinkText).toHaveBeenCalledWith("Some Note", "source.md", "tab");
   });
 
   describe("openVaultPath()", () => {
@@ -156,7 +161,7 @@ describe("openVaultPath", () => {
       const other = leafShowing("Other.md");
       const existing = leafShowing("Drawings/Plan.excalidraw.md", "excalidraw");
       const app = buildApp(VAULT, ["Drawings/Plan.excalidraw.md"], [other, existing]);
-      open(app, "Drawings/Plan.excalidraw.md", true);
+      open(app, "Drawings/Plan.excalidraw.md");
       await waitFor(() =>
         expect(app.workspace.setActiveLeaf).toHaveBeenCalledWith(existing, { focus: true })
       );
@@ -168,7 +173,7 @@ describe("openVaultPath", () => {
     it("loads a still-unloaded tab before revealing it and scrolling to the link's heading (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", async () => {
       const existing = leafShowing("Folder/Foo.md");
       const app = buildApp(VAULT, ["Folder/Foo.md"], [existing]);
-      open(app, "Folder/Foo.md#Heading", true);
+      open(app, "Folder/Foo.md#Heading");
       await waitFor(() =>
         expect(existing.openFile).toHaveBeenCalledWith(
           { path: "Folder/Foo.md" },
@@ -185,7 +190,7 @@ describe("openVaultPath", () => {
       const outline = leafShowing("Folder/Foo.md", "outline", RIGHT_SIDEBAR);
       const popout = leafShowing("Folder/Foo.md", "markdown", POPOUT_WINDOW);
       const app = buildApp(VAULT, ["Folder/Foo.md"], [outline, popout]);
-      open(app, "Folder/Foo.md", true);
+      open(app, "Folder/Foo.md");
       await waitFor(() =>
         expect(app.workspace.setActiveLeaf).toHaveBeenCalledWith(popout, { focus: true })
       );
@@ -193,33 +198,29 @@ describe("openVaultPath", () => {
       expect(app.workspace.openLinkText).not.toHaveBeenCalled();
     });
 
-    it("opens another tab on cmd/ctrl-click even when a tab already shows the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", () => {
-      const existing = leafShowing("Folder/Foo.md");
-      const app = buildApp(VAULT, ["Folder/Foo.md"], [existing]);
-      openVaultPath(app as unknown as App, "Folder/Foo.md", {
-        newLeaf: true,
-        event: new MouseEvent("click", { metaKey: true }),
-      });
+    it("opens another tab when the caller asks for one even when a tab already shows the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", () => {
+      const app = buildApp(VAULT, ["Folder/Foo.md"], [leafShowing("Folder/Foo.md")]);
+      open(app, "Folder/Foo.md", "tab");
       expect(app.workspace.setActiveLeaf).not.toHaveBeenCalled();
       expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "", "tab");
     });
 
     it("opens a new tab when no tab shows the note yet", () => {
       const app = buildApp(VAULT, ["Folder/Foo.md"], [leafShowing("Other.md")]);
-      open(app, "Folder/Foo.md", true);
+      open(app, "Folder/Foo.md");
       expect(app.workspace.revealLeaf).not.toHaveBeenCalled();
-      expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "", true);
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith("Folder/Foo.md", "", "tab");
     });
 
     it.each(["Slides.pdf#page=13", "Slides.PDF#page=14"])(
       "opens %s at the page top instead of inheriting the previous scroll offset (https://github.com/logancyang/obsidian-copilot/issues/3894)",
       (path) => {
         const app = buildApp(VAULT, [path.split("#")[0]]);
-        openVaultPath(app as unknown as App, path, { sourcePath: "source.md", newLeaf: true });
+        openVaultPath(app as unknown as App, path, { sourcePath: "source.md" });
         expect(app.workspace.openLinkText).toHaveBeenCalledWith(
           `${path}&offset=0,,0`,
           "source.md",
-          true
+          "tab"
         );
       }
     );
@@ -236,7 +237,7 @@ describe("openVaultPath", () => {
       (path) => {
         const app = buildApp(VAULT, [path.split("#")[0]]);
         open(app, path);
-        expect(app.workspace.openLinkText).toHaveBeenCalledWith(path, "", false);
+        expect(app.workspace.openLinkText).toHaveBeenCalledWith(path, "", "tab");
       }
     );
   });
@@ -250,10 +251,10 @@ describe("openVaultPath", () => {
       expect(app.workspace.getLeaf).not.toHaveBeenCalled();
     });
 
-    it("opens another tab on middle-click even when a tab already shows the file (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", async () => {
+    it("opens another tab when the caller asks for one even when a tab already shows the file (https://github.com/Brevilabs/obsidian-copilot-private/issues/796)", async () => {
       const app = buildApp(VAULT, ["Folder/Foo.md"], [leafShowing("Folder/Foo.md")]);
       const file = vaultFile("Folder/Foo.md");
-      await openFileInTab(app as unknown as App, file, new MouseEvent("auxclick", { button: 1 }));
+      await openFileInTab(app as unknown as App, file, "tab");
       expect(app.workspace.setActiveLeaf).not.toHaveBeenCalled();
       expect(app.workspace.getLeaf).toHaveBeenCalledWith("tab");
     });
@@ -273,14 +274,13 @@ describe("openVaultPath", () => {
       return screen.getByText("Note");
     }
 
-    it("opens on a primary click and on a middle click, handing over the native event", () => {
+    it("asks for no particular pane on a plain click and for a new tab on a cmd/ctrl-click or middle click", () => {
       const open = jest.fn();
       const link = renderLink(open);
+      fireEvent.click(link);
       fireEvent.click(link, { metaKey: true });
       fireEvent(link, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
-      expect(open).toHaveBeenCalledTimes(2);
-      expect(open.mock.calls[0][0]).toMatchObject({ type: "click", metaKey: true });
-      expect(open.mock.calls[1][0]).toMatchObject({ type: "auxclick", button: 1 });
+      expect(open.mock.calls).toEqual([[false], ["tab"], ["tab"]]);
     });
 
     it("ignores a right click so the context menu does not open the note", () => {
@@ -329,7 +329,7 @@ describe("openVaultPath", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "copilot/skills/voice-profile.md",
         "",
-        false
+        "tab"
       );
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
@@ -340,7 +340,7 @@ describe("openVaultPath", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "copilot/skills/voice-profile.md",
         "",
-        false
+        "tab"
       );
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
@@ -351,7 +351,7 @@ describe("openVaultPath", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "copilot/skills/voice-profile.md#Closings",
         "",
-        false
+        "tab"
       );
     });
 
@@ -385,7 +385,7 @@ describe("openVaultPath", () => {
     it("still routes a genuinely missing note through openLinkText's create flow", () => {
       const app = buildApp(vaultDir);
       open(app, "Ideas/Not Written Yet");
-      expect(app.workspace.openLinkText).toHaveBeenCalledWith("Ideas/Not Written Yet", "", false);
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith("Ideas/Not Written Yet", "", "tab");
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
   });

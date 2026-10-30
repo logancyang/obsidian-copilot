@@ -180,7 +180,7 @@ function renderNode(
             {...miyoSearch}
             open={ctx.expansion.isOpen(expansionId)}
             onToggle={() => ctx.expansion.toggle(expansionId)}
-            onOpenNote={(path, event) => openVaultPath(ctx.app, path, { newLeaf: true, event })}
+            onOpenNote={(path, pane) => openVaultPath(ctx.app, path, { pane })}
           />
         );
       }
@@ -199,7 +199,7 @@ function renderNode(
         <ExcalidrawToolCard
           key={key}
           {...summarizeDrawing(node.members)}
-          onOpenDrawing={(path, event) => openVaultPath(ctx.app, path, { newLeaf: true, event })}
+          onOpenDrawing={(path, pane) => openVaultPath(ctx.app, path, { pane })}
           open={ctx.expansion.isOpen(expansionId)}
           onToggle={() => ctx.expansion.toggle(expansionId)}
         >

@@ -43,9 +43,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             <a
               href="#"
               className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
-              {...openLinkClickProps((event) =>
-                openVaultPath(app, link.path, { newLeaf: true, event })
-              )}
+              {...openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))}
             >
               {link.label}
             </a>

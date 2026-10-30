@@ -32,10 +32,7 @@ describe("ActionCard", () => {
       expect(screen.getByText("Read").closest("a")).toBeNull();
 
       fireEvent.click(link);
-      expect(openVaultPath).toHaveBeenCalledWith({}, "notes/today.md", {
-        newLeaf: true,
-        event: expect.any(MouseEvent),
-      });
+      expect(openVaultPath).toHaveBeenCalledWith({}, "notes/today.md", { pane: false });
     });
 
     it("renders a denied edit as Didn't edit with no file link (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {

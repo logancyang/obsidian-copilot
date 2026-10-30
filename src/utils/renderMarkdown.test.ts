@@ -67,7 +67,7 @@ describe("renderMarkdown", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "00_Inbox/Foo.md",
         "source.md",
-        false
+        "tab"
       );
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
@@ -78,7 +78,7 @@ describe("renderMarkdown", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "00_Inbox/Foo Bar.md",
         "source.md",
-        false
+        "tab"
       );
     });
 
