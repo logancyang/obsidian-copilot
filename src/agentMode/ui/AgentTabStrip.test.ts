@@ -128,6 +128,39 @@ describe("AgentTabStrip", () => {
       expect(manager.closeSession).not.toHaveBeenCalled();
     });
 
+    it("detaches a tab when it is middle-clicked and ignores other auxiliary buttons", () => {
+      const session = {
+        internalId: "existing",
+        backendId: "test",
+        subscribe: () => () => {},
+        getLabel: () => "Existing chat",
+        getStatus: () => "idle",
+        getNeedsAttention: () => false,
+      };
+      const manager = {
+        subscribe: () => () => {},
+        getSessionsForScope: () => [session],
+        getActiveProjectId: () => null,
+        getActiveSession: () => session,
+        getIsStarting: () => false,
+        detachSessionFromTab: jest.fn(),
+      };
+      render(
+        React.createElement(
+          TooltipProvider,
+          null,
+          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
+        )
+      );
+      const tab = screen.getByRole("tab");
+
+      fireEvent(tab, new MouseEvent("auxclick", { bubbles: true, button: 2 }));
+      expect(manager.detachSessionFromTab).not.toHaveBeenCalled();
+
+      fireEvent(tab, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
+      expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
+    });
+
     it("refreshes releases after the new-session button creates a tab for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", async () => {
       const session = {
         internalId: "existing",

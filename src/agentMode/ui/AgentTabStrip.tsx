@@ -253,6 +253,9 @@ const SessionTab: React.FC<TabProps> = ({
             if (e.button !== 2) e.preventDefault();
           }}
           onClick={onActivate}
+          onAuxClick={(e) => {
+            if (e.button === 1) onClose();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
