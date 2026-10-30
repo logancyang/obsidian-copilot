@@ -2,7 +2,7 @@
 
 # v4.0.17 - Excalidraw integration, Miyo search control
 
-Ask Claude Code, Codex, or OpenCode to draw, change, or explain an Excalidraw drawing. With the Excalidraw plugin enabled, Copilot has Excalidraw build every drawing, so labels stay in their boxes and arrows stay attached when you move things around. Ask for a diagram of a note, and the drawing appears inside that note.
+Copilot now understands, draws, and edits Excalidraw drawings. With the Excalidraw plugin enabled, agents in Copilot build cleaner diagrams, with labels and arrows that stay attached, using fewer tokens and less time than the same agent outside Copilot. In our test, Codex drew a diagram with 60% fewer tokens in 23% less time.
 
 This release also lets you stop Claude's reply while its subagents keep working, adds Miyo settings for how much an agent's search returns, and fixes GPT-6 models in Copilot Plus mode.
 
