@@ -68,13 +68,17 @@ describe("selectionStore", () => {
       expect(getSelectedTextContexts()).toEqual([]);
     });
 
-    it(`keeps the attached selection when another note reports nothing selected (${ISSUE_797})`, () => {
+    it(`keeps the attached selection, without notifying listeners, when another note reports nothing selected (${ISSUE_797})`, () => {
       const excerpt = noteExcerpt("Research.md", "Excerpt");
       select(excerpt, "other:select");
+      const listener = jest.fn();
+      const unsubscribe = subscribeSelection(listener);
 
       reportSelection({ location: "Draft.md", key: "other:empty", context: null });
+      unsubscribe();
 
       expect(getSelectedTextContexts()).toEqual([excerpt]);
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it("attaches the same selection again once the user deselected it in between", () => {

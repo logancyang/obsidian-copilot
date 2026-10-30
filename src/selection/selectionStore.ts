@@ -8,22 +8,14 @@ export interface SelectionReport {
   context: SelectedTextContext | null;
 }
 
-interface SelectionState {
-  context: SelectedTextContext | null;
-  lastKey: string | null;
-}
-
 const NO_CONTEXTS = Object.freeze([]) as unknown as SelectedTextContext[];
 
-const selectionAtom = atom<SelectionState>({ context: null, lastKey: null });
+const contextAtom = atom<SelectedTextContext | null>(null);
+const lastKeyAtom = atom<string | null>(null);
 const contextsAtom = atom((get) => {
-  const { context } = get(selectionAtom);
+  const context = get(contextAtom);
   return context ? [context] : NO_CONTEXTS;
 });
-
-function update(patch: Partial<SelectionState>): void {
-  settingsStore.set(selectionAtom, { ...settingsStore.get(selectionAtom), ...patch });
-}
 
 function locationOf(context: SelectedTextContext): string {
   return context.sourceType === "web" ? context.url : context.notePath;
@@ -33,22 +25,23 @@ function locationOf(context: SelectedTextContext): string {
 // across a removed badge or a sent message, so neither brings back a selection the user has not changed.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/797
 export function reportSelection({ location, key, context }: SelectionReport): void {
-  const state = settingsStore.get(selectionAtom);
-  if (key === state.lastKey) return;
-  const clears = !context && state.context !== null && locationOf(state.context) === location;
-  update({ context: context ?? (clears ? null : state.context), lastKey: key });
+  if (key === settingsStore.get(lastKeyAtom)) return;
+  settingsStore.set(lastKeyAtom, key);
+  const attached = settingsStore.get(contextAtom);
+  if (context) settingsStore.set(contextAtom, context);
+  else if (attached && locationOf(attached) === location) settingsStore.set(contextAtom, null);
 }
 
 export function attachSelection(context: SelectedTextContext): void {
-  update({ context });
+  settingsStore.set(contextAtom, context);
 }
 
 export function dismissSelection(id: string): void {
-  if (settingsStore.get(selectionAtom).context?.id === id) update({ context: null });
+  if (settingsStore.get(contextAtom)?.id === id) settingsStore.set(contextAtom, null);
 }
 
 export function clearSelection(): void {
-  if (settingsStore.get(selectionAtom).context) update({ context: null });
+  settingsStore.set(contextAtom, null);
 }
 
 export function getSelectedTextContexts(): SelectedTextContext[] {
