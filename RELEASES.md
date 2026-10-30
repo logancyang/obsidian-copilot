@@ -4,11 +4,11 @@
 
 Copilot now understands, draws, and edits Excalidraw drawings. With the Excalidraw plugin enabled, agents in Copilot build cleaner diagrams, with labels and arrows that stay attached, using fewer tokens and less time than the same agent outside Copilot. In our test, Codex drew a diagram with 60% fewer tokens in 23% less time.
 
-This release also lets you stop Claude's reply while its subagents keep working and adds Miyo settings for how much an agent's search returns.
+This release also lets you send messages right away in Claude agents and adds Miyo settings for how much an agent's search returns.
 
 ## ✨ Enhancements
 
-- Ask an agent for a diagram, and Copilot has the Excalidraw plugin draw it, with every label in its box and every arrow attached, right inside your note. Agents also read and edit the drawings you already have, and a Copilot card in the chat shows each drawing they work on. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), [#3893](https://github.com/logancyang/obsidian-copilot/pull/3893), @zeroliu)
+- Copilot agents can now create beautiful Excalidraw drawings, and read and edit the drawings you already have. A Copilot card in the chat shows each drawing they work on. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), [#3893](https://github.com/logancyang/obsidian-copilot/pull/3893), @zeroliu)
   ![Excalidraw flowchart of the six customer onboarding steps, color-coded by owner with a legend, drawn by an agent](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-drawing-08f8f5bf.png)
   ![Agent Chat with the request to draw the onboarding steps and a Drew in Excalidraw card for Customer onboarding](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-card-b42ac789.png)
 - Interrupt Claude's current reply and send your queued messages right away with **Send now**. ([#3884](https://github.com/logancyang/obsidian-copilot/pull/3884), @zeroliu)
