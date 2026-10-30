@@ -63,7 +63,7 @@ describe("selectionStore", () => {
     it(`clears the attached selection when its own note reports nothing selected (${ISSUE_797})`, () => {
       select(noteExcerpt("Research.md", "Excerpt"), "own:select");
 
-      reportSelection({ location: "Research.md", key: "own:empty", context: null });
+      reportSelection({ location: "Research.md", context: null });
 
       expect(getSelectedTextContexts()).toEqual([]);
     });
@@ -74,7 +74,7 @@ describe("selectionStore", () => {
       const listener = jest.fn();
       const unsubscribe = subscribeSelection(listener);
 
-      reportSelection({ location: "Draft.md", key: "other:empty", context: null });
+      reportSelection({ location: "Draft.md", context: null });
       unsubscribe();
 
       expect(getSelectedTextContexts()).toEqual([excerpt]);
@@ -83,12 +83,23 @@ describe("selectionStore", () => {
 
     it("attaches the same selection again once the user deselected it in between", () => {
       select(noteExcerpt("Research.md", "Excerpt"), "again:select");
-      reportSelection({ location: "Research.md", key: "again:empty", context: null });
+      reportSelection({ location: "Research.md", context: null });
 
       const again = noteExcerpt("Research.md", "Excerpt");
       select(again, "again:select");
 
       expect(getSelectedTextContexts()).toEqual([again]);
+    });
+
+    it(`keeps a removed selection removed when another page reports nothing selected in between (${ISSUE_797})`, () => {
+      const excerpt = noteExcerpt("Research.md", "Excerpt");
+      select(excerpt, "elsewhere:select");
+      dismissSelection(excerpt.id);
+
+      reportSelection({ location: "https://example.com/", context: null });
+      select(noteExcerpt("Research.md", "Excerpt"), "elsewhere:select");
+
+      expect(getSelectedTextContexts()).toEqual([]);
     });
   });
 
@@ -96,10 +107,20 @@ describe("selectionStore", () => {
     it("attaches a command's selection, which its note's later empty report clears", () => {
       const excerpt = noteExcerpt("Research.md", "Excerpt");
 
-      attachSelection(excerpt);
+      attachSelection({ location: "Research.md", key: "command:select", context: excerpt });
       expect(getSelectedTextContexts()).toEqual([excerpt]);
 
-      reportSelection({ location: "Research.md", key: "command:empty", context: null });
+      reportSelection({ location: "Research.md", context: null });
+      expect(getSelectedTextContexts()).toEqual([]);
+    });
+
+    it(`keeps a removed command selection removed when the source then reports the same selection (${ISSUE_797})`, () => {
+      const excerpt = webExcerpt("https://example.com/", "Quote");
+      attachSelection({ location: excerpt.url, key: "command:quote", context: excerpt });
+
+      dismissSelection(excerpt.id);
+      select(webExcerpt("https://example.com/", "Quote"), "command:quote");
+
       expect(getSelectedTextContexts()).toEqual([]);
     });
   });

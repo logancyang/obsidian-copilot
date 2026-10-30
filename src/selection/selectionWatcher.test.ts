@@ -14,6 +14,7 @@ import {
   editorSelectionReport,
   readingSelectionReport,
   watchSelections,
+  webSelectionReport,
 } from "@/selection/selectionWatcher";
 import type { Extension, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -83,7 +84,6 @@ describe("selectionWatcher", () => {
 
       expect(report).toEqual({
         location: "Research.md",
-        key: "Research.md:0:4:0:4",
         context: null,
       });
     });
@@ -109,6 +109,24 @@ describe("selectionWatcher", () => {
       selectText(chat.firstChild!, 4);
 
       expect(readingSelectionReport(app, document)).toBeNull();
+    });
+  });
+
+  describe("webSelectionReport()", () => {
+    it("reports a web excerpt under its page, keyed by the page and the excerpt", () => {
+      const context = {
+        id: "web-1",
+        content: "Quote",
+        sourceType: "web" as const,
+        title: "Page",
+        url: "https://example.com/",
+      };
+
+      expect(webSelectionReport(context)).toEqual({
+        location: "https://example.com/",
+        key: "web:https://example.com/:Quote",
+        context,
+      });
     });
   });
 

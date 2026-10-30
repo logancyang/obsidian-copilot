@@ -12,7 +12,7 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
 import { clearSelection, reportSelection, subscribeSelection } from "@/selection/selectionStore";
-import { watchSelections } from "@/selection/selectionWatcher";
+import { watchSelections, webSelectionReport } from "@/selection/selectionWatcher";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
@@ -824,14 +824,10 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
       getActiveLeaf: () => webViewerService.getActiveLeaf(),
       onSelectionChange: (context) => {
-        reportSelection({
-          location: context.url,
-          key: `web:${context.url}:${context.content}`,
-          context,
-        });
+        reportSelection(webSelectionReport(context));
       },
       onSelectionClear: ({ url }) => {
-        reportSelection({ location: url, key: `web:${url}`, context: null });
+        reportSelection({ location: url, context: null });
       },
     });
 

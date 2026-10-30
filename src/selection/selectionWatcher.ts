@@ -1,4 +1,9 @@
-import { reportSelection, type SelectionReport } from "@/selection/selectionStore";
+import {
+  reportSelection,
+  type KeyedSelection,
+  type SelectionReport,
+} from "@/selection/selectionStore";
+import type { WebSelectedTextContext } from "@/types/message";
 import { EditorView } from "@codemirror/view";
 import {
   editorInfoField,
@@ -9,18 +14,20 @@ import {
 } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
-export function editorSelectionReport({ editor, file }: MarkdownFileInfo): SelectionReport | null {
+export function editorSelectionReport({
+  editor,
+  file,
+}: Pick<MarkdownFileInfo, "editor" | "file">): SelectionReport | null {
   const range = editor?.listSelections()[0];
   if (!editor || !range || !file) return null;
 
-  const key = `${file.path}:${range.anchor.line}:${range.anchor.ch}:${range.head.line}:${range.head.ch}`;
   const content = editor.getSelection();
-  if (!content.trim()) return { location: file.path, key, context: null };
+  if (!content.trim()) return { location: file.path, context: null };
 
   const [startLine, endLine] = [range.anchor.line + 1, range.head.line + 1].sort((a, b) => a - b);
   return {
     location: file.path,
-    key,
+    key: `${file.path}:${range.anchor.line}:${range.anchor.ch}:${range.head.line}:${range.head.ch}`,
     context: {
       id: uuidv4(),
       content,
@@ -31,6 +38,10 @@ export function editorSelectionReport({ editor, file }: MarkdownFileInfo): Selec
       endLine,
     },
   };
+}
+
+export function webSelectionReport(context: WebSelectedTextContext): KeyedSelection {
+  return { location: context.url, key: `web:${context.url}:${context.content}`, context };
 }
 
 export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
@@ -47,14 +58,13 @@ export function readingSelectionReport(app: App, doc: Document): SelectionReport
   if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return null;
 
   const content = selection.toString();
-  const key = `preview:${file.path}:${content}`;
-  if (!content.trim()) return { location: file.path, key, context: null };
+  if (!content.trim()) return { location: file.path, context: null };
 
   // Rendered Markdown does not expose reliable source line numbers for every selection.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
   return {
     location: file.path,
-    key,
+    key: `preview:${file.path}:${content}`,
     context: {
       id: uuidv4(),
       content,
