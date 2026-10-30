@@ -1,5 +1,51 @@
 # Release Notes
 
+# v4.0.17 - Excalidraw integration, Miyo search control
+
+[![Demo video: Obsidian Copilot 4.0.17: Excalidraw Drawings, Send Now, Miyo Limits](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/video-thumbnail-25ea4ac7.png)](https://youtube.com/shorts/ZYazABOaBMk)
+
+Copilot now understands, draws, and edits Excalidraw drawings. With the Excalidraw plugin enabled, agents in Copilot build cleaner diagrams, with labels and arrows that stay attached, using fewer tokens and less time than the same agent outside Copilot. In our test, Codex drew a diagram with 60% fewer tokens in 23% less time.
+
+This release also lets you send messages right away in Claude agents and adds Miyo settings for how much an agent's search returns.
+
+## ✨ Enhancements
+
+- Copilot agents can now create beautiful Excalidraw drawings, and read and edit the drawings you already have. A Copilot card in the chat shows each drawing they work on. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), [#3893](https://github.com/logancyang/obsidian-copilot/pull/3893), [#3896](https://github.com/logancyang/obsidian-copilot/pull/3896), [#3898](https://github.com/logancyang/obsidian-copilot/pull/3898), [#3900](https://github.com/logancyang/obsidian-copilot/pull/3900), @zeroliu)
+  ![Excalidraw flowchart of the six customer onboarding steps, color-coded by owner with a legend, drawn by an agent](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-drawing-08f8f5bf.png)
+  ![Agent Chat with the request to draw the onboarding steps and a Drew in Excalidraw card for Customer onboarding](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/excalidraw-card-b42ac789.png)
+- Interrupt Claude's current reply and send your queued messages right away with **Send now**. ([#3884](https://github.com/logancyang/obsidian-copilot/pull/3884), @zeroliu)
+  ![Two messages waiting under The agent reads these at its next step, with Send now on the right](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/send-now-queued-54aaa772.png)
+- Set **Maximum results** and **Search variants** in **Settings → Copilot → Miyo** to keep agent searches small, and ask an agent to search only a folder you name. ([#3832](https://github.com/logancyang/obsidian-copilot/pull/3832), [#3839](https://github.com/logancyang/obsidian-copilot/pull/3839), @zeroliu, @wenzhengjiang)
+  ![Miyo settings with Maximum results and Search variants sliders](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/miyo-search-limits-5a355dfc.png)
+- Relevant Notes shows each note's folder under its title. ([#3853](https://github.com/logancyang/obsidian-copilot/pull/3853), @zeroliu)
+  ![Relevant Notes listing two notes named Full Guide to Building MCP Servers, one in notes and one in sources](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/relevant-notes-folders-4f5f0ba4.png)
+- When an Agent Chat reply fails, the **Report this to the Copilot team?** card offers a report with the error filled in. ([#3852](https://github.com/logancyang/obsidian-copilot/pull/3852), [#3869](https://github.com/logancyang/obsidian-copilot/pull/3869), @zeroliu)
+- Your message no longer jumps to the top of the chat when you send it, so the reply you were reading stays in view. ([#3829](https://github.com/logancyang/obsidian-copilot/pull/3829), @zeroliu)
+- A Claude chat stays running until its background subagents finish. ([#3830](https://github.com/logancyang/obsidian-copilot/pull/3830), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- GPT-6 models on your OpenAI API key work in Quick Chat's Copilot Plus mode. ([#3843](https://github.com/logancyang/obsidian-copilot/pull/3843), @zeroliu)
+- Agents write math inside tables and `$$` display math that Obsidian renders, and keep backup copies out of your vault. ([#3870](https://github.com/logancyang/obsidian-copilot/pull/3870), @zeroliu)
+- Codex can now safely use the Obsidian CLI skill. ([#3878](https://github.com/logancyang/obsidian-copilot/pull/3878), @zeroliu)
+- The agent model picker no longer shows greyed-out Copilot Plus models when you already have a Copilot license. ([#3855](https://github.com/logancyang/obsidian-copilot/pull/3855), @zeroliu)
+- An OpenCode chat opened on another computer starts on your model and shows its full context window. ([#3875](https://github.com/logancyang/obsidian-copilot/pull/3875), @zeroliu)
+- Quick Chat's input in the mobile sidebar sits right above the keyboard on iPhone and iPad. ([#3892](https://github.com/logancyang/obsidian-copilot/pull/3892), @zeroliu)
+- Clicking a PDF page citation in a chat opens that page at its top. ([#3895](https://github.com/logancyang/obsidian-copilot/pull/3895), @Eric0610-2026)
+- Removed the deprecated built-in Copilot models that the plugin no longer uses. ([#3851](https://github.com/logancyang/obsidian-copilot/pull/3851), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- The Excalidraw tools need the Excalidraw plugin 2.29 or newer. ([#3889](https://github.com/logancyang/obsidian-copilot/pull/3889), @zeroliu)
+- Copilot now installs OpenCode 2.0.32, so models you turn on from a custom provider, such as a local model, stay on after Obsidian restarts. Copilot-managed installs download it the next time Copilot loads. ([#3899](https://github.com/logancyang/obsidian-copilot/pull/3899), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.16 - Background tasks in Claude chats, compact, Miyo search and OpenArtifacts improvements
 
 [![Demo video: Obsidian Copilot 4.0.16: Background Tasks in Claude Chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.16/github-thumbnail-6a06171f.png)](https://youtube.com/shorts/4B04T53tiYk)
