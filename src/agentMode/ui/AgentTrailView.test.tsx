@@ -549,6 +549,24 @@ describe("AgentTrail", () => {
     expect(screen.getByText("Ran 2 commands, read 1 file")).toBeTruthy();
   });
 
+  it("counts each call folded into a sub-agent's Excalidraw card as a tool (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    const board = { path: "Boards/Launch board.excalidraw.md", operations: [] };
+    renderTrail({
+      parts: [
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Draw it" },
+        }),
+        excalidrawToolCall("excalidraw_write", board, { id: "w1", parentToolCallId: "task1" }),
+        excalidrawToolCall("excalidraw_render", board, { id: "r1", parentToolCallId: "task1" }),
+      ],
+    });
+
+    fireEvent.click(screen.getByText('Explore · "Draw it"'));
+
+    expect(screen.getByText("2 tools")).toBeTruthy();
+  });
+
   it("keeps an opened tool visible when streaming turns it into a group", () => {
     const readWithOutput = {
       ...READ_A,

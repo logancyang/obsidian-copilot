@@ -69,15 +69,18 @@ export function foldActivityGroups(
         break;
       case "action": {
         const excalidraw = excalidrawToolRun(node.part);
-        // One card per drawing between two messages, so an agent's write-render-fix loop reads as one change.
+        // One card per drawing between two messages, so an agent's write-render-fix loop reads as one change; a call
+        // whose path is unknown may target any drawing, so it never joins a card.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-        if (excalidraw && drawing?.path === excalidraw.path) {
+        if (excalidraw?.path && drawing?.path === excalidraw.path) {
           drawing.members.push(node.part);
           break;
         }
         if (excalidraw && opensDrawingCard(excalidraw)) {
           const earlier = run.flatMap((m) =>
-            m.type === "action" && excalidrawToolRun(m.part)?.path === excalidraw.path
+            excalidraw.path &&
+            m.type === "action" &&
+            excalidrawToolRun(m.part)?.path === excalidraw.path
               ? [m.part]
               : []
           );

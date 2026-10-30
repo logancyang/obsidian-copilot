@@ -144,6 +144,16 @@ describe("activityGroups", () => {
         ]);
       });
 
+      it("gives each call whose drawing path is unknown its own card, since it may target a different drawing (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+        const unknown = (id: string): RenderNode => ({
+          type: "action",
+          part: excalidrawToolCall("excalidraw_write", { operations: [] }, { id }),
+        });
+        const grouped = foldActivityGroups([unknown("w1"), unknown("w2")]);
+
+        expect(types(grouped)).toEqual(["excalidrawDrawing", "excalidrawDrawing"]);
+      });
+
       it("leaves a failed write or render with no card to join as an ordinary row in the group", () => {
         const grouped = foldActivityGroups([
           action("read", { vendorToolName: "Read" }),

@@ -113,6 +113,13 @@ describe("excalidrawToolRun", () => {
       });
     });
 
+    it("reads an OpenCode call that writes and then renders as the write, so the drawing still gets its card (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      const part = opencodeCall(
+        `await tools["obsidian-copilot"].excalidraw_write({ path: "${PATH}", operations: [] });\nreturn tools["obsidian-copilot"].excalidraw_render({ path: "${PATH}" });`
+      );
+      expect(excalidrawToolRun(part)).toEqual({ action: "edit", status: "completed", path: PATH });
+    });
+
     it("keeps a failed write's status so its card can count the failure", () => {
       const part = excalidrawToolCall("excalidraw_write", CREATE, { status: "failed" });
       expect(excalidrawToolRun(part)?.status).toBe("failed");
@@ -181,6 +188,15 @@ describe("excalidrawToolRun", () => {
         summarizeDrawing([
           excalidrawToolCall("excalidraw_read", { path: PATH }),
           excalidrawToolCall("excalidraw_render", { path: PATH }),
+        ])
+      ).toEqual({ action: "read", status: "completed", path: PATH, failed: 0 });
+    });
+
+    it("names a finished drawing by the calls that finished, not by a change that was stopped (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      expect(
+        summarizeDrawing([
+          excalidrawToolCall("excalidraw_read", { path: PATH }),
+          write("cancelled"),
         ])
       ).toEqual({ action: "read", status: "completed", path: PATH, failed: 0 });
     });

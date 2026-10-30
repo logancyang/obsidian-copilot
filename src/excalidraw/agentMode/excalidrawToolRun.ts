@@ -27,8 +27,8 @@ export interface ExcalidrawDrawingSummary {
 
 export function excalidrawToolRun(part: ToolCallPart): ExcalidrawToolRun | null {
   const read = copilotToolCall(part, EXCALIDRAW_READ_TOOL.name);
-  const render = read ? null : copilotToolCall(part, EXCALIDRAW_RENDER_TOOL.name);
-  const call = read ?? render ?? copilotToolCall(part, EXCALIDRAW_WRITE_TOOL.name);
+  const write = read ? null : copilotToolCall(part, EXCALIDRAW_WRITE_TOOL.name);
+  const call = read ?? write ?? copilotToolCall(part, EXCALIDRAW_RENDER_TOOL.name);
   if (!call) return null;
   // A call made after Excalidraw was turned off completes without drawing anything, so it keeps the ordinary row that
   // shows the tool's explanation. https://github.com/Brevilabs/obsidian-copilot-private/issues/787
@@ -45,7 +45,7 @@ export function excalidrawToolRun(part: ToolCallPart): ExcalidrawToolRun | null 
     "args" in call
       ? call.args.operations !== undefined
       : /[{,]\s*["']?operations["']?\s*[:,}]/.test(call.code);
-  const action = read ? "read" : render ? "render" : edits ? "edit" : "create";
+  const action = read ? "read" : !write ? "render" : edits ? "edit" : "create";
   return { action, status: part.status, path };
 }
 
@@ -60,13 +60,14 @@ const CARD_ACTION_STRENGTH: readonly ExcalidrawCardAction[] = ["create", "edit",
 export function summarizeDrawing(parts: readonly ToolCallPart[]): ExcalidrawDrawingSummary {
   const runs = parts.flatMap((part) => excalidrawToolRun(part) ?? []);
   const touched = runs.filter(opensDrawingCard);
-  const action =
-    CARD_ACTION_STRENGTH.find((a) => touched.some((run) => run.action === a)) ?? "read";
   const status = runs.some((run) => run.status === "pending" || run.status === "in_progress")
     ? "in_progress"
     : touched.some((run) => run.status === "completed")
       ? "completed"
       : "cancelled";
+  const named =
+    status === "completed" ? touched.filter((run) => run.status === "completed") : touched;
+  const action = CARD_ACTION_STRENGTH.find((a) => named.some((run) => run.action === a)) ?? "read";
   return {
     action,
     status,
