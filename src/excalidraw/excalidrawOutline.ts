@@ -169,9 +169,11 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
     const top = [...tally].sort((p, q) => q[1] - p[1])[0];
     return top ? [`${name} ${top[0]}`] : [];
   };
-  const texts = els.filter((e) => e.type === "text");
-  const drawn = els.filter((e) => e.type !== "text");
-  const filled = shapes.filter((e) => e.backgroundColor && e.backgroundColor !== "transparent");
+  const texts = all.filter((e) => e.type === "text");
+  const drawn = all.filter((e) => e.type !== "text");
+  const filled = all.filter(
+    (e) => SHAPE_TYPES.has(e.type) && e.backgroundColor && e.backgroundColor !== "transparent"
+  );
   const look = [
     ...usual("font", texts, (e) => e.fontFamily),
     ...usual("font size", texts, (e) => e.fontSize),
@@ -293,24 +295,30 @@ export function outlineScene(path: string, sceneElements: readonly SceneElement[
     }
   }
 
-  if (drawnGroups.size) {
+  const icons = [...drawnGroups].map(([id, members]) => {
+    const boxes = members.map(box);
+    const x = Math.min(...boxes.map((b) => b[0]));
+    const y = Math.min(...boxes.map((b) => b[1]));
+    const width = Math.max(...boxes.map((b) => b[2])) - x;
+    const height = Math.max(...boxes.map((b) => b[3])) - y;
+    return { id, type: "group", x, y, width, height, members };
+  });
+  if (icons.length) {
     lines.push("Icons and drawn groups (group id, parts; pass the group id to read its members):");
-    for (const [g, members] of drawnGroups) {
-      const boxes = members.map(box);
-      const b: Box = [
-        Math.min(...boxes.map((x) => x[0])),
-        Math.min(...boxes.map((x) => x[1])),
-        Math.max(...boxes.map((x) => x[2])),
-        Math.max(...boxes.map((x) => x[3])),
-      ];
+    for (const icon of icons) {
+      const b = box(icon);
       const host = [...frames, ...shapes]
         .filter((s) => inside(box(s), b))
         .sort((p, q) => area(box(p)) - area(box(q)))[0];
-      lines.push(`  ${g} ${members.length} parts ${size(b)}${host ? ` in ${name(host)}` : ""}`);
+      lines.push(
+        `  ${icon.id} ${icon.members.length} parts ${size(b)}${host ? ` in ${name(host)}` : ""}`
+      );
     }
   }
 
-  lines.push(...overlaps(els, [...shapes, ...freeTexts], box, inside, area, ref));
+  const iconOnTop = new Map(icons.map((i) => [i.members[i.members.length - 1], i]));
+  const layered = all.map((e) => iconOnTop.get(e) ?? e);
+  lines.push(...overlaps(layered, [...shapes, ...freeTexts, ...icons], box, inside, area, ref));
   return lines;
 }
 

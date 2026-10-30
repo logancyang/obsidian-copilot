@@ -139,6 +139,36 @@ describe("excalidrawOutline", () => {
       expect(lines.join("\n")).not.toMatch(/ i[123] /);
     });
 
+    it(`${ISSUE_792} counts the parts of icons and drawn groups toward the drawing's usual style`, () => {
+      const sketchy = {
+        roughness: 2,
+        strokeWidth: 3,
+        fillStyle: "hachure",
+        backgroundColor: "#ffec99",
+        groupIds: ["robot"],
+      };
+      const elements = [
+        shape("head", 0, 0, 60, 40, sketchy),
+        shape("eye", 10, 10, 10, 10, { ...sketchy, type: "ellipse" }),
+      ];
+
+      expect(outlineScene("Robot.excalidraw.md", elements)).toContain(
+        "Usual style: roughness 2, stroke width 3, fill hachure."
+      );
+    });
+
+    it(`${ISSUE_792} flags an icon drawn under a filled shape that covers it`, () => {
+      const elements = [
+        shape("i1", 40, 40, 30, 30, { type: "ellipse", groupIds: ["iconG"] }),
+        shape("i2", 50, 50, 10, 10, { groupIds: ["iconG"] }),
+        shape("panel", 0, 0, 300, 200, { backgroundColor: "#f1f3f5" }),
+      ];
+
+      expect(outlineScene("Board.excalidraw.md", elements)).toContain(
+        "  rectangle panel over group iconG, which sits inside it [hidden under a filled shape]"
+      );
+    });
+
     it("keeps a group holding a label or an arrow in the regular listing", () => {
       const lines = outlineScene(
         "Arch.excalidraw.md",
