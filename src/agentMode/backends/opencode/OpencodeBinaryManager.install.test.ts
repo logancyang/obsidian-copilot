@@ -71,14 +71,14 @@ const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/530"
     fs.rmSync(root, { recursive: true, force: true });
   });
   describe("install()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 installs OpenCode 2.0.22 and selects it when no version is requested", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 installs OpenCode 2.0.32 and selects it when no version is requested", async () => {
       jest.mocked(npmPackage.extractNpmBinary).mockImplementation(async (_archive, destination) => {
-        fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("2.0.22");\n`);
+        fs.writeFileSync(destination, `#!${process.execPath}\nprocess.stdout.write("2.0.32");\n`);
       });
       const result = await manager.install();
-      expect(result.version).toBe("2.0.22");
+      expect(result.version).toBe("2.0.32");
       expect(npmPackage.resolveNpmAsset).toHaveBeenCalledWith(
-        "2.0.22",
+        "2.0.32",
         ["opencode-darwin-arm64"],
         expect.any(AbortSignal)
       );

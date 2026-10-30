@@ -91,7 +91,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return [...opencodeEnabledModelEntries(settings)];
   },
 
-  // OpenCode 2.0.22 stores an "always" reply as a saved rule for its project folder.
+  // OpenCode 2.0.32 stores an "always" reply as a saved rule for its project folder.
   // https://github.com/logancyang/obsidian-copilot/issues/2889
   presentPermissionOption(option: PermissionOption): PermissionOption {
     if (option.kind !== "allow_always") return option;
