@@ -5,6 +5,7 @@ import { AppContext } from "@/context";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import type { AgentMessagePart, TurnFileChange } from "@/agentMode/session/types";
 import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
+import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { makeCommandTask, makeTask } from "@/agentMode/ui/testing/taskFixtures";
 
@@ -684,6 +685,24 @@ describe("AgentTrail", () => {
     });
 
     expect(screen.getByTestId("agent-md").getAttribute("data-miyo-paths")).toBe("v/a.md|v/b.md");
+  });
+
+  it("renders an Excalidraw write as a Copilot card between grouped work and opens the drawing in a new tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    const openLinkText = jest.fn();
+    const app = {
+      workspace: { getActiveFile: jest.fn(() => null), openLinkText },
+      vault: { getAbstractFileByPath: jest.fn(() => ({})) },
+    } as never;
+    const write = excalidrawToolCall("excalidraw_write", {
+      path: "Drawings/Release plan.excalidraw.md",
+      elements: [],
+    });
+    renderTrail({ app, parts: [READ_A, LINT, write, READ_B, LINT, text("Drew it.")] });
+
+    expect(screen.getByText("Drew in Excalidraw")).toBeTruthy();
+    expect(screen.getAllByText("Ran 2 commands, read 1 file")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Release plan" }));
+    expect(openLinkText).toHaveBeenCalledWith("Drawings/Release plan.excalidraw.md", "", true);
   });
 
   describe("with task state from the session", () => {

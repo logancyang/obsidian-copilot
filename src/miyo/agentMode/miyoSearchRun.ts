@@ -1,6 +1,6 @@
-import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import type { AgentMessagePart, AgentToolStatus } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
 import { MIYO_SEARCH_TOOL_NAME } from "@/miyo/miyoSearchTool";
 
 export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
@@ -17,48 +17,14 @@ export interface MiyoSearchRun {
   error: string | null;
 }
 
-const OPENCODE_MIYO_CALL = new RegExp(
-  `tools\\[["']${COPILOT_MCP_SERVER_NAME}["']\\]\\.${MIYO_SEARCH_TOOL_NAME}\\(`
-);
-
-function inputOf(part: ToolCallPart): Record<string, unknown> {
-  const input = part.input;
-  return input && typeof input === "object" ? (input as Record<string, unknown>) : {};
-}
-
 function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-// Claude names the call by server and tool, Codex nests the arguments under `server`/`tool`, and
-// OpenCode runs it as JavaScript inside its `execute` tool.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
-  const input = inputOf(part);
-  if (part.mcpServer === COPILOT_MCP_SERVER_NAME && part.vendorToolName === MIYO_SEARCH_TOOL_NAME) {
-    return stringOrNull(input.query);
-  }
-  if (input.server === COPILOT_MCP_SERVER_NAME && input.tool === MIYO_SEARCH_TOOL_NAME) {
-    const args = input.arguments;
-    return stringOrNull(
-      args && typeof args === "object" ? (args as { query?: unknown }).query : null
-    );
-  }
-  const code = typeof input.code === "string" ? input.code : "";
-  const call = OPENCODE_MIYO_CALL.exec(code);
+  const call = copilotToolCall(part, MIYO_SEARCH_TOOL_NAME);
   if (!call) return undefined;
-  const literal = /\bquery["']?:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/.exec(
-    code.slice(call.index)
-  );
-  if (!literal) return null;
-  // Generated JavaScript often single-quotes the query, which JSON cannot parse until its quotes are swapped.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-  const body = literal[1] ?? literal[2].replace(/\\'/g, "'").replace(/\\?"/g, '\\"');
-  try {
-    return stringOrNull(JSON.parse(`"${body}"`));
-  } catch {
-    return null;
-  }
+  return "args" in call ? stringOrNull(call.args.query) : codeStringField(call.code, "query");
 }
 
 // The tool's failure text opens with an instruction to the agent; the card shows only the reason.
