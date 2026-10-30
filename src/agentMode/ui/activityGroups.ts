@@ -1,7 +1,7 @@
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
-import { excalidrawToolRun, opensDrawingCard } from "@/excalidraw/agentMode/excalidrawToolRun";
+import { excalidrawToolRun } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { formatDuration } from "@/lib/duration";
 
 export type ActivityMember =
@@ -76,7 +76,7 @@ export function foldActivityGroups(
           drawing.members.push(node.part);
           break;
         }
-        if (excalidraw && opensDrawingCard(excalidraw)) {
+        if (excalidraw) {
           flush();
           drawing = {
             type: "excalidrawDrawing",

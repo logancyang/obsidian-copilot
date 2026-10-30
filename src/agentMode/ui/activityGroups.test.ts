@@ -154,15 +154,14 @@ describe("activityGroups", () => {
         expect(types(grouped)).toEqual(["excalidrawDrawing", "excalidrawDrawing"]);
       });
 
-      it("leaves a render with no card to join as an ordinary row in the group", () => {
+      it("opens a card for a render with no card to join, like any other Excalidraw call", () => {
         const grouped = foldActivityGroups([
           action("read", { vendorToolName: "Read" }),
           render("r1"),
           prose("The board looks right."),
         ]);
 
-        expect(types(grouped)).toEqual(["activityGroup", "text"]);
-        expect(groupAt(grouped, 0).members).toHaveLength(2);
+        expect(types(grouped)).toEqual(["action", "excalidrawDrawing", "text"]);
       });
     });
 

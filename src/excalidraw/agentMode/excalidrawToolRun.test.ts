@@ -1,9 +1,5 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import {
-  excalidrawToolRun,
-  opensDrawingCard,
-  summarizeDrawing,
-} from "@/excalidraw/agentMode/excalidrawToolRun";
+import { excalidrawToolRun, summarizeDrawing } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
 import { EXCALIDRAW_TURNED_OFF_TEXT } from "@/excalidraw/excalidrawTools";
 
@@ -105,9 +101,9 @@ describe("excalidrawToolRun", () => {
       expect(excalidrawToolRun(part)?.path).toBeNull();
     });
 
-    it("reads the agent's render check as a render of its drawing", () => {
+    it("reads the agent's render check as a read of its drawing", () => {
       expect(excalidrawToolRun(excalidrawToolCall("excalidraw_render", { path: PATH }))).toEqual({
-        action: "render",
+        action: "read",
         status: "completed",
         path: PATH,
       });
@@ -135,21 +131,6 @@ describe("excalidrawToolRun", () => {
     it("returns null for a write on another server", () => {
       const part = excalidrawToolCall("excalidraw_write", CREATE, { mcpServer: "other" });
       expect(excalidrawToolRun(part)).toBeNull();
-    });
-  });
-
-  describe("opensDrawingCard()", () => {
-    it.each([
-      ["a finished write", { action: "create", status: "completed" }],
-      ["a running edit", { action: "edit", status: "in_progress" }],
-      ["a read", { action: "read", status: "completed" }],
-      ["a failed write, so its retry joins the same card", { action: "edit", status: "failed" }],
-    ] as const)("opens a card for %s", (_name, run) => {
-      expect(opensDrawingCard({ ...run, path: PATH })).toBe(true);
-    });
-
-    it("does not open a card for a render check, which only looks (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
-      expect(opensDrawingCard({ action: "render", status: "completed", path: PATH })).toBe(false);
     });
   });
 
