@@ -2,6 +2,8 @@
 
 # v4.0.17 - Excalidraw integration, Miyo search control
 
+[![Demo video: Obsidian Copilot 4.0.17: Excalidraw Drawings, Send Now, Miyo Limits](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/video-thumbnail-25ea4ac7.png)](https://youtube.com/shorts/ZYazABOaBMk)
+
 Copilot now understands, draws, and edits Excalidraw drawings. With the Excalidraw plugin enabled, agents in Copilot build cleaner diagrams, with labels and arrows that stay attached, using fewer tokens and less time than the same agent outside Copilot. In our test, Codex drew a diagram with 60% fewer tokens in 23% less time.
 
 This release also lets you send messages right away in Claude agents and adds Miyo settings for how much an agent's search returns.
