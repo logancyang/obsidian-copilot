@@ -41,8 +41,7 @@ function wireInternalLinks(
     } catch {
       href = raw;
     }
-    const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
-    openVaultPath(app, href, { newLeaf, sourcePath });
+    openVaultPath(app, href, { sourcePath, event: e });
   };
   el.addEventListener("click", handleClick);
   el.addEventListener("auxclick", handleClick);

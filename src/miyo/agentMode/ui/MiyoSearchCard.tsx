@@ -5,6 +5,7 @@ import type { MiyoNote } from "@/miyo/agentMode/miyoSearchRun";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { cn } from "@/lib/utils";
+import { openLinkClickProps } from "@/utils/openVaultPath";
 
 export interface MiyoSearchCardProps {
   status: AgentToolStatus;
@@ -13,7 +14,7 @@ export interface MiyoSearchCardProps {
   error?: string | null;
   open: boolean;
   onToggle: () => void;
-  onOpenNote: (path: string) => void;
+  onOpenNote: (path: string, event: MouseEvent) => void;
 }
 
 export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({
@@ -122,7 +123,7 @@ export const MiyoSearchCard: React.FC<MiyoSearchCardProps> = ({
 
 interface MiyoNoteRowProps {
   note: MiyoNote;
-  onOpen: (path: string) => void;
+  onOpen: (path: string, event: MouseEvent) => void;
 }
 
 const MiyoNoteRow: React.FC<MiyoNoteRowProps> = ({ note, onOpen }) => {
@@ -157,7 +158,7 @@ const MiyoNoteRow: React.FC<MiyoNoteRowProps> = ({ note, onOpen }) => {
     <button
       type="button"
       title={note.path}
-      onClick={() => onOpen(note.path)}
+      {...openLinkClickProps((event) => onOpen(note.path, event))}
       className={cn(
         rowClass,
         "tw-h-auto tw-cursor-pointer !tw-rounded-none tw-border-none !tw-bg-transparent tw-text-left tw-text-normal !tw-shadow-none hover:!tw-bg-modifier-hover focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-inset focus-visible:tw-ring-ring"

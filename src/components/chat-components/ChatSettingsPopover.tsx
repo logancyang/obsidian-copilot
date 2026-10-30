@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useApp } from "@/context";
+import { openVaultPath } from "@/utils/openVaultPath";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
@@ -82,7 +83,7 @@ export function ChatSettingsPopover() {
   const handleOpenSourceFile = () => {
     if (!displayValue) return;
     const filePath = getPromptFilePath(displayValue);
-    void app.workspace.openLinkText(filePath, "", true);
+    openVaultPath(app, filePath, { newLeaf: true });
   };
 
   return (

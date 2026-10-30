@@ -13,7 +13,8 @@ import {
 } from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { useApp } from "@/context";
-import { openFileInWorkspace } from "@/utils";
+import { logError } from "@/logger";
+import { openFileInTab } from "@/utils/openVaultPath";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -78,7 +79,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   };
 
   const handleBadgeClick = (file: TFile) => {
-    void openFileInWorkspace(app, file);
+    void openFileInTab(app, file).catch((error: unknown) => logError("openFile failed", error));
   };
 
   const uniqueNotes = React.useMemo(() => {

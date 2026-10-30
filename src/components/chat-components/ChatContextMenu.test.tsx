@@ -20,7 +20,6 @@ jest.mock("@/utils/desktopRuntime", () => ({
 }));
 
 jest.mock("@/utils", () => ({
-  openFileInWorkspace: jest.fn(),
   getDomainFromUrl: (url: string) => new URL(url).hostname,
 }));
 

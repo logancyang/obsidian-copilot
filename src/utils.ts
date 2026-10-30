@@ -894,28 +894,3 @@ export function sanitizeFilePath(filePath: string): string {
 
   return parts.join("/");
 }
-
-export async function openFileInWorkspace(app: App, file: TFile): Promise<void> {
-  let existingLeaf = null;
-  app.workspace.iterateAllLeaves((leaf) => {
-    if (
-      leaf.view.getViewType() === "markdown" ||
-      leaf.view.getViewType() === "pdf" ||
-      leaf.view.getViewType() === "canvas"
-    ) {
-      const viewFile = (leaf.view as unknown as Record<string, unknown>).file as
-        | { path: string }
-        | undefined;
-      if (viewFile && viewFile.path === file.path) {
-        existingLeaf = leaf;
-      }
-    }
-  });
-
-  if (existingLeaf) {
-    app.workspace.setActiveLeaf(existingLeaf, { focus: true });
-  } else {
-    const leaf = app.workspace.getLeaf("tab");
-    await leaf.openFile(file);
-  }
-}

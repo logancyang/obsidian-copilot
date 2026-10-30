@@ -48,6 +48,7 @@ function fakeApp(
     ...appParsing(async () => parse),
     workspace: {
       getActiveFile: () => null,
+      iterateAllLeaves: jest.fn(),
       getLeaf: jest.fn(() => ({ openFile: jest.fn().mockResolvedValue(undefined) })),
     },
     vault: {
@@ -287,7 +288,7 @@ describe("TurnDiffView", () => {
 
         fireEvent.click(within(header(view)).getByText("Open note"));
 
-        expect(app.workspace.getLeaf).toHaveBeenCalledWith(true);
+        expect(app.workspace.getLeaf).toHaveBeenCalledWith("tab");
         const leaf = jest.mocked(app.workspace.getLeaf).mock.results[0].value;
         expect(leaf.openFile).toHaveBeenCalledWith(file);
       });

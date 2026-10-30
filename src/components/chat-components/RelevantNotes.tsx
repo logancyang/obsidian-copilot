@@ -27,6 +27,7 @@ import { onMiyoIndexChanged } from "@/miyo/miyoIndex";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { sha256 } from "@/utils/hash";
+import { openFileInTab } from "@/utils/openVaultPath";
 import { Platform, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 
@@ -253,8 +254,7 @@ export const RelevantNotes = memo(
     const navigateToNote = (notePath: string) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
-        const leaf = app.workspace.getLeaf(true);
-        void leaf.openFile(file).catch((err) => logError("openFile failed", err));
+        void openFileInTab(app, file).catch((err) => logError("openFile failed", err));
       }
     };
     const addToChat = (notePath: string) => {

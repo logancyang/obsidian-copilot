@@ -5,7 +5,10 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/context", () => ({ useApp: jest.fn().mockReturnValue({}) }));
-jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
+jest.mock("@/utils/openVaultPath", () => ({
+  ...jest.requireActual("@/utils/openVaultPath"),
+  openVaultPath: jest.fn(),
+}));
 
 function readTool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   return {
@@ -29,7 +32,10 @@ describe("ActionCard", () => {
       expect(screen.getByText("Read").closest("a")).toBeNull();
 
       fireEvent.click(link);
-      expect(openVaultPath).toHaveBeenCalledWith({}, "notes/today.md", { newLeaf: true });
+      expect(openVaultPath).toHaveBeenCalledWith({}, "notes/today.md", {
+        newLeaf: true,
+        event: expect.any(MouseEvent),
+      });
     });
 
     it("renders a denied edit as Didn't edit with no file link (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {

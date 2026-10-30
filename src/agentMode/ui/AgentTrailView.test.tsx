@@ -25,6 +25,7 @@ jest.mock("@/utils", () => ({
 jest.mock("obsidian", () => {
   class MarkdownView {}
   return {
+    Keymap: jest.requireActual<typeof import("obsidian")>("obsidian").Keymap,
     MarkdownView,
     Component: class {
       load() {}
@@ -668,6 +669,7 @@ describe("AgentTrail", () => {
     const app = {
       workspace: { getActiveFile: jest.fn(() => null), openLinkText },
       vault: { getAbstractFileByPath: jest.fn(() => ({})) },
+      metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
     } as never;
     renderTrail({
       app,
@@ -710,6 +712,7 @@ describe("AgentTrail", () => {
     const app = {
       workspace: { getActiveFile: jest.fn(() => null), openLinkText },
       vault: { getAbstractFileByPath: jest.fn(() => ({})) },
+      metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
     } as never;
     const write = excalidrawToolCall("excalidraw_write", {
       path: "Drawings/Release plan.excalidraw.md",

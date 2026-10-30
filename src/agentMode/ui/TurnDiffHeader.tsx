@@ -2,6 +2,7 @@ import type { TurnFileChange } from "@/agentMode/session/types";
 import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
 import type { ChangeStep } from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { Button } from "@/components/ui/button";
+import { openLinkClickProps } from "@/utils/openVaultPath";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import React from "react";
 
@@ -17,7 +18,7 @@ export interface TurnDiffHeaderProps {
   additions: number;
   deletions: number;
   changes?: ChangeStepperProps;
-  onOpenNote?: () => void;
+  onOpenNote?: (event: MouseEvent) => void;
 }
 
 export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
@@ -41,7 +42,7 @@ export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
           variant="link"
           size="sm"
           className="tw-ml-2 !tw-h-auto tw-shrink-0 !tw-border-0 !tw-bg-transparent !tw-px-0 !tw-text-accent !tw-shadow-none"
-          onClick={onOpenNote}
+          {...openLinkClickProps(onOpenNote)}
         >
           Open note
         </Button>
