@@ -18,6 +18,8 @@ export function openVaultPath(app: App, rawPath: string, opts: OpenVaultPathOpti
     }
     path = rel;
   }
+  // Bare PDF destinations inherit the previous vertical offset: https://github.com/logancyang/obsidian-copilot/issues/3894
+  path = path.replace(/(\.pdf#page=\d+)$/i, "$1&offset=0,,0");
   const { filePath, anchor } = splitAnchor(path);
   if (filePath && !app.vault.getAbstractFileByPath(filePath)) {
     const resolved = resolveUnindexedVaultPath(app, filePath);

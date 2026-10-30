@@ -98,6 +98,37 @@ describe("openVaultPath", () => {
     expect(app.workspace.openLinkText).toHaveBeenCalledWith("Some Note", "source.md", false);
   });
 
+  describe("openVaultPath()", () => {
+    it.each(["Slides.pdf#page=13", "Slides.PDF#page=14"])(
+      "opens %s at the page top instead of inheriting the previous scroll offset (https://github.com/logancyang/obsidian-copilot/issues/3894)",
+      (path) => {
+        const app = buildApp(VAULT, [path.split("#")[0]]);
+        openVaultPath(app as unknown as App, path, { sourcePath: "source.md", newLeaf: true });
+        expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+          `${path}&offset=0,,0`,
+          "source.md",
+          true
+        );
+      }
+    );
+
+    it.each([
+      "Slides.pdf#page=13&selection=0,1,2,3",
+      "Slides.pdf#page=13&annotation=abc",
+      "Slides.pdf#page=13&offset=1,2,3",
+      "Slides.pdf#page=13&zoom=100",
+      "Slides.pdf",
+      "Note.md#page=13",
+    ])(
+      "preserves the existing destination for %s (https://github.com/logancyang/obsidian-copilot/issues/3894)",
+      (path) => {
+        const app = buildApp(VAULT, [path.split("#")[0]]);
+        open(app, path);
+        expect(app.workspace.openLinkText).toHaveBeenCalledWith(path, "", false);
+      }
+    );
+  });
+
   describe("unindexed paths that exist on disk", () => {
     let vaultDir: string;
 
