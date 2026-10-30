@@ -1,11 +1,9 @@
+import { useChainType, useModelKey } from "@/aiParams";
 import {
-  clearSelectedTextContexts,
-  getSelectedTextContexts,
-  removeSelectedTextContext,
-  useChainType,
-  useModelKey,
+  clearSelection,
+  dismissSelection,
   useSelectedTextContexts,
-} from "@/aiParams";
+} from "@/selection/selectionStore";
 import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
@@ -124,7 +122,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     []
   );
 
-  const [selectedTextContexts] = useSelectedTextContexts();
+  const selectedTextContexts = useSelectedTextContexts();
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
 
@@ -460,23 +458,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
   }, [onSaveChat, handleSaveAsNote]);
 
-  const handleRemoveSelectedText = useCallback(
-    (id: string) => {
-      const currentContexts = getSelectedTextContexts();
-      const removed = currentContexts.find((ctx) => ctx.id === id);
-      removeSelectedTextContext(id);
-
-      if (removed?.sourceType === "web") {
-        plugin.suppressCurrentWebSelection(removed.url);
-      }
-    },
-    [plugin]
-  );
-
-  useEffect(() => {
-    plugin.chatSelectionHighlightController.clearIfNoNoteContexts(selectedTextContexts);
-  }, [selectedTextContexts, plugin]);
-
   useEffect(() => {
     const handleChatVisibility = () => {
       chatInput.focusInput();
@@ -548,10 +529,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
-    const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
-    clearSelectedTextContexts();
-    plugin.chatSelectionHighlightController.clearForNewChat();
-    plugin.suppressCurrentWebSelection(webSelectionUrl);
+    clearSelection();
     setIncludeActiveNote(settings.autoAttachActiveNote);
     setIncludeActiveWebTab(true);
   }, [
@@ -564,7 +542,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     handleSaveAsNote,
     safeSet,
     plugin,
-    selectedTextContexts,
   ]);
 
   const handleLoadChatHistory = useCallback(async () => {
@@ -706,7 +683,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           setSelectedImages={setSelectedImages}
           modelPickerOverride={chatModelPicker}
           selectedTextContexts={selectedTextContexts}
-          onRemoveSelectedText={handleRemoveSelectedText}
+          onRemoveSelectedText={dismissSelection}
         />
       </div>
     </>

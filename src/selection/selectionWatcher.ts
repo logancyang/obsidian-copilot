@@ -1,0 +1,99 @@
+import { reportSelection, type SelectionReport } from "@/selection/selectionStore";
+import { EditorView } from "@codemirror/view";
+import {
+  editorInfoField,
+  MarkdownView,
+  type App,
+  type MarkdownFileInfo,
+  type Plugin,
+} from "obsidian";
+import { v4 as uuidv4 } from "uuid";
+
+export function editorSelectionReport({ editor, file }: MarkdownFileInfo): SelectionReport | null {
+  const range = editor?.listSelections()[0];
+  if (!editor || !range || !file) return null;
+
+  const key = `${file.path}:${range.anchor.line}:${range.anchor.ch}:${range.head.line}:${range.head.ch}`;
+  const content = editor.getSelection();
+  if (!content.trim()) return { location: file.path, key, context: null };
+
+  const [startLine, endLine] = [range.anchor.line + 1, range.head.line + 1].sort((a, b) => a - b);
+  return {
+    location: file.path,
+    key,
+    context: {
+      id: uuidv4(),
+      content,
+      sourceType: "note",
+      noteTitle: file.basename,
+      notePath: file.path,
+      startLine,
+      endLine,
+    },
+  };
+}
+
+export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
+  const selection = doc.getSelection();
+  const anchor = selection?.anchorNode;
+  const focus = selection?.focusNode;
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  const file = view?.file;
+  if (!anchor || !focus || !file || view.getMode() !== "preview") return null;
+
+  // Only rendered text inside the note is a note selection; a later chat
+  // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+  const readingEl = view.previewMode.containerEl;
+  if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return null;
+
+  const content = selection.toString();
+  const key = `preview:${file.path}:${content}`;
+  if (!content.trim()) return { location: file.path, key, context: null };
+
+  // Rendered Markdown does not expose reliable source line numbers for every selection.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+  return {
+    location: file.path,
+    key,
+    context: {
+      id: uuidv4(),
+      content,
+      sourceType: "note",
+      noteTitle: file.basename,
+      notePath: file.path,
+      startLine: 0,
+      endLine: 0,
+    },
+  };
+}
+
+export function watchSelections(plugin: Plugin): void {
+  let timer: number | undefined;
+  const schedule = (read: () => SelectionReport | null) => {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const report = read();
+      if (report) reportSelection(report);
+    }, 500);
+  };
+  plugin.register(() => window.clearTimeout(timer));
+
+  plugin.registerEditorExtension(
+    EditorView.updateListener.of((update) => {
+      if (!update.selectionSet || !update.view.hasFocus) return;
+
+      // The originating editor identifies its note even in a popout, where
+      // the active leaf may differ. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
+      const info = update.state.field(editorInfoField, false);
+      if (info) schedule(() => editorSelectionReport(info));
+    })
+  );
+
+  const watchDocument = (doc: Document) =>
+    plugin.registerDomEvent(doc, "selectionchange", () => {
+      const report = readingSelectionReport(plugin.app, doc);
+      if (report) schedule(() => report);
+    });
+  watchDocument(activeDocument);
+  plugin.registerEvent(plugin.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
+}

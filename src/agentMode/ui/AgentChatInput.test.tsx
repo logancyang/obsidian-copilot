@@ -77,10 +77,10 @@ jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
 }));
 let mockSelectedTextContexts: SelectedTextContext[] = [];
-jest.mock("@/aiParams", () => ({
-  clearSelectedTextContexts: jest.fn(),
-  removeSelectedTextContext: jest.fn(),
-  useSelectedTextContexts: () => [mockSelectedTextContexts, jest.fn()],
+jest.mock("@/selection/selectionStore", () => ({
+  clearSelection: jest.fn(),
+  dismissSelection: jest.fn(),
+  useSelectedTextContexts: () => mockSelectedTextContexts,
 }));
 jest.mock("@/settings/model", () => ({
   getModelKeyFromModel: (model: { name: string; provider: string; _backendId?: string }) => {
@@ -810,9 +810,9 @@ describe("AgentChatInput", () => {
     });
 
     it("clears input-scoped context only when the logical chat input changes", () => {
-      const clearSelectedTextContexts = jest.requireMock("@/aiParams")
-        .clearSelectedTextContexts as jest.Mock;
-      clearSelectedTextContexts.mockClear();
+      const clearSelection = jest.requireMock("@/selection/selectionStore")
+        .clearSelection as jest.Mock;
+      clearSelection.mockClear();
       const backend = {
         sendMessage: jest.fn(),
         cancel: jest.fn(),
@@ -822,9 +822,9 @@ describe("AgentChatInput", () => {
       const view = renderInput(backend, draft);
 
       view.rerender(inputNode(backend, draft, { chatInputId: "input-1" }));
-      expect(clearSelectedTextContexts).not.toHaveBeenCalled();
+      expect(clearSelection).not.toHaveBeenCalled();
       view.rerender(inputNode(backend, draft, { chatInputId: "input-2" }));
-      expect(clearSelectedTextContexts).toHaveBeenCalledTimes(1);
+      expect(clearSelection).toHaveBeenCalledTimes(1);
     });
 
     it("passes the frozen empty list (not a fresh []) when not entitled", () => {

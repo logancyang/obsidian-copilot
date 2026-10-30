@@ -32,7 +32,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
-import { setSelectedTextContexts } from "@/aiParams";
+import { attachSelection } from "@/selection/selectionStore";
 
 type PublishFile = (file: TFile) => void;
 
@@ -299,7 +299,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
       endLine: Math.max(startLine, endLine),
     };
 
-    setSelectedTextContexts([selectedTextContext]);
+    attachSelection(selectedTextContext);
 
     await plugin.activateChatViewForContext();
   });
@@ -339,7 +339,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         faviconUrl: pageInfo.faviconUrl || undefined,
       };
 
-      setSelectedTextContexts([webSelectedTextContext]);
+      attachSelection(webSelectedTextContext);
 
       await plugin.activateChatViewForContext();
     } catch (error) {

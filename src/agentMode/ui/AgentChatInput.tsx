@@ -4,12 +4,12 @@ import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteTok
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { PromptContent, QueuedPrompt } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import {
-  clearSelectedTextContexts,
-  removeSelectedTextContext,
-  useSelectedTextContexts,
-} from "@/aiParams";
 import { isCompactCommand } from "@/commands/compactCommand";
+import {
+  clearSelection,
+  dismissSelection,
+  useSelectedTextContexts,
+} from "@/selection/selectionStore";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import ChatInput, {
@@ -169,7 +169,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   const eventTarget = useContext(EventTargetContext);
   const chatInputRef = useRef<ChatInputHandle>(null);
 
-  const [selectedTextContexts] = useSelectedTextContexts();
+  const selectedTextContexts = useSelectedTextContexts();
   const { activeWebTabForMentions } = useActiveWebTabState();
 
   const previousChatInputIdRef = useRef(chatInputId);
@@ -215,7 +215,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   useEffect(() => {
     if (previousChatInputIdRef.current === chatInputId) return;
     previousChatInputIdRef.current = chatInputId;
-    clearSelectedTextContexts();
+    clearSelection();
     mentionedAgentIdsRef.current = [];
   }, [chatInputId]);
 
@@ -375,7 +375,7 @@ export const AgentChatInput = memo(function AgentChatInput({
 
       mentionedAgentIdsRef.current = [];
       resetCompose();
-      clearSelectedTextContexts();
+      clearSelection();
 
       const content: PromptContent[] = [];
       for (const image of images) {
@@ -519,7 +519,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           modelPickerOverride={modelPickerOverride ?? undefined}
           modePickerOverride={modePickerOverride ?? undefined}
           selectedTextContexts={selectedTextContexts}
-          onRemoveSelectedText={removeSelectedTextContext}
+          onRemoveSelectedText={dismissSelection}
           agentBrands={agentBrands}
           cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}

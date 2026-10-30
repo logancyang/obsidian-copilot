@@ -17,7 +17,9 @@ const mockComposerSelection: SelectedTextContext[] = [
     content: "Unsent selection B",
   },
 ];
-jest.mock("@/aiParams", () => ({ getSelectedTextContexts: () => mockComposerSelection }));
+jest.mock("@/selection/selectionStore", () => ({
+  getSelectedTextContexts: () => mockComposerSelection,
+}));
 jest.mock("@/settings/model", () => ({ getSettings: () => ({ autoCompactThreshold: Infinity }) }));
 jest.mock("@/logger");
 jest.mock("@/commands/customCommandUtils", () => ({

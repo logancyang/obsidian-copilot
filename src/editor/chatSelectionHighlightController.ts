@@ -98,10 +98,6 @@ export class ChatSelectionHighlightController {
     }
   }
 
-  clearForNewChat(): void {
-    this.clear();
-  }
-
   private persist(options: { useFallback: boolean }): void {
     const cm = this.getEditorView(options.useFallback);
     if (!cm) return;

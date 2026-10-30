@@ -22,7 +22,11 @@ const mockSettings = { autoAttachActiveNote: true };
 jest.mock("@/aiParams", () => ({
   useModelKey: () => ["model", jest.fn()],
   useChainType: () => ["llm_chain"],
-  useSelectedTextContexts: () => [mockSelections],
+}));
+jest.mock("@/selection/selectionStore", () => ({
+  clearSelection: jest.fn(),
+  dismissSelection: jest.fn(),
+  useSelectedTextContexts: () => mockSelections,
 }));
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => mockSettings,
