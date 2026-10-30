@@ -19,7 +19,7 @@ import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
 import type { ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 import { MiyoSearchCard } from "@/miyo/agentMode/ui/MiyoSearchCard";
-import { excalidrawToolRun } from "@/excalidraw/agentMode/excalidrawToolRun";
+import { summarizeDrawing } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { ExcalidrawToolCard } from "@/excalidraw/agentMode/ui/ExcalidrawToolCard";
 import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
@@ -184,16 +184,6 @@ function renderNode(
           />
         );
       }
-      const excalidraw = excalidrawToolRun(node.part);
-      if (excalidraw) {
-        return (
-          <ExcalidrawToolCard
-            key={key}
-            {...excalidraw}
-            onOpenDrawing={(path) => openVaultPath(ctx.app, path, { newLeaf: true })}
-          />
-        );
-      }
       return (
         <ActionCard
           key={key}
@@ -201,6 +191,22 @@ function renderNode(
           open={ctx.expansion.isOpen(expansionId)}
           onToggle={() => ctx.expansion.toggle(expansionId)}
         />
+      );
+    }
+    case "excalidrawDrawing": {
+      const expansionId = `${trailId}/drawing:${node.id}`;
+      return (
+        <ExcalidrawToolCard
+          key={key}
+          {...summarizeDrawing(node.members)}
+          onOpenDrawing={(path) => openVaultPath(ctx.app, path, { newLeaf: true })}
+          open={ctx.expansion.isOpen(expansionId)}
+          onToggle={() => ctx.expansion.toggle(expansionId)}
+        >
+          {node.members.map((part) =>
+            renderNode({ type: "action", part }, part.id, ctx, false, trailId)
+          )}
+        </ExcalidrawToolCard>
       );
     }
     case "activityGroup":

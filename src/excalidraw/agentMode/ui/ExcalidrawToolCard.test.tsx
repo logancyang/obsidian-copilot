@@ -9,16 +9,22 @@ const PATH = "Incidents/Investigation playbook.excalidraw.md";
 
 function renderCard(props: Partial<ExcalidrawToolCardProps> = {}) {
   const onOpenDrawing = jest.fn();
+  const onToggle = jest.fn();
   const result = render(
     <ExcalidrawToolCard
       action="create"
       status="completed"
       path={PATH}
+      failed={0}
+      open={false}
       onOpenDrawing={onOpenDrawing}
+      onToggle={onToggle}
       {...props}
-    />
+    >
+      <div>Excalidraw write failed: INVALID_INPUT</div>
+    </ExcalidrawToolCard>
   );
-  return { ...result, onOpenDrawing };
+  return { ...result, onOpenDrawing, onToggle };
 }
 
 describe("ExcalidrawToolCard", () => {
@@ -57,7 +63,7 @@ describe("ExcalidrawToolCard", () => {
 
         expect(screen.getByText(label)).toBeTruthy();
         expect(screen.getByText("Investigation playbook")).toBeTruthy();
-        expect(screen.queryByRole("button")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Investigation playbook" })).toBeNull();
       }
     );
 
@@ -72,7 +78,10 @@ describe("ExcalidrawToolCard", () => {
           action="edit"
           status="completed"
           path={PATH}
+          failed={0}
+          open={false}
           onOpenDrawing={jest.fn()}
+          onToggle={jest.fn()}
         />
       );
       expect(container.querySelector(".copilot-shimmer-text")).toBeNull();
@@ -87,7 +96,34 @@ describe("ExcalidrawToolCard", () => {
       renderCard({ action: "read", path: null });
 
       expect(screen.getByText("Read Excalidraw drawing")).toBeTruthy();
-      expect(screen.queryByRole("button")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Investigation playbook" })).toBeNull();
+    });
+
+    it("keeps the drawing's steps hidden until the chevron is clicked", () => {
+      const { onToggle } = renderCard();
+
+      expect(screen.queryByText("Excalidraw write failed: INVALID_INPUT")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Show Excalidraw steps" }));
+      expect(onToggle).toHaveBeenCalled();
+    });
+
+    it("shows the drawing's steps, such as a failed write's error, when open", () => {
+      renderCard({ open: true });
+
+      expect(screen.getByText("Excalidraw write failed: INVALID_INPUT")).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Hide Excalidraw steps" }).getAttribute("aria-expanded")
+      ).toBe("true");
+    });
+
+    it("counts failed calls on the card so a rejected write is not hidden (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      renderCard({ failed: 2 });
+      expect(screen.getByText("2 failed")).toBeTruthy();
+    });
+
+    it("shows no failure count when every call went through", () => {
+      renderCard();
+      expect(screen.queryByText(/failed/)).toBeNull();
     });
   });
 });

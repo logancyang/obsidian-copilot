@@ -67,6 +67,36 @@ const RETRIED: AgentMessagePart[] = [
   say("I moved the checkout bug card to Done and added a Blocked badge to the export ticket."),
 ];
 
+const BOARD = "Boards/Launch board.excalidraw.md";
+
+const FIX_LOOP: AgentMessagePart[] = [
+  say("The plugin rejected labels on the frames, so I'm retrying without them."),
+  excalidraw("write-1", "excalidraw_write", { path: BOARD, elements: [] }),
+  excalidraw(
+    "write-2",
+    "excalidraw_write",
+    { path: BOARD, operations: [] },
+    {
+      status: "failed",
+      output: [
+        {
+          type: "text",
+          text: "No change made to Boards/Launch board.excalidraw.md: INVALID_INPUT: Unsupported field; use a trusted EA script for advanced relationships or metadata.",
+        },
+      ],
+    }
+  ),
+  excalidraw("write-3", "excalidraw_write", { path: BOARD, operations: [] }),
+  excalidraw("render-1", "excalidraw_render", { path: BOARD }),
+  excalidraw("write-4", "excalidraw_write", { path: BOARD, operations: [] }),
+  tool("read-1", "Read", { locations: [{ path: BOARD }] }),
+  excalidraw("write-5", "excalidraw_write", { path: BOARD, operations: [] }),
+  tool("edit-1", "Edit", { locations: [{ path: BOARD }] }),
+  excalidraw("write-6", "excalidraw_write", { path: BOARD, operations: [] }),
+  tool("bash-1", "Bash", { input: { command: "head -5 'Boards/Launch board.excalidraw.md'" } }),
+  say("The board is built and checked; adding it to the note now."),
+];
+
 const QUESTION: AgentMessagePart[] = [
   tool("read-1", "Read", { locations: [{ path: "Architecture/Order platform.md" }] }),
   excalidraw("read-2", "excalidraw_read", { path: "Diagrams/Order platform.excalidraw.md" }),
@@ -112,6 +142,10 @@ export const DrawingInProgress: StoryObj<AgentTrailProps> = {
 
 export const EditAfterRetry: StoryObj<AgentTrailProps> = {
   render: () => <ExcalidrawTrailDemo parts={RETRIED} />,
+};
+
+export const WriteRenderFixLoop: StoryObj<AgentTrailProps> = {
+  render: () => <ExcalidrawTrailDemo parts={FIX_LOOP} />,
 };
 
 export const AnsweredFromDrawing: StoryObj<AgentTrailProps> = {

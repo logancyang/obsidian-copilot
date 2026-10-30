@@ -705,6 +705,33 @@ describe("AgentTrail", () => {
     expect(openLinkText).toHaveBeenCalledWith("Drawings/Release plan.excalidraw.md", "", true);
   });
 
+  it("shows an agent's uninterrupted work on one drawing as one card whose steps include a failed write's error (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+    const board = { path: "Boards/Launch board.excalidraw.md", operations: [] };
+    renderTrail({
+      parts: [
+        excalidrawToolCall("excalidraw_write", board, { id: "w1" }),
+        excalidrawToolCall("excalidraw_render", board, { id: "render-1" }),
+        excalidrawToolCall("excalidraw_write", board, {
+          id: "w2",
+          status: "failed",
+          output: [{ type: "text", text: "INVALID_INPUT: Unsupported field" }],
+        }),
+        READ_A,
+        excalidrawToolCall("excalidraw_write", board, { id: "w3" }),
+        text("Updated the board."),
+      ],
+    });
+
+    expect(screen.getAllByText("Edited in Excalidraw")).toHaveLength(1);
+    expect(screen.getByText("1 failed")).toBeTruthy();
+    expect(screen.queryByText(/Unsupported field/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show Excalidraw steps" }));
+    fireEvent.click(screen.getAllByText(/Excalidraw write/)[1]);
+
+    expect(screen.getByText(/Unsupported field/)).toBeTruthy();
+  });
+
   describe("with task state from the session", () => {
     const AGENT_LAUNCH = toolCall("call-1", {
       vendorToolName: "Agent",
