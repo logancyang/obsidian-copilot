@@ -31,6 +31,7 @@ This release also lets you send messages right away in Claude agents and adds Mi
 - The agent model picker no longer shows greyed-out Copilot Plus models when you already have a Copilot license. ([#3855](https://github.com/logancyang/obsidian-copilot/pull/3855), @zeroliu)
 - An OpenCode chat opened on another computer starts on your model and shows its full context window. ([#3875](https://github.com/logancyang/obsidian-copilot/pull/3875), @zeroliu)
 - Quick Chat's input in the mobile sidebar sits right above the keyboard on iPhone and iPad. ([#3892](https://github.com/logancyang/obsidian-copilot/pull/3892), @zeroliu)
+- Clicking a PDF page citation in a chat opens that page at its top. ([#3895](https://github.com/logancyang/obsidian-copilot/pull/3895), @Eric0610-2026)
 - Removed the deprecated built-in Copilot models that the plugin no longer uses. ([#3851](https://github.com/logancyang/obsidian-copilot/pull/3851), @zeroliu)
 
 ## ⚠️ Compatibility Notes
