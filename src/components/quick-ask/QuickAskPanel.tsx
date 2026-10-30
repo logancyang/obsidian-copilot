@@ -1,17 +1,15 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Notice } from "obsidian";
-import { Send, Square, X, MessageSquareX } from "lucide-react";
+import { X } from "lucide-react";
 import { useDraggable } from "@/hooks/use-draggable";
 import type { ResizeDirection } from "@/hooks/use-resizable";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy } from "@/utils";
-import { ModelSelector } from "@/components/ui/ModelSelector";
 import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
-import { Checkbox } from "@/components/ui/checkbox";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useQuickAskSession } from "./useQuickAskSession";
 import { QuickAskMessageComponent } from "./QuickAskMessage";
 import { QuickAskInput } from "./QuickAskInput";
+import { QuickAskFooter } from "./QuickAskFooter";
 import type { QuickAskPanelProps } from "./types";
 import type { ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { Button } from "@/components/ui/button";
@@ -69,7 +67,7 @@ export function QuickAskPanel({
     [onDragOffset]
   );
 
-  const { handleMouseDown: handleDragMouseDown } = useDraggable({
+  const { handlePointerDown: handleDragPointerDown } = useDraggable({
     dragRef: containerRef,
     bounds: null,
     writeToDom: false,
@@ -77,9 +75,9 @@ export function QuickAskPanel({
     onPositionChange: handleDragPositionChange,
   });
 
-  const handleResizeMouseDown = useCallback(
+  const handleResizePointerDown = useCallback(
     (direction: ResizeDirection) =>
-      (e: React.MouseEvent): void => {
+      (e: React.PointerEvent): void => {
         e.preventDefault();
         e.stopPropagation();
         onResizeStart?.(direction, { x: e.clientX, y: e.clientY });
@@ -236,8 +234,8 @@ export function QuickAskPanel({
     >
       <div className="tw-relative tw-flex-none">
         <div
-          className="tw-flex tw-h-4 tw-cursor-grab tw-items-center tw-justify-center hover:tw-bg-[color-mix(in_srgb,var(--background-modifier-hover)_20%,transparent)] active:tw-cursor-grabbing"
-          onMouseDown={handleDragMouseDown}
+          className="tw-flex tw-h-4 tw-cursor-grab tw-touch-none tw-items-center tw-justify-center hover:tw-bg-[color-mix(in_srgb,var(--background-modifier-hover)_20%,transparent)] active:tw-cursor-grabbing"
+          onPointerDown={handleDragPointerDown}
         >
           <div className="tw-h-[5px] tw-w-16 tw-rounded-sm tw-bg-[color-mix(in_srgb,var(--text-muted)_40%,transparent)] hover:tw-bg-[color-mix(in_srgb,var(--text-muted)_65%,transparent)]" />
         </div>
@@ -290,81 +288,34 @@ export function QuickAskPanel({
         />
       </div>
 
-      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
-        <div className="tw-flex tw-items-center tw-gap-1">
-          <ModelSelector
-            size="sm"
-            variant="ghost"
-            value={chatPicker.value}
-            models={chatPicker.models}
-            onChange={chatPicker.onChange}
-            disabled={isStreaming}
-          />
-
-          <div className="tw-flex tw-items-center tw-gap-1.5">
-            <Checkbox
-              id="quickAskIncludeContext"
-              checked={includeNoteContext}
-              onCheckedChange={(checked) => handleIncludeNoteContextChange(!!checked)}
-              className="tw-size-3.5"
-              disabled={isStreaming}
-            />
-            <label
-              htmlFor="quickAskIncludeContext"
-              className="tw-cursor-pointer tw-text-xs tw-text-muted"
-            >
-              Note
-            </label>
-            <HelpTooltip content="Include the active note's content as context" side="top" />
-          </div>
-        </div>
-
-        <div className="tw-flex tw-items-center tw-gap-1">
-          {hasMessages && (
-            <Button
-              variant="ghost2"
-              size="icon"
-              className="hover:tw-bg-modifier-hover"
-              onClick={clear}
-              title="Clear conversation"
-            >
-              <MessageSquareX className="tw-size-4" />
-            </Button>
-          )}
-
-          {isStreaming ? (
-            <Button variant="destructive" size="icon" onClick={stop} title="Stop generating">
-              <Square className="tw-size-4" />
-            </Button>
-          ) : (
-            <Button
-              variant="default"
-              size="icon"
-              onClick={safeAsyncHandler(handleSubmit)}
-              disabled={!inputText.trim()}
-              title="Send message"
-            >
-              <Send className="tw-size-4" />
-            </Button>
-          )}
-        </div>
-      </div>
+      <QuickAskFooter
+        models={chatPicker.models}
+        selectedModel={chatPicker.value}
+        onSelectModel={chatPicker.onChange}
+        includeNoteContext={includeNoteContext}
+        onIncludeNoteContextChange={handleIncludeNoteContextChange}
+        isStreaming={isStreaming}
+        canSubmit={!!inputText.trim()}
+        onSubmit={safeAsyncHandler(handleSubmit)}
+        onStop={stop}
+        onClear={hasMessages ? clear : undefined}
+      />
 
       <div
-        className="tw-absolute tw-right-0 tw-top-4 tw-h-[calc(100%-16px)] tw-w-1 tw-cursor-ew-resize"
-        onMouseDown={handleResizeMouseDown("right")}
+        className="tw-absolute tw-right-0 tw-top-4 tw-h-[calc(100%-16px)] tw-w-1 tw-cursor-ew-resize tw-touch-none"
+        onPointerDown={handleResizePointerDown("right")}
       />
       <div
-        className="tw-absolute tw-bottom-0 tw-left-0 tw-h-1 tw-w-full tw-cursor-ns-resize"
-        onMouseDown={handleResizeMouseDown("bottom")}
+        className="tw-absolute tw-bottom-0 tw-left-0 tw-h-1 tw-w-full tw-cursor-ns-resize tw-touch-none"
+        onPointerDown={handleResizePointerDown("bottom")}
       />
       <div
-        className="quick-ask-resize-indicator-left tw-absolute tw-bottom-0 tw-left-0 tw-size-3 tw-cursor-nesw-resize"
-        onMouseDown={handleResizeMouseDown("bottom-left")}
+        className="quick-ask-resize-indicator-left tw-absolute tw-bottom-0 tw-left-0 tw-size-3 tw-cursor-nesw-resize tw-touch-none [@media(pointer:coarse)]:tw-size-5"
+        onPointerDown={handleResizePointerDown("bottom-left")}
       />
       <div
-        className="quick-ask-resize-indicator-right tw-absolute tw-bottom-0 tw-right-0 tw-z-[10] tw-size-3 tw-cursor-nwse-resize"
-        onMouseDown={handleResizeMouseDown("bottom-right")}
+        className="quick-ask-resize-indicator-right tw-absolute tw-bottom-0 tw-right-0 tw-z-[10] tw-size-3 tw-cursor-nwse-resize tw-touch-none [@media(pointer:coarse)]:tw-size-5"
+        onPointerDown={handleResizePointerDown("bottom-right")}
       />
     </div>
   );

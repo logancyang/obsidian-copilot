@@ -128,8 +128,8 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     [writePositionToDom, onPositionChange]
   );
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent): void => {
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent): void => {
       if (e.button !== 0) return;
       e.preventDefault();
 
@@ -152,7 +152,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
 
       body.classList.add("tw-select-none", "tw-cursor-grabbing");
 
-      const handleMouseMove = (event: MouseEvent): void => {
+      const handlePointerMove = (event: PointerEvent): void => {
         pendingPositionRef.current = {
           x: event.clientX - dragOffsetRef.current.x,
           y: event.clientY - dragOffsetRef.current.y,
@@ -163,8 +163,9 @@ export function useDraggable(options: UseDraggableOptions = {}) {
       const cleanup = (commit: boolean): void => {
         if (cleanupDragRef.current !== cleanup) return;
 
-        ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
-        ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
+        ownerDocument.removeEventListener("pointermove", handlePointerMove, true);
+        ownerDocument.removeEventListener("pointerup", handlePointerUp, true);
+        ownerDocument.removeEventListener("pointercancel", handlePointerUp, true);
 
         if (rafIdRef.current != null) {
           ownerWindow.cancelAnimationFrame(rafIdRef.current);
@@ -186,14 +187,15 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         }
       };
 
-      const handleMouseUp = (): void => {
+      const handlePointerUp = (): void => {
         cleanup(true);
       };
 
       cleanupDragRef.current = cleanup;
 
-      ownerDocument.addEventListener("mousemove", handleMouseMove, true);
-      ownerDocument.addEventListener("mouseup", handleMouseUp, true);
+      ownerDocument.addEventListener("pointermove", handlePointerMove, true);
+      ownerDocument.addEventListener("pointerup", handlePointerUp, true);
+      ownerDocument.addEventListener("pointercancel", handlePointerUp, true);
     },
     [applyPosition, dragRef, getPosition, scheduleApply, writePositionToDom]
   );
@@ -214,6 +216,6 @@ export function useDraggable(options: UseDraggableOptions = {}) {
     setPosition,
     isDragging,
     dragRef,
-    handleMouseDown,
+    handlePointerDown,
   };
 }

@@ -116,7 +116,7 @@ export function MenuCommandModal({
       anchorBottom={anchorBottom}
       resizable={resizable}
       minHeight={resizable ? dynamicMinHeight : undefined}
-      width="min(680px, 92vw)"
+      width="min(680px, 92%)"
       closeOnEscapeFromOutside
     >
       <div onKeyDown={handleKeyDown} className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
@@ -152,9 +152,9 @@ export function MenuCommandModal({
           autoFocus
         />
 
-        <div className="tw-flex tw-flex-none tw-items-center tw-justify-between tw-border-t tw-border-border tw-px-4 tw-py-3">
-          <div className="tw-flex tw-items-center tw-gap-3">
-            <div className="tw-flex tw-items-center tw-gap-1">
+        <div className="tw-flex tw-flex-none tw-flex-wrap tw-items-center tw-justify-between tw-gap-x-3 tw-gap-y-2 tw-border-t tw-border-border tw-px-4 tw-py-3 tw-@container/command-footer">
+          <div className="tw-flex tw-min-w-0 tw-flex-[1_0_14rem] tw-items-center tw-gap-3">
+            <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
               <ModelSelector
                 size="sm"
                 variant="ghost"
@@ -172,7 +172,7 @@ export function MenuCommandModal({
               )}
             </div>
             {onIncludeNoteContextChange && (
-              <div className="tw-flex tw-items-center tw-gap-1.5">
+              <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1.5">
                 <Checkbox
                   id="menuCommandIncludeContext"
                   checked={includeNoteContext}
@@ -190,7 +190,7 @@ export function MenuCommandModal({
               </div>
             )}
           </div>
-          <div className="tw-flex tw-items-center tw-gap-2">
+          <div className="tw-ml-auto tw-flex tw-shrink-0 tw-items-center tw-gap-2">
             {hideContentAreaOnIdle && actionState === "idle" && (
               <Button
                 variant="default"

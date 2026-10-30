@@ -37,7 +37,7 @@ export interface UseRafResizableOptions {
 
 export interface UseRafResizableResult {
   isResizing: boolean;
-  handleResizeStart: (direction: ResizeDirection) => (e: React.MouseEvent) => void;
+  handleResizeStart: (direction: ResizeDirection) => (e: React.PointerEvent) => void;
 }
 
 export function useRafResizable(options: UseRafResizableOptions): UseRafResizableResult {
@@ -63,7 +63,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
 
   const handleResizeStart = useCallback(
     (direction: ResizeDirection) =>
-      (e: React.MouseEvent): void => {
+      (e: React.PointerEvent): void => {
         if (!enabled) return;
 
         const rect = getRect();
@@ -135,7 +135,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       });
     };
 
-    const handleMouseMove = (event: MouseEvent): void => {
+    const handlePointerMove = (event: PointerEvent): void => {
       const currentStart = startRef.current;
       if (!currentStart) return;
 
@@ -183,8 +183,9 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       cancelRaf();
       flushPending();
 
-      ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
-      ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
+      ownerDocument.removeEventListener("pointermove", handlePointerMove, true);
+      ownerDocument.removeEventListener("pointerup", handlePointerUp, true);
+      ownerDocument.removeEventListener("pointercancel", handlePointerUp, true);
 
       body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
       body.setCssProps({ "--copilot-resize-cursor": "" });
@@ -193,20 +194,22 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       setIsResizing(false);
     };
 
-    const handleMouseUp = (): void => {
+    const handlePointerUp = (): void => {
       finish();
     };
 
-    ownerDocument.addEventListener("mousemove", handleMouseMove, true);
-    ownerDocument.addEventListener("mouseup", handleMouseUp, true);
+    ownerDocument.addEventListener("pointermove", handlePointerMove, true);
+    ownerDocument.addEventListener("pointerup", handlePointerUp, true);
+    ownerDocument.addEventListener("pointercancel", handlePointerUp, true);
 
     return () => {
       cancelRaf();
       pendingRef.current = null;
       startRef.current = null;
 
-      ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
-      ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
+      ownerDocument.removeEventListener("pointermove", handlePointerMove, true);
+      ownerDocument.removeEventListener("pointerup", handlePointerUp, true);
+      ownerDocument.removeEventListener("pointercancel", handlePointerUp, true);
 
       body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
       body.setCssProps({ "--copilot-resize-cursor": "" });

@@ -27,7 +27,7 @@ export function DraggableModal({
   children,
   className,
   initialPosition,
-  width = "min(500px, 90vw)",
+  width = "min(500px, 90%)",
   resizable = false,
   minHeight = 260,
   closeOnEscapeFromOutside = false,
@@ -37,7 +37,7 @@ export function DraggableModal({
     position,
     setPosition,
     dragRef,
-    handleMouseDown: rawHandleMouseDown,
+    handlePointerDown: rawHandlePointerDown,
     isDragging,
   } = useDraggable({
     initialPosition: initialPosition || {
@@ -50,8 +50,8 @@ export function DraggableModal({
   const isManualPositionRef = useRef(false);
   const pendingDragCleanupRef = useRef<(() => void) | null>(null);
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
       const ownerDoc = (e.currentTarget as HTMLElement).doc;
       const startX = e.clientX;
       const startY = e.clientY;
@@ -59,14 +59,15 @@ export function DraggableModal({
       pendingDragCleanupRef.current?.();
 
       const cleanup = () => {
-        ownerDoc.removeEventListener("mousemove", onMove, true);
-        ownerDoc.removeEventListener("mouseup", onUp, true);
+        ownerDoc.removeEventListener("pointermove", onMove, true);
+        ownerDoc.removeEventListener("pointerup", onUp, true);
+        ownerDoc.removeEventListener("pointercancel", onUp, true);
         if (pendingDragCleanupRef.current === cleanup) {
           pendingDragCleanupRef.current = null;
         }
       };
 
-      const onMove = (ev: MouseEvent) => {
+      const onMove = (ev: PointerEvent) => {
         if (Math.abs(ev.clientX - startX) < 2 && Math.abs(ev.clientY - startY) < 2) return;
         isManualPositionRef.current = true;
         cleanup();
@@ -74,13 +75,14 @@ export function DraggableModal({
 
       const onUp = () => cleanup();
 
-      ownerDoc.addEventListener("mousemove", onMove, true);
-      ownerDoc.addEventListener("mouseup", onUp, true);
+      ownerDoc.addEventListener("pointermove", onMove, true);
+      ownerDoc.addEventListener("pointerup", onUp, true);
+      ownerDoc.addEventListener("pointercancel", onUp, true);
       pendingDragCleanupRef.current = cleanup;
 
-      rawHandleMouseDown(e);
+      rawHandlePointerDown(e);
     },
-    [rawHandleMouseDown]
+    [rawHandlePointerDown]
   );
 
   const [heightPx, setHeightPx] = useState<number | null>(null);
@@ -240,7 +242,7 @@ export function DraggableModal({
         "tw-flex tw-flex-col",
         "tw-border tw-border-solid tw-border-border tw-bg-primary",
         resizable ? "tw-rounded-t-lg tw-shadow-2xl" : "tw-rounded-lg tw-shadow-2xl",
-        "tw-max-h-[85vh]",
+        "tw-max-h-[85%]",
         resizable && "tw-group",
         isDragging && "tw-cursor-grabbing tw-select-none",
         isResizing && "tw-select-none",
@@ -252,7 +254,7 @@ export function DraggableModal({
       }}
     >
       <div className="tw-relative tw-flex-none">
-        <DragHandle onMouseDown={handleMouseDown} />
+        <DragHandle onPointerDown={handlePointerDown} />
         <CloseButton onClose={onClose} />
       </div>
 
@@ -261,16 +263,16 @@ export function DraggableModal({
       {resizable && (
         <>
           <div
-            className="tw-absolute tw-bottom-0 tw-left-0 tw-h-1 tw-w-full tw-cursor-ns-resize"
-            onMouseDown={handleResizeStart("bottom")}
+            className="tw-absolute tw-bottom-0 tw-left-0 tw-h-1 tw-w-full tw-cursor-ns-resize tw-touch-none"
+            onPointerDown={handleResizeStart("bottom")}
           />
           <div
-            className="quick-ask-resize-indicator-left tw-absolute tw-bottom-0 tw-left-0 tw-size-3 tw-cursor-nesw-resize"
-            onMouseDown={handleResizeStart("bottom-left")}
+            className="quick-ask-resize-indicator-left tw-absolute tw-bottom-0 tw-left-0 tw-size-3 tw-cursor-nesw-resize tw-touch-none [@media(pointer:coarse)]:tw-size-5"
+            onPointerDown={handleResizeStart("bottom-left")}
           />
           <div
-            className="quick-ask-resize-indicator-right tw-absolute tw-bottom-0 tw-right-0 tw-z-[10] tw-size-3 tw-cursor-nwse-resize"
-            onMouseDown={handleResizeStart("bottom-right")}
+            className="quick-ask-resize-indicator-right tw-absolute tw-bottom-0 tw-right-0 tw-z-[10] tw-size-3 tw-cursor-nwse-resize tw-touch-none [@media(pointer:coarse)]:tw-size-5"
+            onPointerDown={handleResizeStart("bottom-right")}
           />
         </>
       )}

@@ -1057,6 +1057,10 @@ If your plugin does not need CSS, delete this file.
   .tw-group\/badge .context-badge-close {
     visibility: visible;
   }
+  .quick-ask-resize-indicator-right::after,
+  .quick-ask-resize-indicator-left::after {
+    opacity: 1;
+  }
   .tw-group\/badge .context-badge-icon-removable {
     visibility: hidden;
   }

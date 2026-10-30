@@ -19,7 +19,7 @@ jest.mock("@/settings/model", () => ({
 jest.mock("@/aiParams", () => ({ useModelKey: () => ["legacy-chat"] }));
 jest.mock("@/utils", () => ({ cleanMessageForCopy: (text: string) => text }));
 jest.mock("@/hooks/use-draggable", () => ({
-  useDraggable: () => ({ handleMouseDown: jest.fn() }),
+  useDraggable: () => ({ handlePointerDown: jest.fn() }),
 }));
 jest.mock("@/components/chat-components/useChatModelPicker", () => ({
   useChatModelPicker: ({
