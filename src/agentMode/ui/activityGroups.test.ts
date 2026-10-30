@@ -7,6 +7,7 @@ import {
 import { buildAgentTrail, type RenderNode, type ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import { miyoSearchCall } from "@/miyo/agentMode/testing/miyoSearchCall";
+import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
 
 function tool(id: string, overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   return { kind: "tool_call", id, title: id, status: "completed", ...overrides };
@@ -64,6 +65,21 @@ describe("activityGroups", () => {
         action("d", { vendorToolName: "Read" }),
       ]);
       expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup"]);
+    });
+
+    it("keeps an Excalidraw write or read out of the group so its card stays visible, while the render check stays grouped (https://github.com/Brevilabs/obsidian-copilot-private/issues/787)", () => {
+      const grouped = foldActivityGroups([
+        action("a", { vendorToolName: "Read" }),
+        action("b", { vendorToolName: "Grep" }),
+        {
+          type: "action",
+          part: excalidrawToolCall("excalidraw_write", { path: "a.md", elements: [] }),
+        },
+        { type: "action", part: excalidrawToolCall("excalidraw_render") },
+        action("c", { vendorToolName: "Edit" }),
+        { type: "action", part: excalidrawToolCall("excalidraw_read") },
+      ]);
+      expect(types(grouped)).toEqual(["activityGroup", "action", "activityGroup", "action"]);
     });
 
     it("keeps a call the caller marks standalone out of the group, such as a task's launching call (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {

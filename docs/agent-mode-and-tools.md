@@ -268,6 +268,7 @@ While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and 
 - Ask for a diagram, flowchart or chart, for example "Draw a diagram of the steps in [[Release process]]". The agent draws it in Excalidraw and embeds it in the note it belongs to. Ask for a Mermaid diagram or a canvas to get that instead. Creating a drawing never overwrites an existing file.
 - When the agent edits a drawing, Obsidian opens it in a tab and saves each change.
 - After drawing or editing, the agent looks at a picture of the result and fixes overlaps before it answers.
+- In the chat, a Copilot card marks each drawing the agent draws, edits or reads. Click the drawing's name to open it.
 - Codex asks you to approve each change to a drawing unless the chat is in **Auto**.
 
 ## Applying a settings change

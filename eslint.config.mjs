@@ -517,6 +517,7 @@ export default [
         { type: "skills", pattern: "src/agentMode/skills" },
         { type: "modelmgmt", pattern: "src/modelManagement" },
         { type: "miyoAgent", pattern: "src/miyo/agentMode" },
+        { type: "excalidrawAgent", pattern: "src/excalidraw/agentMode" },
         { type: "host", pattern: "src/**" },
       ],
     },
@@ -541,12 +542,26 @@ export default [
             {
               from: { type: "ui" },
               allow: {
-                to: { type: ["ui", "session", "registry", "skills", "miyoAgent", "host"] },
+                to: {
+                  type: [
+                    "ui",
+                    "session",
+                    "registry",
+                    "skills",
+                    "miyoAgent",
+                    "excalidrawAgent",
+                    "host",
+                  ],
+                },
               },
             },
             {
               from: { type: "miyoAgent" },
               allow: { to: { type: ["miyoAgent", "ui", "session", "host"] } },
+            },
+            {
+              from: { type: "excalidrawAgent" },
+              allow: { to: { type: ["excalidrawAgent", "ui", "session", "host"] } },
             },
             {
               from: { type: "skills" },

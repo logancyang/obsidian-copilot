@@ -1,6 +1,7 @@
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
+import { excalidrawToolRun } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { formatDuration } from "@/lib/duration";
 
 export type ActivityMember =
@@ -60,7 +61,14 @@ export function foldActivityGroups(
       case "action":
         // A grouped Miyo search would be hidden behind "Ran N commands".
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-        if (isInteractive(node.part) || miyoSearchRun(node.part) || isStandalone(node.part)) {
+        // So would the card that shows Copilot's Excalidraw tools made or read a drawing.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+        if (
+          isInteractive(node.part) ||
+          miyoSearchRun(node.part) ||
+          excalidrawToolRun(node.part) ||
+          isStandalone(node.part)
+        ) {
           flush();
           out.push(node);
         } else {
