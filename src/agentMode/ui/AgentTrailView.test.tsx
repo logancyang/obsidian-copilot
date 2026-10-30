@@ -796,6 +796,24 @@ describe("AgentTrail", () => {
       expect(screen.queryByText(/Ran 2 commands/)).toBeNull();
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/793 shows a task a sub-agent launched as its task card inside the sub-agent, not folded into its command group", () => {
+      renderWithTasks([
+        toolCall("task1", {
+          vendorToolName: "Task",
+          input: { subagent_type: "Explore", description: "Look around" },
+        }),
+        { ...READ_A, parentToolCallId: "task1" },
+        { ...BASH_LAUNCH, parentToolCallId: "task1" },
+        { ...LINT, parentToolCallId: "task1" },
+        text("Started."),
+      ]);
+
+      fireEvent.click(screen.getByText('Explore · "Look around"'));
+
+      expect(screen.getByText("Print 30 progress lines")).toBeTruthy();
+      expect(screen.queryByText(/Ran \d commands/)).toBeNull();
+    });
+
     it("renders a launching call that has no task as before", () => {
       renderWithTasks([AGENT_LAUNCH, text("Started.")], []);
 
