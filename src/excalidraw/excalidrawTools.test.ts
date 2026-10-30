@@ -84,6 +84,17 @@ describe("excalidrawTools", () => {
       );
       expect(EXCALIDRAW_RENDER_TOOL.description).toContain("look at it before you answer");
     });
+
+    it(`${ISSUE_787} titles frames with name at creation, since Excalidraw rejects a frame label and this tool can't rename a frame`, () => {
+      const element = EXCALIDRAW_WRITE_TOOL.inputSchema.properties.elements.items.properties;
+      expect(element.name.description).toBe(
+        "A frame's title; frames take name, never label. This tool can't rename a frame later."
+      );
+      expect(element.label.description).not.toContain("frame");
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
+        "This tool can't rename a frame, so name it when you create it."
+      );
+    });
   });
 
   describe("createExcalidrawTools()", () => {
@@ -518,6 +529,69 @@ describe("excalidrawTools", () => {
       });
       expect(api.execute).not.toHaveBeenCalled();
       expect(api.connectLabelled).not.toHaveBeenCalled();
+    });
+
+    it(`${ISSUE_787} refuses an arrow bound to a stickynote in a new drawing or an add, without touching the plugin`, async () => {
+      const api = fakeApi();
+      const elements = [
+        { id: "n1", type: "stickynote", x: 0, y: 0, width: 200, height: 200 },
+        { id: "r1", type: "rectangle", x: 300, y: 0, width: 200, height: 200 },
+        { id: "a1", type: "arrow", x: 200, y: 100, start: { id: "r1" }, end: { id: "n1" } },
+      ];
+      const refused = {
+        text: "No change made: arrows can't attach to a stickynote. Use a rectangle for any note an arrow starts or ends at.",
+        isError: true,
+      };
+
+      expect(await toolsFor(api).write.call({ path: FLOW, elements })).toEqual(refused);
+      expect(
+        await toolsFor(api).write.call({ path: FLOW, operations: [{ op: "add", elements }] })
+      ).toEqual(refused);
+      expect(api.execute).not.toHaveBeenCalled();
+    });
+
+    it(`${ISSUE_787} creates a stickynote that no arrow is bound to`, async () => {
+      const api = fakeApi();
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        elements: [
+          { id: "n1", type: "stickynote", x: 0, y: 0, width: 200, height: 200 },
+          {
+            id: "a1",
+            type: "arrow",
+            x: 300,
+            y: 0,
+            points: [
+              [0, 0],
+              [80, 0],
+            ],
+          },
+        ],
+      });
+
+      expect(result.isError).toBe(false);
+      expect(api.execute).toHaveBeenCalledWith(expect.objectContaining({ command: "create" }));
+    });
+
+    it(`${ISSUE_787} connects a styled arrow to a shape added in the same call by the real id the plugin gave it`, async () => {
+      const api = fakeApi();
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        operations: [
+          { op: "add", elements: [{ id: "a", type: "rectangle" }] },
+          { op: "connect", from: "box1", to: "a", label: "Yes" },
+        ],
+      });
+
+      expect(api.connectLabelled).toHaveBeenCalledWith(FLOW, {
+        op: "connect",
+        from: "box1",
+        to: "Xy12Ab34",
+        label: "Yes",
+      });
+      expect(result.isError).toBe(false);
     });
 
     it("reports a rejected apply as no change, with the plugin's reason", async () => {
