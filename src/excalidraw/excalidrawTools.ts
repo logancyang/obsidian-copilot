@@ -88,7 +88,8 @@ const ELEMENT = {
     },
     name: {
       type: "string",
-      description: "A frame's title; frames take name, never label, and can't be renamed later.",
+      description:
+        "A frame's title; frames take name, never label. This tool can't rename a frame later.",
     },
     children: { type: "array", items: { type: "string" }, description: "Ids a frame holds." },
   },
@@ -136,13 +137,13 @@ export const EXCALIDRAW_WRITE_TOOL = Object.freeze({
   description: `Create or change an Obsidian Excalidraw drawing: pass elements for a new drawing, or operations for an existing one.
 
 New drawing (elements): Create a new Obsidian Excalidraw drawing. The Excalidraw plugin writes the file, binds each label to its shape and each arrow to both ends. Never write or patch Excalidraw files yourself: a hand-written file garbles labels and detaches arrows. It never overwrites an existing path.
-Give each shape a local id, type, x, y, width, height and label {text}; text inside a shape goes in label, never in a separate text element on top. Connect shapes with arrows whose start {id} and end {id} name shapes in this call; put the arrow's x,y on the source's edge and its last point on the target's edge, with bend points to route around other shapes. Use an arrow with endArrowhead null for a plain connector, never a line. Later elements are drawn on top: put a group's background rectangle before its members and a sticker after the shape it marks. Don't put connected shapes in a frame: frames clip arrows that leave them.
+Give each shape a local id, type, x, y, width, height and label {text}; text inside a shape goes in label, never in a separate text element on top. Connect shapes with arrows whose start {id} and end {id} name shapes in this call; put the arrow's x,y on the source's edge and its last point on the target's edge, with bend points to route around other shapes. Arrows can't attach to a stickynote: use a rectangle for a note an arrow starts or ends at. Use an arrow with endArrowhead null for a plain connector, never a line. Later elements are drawn on top: put a group's background rectangle before its members and a sticker after the shape it marks. Don't put connected shapes in a frame: frames clip arrows that leave them.
 Layout: one flow direction, 60-100 px gaps, and boxes wide enough for their label (about 11 px per character at font size 20). The reply maps your ids to the real ones.
 Groups: groups [[ids..], ..] makes each list one group.
 Icons: icons [{id, icon, x, y, size}] places Lucide icons as editable shapes, each in its own group. An unknown icon name rejects the whole call.
 
 Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
-- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, restyles (the element style fields except roundness), links (link) or rewrites text. To change a label's text or font, update the label's own text id with {"text": ..} or {"fontFamily": ..}. A frame's name can't change after it is created. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
+- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, restyles (the element style fields except roundness), links (link) or rewrites text. To change a label's text or font, update the label's own text id with {"text": ..} or {"fontFamily": ..}. This tool can't rename a frame, so name it when you create it. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
 - {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation; connect existing shapes with connect.
 - {"op":"group","ids":[..]} puts existing elements, or ones added earlier in the same call, in one new group.
@@ -355,6 +356,7 @@ async function create(
 ): Promise<ExcalidrawToolResult> {
   if (!Array.isArray(input.elements) || !input.elements.length)
     return failure("elements must be a non-empty array.");
+  if (bindsArrowToStickyNote(input.elements)) return failure(STICKY_NOTE_ARROW);
   const reply = await api.execute({
     apiVersion: 1,
     command: "create",
@@ -399,6 +401,8 @@ async function edit(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
   if (operations.some((op) => op.op === "connect" && op.via !== undefined && !isRoute(op.via)))
     return failure("No change made: via must be a list of [x, y] points, such as [[540, 40]].");
+  if (operations.some((op) => op.op === "add" && bindsArrowToStickyNote(op.elements)))
+    return failure(STICKY_NOTE_ARROW);
   const opened = await api.execute({ apiVersion: 1, command: "open", path });
   if (!opened.ok) return failure(`Could not open ${path}: ${describeFailure(opened)}`);
 
@@ -416,6 +420,7 @@ async function edit(
   );
   const plain = operations.filter((op) => !styled.includes(op));
   const done: string[] = [];
+  let idMap: Record<string, string> = {};
   if (plain.length) {
     const live = await api.execute({ apiVersion: 1, command: "read", path, source: "live" });
     if (!live.ok) return failure(`Could not read ${path}: ${describeFailure(live)}`);
@@ -428,6 +433,7 @@ async function edit(
       operations: plain,
     });
     if (!applied.ok) return failure(`No change made to ${path}: ${describeFailure(applied)}`);
+    idMap = (applied.data?.idMap ?? {}) as Record<string, string>;
     done.push(
       `Applied ${plain.length} operation${plain.length === 1 ? "" : "s"}.${describeIds(applied)}${describeWarnings(applied)}`
     );
@@ -435,7 +441,13 @@ async function edit(
   for (const op of styled) {
     const connection = op as unknown as LabelledConnection;
     try {
-      const { arrowId, labelId } = await api.connectLabelled(path, connection);
+      // A styled connection runs after apply, so it names shapes added in the same call by their real ids.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+      const { arrowId, labelId } = await api.connectLabelled(path, {
+        ...connection,
+        from: idMap[connection.from] ?? connection.from,
+        to: idMap[connection.to] ?? connection.to,
+      });
       done.push(
         `Connected ${connection.from} -> ${connection.to} with arrow ${arrowId}${labelId ? ` (label ${labelId})` : ""}.`
       );
@@ -449,6 +461,28 @@ async function edit(
     }
   }
   return { text: `Edited ${path}. ${done.join(" ")}`, isError: false };
+}
+
+// Excalidraw 2.29 fails the whole request with a generic "Request could not be completed" when an arrow binds to a
+// stickynote, so the agent would resend a large drawing without knowing why.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+const STICKY_NOTE_ARROW =
+  "No change made: arrows can't attach to a stickynote. Use a rectangle for any note an arrow starts or ends at.";
+
+interface SkeletonEnds {
+  type?: unknown;
+  id?: unknown;
+  start?: { id?: unknown };
+  end?: { id?: unknown };
+}
+
+function bindsArrowToStickyNote(elements: unknown): boolean {
+  if (!Array.isArray(elements)) return false;
+  const shapes = elements as Array<SkeletonEnds | null>;
+  const notes = new Set(shapes.filter((e) => e?.type === "stickynote" && e.id).map((e) => e?.id));
+  return shapes.some(
+    (e) => e?.type === "arrow" && (notes.has(e.start?.id) || notes.has(e.end?.id))
+  );
 }
 
 function isRoute(via: unknown): boolean {
