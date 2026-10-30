@@ -1,6 +1,6 @@
 # Release Notes
 
-# v4.0.17 - Excalidraw drawings in Agent Chat, a Stop that keeps subagents working, and Miyo search controls
+# v4.0.17 - Excalidraw integration, Miyo search control
 
 Ask Claude Code, Codex, or OpenCode to draw, change, or explain an Excalidraw drawing. With the Excalidraw plugin enabled, Copilot has Excalidraw build every drawing, so labels stay in their boxes and arrows stay attached when you move things around. Ask for a diagram of a note, and the drawing appears inside that note.
 
