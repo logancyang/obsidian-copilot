@@ -84,6 +84,17 @@ describe("excalidrawTools", () => {
       );
       expect(EXCALIDRAW_RENDER_TOOL.description).toContain("look at it before you answer");
     });
+
+    it(`${ISSUE_787} titles frames with name at creation, since Excalidraw rejects a frame label and can't rename a frame`, () => {
+      const element = EXCALIDRAW_WRITE_TOOL.inputSchema.properties.elements.items.properties;
+      expect(element.name.description).toBe(
+        "A frame's title; frames take name, never label, and can't be renamed later."
+      );
+      expect(element.label.description).not.toContain("frame");
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
+        "A frame's name can't change after it is created."
+      );
+    });
   });
 
   describe("createExcalidrawTools()", () => {

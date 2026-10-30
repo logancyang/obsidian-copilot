@@ -72,7 +72,7 @@ const ELEMENT = {
         fontSize: { type: "number" },
         verticalAlign: { enum: ["top", "middle", "bottom"] },
       },
-      description: "Text inside a shape or on an arrow.",
+      description: "Text inside a rectangle, ellipse, diamond or stickynote, or on an arrow.",
     },
     text: { type: "string", description: "Only for free-standing text elements." },
     fontFamily: FONT,
@@ -85,6 +85,10 @@ const ELEMENT = {
       type: ["object", "null"],
       properties: { type: { enum: [2, 3] } },
       description: "Rounded corners: {type: 3} for rectangles, {type: 2} for other shapes.",
+    },
+    name: {
+      type: "string",
+      description: "A frame's title; frames take name, never label, and can't be renamed later.",
     },
     children: { type: "array", items: { type: "string" }, description: "Ids a frame holds." },
   },
@@ -138,7 +142,7 @@ Groups: groups [[ids..], ..] makes each list one group.
 Icons: icons [{id, icon, x, y, size}] places Lucide icons as editable shapes, each in its own group. An unknown icon name rejects the whole call.
 
 Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; Obsidian opens it if it isn't open. Get ids from excalidraw_read. The operations apply together:
-- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, restyles (the element style fields except roundness), links (link) or renames. To rename or change a label's font, update the label's own text id with {"text": ..} or {"fontFamily": ..}. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
+- {"op":"update","id":..,"set":{..}} moves (x, y), resizes, restyles (the element style fields except roundness), links (link) or rewrites text. To change a label's text or font, update the label's own text id with {"text": ..} or {"fontFamily": ..}. A frame's name can't change after it is created. An arrow's points can't be updated: to reroute it, delete it and connect again with via.
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
 - {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation; connect existing shapes with connect.
 - {"op":"group","ids":[..]} puts existing elements, or ones added earlier in the same call, in one new group.
