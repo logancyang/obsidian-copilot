@@ -2,6 +2,8 @@
 
 Context is the material Copilot gives an AI with your request. Choose the shortest lifetime that fits the job:
 
+Clicking a PDF page citation in a chat opens the target page at its top while keeping your current zoom. Citations to selected text, annotations, or an explicit position keep their original destination.
+
 | Context type                     | How long it lasts                                 |
 | -------------------------------- | ------------------------------------------------- |
 | Agent Chat attachment or mention | The next message                                  |
