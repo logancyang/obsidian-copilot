@@ -375,14 +375,14 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
     });
 
-    it("shows only Pin chat and More actions when hovering a saved chat whose session is closed", () => {
+    it("shows only Pin chat, Open chat note, and More actions when hovering a saved chat whose session is closed", () => {
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
       const actions = within(rowFor("Saved chat"))
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Pin chat", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Open chat note", "More actions"]);
     });
 
     it("leads the hover actions with Close chat when the chat's session is open", () => {
@@ -396,7 +396,7 @@ describe("GlobalRecentChatsSection", () => {
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Pin chat", "Close chat", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Close chat", "Open chat note", "More actions"]);
     });
 
     it("pins an unpinned chat from its Pin chat action without opening it", async () => {
@@ -712,6 +712,9 @@ describe("GlobalRecentChatsSection", () => {
       const menu = openMenuFromButton("Native chat");
 
       expect(menuEntries(menu)).not.toContain("Open chat note");
+      expect(
+        within(rowFor("Native chat")).queryByRole("button", { name: "Open chat note" })
+      ).toBeNull();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/699 offers Copy chat link for a chat with no saved note and copies it by that chat's id", () => {

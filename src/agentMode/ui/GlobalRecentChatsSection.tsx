@@ -283,7 +283,7 @@ const RecentChatRow = memo(function RecentChatRow({
   isSessionOpen,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
-  const { onCloseSession, onSetChatPinned } = actions;
+  const { onOpenSourceFile, onCloseSession, onSetChatPinned } = actions;
   const Icon = resolveChatIcon(item) ?? MessageCircle;
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
@@ -355,6 +355,11 @@ const RecentChatRow = memo(function RecentChatRow({
               onClick={() => safeAsyncHandler(onCloseSession)(item.id)}
             >
               <Power className="tw-size-3" />
+            </RowActionButton>
+          )}
+          {isNoteBacked && (
+            <RowActionButton label="Open chat note" onClick={() => onOpenSourceFile(item.id)}>
+              <FileText className="tw-size-3.5" />
             </RowActionButton>
           )}
           <RecentChatMenu
