@@ -408,7 +408,13 @@ export class ProjectFileManager {
       removePendingFileWrite(filePath);
     }
 
-    upsertCachedProjectRecord({ ...record, project: { ...record.project, archivedAt } });
+    const freshRecord = getCachedProjectRecordById(normalizedId);
+    if (freshRecord) {
+      upsertCachedProjectRecord({
+        ...freshRecord,
+        project: { ...freshRecord.project, archivedAt },
+      });
+    }
   }
 
   public async touchProjectLastUsed(projectId: string): Promise<void> {

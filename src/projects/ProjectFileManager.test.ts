@@ -204,6 +204,30 @@ describe("ProjectFileManager", () => {
       expect(getCachedProjectRecords()[0].project.archivedAt).toBeUndefined();
     });
 
+    it("keeps a last-used timestamp cached while the archive write was in flight", async () => {
+      const { app } = seedArchivable();
+      (app.fileManager.processFrontMatter as jest.Mock).mockImplementationOnce(async () => {
+        const [{ project, ...rest }] = getCachedProjectRecords();
+        upsertCachedProjectRecord({ ...rest, project: { ...project, UsageTimestamps: 9_000 } });
+      });
+
+      await ProjectFileManager.getInstance(app).setProjectArchived("p1", true);
+
+      expect(getCachedProjectRecords()[0].project).toMatchObject({ UsageTimestamps: 9_000 });
+      expect(getCachedProjectRecords()[0].project.archivedAt).toBeDefined();
+    });
+
+    it("does not re-add a project deleted while the archive write was in flight", async () => {
+      const { app } = seedArchivable();
+      (app.fileManager.processFrontMatter as jest.Mock).mockImplementationOnce(async () => {
+        updateCachedProjectRecords([]);
+      });
+
+      await ProjectFileManager.getInstance(app).setProjectArchived("p1", true);
+
+      expect(getCachedProjectRecords()).toEqual([]);
+    });
+
     it("rejects a project that is not in the cache", async () => {
       const { app } = makeTestVault();
 
