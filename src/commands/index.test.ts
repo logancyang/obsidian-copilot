@@ -71,6 +71,34 @@ describe("commands", () => {
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
     });
 
+    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const register = (): { commands: Command[]; plugin: CopilotPlugin } => {
+        const commands: Command[] = [];
+        const plugin = {
+          addCommand: jest.fn((command: Command) => commands.push(command)),
+          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
+          app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        } as unknown as CopilotPlugin;
+        registerCommands(plugin, jest.fn());
+        return { commands, plugin };
+      };
+      const find = (commands: Command[]) =>
+        commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+
+      jest.mocked(isDesktopRuntime).mockReturnValue(false);
+      expect(find(register().commands)).toBeUndefined();
+
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      const { commands, plugin } = register();
+      const command = find(commands);
+      expect(command).toMatchObject({
+        name: "Open Copilot Agent sessions sidebar",
+        icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
+      });
+      command?.callback?.();
+      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+    });
+
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
       const activeFile = markdownFile("Notes/Active.md");
       const commands: Command[] = [];
