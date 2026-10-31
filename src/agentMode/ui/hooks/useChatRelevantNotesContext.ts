@@ -1,6 +1,7 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
-import { useSelectedTextContexts, type ProjectConfig } from "@/aiParams";
+import { type ProjectConfig } from "@/aiParams";
+import { useSelectedTextContexts } from "@/selection/selectionStore";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { getMiyoFilePath, getMiyoFolderName } from "@/miyo/miyoUtils";
@@ -22,7 +23,7 @@ export function useChatRelevantNotesContext(
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
-  const [selections] = useSelectedTextContexts();
+  const selections = useSelectedTextContexts();
   // New chats include the web tab by default, which is not an attachment until a page is open.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
   const { activeWebTabForMentions } = useActiveWebTabState();

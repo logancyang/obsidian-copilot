@@ -11,8 +11,8 @@ import {
 } from "@/utils/chatDeepLink";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
-import { setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
-import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
+import { clearSelection, reportSelection, subscribeSelection } from "@/selection/selectionStore";
+import { watchSelections, webSelectionReport } from "@/selection/selectionWatcher";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
@@ -110,9 +110,7 @@ import {
 import {
   addIcon,
   Editor,
-  editorInfoField,
   FileSystemAdapter,
-  MarkdownFileInfo,
   MarkdownView,
   Menu,
   Notice,
@@ -139,10 +137,8 @@ import {
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { listMarkdownFiles, readFrontmatterViaAdapter, trashFile } from "@/utils/vaultAdapterUtils";
-import { v4 as uuidv4 } from "uuid";
 import { withTimeout } from "@/utils";
 import { StartupLoadingView, type CopilotStartup } from "@/components/StartupLoadingView";
-import { EditorView } from "@codemirror/view";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import {
@@ -181,8 +177,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
   private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
-  private selectionDebounceTimer?: number;
-  private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
@@ -425,6 +419,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       closeQuickAskOnChatFocus: false,
     });
     this.chatSelectionHighlightController.initialize();
+    this.register(
+      subscribeSelection((contexts) =>
+        this.chatSelectionHighlightController.clearIfNoNoteContexts(contexts)
+      )
+    );
 
     if (isDesktopRuntime()) {
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
@@ -704,9 +703,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       }
     }
 
-    window.clearTimeout(this.selectionDebounceTimer);
     this.cleanupWebSelectionWatcher();
-    this.clearSelectionContext();
+    clearSelection();
 
     try {
       const webViewerService = getWebViewerService(this.app);
@@ -809,133 +807,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   }
 
   initSelectionHandler() {
-    this.registerEditorExtension(
-      EditorView.updateListener.of((update) => {
-        if (!update.selectionSet || !update.view.hasFocus) return;
-
-        // The originating editor identifies its note even in a popout, where
-        // the active leaf may differ. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
-        const info = update.state.field(editorInfoField, false);
-        if (info) this.scheduleSelectionUpdate(() => this.handleSelectionChange(info));
-      })
-    );
-
-    const watchDocument = (doc: Document) =>
-      this.registerDomEvent(doc, "selectionchange", () => this.handleReadingSelectionChange(doc));
-    watchDocument(activeDocument);
-    this.registerEvent(this.app.workspace.on("window-open", (win) => watchDocument(win.doc)));
-  }
-
-  private scheduleSelectionUpdate(update: () => void): void {
-    window.clearTimeout(this.selectionDebounceTimer);
-    this.selectionDebounceTimer = window.setTimeout(update, 500);
-  }
-
-  private handleReadingSelectionChange(doc: Document): void {
-    const selection = doc.getSelection();
-    const anchor = selection?.anchorNode;
-    const focus = selection?.focusNode;
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const file = view?.file;
-    if (!anchor || !focus || !file || view.getMode() !== "preview") return;
-
-    // Only rendered text inside the note is a note selection; a later chat
-    // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
-    const readingEl = view.previewMode.containerEl;
-    if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return;
-
-    const selectedText = selection.toString();
-    this.scheduleSelectionUpdate(() => {
-      const signature = `preview:${file.path}:${selectedText}`;
-      if (signature === this.lastSelectionSignature) return;
-      this.lastSelectionSignature = signature;
-
-      if (!selectedText.trim()) {
-        this.clearNoteSelectionContexts();
-        return;
-      }
-
-      // Rendered Markdown does not expose reliable source line numbers for every selection.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/597
-      this.setSelectionContext({
-        id: uuidv4(),
-        content: selectedText,
-        sourceType: "note",
-        noteTitle: file.basename,
-        notePath: file.path,
-        startLine: 0,
-        endLine: 0,
-      });
-    });
-  }
-
-  private clearNoteSelectionContexts(): void {
-    const currentContexts = getSelectedTextContexts();
-    const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
-    if (currentContexts.length !== nonNoteContexts.length) {
-      setSelectedTextContexts(nonNoteContexts);
-    }
-  }
-
-  private clearSelectionContext() {
-    setSelectedTextContexts([]);
-  }
-
-  private clearWebSelectionContextForUrl(url: string): void {
-    const current = getSelectedTextContexts();
-    const next = current.filter((c) => c.sourceType !== "web" || c.url !== url);
-    if (next.length === current.length) {
-      return;
-    }
-    setSelectedTextContexts(next);
-  }
-
-  private setSelectionContext(context: SelectedTextContext) {
-    setSelectedTextContexts([context]);
-  }
-
-  handleSelectionChange({ editor, file }: MarkdownFileInfo) {
-    const selectionRange = editor?.listSelections()[0];
-    if (!editor || !selectionRange) {
-      return;
-    }
-
-    const signature = file
-      ? `${file.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
-      : "";
-
-    if (signature === this.lastSelectionSignature) {
-      return;
-    }
-    this.lastSelectionSignature = signature;
-
-    const selectedText = editor.getSelection();
-
-    if (!selectedText || !selectedText.trim()) {
-      this.clearNoteSelectionContexts();
-      return;
-    }
-
-    if (!file) {
-      return;
-    }
-
-    const anchorLine = selectionRange.anchor.line + 1;
-    const headLine = selectionRange.head.line + 1;
-    const startLine = Math.min(anchorLine, headLine);
-    const endLine = Math.max(anchorLine, headLine);
-
-    const selectedTextContext: NoteSelectedTextContext = {
-      id: uuidv4(),
-      content: selectedText,
-      sourceType: "note",
-      noteTitle: file.basename,
-      notePath: file.path,
-      startLine,
-      endLine,
-    };
-
-    this.setSelectionContext(selectedTextContext);
+    watchSelections(this);
   }
 
   initWebSelectionWatcher() {
@@ -952,10 +824,10 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
       getActiveLeaf: () => webViewerService.getActiveLeaf(),
       onSelectionChange: (context) => {
-        this.setSelectionContext(context);
+        reportSelection(webSelectionReport(context));
       },
       onSelectionClear: ({ url }) => {
-        this.clearWebSelectionContextForUrl(url);
+        reportSelection({ location: url, context: null });
       },
     });
 
@@ -965,15 +837,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   cleanupWebSelectionWatcher() {
     this.webSelectionTracker?.stop();
     this.webSelectionTracker = undefined;
-  }
-
-  suppressCurrentWebSelection(url?: string): void {
-    if (url && url.trim()) {
-      this.webSelectionTracker?.suppressSelectionForUrl(url);
-      return;
-    }
-
-    this.webSelectionTracker?.suppressCurrentSelection();
   }
 
   private getCurrentEditorOrDummy(): Editor {

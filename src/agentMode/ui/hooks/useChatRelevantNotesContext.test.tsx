@@ -12,8 +12,8 @@ jest.mock("obsidian", () => ({
   MarkdownView: class MarkdownView {},
 }));
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hooks; names must match the exports */
-jest.mock("@/aiParams", () => ({
-  useSelectedTextContexts: () => [[{ content: "literal excerpt", notePath: "excerpt.md" }]],
+jest.mock("@/selection/selectionStore", () => ({
+  useSelectedTextContexts: () => [{ content: "literal excerpt", notePath: "excerpt.md" }],
 }));
 let mockActiveWebTab: { url: string; title: string } | null = null;
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({

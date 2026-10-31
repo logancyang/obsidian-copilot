@@ -26,13 +26,14 @@ import { requestMiyoIndexRefresh } from "@/miyo/miyoIndex";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
-import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
+import { WebSelectedTextContext } from "@/types/message";
 import { isSourceModeOn } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
-import { setSelectedTextContexts } from "@/aiParams";
+import { attachSelection } from "@/selection/selectionStore";
+import { editorSelectionReport, webSelectionReport } from "@/selection/selectionWatcher";
 
 type PublishFile = (file: TFile) => void;
 
@@ -268,38 +269,19 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   });
 
   addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
-    const selectedText = editor.getSelection();
-    if (!selectedText) {
-      new Notice("No text selected");
-      return;
-    }
-
-    const activeFile = plugin.app.workspace.getActiveFile();
-    if (!activeFile) {
+    const file = plugin.app.workspace.getActiveFile();
+    if (!file) {
       new Notice("No active file");
       return;
     }
 
-    const selectionRange = editor.listSelections()[0];
-    if (!selectionRange) {
-      new Notice("Could not determine selection range");
+    const report = editorSelectionReport({ editor, file });
+    if (!report?.context) {
+      new Notice("No text selected");
       return;
     }
 
-    const startLine = selectionRange.anchor.line + 1;
-    const endLine = selectionRange.head.line + 1;
-
-    const selectedTextContext: NoteSelectedTextContext = {
-      id: uuidv4(),
-      content: selectedText,
-      sourceType: "note",
-      noteTitle: activeFile.basename,
-      notePath: activeFile.path,
-      startLine: Math.min(startLine, endLine),
-      endLine: Math.max(startLine, endLine),
-    };
-
-    setSelectedTextContexts([selectedTextContext]);
+    attachSelection(report);
 
     await plugin.activateChatViewForContext();
   });
@@ -339,7 +321,7 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         faviconUrl: pageInfo.faviconUrl || undefined,
       };
 
-      setSelectedTextContexts([webSelectedTextContext]);
+      attachSelection(webSelectionReport(webSelectedTextContext));
 
       await plugin.activateChatViewForContext();
     } catch (error) {

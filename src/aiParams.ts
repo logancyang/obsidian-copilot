@@ -2,7 +2,6 @@ import { ChainType } from "@/chainType";
 
 import { ModelCapability, ReasoningEffort } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
-import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
 
 const userModelKeyAtom = atom<string | null>(null);
@@ -29,8 +28,6 @@ const chainTypeAtom = atom(
     set(userChainTypeAtom, newValue);
   }
 );
-
-const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {
   id: string;
@@ -124,30 +121,6 @@ export function subscribeToChainTypeChange(callback: () => void): () => void {
 
 export function useChainType() {
   return useAtom(chainTypeAtom, {
-    store: settingsStore,
-  });
-}
-
-export function setSelectedTextContexts(contexts: SelectedTextContext[]) {
-  settingsStore.set(selectedTextContextsAtom, contexts);
-}
-
-export function getSelectedTextContexts(): SelectedTextContext[] {
-  return settingsStore.get(selectedTextContextsAtom);
-}
-
-export function removeSelectedTextContext(id: string) {
-  const current = getSelectedTextContexts();
-  setSelectedTextContexts(current.filter((context) => context.id !== id));
-}
-
-export function clearSelectedTextContexts() {
-  if (getSelectedTextContexts().length === 0) return;
-  setSelectedTextContexts([]);
-}
-
-export function useSelectedTextContexts() {
-  return useAtom(selectedTextContextsAtom, {
     store: settingsStore,
   });
 }

@@ -43,7 +43,6 @@ export class WebSelectionTracker {
   private timeoutId: number | null = null;
   private isRunning = false;
   private leafState = new WeakMap<WebViewerLeaf, LeafSelectionTrackingState>();
-  private suppressedSelectionsByUrl = new Map<string, string | null>();
 
   constructor(options: WebSelectionTrackingOptions) {
     this.intervalMs = options.intervalMs ?? 500;
@@ -74,7 +73,6 @@ export class WebSelectionTracker {
       this.timeoutId = null;
     }
     this.leafState = new WeakMap<WebViewerLeaf, LeafSelectionTrackingState>();
-    this.suppressedSelectionsByUrl = new Map<string, string | null>();
   }
 
   private scheduleNext(): void {
@@ -119,10 +117,6 @@ export class WebSelectionTracker {
 
       state.consecutiveEmptyChecks = 0;
 
-      if (this.shouldSuppressSelectionForUrl(url, selectedText)) {
-        return;
-      }
-
       if (
         state.lastSelection &&
         state.lastSelection.url === url &&
@@ -133,10 +127,6 @@ export class WebSelectionTracker {
 
       const selectedMarkdown = await actions.getSelectedMarkdown(leaf);
       if (!selectedMarkdown.trim()) {
-        return;
-      }
-
-      if (this.shouldSuppressSelectionForUrl(url, selectedText)) {
         return;
       }
 
@@ -207,7 +197,6 @@ export class WebSelectionTracker {
 
     state.lastSelection = null;
     state.consecutiveEmptyChecks = 0;
-    this.clearSuppressionForUrl(urlToClear);
 
     this.onSelectionClear({ url: urlToClear, reason: "selection-cleared" });
   }
@@ -234,49 +223,7 @@ export class WebSelectionTracker {
     state.lastSelection = null;
     state.consecutiveEmptyChecks = 0;
     state.consecutiveInvalidUrlChecks = 0;
-    this.clearSuppressionForUrl(urlToClear);
 
     this.onSelectionClear({ url: urlToClear, reason: "invalid-url" });
-  }
-
-  private clearSuppressionForUrl(url: string): void {
-    this.suppressedSelectionsByUrl.delete(url.trim());
-  }
-
-  private shouldSuppressSelectionForUrl(url: string, selectedText: string): boolean {
-    const urlKey = url.trim();
-    const suppressedText = this.suppressedSelectionsByUrl.get(urlKey);
-    if (suppressedText === undefined) {
-      return false;
-    }
-
-    if (suppressedText === null) {
-      this.suppressedSelectionsByUrl.set(urlKey, selectedText);
-      return true;
-    }
-
-    if (suppressedText === selectedText) {
-      return true;
-    }
-
-    this.suppressedSelectionsByUrl.delete(urlKey);
-    return false;
-  }
-
-  suppressSelectionForUrl(url: string): void {
-    const trimmed = url.trim();
-    if (!this.isValidUrl(trimmed)) {
-      return;
-    }
-
-    this.suppressedSelectionsByUrl.set(trimmed, null);
-  }
-
-  suppressCurrentSelection(): void {
-    const leaf = this.getLeaf();
-    if (!leaf) return;
-
-    const pageInfo = actions.getPageInfo(leaf);
-    this.suppressSelectionForUrl(pageInfo.url);
   }
 }

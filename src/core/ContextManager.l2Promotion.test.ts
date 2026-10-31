@@ -1,6 +1,6 @@
 import { PromptContextEnvelope, PromptLayerSegment } from "@/context/PromptContextTypes";
 
-jest.mock("@/aiParams", () => ({
+jest.mock("@/selection/selectionStore", () => ({
   getSelectedTextContexts: jest.fn().mockReturnValue([]),
 }));
 

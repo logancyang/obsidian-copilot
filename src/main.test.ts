@@ -78,7 +78,7 @@ import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import * as obsidianModule from "obsidian";
 import CopilotView from "@/components/CopilotView";
-import { getSelectedTextContexts, setSelectedTextContexts } from "@/aiParams";
+import { getSelectedTextContexts } from "@/selection/selectionStore";
 import { DEFAULT_SETTINGS } from "@/constants";
 import {
   APPLY_VIEW_TYPE,
@@ -91,9 +91,6 @@ import {
 import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
-import { EditorView } from "@codemirror/view";
-import type { Extension, StateField } from "@codemirror/state";
-import { editorInfoField, type MarkdownFileInfo } from "obsidian";
 
 const mockStartSelectionTracker = jest.fn();
 const mockSelectionTrackerOptions = jest.fn();
@@ -239,151 +236,6 @@ describe("main", () => {
       });
     });
 
-    describe("initSelectionHandler()", () => {
-      beforeEach(() => {
-        jest.useFakeTimers();
-        setSelectedTextContexts([]);
-      });
-      afterEach(() => {
-        jest.useRealTimers();
-        setSelectedTextContexts([]);
-      });
-
-      it("attaches Reading view text after the debounce even when chat takes the selection first, then clears it in the note (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-        const preview = document.createElement("div");
-        preview.textContent = "Excerpt from the note";
-        const chat = document.createElement("div");
-        chat.textContent = "Chat input";
-        document.body.append(preview, chat);
-        const noteView = {
-          file: { path: "Research.md", basename: "Research" },
-          getMode: () => "preview",
-          previewMode: { containerEl: preview },
-        };
-        const cleanups: Array<() => void> = [];
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, {
-          registerEditorExtension: jest.fn(),
-          registerDomEvent: (doc: Document, event: string, handler: EventListener) => {
-            doc.addEventListener(event, handler);
-            cleanups.push(() => doc.removeEventListener(event, handler));
-          },
-          registerEvent: jest.fn(),
-          app: { workspace: { getActiveViewOfType: () => noteView, on: jest.fn() } },
-        });
-        const select = (node: Node, end: number) => {
-          const range = document.createRange();
-          range.setStart(node, 0);
-          range.setEnd(node, end);
-          const selection = document.getSelection()!;
-          selection.removeAllRanges();
-          selection.addRange(range);
-          document.dispatchEvent(new Event("selectionchange"));
-        };
-
-        plugin.initSelectionHandler();
-        select(preview.firstChild!, 7);
-        select(chat.firstChild!, 0);
-        expect(getSelectedTextContexts()).toEqual([]);
-        jest.advanceTimersByTime(500);
-        expect(getSelectedTextContexts()).toEqual([
-          expect.objectContaining({
-            content: "Excerpt",
-            notePath: "Research.md",
-            startLine: 0,
-            endLine: 0,
-          }),
-        ]);
-
-        select(preview.firstChild!, 0);
-        jest.advanceTimersByTime(500);
-        expect(getSelectedTextContexts()).toEqual([]);
-
-        document.getSelection()!.removeAllRanges();
-        cleanups.forEach((cleanup) => cleanup());
-        preview.remove();
-        chat.remove();
-      });
-
-      it("attaches and clears a note excerpt from the focused editor's own note after the debounce (https://github.com/Brevilabs/obsidian-copilot-private/issues/597)", () => {
-        let extension: Extension | undefined;
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, {
-          registerEditorExtension: (value: Extension) => {
-            extension = value;
-          },
-          registerDomEvent: jest.fn(),
-          registerEvent: jest.fn(),
-          app: { workspace: { on: jest.fn() } },
-        });
-        plugin.initSelectionHandler();
-        const noteInfo = {
-          file: { path: "Research.md", basename: "Research" },
-          editor: {
-            listSelections: () => [
-              {
-                anchor: { line: 0, ch: cm.state.selection.main.anchor },
-                head: { line: 0, ch: cm.state.selection.main.head },
-              },
-            ],
-            getSelection: () =>
-              cm.state.sliceDoc(cm.state.selection.main.from, cm.state.selection.main.to),
-          },
-        } as unknown as MarkdownFileInfo;
-        const cm = new EditorView({
-          doc: "Excerpt from the note",
-          parent: document.body,
-          extensions: [
-            extension!,
-            (editorInfoField as unknown as StateField<unknown>).init(() => noteInfo),
-          ],
-        });
-
-        cm.focus();
-        cm.dispatch({ selection: { anchor: 0, head: 3 } });
-        cm.dispatch({ selection: { anchor: 0, head: 7 } });
-        jest.advanceTimersByTime(500);
-        expect(getSelectedTextContexts()).toEqual([
-          expect.objectContaining({ content: "Excerpt", notePath: "Research.md" }),
-        ]);
-
-        cm.dispatch({ selection: { anchor: 7 } });
-        jest.advanceTimersByTime(500);
-        expect(getSelectedTextContexts()).toEqual([]);
-        cm.destroy();
-      });
-    });
-
-    describe("handleSelectionChange()", () => {
-      it("automatically attaches a note excerpt even when the retired preferences were saved as false", () => {
-        settingsStore.set(settingsAtom, {
-          ...DEFAULT_SETTINGS,
-          ...{ autoAddSelectionToContext: false, autoIncludeTextSelection: false },
-        });
-        setSelectedTextContexts([]);
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-
-        plugin.handleSelectionChange({
-          file: { path: "Research.md", basename: "Research" },
-          editor: {
-            listSelections: () => [{ anchor: { line: 1, ch: 0 }, head: { line: 2, ch: 7 } }],
-            getSelection: () => "An excerpt from the note.",
-          },
-        } as unknown as MarkdownFileInfo);
-
-        expect(getSelectedTextContexts()).toEqual([
-          expect.objectContaining({
-            content: "An excerpt from the note.",
-            sourceType: "note",
-            notePath: "Research.md",
-            startLine: 2,
-            endLine: 3,
-          }),
-        ]);
-        setSelectedTextContexts([]);
-      });
-    });
-
     describe("initWebSelectionWatcher()", () => {
       it("enables desktop web selection tracking even when the retired preference was saved as false", () => {
         settingsStore.set(settingsAtom, {
@@ -401,6 +253,30 @@ describe("main", () => {
         )![0] as WebSelectionTrackingOptions;
         expect(options.isEnabled()).toBe(true);
         expect(mockStartSelectionTracker).toHaveBeenCalled();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+
+      it("attaches a web tab's selection and clears it once the tab deselects it", () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
+        Object.assign(plugin, { app: {} });
+        plugin.initWebSelectionWatcher();
+        const options = mockSelectionTrackerOptions.mock.calls.at(
+          -1
+        )![0] as WebSelectionTrackingOptions;
+        const quote = {
+          id: "web-1",
+          content: "Quote",
+          sourceType: "web" as const,
+          title: "Page",
+          url: "https://example.com/",
+        };
+
+        options.onSelectionChange(quote);
+        expect(getSelectedTextContexts()).toEqual([quote]);
+
+        options.onSelectionClear({ url: quote.url, reason: "selection-cleared" });
+        expect(getSelectedTextContexts()).toEqual([]);
         (isDesktopRuntime as jest.Mock).mockReturnValue(false);
       });
     });

@@ -1,4 +1,4 @@
-import { getSelectedTextContexts } from "@/aiParams";
+import { getSelectedTextContexts } from "@/selection/selectionStore";
 import { ChainType } from "@/chainType";
 import { processPrompt } from "@/commands/customCommandUtils";
 import { LOADING_MESSAGES } from "@/constants";

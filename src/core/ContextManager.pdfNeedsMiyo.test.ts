@@ -8,7 +8,7 @@ import { ChatMessage } from "@/types/message";
 import * as obsidianModule from "obsidian";
 import { App, TFile, Vault } from "obsidian";
 
-jest.mock("@/aiParams", () => ({ getSelectedTextContexts: () => [] }));
+jest.mock("@/selection/selectionStore", () => ({ getSelectedTextContexts: () => [] }));
 jest.mock("@/settings/model", () => ({
   getSettings: () => ({
     autoCompactThreshold: Infinity,
