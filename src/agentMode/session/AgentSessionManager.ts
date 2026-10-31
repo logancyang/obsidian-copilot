@@ -30,7 +30,7 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
-import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE, SESSIONS_SIDEBAR_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex, AgentSessionIndexEntry } from "./AgentSessionIndex";
 import {
@@ -538,8 +538,24 @@ export class AgentSessionManager {
     this.notify();
   }
 
+  // With a sessions sidebar open there are no tabs to close, so every chat but the active one counts as hidden.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+  private isSessionsSidebarOpen(): boolean {
+    return this.app.workspace.getLeavesOfType(SESSIONS_SIDEBAR_VIEWTYPE).length > 0;
+  }
+
+  private closeIdleHiddenChatsOverSidebarCap(): void {
+    if (this.isSessionsSidebarOpen()) this.closeIdleHiddenChatsOverCap();
+  }
+
   private closeIdleHiddenChatsOverCap(): void {
-    const hidden = Array.from(this.detachedFromTabIds, (id) => this.sessions.get(id)).filter(
+    const hiddenIds = new Set(this.detachedFromTabIds);
+    if (this.isSessionsSidebarOpen()) {
+      for (const id of this.sessions.keys()) {
+        if (id !== this.activeSessionId) hiddenIds.add(id);
+      }
+    }
+    const hidden = Array.from(hiddenIds, (id) => this.sessions.get(id)).filter(
       (session): session is AgentSession =>
         !!session && this.opts.resolveDescriptor(session.backendId)?.processPerChat === true
     );
@@ -560,18 +576,27 @@ export class AgentSessionManager {
   }
 
   getRunningChatIds(): ReadonlySet<string> {
-    const ids = new Set<string>();
-    for (const [internalId, session] of this.sessions) {
-      if (session.getStatus() !== "running" && !hasRunningTask(session)) continue;
-      for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
-    }
-    return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
+    return this.chatIdsWhere(
+      (session) => session.getStatus() === "running" || hasRunningTask(session)
+    );
+  }
+
+  getWaitingChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.getStatus() === "awaiting_permission");
   }
 
   getAttentionChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.getNeedsAttention());
+  }
+
+  getActiveChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.internalId === this.activeSessionId);
+  }
+
+  private chatIdsWhere(include: (session: AgentSession) => boolean): ReadonlySet<string> {
     const ids = new Set<string>();
     for (const [internalId, session] of this.sessions) {
-      if (!session.getNeedsAttention()) continue;
+      if (!include(session)) continue;
       for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
     }
     return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
@@ -932,6 +957,7 @@ export class AgentSessionManager {
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.notify();
+    this.closeIdleHiddenChatsOverSidebarCap();
 
     void session.ready
       .then(async () => {
@@ -1162,6 +1188,13 @@ export class AgentSessionManager {
 
   async exitProject(): Promise<void> {
     await this.enterProject(GLOBAL_SCOPE);
+  }
+
+  async openGlobalLanding(): Promise<void> {
+    await this.enterProject(GLOBAL_SCOPE);
+    const active = this.getActiveSession();
+    if (active?.projectId === GLOBAL_SCOPE && !active.hasUserVisibleMessages()) return;
+    await this.createSession(undefined, GLOBAL_SCOPE);
   }
 
   private parkActiveScope(): void {
@@ -1621,6 +1654,7 @@ export class AgentSessionManager {
     this.lastActiveByScope.set(session.projectId, id);
     session.clearNeedsAttention();
     this.notify();
+    this.closeIdleHiddenChatsOverSidebarCap();
   }
 
   async replaceSessionInPlace(

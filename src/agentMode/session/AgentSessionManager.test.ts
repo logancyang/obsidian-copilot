@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
-import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
+import {
+  AI_SENDER,
+  CHAT_AGENT_VIEWTYPE,
+  SESSIONS_SIDEBAR_VIEWTYPE,
+  USER_SENDER,
+} from "@/constants";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { playNotificationSound } from "@/utils/notificationSound";
@@ -530,6 +535,17 @@ function closedSessions(): unknown[] {
   return mockSessionCancel.mock.contexts;
 }
 
+function openSessionsSidebar(app: App): void {
+  const original = app.workspace.getLeavesOfType as jest.Mock;
+  original.mockImplementation((viewType: string) =>
+    viewType === SESSIONS_SIDEBAR_VIEWTYPE
+      ? [{ view: { getViewType: () => SESSIONS_SIDEBAR_VIEWTYPE } }]
+      : viewType === CHAT_AGENT_VIEWTYPE
+        ? [{ view: { getViewType: () => CHAT_AGENT_VIEWTYPE } }]
+        : []
+  );
+}
+
 async function hideChats(mgr: AgentSessionManager, count: number): Promise<AgentSession[]> {
   const chats: AgentSession[] = [];
   for (let i = 0; i < count; i++) chats.push(await mgr.createSession());
@@ -791,6 +807,7 @@ function buildHistoryHarness(opts?: {
       on: jest.fn(() => ({}) as never),
       offref: jest.fn(),
     },
+    workspace: buildWorkspace(),
   } as unknown as App;
   const plugin = {
     manifest: { version: "1.0.0" },
@@ -2293,6 +2310,198 @@ describe("AgentSessionManager", () => {
 
         expect(mgr.getSessionsForScope("proj-detach")).not.toContain(old);
         expect(mgr.getAttentionChatIds().has(nativeIdOf(old))).toBe(true);
+      });
+    });
+
+    describe("getWaitingChatIds()", () => {
+      it("lists a session that waits on a permission answer by its native chat id for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const waiting = await mgr.createSession();
+        const idle = await mgr.createSession();
+
+        getSessionTestHandle(waiting).setStatus("awaiting_permission");
+
+        expect(mgr.getWaitingChatIds()).toEqual(new Set([nativeIdOf(waiting)]));
+        expect(mgr.getWaitingChatIds().has(nativeIdOf(idle))).toBe(false);
+      });
+
+      it("keeps a waiting session out of the running set and drops it once the answer arrives for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const chat = await mgr.createSession();
+        getSessionTestHandle(chat).setStatus("awaiting_permission");
+        expect(mgr.getRunningChatIds().has(nativeIdOf(chat))).toBe(false);
+
+        getSessionTestHandle(chat).setStatus("running");
+
+        expect(mgr.getWaitingChatIds().size).toBe(0);
+        expect(mgr.getRunningChatIds().has(nativeIdOf(chat))).toBe(true);
+      });
+
+      it("returns the same frozen empty set when no chat is waiting", async () => {
+        const mgr = buildManager();
+        await mgr.createSession();
+        const first = mgr.getWaitingChatIds();
+        expect(first.size).toBe(0);
+        expect(mgr.getWaitingChatIds()).toBe(first);
+      });
+
+      it("notifies subscribers when a running chat starts waiting for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const chat = await mgr.createSession();
+        getSessionTestHandle(chat).setStatus("running");
+        const listener = jest.fn();
+        mgr.subscribe(listener);
+
+        getSessionTestHandle(chat).setStatus("awaiting_permission");
+
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("getActiveChatIds()", () => {
+      it("holds the native id of the active session and none of the other sessions for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const second = await mgr.createSession();
+
+        expect(mgr.getActiveChatIds()).toEqual(new Set([nativeIdOf(second)]));
+
+        mgr.setActiveSession(first.internalId);
+
+        expect(mgr.getActiveChatIds()).toEqual(new Set([nativeIdOf(first)]));
+      });
+
+      it("holds both the saved note path and the native id once the active chat is saved for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager({
+          persistence: { saveSession: jest.fn(async () => ({ path: "chats/agent__saved.md" })) },
+        });
+        const chat = await mgr.createSession();
+        getSessionTestHandle(chat).setMessages([{ message: "hi" }]);
+        await mgr.saveActiveSession();
+
+        expect(mgr.getActiveChatIds()).toEqual(
+          new Set(["chats/agent__saved.md", nativeIdOf(chat)])
+        );
+      });
+
+      it("is empty when no session is active and returns the same set while membership is unchanged", async () => {
+        const mgr = buildManager();
+        const empty = mgr.getActiveChatIds();
+        expect(empty.size).toBe(0);
+        expect(mgr.getActiveChatIds()).toBe(empty);
+      });
+    });
+
+    describe("openGlobalLanding()", () => {
+      it("keeps the active empty global chat as the landing instead of creating another for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const landing = await mgr.createSession();
+
+        await mgr.openGlobalLanding();
+        await mgr.openGlobalLanding();
+
+        expect(mgr.getActiveSession()).toBe(landing);
+        expect(mgr.getSessions()).toEqual([landing]);
+      });
+
+      it("starts a fresh global chat beside the active conversation, which stays open, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager();
+        const conversation = await mgr.createSession();
+        getSessionTestHandle(conversation).setHasUserVisibleMessages(true);
+
+        await mgr.openGlobalLanding();
+
+        const landing = mgr.getActiveSession()!;
+        expect(landing).not.toBe(conversation);
+        expect(landing.projectId).toBe(GLOBAL_SCOPE);
+        expect(landing.hasUserVisibleMessages()).toBe(false);
+        expect(mgr.getSessions()).toEqual([conversation, landing]);
+      });
+
+      it("leaves the project and lands on a global chat when a project chat is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        seedProjects("proj-landing");
+        const mgr = buildManager();
+        await mgr.enterProject("proj-landing");
+        getSessionTestHandle(mgr.getActiveSession()!).setHasUserVisibleMessages(true);
+
+        await mgr.openGlobalLanding();
+
+        expect(mgr.getActiveProjectId()).toBe(GLOBAL_SCOPE);
+        expect(mgr.getActiveSession()!.projectId).toBe(GLOBAL_SCOPE);
+        expect(mgr.getActiveSession()!.hasUserVisibleMessages()).toBe(false);
+      });
+
+      it("returns to the project-free landing the user left when that landing is still open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        seedProjects("proj-landing");
+        const mgr = buildManager();
+        const globalLanding = await mgr.createSession();
+        await mgr.enterProject("proj-landing");
+
+        await mgr.openGlobalLanding();
+
+        expect(mgr.getActiveSession()).toBe(globalLanding);
+      });
+    });
+
+    describe("hidden chat cap while a sessions sidebar is open", () => {
+      it("counts every chat but the active one as hidden and closes the oldest idle chat once a fourth is hidden for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const app = buildApp();
+        openSessionsSidebar(app);
+        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats: AgentSession[] = [];
+        for (let i = 0; i < 4; i++) chats.push(await mgr.createSession());
+        expect(closedSessions()).toEqual([]);
+        const closed = untilClosed(mgr, chats[0]);
+
+        await mgr.createSession();
+        await closed;
+
+        expect(closedSessions()).toEqual([chats[0]]);
+        expect(mgr.getSessions()).toEqual(expect.arrayContaining(chats.slice(1)));
+      });
+
+      it("enforces the cap when the active chat switches to an already open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const app = buildApp();
+        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats: AgentSession[] = [];
+        for (let i = 0; i < 5; i++) chats.push(await mgr.createSession());
+        expect(closedSessions()).toEqual([]);
+        openSessionsSidebar(app);
+        const closed = untilClosed(mgr, chats[0]);
+
+        mgr.setActiveSession(chats[3].internalId);
+        await closed;
+
+        expect(closedSessions()).toEqual([chats[0]]);
+        expect(mgr.getActiveSession()).toBe(chats[3]);
+      });
+
+      it("keeps every idle chat open when no sessions sidebar is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
+        const chats: AgentSession[] = [];
+        for (let i = 0; i < 5; i++) chats.push(await mgr.createSession());
+
+        mgr.setActiveSession(chats[0].internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.getSessions()).toEqual(chats);
+      });
+
+      it("keeps a background chat that is still working while a sessions sidebar is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const app = buildApp();
+        openSessionsSidebar(app);
+        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
+        const working = await mgr.createSession();
+        getSessionTestHandle(working).setStatus("running");
+        const rest: AgentSession[] = [];
+        for (let i = 0; i < 3; i++) rest.push(await mgr.createSession());
+        const closed = untilClosed(mgr, rest[0]);
+
+        await mgr.createSession();
+        await closed;
+
+        expect(closedSessions()).toEqual([rest[0]]);
+        expect(mgr.getSessions()).toContain(working);
       });
     });
 
