@@ -5822,6 +5822,32 @@ describe("AgentSession", () => {
         expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 fires onPromptSent once for a message sent and once for a message queued while the agent works, but not for one it refuses", () => {
+        const mock = makeMockBackend();
+        recordPrompts(mock);
+        const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
+        const onPromptSent = jest.fn();
+        subscribeTo(session, { onPromptSent });
+
+        session.sendPrompt("list the notes");
+        session.sendPrompt("only do the first two");
+
+        expect(onPromptSent).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 does not fire onPromptSent for a message refused because a turn is in flight", () => {
+        const mock = makeMockBackend();
+        recordPrompts(mock);
+        const session = makeSession(mock);
+        session.sendPrompt("list the notes");
+        const onPromptSent = jest.fn();
+        subscribeTo(session, { onPromptSent });
+
+        expect(() => session.sendPrompt("only do the first two")).toThrow();
+
+        expect(onPromptSent).not.toHaveBeenCalled();
+      });
+
       it("fires onDisconnected when the agent's connection drops, after the session ends its running tasks (https://github.com/Brevilabs/obsidian-copilot-private/issues/175)", () => {
         const mock = makeMockBackend();
         const session = makeSession(mock, { backendId: "claude" });

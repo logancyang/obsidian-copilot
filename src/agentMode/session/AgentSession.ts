@@ -181,6 +181,7 @@ export interface AgentSessionListener {
   onNeedsAttentionChanged?(needsAttention: boolean): void;
   onTasksChanged?(): void;
   onQueuedPromptsChanged?(): void;
+  onPromptSent?(): void;
   onDisconnected?(): void;
 }
 
@@ -729,13 +730,16 @@ export class AgentSession {
       ) {
         throw new Error("Session already has a turn in flight");
       }
-      return this.queuePrompt(displayText, context, promptContent);
+      const queued = this.queuePrompt(displayText, context, promptContent);
+      this.notifyPromptSent();
+      return queued;
     }
 
     const promptId = uuidv4();
     const userMessageId = this.store.addMessage(
       buildUserMessage(promptId, displayText, context, promptContent)
     );
+    this.notifyPromptSent();
     this.turns.openReply();
 
     if (this.label === null && !this.backendSummarizesTitle()) {
@@ -816,6 +820,16 @@ export class AgentSession {
       };
     });
     return { userMessageId: prompt.id, turn };
+  }
+
+  private notifyPromptSent(): void {
+    for (const l of this.listeners) {
+      try {
+        l.onPromptSent?.();
+      } catch (e) {
+        logWarn(`[AgentMode] prompt sent listener threw`, e);
+      }
+    }
   }
 
   private notifyQueuedPromptsChanged(): void {
