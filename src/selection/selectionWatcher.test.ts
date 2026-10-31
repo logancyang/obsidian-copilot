@@ -9,7 +9,11 @@ jest.mock("obsidian", () => {
   };
 });
 
-import { clearSelection, getSelectedTextContexts } from "@/selection/selectionStore";
+import {
+  clearSelection,
+  getSelectedTextContexts,
+  type SelectionReport,
+} from "@/selection/selectionStore";
 import {
   editorSelectionReport,
   readingSelectionReport,
@@ -21,6 +25,7 @@ import { EditorView } from "@codemirror/view";
 import { editorInfoField, type App, type MarkdownFileInfo, type Plugin } from "obsidian";
 
 const ISSUE_597 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/597";
+const ISSUE_794 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/794";
 
 const research = { path: "Research.md", basename: "Research" };
 
@@ -213,6 +218,58 @@ describe("selectionWatcher", () => {
       jest.advanceTimersByTime(500);
       expect(getSelectedTextContexts()).toEqual([]);
       cm.destroy();
+      unload();
+    });
+
+    it(`reads an input source after a click or key press and attaches what it reports after the debounce (${ISSUE_794})`, () => {
+      const { app } = readingNote("Unrelated");
+      const { plugin, unload } = fakePlugin(app);
+      const drawing = { path: "Flow.excalidraw.md", basename: "Flow.excalidraw" };
+      let shapes = "box1 rectangle";
+      const source = jest.fn(
+        () => (): SelectionReport =>
+          shapes
+            ? {
+                location: drawing.path,
+                key: `excalidraw:${drawing.path}:${shapes}`,
+                context: {
+                  id: shapes,
+                  content: shapes,
+                  sourceType: "note",
+                  noteTitle: drawing.basename,
+                  notePath: drawing.path,
+                  startLine: 0,
+                  endLine: 0,
+                },
+              }
+            : { location: drawing.path, context: null }
+      );
+
+      watchSelections(plugin, [source]);
+      document.dispatchEvent(new Event("pointerup"));
+      expect(getSelectedTextContexts()).toEqual([]);
+      jest.advanceTimersByTime(500);
+      expect(getSelectedTextContexts()).toEqual([
+        expect.objectContaining({ content: "box1 rectangle", notePath: drawing.path }),
+      ]);
+
+      shapes = "";
+      document.dispatchEvent(new Event("keyup"));
+      jest.advanceTimersByTime(500);
+      expect(getSelectedTextContexts()).toEqual([]);
+      expect(source).toHaveBeenCalledWith(app);
+      unload();
+    });
+
+    it("ignores clicks and key presses while no input source has a selection to read", () => {
+      const { app } = readingNote("Unrelated");
+      const { plugin, unload } = fakePlugin(app);
+
+      watchSelections(plugin, [() => null]);
+      document.dispatchEvent(new Event("pointerup"));
+      jest.advanceTimersByTime(500);
+
+      expect(getSelectedTextContexts()).toEqual([]);
       unload();
     });
 

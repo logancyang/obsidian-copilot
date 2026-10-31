@@ -1,9 +1,10 @@
 import { FileSystemAdapter, TFile, type App } from "obsidian";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
-import { getExcalidrawApi } from "./excalidrawApi";
+import { activeDrawingSelection, getExcalidrawApi } from "./excalidrawApi";
 
 const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
 const ISSUE_792 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/792";
+const ISSUE_794 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/794";
 const FLOW = "Drawings/Flow.excalidraw.md";
 const ELEMENTS = [{ id: "box1", type: "rectangle", x: 0, y: 0, width: 10, height: 10 }];
 
@@ -85,6 +86,82 @@ function appWith(
 }
 
 describe("excalidrawApi", () => {
+  describe("activeDrawingSelection()", () => {
+    const drawingView = {
+      file: Object.assign(new TFile(), { path: FLOW, basename: "Flow.excalidraw" }),
+      getViewType: () => "excalidraw",
+    };
+    const appShowing = (ea: unknown, view: unknown) =>
+      ({
+        plugins: { getPlugin: () => (ea ? { ea } : null) },
+        workspace: { getActiveViewOfType: () => view },
+      }) as unknown as App;
+
+    it(`${ISSUE_794} outlines the active drawing's selected shapes and labels by id when read, then releases the API`, () => {
+      const { ea, fresh } = fakeEa();
+      const read = activeDrawingSelection(appShowing(ea, drawingView))!;
+      Object.assign(fresh, {
+        getViewSelectedElements: jest.fn().mockReturnValue([
+          {
+            id: "step1",
+            type: "rectangle",
+            x: 0,
+            y: 0,
+            width: 120,
+            height: 60,
+            boundElements: [{ id: "label1", type: "text" }],
+          },
+          {
+            id: "label1",
+            type: "text",
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 20,
+            containerId: "step1",
+            text: "Sign up",
+          },
+        ]),
+      });
+
+      const report = read();
+      const { context } = report;
+
+      expect(report).toMatchObject({
+        location: FLOW,
+        key: `excalidraw:${FLOW}:${context!.content}`,
+      });
+      expect(context).toMatchObject({
+        sourceType: "note",
+        noteTitle: "Flow.excalidraw",
+        notePath: FLOW,
+      });
+      expect(context!.content).toContain(`${FLOW}: 2 elements (rectangle 1, text 1).`);
+      expect(context!.content).toContain('  step1 rectangle "Sign up" @0,0 120x60 text label1');
+      expect(ea.getAPI).toHaveBeenCalledWith(drawingView);
+      expect(fresh.destroy).toHaveBeenCalled();
+    });
+
+    it(`${ISSUE_794} reports nothing selected in the drawing when no shape is selected`, () => {
+      const { ea, fresh } = fakeEa();
+      Object.assign(fresh, { getViewSelectedElements: jest.fn().mockReturnValue([]) });
+
+      expect(activeDrawingSelection(appShowing(ea, drawingView))!()).toEqual({
+        location: FLOW,
+        context: null,
+      });
+    });
+
+    it(`${ISSUE_794} has no source when the active view is not a drawing or the Excalidraw plugin is not loaded`, () => {
+      const { ea } = fakeEa();
+      const noteView = { file: new TFile(), getViewType: () => "markdown" };
+
+      expect(activeDrawingSelection(appShowing(ea, noteView))).toBeNull();
+      expect(activeDrawingSelection(appShowing(ea, null))).toBeNull();
+      expect(activeDrawingSelection(appShowing(null, drawingView))).toBeNull();
+    });
+  });
+
   describe("getExcalidrawApi()", () => {
     beforeEach(() => __resetVaultBaseCache());
 

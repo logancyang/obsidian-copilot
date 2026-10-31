@@ -13,6 +13,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ChainOwner from "@/LLMProviders/chainOwner";
 import { clearSelection, reportSelection, subscribeSelection } from "@/selection/selectionStore";
 import { watchSelections, webSelectionReport } from "@/selection/selectionWatcher";
+import { activeDrawingSelection } from "@/excalidraw/excalidrawApi";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
@@ -807,7 +808,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   }
 
   initSelectionHandler() {
-    watchSelections(this);
+    watchSelections(this, [activeDrawingSelection]);
   }
 
   initWebSelectionWatcher() {

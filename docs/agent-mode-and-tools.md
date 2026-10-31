@@ -268,6 +268,7 @@ On Windows, creating the folder links may require **Developer Mode** or administ
 While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and OpenCode read, draw, and edit Excalidraw drawings through Copilot's Excalidraw tools. The Excalidraw plugin builds each drawing, so labels stay inside their shapes and arrows stay attached when you move a shape. There is no skill to turn on.
 
 - Ask for a diagram, flowchart or chart, for example "Draw a diagram of the steps in [[Release process]]". The agent draws it in Excalidraw and embeds it in the note it belongs to. Ask for a Mermaid diagram or a canvas to get that instead. Creating a drawing never overwrites an existing file.
+- Select shapes in an open drawing to point the agent at them, for example "make these red". The selection is attached to your next message, like selected text. Clicking empty canvas removes it.
 - When the agent edits a drawing, Obsidian opens it in a tab and saves each change.
 - After drawing or editing, the agent looks at a picture of the result and fixes overlaps before it answers.
 - In the chat, a Copilot card marks each drawing the agent draws, edits or reads. Click the drawing's name to open it.

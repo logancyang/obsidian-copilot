@@ -1,11 +1,13 @@
-import type { SceneElement } from "@/excalidraw/excalidrawOutline";
+import { outlineScene, type SceneElement } from "@/excalidraw/excalidrawOutline";
 import type {
   ExcalidrawApi,
   ExcalidrawCliReply,
   LabelledConnection,
 } from "@/excalidraw/excalidrawTools";
+import type { SelectionReport } from "@/selection/selectionStore";
 import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
-import { TFile, type App, type View } from "obsidian";
+import { ItemView, TFile, type App, type View } from "obsidian";
+import { v4 as uuidv4 } from "uuid";
 
 export const EXCALIDRAW_PLUGIN_ID = "obsidian-excalidraw-plugin";
 const EXCALIDRAW_VIEW_TYPE = "excalidraw";
@@ -27,6 +29,7 @@ interface ExcalidrawAutomate {
   createPNGBase64(templatePath?: string, scale?: number): Promise<string>;
   executeCLI(request: Record<string, unknown>): Promise<ExcalidrawCliReply>;
   getViewElements(): SceneElement[];
+  getViewSelectedElements(): SceneElement[];
   copyViewElementsToEAforEditing(elements: SceneElement[]): void;
   connectObjects(
     from: string,
@@ -59,13 +62,50 @@ interface SaveOutcome {
 
 type ExcalidrawView = View & { file?: TFile | null; saveWithOutcome(): Promise<SaveOutcome> };
 
-// executeCLI arrived in Excalidraw 2.29, the first release whose create and apply commands bind labels and arrows both ways.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-export function getExcalidrawApi(app: App): ExcalidrawApi | null {
+function excalidrawAutomate(app: App): ExcalidrawAutomate | null {
   const { plugins } = app as unknown as {
     plugins?: { getPlugin(id: string): { ea?: ExcalidrawAutomate | null } | null };
   };
-  const ea = plugins?.getPlugin(EXCALIDRAW_PLUGIN_ID)?.ea;
+  return plugins?.getPlugin(EXCALIDRAW_PLUGIN_ID)?.ea ?? null;
+}
+
+// The plugin's onSceneChangeHook has one slot per drawing, owned by the user's own scripts, so the selection is read on demand.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/794
+export function activeDrawingSelection(app: App): (() => SelectionReport) | null {
+  const ea = excalidrawAutomate(app);
+  const view = app.workspace.getActiveViewOfType(ItemView) as ExcalidrawView | null;
+  const file = view?.file;
+  if (!ea || !view || !file || view.getViewType() !== EXCALIDRAW_VIEW_TYPE) return null;
+  return () => {
+    const fresh = ea.getAPI(view);
+    let outline: string;
+    try {
+      const selected = fresh.getViewSelectedElements();
+      outline = selected.length ? outlineScene(file.path, selected).join("\n") : "";
+    } finally {
+      fresh.destroy();
+    }
+    if (!outline) return { location: file.path, context: null };
+    return {
+      location: file.path,
+      key: `excalidraw:${file.path}:${outline}`,
+      context: {
+        id: uuidv4(),
+        content: outline,
+        sourceType: "note",
+        noteTitle: file.basename,
+        notePath: file.path,
+        startLine: 0,
+        endLine: 0,
+      },
+    };
+  };
+}
+
+// executeCLI arrived in Excalidraw 2.29, the first release whose create and apply commands bind labels and arrows both ways.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+export function getExcalidrawApi(app: App): ExcalidrawApi | null {
+  const ea = excalidrawAutomate(app);
   if (!ea || typeof ea.executeCLI !== "function") return null;
   const vaultPath = (path: string) => toVaultRelative(path, getVaultBase(app));
   const drawing = (path: string) => {
