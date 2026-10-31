@@ -8,10 +8,16 @@ interface UseLatestVersionResult {
   hasUpdate: boolean;
 }
 
+export const LATEST_VERSION_REFRESH_COOLDOWN_MS = 60 * 60 * 1000;
+
 let latestReleaseRequest: Promise<LatestRelease | null> | null = null;
+let latestReleaseRequestedAt = 0;
 
 export function requestLatestRelease(): Promise<LatestRelease | null> {
-  latestReleaseRequest ??= checkLatestVersion().then((result) => result.release);
+  if (!latestReleaseRequest) {
+    latestReleaseRequestedAt = Date.now();
+    latestReleaseRequest = checkLatestVersion().then((result) => result.release);
+  }
   return latestReleaseRequest;
 }
 
@@ -30,6 +36,12 @@ function getReleaseRevision(): number {
 }
 
 export function refreshLatestVersion(): void {
+  if (
+    latestReleaseRequest &&
+    Date.now() - latestReleaseRequestedAt < LATEST_VERSION_REFRESH_COOLDOWN_MS
+  ) {
+    return;
+  }
   latestReleaseRequest = null;
   releaseRevision += 1;
   releaseListeners.forEach((listener) => listener());

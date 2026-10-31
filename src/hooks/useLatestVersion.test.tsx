@@ -1,4 +1,5 @@
 import {
+  LATEST_VERSION_REFRESH_COOLDOWN_MS,
   refreshLatestVersion,
   requestLatestRelease,
   useLatestVersion,
@@ -19,6 +20,12 @@ const RELEASE = {
   version: "4.0.4",
 };
 
+let now = 0;
+
+function passRefreshCooldown(): void {
+  now += LATEST_VERSION_REFRESH_COOLDOWN_MS;
+}
+
 function LatestVersionProbe(): React.ReactElement {
   const value = useLatestVersion("4.0.3");
   return <output>{JSON.stringify(value)}</output>;
@@ -27,7 +34,12 @@ function LatestVersionProbe(): React.ReactElement {
 describe("useLatestVersion", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+    passRefreshCooldown();
     refreshLatestVersion();
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
   describe("requestLatestRelease()", () => {
     it("shares the startup request with settings and chat consumers", async () => {
@@ -78,7 +90,22 @@ describe("useLatestVersion", () => {
     });
   });
   describe("refreshLatestVersion()", () => {
-    it(`updates mounted consumers after a new-tab refresh for ${ISSUE_URL}`, async () => {
+    it("keeps the current release without a new request when the last check started under an hour ago", async () => {
+      jest
+        .mocked(checkLatestVersion)
+        .mockResolvedValue({ error: null, release: RELEASE, version: RELEASE.version });
+      const first = requestLatestRelease();
+      await act(async () => {
+        await first;
+      });
+
+      now += LATEST_VERSION_REFRESH_COOLDOWN_MS - 1;
+      refreshLatestVersion();
+
+      expect(requestLatestRelease()).toBe(first);
+      expect(checkLatestVersion).toHaveBeenCalledTimes(1);
+    });
+    it(`updates mounted consumers after a new-tab refresh an hour after the last check for ${ISSUE_URL}`, async () => {
       jest
         .mocked(checkLatestVersion)
         .mockResolvedValue({ error: null, release: RELEASE, version: RELEASE.version });
@@ -97,6 +124,7 @@ describe("useLatestVersion", () => {
       jest
         .mocked(checkLatestVersion)
         .mockResolvedValue({ error: null, release: nextRelease, version: nextRelease.version });
+      passRefreshCooldown();
       act(() => refreshLatestVersion());
 
       await waitFor(() => {
@@ -113,7 +141,7 @@ describe("useLatestVersion", () => {
       );
       expect(checkLatestVersion).toHaveBeenCalledTimes(2);
     });
-    it(`ignores a stale response after a new-tab refresh for ${ISSUE_URL}`, async () => {
+    it(`ignores a stale response after a new-tab refresh an hour after the last check for ${ISSUE_URL}`, async () => {
       let resolveOld!: (value: Awaited<ReturnType<typeof checkLatestVersion>>) => void;
       jest.mocked(checkLatestVersion).mockReturnValueOnce(
         new Promise((resolve) => {
@@ -125,6 +153,7 @@ describe("useLatestVersion", () => {
       jest
         .mocked(checkLatestVersion)
         .mockResolvedValue({ error: null, release: nextRelease, version: nextRelease.version });
+      passRefreshCooldown();
       act(() => refreshLatestVersion());
       await waitFor(() => expect(screen.getByRole("status").textContent).toContain("4.0.5"));
       await act(async () => {
