@@ -479,11 +479,15 @@ function buildCopilotMcpServer({
 const FEEDBACK_DRAFT = { title: "t", whatHappened: "w", userSaid: "u", repro: "r" };
 
 function seedProjects(...ids: string[]): void {
+  seedProjectRecords(ids.map((id) => ({ id })));
+}
+
+function seedProjectRecords(projects: Array<{ id: string; archivedAt?: number }>): void {
   projectsState.updateCachedProjectRecords(
-    ids.map(
-      (id) =>
+    projects.map(
+      ({ id, archivedAt }) =>
         ({
-          project: { id },
+          project: { id, archivedAt },
           filePath: `Projects/${id}/project.md`,
           folderName: id,
         }) as unknown as ProjectFileRecord
@@ -4078,6 +4082,54 @@ describe("AgentSessionManager", () => {
           "chats/agent__archived.md": 6_000,
           "chats/agent__legacy.md": undefined,
         });
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/806 hides every chat of an archived project, pinned ones included, from the global view but not from the project's own view", async () => {
+        seedProjectRecords([{ id: "shelved", archivedAt: 9_000 }, { id: "active" }]);
+        const { manager, index } = buildHistoryHarness({
+          files: {
+            "chats/agent__global.md": { epoch: 1_000, topic: "Global chat", backendId: "opencode" },
+            "chats/agent__active.md": {
+              epoch: 1_000,
+              topic: "Active project chat",
+              backendId: "opencode",
+              projectId: "active",
+            },
+            "chats/agent__shelved.md": {
+              epoch: 1_000,
+              topic: "Shelved project chat",
+              backendId: "opencode",
+              projectId: "shelved",
+            },
+            "chats/agent__shelved-pinned.md": {
+              epoch: 1_000,
+              topic: "Shelved pinned chat",
+              backendId: "opencode",
+              projectId: "shelved",
+              pinnedAt: 4_000,
+            },
+          },
+        });
+        await index.recordSession({
+          backendId: "codex",
+          sessionId: "shelved-native",
+          title: "Shelved native chat",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+          projectId: "shelved",
+        });
+
+        const globalTitles = (await manager.getChatHistoryItems()).map((item) => item.title);
+        const shelvedTitles = (await manager.getChatHistoryItems("shelved")).map(
+          (item) => item.title
+        );
+
+        expect(globalTitles.sort()).toEqual(["Active project chat", "Global chat"]);
+        expect(shelvedTitles.sort()).toEqual([
+          "Shelved native chat",
+          "Shelved pinned chat",
+          "Shelved project chat",
+        ]);
       });
 
       it("de-duplicates hidden-folder chats via the adapter frontmatter fallback", async () => {

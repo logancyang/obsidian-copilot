@@ -12,8 +12,26 @@ const projectConfigsAtom = atom<ProjectConfig[]>((get) =>
   get(projectRecordsAtom).map((r) => r.project)
 );
 
+const EMPTY_PROJECTS: ProjectConfig[] = Object.freeze([]) as unknown as ProjectConfig[];
+
+function selectProjects(projects: ProjectConfig[], archived: boolean): ProjectConfig[] {
+  const selected = projects.filter((project) => (project.archivedAt !== undefined) === archived);
+  return selected.length === 0 ? EMPTY_PROJECTS : selected;
+}
+
+const activeProjectConfigsAtom = atom((get) => selectProjects(get(projectConfigsAtom), false));
+const archivedProjectConfigsAtom = atom((get) => selectProjects(get(projectConfigsAtom), true));
+
 export function useProjects(): ProjectConfig[] {
   return useAtomValue(projectConfigsAtom, { store: projectsStore });
+}
+
+export function useActiveProjects(): ProjectConfig[] {
+  return useAtomValue(activeProjectConfigsAtom, { store: projectsStore });
+}
+
+export function useArchivedProjects(): ProjectConfig[] {
+  return useAtomValue(archivedProjectConfigsAtom, { store: projectsStore });
 }
 
 export function getCachedProjectRecords(): ProjectFileRecord[] {

@@ -1,7 +1,11 @@
 import { ProjectConfig } from "@/aiParams";
 import { removeGeneratedInstructionFiles } from "@/instructions/agentsFile";
 import { logError, logInfo, logWarn } from "@/logger";
-import { COPILOT_PROJECT_LAST_USED, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
+import {
+  COPILOT_PROJECT_ARCHIVED_AT,
+  COPILOT_PROJECT_LAST_USED,
+  PROJECTS_UNSUPPORTED_FOLDER_NAME,
+} from "@/projects/constants";
 import { ProjectFileRecord } from "@/projects/type";
 import {
   getProjectAnchorFromConfigPath,
@@ -276,7 +280,14 @@ export class ProjectFileManager {
       const memoryLastUsed = this.projectLastUsedManager.getLastTouchedAt(normalizedId) ?? 0;
       const lastUsedMs = Math.max(cachedLastUsed, memoryLastUsed);
 
-      const projectForWrite = { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs };
+      // Archiving is its own action, so an edit never changes the archive state.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/806
+      const projectForWrite = {
+        ...nextProject,
+        created: createdMs,
+        UsageTimestamps: lastUsedMs,
+        archivedAt: existing.project.archivedAt,
+      };
 
       try {
         await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
@@ -300,7 +311,7 @@ export class ProjectFileManager {
       );
 
       const updated: ProjectFileRecord = {
-        project: { ...nextProject, created: createdMs, UsageTimestamps: lastUsedMs },
+        project: projectForWrite,
         filePath,
         folderName,
       };
@@ -372,6 +383,32 @@ export class ProjectFileManager {
     } finally {
       removePendingFileWrite(existing.filePath);
     }
+  }
+
+  public async setProjectArchived(projectId: string, archived: boolean): Promise<void> {
+    const normalizedId = (projectId || "").trim();
+    const record = getCachedProjectRecordById(normalizedId);
+    if (!record) throw new Error(`Project not found: ${normalizedId}`);
+
+    const filePath = normalizePath(record.filePath);
+    const file = this.vault.getAbstractFileByPath(filePath);
+    if (!(file instanceof TFile)) throw new Error(`Project file not found: ${filePath}`);
+
+    const archivedAt = archived ? Date.now() : undefined;
+    try {
+      addPendingFileWrite(filePath);
+      await this.app.fileManager.processFrontMatter(
+        file,
+        (frontmatter: Record<string, unknown>) => {
+          if (archivedAt === undefined) delete frontmatter[COPILOT_PROJECT_ARCHIVED_AT];
+          else frontmatter[COPILOT_PROJECT_ARCHIVED_AT] = archivedAt;
+        }
+      );
+    } finally {
+      removePendingFileWrite(filePath);
+    }
+
+    upsertCachedProjectRecord({ ...record, project: { ...record.project, archivedAt } });
   }
 
   public async touchProjectLastUsed(projectId: string): Promise<void> {

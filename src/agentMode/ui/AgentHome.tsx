@@ -59,7 +59,12 @@ import { logError, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getProjectLandingCaptureSignature } from "@/projects/projectContextSignature";
-import { getCachedProjectRecordById, useProjects } from "@/projects/state";
+import {
+  getCachedProjectRecordById,
+  useActiveProjects,
+  useArchivedProjects,
+  useProjects,
+} from "@/projects/state";
 import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
@@ -178,6 +183,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [descriptor, plugin]);
 
   const projects = useProjects();
+  const activeProjects = useActiveProjects();
+  const archivedProjects = useArchivedProjects();
+  const archivedProjectKey = archivedProjects.map((project) => project.id).join("\n");
   const projectNamesById = useMemo<Readonly<Record<string, string>>>(() => {
     if (projects.length === 0) return EMPTY_PROJECT_NAMES_BY_ID;
     return Object.fromEntries(projects.map((project) => [project.id, project.name]));
@@ -241,11 +249,31 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const handleViewArchived = useCallback(
     () =>
-      new ArchivedChatsModal(app, archivedChatItems, {
+      new ArchivedChatsModal(app, archivedChatItems, isProjectScope ? [] : archivedProjects, {
         onUnarchive: (id) => handleSetChatArchived(id, false),
         onOpen: handleLoadChat,
+        onUnarchiveProject: async (id) => {
+          try {
+            await ProjectFileManager.getInstance(app).setProjectArchived(id, false);
+          } catch (e) {
+            logError("[AgentMode] unarchive project failed", e);
+            new Notice("Failed to unarchive project.");
+            throw e;
+          }
+        },
+        onOpenProject: async (id) => {
+          await manager.enterProject(id);
+        },
       }).open(),
-    [app, archivedChatItems, handleSetChatArchived, handleLoadChat]
+    [
+      app,
+      manager,
+      isProjectScope,
+      archivedChatItems,
+      archivedProjects,
+      handleSetChatArchived,
+      handleLoadChat,
+    ]
   );
 
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
@@ -397,7 +425,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   useEffect(() => {
     if (isLanding) void handleLoadChatHistory();
-  }, [isLanding, handleLoadChatHistory]);
+  }, [isLanding, handleLoadChatHistory, archivedProjectKey]);
 
   const [globalShelfTab, setGlobalShelfTabState] = useState<string | null>(() =>
     getHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY)
@@ -460,10 +488,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "projects",
         icon: <Folder className="tw-size-4" />,
         title: "Projects",
-        count: projects.length,
+        count: activeProjects.length,
         renderBody: () => (
           <ProjectPickerList
-            projects={projects}
+            projects={activeProjects}
             onSelect={handleSelectProject}
             onCreate={handleCreateProject}
             app={app}
@@ -474,7 +502,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       },
     ],
     [
-      projects,
+      activeProjects,
       projectNamesById,
       chatHistoryItems,
       app,
