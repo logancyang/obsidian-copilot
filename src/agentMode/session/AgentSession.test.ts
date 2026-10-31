@@ -5822,7 +5822,7 @@ describe("AgentSession", () => {
         expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 fires onPromptSent once for a message sent and once for a message queued while the agent works, but not for one it refuses", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 fires onPromptSent once for a message sent and once for a message queued while the agent works", () => {
         const mock = makeMockBackend();
         recordPrompts(mock);
         const session = makeSession(mock, { getDescriptor: midTurnDescriptor });
