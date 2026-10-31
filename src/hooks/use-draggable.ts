@@ -152,7 +152,11 @@ export function useDraggable(options: UseDraggableOptions = {}) {
 
       body.classList.add("tw-select-none", "tw-cursor-grabbing");
 
+      const pointerId = e.pointerId;
+
       const handlePointerMove = (event: PointerEvent): void => {
+        // Ignore other touches so a second finger cannot move, resize, or release the panel. https://github.com/Brevilabs/obsidian-copilot-private/issues/798
+        if (event.pointerId !== pointerId) return;
         pendingPositionRef.current = {
           x: event.clientX - dragOffsetRef.current.x,
           y: event.clientY - dragOffsetRef.current.y,
@@ -187,7 +191,8 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         }
       };
 
-      const handlePointerUp = (): void => {
+      const handlePointerUp = (event: PointerEvent): void => {
+        if (event.pointerId !== pointerId) return;
         cleanup(true);
       };
 

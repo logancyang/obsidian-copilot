@@ -2,9 +2,16 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import { useDraggable } from "@/hooks/use-draggable";
 
-function touchPointer(target: EventTarget, type: string, clientX = 0, clientY = 0): void {
+function touchPointer(
+  target: EventTarget,
+  type: string,
+  clientX = 0,
+  clientY = 0,
+  pointerId = 1
+): void {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY });
   Object.defineProperty(event, "pointerType", { value: "touch" });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
   act(() => {
     target.dispatchEvent(event);
   });
@@ -46,6 +53,21 @@ describe("use-draggable", () => {
       touchPointer(document, "pointermove", 300, 300);
 
       expect(screen.getByTestId("position").textContent).toBe("20,30");
+      expect(screen.getByTestId("panel").dataset.dragging).toBe("false");
+    });
+
+    it("ignores a second touch so it neither moves nor releases the panel (https://github.com/Brevilabs/obsidian-copilot-private/issues/798)", () => {
+      render(<DraggablePanel />);
+
+      touchPointer(screen.getByTestId("handle"), "pointerdown", 100, 100, 1);
+      touchPointer(document, "pointermove", 400, 400, 2);
+      touchPointer(document, "pointerup", 400, 400, 2);
+      expect(screen.getByTestId("panel").dataset.dragging).toBe("true");
+
+      touchPointer(document, "pointermove", 130, 60, 1);
+      touchPointer(document, "pointerup", 130, 60, 1);
+
+      expect(screen.getByTestId("position").textContent).toBe("40,-20");
       expect(screen.getByTestId("panel").dataset.dragging).toBe("false");
     });
   });

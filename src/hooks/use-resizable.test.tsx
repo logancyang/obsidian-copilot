@@ -2,9 +2,16 @@ import React from "react";
 import { act, render, screen } from "@testing-library/react";
 import { useRafResizable, type ResizeUpdate } from "@/hooks/use-resizable";
 
-function touchPointer(target: EventTarget, type: string, clientX = 0, clientY = 0): void {
+function touchPointer(
+  target: EventTarget,
+  type: string,
+  clientX = 0,
+  clientY = 0,
+  pointerId = 1
+): void {
   const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY });
   Object.defineProperty(event, "pointerType", { value: "touch" });
+  Object.defineProperty(event, "pointerId", { value: pointerId });
   act(() => {
     target.dispatchEvent(event);
   });
@@ -66,6 +73,23 @@ describe("use-resizable", () => {
       touchPointer(document, "pointermove", 400, 400);
 
       expect(onResize).not.toHaveBeenCalled();
+      expect(screen.getByTestId("panel").dataset.resizing).toBe("false");
+    });
+
+    it("ignores a second touch so it neither resizes nor releases the panel (https://github.com/Brevilabs/obsidian-copilot-private/issues/798)", () => {
+      const onResize = jest.fn();
+      render(<ResizablePanel onResize={onResize} />);
+
+      touchPointer(screen.getByTestId("corner"), "pointerdown", 320, 240, 1);
+      touchPointer(document, "pointermove", 600, 600, 2);
+      touchPointer(document, "pointerup", 600, 600, 2);
+      expect(screen.getByTestId("panel").dataset.resizing).toBe("true");
+
+      touchPointer(document, "pointermove", 360, 300, 1);
+      touchPointer(document, "pointerup", 360, 300, 1);
+
+      expect(onResize).toHaveBeenCalledTimes(1);
+      expect(onResize).toHaveBeenLastCalledWith({ width: 340, height: 260 });
       expect(screen.getByTestId("panel").dataset.resizing).toBe("false");
     });
   });

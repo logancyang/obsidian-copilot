@@ -65,7 +65,7 @@ export class QuickAskOverlay {
   private isResizing = false;
   private resizeDirection: ResizeDirection | null = null;
   private resizeStartRect: DOMRect | null = null;
-  private resizeStartMouse: { x: number; y: number } | null = null;
+  private resizeStartMouse: { x: number; y: number; pointerId: number } | null = null;
   private resizeRafId: number | null = null;
 
   constructor(private readonly options: QuickAskOverlayOptions) {}
@@ -531,7 +531,7 @@ export class QuickAskOverlay {
 
   private handleResizeStart = (
     direction: ResizeDirection,
-    start: { x: number; y: number }
+    start: { x: number; y: number; pointerId: number }
   ): void => {
     if (this.isResizing) return;
 
@@ -562,6 +562,8 @@ export class QuickAskOverlay {
 
   private handleResizeMove = (e: PointerEvent): void => {
     if (!this.isResizing || !this.resizeStartRect || !this.resizeStartMouse) return;
+    // Ignore other touches so a second finger cannot move, resize, or release the panel. https://github.com/Brevilabs/obsidian-copilot-private/issues/798
+    if (e.pointerId !== this.resizeStartMouse.pointerId) return;
 
     const win = this.ownerWindow ?? window;
 
@@ -575,7 +577,8 @@ export class QuickAskOverlay {
     });
   };
 
-  private handleResizeEnd = (): void => {
+  private handleResizeEnd = (e: PointerEvent): void => {
+    if (e.pointerId !== this.resizeStartMouse?.pointerId) return;
     this.cleanupResize();
     this.renderPanel();
   };
