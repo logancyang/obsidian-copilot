@@ -88,6 +88,23 @@ describe("AgentChatControls", () => {
       expect(container.firstElementChild?.firstElementChild?.textContent).toBe("2 tasks running");
     });
 
+    it("opens the chat's saved note from the More actions menu", () => {
+      const onOpenChatNote = jest.fn();
+      renderSessionControls({ onOpenChatNote });
+
+      fireEvent.click(within(openMoreActions()).getByRole("menuitem", { name: "Open chat note" }));
+
+      expect(onOpenChatNote).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves Open chat note out of the More actions menu when the chat has no saved note", () => {
+      renderSessionControls();
+
+      expect(
+        within(openMoreActions()).queryByRole("menuitem", { name: "Open chat note" })
+      ).toBeNull();
+    });
+
     it("copies the chat link from the More actions menu", () => {
       const onCopyChatLink = jest.fn();
       renderSessionControls({ onCopyChatLink });

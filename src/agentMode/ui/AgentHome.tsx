@@ -616,6 +616,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     () => getChatBookmarkState(manager.getSessionSourcePath(sessionId)),
     [getChatBookmarkState, manager, sessionId]
   );
+  const activeSourcePath = manager.getSessionSourcePath(sessionId);
+  const handleOpenChatNote = activeSourcePath
+    ? () => handleOpenSourceFile(activeSourcePath)
+    : undefined;
   const handleCopyChatLink = () =>
     plugin.copyChatLink(async () => {
       // A native session link only opens on this device: https://github.com/Brevilabs/obsidian-copilot-private/issues/601
@@ -758,7 +762,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       )}
                     >
                       <AgentChatMessages
-                        sourcePath={manager.getSessionSourcePath(sessionId)}
+                        sourcePath={activeSourcePath}
                         key={sessionId}
                         messages={messages}
                         plugin={plugin}
@@ -780,6 +784,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             : undefined
                         }
                         onSetChatBookmarked={handleSetActiveChatBookmarked}
+                        onOpenChatNote={handleOpenChatNote}
                         onReportError={handleReportError}
                         onNewChat={handleNewChat}
                         onSaveAsNote={handleSaveAsNote}

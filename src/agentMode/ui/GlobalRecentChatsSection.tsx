@@ -24,7 +24,7 @@ import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import {
-  ArrowUpRight,
+  FileText,
   Link,
   LoaderCircle,
   MessageCircle,
@@ -212,8 +212,8 @@ function RecentChatMenu({
         </DropdownMenuItem>
         {isNoteBacked && (
           <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
-            <ArrowUpRight />
-            Open source note
+            <FileText />
+            Open chat note
           </DropdownMenuItem>
         )}
         <DropdownMenuItem
@@ -283,7 +283,7 @@ const RecentChatRow = memo(function RecentChatRow({
   isSessionOpen,
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
-  const { onOpenSourceFile, onCloseSession, onSetChatPinned } = actions;
+  const { onCloseSession, onSetChatPinned } = actions;
   const Icon = resolveChatIcon(item) ?? MessageCircle;
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
@@ -355,11 +355,6 @@ const RecentChatRow = memo(function RecentChatRow({
               onClick={() => safeAsyncHandler(onCloseSession)(item.id)}
             >
               <Power className="tw-size-3" />
-            </RowActionButton>
-          )}
-          {isNoteBacked && (
-            <RowActionButton label="Open source note" onClick={() => onOpenSourceFile(item.id)}>
-              <ArrowUpRight className="tw-size-4" />
             </RowActionButton>
           )}
           <RecentChatMenu
