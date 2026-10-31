@@ -9,12 +9,12 @@ const ICON_CLS = "tw-size-3";
 
 const ReplaceShortcutHint = () =>
   Platform.isMacOS ? (
-    <span className="tw-ml-1 tw-inline-flex tw-items-center tw-gap-0.5 tw-opacity-80">
+    <span className="tw-ml-1 tw-hidden tw-items-center tw-gap-0.5 tw-opacity-80 @lg/command-footer:tw-inline-flex">
       <Command className={ICON_CLS} />
       <CornerDownLeft className={ICON_CLS} />
     </span>
   ) : (
-    <span className="tw-ml-1 tw-inline-flex tw-items-center tw-gap-0.5 tw-text-xs tw-opacity-80">
+    <span className="tw-ml-1 tw-hidden tw-items-center tw-gap-0.5 tw-text-xs tw-opacity-80 @lg/command-footer:tw-inline-flex">
       Ctrl
       <CornerDownLeft className={ICON_CLS} />
     </span>
@@ -22,13 +22,13 @@ const ReplaceShortcutHint = () =>
 
 const InsertShortcutHint = () =>
   Platform.isMacOS ? (
-    <span className="tw-ml-1 tw-inline-flex tw-items-center tw-gap-0.5 tw-opacity-80">
+    <span className="tw-ml-1 tw-hidden tw-items-center tw-gap-0.5 tw-opacity-80 @lg/command-footer:tw-inline-flex">
       <Command className={ICON_CLS} />
       <ArrowBigUp className={ICON_CLS} />
       <CornerDownLeft className={ICON_CLS} />
     </span>
   ) : (
-    <span className="tw-ml-1 tw-inline-flex tw-items-center tw-gap-0.5 tw-text-xs tw-opacity-80">
+    <span className="tw-ml-1 tw-hidden tw-items-center tw-gap-0.5 tw-text-xs tw-opacity-80 @lg/command-footer:tw-inline-flex">
       Ctrl
       <ArrowBigUp className={ICON_CLS} />
       <CornerDownLeft className={ICON_CLS} />
