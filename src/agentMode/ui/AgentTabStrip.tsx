@@ -8,6 +8,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { useApp } from "@/context";
+import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { cn } from "@/lib/utils";
@@ -15,11 +17,12 @@ import { logError } from "@/logger";
 import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
-import { Loader2, MoreHorizontal, Plus, X } from "lucide-react";
+import { Loader2, MoreHorizontal, PanelLeft, Plus, X } from "lucide-react";
 import React from "react";
 
 interface Props {
   manager: AgentSessionManager;
+  onOpenSidebar: () => void;
 }
 
 const TAB_GAP_PX = 4;
@@ -98,7 +101,8 @@ function useSessionDisplay(session: AgentSession) {
   };
 }
 
-export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
+export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
+  const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
 
@@ -112,7 +116,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   const [stripWidth, setStripWidth] = React.useState(0);
 
   React.useLayoutEffect(() => {
-    if (sessionCount === 0) return;
+    if (sessionCount === 0 || isHidden) return;
     const strip = stripRef.current;
     if (!strip) return;
 
@@ -127,7 +131,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
     const ro = new ResizeObserver(measure);
     ro.observe(strip);
     return () => ro.disconnect();
-  }, [sessionCount]);
+  }, [sessionCount, isHidden]);
 
   const visibleCount = React.useMemo(
     () => computeVisibleCount(stripWidth, sessionCount),
@@ -154,54 +158,70 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
     [manager]
   );
 
-  if (sessionCount === 0) return null;
+  if (sessionCount === 0 || isHidden) return null;
 
   return (
-    <div
-      ref={stripRef}
-      className="tw-relative tw-flex tw-w-full tw-items-stretch tw-gap-1 tw-overflow-hidden tw-px-2"
-    >
-      <div role="tablist" className="tw-flex tw-min-w-0 tw-items-stretch tw-gap-1">
-        {visibleSessions.map((session) => (
-          <SessionTab
-            key={session.internalId}
-            session={session}
-            isActive={session.internalId === activeId}
-            isRenaming={renamingId === session.internalId}
-            onActivate={() => manager.setActiveSession(session.internalId)}
-            onClose={() => handleClose(session.internalId)}
-            onStartRename={() => setRenamingId(session.internalId)}
-            onSubmitRename={(label) => {
-              manager.renameSession(session.internalId, label);
-              setRenamingId(null);
-            }}
-            onCancelRename={() => setRenamingId(null)}
-          />
-        ))}
-      </div>
-      {overflowSessions.length > 0 && (
-        <OverflowMenu
-          sessions={overflowSessions}
-          activeId={activeId}
-          onActivate={(id) => manager.setActiveSession(id)}
-          onClose={handleClose}
-        />
-      )}
+    <div className="tw-flex tw-w-full tw-items-stretch tw-pl-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant="ghost2"
             size="icon"
-            onClick={handleNew}
-            disabled={isCreating}
-            aria-label="New chat"
+            onClick={onOpenSidebar}
+            aria-label="Open sessions sidebar"
             className="tw-my-1 tw-shrink-0"
           >
-            <Plus className="tw-size-4" />
+            <PanelLeft className="tw-size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>New chat</TooltipContent>
+        <TooltipContent>Open sessions sidebar</TooltipContent>
       </Tooltip>
+      <div
+        ref={stripRef}
+        className="tw-relative tw-flex tw-min-w-0 tw-flex-1 tw-items-stretch tw-gap-1 tw-overflow-hidden tw-px-2"
+      >
+        <div role="tablist" className="tw-flex tw-min-w-0 tw-items-stretch tw-gap-1">
+          {visibleSessions.map((session) => (
+            <SessionTab
+              key={session.internalId}
+              session={session}
+              isActive={session.internalId === activeId}
+              isRenaming={renamingId === session.internalId}
+              onActivate={() => manager.setActiveSession(session.internalId)}
+              onClose={() => handleClose(session.internalId)}
+              onStartRename={() => setRenamingId(session.internalId)}
+              onSubmitRename={(label) => {
+                manager.renameSession(session.internalId, label);
+                setRenamingId(null);
+              }}
+              onCancelRename={() => setRenamingId(null)}
+            />
+          ))}
+        </div>
+        {overflowSessions.length > 0 && (
+          <OverflowMenu
+            sessions={overflowSessions}
+            activeId={activeId}
+            onActivate={(id) => manager.setActiveSession(id)}
+            onClose={handleClose}
+          />
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost2"
+              size="icon"
+              onClick={handleNew}
+              disabled={isCreating}
+              aria-label="New chat"
+              className="tw-my-1 tw-shrink-0"
+            >
+              <Plus className="tw-size-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>New chat</TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 };

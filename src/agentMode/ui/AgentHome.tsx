@@ -280,6 +280,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const runningChatIds = useRunningChatIds(manager);
   const attentionChatIds = useAttentionChatIds(manager);
 
+  const handleOpenSessionsSidebar = useCallback(() => {
+    plugin.activateSessionsSidebar().catch((e) => logError("[AgentMode] open sidebar failed", e));
+  }, [plugin]);
+
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
       logError("[AgentMode] exit project failed", e);
@@ -712,7 +716,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} />
+      <AgentTabStrip manager={manager} onOpenSidebar={handleOpenSessionsSidebar} />
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}

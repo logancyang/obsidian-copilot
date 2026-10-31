@@ -86,6 +86,7 @@ import {
   CHAT_VIEWTYPE,
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
+  SESSIONS_SIDEBAR_VIEWTYPE,
   TURN_DIFF_VIEW_TYPE,
 } from "@/constants";
 import { StartupLoadingView } from "@/components/StartupLoadingView";
@@ -392,6 +393,89 @@ describe("main", () => {
       });
     });
 
+    describe("activateSessionsSidebar()", () => {
+      beforeEach(() => {
+        jest.clearAllMocks();
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+      });
+
+      it("opens the sessions sidebar in a new left split leaf and reveals it for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const plugin = createPluginUnderTest([]);
+        const leaf = { setViewState: jest.fn().mockResolvedValue(undefined) };
+        const getLeftLeaf = jest.fn(() => leaf);
+        const getRightLeaf = jest.fn();
+        const revealLeaf = jest.fn();
+        Object.assign(plugin, {
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              getLeftLeaf,
+              getRightLeaf,
+              revealLeaf,
+            },
+          },
+        });
+
+        await plugin.activateSessionsSidebar();
+
+        expect(getLeftLeaf).toHaveBeenCalledWith(false);
+        expect(getRightLeaf).not.toHaveBeenCalled();
+        expect(leaf.setViewState).toHaveBeenCalledWith({
+          type: SESSIONS_SIDEBAR_VIEWTYPE,
+          active: true,
+        });
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+      });
+
+      it("reveals the open sessions sidebar instead of opening a second one for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const plugin = createPluginUnderTest([]);
+        const existing = { setViewState: jest.fn() };
+        const getLeftLeaf = jest.fn();
+        const revealLeaf = jest.fn();
+        Object.assign(plugin, {
+          app: {
+            workspace: { getLeavesOfType: jest.fn(() => [existing]), getLeftLeaf, revealLeaf },
+          },
+        });
+
+        await plugin.activateSessionsSidebar();
+
+        expect(revealLeaf).toHaveBeenCalledWith(existing);
+        expect(getLeftLeaf).not.toHaveBeenCalled();
+        expect(existing.setViewState).not.toHaveBeenCalled();
+      });
+
+      it("does nothing when the workspace has no left split to open in for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const plugin = createPluginUnderTest([]);
+        const revealLeaf = jest.fn();
+        Object.assign(plugin, {
+          app: {
+            workspace: {
+              getLeavesOfType: jest.fn(() => []),
+              getLeftLeaf: jest.fn(() => null),
+              revealLeaf,
+            },
+          },
+        });
+
+        await expect(plugin.activateSessionsSidebar()).resolves.toBeUndefined();
+
+        expect(revealLeaf).not.toHaveBeenCalled();
+      });
+
+      it("explains that Agent Chat is unavailable instead of opening on mobile for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+        const plugin = createPluginUnderTest([]);
+        const getLeftLeaf = jest.fn();
+        Object.assign(plugin, { app: { workspace: { getLeavesOfType: jest.fn(), getLeftLeaf } } });
+
+        await plugin.activateSessionsSidebar();
+
+        expect(Notice).toHaveBeenCalledWith("Agent Chat is not available on mobile.");
+        expect(getLeftLeaf).not.toHaveBeenCalled();
+      });
+    });
+
     describe("addNoteToActiveChat()", () => {
       beforeEach(() => {
         jest.clearAllMocks();
@@ -572,7 +656,7 @@ describe("main", () => {
         expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
       });
 
-      it("also registers the Agent Chat, plan preview, and turn diff views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
+      it("also registers the Agent Chat, sessions sidebar, plan preview, and turn diff views up front on desktop https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         const settings = deferred();
         const { plugin, registrations } = createLoadingPlugin(() => settings.promise);
@@ -584,6 +668,7 @@ describe("main", () => {
           APPLY_VIEW_TYPE,
           RELEVANT_NOTES_VIEWTYPE,
           CHAT_AGENT_VIEWTYPE,
+          SESSIONS_SIDEBAR_VIEWTYPE,
           PLAN_PREVIEW_VIEW_TYPE,
           TURN_DIFF_VIEW_TYPE,
         ]);
