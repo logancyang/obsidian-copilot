@@ -60,6 +60,8 @@ function renderSection(
         onOpenSourceFile={props.onOpenSourceFile ?? noop}
         onCopyChatLink={props.onCopyChatLink ?? noop}
         onSetChatPinned={props.onSetChatPinned ?? noop}
+        onSetChatArchived={props.onSetChatArchived ?? noop}
+        onViewArchived={props.onViewArchived}
         getChatBookmarkState={props.getChatBookmarkState ?? unsettledBookmarkState}
         onSetChatBookmarked={props.onSetChatBookmarked ?? noop}
       />
@@ -545,11 +547,63 @@ describe("GlobalRecentChatsSection", () => {
         "Rename",
         "Copy chat link",
         "---",
+        "Archive chat",
         "Delete",
       ]);
       expect(within(menu).getByRole("menuitem", { name: "Delete" }).className).toContain(
         "tw-text-error"
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 archives the chosen chat when Archive chat is selected from the menu, without opening it", async () => {
+      const onSetChatArchived = jest.fn(noop);
+      const onLoadChat = jest.fn(noop);
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onSetChatArchived,
+        onLoadChat,
+      });
+
+      const menu = openMenuFromButton("Saved chat");
+      await act(async () => {
+        chooseMenuItem(menu, "Archive chat");
+      });
+
+      expect(onSetChatArchived).toHaveBeenCalledWith("chats/saved.md", true);
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 offers Archive chat for a pinned chat too", () => {
+      renderSection({
+        items: [makeItem("chats/pinned.md", { title: "Pinned chat", pinnedAt: 5_000 })],
+      });
+
+      expect(menuEntries(openMenuFromButton("Pinned chat"))).toContain("Archive chat");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 opens the archived chats from a View archived button below the list", () => {
+      const onViewArchived = jest.fn();
+      renderSection({
+        items: [makeItem("chats/saved.md", { title: "Saved chat" })],
+        onViewArchived,
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "View archived" }));
+
+      expect(onViewArchived).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 still offers View archived when every chat is archived and the list is empty", () => {
+      renderSection({ items: [], onViewArchived: jest.fn() });
+
+      expect(screen.getByText("No recent chats")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "View archived" })).toBeTruthy();
+    });
+
+    it("shows no View archived button when the host provides no archive viewer", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
+
+      expect(screen.queryByRole("button", { name: "View archived" })).toBeNull();
     });
 
     it("adds Close chat above Delete in the menu when the chat's session is open", () => {
@@ -565,6 +619,7 @@ describe("GlobalRecentChatsSection", () => {
         "Rename",
         "Copy chat link",
         "---",
+        "Archive chat",
         "Close chat",
         "Delete",
       ]);
@@ -586,6 +641,7 @@ describe("GlobalRecentChatsSection", () => {
         "Copy chat link",
         "Add to bookmarks",
         "---",
+        "Archive chat",
         "Delete",
       ]);
     });
@@ -822,6 +878,7 @@ describe("GlobalRecentChatsSection", () => {
             onOpenSourceFile={noop}
             onCopyChatLink={noop}
             onSetChatPinned={noop}
+            onSetChatArchived={noop}
             getChatBookmarkState={async () => "unavailable"}
             onSetChatBookmarked={noop}
             onLoadHistory={safeAsyncHandler(loadHistory)}

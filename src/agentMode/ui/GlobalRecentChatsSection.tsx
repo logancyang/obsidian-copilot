@@ -24,6 +24,7 @@ import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import {
+  Archive,
   FileText,
   Link,
   LoaderCircle,
@@ -51,6 +52,8 @@ interface GlobalRecentChatsSectionProps {
   onOpenSourceFile: (id: string) => Promise<void>;
   onCopyChatLink: (id: string) => Promise<void>;
   onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
+  onSetChatArchived: (id: string, archived: boolean) => Promise<void>;
+  onViewArchived?: () => void;
   getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
   onSetChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
   onLoadHistory?: () => void;
@@ -129,6 +132,7 @@ interface RecentChatActions {
   onOpenSourceFile: (id: string) => void;
   onCloseSession?: (id: string) => Promise<void>;
   onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
+  onSetChatArchived: (id: string, archived: boolean) => Promise<void>;
 }
 
 interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
@@ -179,6 +183,7 @@ function RecentChatMenu({
     onOpenSourceFile,
     onCloseSession,
     onSetChatPinned,
+    onSetChatArchived,
   },
 }: RecentChatMenuProps): React.ReactElement {
   const app = useApp();
@@ -235,6 +240,10 @@ function RecentChatMenu({
           }
         />
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatArchived)(item.id, true)}>
+          <Archive />
+          Archive chat
+        </DropdownMenuItem>
         {isSessionOpen && onCloseSession && (
           <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
             <Power />
@@ -386,6 +395,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onOpenSourceFile,
   onCopyChatLink,
   onSetChatPinned,
+  onSetChatArchived,
+  onViewArchived,
   getChatBookmarkState,
   onSetChatBookmarked,
   onLoadHistory,
@@ -435,6 +446,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       onOpenSourceFile: handleOpenSourceFile,
       onCloseSession,
       onSetChatPinned,
+      onSetChatArchived,
     }),
     [
       getChatBookmarkState,
@@ -444,6 +456,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       onDeleteChat,
       onSetChatBookmarked,
       onSetChatPinned,
+      onSetChatArchived,
       onUpdateTitle,
     ]
   );
@@ -506,6 +519,18 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
             )}
           </div>
         </AgentHomePreviewList>
+      )}
+      {onViewArchived && (
+        <Button
+          type="button"
+          variant="ghost2"
+          size="sm"
+          className="tw-shrink-0 tw-justify-start tw-gap-2 tw-text-muted"
+          onClick={onViewArchived}
+        >
+          <Archive className="tw-size-3.5" />
+          View archived
+        </Button>
       )}
     </div>
   );

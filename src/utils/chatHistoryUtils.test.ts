@@ -1,5 +1,5 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
-import { fileToHistoryItem, parseChatPinnedAt } from "@/utils/chatHistoryUtils";
+import { fileToHistoryItem, parseChatTimestamp } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import type { App, TFile } from "obsidian";
 
@@ -66,21 +66,21 @@ describe("chatHistoryUtils", () => {
     });
   });
 
-  describe("parseChatPinnedAt()", () => {
+  describe("parseChatTimestamp()", () => {
     it("accepts a pin time written as a YAML number", () => {
-      expect(parseChatPinnedAt(1735733000000)).toBe(1735733000000);
+      expect(parseChatTimestamp(1735733000000)).toBe(1735733000000);
     });
 
     it("accepts a pin time read back as text from a note outside the metadata cache", () => {
-      expect(parseChatPinnedAt("1735733000000")).toBe(1735733000000);
+      expect(parseChatTimestamp("1735733000000")).toBe(1735733000000);
     });
 
     it("treats a missing, non-numeric, zero, or negative value as not pinned", () => {
-      expect(parseChatPinnedAt(undefined)).toBeUndefined();
-      expect(parseChatPinnedAt("yesterday")).toBeUndefined();
-      expect(parseChatPinnedAt(0)).toBeUndefined();
-      expect(parseChatPinnedAt(-5)).toBeUndefined();
-      expect(parseChatPinnedAt(true)).toBeUndefined();
+      expect(parseChatTimestamp(undefined)).toBeUndefined();
+      expect(parseChatTimestamp("yesterday")).toBeUndefined();
+      expect(parseChatTimestamp(0)).toBeUndefined();
+      expect(parseChatTimestamp(-5)).toBeUndefined();
+      expect(parseChatTimestamp(true)).toBeUndefined();
     });
   });
 });

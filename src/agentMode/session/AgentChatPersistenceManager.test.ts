@@ -532,6 +532,55 @@ describe("AgentChatPersistenceManager", () => {
     });
   });
 
+  describe("setArchivedAt()", () => {
+    it("archives a chat by writing the archive time to its note's frontmatter", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+
+      await manager.setArchivedAt(saved!.path, 1_760_000_000_000);
+
+      expect(app.files.get(saved!.path)!.contents).toContain("archivedAt: 1760000000000\n");
+    });
+
+    it("changes nothing in the note except the archive field", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const before = app.files.get(saved!.path)!.contents!;
+
+      await manager.setArchivedAt(saved!.path, 1_760_000_000_000);
+      await manager.setArchivedAt(saved!.path, null);
+
+      expect(app.files.get(saved!.path)!.contents).toBe(before);
+    });
+
+    it("unarchives a chat by removing the archivedAt key from its note's frontmatter", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      await manager.setArchivedAt(saved!.path, 1_760_000_000_000);
+
+      await manager.setArchivedAt(saved!.path, null);
+
+      expect(app.files.get(saved!.path)!.contents).not.toContain("archivedAt");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 rejects archiving a note that was moved or deleted so the row is not shown archived", async () => {
+      await expect(
+        manager.setArchivedAt("test-folder/agent__gone.md", 1_760_000_000_000)
+      ).rejects.toThrow("test-folder/agent__gone.md");
+      expect(app.files.has("test-folder/agent__gone.md")).toBe(false);
+    });
+
+    it("keeps a chat archived through later autosaves", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      await manager.setArchivedAt(saved!.path, 1_760_000_000_000);
+
+      await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "hi again")],
+        "claude",
+        { existingPath: saved!.path }
+      );
+
+      expect(app.files.get(saved!.path)!.contents).toContain("archivedAt: 1760000000000\n");
+    });
+  });
+
   describe("loadFile()", () => {
     it("throws on missing backendId instead of silently defaulting", async () => {
       const path = "test-folder/agent__broken.md";

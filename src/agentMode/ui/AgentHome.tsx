@@ -21,6 +21,7 @@ import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeRel
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
+import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
   getHomeShelfTab,
@@ -206,12 +207,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const {
     chatHistoryItems,
+    archivedChatItems,
     chatHistorySettled,
     loadChatHistory: handleLoadChatHistory,
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
     setChatPinned: handleSetChatPinned,
+    setChatArchived: handleSetChatArchived,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
     getChatBookmarkState,
@@ -234,6 +237,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const handleLoadChatHistorySafely = safeAsyncHandler(handleLoadChatHistory);
+
+  const handleViewArchived = useCallback(
+    () =>
+      new ArchivedChatsModal(app, archivedChatItems, {
+        onUnarchive: (id) => handleSetChatArchived(id, false),
+        onOpen: handleLoadChat,
+      }).open(),
+    [app, archivedChatItems, handleSetChatArchived, handleLoadChat]
+  );
 
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
@@ -410,6 +422,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
+            onSetChatArchived={handleSetChatArchived}
+            onViewArchived={handleViewArchived}
             getChatBookmarkState={getChatBookmarkState}
             onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
@@ -467,6 +481,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleUpdateChatTitle,
       handleDeleteChat,
       handleSetChatPinned,
+      handleSetChatArchived,
+      handleViewArchived,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
       getChatBookmarkState,
@@ -502,6 +518,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSourceFile={handleOpenSourceFile}
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
+            onSetChatArchived={handleSetChatArchived}
+            onViewArchived={handleViewArchived}
             getChatBookmarkState={getChatBookmarkState}
             onSetChatBookmarked={handleSetChatBookmarked}
             onLoadHistory={handleLoadChatHistorySafely}
@@ -531,6 +549,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleUpdateChatTitle,
       handleDeleteChat,
       handleSetChatPinned,
+      handleSetChatArchived,
+      handleViewArchived,
       handleOpenSourceFile,
       handleCopyHistoryChatLink,
       getChatBookmarkState,

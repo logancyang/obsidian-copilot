@@ -166,6 +166,7 @@ interface MockSessionTestHandle {
   setTaskStatuses(statuses: AgentTask["status"][], kinds?: AgentTask["kind"][]): void;
   setPendingPermissionCount(count: number): void;
   setQueuedPromptCount(count: number): void;
+  sendPrompt(): void;
   disconnect(): void;
 }
 
@@ -203,6 +204,7 @@ function makeMockSession(overrides: {
     onStatusChanged?: (s: typeof status) => void;
     onNeedsAttentionChanged?: (v: boolean) => void;
     onTasksChanged?: () => void;
+    onPromptSent?: () => void;
     onDisconnected?: () => void;
   }>();
   const session = {
@@ -288,6 +290,9 @@ function makeMockSession(overrides: {
     },
     setQueuedPromptCount: (count) => {
       queuedPrompts = Array.from({ length: count }, (_, i) => ({ id: `prompt-${i}` }));
+    },
+    sendPrompt: () => {
+      for (const l of listeners) l.onPromptSent?.();
     },
     disconnect: () => {
       for (const l of listeners) l.onDisconnected?.();
@@ -719,6 +724,7 @@ interface FakeFrontmatter {
   lastAccessedAt?: number;
   projectId?: string;
   pinnedAt?: number;
+  archivedAt?: number;
 }
 
 function makeIndexStorage() {
@@ -794,6 +800,7 @@ function buildHistoryHarness(opts?: {
     deleteFile: jest.fn(async () => undefined),
     saveSession: jest.fn(async () => ({ path: "chats/agent__saved.md" })),
     setPinnedAt: jest.fn(async () => undefined),
+    setArchivedAt: jest.fn(async () => undefined),
   };
   const indexStorage = opts?.indexStorage ?? makeIndexStorage();
   const index = new AgentSessionIndex(indexStorage, "plugins/copilot/index.json");
@@ -4057,6 +4064,22 @@ describe("AgentSessionManager", () => {
         });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 reports when saved chats were archived and treats chats saved before archiving existed as not archived", async () => {
+        const { manager } = buildHistoryHarness({
+          files: {
+            "chats/agent__archived.md": { epoch: 1_000, backendId: "opencode", archivedAt: 6_000 },
+            "chats/agent__legacy.md": { epoch: 1_000, backendId: "opencode" },
+          },
+        });
+
+        const items = await manager.getChatHistoryItems();
+
+        expect(Object.fromEntries(items.map((item) => [item.id, item.archivedAt]))).toEqual({
+          "chats/agent__archived.md": 6_000,
+          "chats/agent__legacy.md": undefined,
+        });
+      });
+
       it("de-duplicates hidden-folder chats via the adapter frontmatter fallback", async () => {
         const { manager, index } = buildHistoryHarness({
           hiddenFiles: {
@@ -4768,6 +4791,92 @@ describe("AgentSessionManager", () => {
 
         expect(persistence.saveSession).not.toHaveBeenCalled();
         expect(persistence.setPinnedAt).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("setChatArchived()", () => {
+      const ARCHIVED_AT = 1_760_000_000_000;
+      let nowSpy: jest.SpyInstance | undefined;
+
+      beforeEach(() => {
+        nowSpy = jest.spyOn(Date, "now").mockReturnValue(ARCHIVED_AT);
+      });
+
+      afterEach(() => {
+        nowSpy?.mockRestore();
+        nowSpy = undefined;
+      });
+
+      it("archives a saved chat by writing the current time to its note and returns the archived row", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode" } },
+        });
+
+        const archived = await manager.setChatArchived("chats/agent__a.md", true);
+
+        expect(archived).toEqual({ id: "chats/agent__a.md", archivedAt: ARCHIVED_AT });
+        expect(persistence.setArchivedAt).toHaveBeenCalledWith("chats/agent__a.md", ARCHIVED_AT);
+      });
+
+      it("unarchives a saved chat by clearing the archive time from its note", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: {
+            "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", archivedAt: 4_000 },
+          },
+        });
+
+        const restored = await manager.setChatArchived("chats/agent__a.md", false);
+
+        expect(restored).toEqual({ id: "chats/agent__a.md", archivedAt: undefined });
+        expect(persistence.setArchivedAt).toHaveBeenCalledWith("chats/agent__a.md", null);
+      });
+
+      it("saves a live chat that has no note yet and archives the new note instead of the unsaved chat", async () => {
+        jest.useFakeTimers();
+        jest.spyOn(Date, "now").mockReturnValue(ARCHIVED_AT);
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const saveSession = jest.fn(async () => ({ path: "chats/saved.md" }));
+        const setArchivedAt = jest.fn(async () => undefined);
+        const mgr = buildManager({ persistence: { saveSession, setArchivedAt } });
+        const session = await mgr.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Unsaved question" }]);
+
+        const archived = await mgr.setChatArchived(nativeIdOf(session), true);
+
+        expect(setArchivedAt).toHaveBeenCalledWith("chats/saved.md", ARCHIVED_AT);
+        expect(archived).toEqual({ id: "chats/saved.md", archivedAt: ARCHIVED_AT });
+      });
+    });
+
+    describe("archived chat that receives a message", () => {
+      const ARCHIVED_NOTE = "chats/agent__saved.md";
+
+      async function openSavedChat(archivedAt?: number) {
+        const harness = buildHistoryHarness({
+          files: { [ARCHIVED_NOTE]: { epoch: 1_000, backendId: "opencode", archivedAt } },
+        });
+        const session = await harness.manager.createSession();
+        getSessionTestHandle(session).setMessages([{ message: "Earlier question" }]);
+        await harness.manager.ensureChatNote(nativeIdOf(session));
+        return { ...harness, handle: getSessionTestHandle(session) };
+      }
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/805 is unarchived when the user sends a message in it", async () => {
+        const { manager, persistence, handle } = await openSavedChat(4_000);
+
+        handle.sendPrompt();
+        await manager.saveActiveSession();
+
+        expect(persistence.setArchivedAt).toHaveBeenCalledWith(ARCHIVED_NOTE, null);
+      });
+
+      it("leaves a chat that was never archived untouched when the user sends a message in it", async () => {
+        const { manager, persistence, handle } = await openSavedChat();
+
+        handle.sendPrompt();
+        await manager.saveActiveSession();
+
+        expect(persistence.setArchivedAt).not.toHaveBeenCalled();
       });
     });
 

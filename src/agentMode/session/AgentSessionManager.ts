@@ -20,7 +20,7 @@ import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
   fileToHistoryItem,
-  parseChatPinnedAt,
+  parseChatTimestamp,
   readChatPathProjectId,
 } from "@/utils/chatHistoryUtils";
 import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
@@ -155,6 +155,11 @@ export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefine
 export interface PinnedChat {
   id: string;
   pinnedAt?: number;
+}
+
+export interface ArchivedChat {
+  id: string;
+  archivedAt?: number;
 }
 
 export interface ReplaceSessionOptions {
@@ -413,7 +418,8 @@ export class AgentSessionManager {
           return {
             item: {
               ...item,
-              pinnedAt: parseChatPinnedAt(frontmatter?.pinnedAt),
+              pinnedAt: parseChatTimestamp(frontmatter?.pinnedAt),
+              archivedAt: parseChatTimestamp(frontmatter?.archivedAt),
               ...(liveAttentionPaths.has(item.id) ? { needsAttention: true } : {}),
             },
             backendId: ref?.backendId,
@@ -582,6 +588,17 @@ export class AgentSessionManager {
     const pinnedAt = pinned ? Date.now() : null;
     await persistence.setPinnedAt(path, pinnedAt);
     return { id: path, pinnedAt: pinnedAt ?? undefined };
+  }
+
+  async setChatArchived(id: string, archived: boolean): Promise<ArchivedChat> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) throw new Error("Agent chat persistence is not configured.");
+    // The archive flag lives in the chat's note, so a chat that has none is saved as one first.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/805
+    const path = await this.ensureChatNote(id);
+    const archivedAt = archived ? Date.now() : null;
+    await persistence.setArchivedAt(path, archivedAt);
+    return { id: path, archivedAt: archivedAt ?? undefined };
   }
 
   async ensureChatNote(id: string): Promise<string> {
@@ -2180,8 +2197,26 @@ export class AgentSessionManager {
       onMessagesChanged: trigger,
       onStatusChanged: () => {},
       onLabelChanged: trigger,
+      onPromptSent: () => this.unarchiveSavedChat(session),
     });
     this.getSessionState(session.internalId).unsub = unsubscribe;
+  }
+
+  // The note write joins the chat's save chain so it never interleaves with an autosave rewriting the same note.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/805
+  private unarchiveSavedChat(session: AgentSession): void {
+    const persistence = this.opts.persistenceManager;
+    const state = this.getSessionState(session.internalId);
+    const path = state.source?.path;
+    if (!persistence || !path) return;
+    const unarchive = async () => {
+      const frontmatter = await this.readChatFrontmatter(path);
+      if (parseChatTimestamp(frontmatter?.archivedAt) === undefined) return;
+      await persistence.setArchivedAt(path, null);
+    };
+    state.saving = (state.saving ?? Promise.resolve())
+      .then(unarchive)
+      .catch((e) => logWarn(`[AgentMode] unarchive on send failed for ${path}`, e));
   }
 
   private scheduleAutoSave(session: AgentSession): void {
