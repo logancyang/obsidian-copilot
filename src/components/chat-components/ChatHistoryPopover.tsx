@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowUpRight,
   Check,
   Edit2,
+  FileText,
   LoaderCircle,
   MessageCircle,
   Power,
@@ -525,9 +525,9 @@ function ChatHistoryItem({
                   }
                 }}
                 className="tw-size-5 tw-p-0"
-                title="Open the source file"
+                title="Open chat note"
               >
-                <ArrowUpRight className="tw-size-4" />
+                <FileText className="tw-size-3.5" />
               </Button>
 
               <Button
