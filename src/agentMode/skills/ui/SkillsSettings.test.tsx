@@ -529,8 +529,7 @@ describe("SkillsSettings", () => {
 
       expect(openVaultPath).toHaveBeenCalledWith(
         expect.anything(),
-        "/vault/.claude/skills/broken-skill/SKILL.md",
-        { newLeaf: true }
+        "/vault/.claude/skills/broken-skill/SKILL.md"
       );
       expect(openWithSystemDefault).toHaveBeenCalledWith("/vault/.claude/skills/broken-skill");
     });
@@ -582,8 +581,7 @@ describe("SkillsSettings", () => {
 
       expect(openVaultPath).toHaveBeenCalledWith(
         app,
-        "/vault/copilot/skills/broken-skill/SKILL.md",
-        { newLeaf: true }
+        "/vault/copilot/skills/broken-skill/SKILL.md"
       );
       expect(
         (

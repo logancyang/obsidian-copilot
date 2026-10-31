@@ -9,6 +9,10 @@ let requestUrlImpl = jest.fn().mockResolvedValue({
 });
 
 module.exports = {
+  Keymap: {
+    isModEvent: (event) =>
+      Boolean(event && (event.metaKey || event.ctrlKey || event.button === 1)) && "tab",
+  },
   moment: jest.requireActual("moment"),
   requestUrl: (...args) => requestUrlImpl(...args),
   __setRequestUrlImpl: (impl) => {

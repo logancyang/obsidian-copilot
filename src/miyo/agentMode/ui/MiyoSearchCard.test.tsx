@@ -214,7 +214,7 @@ describe("MiyoSearchCard", () => {
 
       fireEvent.click(screen.getByRole("button", { name: /Standing desk setup/ }));
 
-      expect(onOpenNote).toHaveBeenCalledWith("Projects/Standing desk setup.md");
+      expect(onOpenNote).toHaveBeenCalledWith("Projects/Standing desk setup.md", false);
       expect(onToggle).not.toHaveBeenCalled();
     });
 

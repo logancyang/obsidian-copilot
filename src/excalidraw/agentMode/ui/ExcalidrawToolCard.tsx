@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { ExcalidrawDrawingSummary } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { cn } from "@/lib/utils";
+import { openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 
 export interface ExcalidrawToolCardProps extends ExcalidrawDrawingSummary {
-  onOpenDrawing: (path: string) => void;
+  onOpenDrawing: (path: string, pane: OpenPane) => void;
   open: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
@@ -67,7 +68,7 @@ export const ExcalidrawToolCard: React.FC<ExcalidrawToolCardProps> = ({
             size="fit"
             title={path}
             className="!tw-h-auto tw-min-w-0 tw-justify-start !tw-border-0 !tw-bg-transparent !tw-px-0 tw-text-sm !tw-text-accent !tw-shadow-none"
-            onClick={() => onOpenDrawing(path)}
+            {...openLinkClickProps((pane) => onOpenDrawing(path, pane))}
           >
             <span className="tw-truncate">{name}</span>
           </Button>

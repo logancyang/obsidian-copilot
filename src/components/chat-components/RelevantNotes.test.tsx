@@ -30,6 +30,7 @@ const mockApp = {
     on: jest.fn(),
     offref: jest.fn(),
     getLeaf: mockGetLeaf,
+    iterateAllLeaves: jest.fn(),
   },
 };
 const mockUpdateSetting = jest.fn();
@@ -249,12 +250,12 @@ describe("RelevantNotes", () => {
       expect(onAddToChat).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 
-    it("opens a result in a new leaf", async () => {
+    it("opens a result in a new tab", async () => {
       render(<RelevantNotes onAddToChat={jest.fn()} />);
 
       fireEvent.click(await screen.findByText("Target"));
 
-      expect(mockGetLeaf).toHaveBeenCalledWith(true);
+      expect(mockGetLeaf).toHaveBeenCalledWith("tab");
       expect(mockOpenFile).toHaveBeenCalledWith(expect.objectContaining({ path: "Target.md" }));
     });
 

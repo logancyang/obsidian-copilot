@@ -8,6 +8,8 @@ Quick Chat remains available for lightweight conversation and is the main chat e
 
 Your sent messages display Markdown formatting, including headings, lists, code blocks, links, and image embeds. Copy and Edit keep the original Markdown text. Links and image embeds in saved chats resolve from the conversation note, even when another note is open.
 
+Selecting a note in Agent Chat, such as a file on a tool card, a drawing on a Copilot card, a link in a reply, or **Open note** in a change review, switches to the tab where that note is already open, including one in a popout window. A new tab opens only when the note isn't open. To open another tab anyway, Cmd-click (Ctrl-click on Windows and Linux) or middle-click it.
+
 ## Choose an agent
 
 Open [**Settings → Copilot → Basic → Agents**](settings.md#basic). Configure at least one agent, then choose the **Default agent** for new chats.

@@ -6,6 +6,7 @@ import { App, FileSystemAdapter } from "obsidian";
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 jest.mock("obsidian", () => ({
+  Keymap: jest.requireActual<typeof import("obsidian")>("obsidian").Keymap,
   FileSystemAdapter: class FileSystemAdapter {
     private readonly base: string;
     constructor(base = "/vault") {
@@ -24,6 +25,7 @@ const VAULT = "/Users/me/vault";
 interface TestApp {
   workspace: { openLinkText: jest.Mock; getActiveFile: () => null };
   vault: { adapter: unknown; getAbstractFileByPath: jest.Mock };
+  metadataCache: { getFirstLinkpathDest: jest.Mock };
 }
 
 function buildApp(): TestApp {
@@ -31,6 +33,7 @@ function buildApp(): TestApp {
   return {
     workspace: { openLinkText: jest.fn(), getActiveFile: () => null },
     vault: { adapter, getAbstractFileByPath: jest.fn(() => null) },
+    metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
   };
 }
 
@@ -64,7 +67,7 @@ describe("renderMarkdown", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "00_Inbox/Foo.md",
         "source.md",
-        false
+        "tab"
       );
       expect(openWithSystemDefault).not.toHaveBeenCalled();
     });
@@ -75,14 +78,18 @@ describe("renderMarkdown", () => {
       expect(app.workspace.openLinkText).toHaveBeenCalledWith(
         "00_Inbox/Foo Bar.md",
         "source.md",
-        false
+        "tab"
       );
     });
 
-    it("opens the link in a new leaf on ctrl-click", async () => {
+    it("opens the link in a new tab on ctrl-click", async () => {
       const app = buildApp();
       await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md", { button: 0, ctrlKey: true });
-      expect(app.workspace.openLinkText).toHaveBeenCalledWith("00_Inbox/Foo.md", "source.md", true);
+      expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+        "00_Inbox/Foo.md",
+        "source.md",
+        "tab"
+      );
     });
   });
 });

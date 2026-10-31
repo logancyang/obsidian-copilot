@@ -177,7 +177,7 @@ export const SkillsSettings: React.FC = () => {
 
   const handleEditSkillMd = useCallback(
     (skill: Skill) => {
-      openVaultPath(app, skill.filePath, { newLeaf: true });
+      openVaultPath(app, skill.filePath);
     },
     [app]
   );
@@ -218,7 +218,7 @@ export const SkillsSettings: React.FC = () => {
         ...evidence,
         revealLabel: indexed ? "Reveal in vault" : "Show in folder",
         onFixWithAgent: () => handleFixWithAgent([evidence]),
-        onOpen: () => openVaultPath(app, skill.filePath, { newLeaf: true }),
+        onOpen: () => openVaultPath(app, skill.filePath),
         onReveal: () => handleRevealSkillFolder(skill.dirPath),
       };
     });

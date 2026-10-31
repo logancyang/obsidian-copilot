@@ -1,5 +1,5 @@
 import { openVaultPath } from "@/utils/openVaultPath";
-import { App, Component, MarkdownRenderer } from "obsidian";
+import { App, Component, Keymap, MarkdownRenderer } from "obsidian";
 
 type ModernRender = (
   app: App,
@@ -41,8 +41,7 @@ function wireInternalLinks(
     } catch {
       href = raw;
     }
-    const newLeaf = e.button === 1 || e.ctrlKey || e.metaKey;
-    openVaultPath(app, href, { newLeaf, sourcePath });
+    openVaultPath(app, href, { sourcePath, pane: Keymap.isModEvent(e) });
   };
   el.addEventListener("click", handleClick);
   el.addEventListener("auxclick", handleClick);

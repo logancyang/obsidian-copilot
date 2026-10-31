@@ -5,7 +5,7 @@ import type { AgentToolStatus } from "@/agentMode/session/types";
 import { displayTargetFromPath, lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
-import { openVaultPath } from "@/utils/openVaultPath";
+import { openLinkClickProps, openVaultPath } from "@/utils/openVaultPath";
 import { useApp } from "@/context";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
@@ -43,11 +43,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             <a
               href="#"
               className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openVaultPath(app, link.path, { newLeaf: true });
-              }}
+              {...openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))}
             >
               {link.label}
             </a>
