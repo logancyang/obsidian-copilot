@@ -18,11 +18,12 @@ import { logFileManager } from "@/logFileManager";
 import type CopilotPlugin from "@/main";
 import { createModelManagement } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
-import { getSettings, resetSettings, updateAgentModeBackendFields } from "@/settings/model";
-import { AI_SENDER } from "@/constants";
+import { getSettings, setSettings, updateAgentModeBackendFields } from "@/settings/model";
+import { AI_SENDER, DEFAULT_SETTINGS } from "@/constants";
 
 import { EgressProxy } from "./egressProxy";
 import { App } from "./obsidianApp";
+import { shownNotices } from "./obsidianShim";
 import { ScriptedProvider } from "./scriptedProvider";
 
 // Agent Mode schedules its timers on `window`, which a bare Node process lacks.
@@ -36,6 +37,8 @@ const STARTUP_TIMEOUT_MS = 30_000;
 const TURN_TIMEOUT_MS = 20_000;
 /** How long a streamed chunk may take to appear in the conversation. */
 const CHUNK_VISIBLE_TIMEOUT_MS = 10_000;
+/** How long opencode may take to confirm a picked model, effort, or mode. */
+const SELECTION_TIMEOUT_MS = 10_000;
 
 /**
  * The only credential the scripted provider accepts. It reaches opencode the
@@ -55,6 +58,17 @@ const EXPECTED_REFUSED_EGRESS: ReadonlySet<string> = new Set([
   "registry.npmjs.org:443",
 ]);
 
+/**
+ * Warnings Copilot logs when it stops opencode: the process exit itself and,
+ * right after a turn, the title poll that turn started, cut off by the closing
+ * connection. Logged while a scenario deliberately restarts opencode, they are
+ * expected; anywhere else they fail the scenario.
+ */
+const SHUTDOWN_WARNINGS: readonly RegExp[] = [
+  / WARN \[AgentMode\] backend opencode exited$/,
+  / WARN \[AgentMode\] session\/list title poll failed for \S+ ACP connection closed/,
+];
+
 /** One observed state of the conversation's latest assistant message. */
 export interface AnswerSnapshot {
   text: string;
@@ -62,11 +76,22 @@ export interface AnswerSnapshot {
   stopReason: StopReason | null;
 }
 
+/** One model Copilot is configured with, served by the scripted endpoint of its provider. */
+export interface ScriptedModel {
+  /** The Copilot provider row it belongs to, which also names that row's endpoint. */
+  provider: string;
+  model: string;
+  /** The model's declared reasoning capability, as the BYOK wizard records it. */
+  reasoning: boolean;
+}
+
 export interface RuntimeOptions {
   /** Absolute path to the pinned opencode binary. */
   binaryPath: string;
-  /** The model id the scripted provider serves, made opencode's default model. */
-  model: string;
+  /** Configured as one OpenAI-compatible provider row per distinct `provider`. */
+  models: readonly ScriptedModel[];
+  /** Saved as opencode's default model before Copilot starts. */
+  defaultModel: { model: string; effort: string | null };
 }
 
 /**
@@ -89,15 +114,20 @@ export class Runtime {
   #agentHome = "";
   #restoreEnvironment: (() => void) | null = null;
   #originalCwd = "";
+  #modelManagement: ReturnType<typeof createModelManagement> | null = null;
+  #preloader: AgentModelPreloader | null = null;
+  /** Log lines a deliberate restart wrote that {@link problems} ignores. */
+  readonly #expectedLogLines = new Set<string>();
   #manager: AgentSessionManager | null = null;
   #conversation: Conversation | null = null;
   /** Process startups the manager does not wait for on shutdown; see {@link stop}. */
   readonly #startups: Promise<unknown>[] = [];
 
   /**
-   * Configure Copilot the way a user would — a BYOK OpenAI-compatible provider
-   * with a key, its model enabled for opencode and picked as the default — then
-   * construct the session layer and start the model probe plugin load starts.
+   * Configure Copilot the way a user would — BYOK OpenAI-compatible providers
+   * with a key, their models enabled for opencode and one picked as the
+   * default — then construct the session layer and start the model probe
+   * plugin load starts.
    */
   async start(options: RuntimeOptions): Promise<void> {
     this.#tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), "copilot-runtime-"));
@@ -110,29 +140,44 @@ export class Runtime {
     // from a repository checkout, so neither should the scenario.
     this.#originalCwd = process.cwd();
     process.chdir(this.#tempRoot);
-    // The log buffer outlives a scenario; start each one with its own.
+    // The log buffer and the notices outlive a scenario; start each one with its own.
     await logFileManager.clear();
-    await this.provider.start(options.model);
+    shownNotices.length = 0;
+    const providers = [...new Set(options.models.map((m) => m.provider))];
+    await this.provider.start(
+      providers.map((name) => ({
+        name,
+        models: options.models.filter((m) => m.provider === name).map((m) => m.model),
+      }))
+    );
     await this.egress.start();
     this.#restoreEnvironment = this.#isolateEnvironment();
 
-    resetSettings();
+    // A fresh install's settings. The settings tab's reset (`resetSettings`)
+    // keeps every provider that has a key, so it would carry one scenario's
+    // providers into the next.
+    setSettings(DEFAULT_SETTINGS);
     const app = new App(this.#vaultPath) as unknown as ObsidianApp;
     const modelManagement = createModelManagement({ app });
+    this.#modelManagement = modelManagement;
     const plugin = {
       app,
       manifest: { version: CLIENT_VERSION },
       modelManagement,
     } as unknown as CopilotPlugin;
 
-    const { configuredModelIds } = await modelManagement.setup.byok.setupProvider({
-      providerType: "openai-compatible",
-      displayName: "Scripted",
-      baseUrl: this.provider.baseUrl,
-      apiKey: SYNTHETIC_API_KEY,
-      models: [{ id: options.model, displayName: options.model }],
-      autoEnrollIn: ["opencode"],
-    });
+    for (const provider of providers) {
+      await modelManagement.setup.byok.setupProvider({
+        providerType: "openai-compatible",
+        displayName: provider,
+        baseUrl: this.provider.baseUrl(provider),
+        apiKey: SYNTHETIC_API_KEY,
+        models: options.models
+          .filter((m) => m.provider === provider)
+          .map((m) => ({ id: m.model, displayName: m.model, reasoning: m.reasoning })),
+        autoEnrollIn: ["opencode"],
+      });
+    }
     updateAgentModeBackendFields("opencode", {
       binaryPath: options.binaryPath,
       binaryVersion: OPENCODE_PINNED_VERSION,
@@ -142,36 +187,39 @@ export class Runtime {
       envOverrides: { OPENCODE_DISABLE_MODELS_FETCH: "1" },
     });
 
+    const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
+    this.#preloader = preloader;
     const manager: AgentSessionManager = new AgentSessionManager(app, plugin, {
       permissionPrompter: createDefaultPermissionPrompter(
         (id) => manager.getSessionByBackendId(id),
         (id) => manager.isReadOnlyFanoutSession(id)
       ),
       resolveDescriptor: (id) => backendRegistry[id],
-      modelPreloader: new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]),
+      modelPreloader: preloader,
     });
     this.#manager = manager;
 
-    // The same write the Default model picker makes. Without a default,
+    // The same write the Default model setting makes. Without a default,
     // opencode starts sessions on one of its own hosted models.
-    const opencode = backendRegistry.opencode;
-    const defaultEntry = opencode
-      .getEnabledModelEntries?.(getSettings())
-      ?.find(
-        (entry) =>
-          entry.baseModelId === opencode.getWireBaseId?.(configuredModelIds[0], getSettings())
-      );
-    if (!defaultEntry) {
-      throw new Error(`"${options.model}" is not an enabled opencode model after setup`);
-    }
     await manager.persistDefaultSelection("opencode", {
-      baseModelId: defaultEntry.baseModelId,
-      effort: null,
+      baseModelId: this.wireId(options.defaultModel.model),
+      effort: options.defaultModel.effort,
     });
     // The first chat adopts this probe's warm process, as after plugin load.
     const preload = manager.preloadModels("opencode");
     this.#startups.push(preload);
     manager.registerPreload("opencode", preload);
+  }
+
+  /** opencode's id for a configured model, as the picker and saved selections name it. */
+  wireId(model: string): string {
+    const settings = getSettings();
+    const configured = settings.configuredModels.find((m) => m.info.id === model);
+    const wireId =
+      configured &&
+      backendRegistry.opencode.getWireBaseId?.(configured.configuredModelId, settings);
+    if (!wireId) throw new Error(`"${model}" is not a configured opencode model`);
+    return wireId;
   }
 
   /**
@@ -201,6 +249,77 @@ export class Runtime {
     return this.#conversation;
   }
 
+  /** The production session manager, for the selection and restart APIs the chat view calls. */
+  get manager(): AgentSessionManager {
+    return this.#requireManager();
+  }
+
+  /** The running plugin's model registries, which the settings tab edits. */
+  get modelManagement(): ReturnType<typeof createModelManagement> {
+    if (!this.#modelManagement) throw new Error("Runtime.start() has not completed");
+    return this.#modelManagement;
+  }
+
+  /**
+   * Report a spawn-time setting change with no chat open, as Copilot's settings
+   * subscriptions do: opencode's warm probe restarts on the new config at once.
+   * Resolves once the old probe has exited and the new one is warm.
+   *
+   * @param reason The reason the subscription reports, carried into the log.
+   */
+  async noteSpawnConfigChanged(reason: string): Promise<void> {
+    const manager = this.#requireManager();
+    const restart = this.#expectingShutdown(async () => {
+      // A probe still starting would take the change itself and exit later.
+      await Promise.allSettled(this.#startups.splice(0));
+      // The refresh stops the old probe without waiting for it to exit; its
+      // exit warning belongs to this restart all the same.
+      const exited = Promise.all(
+        (this.#preloader?.getWarmProcs() ?? [])
+          .filter(({ proc }) => proc.isRunning())
+          .map(({ proc }) => new Promise<void>((resolve) => proc.onExit(resolve)))
+      );
+      await manager.noteSpawnConfigChanged("opencode", reason);
+      await exited;
+      // Deduplicated onto the new probe the change started.
+      await manager.preloadModels("opencode");
+    });
+    await within(
+      STARTUP_TIMEOUT_MS,
+      restart,
+      () =>
+        "opencode's warm probe did not restart: the old probe had not exited or the new one was still starting"
+    );
+  }
+
+  /**
+   * Restart opencode the way the chat's Reload action does. A spawn-time
+   * setting change is held while a chat is open; Reload applies it, replacing
+   * every open chat with its resumed conversation. Returns the chat now shown,
+   * once it can take a message.
+   */
+  async restartAgent(): Promise<Conversation> {
+    const manager = this.#requireManager();
+    const restart = async (): Promise<AgentChatUIState> => {
+      await this.#expectingShutdown(async () => {
+        await manager.noteSpawnConfigChanged("opencode", "runtime scenario");
+        await manager.applyHeldConfigChange("opencode");
+      });
+      const session = manager.getActiveSession();
+      const ui = session && manager.getChatUIState(session.internalId);
+      if (!ui) throw new Error("no chat is shown after the restart");
+      await session.ready;
+      return ui;
+    };
+    const ui = await within(
+      STARTUP_TIMEOUT_MS,
+      restart(),
+      () => `the chat was not resumed (last error: ${manager.getLastError() ?? "none"})`
+    );
+    this.#conversation = new Conversation(ui);
+    return this.#conversation;
+  }
+
   /**
    * Everything that should fail a scenario even when its own steps passed:
    * requests the scripted provider refused, network destinations the runtime
@@ -216,6 +335,7 @@ export class Runtime {
       .exportLogText()
       .split("\n")
       .filter((line) => ["WARN", "ERROR"].includes(line.split(" ")[1]))
+      .filter((line) => !this.#expectedLogLines.has(line))
       .map((line) => `Copilot logged: ${line}`);
     return [...this.provider.failures, ...unexpectedEgress, ...loggedProblems];
   }
@@ -252,6 +372,9 @@ export class Runtime {
     const manager = this.#manager;
     this.#manager = null;
     this.#conversation = null;
+    this.#modelManagement = null;
+    this.#preloader = null;
+    this.#expectedLogLines.clear();
     const problems: string[] = [];
     // `shutdown()` stops the processes it owns but not one still starting: a
     // probe that finishes afterwards shuts its own process down, too late for
@@ -272,7 +395,7 @@ export class Runtime {
     await this.provider.stop();
     await this.egress.stop();
     KeychainService.resetInstance();
-    resetSettings();
+    setSettings(DEFAULT_SETTINGS);
     this.#restoreEnvironment?.();
     this.#restoreEnvironment = null;
     if (this.#originalCwd) process.chdir(this.#originalCwd);
@@ -281,6 +404,20 @@ export class Runtime {
     }
     this.#tempRoot = "";
     return problems;
+  }
+
+  /**
+   * Run a deliberate restart, recording the {@link SHUTDOWN_WARNINGS} it logs
+   * as expected. Any other warning it logs still fails the scenario.
+   */
+  async #expectingShutdown(stop: () => Promise<void>): Promise<void> {
+    const before = new Set(logFileManager.exportLogText().split("\n"));
+    await stop();
+    for (const line of logFileManager.exportLogText().split("\n")) {
+      if (!before.has(line) && SHUTDOWN_WARNINGS.some((warning) => warning.test(line))) {
+        this.#expectedLogLines.add(line);
+      }
+    }
   }
 
   /**
@@ -369,6 +506,19 @@ export class Conversation {
       () => `the turn did not finish; the answer went ${formatTimeline(this.#timeline)}`
     );
     this.#record();
+  }
+
+  /**
+   * Resolve once `check()` holds, re-checking whenever the chat view would
+   * re-render, as it does when opencode confirms a picked model, effort, or mode.
+   */
+  waitFor(check: () => boolean, waitingFor: () => string): Promise<void> {
+    return waitUntil(
+      check,
+      (listener) => this.ui.subscribe(listener),
+      SELECTION_TIMEOUT_MS,
+      waitingFor
+    );
   }
 
   /** Resolve once the answer being streamed reads exactly `text`. */
