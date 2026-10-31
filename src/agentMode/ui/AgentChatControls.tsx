@@ -20,6 +20,7 @@ import {
   Bookmark,
   Bug,
   Download,
+  FileText,
   History,
   Link,
   MessageCirclePlus,
@@ -58,6 +59,7 @@ interface AgentChatControlsProps {
   openChatIds?: ReadonlySet<string>;
   runningChatIds?: ReadonlySet<string>;
   onOpenSourceFile?: (id: string) => Promise<void>;
+  onOpenChatNote?: () => void | Promise<void>;
   onCopyChatLink?: () => void | Promise<void>;
   getChatBookmarkState?: () => Promise<ChatBookmarkState>;
   onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
@@ -78,6 +80,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   openChatIds,
   runningChatIds,
   onOpenSourceFile,
+  onOpenChatNote,
   onCopyChatLink,
   getChatBookmarkState,
   onSetChatBookmarked,
@@ -165,6 +168,12 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" container={moreActionsBody}>
+              {onOpenChatNote && (
+                <DropdownMenuItem onSelect={() => void onOpenChatNote()}>
+                  <FileText />
+                  Open chat note
+                </DropdownMenuItem>
+              )}
               {onCopyChatLink ? (
                 <DropdownMenuItem onSelect={() => void onCopyChatLink()}>
                   <Link />

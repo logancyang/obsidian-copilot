@@ -35,7 +35,7 @@ function ControlsStory({
   useEffect(() => {
     if (!openMoreActions) return;
     rootRef.current
-      ?.querySelector('button[title="More Actions"]')
+      ?.querySelector('button[title="More actions"]')
       ?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
   }, [openMoreActions]);
 
@@ -59,6 +59,7 @@ const meta = {
     onUpdateChatTitle: async () => {},
     onDeleteChat: async () => {},
     onSetChatBookmarked: async () => {},
+    onOpenChatNote: () => undefined,
     onReportError: () => undefined,
     usageMeter: (
       <UsageMeter
@@ -90,7 +91,12 @@ export const MoreActionsBookmarksOff: Story = {
 };
 
 export const MoreActionsEmptyChat: Story = {
-  args: { openMoreActions: true, getChatBookmarkState: undefined, onCopyChatLink: undefined },
+  args: {
+    openMoreActions: true,
+    getChatBookmarkState: undefined,
+    onCopyChatLink: undefined,
+    onOpenChatNote: undefined,
+  },
 };
 
 export const BelowQueuedMessages: Story = {

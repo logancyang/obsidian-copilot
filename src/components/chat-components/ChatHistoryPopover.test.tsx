@@ -40,6 +40,27 @@ describe("ChatHistoryPopover", () => {
 
       expect(screen.getAllByText(/^Summary for/)).toHaveLength(1);
     });
+    it("opens the chosen chat's saved note from its Open chat note button without loading the chat", async () => {
+      const onOpenSourceFile = jest.fn(async () => {});
+      const onLoadChat = jest.fn(async () => {});
+      render(
+        <ChatHistoryPopover
+          chatHistory={history}
+          onUpdateTitle={jest.fn()}
+          onDeleteChat={async () => {}}
+          onLoadChat={onLoadChat}
+          onOpenSourceFile={onOpenSourceFile}
+        >
+          <button type="button">History</button>
+        </ChatHistoryPopover>
+      );
+      fireEvent.click(screen.getByText("History"));
+
+      await act(async () => fireEvent.click(screen.getAllByTitle("Open chat note")[1]));
+
+      expect(onOpenSourceFile).toHaveBeenCalledWith(history[1].id);
+      expect(onLoadChat).not.toHaveBeenCalled();
+    });
     it(`${issue} closes an open session while preserving its saved history and leaving the popover open`, async () => {
       const onCloseSession = jest.fn(async () => {});
       const onLoadChat = jest.fn(async () => {});

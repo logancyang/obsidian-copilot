@@ -24,7 +24,7 @@ import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
 import {
-  ArrowUpRight,
+  FileText,
   Link,
   LoaderCircle,
   MessageCircle,
@@ -212,8 +212,8 @@ function RecentChatMenu({
         </DropdownMenuItem>
         {isNoteBacked && (
           <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
-            <ArrowUpRight />
-            Open source note
+            <FileText />
+            Open chat note
           </DropdownMenuItem>
         )}
         <DropdownMenuItem
@@ -358,8 +358,8 @@ const RecentChatRow = memo(function RecentChatRow({
             </RowActionButton>
           )}
           {isNoteBacked && (
-            <RowActionButton label="Open source note" onClick={() => onOpenSourceFile(item.id)}>
-              <ArrowUpRight className="tw-size-4" />
+            <RowActionButton label="Open chat note" onClick={() => onOpenSourceFile(item.id)}>
+              <FileText className="tw-size-3.5" />
             </RowActionButton>
           )}
           <RecentChatMenu

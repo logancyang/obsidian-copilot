@@ -375,14 +375,14 @@ describe("GlobalRecentChatsSection", () => {
       expect(screen.getAllByText(/^Chat search-page-/)).toHaveLength(50);
     });
 
-    it("shows only Pin chat, Open source note, and More actions when hovering a saved chat whose session is closed", () => {
+    it("shows only Pin chat, Open chat note, and More actions when hovering a saved chat whose session is closed", () => {
       renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
 
       const actions = within(rowFor("Saved chat"))
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Pin chat", "Open source note", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Open chat note", "More actions"]);
     });
 
     it("leads the hover actions with Close chat when the chat's session is open", () => {
@@ -396,7 +396,7 @@ describe("GlobalRecentChatsSection", () => {
         .getAllByRole("button")
         .map((button) => button.getAttribute("aria-label"));
 
-      expect(actions).toEqual(["Pin chat", "Close chat", "Open source note", "More actions"]);
+      expect(actions).toEqual(["Pin chat", "Close chat", "Open chat note", "More actions"]);
     });
 
     it("pins an unpinned chat from its Pin chat action without opening it", async () => {
@@ -541,7 +541,7 @@ describe("GlobalRecentChatsSection", () => {
 
       expect(menuEntries(menu)).toEqual([
         "Pin chat",
-        "Open source note",
+        "Open chat note",
         "Rename",
         "Copy chat link",
         "---",
@@ -561,7 +561,7 @@ describe("GlobalRecentChatsSection", () => {
 
       expect(menuEntries(openMenuFromButton("Open chat"))).toEqual([
         "Pin chat",
-        "Open source note",
+        "Open chat note",
         "Rename",
         "Copy chat link",
         "---",
@@ -581,7 +581,7 @@ describe("GlobalRecentChatsSection", () => {
 
       expect(menuEntries(menu)).toEqual([
         "Pin chat",
-        "Open source note",
+        "Open chat note",
         "Rename",
         "Copy chat link",
         "Add to bookmarks",
@@ -590,7 +590,7 @@ describe("GlobalRecentChatsSection", () => {
       ]);
     });
 
-    it("opens the chosen chat's source note when Open source note is selected from the menu", () => {
+    it("opens the chosen chat's saved note when Open chat note is selected from the menu", () => {
       const onOpenSourceFile = jest.fn(noop);
       const onLoadChat = jest.fn(noop);
       renderSection({
@@ -599,7 +599,7 @@ describe("GlobalRecentChatsSection", () => {
         onLoadChat,
       });
 
-      chooseMenuItem(openMenuFromButton("Saved chat"), "Open source note");
+      chooseMenuItem(openMenuFromButton("Saved chat"), "Open chat note");
 
       expect(onOpenSourceFile).toHaveBeenCalledWith("chats/saved.md");
       expect(onLoadChat).not.toHaveBeenCalled();
@@ -705,15 +705,15 @@ describe("GlobalRecentChatsSection", () => {
       expect(onLoadChat).not.toHaveBeenCalled();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Open source note out for a chat with no saved note", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Open chat note out for a chat with no saved note", () => {
       const nativeId = buildNativeChatId("opencode", "session-1");
       renderSection({ items: [makeItem(nativeId, { title: "Native chat" })] });
 
       const menu = openMenuFromButton("Native chat");
 
-      expect(menuEntries(menu)).not.toContain("Open source note");
+      expect(menuEntries(menu)).not.toContain("Open chat note");
       expect(
-        within(rowFor("Native chat")).queryByRole("button", { name: "Open source note" })
+        within(rowFor("Native chat")).queryByRole("button", { name: "Open chat note" })
       ).toBeNull();
     });
 
