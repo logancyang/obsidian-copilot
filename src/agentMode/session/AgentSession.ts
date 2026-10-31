@@ -35,12 +35,11 @@ import {
   ToolCallDelta,
   ToolCallSnapshot,
   TurnDiff,
-  TurnFileChange,
 } from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
-import { err2String, formatDateTime } from "@/utils";
+import { err2String, formatDateTime, isTextReadableFile } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
-import type { App, DataAdapter } from "obsidian";
+import { TFile, type App, type DataAdapter, type TAbstractFile } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
@@ -49,12 +48,7 @@ import {
   toVaultTargetPath,
   type EditTargetSource,
 } from "@/agentMode/session/editTargets";
-import {
-  buildTurnFileChange,
-  filePatchesByVaultPath,
-  revertFilePatch,
-  type FileCaptures,
-} from "@/agentMode/session/turnFileChanges";
+import { FileCaptures, filePatchesByVaultPath } from "@/agentMode/session/turnFileChanges";
 import { TurnTracker, type TurnOutcome, type TurnSend } from "@/agentMode/session/TurnTracker";
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
@@ -75,6 +69,7 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { v4 as uuidv4 } from "uuid";
 import { getSettings } from "@/settings/model";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import {
   EMPTY_ENABLED_MODELS,
   ENABLED_MODEL_WAIT_MS,
@@ -262,6 +257,7 @@ export class AgentSession {
   private readonly taskContent = new Map<string, AgentMessageStore>();
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
+  private unwatchVaultFiles: (() => void) | null = null;
   private currentState: BackendState | null = null;
   private label: string | null = null;
   private labelSource: "user" | "agent" | null = null;
@@ -319,6 +315,8 @@ export class AgentSession {
     this.runFanoutTurn = opts.runFanoutTurn ?? null;
     this.getDisplayName = opts.getDisplayName ?? null;
     this.getApp = opts.getApp ?? null;
+    const app = this.getApp?.();
+    if (app) this.watchVaultFiles(app);
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     this.getProjectContextBlockFn =
@@ -1070,6 +1068,8 @@ export class AgentSession {
     this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
+    this.unwatchVaultFiles?.();
+    this.unwatchVaultFiles = null;
     this.requests.dispose();
     this.turns.dispose();
     this.recomputeStatusIfChanged();
@@ -1653,7 +1653,7 @@ export class AgentSession {
   private filesOfTask(toolCallId: string): FileCaptures {
     let files = this.taskFiles.get(toolCallId);
     if (!files) {
-      files = new Map();
+      files = new FileCaptures();
       this.taskFiles.set(toolCallId, files);
     }
     return files;
@@ -1693,50 +1693,70 @@ export class AgentSession {
     );
     for (const path of editTargetPaths(target, vaultBase)) {
       if (!isCapturableVaultPath(path)) continue;
-      let capture = files.get(path);
-      if (!capture) {
-        // Read as the call is announced; an Auto-mode write can land first, so a write-time original wins.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
-        capture = { edited: false, snapshot: readVaultText(adapter, path) };
-        files.set(path, capture);
-      }
+      const capture = files.observe(path, (p) => readVaultText(adapter, p));
       if (!changes) continue;
       capture.edited = true;
       // Later results report text this turn already changed; the first is the turn's starting file.
+      // A moved or newly made file's path text is not its starting file.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-      if (capture.writeTimeBefore === undefined) capture.writeTimeBefore = originals.get(path);
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/763
+      if (capture.origin === path && capture.writeTimeBefore === undefined) {
+        capture.writeTimeBefore = originals.get(path);
+      }
     }
   }
 
-  // Before text comes from a source that saw the file at write time; the first-mention snapshot
-  // is only the fallback. https://github.com/Brevilabs/obsidian-copilot-private/issues/347
+  // Vault events name paths, not actors: a file the turn never mentioned joins the open reply's capture,
+  // or every running subagent's when no reply is open. https://github.com/Brevilabs/obsidian-copilot-private/issues/763
+  private openFileCaptures(): { captures: FileCaptures[]; adopting: ReadonlySet<FileCaptures> } {
+    const tasks = [...this.taskFiles.values()];
+    const main = this.turns.getReplyId() === null ? null : this.turns.getTurnFiles();
+    return {
+      captures: main ? [main, ...tasks] : tasks,
+      adopting: new Set(main ? [main] : tasks),
+    };
+  }
+
+  private watchVaultFiles(app: App): void {
+    const { vault } = app;
+    const read = (path: string) => readVaultText(vault.adapter, path);
+    // Copilot saves the chat's own note mid-turn; that write is never the agent's change.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/763
+    const adoptable = (file: TAbstractFile) =>
+      file instanceof TFile &&
+      isTextReadableFile(file) &&
+      !file.path.startsWith(`${getEffectiveConversationsFolder()}/`);
+    const refs = [
+      vault.on("create", (file) => {
+        const { captures, adopting } = this.openFileCaptures();
+        for (const c of captures) c.vaultCreated(file.path, adopting.has(c) && adoptable(file));
+      }),
+      vault.on("rename", (file, oldPath) => {
+        const { captures, adopting } = this.openFileCaptures();
+        for (const c of captures) {
+          c.vaultRenamed(oldPath, file.path, adopting.has(c) && adoptable(file), read);
+        }
+      }),
+      vault.on("delete", (file) => {
+        for (const c of this.openFileCaptures().captures) c.vaultDeleted(file.path);
+      }),
+    ];
+    this.unwatchVaultFiles = () => {
+      for (const ref of refs) vault.offref(ref);
+    };
+  }
+
   private async finalizeFileChanges(
     files: FileCaptures,
     store: AgentMessageStore,
     messageId: string,
     turnDiff?: TurnDiff
   ): Promise<boolean> {
-    const edited = [...files].filter(([, capture]) => capture.edited);
     const app = this.getApp?.();
     const adapter = app?.vault?.adapter;
-    if (edited.length === 0 || !app || !adapter) return false;
+    if (!files.hasEdits() || !app || !adapter) return false;
     const turnPatches = turnDiff ? filePatchesByVaultPath(turnDiff, getVaultBase(app)) : undefined;
-    const changes = (
-      await Promise.all(
-        edited.map(async ([path, capture]) => {
-          const after = await readVaultText(adapter, path);
-          const patch = turnPatches?.get(path);
-          if (capture.writeTimeBefore === undefined && patch) {
-            capture.writeTimeBefore = revertFilePatch(patch, after);
-          }
-          const before =
-            capture.writeTimeBefore === undefined
-              ? await capture.snapshot
-              : capture.writeTimeBefore;
-          return buildTurnFileChange(path, before, after);
-        })
-      )
-    ).filter((change): change is TurnFileChange => change !== null);
+    const changes = await files.changes((path) => readVaultText(adapter, path), turnPatches);
     return changes.length > 0 && store.setFileChanges(messageId, changes);
   }
 
