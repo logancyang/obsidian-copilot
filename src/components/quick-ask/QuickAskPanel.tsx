@@ -80,7 +80,7 @@ export function QuickAskPanel({
       (e: React.PointerEvent): void => {
         e.preventDefault();
         e.stopPropagation();
-        onResizeStart?.(direction, { x: e.clientX, y: e.clientY });
+        onResizeStart?.(direction, { x: e.clientX, y: e.clientY, pointerId: e.pointerId });
       },
     [onResizeStart]
   );

@@ -21,7 +21,10 @@ export interface QuickAskPanelProps {
   replaceGuard: ReplaceGuard;
   onClose: () => void;
   onDragOffset?: (offset: { x: number; y: number }) => void;
-  onResizeStart?: (direction: ResizeDirection, start: { x: number; y: number }) => void;
+  onResizeStart?: (
+    direction: ResizeDirection,
+    start: { x: number; y: number; pointerId: number }
+  ) => void;
   hasCustomHeight?: boolean;
 }
 

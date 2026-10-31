@@ -19,6 +19,7 @@ export interface ResizeUpdate {
 
 interface ResizeStartState {
   direction: ResizeDirection;
+  pointerId: number;
   startClientX: number;
   startClientY: number;
   width: number;
@@ -76,6 +77,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
 
         startRef.current = {
           direction,
+          pointerId: e.pointerId,
           startClientX: e.clientX,
           startClientY: e.clientY,
           width: rect.width,
@@ -137,7 +139,8 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
 
     const handlePointerMove = (event: PointerEvent): void => {
       const currentStart = startRef.current;
-      if (!currentStart) return;
+      // Ignore other touches so a second finger cannot move, resize, or release the panel. https://github.com/Brevilabs/obsidian-copilot-private/issues/798
+      if (!currentStart || event.pointerId !== currentStart.pointerId) return;
 
       const deltaX = event.clientX - currentStart.startClientX;
       const deltaY = event.clientY - currentStart.startClientY;
@@ -194,7 +197,8 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       setIsResizing(false);
     };
 
-    const handlePointerUp = (): void => {
+    const handlePointerUp = (event: PointerEvent): void => {
+      if (event.pointerId !== start.pointerId) return;
       finish();
     };
 
