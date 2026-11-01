@@ -1,14 +1,17 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type { ProjectConfig } from "@/aiParams";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
 import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
+import { logError } from "@/logger";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import { MessageCircle } from "lucide-react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
 
 export interface ArchivedActions {
@@ -16,6 +19,26 @@ export interface ArchivedActions {
   onOpen: (id: string) => Promise<void>;
   onUnarchiveProject: (id: string) => Promise<void>;
   onOpenProject: (id: string) => Promise<void>;
+}
+
+export function createProjectArchiveActions(
+  app: App,
+  manager: AgentSessionManager
+): Pick<ArchivedActions, "onUnarchiveProject" | "onOpenProject"> {
+  return {
+    onUnarchiveProject: async (id) => {
+      try {
+        await ProjectFileManager.getInstance(app).setProjectArchived(id, false);
+      } catch (e) {
+        logError("[AgentMode] unarchive project failed", e);
+        new Notice("Failed to unarchive project.");
+        throw e;
+      }
+    },
+    onOpenProject: async (id) => {
+      await manager.enterProject(id);
+    },
+  };
 }
 
 export interface ArchivedChatsListProps extends ArchivedActions {

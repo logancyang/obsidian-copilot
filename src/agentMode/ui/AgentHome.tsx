@@ -22,7 +22,7 @@ import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeRel
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
-import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
+import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
   getHomeShelfTab,
@@ -252,18 +252,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       new ArchivedChatsModal(app, archivedChatItems, isProjectScope ? [] : archivedProjects, {
         onUnarchive: (id) => handleSetChatArchived(id, false),
         onOpen: handleLoadChat,
-        onUnarchiveProject: async (id) => {
-          try {
-            await ProjectFileManager.getInstance(app).setProjectArchived(id, false);
-          } catch (e) {
-            logError("[AgentMode] unarchive project failed", e);
-            new Notice("Failed to unarchive project.");
-            throw e;
-          }
-        },
-        onOpenProject: async (id) => {
-          await manager.enterProject(id);
-        },
+        ...createProjectArchiveActions(app, manager),
       }).open(),
     [
       app,
