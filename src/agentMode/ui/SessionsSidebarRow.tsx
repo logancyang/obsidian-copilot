@@ -1,4 +1,8 @@
-import { RecentChatMenu, type RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import {
+  RecentChatMenu,
+  RowActionButton,
+  type RecentChatActions,
+} from "@/agentMode/ui/RecentChatMenu";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
@@ -88,7 +92,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   return (
     <div
       className={cn(
-        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-rounded-md tw-pr-1",
+        "tw-group tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-rounded-md",
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
@@ -97,35 +101,16 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         setMenuOpen(true);
       }}
     >
-      {/* The close button covers the status gutter, so hovering or focusing it hides the indicator beneath; every row
-          keeps the gutter so a status appearing never shifts the title.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      {closeSession && (
-        <button
-          type="button"
-          aria-label="Close chat"
-          title="Close chat"
-          onClick={() => safeAsyncHandler(closeSession)(item.id)}
-          className={cn(
-            "clickable-icon tw-peer tw-absolute tw-left-1.5 tw-top-1/2 tw-flex tw-size-5 -tw-translate-y-1/2",
-            "tw-items-center tw-justify-center tw-rounded-sm tw-p-0 tw-opacity-0",
-            "hover:tw-opacity-100 focus-visible:tw-opacity-100"
-          )}
-        >
-          <X className="tw-size-3.5" />
-        </button>
-      )}
       <button
         type="button"
         aria-current={active ? "true" : undefined}
         onClick={onSelect}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
-          "peer-hover:[&_[data-status-gutter]]:tw-invisible peer-focus-visible:[&_[data-status-gutter]]:tw-invisible"
+          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none"
         )}
       >
-        {/* An unseen result reads like unread mail, a bold title, so the gutter's one dot keeps meaning "session open".
+        {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
             https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
         <RecentChatTitle
           title={item.title}
@@ -135,11 +120,14 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           <span role="img" aria-label="Unread result" className="tw-sr-only" />
         )}
         {projectName && <RecentChatProjectBadge name={projectName} />}
-        {/* The gutter leads visually but follows the title in the DOM, so the row's accessible name starts with the title.
+        {/* Titles start flush with the panel and the status sits at the right end, where hovering the row swaps it
+            for the row's actions; a long title ellipsizes before the status.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
         <span
-          data-status-gutter
-          className="tw-order-first tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center"
+          className={cn(
+            "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+            menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden"
+          )}
         >
           <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
         </span>
@@ -148,10 +136,18 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
       <div
         className={cn(
-          "tw-shrink-0 tw-items-center",
+          "tw-shrink-0 tw-items-center tw-pr-1",
           menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
+        {closeSession && (
+          <RowActionButton
+            label="Close chat"
+            onClick={() => safeAsyncHandler(closeSession)(item.id)}
+          >
+            <X className="tw-size-3.5" />
+          </RowActionButton>
+        )}
         <RecentChatMenu
           item={item}
           isNoteBacked={!isNativeChatId(item.id)}
