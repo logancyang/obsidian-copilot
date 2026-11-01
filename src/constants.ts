@@ -543,7 +543,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     offerFeedbackCards: true,
     notificationSound: true,
     notificationSoundId: "piano",
-    welcomeDismissed: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
       builtinPreferences: DEFAULT_BUILTIN_PREFERENCES,
