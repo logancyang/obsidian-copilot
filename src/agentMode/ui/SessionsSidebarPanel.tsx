@@ -349,10 +349,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                     {/* An empty container would still add the column gap, so an empty project says so instead.
                         https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
                     {expanded && chats.length === 0 && (
-                      <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
+                      <div className="tw-py-1 tw-pl-12 tw-text-xs tw-text-muted">No chats</div>
                     )}
                     {expanded && chats.length > 0 && (
-                      <div className="tw-flex tw-flex-col tw-gap-0.5">
+                      <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-0.5">
                         {chats.slice(0, shownCount).map((item) => renderChat(item))}
                         {shownCount < chats.length && (
                           <ShowMoreButton
