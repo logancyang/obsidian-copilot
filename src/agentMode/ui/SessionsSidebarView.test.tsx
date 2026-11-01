@@ -1,5 +1,5 @@
 import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
-import { COPILOT_AGENT_ICON_ID, SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
+import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { act, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
@@ -28,7 +28,7 @@ describe("SessionsSidebarView", () => {
 
       expect(view.getViewType()).toBe(SESSIONS_SIDEBAR_VIEWTYPE);
       expect(view.getDisplayText()).toBe("Copilot");
-      expect(view.getIcon()).toBe(COPILOT_AGENT_ICON_ID);
+      expect(view.getIcon()).toBe("panel-left");
     });
 
     it("renders the sessions sidebar when it opens and removes it when it closes for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
