@@ -158,7 +158,7 @@ function rowTitles(): string[] {
     )
     .filter(
       (button) =>
-        !/^(New chat|New project|Search chats|Sidebar options|More actions|Show more)/.test(
+        !/^(New chat|New project|Search chats|Sidebar options|More actions|Show more|Pin chat|Unpin chat|Archive chat)/.test(
           button.getAttribute("aria-label") ?? button.textContent ?? ""
         )
     )
@@ -287,13 +287,14 @@ describe("SessionsSidebar", () => {
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
     });
 
-    it("closes a chat's live session from its row through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+    it("closes a chat's live session from its row menu through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
       manager.open = new Set(["a.md"]);
       renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+      openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
 
       await waitFor(() => expect(manager.closeChatSession).toHaveBeenCalledWith("a.md"));
     });
@@ -305,7 +306,8 @@ describe("SessionsSidebar", () => {
       manager.closeChatSession.mockRejectedValueOnce(new Error("Agent is busy."));
       renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+      openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
 
       await waitFor(() =>
         expect(Notice).toHaveBeenCalledWith("Could not close chat: Agent is busy.")

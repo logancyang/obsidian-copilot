@@ -95,8 +95,6 @@ const Group: React.FC<GroupProps> = ({
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
     <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
       <div className="tw-group tw-relative">
-        {/* The header text starts in the chat title column, so first-level rows sit flush under it and their status
-            indicators hang in the margin to the left. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <h3 className="tw-m-0">
           <button
             id={headerId}
@@ -105,12 +103,19 @@ const Group: React.FC<GroupProps> = ({
             onClick={onToggle}
             className={cn(
               "clickable-icon tw-flex tw-h-auto tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-bg-transparent",
-              "tw-pb-1 tw-pl-8 tw-pr-2 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
+              "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
             )}
           >
             <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
             {action && <span aria-hidden="true" className="tw-w-5 tw-shrink-0" />}
-            <ChevronRight className={cn("tw-size-4 tw-shrink-0", !collapsed && "tw-rotate-90")} />
+            {/* The fold chevron shows only on hover or focus, like the header's other actions, so the list reads clean.
+                https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+            <ChevronRight
+              className={cn(
+                "tw-invisible tw-size-4 tw-shrink-0 group-focus-within:tw-visible group-hover:tw-visible",
+                !collapsed && "tw-rotate-90"
+              )}
+            />
           </button>
         </h3>
         {/* The header action fills a slot the header always reserves left of the chevron, so showing it on hover
@@ -204,7 +209,7 @@ const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     type="button"
     variant="ghost2"
     size="sm"
-    className="tw-h-7 tw-justify-start tw-pl-8 tw-pr-2 tw-text-muted"
+    className="tw-h-7 tw-justify-start tw-px-2 tw-text-muted"
     onClick={onClick}
   >
     Show more
@@ -371,9 +376,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto">
         {matches ? (
           matches.length === 0 ? (
-            <div className="tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-xs tw-text-muted">
-              No matching chats
-            </div>
+            <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No matching chats</div>
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-0.5">
               {matches.slice(0, matchDisplayCount).map((item) => renderChat(item, true))}
@@ -457,10 +460,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                           {/* An empty container would still add the column gap, so an empty project says so instead.
                               https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
                           {expanded && chats.length === 0 && (
-                            <div className="tw-py-1 tw-pl-14 tw-text-xs tw-text-muted">
-                              No chats
-                            </div>
+                            <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
                           )}
+                          {/* A project's chats indent by the folder icon and its gap, so their titles start under the project name.
+                              https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
                           {expanded && chats.length > 0 && (
                             <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
                               {chats.slice(0, shownCount).map((item) => renderChat(item))}
