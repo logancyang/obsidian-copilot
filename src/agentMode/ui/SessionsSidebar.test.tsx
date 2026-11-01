@@ -77,7 +77,9 @@ class FakeManager {
   updateChatTitle = jest.fn(async () => {});
   getActiveProjectId = () => this.activeProjectId;
   exitProject = jest.fn(async () => {});
-  enterProject = jest.fn(async () => {});
+  enterProject = jest.fn(async () => {
+    this.events.push("project");
+  });
   historyRevision = 0;
   getHistoryRevision = () => this.historyRevision;
   subscribe = (listener: () => void) => {
@@ -474,6 +476,23 @@ describe("SessionsSidebar", () => {
       const [, chats, projects] = jest.mocked(ArchivedChatsModal).mock.calls[0];
       expect(chats.map((item) => item.id)).toEqual(["shelved.md"]);
       expect(projects.map((project) => project.id)).toEqual(["shelved"]);
+    });
+
+    it("reveals the Agent view before entering a project opened from the Archived dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Sidebar options" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByRole("menuitem", { name: "View archived" }));
+
+      const [, , , actions] = jest.mocked(ArchivedChatsModal).mock.calls[0];
+      await actions.onOpenProject("shelved");
+
+      expect(manager.events).toEqual(["view", "project"]);
     });
 
     it("leaves the project when the open project is deleted from its folder menu, as the landing list does, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
