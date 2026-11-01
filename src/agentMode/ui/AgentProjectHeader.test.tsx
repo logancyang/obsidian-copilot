@@ -18,6 +18,7 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
         onExit={"onExit" in props ? props.onExit : onExit}
         menu={menu}
         orphaned={props.orphaned}
+        sidebarOpen={props.sidebarOpen}
       />
     </TooltipProvider>
   );
@@ -35,6 +36,15 @@ describe("AgentProjectHeader", () => {
       const { onExit } = renderHeader();
       fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
       expect(onExit).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides the leave button while the sessions sidebar is open, keeping the project name and menu, for https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      renderHeader({ projectName: "Research", title: "Compare vendors", sidebarOpen: true });
+
+      expect(screen.queryByRole("button", { name: "Leave project" })).toBeNull();
+      expect(screen.getByText("Research")).toBeTruthy();
+      expect(screen.getByText("Compare vendors")).toBeTruthy();
+      expect(screen.getByLabelText("Project options")).toBeTruthy();
     });
 
     it("renders the provided options menu in the trailing slot", () => {
