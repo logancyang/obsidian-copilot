@@ -106,6 +106,15 @@ describe("SessionsSidebarRow", () => {
       expect(onSelect).not.toHaveBeenCalled();
     });
 
+    it("keeps the status's space and overlays close on it, so hovering a live chat moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true });
+
+      const statusSlot = screen.getByLabelText("Session open").parentElement!;
+      expect(statusSlot.className).toContain("group-hover:tw-invisible");
+      expect(statusSlot.className).not.toContain("group-hover:tw-hidden");
+      expect(screen.getByRole("button", { name: "Close chat" }).className).toContain("tw-absolute");
+    });
+
     it("offers no close button when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderRow({ isSessionOpen: false, status: "unread" });
 
