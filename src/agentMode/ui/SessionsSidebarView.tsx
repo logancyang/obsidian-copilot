@@ -24,7 +24,7 @@ export default class SessionsSidebarView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Copilot Agent sessions";
+    return "Copilot Navigator";
   }
 
   async onOpen(): Promise<void> {
