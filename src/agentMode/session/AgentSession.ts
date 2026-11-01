@@ -102,6 +102,7 @@ import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
+import { isProviderLimitFailure } from "@/agentMode/session/feedback/providerLimitFailure";
 import type {
   FeedbackEvidence,
   FeedbackOffer,
@@ -1127,6 +1128,7 @@ export class AgentSession {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
   private offerTurnErrorReport(errorText: string): void {
     if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
+    if (isProviderLimitFailure(errorText)) return;
     this.feedbackOffer = this.openFeedbackOffer("turn_error", {
       title: `Agent Chat reply failed on ${this.backendId}`,
       whatHappened: errorText,

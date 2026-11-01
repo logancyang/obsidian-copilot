@@ -123,7 +123,7 @@ When something goes wrong in an Agent Chat, select **More actions** (⋯) above 
 
 When Copilot itself fails in Agent Chat, such as a Copilot tool erroring, a needed tool missing, or you telling the agent Copilot crashed or lost your text, the agent may draft a report for you. The agent's own mistakes and answers don't get a card, since the Copilot team can't change how a model reasons. A **Report this to the Copilot team?** card appears under its reply, with a one-line summary and your own words. The card never interrupts the agent, and it appears at most once each time you open a chat. The card is not saved with the chat, so it is gone once you close the chat or reload Obsidian.
 
-When a reply fails with an error, the same card appears under it, carrying the error.
+When a reply fails with an error, the same card appears under it, carrying the error. Errors from your AI provider about used-up quota or credit, or a rate limit, get no card; check your plan or wait for the limit to reset.
 
 - **Review & report** opens **Report an issue** with the draft already in the description: what happened, what you said, and steps to reproduce, or the error for a failed reply, plus which agent, model and chat it came from. Every available attachment starts ticked, so untick anything you would rather not send. Edit the description freely, then continue with the steps above. Once the upload lands, the card shows the report ID.
 - **Dismiss** removes the card. Nothing is sent.
