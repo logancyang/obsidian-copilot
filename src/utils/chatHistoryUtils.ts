@@ -63,8 +63,10 @@ export async function filterChatHistoryFiles(app: App, files: TFile[]): Promise<
 export function extractChatTitle(app: App, file: TFile): string {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 
-  if (frontmatter?.topic && typeof frontmatter.topic === "string" && frontmatter.topic.trim()) {
-    return frontmatter.topic.trim();
+  // Agent Mode notes saved before their title moved to topic keep it only in agentLabel.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
+  for (const title of [frontmatter?.topic, frontmatter?.agentLabel]) {
+    if (typeof title === "string" && title.trim()) return title.trim();
   }
 
   let basename = file.basename;

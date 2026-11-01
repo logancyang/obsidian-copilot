@@ -78,6 +78,13 @@ describe("chatHistoryUtils", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 uses the agentLabel of an Agent Mode note saved with no topic", () => {
+      const app = makeApp({ agentLabel: "Garden planting schedule" });
+      expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Plan_the_garden"))).toBe(
+        "Garden planting schedule"
+      );
+    });
+
     it("derives a global chat's title from its filename without the agent prefix, date and time", () => {
       const app = makeApp({});
       expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Write_a_poem"))).toBe(
