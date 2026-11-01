@@ -670,6 +670,55 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("region")).toBeNull();
       });
 
+      describe("with many matches", () => {
+        const originalObserver = window.IntersectionObserver;
+        let callback: IntersectionObserverCallback;
+        const observer = {
+          disconnect: jest.fn(),
+          observe: jest.fn(),
+        } as unknown as IntersectionObserver;
+
+        beforeEach(() => {
+          window.IntersectionObserver = jest.fn((nextCallback: IntersectionObserverCallback) => {
+            callback = nextCallback;
+            return observer;
+          });
+        });
+        afterEach(() => {
+          window.IntersectionObserver = originalObserver;
+        });
+
+        const manyMatches = Array.from({ length: 45 }, (_, index) =>
+          sidebarChat(`chats/m-${index}.md`, `Rec match ${index + 1}`, index + 1)
+        );
+        const matchCount = () => screen.getAllByRole("button", { name: /^Rec match/ }).length;
+
+        it("lists 20 matches at a time as the list scrolls for https://github.com/Brevilabs/obsidian-copilot-private/issues/808", () => {
+          renderPanel({ items: manyMatches });
+          search("match");
+          expect(matchCount()).toBe(20);
+
+          act(() => callback([{ isIntersecting: true } as IntersectionObserverEntry], observer));
+          expect(matchCount()).toBe(40);
+
+          act(() => callback([{ isIntersecting: true } as IntersectionObserverEntry], observer));
+          expect(matchCount()).toBe(45);
+        });
+
+        it("starts again at 20 matches when the filter text changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/808", () => {
+          renderPanel({ items: manyMatches });
+          search("match");
+          act(() => callback([{ isIntersecting: true } as IntersectionObserverEntry], observer));
+          expect(matchCount()).toBe(40);
+
+          fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+            target: { value: "Rec match" },
+          });
+
+          expect(matchCount()).toBe(20);
+        });
+      });
+
       it("restores the grouped view when the filter is cleared", () => {
         renderPanel({ items, projects: projects(1) });
         search("launch");

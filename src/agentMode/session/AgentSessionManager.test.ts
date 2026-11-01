@@ -4559,6 +4559,179 @@ describe("AgentSessionManager", () => {
         expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
       });
 
+      describe("transcript probe cache", () => {
+        const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/808";
+        const SAVED_NOTE = "chats/agent__saved.md";
+        const savedChat = (sessionId: string) => ({
+          [SAVED_NOTE]: { epoch: 1_000, topic: "Saved", backendId: "opencode", sessionId },
+        });
+
+        it(`${issue} probes each chat's transcript once, however many times the list loads`, async () => {
+          const sessionExistsLocally = jest.fn(async () => true);
+          const { manager } = buildHistoryHarness({
+            files: {
+              "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" },
+              "chats/agent__b.md": { epoch: 2_000, backendId: "opencode", sessionId: "s2" },
+            },
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+
+          const first = await manager.getChatHistoryItems();
+          const second = await manager.getChatHistoryItems();
+
+          expect(second.map((i) => i.id)).toEqual(first.map((i) => i.id));
+          expect(first).toHaveLength(2);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} keeps probing a chat whose transcript is absent, so a transcript that appears later is found`, async () => {
+          let present = false;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          present = true;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after the chat is deleted`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+
+          await manager.deleteChatHistory(SAVED_NOTE);
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after its session is released and closed`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const sessionId = `backend-${nextBackendSessionId}`;
+          const { manager } = buildHistoryHarness({
+            files: savedChat(sessionId),
+            warmSessionExistsLocally: sessionExistsLocally,
+            createBackendProcess: jest.fn(() => ({
+              ...makeMockBackendProcess(),
+              sessionExistsLocally,
+            })),
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+          const session = await manager.createSession("opencode");
+          expect(session.getBackendSessionId()).toBe(sessionId);
+
+          await manager.closeSession(session.internalId, { releaseBackend: true });
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after its backend process exits`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+          await manager.createSession("opencode");
+
+          for (const exit of mockBackendExitListeners) exit();
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+      });
+
+      describe("overlapping loads", () => {
+        const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/808";
+
+        function holdFirstScan() {
+          const harness = buildHistoryHarness({
+            files: { "chats/agent__a.md": { epoch: 1_000, topic: "A", backendId: "opencode" } },
+          });
+          const scan = harness.persistence.getAgentChatHistoryFiles;
+          const realScan = scan.getMockImplementation()!;
+          const release = deferred();
+          const started = deferred();
+          scan.mockImplementationOnce(async () => {
+            started.resolve();
+            await release.promise;
+            return realScan();
+          });
+          return { ...harness, scan, release, started };
+        }
+
+        it(`${issue} runs one scan at a time and answers every request that arrives meanwhile with one follow-up scan`, async () => {
+          const { manager, scan, release, started } = holdFirstScan();
+
+          const first = manager.getChatHistoryItems();
+          await started.promise;
+          const during = [
+            manager.getChatHistoryItems(),
+            manager.getChatHistoryItems(),
+            manager.getChatHistoryItems(),
+          ];
+          expect(scan).toHaveBeenCalledTimes(1);
+          release.resolve();
+          const results = await Promise.all([first, ...during]);
+
+          expect(scan).toHaveBeenCalledTimes(2);
+          expect(results.map((items) => items.map((i) => i.title))).toEqual([
+            ["A"],
+            ["A"],
+            ["A"],
+            ["A"],
+          ]);
+        });
+
+        it(`${issue} reads notes only after a request that arrives mid-scan, so a change made meanwhile is listed`, async () => {
+          const { manager, release, started, persistence } = holdFirstScan();
+          const first = manager.getChatHistoryItems();
+          await started.promise;
+
+          const follow = manager.getChatHistoryItems();
+          persistence.getAgentChatHistoryFiles.mockResolvedValue([]);
+          release.resolve();
+
+          expect(await first).toHaveLength(1);
+          expect(await follow).toHaveLength(0);
+        });
+
+        it(`${issue} scans again for a request made after the previous scan finished`, async () => {
+          const { manager, persistence } = buildHistoryHarness();
+
+          await manager.getChatHistoryItems();
+          await manager.getChatHistoryItems();
+
+          expect(persistence.getAgentChatHistoryFiles).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} keeps serving requests after a scan fails`, async () => {
+          const { manager, persistence } = buildHistoryHarness();
+          persistence.getAgentChatHistoryFiles.mockRejectedValueOnce(
+            new Error("vault read failed")
+          );
+
+          await expect(manager.getChatHistoryItems()).rejects.toThrow("vault read failed");
+
+          expect(await manager.getChatHistoryItems()).toEqual([]);
+        });
+      });
+
       it("lists a live chat whose backend transcript is not written until its first turn ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
         const note = "chats/agent__live.md";
         const { manager, index } = buildHistoryHarness({

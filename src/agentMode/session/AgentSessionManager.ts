@@ -189,6 +189,13 @@ export class AgentSessionManager {
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
   private readonly detachedFromTabIds = new Set<string>();
   private historyRevision = 0;
+  // Loads run one at a time; a request made while one runs shares the single load queued behind it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/808
+  private historyLoadTail: Promise<unknown> = Promise.resolve();
+  private readonly queuedHistoryLoads = new Map<ProjectScopeId, Promise<ChatHistoryItem[]>>();
+  // Only a present transcript is cached: an absent one can appear later, and a cached absence would hide that chat.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/808
+  private readonly presentTranscriptSessionIds = new Map<BackendId, Set<string>>();
   private readonly landingCaptureSignatures = new Map<string, string>();
   private readonly contentTracker: ProjectContentTracker;
   private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
@@ -399,7 +406,20 @@ export class AgentSessionManager {
     if (epoch > lastSeen) this.lastSeenProjectContentEpochBySession.set(internalId, epoch);
   }
 
-  async getChatHistoryItems(scope?: ProjectScopeId): Promise<ChatHistoryItem[]> {
+  getChatHistoryItems(scope?: ProjectScopeId): Promise<ChatHistoryItem[]> {
+    const key = scope ?? GLOBAL_SCOPE;
+    const queued = this.queuedHistoryLoads.get(key);
+    if (queued) return queued;
+    const load = this.historyLoadTail.then(() => {
+      this.queuedHistoryLoads.delete(key);
+      return this.loadChatHistoryItems(scope);
+    });
+    this.queuedHistoryLoads.set(key, load);
+    this.historyLoadTail = load.catch(() => undefined);
+    return load;
+  }
+
+  private async loadChatHistoryItems(scope?: ProjectScopeId): Promise<ChatHistoryItem[]> {
     const persistence = this.opts.persistenceManager;
     const index = this.opts.sessionIndex;
     if (!persistence && !index) return EMPTY_HISTORY_ITEMS;
@@ -695,6 +715,7 @@ export class AgentSessionManager {
     if (persistence) {
       for (const path of notePaths) await persistence.deleteFile(path);
     }
+    if (ref) this.presentTranscriptSessionIds.get(ref.backendId)?.delete(ref.sessionId);
     this.markHistoryChanged();
   }
 
@@ -786,6 +807,8 @@ export class AgentSessionManager {
         // A chat's first turn is still writing its backend transcript, so the probe would report it absent.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
         if (this.findLiveSession(entry.backendId, entry.sessionId)) return true;
+        if (this.presentTranscriptSessionIds.get(entry.backendId)?.has(entry.sessionId))
+          return true;
         const proc = procs.get(entry.backendId);
         if (!proc?.sessionExistsLocally) return true;
         let cwd: string;
@@ -797,7 +820,9 @@ export class AgentSessionManager {
           return true;
         }
         try {
-          return await proc.sessionExistsLocally({ sessionId: entry.sessionId, cwd });
+          const exists = await proc.sessionExistsLocally({ sessionId: entry.sessionId, cwd });
+          if (exists) this.rememberPresentTranscript(entry.backendId, entry.sessionId);
+          return exists;
         } catch {
           return true;
         }
@@ -814,6 +839,12 @@ export class AgentSessionManager {
       );
     }
     return entries.filter((_, i) => keep[i]);
+  }
+
+  private rememberPresentTranscript(backendId: BackendId, sessionId: string): void {
+    const sessionIds = this.presentTranscriptSessionIds.get(backendId) ?? new Set<string>();
+    sessionIds.add(sessionId);
+    this.presentTranscriptSessionIds.set(backendId, sessionIds);
   }
 
   private async sweepNativeSessions(
@@ -1616,6 +1647,7 @@ export class AgentSessionManager {
     const session = this.sessions.get(id);
     if (!session) return;
     const closedScope = session.projectId;
+    const closedBackendSessionId = session.getBackendSessionId();
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
     const closedIdx = scopeIdsBefore.indexOf(id);
     // User-requested release must block new sends before cancellation and saving.
@@ -1648,6 +1680,9 @@ export class AgentSessionManager {
     this.detachAutoSave(id);
     this.opts.copilotMcpServer?.disconnect(id);
     this.sessions.delete(id);
+    if (closedBackendSessionId) {
+      this.presentTranscriptSessionIds.get(session.backendId)?.delete(closedBackendSessionId);
+    }
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
@@ -2594,6 +2629,7 @@ export class AgentSessionManager {
     descriptor: BackendDescriptor
   ): void {
     proc.onExit(() => {
+      this.presentTranscriptSessionIds.delete(backendId);
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
         // Retry spawns from current settings; a dead generation has no config left to apply.
