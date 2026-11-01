@@ -135,11 +135,11 @@ interface RecentChatActions {
   onSetChatArchived: (id: string, archived: boolean) => Promise<void>;
 }
 
-interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
+export interface RowActionButtonProps extends React.ComponentPropsWithoutRef<typeof Button> {
   label: string;
 }
 
-const RowActionButton = forwardRef<HTMLButtonElement, RowActionButtonProps>(
+export const RowActionButton = forwardRef<HTMLButtonElement, RowActionButtonProps>(
   function RowActionButton({ label, onClick, ...props }, ref) {
     return (
       <Button
