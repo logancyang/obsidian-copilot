@@ -25,17 +25,7 @@ import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { cn } from "@/lib/utils";
-import {
-  Archive,
-  ChevronRight,
-  Clock,
-  Folder,
-  MoreHorizontal,
-  Pin,
-  Search,
-  SquarePen,
-  type LucideIcon,
-} from "lucide-react";
+import { Archive, ChevronRight, MoreHorizontal, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useId, useMemo, useState } from "react";
 
 interface SessionsSidebarPanelProps {
@@ -59,13 +49,12 @@ interface SessionsSidebarPanelProps {
 
 interface GroupProps {
   title: string;
-  icon: LucideIcon;
   collapsed: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }
 
-const Group: React.FC<GroupProps> = ({ title, icon: Icon, collapsed, onToggle, children }) => {
+const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) => {
   const headerId = useId();
   return (
     // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
@@ -82,7 +71,6 @@ const Group: React.FC<GroupProps> = ({ title, icon: Icon, collapsed, onToggle, c
             "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
           )}
         >
-          <Icon className="tw-size-4 tw-shrink-0" />
           <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
           <ChevronRight className={cn("tw-size-4 tw-shrink-0", !collapsed && "tw-rotate-90")} />
         </button>
@@ -245,7 +233,6 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             {groups.pinned.length > 0 && (
               <Group
                 title="Pinned"
-                icon={Pin}
                 collapsed={collapsedGroups.has("pinned")}
                 onToggle={() => onToggleGroup("pinned")}
               >
@@ -255,7 +242,6 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             {visibleProjects.length > 0 && (
               <Group
                 title="Projects"
-                icon={Folder}
                 collapsed={collapsedGroups.has("projects")}
                 onToggle={() => onToggleGroup("projects")}
               >
@@ -279,10 +265,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                       {/* An empty container would still add the column gap, so an empty project says so instead.
                           https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
                       {expanded && chats.length === 0 && (
-                        <div className="tw-py-1 tw-pl-12 tw-text-xs tw-text-muted">No chats</div>
+                        <div className="tw-py-1 tw-pl-14 tw-text-xs tw-text-muted">No chats</div>
                       )}
                       {expanded && chats.length > 0 && (
-                        <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-0.5">
+                        <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
                           {chats.slice(0, shownCount).map((item) => renderChat(item))}
                           {shownCount < chats.length && (
                             <ShowMoreButton
@@ -304,7 +290,6 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             {groups.recents.length > 0 && (
               <Group
                 title="Recents"
-                icon={Clock}
                 collapsed={collapsedGroups.has("recents")}
                 onToggle={() => onToggleGroup("recents")}
               >
