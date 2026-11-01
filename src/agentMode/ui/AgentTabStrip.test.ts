@@ -229,7 +229,7 @@ describe("AgentTabStrip", () => {
       renderStrip(makeManagerWithOneChat(), { onOpenSidebar });
 
       const [leftmost] = screen.getAllByRole("button");
-      expect(leftmost).toBe(screen.getByRole("button", { name: "Open sessions sidebar" }));
+      expect(leftmost).toBe(screen.getByRole("button", { name: "Open Copilot Navigator" }));
       fireEvent.click(leftmost);
 
       expect(onOpenSidebar).toHaveBeenCalledTimes(1);
@@ -242,7 +242,7 @@ describe("AgentTabStrip", () => {
 
       act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
       expect(screen.queryByRole("tab")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Open sessions sidebar" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open Copilot Navigator" })).toBeNull();
 
       act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 2 }));
       act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
@@ -250,7 +250,7 @@ describe("AgentTabStrip", () => {
 
       act(() => workspace.setLeaves({}));
       expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Open sessions sidebar" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
     });
 
     it("starts hidden when a sessions sidebar leaf already exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {

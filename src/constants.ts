@@ -384,7 +384,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.NEW_AGENT_CHAT]: "New Copilot Agent Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Quick Chat window",
   [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "Open Copilot Agent Chat window",
-  [COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR]: "Open Copilot Agent sessions sidebar",
+  [COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR]: "Open Copilot Navigator",
   [COMMAND_IDS.OPEN_RELEVANT_NOTES_VIEW]: "Open Relevant Notes",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Quick Chat window",
   [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: "Toggle Copilot Agent Chat window",

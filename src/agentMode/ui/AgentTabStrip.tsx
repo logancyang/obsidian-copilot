@@ -168,13 +168,13 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
             variant="ghost2"
             size="icon"
             onClick={onOpenSidebar}
-            aria-label="Open sessions sidebar"
+            aria-label="Open Copilot Navigator"
             className="tw-my-1 tw-shrink-0"
           >
             <PanelLeft className="tw-size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Open sessions sidebar</TooltipContent>
+        <TooltipContent>Open Copilot Navigator</TooltipContent>
       </Tooltip>
       <div
         ref={stripRef}
