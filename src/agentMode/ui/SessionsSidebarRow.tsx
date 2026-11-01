@@ -76,7 +76,7 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
         <span
           role="img"
           aria-label="Session open"
-          className="tw-bg-green tw-size-2 tw-shrink-0 tw-rounded-full"
+          className="tw-size-2 tw-shrink-0 tw-rounded-full tw-bg-change-inserted"
         />
       ) : null;
   }
