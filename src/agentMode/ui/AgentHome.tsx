@@ -12,6 +12,7 @@ import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import { isProjectContextInline, withoutChatLists } from "@/agentMode/ui/landingChatLists";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
@@ -34,6 +35,8 @@ import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel"
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
+import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
+import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -96,6 +99,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
+  const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
   useChatInputAutoFocus();
@@ -347,6 +351,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
+  const chatLabel = useSessionLabel(manager.getSession(sessionId));
+  const chatTitle = sidebarOpen && !isLanding ? (chatLabel ?? "New chat") : undefined;
 
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
     const active = manager.getActiveSession();
@@ -517,6 +523,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
+  const globalShelfSections = useMemo(
+    () => (sidebarOpen ? withoutChatLists(landingSections) : landingSections),
+    [sidebarOpen, landingSections]
+  );
+
   const contextSummary = useMemo(() => buildContextSummary(activeProject), [activeProject]);
 
   const projectLandingSections = useMemo<AgentHomeShelfSection[]>(
@@ -660,6 +671,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       return (await manager.saveActiveSession())?.path ?? "";
     });
 
+  const showHeader = isProjectScope || chatTitle !== undefined;
+  const headerIsProject = isProjectScope || chatTitle === undefined;
+
   const handleReportError = () => {
     const evidence = activeSession?.getReportEvidence();
     openReportIssueModal(plugin, {
@@ -674,17 +688,18 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       <div
         className={cn(
           "tw-grid tw-shrink-0 tw-transition-[grid-template-rows,opacity] tw-duration-200 tw-ease-out motion-reduce:tw-transition-none",
-          isProjectScope
+          showHeader
             ? "tw-grid-rows-[1fr] tw-opacity-100"
             : "tw-pointer-events-none tw-grid-rows-[0fr] tw-opacity-0"
         )}
-        aria-hidden={!isProjectScope}
+        aria-hidden={!showHeader}
       >
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
-            projectName={headerName}
-            onExit={handleExitProject}
-            orphaned={headerOrphaned}
+            projectName={headerIsProject ? headerName : undefined}
+            title={chatTitle}
+            onExit={headerIsProject ? handleExitProject : undefined}
+            orphaned={headerIsProject && headerOrphaned}
             menu={
               activeProject ? (
                 <ProjectInfoPopover
@@ -750,7 +765,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       ) : undefined
                     }
                     context={
-                      isProjectLanding && !isOrphanedProject && projectPlacement?.standalone ? (
+                      isProjectLanding &&
+                      !isOrphanedProject &&
+                      isProjectContextInline(projectPlacement?.standalone, sidebarOpen) ? (
                         <div className="tw-px-2 tw-pb-1 tw-pt-3">
                           <AgentContextSection
                             app={app}
@@ -762,16 +779,17 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement && !projectPlacement.standalone ? (
+                        projectPlacement &&
+                        !isProjectContextInline(projectPlacement.standalone, sidebarOpen) ? (
                           <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
                         ) : null
-                      ) : (
+                      ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf
-                          sections={landingSections}
+                          sections={globalShelfSections}
                           activeSectionId={globalShelfTab}
                           onSectionSelect={setGlobalShelfTab}
                         />
-                      )
+                      ) : null
                     }
                   />
                 ) : (

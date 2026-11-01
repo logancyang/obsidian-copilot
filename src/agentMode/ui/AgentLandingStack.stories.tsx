@@ -1,8 +1,9 @@
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
+import { isProjectContextInline, withoutChatLists } from "@/agentMode/ui/landingChatLists";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { Meta, StoryObj } from "@/lib/story";
-import { FileSearch, Folder, MessageSquare, RefreshCw } from "lucide-react";
+import { FileSearch, Files, Folder, MessageSquare, RefreshCw } from "lucide-react";
 import React from "react";
 
 type AgentLandingStackProps = React.ComponentProps<typeof AgentLandingStack>;
@@ -104,6 +105,23 @@ const projectSections: AgentHomeShelfSection[] = [
 
 const allSections = [...sections, ...relevantNotesSections, ...projectSections];
 
+const projectContextBody = (
+  <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-normal">
+    Context: 3 notes, 1 folder
+  </div>
+);
+
+const projectLandingSections: AgentHomeShelfSection[] = [
+  { ...sections[0], id: "project-chats", title: "Recent chats" },
+  {
+    id: "project-context",
+    icon: <Files className="tw-size-4" />,
+    title: "Context",
+    count: 4,
+    renderBody: () => projectContextBody,
+  },
+];
+
 function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProps) {
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
@@ -135,6 +153,32 @@ function RelevantNotesPreviewCanvas({ args }: Pick<LandingStackCanvasProps, "arg
   );
 }
 
+function LandingCanvas({
+  args,
+  sidebarOpen,
+  project,
+}: Pick<LandingStackCanvasProps, "args"> & { sidebarOpen: boolean; project: boolean }) {
+  const globalSections = sidebarOpen ? withoutChatLists(allSections) : allSections;
+  const contextInline = project && isProjectContextInline(false, sidebarOpen);
+  const shelf = project ? (
+    contextInline ? undefined : (
+      <AgentHomeShelf sections={projectLandingSections} />
+    )
+  ) : globalSections.length > 0 ? (
+    <AgentHomeShelf sections={globalSections} />
+  ) : undefined;
+  return (
+    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
+      <AgentLandingStack
+        hero={args.hero ?? null}
+        composer={args.composer ?? null}
+        context={contextInline ? <div className="tw-pt-3">{projectContextBody}</div> : undefined}
+        shelf={shelf}
+      />
+    </div>
+  );
+}
+
 const meta = {
   title: "Agent Mode/Agent Landing Stack",
   component: AgentLandingStack,
@@ -162,4 +206,20 @@ export const FullPreview: StoryObj<AgentLandingStackProps> = {
 
 export const RelevantNotesPreview: StoryObj<AgentLandingStackProps> = {
   render: (args) => <RelevantNotesPreviewCanvas args={args} />,
+};
+
+export const GlobalLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen={false} project={false} />,
+};
+
+export const GlobalLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen project={false} />,
+};
+
+export const ProjectLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen={false} project />,
+};
+
+export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen project />,
 };
