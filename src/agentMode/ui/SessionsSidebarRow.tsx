@@ -108,7 +108,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         onClick={onSelect}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none"
+          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
         {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
