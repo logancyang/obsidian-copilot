@@ -91,6 +91,18 @@ describe("SessionsSidebarFolderRow", () => {
       expect(screen.getByText("Garden plans").className).toContain("tw-font-semibold");
     });
 
+    it("keeps the bubbled status's space and overlays the chevron on it, so hovering moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderFolderRow({ hiddenStatus: "waiting" });
+
+      const row = screen.getByText("Garden plans").closest("button")!;
+      const statusSlot = screen.getByLabelText("Waiting for permission").parentElement!;
+      expect(statusSlot.className).toContain("group-hover:tw-invisible");
+      expect(statusSlot.className).not.toContain("group-hover:tw-hidden");
+      expect(row.querySelector(".lucide-chevron-right")!.getAttribute("class")).toContain(
+        "tw-absolute"
+      );
+    });
+
     it("shows no status when nothing hidden needs the user", () => {
       renderFolderRow({ hiddenStatus: "idle" });
 
