@@ -12,6 +12,13 @@ export interface AgentHomeShelfSection {
   disabledTooltip?: string;
 }
 
+export function landingSectionsForSidebar(
+  sections: AgentHomeShelfSection[],
+  sidebarOpen: boolean
+): AgentHomeShelfSection[] {
+  return sidebarOpen ? sections.filter((section) => section.id === "relevant-notes") : sections;
+}
+
 interface AgentHomeShelfProps {
   sections: AgentHomeShelfSection[];
   className?: string;

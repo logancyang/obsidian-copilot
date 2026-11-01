@@ -21,7 +21,11 @@ import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
-import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
+import {
+  AgentHomeShelf,
+  landingSectionsForSidebar,
+  type AgentHomeShelfSection,
+} from "@/agentMode/ui/AgentHomeShelf";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
@@ -523,11 +527,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
+  // The sessions sidebar already lists chats and projects, so the landing drops its own lists and shows the project
+  // context inline instead of a shelf.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   const globalShelfSections = useMemo(
-    () =>
-      sidebarOpen
-        ? landingSections.filter((section) => section.id === "relevant-notes")
-        : landingSections,
+    () => landingSectionsForSidebar(landingSections, sidebarOpen),
     [sidebarOpen, landingSections]
   );
 
