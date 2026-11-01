@@ -250,6 +250,7 @@ export class AgentSessionManager {
       unsub?: () => void;
       signature?: string;
       attentionUnsub?: () => void;
+      withholdsSessionId?: boolean;
     }
   >();
 
@@ -2061,7 +2062,11 @@ export class AgentSessionManager {
       if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
-    this.getSessionState(session.internalId).source = file;
+    const state = this.getSessionState(session.internalId);
+    state.source = file;
+    // A fresh session has no transcript until its first prompt, and a note pointing at a missing transcript drops out of the chat lists.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/814
+    if (!resumed) state.withholdsSessionId = true;
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2334,7 +2339,10 @@ export class AgentSessionManager {
       onMessagesChanged: trigger,
       onStatusChanged: () => {},
       onLabelChanged: trigger,
-      onPromptSent: () => this.unarchiveSavedChat(session),
+      onPromptSent: () => {
+        this.getSessionState(session.internalId).withholdsSessionId = false;
+        this.unarchiveSavedChat(session);
+      },
     });
     this.getSessionState(session.internalId).unsub = unsubscribe;
   }
@@ -2386,6 +2394,7 @@ export class AgentSessionManager {
     const index = this.opts.sessionIndex;
     if (!index) return;
     if (!this.sessions.has(session.internalId)) return;
+    if (this.sessionState.get(session.internalId)?.withholdsSessionId) return;
     const sessionId = session.getBackendSessionId();
     if (!sessionId) return;
     const messages = session.store.getDisplayMessages();
@@ -2451,8 +2460,9 @@ export class AgentSessionManager {
     const messages = session.store.getDisplayMessages();
     if (messages.length === 0) return null;
 
+    const state = this.getSessionState(session.internalId);
     const label = session.getLabel();
-    const sessionId = session.getBackendSessionId();
+    const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
     const last = messages[messages.length - 1];
     const fanoutSig = last?.fanout
@@ -2463,7 +2473,6 @@ export class AgentSessionManager {
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
     }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
-    const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.source ?? null;
     }

@@ -5706,6 +5706,67 @@ describe("AgentSessionManager", () => {
         resend.mockRestore();
       });
 
+      describe("a saved chat with no resumable session", () => {
+        const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/814";
+        const NOTE = "chats/agent__browsed.md";
+
+        async function openBrowsedChat() {
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const files: Record<string, FakeFrontmatter> = {
+            [NOTE]: { epoch: 1_000, topic: "Browsed", backendId: "opencode" },
+          };
+          const harness = buildHistoryHarness({
+            files,
+            createBackendProcess: jest.fn(() => ({
+              ...makeMockBackendProcess(),
+              sessionExistsLocally: jest.fn(async () => false),
+            })),
+          });
+          Object.assign(harness.persistence, {
+            loadFile: jest.fn(async () => ({
+              backendId: "opencode",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+            })),
+          });
+          (harness.persistence.saveSession as jest.Mock).mockImplementation(
+            async (_messages, _backendId, options: { sessionId?: string | null }) => {
+              if (options.sessionId) files[NOTE].sessionId = options.sessionId;
+              return { path: NOTE };
+            }
+          );
+          const session = await harness.manager.loadSessionFromHistory(new MockTFile(NOTE));
+          return { ...harness, files, session };
+        }
+
+        async function autosave(session: AgentSession) {
+          getSessionTestHandle(session).setMessages(savedTurn, true);
+          await jest.advanceTimersByTimeAsync(2000);
+        }
+
+        it(`${issue} stays listed with its note's session unchanged after it is opened and left before a message is sent`, async () => {
+          const { manager, files, session } = await openBrowsedChat();
+          await autosave(session);
+
+          const closed = untilClosed(manager, session);
+          await manager.createSession();
+          await closed;
+
+          expect(files[NOTE].sessionId).toBeUndefined();
+          expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
+        });
+
+        it(`${issue} saves its new session into the note once a message is sent in it`, async () => {
+          const { manager, files, session } = await openBrowsedChat();
+          getSessionTestHandle(session).sendPrompt();
+          await autosave(session);
+
+          expect(files[NOTE].sessionId).toBe(session.getBackendSessionId());
+          expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
+        });
+      });
+
       it("reattaches a project chat to its project scope", async () => {
         seedProjects("proj-ctx");
         const replay = buildReplayingBackend();
