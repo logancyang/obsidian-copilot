@@ -56,11 +56,15 @@ const Group: React.FC<{ title: string; action?: React.ReactNode; children: React
   children,
 }) => (
   <section aria-label={title} className="tw-flex tw-flex-col tw-gap-0.5">
-    <div className="tw-flex tw-items-center tw-justify-between tw-pr-1">
+    <div className="tw-group tw-flex tw-items-center tw-justify-between tw-pr-1">
       <h3 className="tw-m-0 tw-px-2 tw-pb-0.5 tw-pt-2 tw-text-xs tw-font-medium tw-text-muted">
         {title}
       </h3>
-      {action}
+      {action && (
+        <div className="tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100">
+          {action}
+        </div>
+      )}
     </div>
     {children}
   </section>
