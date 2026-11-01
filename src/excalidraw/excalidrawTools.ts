@@ -374,7 +374,7 @@ async function create(
   const idMap = (reply.data?.idMap ?? {}) as Record<string, string>;
   // The plugin maps an icon's id to its group in groupMap, never in idMap, and rejects it as an element id.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/816
-  const icons = (reply.data?.groupMap ?? {}) as Record<string, { elementIds?: string[] }>;
+  const icons = (reply.data?.groupMap ?? {}) as Record<string, { elementIds: string[] }>;
   const grouped = await edit(
     api,
     {

@@ -96,6 +96,12 @@ describe("excalidrawTools", () => {
         "This tool can't rename a frame, so name it when you create it."
       );
     });
+
+    it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
+        "Other operations can't take an icon's id or group id"
+      );
+    });
   });
 
   describe("createExcalidrawTools()", () => {
@@ -352,12 +358,6 @@ describe("excalidrawTools", () => {
         })
       );
       expect(result.isError).toBe(false);
-    });
-
-    it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
-      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
-        "Other operations can't take an icon's id or group id"
-      );
     });
 
     it(`${ISSUE_792} sends an icon operation to the plugin's apply`, async () => {
