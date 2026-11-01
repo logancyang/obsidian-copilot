@@ -62,5 +62,6 @@ export const LongTitle: StoryObj<SessionsSidebarRowProps> = {
     item: sidebarChat("chats/long.md", longTitle, 600),
     projectName: "Fall product launch",
     status: "waiting",
+    isSessionOpen: true,
   },
 };
