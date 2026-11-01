@@ -25,14 +25,16 @@ const archivedProject = (id: string, name: string, archivedAt: number): ProjectC
 });
 
 const PROJECTS = [
-  archivedProject("proj-old", "Thesis", 2_000),
-  archivedProject("proj-new", "Launch plan", 4_000),
+  archivedProject("proj-old", "Thesis", new Date(2026, 8, 5, 12).getTime()),
+  archivedProject("proj-new", "Launch plan", new Date(2026, 9, 20, 12).getTime()),
 ];
 
 const CHATS = [
-  archivedChat("chats/old.md", "Old research", 1_000),
-  archivedChat("chats/new.md", "Newly shelved", 3_000),
+  archivedChat("chats/old.md", "Old research", new Date(2026, 7, 28, 12).getTime()),
+  archivedChat("chats/new.md", "Newly shelved", new Date(2026, 9, 31, 12).getTime()),
 ];
+
+const rowOf = (title: string) => screen.getByText(title).closest<HTMLElement>("[role=button]")!;
 
 function renderList(overrides: Partial<React.ComponentProps<typeof ArchivedChatsList>> = {}) {
   const props = {
@@ -67,30 +69,56 @@ describe("ArchivedChatsModal", () => {
       expect(rowTitles()).toEqual(["Newly shelved", "Old research"]);
     });
 
-    it("opens the chat whose Open button is clicked", () => {
+    it("shows the full date each chat was archived", () => {
+      renderList();
+
+      expect(within(rowOf("Newly shelved")).getByText("October 31, 2026")).toBeTruthy();
+      expect(within(rowOf("Old research")).getByText("August 28, 2026")).toBeTruthy();
+    });
+
+    it("opens a chat when its row is clicked", () => {
       const { onOpen } = renderList();
 
-      fireEvent.click(
-        within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-          name: "Open",
-        })
-      );
+      fireEvent.click(screen.getByText("Old research"));
 
       expect(onOpen).toHaveBeenCalledWith("chats/old.md");
     });
 
-    it("unarchives the chat whose Unarchive button is clicked and drops it from the list", async () => {
-      const { onUnarchive } = renderList();
+    it.each(["Enter", " "])("opens a chat when its focused row receives %j", (key) => {
+      const { onOpen } = renderList();
+
+      fireEvent.keyDown(rowOf("Old research"), { key });
+
+      expect(onOpen).toHaveBeenCalledWith("chats/old.md");
+    });
+
+    it("offers no Open button because the row itself opens the chat", () => {
+      renderList();
+
+      expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    });
+
+    it("hides the unarchive icon button until the row is hovered or focused while keeping it focusable", () => {
+      renderList();
+
+      const unarchive = within(rowOf("Old research")).getByRole("button", { name: "Unarchive" });
+
+      expect(unarchive.parentElement!.className).toContain("tw-opacity-0");
+      expect(unarchive.parentElement!.className).toContain("focus-within:tw-opacity-100");
+      expect(unarchive.parentElement!.className).toContain("group-hover:tw-opacity-100");
+      expect(unarchive.getAttribute("title")).toBe("Unarchive");
+      expect(unarchive.textContent).toBe("");
+    });
+
+    it("unarchives the chat whose Unarchive icon button is clicked, drops it from the list, and does not open it", async () => {
+      const { onUnarchive, onOpen } = renderList();
 
       await act(async () => {
-        fireEvent.click(
-          within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-            name: "Unarchive",
-          })
-        );
+        fireEvent.click(within(rowOf("Old research")).getByRole("button", { name: "Unarchive" }));
       });
 
       expect(onUnarchive).toHaveBeenCalledWith("chats/old.md");
+      expect(onOpen).not.toHaveBeenCalled();
       expect(rowTitles()).toEqual(["Newly shelved"]);
     });
 
@@ -101,11 +129,7 @@ describe("ArchivedChatsModal", () => {
       renderList({ onUnarchive });
 
       await act(async () => {
-        fireEvent.click(
-          within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-            name: "Unarchive",
-          })
-        );
+        fireEvent.click(within(rowOf("Old research")).getByRole("button", { name: "Unarchive" }));
       });
 
       expect(rowTitles()).toEqual(["Newly shelved", "Old research"]);
@@ -127,19 +151,25 @@ describe("ArchivedChatsModal", () => {
       expect(rowTitles()).toEqual(["Launch plan", "Thesis", "Newly shelved", "Old research"]);
     });
 
-    it("unarchives the project whose Unarchive button is clicked and drops only that project", async () => {
-      const { onUnarchive, onUnarchiveProject } = renderList({ projects: PROJECTS });
+    it("shows the full date each project was archived", () => {
+      renderList({ projects: PROJECTS });
+
+      expect(within(rowOf("Launch plan")).getByText("October 20, 2026")).toBeTruthy();
+      expect(within(rowOf("Thesis")).getByText("September 5, 2026")).toBeTruthy();
+    });
+
+    it("unarchives the project whose Unarchive icon button is clicked, drops only that project, and does not open it", async () => {
+      const { onUnarchive, onUnarchiveProject, onOpenProject } = renderList({
+        projects: PROJECTS,
+      });
 
       await act(async () => {
-        fireEvent.click(
-          within(screen.getByText("Thesis").closest("li")!).getByRole("button", {
-            name: "Unarchive",
-          })
-        );
+        fireEvent.click(within(rowOf("Thesis")).getByRole("button", { name: "Unarchive" }));
       });
 
       expect(onUnarchiveProject).toHaveBeenCalledWith("proj-old");
       expect(onUnarchive).not.toHaveBeenCalled();
+      expect(onOpenProject).not.toHaveBeenCalled();
       expect(rowTitles()).toEqual(["Launch plan", "Newly shelved", "Old research"]);
     });
 
@@ -156,17 +186,21 @@ describe("ArchivedChatsModal", () => {
       expect(rowTitles()).toEqual(["Thesis"]);
     });
 
-    it("opens the project whose Open button is clicked", () => {
+    it("opens a project when its row is clicked", () => {
       const { onOpenProject, onOpen } = renderList({ projects: PROJECTS });
 
-      fireEvent.click(
-        within(screen.getByText("Launch plan").closest("li")!).getByRole("button", {
-          name: "Open",
-        })
-      );
+      fireEvent.click(screen.getByText("Launch plan"));
 
       expect(onOpenProject).toHaveBeenCalledWith("proj-new");
       expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it.each(["Enter", " "])("opens a project when its focused row receives %j", (key) => {
+      const { onOpenProject } = renderList({ projects: PROJECTS });
+
+      fireEvent.keyDown(rowOf("Thesis"), { key });
+
+      expect(onOpenProject).toHaveBeenCalledWith("proj-old");
     });
   });
 
@@ -207,18 +241,13 @@ describe("ArchivedChatsModal", () => {
         await act(async () => ReactModal.prototype.onClose.call(modal));
       });
 
-      it("opens the chosen chat and closes the dialog", async () => {
+      it("opens the clicked chat and closes the dialog", async () => {
         const onOpen = jest.fn(async () => {});
         const modal = await openModal({ onOpen });
         const close = jest.spyOn(modal, "close");
 
         await act(async () => {
-          fireEvent.click(
-            within(within(modal.contentEl).getByText("Newly shelved").closest("li")!).getByRole(
-              "button",
-              { name: "Open" }
-            )
-          );
+          fireEvent.click(within(modal.contentEl).getByText("Newly shelved"));
         });
 
         expect(onOpen).toHaveBeenCalledWith("chats/new.md");
@@ -232,11 +261,7 @@ describe("ArchivedChatsModal", () => {
         const close = jest.spyOn(modal, "close");
 
         await act(async () => {
-          fireEvent.click(
-            within(within(modal.contentEl).getByText("Thesis").closest("li")!).getByRole("button", {
-              name: "Open",
-            })
-          );
+          fireEvent.click(within(modal.contentEl).getByText("Thesis"));
         });
 
         expect(onOpenProject).toHaveBeenCalledWith("proj-old");
