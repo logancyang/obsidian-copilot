@@ -160,8 +160,18 @@ function LandingCanvas({
   args,
   sidebarOpen,
   project,
-}: Pick<LandingStackCanvasProps, "args"> & { sidebarOpen: boolean; project: boolean }) {
-  const globalSections = landingSectionsForSidebar(allSections, sidebarOpen);
+  relevantNotesInSidePanel = false,
+}: Pick<LandingStackCanvasProps, "args"> & {
+  sidebarOpen: boolean;
+  project: boolean;
+  relevantNotesInSidePanel?: boolean;
+}) {
+  const globalSections = landingSectionsForSidebar(
+    relevantNotesInSidePanel
+      ? allSections.filter((section) => section.id !== "relevant-notes")
+      : allSections,
+    sidebarOpen
+  );
   const contextInline = project && sidebarOpen;
   const shelf = project ? (
     contextInline ? undefined : (
@@ -225,4 +235,10 @@ export const ProjectLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
 
 export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} sidebarOpen project />,
+};
+
+export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
+  render: (args) => (
+    <LandingCanvas args={args} sidebarOpen project={false} relevantNotesInSidePanel />
+  ),
 };
