@@ -23,7 +23,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
-  const hoverHidden = menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden";
+  const hoverHidden = menuOpen
+    ? "tw-invisible"
+    : "group-focus-within:tw-invisible group-hover:tw-invisible";
   const hoverShown = menuOpen
     ? "tw-block"
     : "tw-hidden group-focus-within:tw-block group-hover:tw-block";
@@ -50,7 +52,10 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         <span
           className={cn(
             "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
-            hiddenStatus === "unread" && "tw-font-semibold"
+            hiddenStatus === "unread" && "tw-font-semibold",
+            menuOpen
+              ? "[mask-image:linear-gradient(to_left,transparent_1.5rem,black_2.5rem)]"
+              : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_1.5rem,black_2.5rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_1.5rem,black_2.5rem)]"
           )}
         >
           {project.name}
@@ -58,8 +63,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         {hiddenStatus === "unread" && (
           <span role="img" aria-label="Unread result" className="tw-sr-only" />
         )}
-        {/* The bubbled status sits at the right end, in line with chat statuses; hovering swaps it for the actions and
-            the chevron, which stay hidden otherwise so the list reads clean.
+        {/* The bubbled status sits at the right end, in line with chat statuses; hovering lays the actions and the
+            chevron over it, hidden otherwise so the list reads clean, and the name fades under them instead of reflowing.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <span
           className={cn(
@@ -69,10 +74,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         >
           {hiddenStatus !== "unread" && <SessionStatusIcon status={hiddenStatus} />}
         </span>
-        <span aria-hidden="true" className={cn("tw-w-5 tw-shrink-0", hoverShown)} />
         <ChevronRight
           className={cn(
-            "tw-size-4 tw-shrink-0 tw-text-muted",
+            "tw-absolute tw-right-2 tw-size-4 tw-text-muted",
             hoverShown,
             expanded && "tw-rotate-90"
           )}

@@ -179,10 +179,14 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
         </h2>
         {/* New chat keeps its label while the header has room, down to Obsidian's default sidebar width, and drops to its icon
             in a narrower sidebar; the label stays as its screen-reader name, since an aria-label would show as a tooltip.
+            Obsidian's grey focus shadow beats the Button ring and barely shows beside the accent fill, so focus adds an outline.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <Button
           variant="default"
-          className="tw-h-7 tw-shrink-0 tw-gap-1.5 tw-px-2"
+          className={cn(
+            "tw-h-7 tw-shrink-0 tw-gap-1.5 tw-px-2",
+            "focus-visible:tw-outline focus-visible:tw-outline-2 focus-visible:tw-outline-offset-2 focus-visible:tw-outline-base-100"
+          )}
           onClick={onNewChat}
         >
           <SquarePen className="tw-size-4" />
