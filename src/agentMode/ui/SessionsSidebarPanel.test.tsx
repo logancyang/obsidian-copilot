@@ -26,6 +26,8 @@ function baseProps(
     waitingChatIds: NONE,
     attentionChatIds: NONE,
     openChatIds: NONE,
+    collapsedGroups: NONE,
+    onToggleGroup: jest.fn(),
     actions: inertChatActions({ getChatBookmarkState: () => new Promise<never>(() => {}) }),
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
@@ -55,7 +57,10 @@ function section(name: string): HTMLElement {
 function chatTitles(root: HTMLElement): string[] {
   return within(root)
     .queryAllByRole("button")
-    .filter((button) => /^(Chat|Pin|Rec)/.test(button.textContent ?? ""))
+    .filter(
+      (button) =>
+        !button.hasAttribute("aria-expanded") && /^(Chat|Pin|Rec)/.test(button.textContent ?? "")
+    )
     .map((button) => (button.textContent ?? "").trim());
 }
 
@@ -137,15 +142,58 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.getByRole("button", { name: "Project 1" })).toBeTruthy();
         expect(screen.queryByText("No chats yet")).toBeNull();
       });
+
+      it.each([
+        ["Pinned", "pinned"],
+        ["Projects", "projects"],
+        ["Recents", "recents"],
+      ])(
+        "folds the %s group from its header for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
+        (title, groupId) => {
+          const { onToggleGroup } = renderPanel({
+            items: [
+              sidebarChat("chats/pin.md", "Pinned chat", 1, { pinnedAt: 5 }),
+              sidebarChat("chats/rec.md", "Recent chat", 2),
+            ],
+            projects: projects(1),
+          });
+
+          const header = within(section(title)).getByRole("button", { name: title });
+          expect(header.getAttribute("aria-expanded")).toBe("true");
+          fireEvent.click(header);
+
+          expect(onToggleGroup).toHaveBeenCalledWith(groupId);
+        }
+      );
+
+      it("hides the rows of a folded group but keeps its header for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({
+          items: [
+            sidebarChat("chats/pin.md", "Pinned chat", 1, { pinnedAt: 5 }),
+            sidebarChat("chats/rec.md", "Recent chat", 2),
+          ],
+          projects: projects(1),
+          collapsedGroups: new Set(["pinned", "projects"]),
+        });
+
+        expect(
+          within(section("Pinned"))
+            .getByRole("button", { name: "Pinned" })
+            .getAttribute("aria-expanded")
+        ).toBe("false");
+        expect(screen.queryByText("Pinned chat")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Project 1" })).toBeNull();
+        expect(within(section("Recents")).getByText("Recent chat")).toBeTruthy();
+      });
     });
 
     describe("projects", () => {
-      it("lists projects in the order given, the first 5 before Show more for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      it("lists the first 5 projects before Show more for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         renderPanel({ projects: projects(7) });
 
         const folders = within(section("Projects"))
-          .getAllByRole("button", { expanded: false, name: /^Expand Project \d$/ })
-          .map((button) => button.getAttribute("aria-label")!.replace("Expand ", ""));
+          .getAllByRole("button", { expanded: false, name: /^Project \d$/ })
+          .map((button) => button.textContent);
         expect(folders).toEqual(["Project 1", "Project 2", "Project 3", "Project 4", "Project 5"]);
       });
 
@@ -164,39 +212,14 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
       });
 
-      it("expands a collapsed folder and opens its project when the folder is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      it("only folds or unfolds a project on a click of its row, without opening the project or a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
-          projects: projects(1),
-          items: projectChats("p1", 2),
-        });
-
-        fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
-
-        expect(onToggleProject).toHaveBeenCalledWith("p1");
-        expect(onOpenProject).toHaveBeenCalledWith("p1");
-        expect(onOpenChat).not.toHaveBeenCalled();
-      });
-
-      it("keeps an expanded folder open when its project is opened for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-        const { onToggleProject, onOpenProject } = renderPanel({
           projects: projects(1),
           items: projectChats("p1", 2),
           expandedProjectIds: new Set(["p1"]),
         });
 
         fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
-
-        expect(onToggleProject).not.toHaveBeenCalled();
-        expect(onOpenProject).toHaveBeenCalledWith("p1");
-      });
-
-      it("only toggles the folder from the chevron, leaving the open chat alone for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-        const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
-          projects: projects(1),
-          items: projectChats("p1", 2),
-        });
-
-        fireEvent.click(screen.getByRole("button", { name: "Expand Project 1" }));
 
         expect(onToggleProject).toHaveBeenCalledWith("p1");
         expect(onOpenProject).not.toHaveBeenCalled();
@@ -251,6 +274,12 @@ describe("SessionsSidebarPanel", () => {
           activeChatIds: new Set([items[0].id]),
         });
         expect(current()).toEqual(["Chat p1 1"]);
+      });
+
+      it("says an expanded project has no chats instead of leaving an empty gap for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({ projects: projects(2), expandedProjectIds: new Set(["p1"]) });
+
+        expect(within(section("Projects")).getAllByText("No chats")).toHaveLength(1);
       });
 
       it("hides the chats of a collapsed project", () => {
@@ -453,6 +482,27 @@ describe("SessionsSidebarPanel", () => {
         ).toBeTruthy();
         expect(screen.getAllByLabelText(label)).toHaveLength(1);
       });
+
+      it("marks only chats with a live session and closes that session by its history id for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+        const actions = inertChatActions({
+          onCloseSession: jest.fn(async () => {}),
+          getChatBookmarkState: () => new Promise<never>(() => {}),
+        });
+        const { onOpenChat } = renderPanel({
+          items,
+          actions,
+          openChatIds: new Set(["chats/b.md"]),
+        });
+
+        expect(screen.getAllByLabelText("Session open")).toHaveLength(1);
+        expect(
+          within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText("Session open")
+        ).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+
+        expect(actions.onCloseSession).toHaveBeenCalledWith("chats/b.md");
+        expect(onOpenChat).not.toHaveBeenCalled();
+      });
     });
 
     describe("new project", () => {
@@ -499,15 +549,15 @@ describe("SessionsSidebarPanel", () => {
         renderPanel();
         const wrapper = plusButton().parentElement!;
 
-        expect(wrapper.classList.contains("tw-opacity-100")).toBe(false);
+        expect(wrapper.classList.contains("tw-visible")).toBe(false);
 
         startProject();
 
-        expect(wrapper.classList.contains("tw-opacity-100")).toBe(true);
+        expect(wrapper.classList.contains("tw-visible")).toBe(true);
 
         fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }));
 
-        expect(wrapper.classList.contains("tw-opacity-100")).toBe(false);
+        expect(wrapper.classList.contains("tw-visible")).toBe(false);
       });
 
       it("creates the project with the trimmed name on Enter and closes the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {

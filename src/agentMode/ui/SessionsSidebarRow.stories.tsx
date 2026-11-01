@@ -13,7 +13,7 @@ const meta = {
     status: "idle",
     active: false,
     isSessionOpen: false,
-    actions: inertChatActions(),
+    actions: inertChatActions({ onCloseSession: async () => {} }),
     onSelect: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
@@ -35,6 +35,14 @@ export const WaitingForPermission: StoryObj<SessionsSidebarRowProps> = {
 
 export const UnreadResult: StoryObj<SessionsSidebarRowProps> = {
   args: { status: "unread" },
+};
+
+export const SessionOpen: StoryObj<SessionsSidebarRowProps> = {
+  args: { isSessionOpen: true },
+};
+
+export const SessionOpenAndRunning: StoryObj<SessionsSidebarRowProps> = {
+  args: { isSessionOpen: true, status: "running" },
 };
 
 export const Active: StoryObj<SessionsSidebarRowProps> = {

@@ -5,7 +5,6 @@ import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import * as projectsState from "@/projects/state";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";
@@ -32,17 +31,12 @@ jest.mock("@/agentMode/ui/ArchivedChatsModal", () => ({
 
 const NONE: ReadonlySet<string> = new Set();
 
-function chat(
-  id: string,
-  title: string,
-  lastAccessedMs: number,
-  extra: Partial<ChatHistoryItem> = {}
-) {
+function chat(id: string, title: string, createdMs: number, extra: Partial<ChatHistoryItem> = {}) {
   return {
     id,
     title,
-    createdAt: new Date(1_000),
-    lastAccessedAt: new Date(lastAccessedMs),
+    createdAt: new Date(createdMs),
+    lastAccessedAt: new Date(createdMs),
     ...extra,
   } satisfies ChatHistoryItem;
 }
@@ -63,6 +57,7 @@ class FakeManager {
     this.events.push(`landing:${projectId}`);
   });
   getChatHistoryItems = jest.fn(async () => this.items);
+  closeChatSession = jest.fn(async (_id: string) => {});
   getOpenChatIds = () => this.open;
   getRunningChatIds = () => this.running;
   getWaitingChatIds = () => this.waiting;
@@ -118,8 +113,6 @@ class FakeLocalStorage {
   saveLocalStorage = (key: string, value: unknown) => void this.store.set(key, value);
 }
 
-const usageManager = new RecentUsageManager<string>();
-
 const createProject = jest.fn(async (project: { id: string; name: string }) => {
   projectsState.updateCachedProjectRecords([
     ...projectsState.getCachedProjectRecords(),
@@ -129,7 +122,6 @@ const createProject = jest.fn(async (project: { id: string; name: string }) => {
 
 function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage()) {
   jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
-    getProjectUsageTimestampsManager: () => usageManager,
     deleteProject: jest.fn(async () => {}),
     createProject,
   } as unknown as ProjectFileManager);
@@ -294,6 +286,31 @@ describe("SessionsSidebar", () => {
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
     });
 
+    it("closes a chat's live session from its row through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.open = new Set(["a.md"]);
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+
+      await waitFor(() => expect(manager.closeChatSession).toHaveBeenCalledWith("a.md"));
+    });
+
+    it("tells the user when a chat's live session cannot be closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.open = new Set(["a.md"]);
+      manager.closeChatSession.mockRejectedValueOnce(new Error("Agent is busy."));
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith("Could not close chat: Agent is busy.")
+      );
+    });
+
     it("reveals the Agent view once the new global chat is open, so its composer takes the focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
@@ -332,7 +349,7 @@ describe("SessionsSidebar", () => {
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
       manager.open = new Set(["b.md"]);
       act(() => manager.emit());
-      await screen.findByRole("button", { name: "Beta" });
+      await screen.findByRole("button", { name: /^Beta Session open$/ });
 
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta finished", 2_000)];
       manager.running = new Set(["b.md"]);
@@ -415,22 +432,39 @@ describe("SessionsSidebar", () => {
       expect(await screen.findByRole("button", { name: "Seedling notes" })).toBeTruthy();
     });
 
-    it("orders projects by last activity and leaves archived projects out for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+    it("keeps a folded group folded after a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Loose chat", 1_000)];
+      const storage = new FakeLocalStorage();
+      renderSidebar(manager, storage);
+      await screen.findByRole("button", { name: "Loose chat" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Recents" }));
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+
+      cleanup();
+      renderSidebar(manager, storage);
+      const header = await screen.findByRole("button", { name: "Recents" });
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+    });
+
+    it("orders projects newest created first, ignoring recent use, and leaves archived projects out for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       projectsState.updateCachedProjectRecords([
-        projectRecord("stale", "Stale project", { UsageTimestamps: 1_000 }),
-        projectRecord("fresh", "Fresh project", { UsageTimestamps: 5_000 }),
-        projectRecord("shelved", "Shelved project", { UsageTimestamps: 9_000, archivedAt: 9_500 }),
+        projectRecord("stale", "Stale project", { created: 1_000, UsageTimestamps: 9_000 }),
+        projectRecord("fresh", "Fresh project", { created: 5_000, UsageTimestamps: 1_000 }),
+        projectRecord("shelved", "Shelved project", { created: 9_000, archivedAt: 9_500 }),
       ]);
       renderSidebar(new FakeManager());
 
       const folders = await screen.findAllByRole("button", {
         expanded: false,
-        name: /^Expand \w+ project$/,
+        name: /^\w+ project$/,
       });
 
-      expect(folders.map((folder) => folder.getAttribute("aria-label"))).toEqual([
-        "Expand Fresh project",
-        "Expand Stale project",
+      expect(folders.map((folder) => folder.textContent)).toEqual([
+        "Fresh project",
+        "Stale project",
       ]);
     });
 
@@ -529,26 +563,13 @@ describe("SessionsSidebar", () => {
       expect(manager.exitProject).toHaveBeenCalledTimes(1);
     });
 
-    it("opens the project landing, then reveals the Agent view, and expands the folder when the folder is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
-      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
-      const manager = new FakeManager();
-      manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
-      renderSidebar(manager);
-
-      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
-
-      expect(await screen.findByRole("button", { name: "Seedling notes" })).toBeTruthy();
-      await waitFor(() => expect(manager.openProjectLanding).toHaveBeenCalledWith("garden"));
-      expect(manager.events).toEqual(["landing:garden", "view"]);
-    });
-
-    it("expands the folder from the chevron without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+    it("expands the folder from its row without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
       const manager = new FakeManager();
       manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
       const plugin = renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Expand Garden plans" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
 
       expect(screen.getByRole("button", { name: "Seedling notes" })).toBeTruthy();
       expect(manager.openProjectLanding).not.toHaveBeenCalled();
@@ -574,7 +595,7 @@ describe("SessionsSidebar", () => {
       manager.openProjectLanding.mockRejectedValueOnce(failure);
       renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
+      fireEvent.click(await screen.findByRole("button", { name: "New chat in Garden plans" }));
 
       await waitFor(() =>
         expect(logError).toHaveBeenCalledWith("[AgentMode] sidebar open project failed", failure)

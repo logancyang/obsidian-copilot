@@ -17,15 +17,14 @@ export interface SessionsSidebarGroups {
   recents: ChatHistoryItem[];
 }
 
+// Creation time, not last use, so opening or clicking a chat or project never moves it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/802
 function byNewest(a: ChatHistoryItem, b: ChatHistoryItem): number {
-  return b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime();
+  return b.createdAt.getTime() - a.createdAt.getTime();
 }
 
-/**
- * `projects` arrive already ordered by last activity. A chat whose project is gone from that list
- * (deleted) falls into Recents so it stays reachable.
- * https://github.com/Brevilabs/obsidian-copilot-private/issues/802
- */
+// A chat whose project is gone from `projects` (deleted) falls into Recents so it stays reachable.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/802
 export function groupSessionsSidebarChats(
   items: readonly ChatHistoryItem[],
   projects: readonly ProjectConfig[]
@@ -44,7 +43,9 @@ export function groupSessionsSidebarChats(
   pinned.sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
   return {
     pinned,
-    projects: projects.map((project) => ({ project, chats: chatsByProject.get(project.id)! })),
+    projects: [...projects]
+      .sort((a, b) => b.created - a.created)
+      .map((project) => ({ project, chats: chatsByProject.get(project.id)! })),
     recents,
   };
 }

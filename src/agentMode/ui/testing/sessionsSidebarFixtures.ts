@@ -10,13 +10,8 @@ export function sidebarChat(
   minutesAgo: number,
   extra: Partial<ChatHistoryItem> = {}
 ): ChatHistoryItem {
-  return {
-    id,
-    title,
-    createdAt: new Date("2026-10-30T09:00:00Z"),
-    lastAccessedAt: new Date(NOW_MS - minutesAgo * 60_000),
-    ...extra,
-  };
+  const at = new Date(NOW_MS - minutesAgo * 60_000);
+  return { id, title, createdAt: at, lastAccessedAt: at, ...extra };
 }
 
 export function sidebarProject(id: string, name: string): ProjectConfig {

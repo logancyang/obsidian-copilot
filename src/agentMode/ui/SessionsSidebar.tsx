@@ -4,15 +4,13 @@ import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
-import { useExpandedProjectIds } from "@/agentMode/ui/hooks/useExpandedProjectIds";
+import { useStoredIdSet } from "@/agentMode/ui/hooks/useStoredIdSet";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
-import { useSortedProjects } from "@/agentMode/ui/ProjectPickerList";
 import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
 import { AGENT_CHAT_MODE } from "@/constants";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useActiveProjects, useArchivedProjects } from "@/projects/state";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
@@ -51,12 +49,15 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   const activeProjectId = useSyncExternalStore(subscribeToManager, getActiveProjectId);
   const archivedProjects = useArchivedProjects();
   const archivedProjectKey = archivedProjects.map((project) => project.id).join("\n");
-  const projectUsageManager = useMemo(
-    () => ProjectFileManager.getInstance(app).getProjectUsageTimestampsManager(),
-    [app]
+  const projects = useActiveProjects();
+  const { ids: expandedProjectIds, toggle: toggleProject } = useStoredIdSet(
+    app,
+    "copilot:sessions-sidebar-expanded-projects:v1"
   );
-  const projects = useSortedProjects(useActiveProjects(), projectUsageManager);
-  const { expandedProjectIds, toggleProject } = useExpandedProjectIds(app);
+  const { ids: collapsedGroups, toggle: toggleGroup } = useStoredIdSet(
+    app,
+    "copilot:sessions-sidebar-collapsed-groups:v1"
+  );
 
   // The saved list changes when a chat starts, finishes, is renamed or deleted, or when a project's archive state changes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
@@ -176,6 +177,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       onToggleProject={toggleProject}
       onOpenProject={safeAsyncHandler(handleOpenProject)}
       onCreateProject={handleCreateProject}
+      collapsedGroups={collapsedGroups}
+      onToggleGroup={toggleGroup}
       onProjectDeleted={handleProjectDeleted}
       onViewArchived={handleViewArchived}
       activeChatIds={activeChatIds}
