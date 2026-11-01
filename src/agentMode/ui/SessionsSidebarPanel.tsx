@@ -27,8 +27,19 @@ import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { cn } from "@/lib/utils";
-import { Archive, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
-import React, { useCallback, useMemo, useState } from "react";
+import {
+  Archive,
+  ChevronRight,
+  Clock,
+  Folder,
+  MoreHorizontal,
+  Pin,
+  Plus,
+  Search,
+  SquarePen,
+  type LucideIcon,
+} from "lucide-react";
+import React, { useCallback, useId, useMemo, useState } from "react";
 
 interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
@@ -40,6 +51,8 @@ interface SessionsSidebarPanelProps {
   waitingChatIds: ReadonlySet<string>;
   attentionChatIds: ReadonlySet<string>;
   openChatIds: ReadonlySet<string>;
+  collapsedGroups: ReadonlySet<string>;
+  onToggleGroup: (groupId: string) => void;
   actions: RecentChatActions;
   onNewChat: () => void;
   onOpenChat: (id: string) => void;
@@ -52,38 +65,73 @@ interface SessionsSidebarPanelProps {
 
 interface GroupProps {
   title: string;
+  icon: LucideIcon;
+  collapsed: boolean;
+  onToggle: () => void;
   action?: React.ReactNode;
   actionPinned?: boolean;
   children: React.ReactNode;
 }
 
-const Group: React.FC<GroupProps> = ({ title, action, actionPinned, children }) => (
-  <section aria-label={title} className="tw-flex tw-flex-col tw-gap-0.5">
-    <div className="tw-group tw-flex tw-items-center tw-justify-between tw-pr-1">
-      <h3 className="tw-m-0 tw-px-2 tw-pb-0.5 tw-pt-2 tw-text-xs tw-font-medium tw-text-muted">
-        {title}
-      </h3>
-      {action && (
-        <div
-          className={cn(
-            "tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100",
-            actionPinned && "tw-opacity-100"
-          )}
-        >
-          {action}
-        </div>
-      )}
-    </div>
-    {children}
-  </section>
-);
+const Group: React.FC<GroupProps> = ({
+  title,
+  icon: Icon,
+  collapsed,
+  onToggle,
+  action,
+  actionPinned,
+  children,
+}) => {
+  const headerId = useId();
+  return (
+    // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
+    <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
+      <div className="tw-group tw-relative">
+        <h3 className="tw-m-0">
+          <button
+            id={headerId}
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={onToggle}
+            className={cn(
+              "clickable-icon tw-flex tw-h-auto tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-bg-transparent",
+              "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
+            )}
+          >
+            <Icon className="tw-size-4 tw-shrink-0" />
+            <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
+            {action && <span aria-hidden="true" className="tw-w-5 tw-shrink-0" />}
+            <ChevronRight className={cn("tw-size-4 tw-shrink-0", !collapsed && "tw-rotate-90")} />
+          </button>
+        </h3>
+        {/* The header action fills a slot the header always reserves left of the chevron, so showing it on hover
+            never moves the title or the chevron.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        {action && (
+          <div
+            className={cn(
+              "tw-absolute tw-bottom-0.5 tw-right-8 tw-flex tw-items-center",
+              actionPinned
+                ? "tw-visible"
+                : "tw-invisible group-focus-within:tw-visible group-hover:tw-visible"
+            )}
+          >
+            {action}
+          </div>
+        )}
+      </div>
+      {!collapsed && children}
+    </section>
+  );
+};
 
 const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
   <Button
     type="button"
     variant="ghost2"
     size="sm"
-    className="tw-h-7 tw-justify-start tw-px-2 tw-text-muted"
+    className="tw-h-7 tw-justify-start tw-pl-8 tw-pr-2 tw-text-muted"
     onClick={onClick}
   >
     Show more
@@ -100,6 +148,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   waitingChatIds,
   attentionChatIds,
   openChatIds,
+  collapsedGroups,
+  onToggleGroup,
   actions,
   onNewChat,
   onOpenChat,
@@ -250,10 +300,20 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No chats yet</div>
             )}
             {groups.pinned.length > 0 && (
-              <Group title="Pinned">{groups.pinned.map((item) => renderChat(item, true))}</Group>
+              <Group
+                title="Pinned"
+                icon={Pin}
+                collapsed={collapsedGroups.has("pinned")}
+                onToggle={() => onToggleGroup("pinned")}
+              >
+                {groups.pinned.map((item) => renderChat(item, true))}
+              </Group>
             )}
             <Group
               title="Projects"
+              icon={Folder}
+              collapsed={collapsedGroups.has("projects")}
+              onToggle={() => onToggleGroup("projects")}
               actionPinned={createAnchor !== null}
               action={
                 <RowActionButton
@@ -283,15 +343,16 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                       }
                       hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
                       onToggle={() => onToggleProject(project.id)}
-                      onOpen={() => {
-                        if (!expanded) onToggleProject(project.id);
-                        onOpenProject(project.id);
-                      }}
                       onNewChat={() => onOpenProject(project.id)}
                       onDeleted={onProjectDeleted}
                     />
-                    {expanded && (
-                      <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-0.5">
+                    {/* An empty container would still add the column gap, so an empty project says so instead.
+                        https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+                    {expanded && chats.length === 0 && (
+                      <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
+                    )}
+                    {expanded && chats.length > 0 && (
+                      <div className="tw-flex tw-flex-col tw-gap-0.5">
                         {chats.slice(0, shownCount).map((item) => renderChat(item))}
                         {shownCount < chats.length && (
                           <ShowMoreButton
@@ -310,7 +371,12 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               )}
             </Group>
             {groups.recents.length > 0 && (
-              <Group title="Recents">
+              <Group
+                title="Recents"
+                icon={Clock}
+                collapsed={collapsedGroups.has("recents")}
+                onToggle={() => onToggleGroup("recents")}
+              >
                 {groups.recents.slice(0, displayCount).map((item) => renderChat(item))}
                 {displayCount < groups.recents.length && (
                   <div ref={sentinelRef} className="tw-h-1" aria-hidden="true" />

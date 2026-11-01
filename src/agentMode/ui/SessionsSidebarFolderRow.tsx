@@ -2,7 +2,6 @@ import { AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionStatusIcon, type SessionStatus } from "@/agentMode/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
-import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { ChevronRight, Plus } from "lucide-react";
@@ -14,7 +13,6 @@ interface SessionsSidebarFolderRowProps {
   active: boolean;
   hiddenStatus: SessionStatus;
   onToggle: () => void;
-  onOpen: () => void;
   onNewChat: () => void;
   onDeleted: (projectId: string) => void;
 }
@@ -25,7 +23,6 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   active,
   hiddenStatus,
   onToggle,
-  onOpen,
   onNewChat,
   onDeleted,
 }) => {
@@ -34,7 +31,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   return (
     <div
       className={cn(
-        "tw-group tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-rounded-md tw-pr-1",
+        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md",
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
@@ -43,35 +40,34 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         setMenuOpen(true);
       }}
     >
-      <RowActionButton
-        label={`${expanded ? "Collapse" : "Expand"} ${project.name}`}
-        aria-expanded={expanded}
-        className="tw-ml-1 tw-size-5 tw-shrink-0 tw-p-0"
-        onClick={onToggle}
-      >
-        <ChevronRight
-          className={cn("tw-size-3.5 tw-shrink-0 tw-text-muted", expanded && "tw-rotate-90")}
-        />
-      </RowActionButton>
+      {/* The name starts in the chat title column so a project's chats line up under it, and the hover actions
+          fill a slot the row always reserves, so showing them never moves the name, status or chevron.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
       <button
         type="button"
+        aria-expanded={expanded}
         aria-current={active ? "true" : undefined}
-        onClick={onOpen}
+        onClick={onToggle}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-py-1.5 tw-pr-2 tw-text-left tw-shadow-none"
+          "tw-rounded-md tw-bg-transparent tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-left tw-shadow-none"
         )}
       >
-        <ProjectFolderIcon />
         <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal">
           {project.name}
         </span>
         <SessionStatusIcon status={hiddenStatus} />
+        <span aria-hidden="true" className="tw-w-10 tw-shrink-0" />
+        <ChevronRight
+          className={cn("tw-size-4 tw-shrink-0 tw-text-muted", expanded && "tw-rotate-90")}
+        />
       </button>
       <div
         className={cn(
-          "tw-shrink-0 tw-items-center",
-          menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
+          "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center",
+          menuOpen
+            ? "tw-visible"
+            : "tw-invisible group-focus-within:tw-visible group-hover:tw-visible"
         )}
       >
         <RowActionButton label={`New chat in ${project.name}`} onClick={onNewChat}>

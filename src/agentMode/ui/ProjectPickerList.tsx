@@ -38,7 +38,7 @@ function effectiveLastUsedMs(
   );
 }
 
-export function useSortedProjects(
+function useSortedProjects(
   projects: ProjectConfig[],
   manager: RecentUsageManager<string> | undefined
 ): ProjectConfig[] {
