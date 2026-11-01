@@ -76,17 +76,15 @@ export function extractChatTitle(app: App, file: TFile): string {
         ? String(rawProjectId)
         : "";
 
-  if (projectId) {
-    const sanitizedPrefix = `${sanitizeVaultPathSegment(projectId)}__`;
-    const rawPrefix = `${projectId}__`;
-    if (basename.startsWith(sanitizedPrefix)) {
-      basename = basename.slice(sanitizedPrefix.length);
-    } else if (basename.startsWith(rawPrefix)) {
-      basename = basename.slice(rawPrefix.length);
-    }
-  } else {
-    basename = basename.replace(/^[a-zA-Z0-9_-]+__/, "");
-  }
+  const projectPrefixes = projectId
+    ? [`${sanitizeVaultPathSegment(projectId)}__`, `${projectId}__`]
+    : [];
+  const projectPrefix = projectPrefixes.find((prefix) => basename.startsWith(prefix));
+  // Agent Mode names project chat notes agent__…, like global ones, instead of <projectId>__….
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/809
+  basename = projectPrefix
+    ? basename.slice(projectPrefix.length)
+    : basename.replace(/^[a-zA-Z0-9_-]+__/, "");
 
   return basename
     .replace(/\{\$date\}|\d{8}/g, "")

@@ -250,6 +250,16 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[1].message).toBe("hi back");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 writes the chat title to the note's topic, the one title the chat lists read", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        label: "My chat",
+      });
+
+      const contents = app.files.get(saved!.path)!.contents!;
+      expect(contents).toContain('topic: "My chat"\n');
+      expect(contents).not.toContain("agentLabel");
+    });
+
     it("writes under the folder captured at entry, not one a mid-save root change swaps in", async () => {
       const folderMock = jest.mocked(getEffectiveConversationsFolder);
       folderMock.mockReturnValueOnce("old-folder");
@@ -312,7 +322,7 @@ describe("AgentChatPersistenceManager", () => {
         label: "first\nsecond\rthird",
       });
       const raw = app.files.get(saved!.path)!.contents!;
-      const labelLines = raw.split("\n").filter((l) => l.startsWith("agentLabel:"));
+      const labelLines = raw.split("\n").filter((l) => l.startsWith("topic:"));
       expect(labelLines).toHaveLength(1);
       const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
       expect(loaded.label).toBe("first second third");
@@ -686,6 +696,45 @@ describe("AgentChatPersistenceManager", () => {
         expect(app.files.get(saved!.path)!.contents).toContain(`epoch: ${visibleEpoch}\n`);
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 keeps the title of a note saved with only agentLabel", async () => {
+      const path = "test-folder/agent__old-title.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          'agentLabel: "Agent title"',
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.label).toBe("Agent title");
+    });
+
+    it("takes the title from topic when the note also has an older agentLabel", async () => {
+      const path = "test-folder/agent__renamed.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          'topic: "Renamed"',
+          'agentLabel: "Agent title"',
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.label).toBe("Renamed");
+    });
 
     it("ignores malformed usage JSON instead of failing the load", async () => {
       const path = "test-folder/agent__badusage.md";

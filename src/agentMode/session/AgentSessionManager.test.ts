@@ -5072,6 +5072,20 @@ describe("AgentSessionManager", () => {
         expect((await index.getEntry("codex", liveId))?.title).toBe("Codex renamed");
         expect(live.setLabel).not.toHaveBeenCalled();
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 renames an open saved chat's note and its session, so its header and tab show the new title", async () => {
+        const { manager, persistence } = buildHistoryHarness();
+        const live = await manager.createSession("opencode");
+        getSessionTestHandle(live).setMessages([{ message: "hi" }]);
+        await manager.saveActiveSession();
+        const other = await manager.createSession("opencode");
+
+        await manager.updateChatTitle("chats/agent__saved.md", "Renamed");
+
+        expect(persistence.updateTopic).toHaveBeenCalledWith("chats/agent__saved.md", "Renamed");
+        expect(live.setLabel).toHaveBeenCalledWith("Renamed");
+        expect(other.setLabel).not.toHaveBeenCalled();
+      });
     });
 
     describe("ensureChatNote()", () => {
