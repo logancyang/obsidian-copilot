@@ -14,8 +14,8 @@ const archivedChat = (id: string, title: string, archivedAt: number): ChatHistor
 });
 
 const CHATS = [
-  archivedChat("chats/old.md", "Old research", Date.parse("2026-08-28T12:00:00Z")),
-  archivedChat("chats/new.md", "Newly shelved", Date.parse("2026-10-31T12:00:00Z")),
+  archivedChat("chats/old.md", "Old research", new Date(2026, 7, 28, 12).getTime()),
+  archivedChat("chats/new.md", "Newly shelved", new Date(2026, 9, 31, 12).getTime()),
 ];
 
 const rowOf = (title: string) => screen.getByText(title).closest<HTMLElement>("[role=button]")!;
