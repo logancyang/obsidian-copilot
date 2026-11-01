@@ -214,21 +214,22 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   return (
     <div className="tw-flex tw-size-full tw-min-h-0 tw-flex-col tw-gap-2 tw-p-2">
       <div className="tw-flex tw-items-center tw-gap-1 tw-@container/sidebar-header">
-        <h2 className="tw-m-0 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2 tw-px-2 tw-text-ui-medium tw-font-semibold tw-text-normal">
-          <CopilotBrandIcon className="tw-size-5" />
-          Copilot
+        <h2 className="tw-m-0 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-pl-2 tw-text-ui-medium tw-font-semibold tw-text-normal">
+          <CopilotBrandIcon className="tw-size-5 tw-shrink-0" />
+          <span className="tw-truncate">Copilot</span>
         </h2>
-        {/* New chat keeps its label while the header has room and drops to its icon in a narrow sidebar.
+        {/* New chat keeps its label while the header has room, down to Obsidian's default sidebar width, and drops to its icon
+            in a narrower sidebar.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <Button
           variant="ghost2"
           aria-label="New chat"
           title="New chat"
-          className="tw-h-8 tw-shrink-0 tw-gap-2 tw-px-2 tw-text-normal"
+          className="tw-h-8 tw-shrink-0 tw-gap-1.5 tw-px-1.5 tw-text-normal"
           onClick={onNewChat}
         >
           <SquarePen className="tw-size-4" />
-          <span className="tw-hidden @[280px]/sidebar-header:tw-inline">New chat</span>
+          <span className="tw-hidden @[258px]/sidebar-header:tw-inline">New chat</span>
         </Button>
         <Button
           variant="ghost2"
@@ -272,7 +273,9 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto">
         {matches ? (
           matches.length === 0 ? (
-            <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No matching chats</div>
+            <div className="tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-xs tw-text-muted">
+              No matching chats
+            </div>
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-0.5">
               {matches.map((item) => renderChat(item, true))}
