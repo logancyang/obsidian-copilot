@@ -7,27 +7,29 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/802";
 
+// Last use runs opposite to creation, so a list ordered by recency would fail these expectations.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/802
 function chat(
   id: string,
-  lastAccessedMs: number,
+  createdMs: number,
   extra: Partial<ChatHistoryItem> = {}
 ): ChatHistoryItem {
   return {
     id,
     title: `Title of ${id}`,
-    createdAt: new Date(1_000),
-    lastAccessedAt: new Date(lastAccessedMs),
+    createdAt: new Date(createdMs),
+    lastAccessedAt: new Date(100_000 - createdMs),
     ...extra,
   };
 }
 
-function project(id: string): ProjectConfig {
-  return { id, name: `Project ${id}` } as ProjectConfig;
+function project(id: string, created = 1_000): ProjectConfig {
+  return { id, name: `Project ${id}`, created } as ProjectConfig;
 }
 
 describe("sessionsSidebarGroups", () => {
   describe("groupSessionsSidebarChats()", () => {
-    it("puts chats without a project into Recents, newest first", () => {
+    it(`puts chats without a project into Recents, newest created first even when an older chat was used more recently (${ISSUE})`, () => {
       const groups = groupSessionsSidebarChats(
         [chat("old", 1_000), chat("new", 3_000), chat("mid", 2_000)],
         []
@@ -38,14 +40,14 @@ describe("sessionsSidebarGroups", () => {
       expect(groups.projects).toEqual([]);
     });
 
-    it("groups project chats under their project, newest first, in the order the projects were given", () => {
+    it(`groups project chats under their project, newest created first, with projects newest created first (${ISSUE})`, () => {
       const groups = groupSessionsSidebarChats(
         [
           chat("a-old", 1_000, { projectId: "a" }),
           chat("b-1", 2_000, { projectId: "b" }),
           chat("a-new", 3_000, { projectId: "a" }),
         ],
-        [project("b"), project("a")]
+        [project("a", 1_000), project("b", 2_000)]
       );
 
       expect(
@@ -107,7 +109,7 @@ describe("sessionsSidebarGroups", () => {
       chat("three", 2_000, { title: "Launch checklist", pinnedAt: 5 }),
     ];
 
-    it("returns the chats whose title contains the query, ignoring case, newest first", () => {
+    it("returns the chats whose title contains the query, ignoring case, newest created first", () => {
       expect(filterChatsByTitle(items, "LAUNCH").map((item) => item.id)).toEqual(["three", "one"]);
     });
 

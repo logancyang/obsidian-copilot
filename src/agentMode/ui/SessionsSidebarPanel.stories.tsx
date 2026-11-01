@@ -24,7 +24,9 @@ const meta = {
     waitingChatIds: none,
     attentionChatIds: none,
     openChatIds: none,
-    actions: inertChatActions(),
+    collapsedGroups: none,
+    onToggleGroup: () => {},
+    actions: inertChatActions({ onCloseSession: async () => {} }),
     onNewChat: () => {},
     onOpenChat: () => {},
     onToggleProject: () => {},
@@ -37,20 +39,23 @@ const meta = {
 } satisfies Meta<SessionsSidebarPanelProps>;
 export default meta;
 
+function toggled(current: ReadonlySet<string>, id: string): ReadonlySet<string> {
+  const next = new Set(current);
+  if (!next.delete(id)) next.add(id);
+  return next;
+}
+
 function WithToggleableFolders(args: Partial<SessionsSidebarPanelProps>) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(args.expandedProjectIds ?? none);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(args.collapsedGroups ?? none);
   return (
     <SessionsSidebarPanel
       {...meta.args}
       {...args}
       expandedProjectIds={expanded}
-      onToggleProject={(id) =>
-        setExpanded((current) => {
-          const next = new Set(current);
-          if (!next.delete(id)) next.add(id);
-          return next;
-        })
-      }
+      onToggleProject={(id) => setExpanded((current) => toggled(current, id))}
+      collapsedGroups={collapsed}
+      onToggleGroup={(id) => setCollapsed((current) => toggled(current, id))}
     />
   );
 }
@@ -93,6 +98,19 @@ export const EveryGroupPopulated: StoryObj<SessionsSidebarPanelProps> = {
     projects,
     expandedProjectIds: new Set(["garden"]),
     activeChatIds: new Set(["chats/garden-1.md"]),
+    openChatIds: new Set(["chats/garden-1.md", "chats/recent-1.md", "chats/recent-2.md"]),
+    runningChatIds: new Set(["chats/recent-1.md"]),
+    attentionChatIds: new Set(["chats/pinned.md"]),
+  },
+  render: WithToggleableFolders,
+};
+
+export const FoldedGroupAndEmptyProject: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: everyGroupItems,
+    projects: [...projects, sidebarProject("empty", "Reading list")],
+    expandedProjectIds: new Set(["garden", "empty"]),
+    collapsedGroups: new Set(["pinned"]),
   },
   render: WithToggleableFolders,
 };

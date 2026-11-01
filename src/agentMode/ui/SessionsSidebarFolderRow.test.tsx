@@ -15,7 +15,6 @@ function renderFolderRow(
     active: false,
     hiddenStatus: "idle" as const,
     onToggle: jest.fn(),
-    onOpen: jest.fn(),
     onNewChat: jest.fn(),
     onDeleted: jest.fn(),
     ...overrides,
@@ -32,42 +31,32 @@ describe("SessionsSidebarFolderRow", () => {
   beforeAll(installRadixMenuPolyfills);
 
   describe("SessionsSidebarFolderRow()", () => {
-    it("opens the project on a click of its name without toggling the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-      const { onOpen, onToggle } = renderFolderRow();
+    it("only folds or unfolds the folder when the project row is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const { onToggle, onNewChat } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
 
-      expect(onOpen).toHaveBeenCalledTimes(1);
-      expect(onToggle).not.toHaveBeenCalled();
-    });
-
-    it("toggles the folder from the chevron alone without opening the project for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-      const { onOpen, onToggle } = renderFolderRow();
-
-      fireEvent.click(screen.getByRole("button", { name: "Expand Garden plans" }));
-
       expect(onToggle).toHaveBeenCalledTimes(1);
-      expect(onOpen).not.toHaveBeenCalled();
+      expect(onNewChat).not.toHaveBeenCalled();
     });
 
     it.each([
-      [true, "Collapse Garden plans"],
-      [false, "Expand Garden plans"],
-    ])("labels the chevron for expanded=%s", (expanded, label) => {
+      [true, "true"],
+      [false, "false"],
+    ])("reports expanded=%s to assistive tech", (expanded, ariaExpanded) => {
       renderFolderRow({ expanded });
 
-      expect(screen.getByRole("button", { name: label }).getAttribute("aria-expanded")).toBe(
-        String(expanded)
-      );
+      expect(
+        screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-expanded")
+      ).toBe(ariaExpanded);
     });
 
-    it("starts a chat in the project from the hover plus without opening the project twice for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-      const { onNewChat, onOpen, onToggle } = renderFolderRow();
+    it("starts a chat in the project from the hover plus without folding the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      const { onNewChat, onToggle } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "New chat in Garden plans" }));
 
       expect(onNewChat).toHaveBeenCalledTimes(1);
-      expect(onOpen).not.toHaveBeenCalled();
       expect(onToggle).not.toHaveBeenCalled();
     });
 
@@ -105,13 +94,12 @@ describe("SessionsSidebarFolderRow", () => {
     });
 
     it("opens the project menu from the context menu gesture without toggling the folder", () => {
-      const { onOpen, onToggle } = renderFolderRow();
+      const { onToggle } = renderFolderRow();
 
       fireEvent.contextMenu(screen.getByRole("button", { name: "Garden plans" }));
 
       expect(screen.getByRole("menu")).toBeTruthy();
       expect(onToggle).not.toHaveBeenCalled();
-      expect(onOpen).not.toHaveBeenCalled();
     });
   });
 });
