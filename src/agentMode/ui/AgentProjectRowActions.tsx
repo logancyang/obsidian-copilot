@@ -1,14 +1,22 @@
 import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { logError } from "@/logger";
 import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
-import { Archive, FolderSearch, Pencil, Trash2 } from "lucide-react";
+import { Archive, FolderSearch, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { App, Notice, TFolder } from "obsidian";
-import React, { memo } from "react";
+import React, { memo, useCallback, useState } from "react";
 
 export function revealProjectFolder(app: App, project: ProjectConfig): void {
   const record = getCachedProjectRecordById(project.id);
@@ -147,3 +155,50 @@ export const AgentProjectRowActions = memo(
 );
 
 AgentProjectRowActions.displayName = "AgentProjectRowActions";
+
+interface AgentProjectRowMenuProps extends AgentProjectRowActionsProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function AgentProjectRowMenu({
+  open,
+  onOpenChange,
+  ...actionProps
+}: AgentProjectRowMenuProps): React.ReactElement {
+  const { project } = actionProps;
+  const { edit, archive, remove, reveal } = projectRowActions(actionProps);
+  const [rowBody, setRowBody] = useState<HTMLElement | null>(null);
+  const trackRowBody = useCallback(
+    (node: HTMLButtonElement | null) => setRowBody(node?.ownerDocument.body ?? null),
+    []
+  );
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
+      <DropdownMenuTrigger asChild>
+        <RowActionButton label={`More actions for ${project.name}`} ref={trackRowBody}>
+          <MoreHorizontal className="tw-size-4" />
+        </RowActionButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" container={rowBody}>
+        <DropdownMenuItem onSelect={reveal}>
+          <FolderSearch />
+          Reveal in vault
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={edit}>
+          <Pencil />
+          Edit project
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void archive()}>
+          <Archive />
+          Archive project
+        </DropdownMenuItem>
+        <DropdownMenuItem className="tw-text-error focus:tw-text-error" onSelect={remove}>
+          <Trash2 />
+          Delete project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

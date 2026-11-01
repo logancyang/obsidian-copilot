@@ -2,8 +2,16 @@ import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { act, render, screen } from "@testing-library/react";
 import React from "react";
 
-function PagingList({ total = 120, query = "" }: { total?: number; query?: string }) {
-  const { displayCount, sentinelRef } = useIncrementalPaging(total, query);
+function PagingList({
+  total = 120,
+  query = "",
+  pageSize,
+}: {
+  total?: number;
+  query?: string;
+  pageSize?: number;
+}) {
+  const { displayCount, sentinelRef } = useIncrementalPaging(total, query, pageSize);
   return (
     <>
       <output>{Math.min(displayCount, total)}</output>
@@ -43,6 +51,13 @@ describe("useIncrementalPaging", () => {
       intersect();
       expect(screen.getByRole("status").textContent).toBe("120");
       expect(disconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it("pages by a caller-supplied size (https://github.com/Brevilabs/obsidian-copilot-private/issues/802)", () => {
+      render(<PagingList pageSize={20} />);
+      expect(screen.getByRole("status").textContent).toBe("20");
+      intersect();
+      expect(screen.getByRole("status").textContent).toBe("40");
     });
 
     it("resets on a new query even when the total stays the same (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
