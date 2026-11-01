@@ -147,7 +147,7 @@ Existing drawing (operations): Change an existing Obsidian Excalidraw drawing; O
 - {"op":"delete","ids":[..]} removes elements and their labels. Delete the arrows into and out of a removed shape too.
 - {"op":"add","elements":[..]} adds elements as for a new drawing, drawn on top. Its arrows can only attach to shapes added in the same operation; connect existing shapes with connect.
 - {"op":"group","ids":[..]} puts existing elements, or ones added earlier in the same call, in one new group.
-- {"op":"lucide","id":..,"icon":..,"x":..,"y":..,"size":..} adds an icon as for a new drawing; the reply names its group id.
+- {"op":"lucide","id":..,"icon":..,"x":..,"y":..,"size":..} adds an icon as for a new drawing; the reply names its group id. Other operations can't take an icon's id or group id: to group, move or delete the icon, use the member ids excalidraw_read lists for its group id, in a later call.
 - {"op":"connect","from":..,"to":..} adds an arrow attached to two existing shapes; optional fromSide and toSide (top, bottom, left, right), via (bend points [[x,y],..] to route it around shapes, as for a loop back), label, dashed (true), color, roughness and strokeWidth.
 Make room before inserting by moving the shapes that follow. Keep every id you didn't mean to change: links and block references point at them.`,
   inputSchema: {
@@ -338,7 +338,7 @@ async function write(
     (Array.isArray(input.icons) && input.icons.length > 0) ||
     (Array.isArray(input.operations) &&
       input.operations.some((op) => (op as Record<string, unknown> | null)?.op === "lucide"));
-  // Excalidraw 2.29 has no icon support and rejects the request with a generic unsupported-field error.
+  // Excalidraw 2.29.0 has no icon support and rejects the request with a generic unsupported-field error.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
   if (wantsIcons && !(await api.execute({ apiVersion: 1, command: "status" })).data?.lucideIcons)
     return failure(
@@ -372,12 +372,15 @@ async function create(
   // The plugin's create can't group elements, so groups are applied to the new drawing right after it is created.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/792
   const idMap = (reply.data?.idMap ?? {}) as Record<string, string>;
+  // The plugin maps an icon's id to its group in groupMap, never in idMap, and rejects it as an element id.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/816
+  const icons = (reply.data?.groupMap ?? {}) as Record<string, { elementIds?: string[] }>;
   const grouped = await edit(
     api,
     {
       operations: groups.map((ids) => ({
         op: "group",
-        ids: ids.map((id) => idMap[String(id)] ?? id),
+        ids: ids.flatMap((id) => icons[String(id)]?.elementIds ?? [idMap[String(id)] ?? id]),
       })),
     },
     path

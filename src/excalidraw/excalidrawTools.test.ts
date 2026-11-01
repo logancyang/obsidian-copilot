@@ -11,6 +11,7 @@ import {
 
 const ISSUE_787 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/787";
 const ISSUE_792 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/792";
+const ISSUE_816 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/816";
 const FLOW = "Drawings/Flow.excalidraw.md";
 
 const START: SceneElement[] = [
@@ -317,6 +318,46 @@ describe("excalidrawTools", () => {
         text: `Created ${FLOW}. Ids (yours=real): a=Xy12Ab34. Icon groups (yours=group id): db=Grp00001.`,
         isError: false,
       });
+    });
+
+    it(`${ISSUE_816} groups an icon named in groups with the shapes beside it by the icon's member ids, since the plugin keeps icon ids out of its element id map`, async () => {
+      const execute = jest.fn().mockImplementation(async (request: Record<string, unknown>) => {
+        if (request.command === "status") return { ok: true, data: { lucideIcons: true } };
+        if (request.command === "create")
+          return {
+            ok: true,
+            data: {
+              idMap: { box: "Box00001" },
+              groupMap: {
+                db: { groupId: "Ico00001", elementIds: ["Path0001", "Path0002"] },
+              },
+            },
+          };
+        if (request.command === "read") return { ok: true, data: { revision: "r1" } };
+        if (request.command === "apply") return { ok: true, data: { groupIds: ["Grp00001"] } };
+        return { ok: true };
+      });
+      const api = fakeApi({ execute });
+
+      const result = await toolsFor(api).write.call({
+        path: FLOW,
+        elements: [{ id: "box", type: "rectangle" }],
+        icons: [{ id: "db", icon: "database" }],
+        groups: [["box", "db"]],
+      });
+
+      expect(execute).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          operations: [{ op: "group", ids: ["Box00001", "Path0001", "Path0002"] }],
+        })
+      );
+      expect(result.isError).toBe(false);
+    });
+
+    it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
+      expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
+        "Other operations can't take an icon's id or group id"
+      );
     });
 
     it(`${ISSUE_792} sends an icon operation to the plugin's apply`, async () => {
