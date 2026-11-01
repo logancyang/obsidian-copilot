@@ -2392,6 +2392,40 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("getHistoryRevision()", () => {
+      const NOTE = "chats/agent__a.md";
+      const noteHarness = () =>
+        buildHistoryHarness({ files: { [NOTE]: { epoch: 1_000, backendId: "opencode" } } });
+
+      it("moves forward and notifies subscribers once a chat is deleted so other lists reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const { manager } = noteHarness();
+        const before = manager.getHistoryRevision();
+        const listener = jest.fn();
+        manager.subscribe(listener);
+
+        await manager.deleteChatHistory(NOTE);
+
+        expect(manager.getHistoryRevision()).toBeGreaterThan(before);
+        expect(listener).toHaveBeenCalled();
+      });
+
+      it("moves forward when a native chat without a note is renamed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        const { manager, index } = buildHistoryHarness();
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Old title",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
+        const before = manager.getHistoryRevision();
+
+        await manager.updateChatTitle(buildNativeChatId("opencode", "s1"), "New title");
+
+        expect(manager.getHistoryRevision()).toBeGreaterThan(before);
+      });
+    });
+
     describe("openGlobalLanding()", () => {
       it("keeps the active empty global chat as the landing instead of creating another for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
         const mgr = buildManager();

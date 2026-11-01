@@ -46,6 +46,8 @@ class FakeManager {
   getWaitingChatIds = () => this.waiting;
   getAttentionChatIds = () => this.attention;
   getActiveChatIds = () => this.active;
+  historyRevision = 0;
+  getHistoryRevision = () => this.historyRevision;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -55,8 +57,25 @@ class FakeManager {
   }
 }
 
+class FakeMetadataCache {
+  private readonly handlers = new Set<(...args: unknown[]) => void>();
+  on = (_name: "changed", handler: (...args: unknown[]) => void) => {
+    this.handlers.add(handler);
+    return handler;
+  };
+  offref = (ref: (...args: unknown[]) => void) => {
+    this.handlers.delete(ref);
+  };
+  change(frontmatter: Record<string, unknown> | undefined): void {
+    for (const handler of this.handlers) handler({ path: "note.md" }, "", { frontmatter });
+  }
+}
+
+const metadataCache = new FakeMetadataCache();
+
 function renderSidebar(manager: FakeManager) {
   const plugin = {
+    app: { metadataCache },
     loadChatById: jest.fn(async () => {}),
     activateAgentView: jest.fn(async () => {
       manager.events.push("view");
@@ -222,6 +241,48 @@ describe("SessionsSidebar", () => {
 
       act(() => manager.emit());
       act(() => manager.emit());
+
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+    });
+
+    it("reloads the list when a chat is deleted from another list so the row drops out for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+
+      manager.items = [chat("b.md", "Beta", 2_000)];
+      manager.historyRevision++;
+      act(() => manager.emit());
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Alpha" })).toBeNull());
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
+    });
+
+    it("reloads the list when an agent chat note's frontmatter changes so an archive from another list drops the row for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+
+      manager.items = [
+        chat("a.md", "Alpha", 1_000, { archivedAt: 5_000 }),
+        chat("b.md", "Beta", 2_000),
+      ];
+      act(() => metadataCache.change({ mode: "agent", archivedAt: 5_000 }));
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Alpha" })).toBeNull());
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
+    });
+
+    it("ignores metadata changes of notes that are not agent chats for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+
+      act(() => metadataCache.change(undefined));
+      act(() => metadataCache.change({ tags: ["daily"] }));
 
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
     });
