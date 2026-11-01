@@ -1,5 +1,7 @@
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
+import { SessionsSidebarNewProjectRow } from "@/agentMode/ui/SessionsSidebarNewProjectRow";
 import {
   SessionsSidebarRow,
   mostUrgentStatus,
@@ -24,13 +26,15 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
-import { Archive, MoreHorizontal, Search, SquarePen } from "lucide-react";
+import { err2String } from "@/utils";
+import { Archive, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 
 interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
   projects: readonly ProjectConfig[];
   expandedProjectIds: ReadonlySet<string>;
+  activeProjectId: string;
   activeChatIds: ReadonlySet<string>;
   runningChatIds: ReadonlySet<string>;
   waitingChatIds: ReadonlySet<string>;
@@ -40,18 +44,34 @@ interface SessionsSidebarPanelProps {
   onNewChat: () => void;
   onOpenChat: (id: string) => void;
   onToggleProject: (projectId: string) => void;
+  onOpenProject: (projectId: string) => void;
+  onNewProjectChat: (projectId: string) => void;
+  onCreateProject: (name: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
   onViewArchived: () => void;
 }
 
-const Group: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const Group: React.FC<{ title: string; action?: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  action,
+  children,
+}) => (
   <section aria-label={title} className="tw-flex tw-flex-col tw-gap-0.5">
-    <h3 className="tw-m-0 tw-px-2 tw-pb-0.5 tw-pt-2 tw-text-xs tw-font-medium tw-text-muted">
-      {title}
-    </h3>
+    <div className="tw-flex tw-items-center tw-justify-between tw-pr-1">
+      <h3 className="tw-m-0 tw-px-2 tw-pb-0.5 tw-pt-2 tw-text-xs tw-font-medium tw-text-muted">
+        {title}
+      </h3>
+      {action}
+    </div>
     {children}
   </section>
 );
+
+interface NewProjectDraft {
+  name: string;
+  saving: boolean;
+  error?: string;
+}
 
 const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
   <Button
@@ -69,6 +89,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   items,
   projects,
   expandedProjectIds,
+  activeProjectId,
   activeChatIds,
   runningChatIds,
   waitingChatIds,
@@ -78,6 +99,9 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   onNewChat,
   onOpenChat,
   onToggleProject,
+  onOpenProject,
+  onNewProjectChat,
+  onCreateProject,
   onProjectDeleted,
   onViewArchived,
 }) => {
@@ -87,6 +111,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   const [fullyShownProjectIds, setFullyShownProjectIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
+
+  const [newProject, setNewProject] = useState<NewProjectDraft | null>(null);
 
   const groups = useMemo(() => groupSessionsSidebarChats(items, projects), [items, projects]);
   const projectNamesById = useMemo(
@@ -107,6 +133,22 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     setSearchOpen((open) => !open);
     setQuery("");
   }, []);
+
+  const submitNewProject = useCallback(async () => {
+    if (!newProject) return;
+    const name = newProject.name.trim();
+    if (!name) {
+      setNewProject(null);
+      return;
+    }
+    setNewProject({ name: newProject.name, saving: true });
+    try {
+      await onCreateProject(name);
+      setNewProject(null);
+    } catch (error) {
+      setNewProject({ name: newProject.name, saving: false, error: err2String(error) });
+    }
+  }, [newProject, onCreateProject]);
 
   const statusOf = (item: ChatHistoryItem) =>
     resolveSessionStatus({
@@ -197,52 +239,78 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               {matches.map((item) => renderChat(item, true))}
             </div>
           )
-        ) : items.length === 0 && projects.length === 0 ? (
-          <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No chats yet</div>
         ) : (
           <>
+            {items.length === 0 && projects.length === 0 && (
+              <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No chats yet</div>
+            )}
             {groups.pinned.length > 0 && (
               <Group title="Pinned">{groups.pinned.map((item) => renderChat(item, true))}</Group>
             )}
-            {visibleProjects.length > 0 && (
-              <Group title="Projects">
-                {visibleProjects.map(({ project, chats }) => {
-                  const expanded = expandedProjectIds.has(project.id);
-                  const fullyShown = fullyShownProjectIds.has(project.id);
-                  const shownCount = !expanded
-                    ? 0
-                    : fullyShown
-                      ? chats.length
-                      : VISIBLE_CHATS_PER_PROJECT;
-                  return (
-                    <div key={project.id} className="tw-flex tw-flex-col tw-gap-0.5">
-                      <SessionsSidebarFolderRow
-                        project={project}
-                        expanded={expanded}
-                        hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
-                        onToggle={() => onToggleProject(project.id)}
-                        onDeleted={onProjectDeleted}
-                      />
-                      {expanded && (
-                        <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-0.5">
-                          {chats.slice(0, shownCount).map((item) => renderChat(item))}
-                          {shownCount < chats.length && (
-                            <ShowMoreButton
-                              onClick={() =>
-                                setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
-                              }
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {visibleProjects.length < groups.projects.length && (
-                  <ShowMoreButton onClick={() => setAllProjectsShown(true)} />
-                )}
-              </Group>
-            )}
+            <Group
+              title="Projects"
+              action={
+                <RowActionButton
+                  label="New project"
+                  onClick={() => setNewProject((draft) => draft ?? { name: "", saving: false })}
+                >
+                  <Plus className="tw-size-4" />
+                </RowActionButton>
+              }
+            >
+              {newProject && (
+                <SessionsSidebarNewProjectRow
+                  {...newProject}
+                  onNameChange={(name) => setNewProject({ name, saving: false })}
+                  onSubmit={() => void submitNewProject()}
+                  onCancel={() => setNewProject(null)}
+                />
+              )}
+              {visibleProjects.map(({ project, chats }) => {
+                const expanded = expandedProjectIds.has(project.id);
+                const fullyShown = fullyShownProjectIds.has(project.id);
+                const shownCount = !expanded
+                  ? 0
+                  : fullyShown
+                    ? chats.length
+                    : VISIBLE_CHATS_PER_PROJECT;
+                return (
+                  <div key={project.id} className="tw-flex tw-flex-col tw-gap-0.5">
+                    <SessionsSidebarFolderRow
+                      project={project}
+                      expanded={expanded}
+                      active={
+                        activeProjectId === project.id &&
+                        !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
+                      }
+                      hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
+                      onToggle={() => onToggleProject(project.id)}
+                      onOpen={() => {
+                        if (!expanded) onToggleProject(project.id);
+                        onOpenProject(project.id);
+                      }}
+                      onNewChat={() => onNewProjectChat(project.id)}
+                      onDeleted={onProjectDeleted}
+                    />
+                    {expanded && (
+                      <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-0.5">
+                        {chats.slice(0, shownCount).map((item) => renderChat(item))}
+                        {shownCount < chats.length && (
+                          <ShowMoreButton
+                            onClick={() =>
+                              setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {visibleProjects.length < groups.projects.length && (
+                <ShowMoreButton onClick={() => setAllProjectsShown(true)} />
+              )}
+            </Group>
             {groups.recents.length > 0 && (
               <Group title="Recents">
                 {groups.recents.slice(0, displayCount).map((item) => renderChat(item))}

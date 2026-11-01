@@ -20,6 +20,7 @@ function baseProps(
     items: [],
     projects: [],
     expandedProjectIds: NONE,
+    activeProjectId: "",
     activeChatIds: NONE,
     runningChatIds: NONE,
     waitingChatIds: NONE,
@@ -29,6 +30,9 @@ function baseProps(
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
     onToggleProject: jest.fn(),
+    onOpenProject: jest.fn(),
+    onNewProjectChat: jest.fn(),
+    onCreateProject: jest.fn().mockResolvedValue(undefined),
     onProjectDeleted: jest.fn(),
     onViewArchived: jest.fn(),
     ...overrides,
@@ -93,11 +97,13 @@ describe("SessionsSidebarPanel", () => {
         expect(within(section("Recents")).getByText("Recent chat")).toBeTruthy();
       });
 
-      it("omits the groups that have nothing to show", () => {
+      it("omits the Pinned and Recents groups that have nothing to show but keeps Projects for its New project button", () => {
         renderPanel({ items: [sidebarChat("chats/rec.md", "Recent chat", 2)] });
 
         expect(screen.queryByRole("region", { name: "Pinned" })).toBeNull();
-        expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
+        expect(
+          within(section("Projects")).getByRole("button", { name: "New project" })
+        ).toBeTruthy();
         expect(screen.getByRole("region", { name: "Recents" })).toBeTruthy();
       });
 
@@ -139,8 +145,8 @@ describe("SessionsSidebarPanel", () => {
         renderPanel({ projects: projects(7) });
 
         const folders = within(section("Projects"))
-          .getAllByRole("button", { expanded: false, name: /^Project \d$/ })
-          .map((button) => button.textContent);
+          .getAllByRole("button", { expanded: false, name: /^Expand Project \d$/ })
+          .map((button) => button.getAttribute("aria-label")!.replace("Expand ", ""));
         expect(folders).toEqual(["Project 1", "Project 2", "Project 3", "Project 4", "Project 5"]);
       });
 
@@ -159,8 +165,8 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
       });
 
-      it("only toggles the folder when it is clicked, without opening a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-        const { onToggleProject, onOpenChat } = renderPanel({
+      it("expands a collapsed folder and opens its project when the folder is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
           projects: projects(1),
           items: projectChats("p1", 2),
         });
@@ -168,7 +174,84 @@ describe("SessionsSidebarPanel", () => {
         fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
 
         expect(onToggleProject).toHaveBeenCalledWith("p1");
+        expect(onOpenProject).toHaveBeenCalledWith("p1");
         expect(onOpenChat).not.toHaveBeenCalled();
+      });
+
+      it("keeps an expanded folder open when its project is opened for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onToggleProject, onOpenProject } = renderPanel({
+          projects: projects(1),
+          items: projectChats("p1", 2),
+          expandedProjectIds: new Set(["p1"]),
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
+
+        expect(onToggleProject).not.toHaveBeenCalled();
+        expect(onOpenProject).toHaveBeenCalledWith("p1");
+      });
+
+      it("only toggles the folder from the chevron, leaving the open chat alone for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
+          projects: projects(1),
+          items: projectChats("p1", 2),
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Expand Project 1" }));
+
+        expect(onToggleProject).toHaveBeenCalledWith("p1");
+        expect(onOpenProject).not.toHaveBeenCalled();
+        expect(onOpenChat).not.toHaveBeenCalled();
+      });
+
+      it("highlights a collapsed folder whose open chat is hidden inside it for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const items = projectChats("p1", 1);
+        renderPanel({
+          projects: projects(1),
+          items,
+          activeProjectId: "p1",
+          activeChatIds: new Set([items[0].id]),
+        });
+
+        expect(screen.getByRole("button", { name: "Project 1" }).getAttribute("aria-current")).toBe(
+          "true"
+        );
+      });
+
+      it("starts a chat in the project from the folder's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onNewProjectChat, onToggleProject } = renderPanel({ projects: projects(2) });
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat in Project 2" }));
+
+        expect(onNewProjectChat).toHaveBeenCalledWith("p2");
+        expect(onToggleProject).not.toHaveBeenCalled();
+      });
+
+      it("highlights the folder of the open project landing but not a folder whose own chat is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const items = projectChats("p1", 1);
+        const { unmount } = render(
+          <AppContext.Provider value={new App()}>
+            <SessionsSidebarPanel
+              {...baseProps({ projects: projects(2), items, activeProjectId: "p2" })}
+            />
+          </AppContext.Provider>
+        );
+        const current = () =>
+          screen
+            .getAllByRole("button")
+            .filter((row) => row.getAttribute("aria-current") === "true")
+            .map((row) => row.textContent!.trim());
+        expect(current()).toEqual(["Project 2"]);
+        unmount();
+
+        renderPanel({
+          projects: projects(2),
+          items,
+          expandedProjectIds: new Set(["p1"]),
+          activeProjectId: "p1",
+          activeChatIds: new Set([items[0].id]),
+        });
+        expect(current()).toEqual(["Chat p1 1"]);
       });
 
       it("hides the chats of a collapsed project", () => {
@@ -370,6 +453,118 @@ describe("SessionsSidebarPanel", () => {
           within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText(label)
         ).toBeTruthy();
         expect(screen.getAllByLabelText(label)).toHaveLength(1);
+      });
+    });
+
+    describe("new project", () => {
+      const startProject = () =>
+        fireEvent.click(within(section("Projects")).getByRole("button", { name: "New project" }));
+      const nameField = () => screen.getByRole("textbox", { name: "Project name" });
+      const typeName = (name: string) => fireEvent.change(nameField(), { target: { value: name } });
+
+      it("adds an editable row at the top of Projects from the group's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel({ projects: projects(1) });
+
+        startProject();
+
+        const group = section("Projects");
+        expect(within(group).getByRole("textbox", { name: "Project name" })).toBeTruthy();
+        expect(
+          group
+            .querySelector("input")!
+            .compareDocumentPosition(within(group).getByRole("button", { name: "Project 1" })) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      });
+
+      it("offers the plus even when no project exists yet", () => {
+        renderPanel();
+
+        startProject();
+
+        expect(nameField()).toBeTruthy();
+      });
+
+      it("creates the project with the trimmed name on Enter and removes the row for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("  Garden plans ");
+
+        await act(async () => {
+          fireEvent.keyDown(nameField(), { key: "Enter" });
+        });
+
+        expect(onCreateProject).toHaveBeenCalledWith("Garden plans");
+        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+      });
+
+      it("creates nothing and removes the row on Escape for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("Garden plans");
+
+        fireEvent.keyDown(nameField(), { key: "Escape" });
+
+        expect(onCreateProject).not.toHaveBeenCalled();
+        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+      });
+
+      it("creates nothing and removes the row when Enter is pressed on an empty name for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("   ");
+
+        fireEvent.keyDown(nameField(), { key: "Enter" });
+
+        expect(onCreateProject).not.toHaveBeenCalled();
+        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+      });
+
+      it("keeps the row with the creation error, then clears the error on the next edit for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const onCreateProject = jest
+          .fn()
+          .mockRejectedValue(new Error('A project with the name "Garden" already exists'));
+        renderPanel({ onCreateProject });
+        startProject();
+        typeName("Garden");
+
+        await act(async () => {
+          fireEvent.keyDown(nameField(), { key: "Enter" });
+        });
+
+        expect(screen.getByRole("alert").textContent).toBe(
+          'A project with the name "Garden" already exists'
+        );
+        expect((nameField() as HTMLInputElement).value).toBe("Garden");
+
+        typeName("Garden 2");
+
+        expect(screen.queryByRole("alert")).toBeNull();
+      });
+
+      it("ignores a second Enter while the project is still being created", async () => {
+        let finish: () => void = () => {};
+        const onCreateProject = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)));
+        renderPanel({ onCreateProject });
+        startProject();
+        typeName("Garden");
+
+        fireEvent.keyDown(nameField(), { key: "Enter" });
+        fireEvent.keyDown(nameField(), { key: "Enter" });
+        await act(async () => finish());
+
+        expect(onCreateProject).toHaveBeenCalledTimes(1);
+      });
+
+      it("hides the plus while the title filter is active", () => {
+        renderPanel({ items: [sidebarChat("chats/a.md", "Chat A", 1)] });
+
+        fireEvent.click(screen.getByRole("button", { name: "Search chats" }));
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "Chat" },
+        });
+
+        expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
       });
     });
 

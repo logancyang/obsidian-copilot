@@ -2424,6 +2424,22 @@ describe("AgentSessionManager", () => {
 
         expect(manager.getHistoryRevision()).toBeGreaterThan(before);
       });
+
+      it("moves forward when a chat's note is first saved so the sidebar lists it before its first turn ends https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const saveSession = jest.fn().mockResolvedValue({ path: "chats/agent__first.md" });
+        const mgr = buildManager({ persistence: { saveSession } });
+        const chat = await mgr.createSession();
+        getSessionTestHandle(chat).setMessages([{ message: "Hello" }]);
+        const before = mgr.getHistoryRevision();
+
+        await mgr.saveActiveSession();
+        const afterFirstSave = mgr.getHistoryRevision();
+        getSessionTestHandle(chat).setMessages([{ message: "Hello" }, { message: "More" }]);
+        await mgr.saveActiveSession();
+
+        expect(afterFirstSave).toBeGreaterThan(before);
+        expect(mgr.getHistoryRevision()).toBe(afterFirstSave);
+      });
     });
 
     describe("openGlobalLanding()", () => {
@@ -2474,6 +2490,58 @@ describe("AgentSessionManager", () => {
         await mgr.openGlobalLanding();
 
         expect(mgr.getActiveSession()).toBe(globalLanding);
+      });
+    });
+
+    describe("openProjectLanding()", () => {
+      const PROJECT = "proj-landing";
+      beforeEach(() => seedProjects(PROJECT));
+
+      it("opens the project's empty landing from the global scope https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        await mgr.createSession();
+
+        await mgr.openProjectLanding(PROJECT);
+
+        expect(mgr.getActiveProjectId()).toBe(PROJECT);
+        expect(mgr.getActiveSession()!.projectId).toBe(PROJECT);
+        expect(mgr.getActiveSession()!.hasUserVisibleMessages()).toBe(false);
+      });
+
+      it("starts a fresh project chat beside the project chat already open, which stays open https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        await mgr.enterProject(PROJECT);
+        const conversation = mgr.getActiveSession()!;
+        getSessionTestHandle(conversation).setHasUserVisibleMessages(true);
+
+        await mgr.openProjectLanding(PROJECT);
+
+        const landing = mgr.getActiveSession()!;
+        expect(landing).not.toBe(conversation);
+        expect(landing.projectId).toBe(PROJECT);
+        expect(landing.hasUserVisibleMessages()).toBe(false);
+        expect(mgr.getSessions()).toContain(conversation);
+      });
+
+      it("keeps the active empty project landing instead of creating another https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        await mgr.openProjectLanding(PROJECT);
+        const landing = mgr.getActiveSession();
+
+        await mgr.openProjectLanding(PROJECT);
+
+        expect(mgr.getActiveSession()).toBe(landing);
+        expect(mgr.getSessions()).toEqual([landing]);
+      });
+
+      it("creates no session for a project that no longer exists https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        const globalLanding = await mgr.createSession();
+
+        await mgr.openProjectLanding("deleted-project");
+
+        expect(mgr.getActiveSession()).toBe(globalLanding);
+        expect(mgr.getSessions()).toEqual([globalLanding]);
       });
     });
 
@@ -4460,6 +4528,77 @@ describe("AgentSessionManager", () => {
         expect(titles).toContain("Made here");
         expect(titles).not.toContain("Made elsewhere");
         expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
+      });
+
+      it("lists a live chat whose backend transcript is not written until its first turn ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
+        const note = "chats/agent__live.md";
+        const { manager, index } = buildHistoryHarness({
+          files: {
+            [note]: {
+              epoch: 1_000,
+              topic: "First message",
+              backendId: "opencode",
+              sessionId: "live-sess",
+            },
+          },
+          createBackendProcess: jest.fn(() => ({
+            ...makeMockBackendProcess(),
+            sessionExistsLocally: jest.fn(async () => false),
+          })),
+        });
+        sessionCreateSpy.mockImplementationOnce((opts) =>
+          makeMockSession({
+            internalId: opts.internalId,
+            backendId: opts.backendId,
+            backendSessionId: "live-sess",
+          })
+        );
+        await manager.createSession();
+
+        const items = await manager.getChatHistoryItems();
+
+        expect(items.map((i) => i.id)).toEqual([note]);
+        expect(await index.isTombstoned("opencode", "live-sess")).toBe(false);
+      });
+
+      it("lists a live project chat under its project while its backend transcript is still being written (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
+        seedProjects(HISTORY_PROJECT_ID);
+        const note = "chats/agent__project-live.md";
+        const { manager } = buildHistoryHarness({
+          files: {
+            [note]: {
+              epoch: 1_000,
+              topic: "Sent from the project landing",
+              backendId: "opencode",
+              sessionId: "project-live-sess",
+              projectId: HISTORY_PROJECT_ID,
+            },
+          },
+          createBackendProcess: jest.fn(() => ({
+            ...makeMockBackendProcess(),
+            sessionExistsLocally: jest.fn(async () => false),
+          })),
+        });
+        sessionCreateSpy.mockImplementationOnce((opts) =>
+          makeMockSession({
+            internalId: opts.internalId,
+            backendId: opts.backendId,
+            projectId: opts.projectId,
+            backendSessionId: "project-live-sess",
+          })
+        );
+        await manager.openProjectLanding(HISTORY_PROJECT_ID);
+
+        const items = await manager.getChatHistoryItems(HISTORY_PROJECT_ID);
+
+        expect(items.map((i) => i.id)).toEqual([note]);
+      });
+
+      it("lists nothing for a new chat that has no message yet (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
+        const { manager } = buildHistoryHarness();
+        await manager.openGlobalLanding();
+
+        expect(await manager.getChatHistoryItems()).toHaveLength(0);
       });
 
       it("tombstones the native twin of a dropped non-local markdown chat", async () => {

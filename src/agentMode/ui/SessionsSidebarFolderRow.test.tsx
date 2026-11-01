@@ -12,8 +12,11 @@ function renderFolderRow(
   const props = {
     project: sidebarProject("garden", "Garden plans"),
     expanded: false,
+    active: false,
     hiddenStatus: "idle" as const,
     onToggle: jest.fn(),
+    onOpen: jest.fn(),
+    onNewChat: jest.fn(),
     onDeleted: jest.fn(),
     ...overrides,
   };
@@ -29,23 +32,55 @@ describe("SessionsSidebarFolderRow", () => {
   beforeAll(installRadixMenuPolyfills);
 
   describe("SessionsSidebarFolderRow()", () => {
-    it("shows the project name and toggles the folder on click for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const { onToggle } = renderFolderRow();
+    it("opens the project on a click of its name without toggling the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      const { onOpen, onToggle } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
 
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onToggle).not.toHaveBeenCalled();
+    });
+
+    it("toggles the folder from the chevron alone without opening the project for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      const { onOpen, onToggle } = renderFolderRow();
+
+      fireEvent.click(screen.getByRole("button", { name: "Expand Garden plans" }));
+
       expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [true, "Collapse Garden plans"],
+      [false, "Expand Garden plans"],
+    ])("labels the chevron for expanded=%s", (expanded, label) => {
+      renderFolderRow({ expanded });
+
+      expect(screen.getByRole("button", { name: label }).getAttribute("aria-expanded")).toBe(
+        String(expanded)
+      );
+    });
+
+    it("starts a chat in the project from the hover plus without opening the project twice for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      const { onNewChat, onOpen, onToggle } = renderFolderRow();
+
+      fireEvent.click(screen.getByRole("button", { name: "New chat in Garden plans" }));
+
+      expect(onNewChat).toHaveBeenCalledTimes(1);
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(onToggle).not.toHaveBeenCalled();
     });
 
     it.each([
       [true, "true"],
-      [false, "false"],
-    ])("reports expanded=%s to assistive tech", (expanded, ariaExpanded) => {
-      renderFolderRow({ expanded });
+      [false, undefined],
+    ])("marks the row current when active=%s", (active, current) => {
+      renderFolderRow({ active });
 
       expect(
-        screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-expanded")
-      ).toBe(ariaExpanded);
+        screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-current") ??
+          undefined
+      ).toBe(current);
     });
 
     it.each([
@@ -70,12 +105,13 @@ describe("SessionsSidebarFolderRow", () => {
     });
 
     it("opens the project menu from the context menu gesture without toggling the folder", () => {
-      const { onToggle } = renderFolderRow();
+      const { onOpen, onToggle } = renderFolderRow();
 
       fireEvent.contextMenu(screen.getByRole("button", { name: "Garden plans" }));
 
       expect(screen.getByRole("menu")).toBeTruthy();
       expect(onToggle).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -46,6 +47,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   const subscribeToManager = useCallback((l: () => void) => manager.subscribe(l), [manager]);
   const getHistoryRevision = useCallback(() => manager.getHistoryRevision(), [manager]);
   const historyRevision = useSyncExternalStore(subscribeToManager, getHistoryRevision);
+  const getActiveProjectId = useCallback(() => manager.getActiveProjectId(), [manager]);
+  const activeProjectId = useSyncExternalStore(subscribeToManager, getActiveProjectId);
   const archivedProjects = useArchivedProjects();
   const archivedProjectKey = archivedProjects.map((project) => project.id).join("\n");
   const projectUsageManager = useMemo(
@@ -80,6 +83,27 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       new Notice("Failed to start a new chat. Please try again.");
     }
   }, [manager, plugin]);
+
+  const handleOpenProject = useCallback(
+    async (projectId: string) => {
+      try {
+        await plugin.activateAgentView();
+        await manager.openProjectLanding(projectId);
+      } catch (e) {
+        logError("[AgentMode] sidebar open project failed", e);
+        new Notice("Failed to open project. Please try again.");
+      }
+    },
+    [manager, plugin]
+  );
+
+  const handleCreateProject = useCallback(
+    async (name: string) => {
+      await createProjectAndEnter(app, manager, name);
+      await plugin.activateAgentView();
+    },
+    [app, manager, plugin]
+  );
 
   const handleCloseSession = useCallback(
     async (id: string) => {
@@ -143,9 +167,13 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       items={chatHistoryItems}
       projects={projects}
       expandedProjectIds={expandedProjectIds}
+      activeProjectId={activeProjectId}
       openChatIds={openChatIds}
       actions={actions}
       onToggleProject={toggleProject}
+      onOpenProject={safeAsyncHandler(handleOpenProject)}
+      onNewProjectChat={safeAsyncHandler(handleOpenProject)}
+      onCreateProject={handleCreateProject}
       onProjectDeleted={handleProjectDeleted}
       onViewArchived={handleViewArchived}
       activeChatIds={activeChatIds}

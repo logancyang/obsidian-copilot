@@ -18,6 +18,7 @@ const meta = {
     items: [],
     projects: [],
     expandedProjectIds: none,
+    activeProjectId: "",
     activeChatIds: none,
     runningChatIds: none,
     waitingChatIds: none,
@@ -27,6 +28,9 @@ const meta = {
     onNewChat: () => {},
     onOpenChat: () => {},
     onToggleProject: () => {},
+    onOpenProject: () => {},
+    onNewProjectChat: () => {},
+    onCreateProject: async () => {},
     onProjectDeleted: () => {},
     onViewArchived: () => {},
   },
@@ -163,4 +167,13 @@ export const FilterWithMatches: StoryObj<SessionsSidebarPanelProps> = {
 export const FilterWithNoMatches: StoryObj<SessionsSidebarPanelProps> = {
   args: { items: everyGroupItems, projects, query: "zebra" } as Partial<SessionsSidebarPanelProps>,
   render: FilteredPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
+};
+
+export const ProjectLandingOpen: StoryObj<SessionsSidebarPanelProps> = {
+  args: { items: everyGroupItems, projects, activeProjectId: "garden" },
+  render: (args) => <WithToggleableFolders {...args} expandedProjectIds={new Set(["garden"])} />,
+};
+
+export const NoProjectsYet: StoryObj<SessionsSidebarPanelProps> = {
+  args: { items: [sidebarChat("chats/recent-1.md", "Summarize the Q3 interview notes", 5)] },
 };
