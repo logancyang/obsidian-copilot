@@ -27,7 +27,7 @@ describe("SessionsSidebarView", () => {
       const { view } = makeView({});
 
       expect(view.getViewType()).toBe(SESSIONS_SIDEBAR_VIEWTYPE);
-      expect(view.getDisplayText()).toBe("Copilot Agent sessions");
+      expect(view.getDisplayText()).toBe("Copilot Navigator");
       expect(view.getIcon()).toBe("panel-left");
     });
 
