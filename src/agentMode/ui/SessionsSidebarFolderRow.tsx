@@ -8,7 +8,7 @@ import {
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Folder, Plus } from "lucide-react";
 import React, { useState } from "react";
 
 interface SessionsSidebarFolderRowProps {
@@ -47,8 +47,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         setMenuOpen(true);
       }}
     >
-      {/* The name starts in the chat title column so a project's chats line up under it, and the hover actions
-          fill a slot the row always reserves, so showing them never moves the name, status or chevron.
+      {/* The folder icon starts in the chat title column and a project's chats indent by the icon's width, so their
+          titles line up under the project name; the hover actions fill a slot the row always reserves, so showing
+          them never moves the name, status or chevron.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
       <button
         ref={sortHandle?.ref}
@@ -62,6 +63,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
           "tw-rounded-md tw-bg-transparent tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-left tw-shadow-none"
         )}
       >
+        <Folder className="tw-size-4 tw-shrink-0 tw-text-muted" />
         {/* A hidden chat's unseen result bolds the folder name, as it bolds a chat title.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <span
