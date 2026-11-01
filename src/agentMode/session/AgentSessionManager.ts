@@ -1148,11 +1148,12 @@ export class AgentSessionManager {
 
   private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
     const expected = this.currentLandingCaptureSignature(projectId);
-    if (!expected) return null;
+    if (projectId !== GLOBAL_SCOPE && !expected) return null;
     const isReusable = (session: AgentSession): boolean =>
       this.isReusableLandingShell(session, projectId) &&
       !this.detachedFromTabIds.has(session.internalId) &&
-      this.landingCaptureSignatures.get(session.internalId) === expected;
+      (projectId === GLOBAL_SCOPE ||
+        this.landingCaptureSignatures.get(session.internalId) === expected);
 
     const mruId = this.lastActiveByScope.get(projectId);
     const mru = mruId ? this.sessions.get(mruId) : undefined;
@@ -1214,6 +1215,13 @@ export class AgentSessionManager {
     if (this.activeProjectId !== projectId) return;
     const active = this.getActiveSession();
     if (active?.projectId === projectId && !active.hasUserVisibleMessages()) return;
+    // Repeated New chat clicks reuse the empty chat left behind instead of stacking another.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
+    const reusable = this.pickReusableLandingSession(projectId);
+    if (reusable) {
+      this.setActiveSession(reusable.internalId);
+      return;
+    }
     await this.createSession(undefined, projectId);
   }
 

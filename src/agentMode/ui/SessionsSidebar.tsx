@@ -76,8 +76,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
 
   const handleNewChat = useCallback(async () => {
     try {
-      await plugin.activateAgentView();
       await manager.openGlobalLanding();
+      await plugin.activateAgentView();
     } catch (e) {
       logError("[AgentMode] sidebar new chat failed", e);
       new Notice("Failed to start a new chat. Please try again.");
@@ -87,8 +87,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   const handleOpenProject = useCallback(
     async (projectId: string) => {
       try {
-        await plugin.activateAgentView();
         await manager.openProjectLanding(projectId);
+        await plugin.activateAgentView();
       } catch (e) {
         logError("[AgentMode] sidebar open project failed", e);
         new Notice("Failed to open project. Please try again.");
@@ -172,7 +172,6 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       actions={actions}
       onToggleProject={toggleProject}
       onOpenProject={safeAsyncHandler(handleOpenProject)}
-      onNewProjectChat={safeAsyncHandler(handleOpenProject)}
       onCreateProject={handleCreateProject}
       onProjectDeleted={handleProjectDeleted}
       onViewArchived={handleViewArchived}

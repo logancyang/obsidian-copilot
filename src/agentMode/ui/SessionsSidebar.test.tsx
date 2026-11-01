@@ -294,7 +294,7 @@ describe("SessionsSidebar", () => {
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
     });
 
-    it("lands on a new global chat in the Agent view after the view is revealed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+    it("reveals the Agent view once the new global chat is open, so its composer takes the focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
       renderSidebar(manager);
@@ -303,7 +303,7 @@ describe("SessionsSidebar", () => {
       fireEvent.click(screen.getByRole("button", { name: "New chat" }));
 
       await waitFor(() => expect(manager.openGlobalLanding).toHaveBeenCalledTimes(1));
-      expect(manager.events).toEqual(["view", "landing"]);
+      expect(manager.events).toEqual(["landing", "view"]);
     });
 
     it("reports a failed new chat without throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
@@ -512,7 +512,7 @@ describe("SessionsSidebar", () => {
       expect(manager.exitProject).toHaveBeenCalledTimes(1);
     });
 
-    it("opens the project landing in the Agent view and expands the folder when the folder is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+    it("opens the project landing, then reveals the Agent view, and expands the folder when the folder is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
       const manager = new FakeManager();
       manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
@@ -522,7 +522,7 @@ describe("SessionsSidebar", () => {
 
       expect(await screen.findByRole("button", { name: "Seedling notes" })).toBeTruthy();
       await waitFor(() => expect(manager.openProjectLanding).toHaveBeenCalledWith("garden"));
-      expect(manager.events).toEqual(["view", "landing:garden"]);
+      expect(manager.events).toEqual(["landing:garden", "view"]);
     });
 
     it("expands the folder from the chevron without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
@@ -546,7 +546,7 @@ describe("SessionsSidebar", () => {
 
       fireEvent.click(await screen.findByRole("button", { name: "New chat in Garden plans" }));
 
-      await waitFor(() => expect(manager.events).toEqual(["view", "landing:garden"]));
+      await waitFor(() => expect(manager.events).toEqual(["landing:garden", "view"]));
       expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
     });
 

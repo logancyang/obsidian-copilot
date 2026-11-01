@@ -45,7 +45,6 @@ interface SessionsSidebarPanelProps {
   onOpenChat: (id: string) => void;
   onToggleProject: (projectId: string) => void;
   onOpenProject: (projectId: string) => void;
-  onNewProjectChat: (projectId: string) => void;
   onCreateProject: (name: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
   onViewArchived: () => void;
@@ -100,7 +99,6 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   onOpenChat,
   onToggleProject,
   onOpenProject,
-  onNewProjectChat,
   onCreateProject,
   onProjectDeleted,
   onViewArchived,
@@ -289,7 +287,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                         if (!expanded) onToggleProject(project.id);
                         onOpenProject(project.id);
                       }}
-                      onNewChat={() => onNewProjectChat(project.id)}
+                      onNewChat={() => onOpenProject(project.id)}
                       onDeleted={onProjectDeleted}
                     />
                     {expanded && (

@@ -29,7 +29,6 @@ const meta = {
     onOpenChat: () => {},
     onToggleProject: () => {},
     onOpenProject: () => {},
-    onNewProjectChat: () => {},
     onCreateProject: async () => {},
     onProjectDeleted: () => {},
     onViewArchived: () => {},

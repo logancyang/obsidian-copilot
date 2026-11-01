@@ -2543,6 +2543,35 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(globalLanding);
         expect(mgr.getSessions()).toEqual([globalLanding]);
       });
+
+      it("reuses the empty project chat left behind when returning from a chat with messages instead of stacking another https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        await mgr.enterProject(PROJECT);
+        const conversation = mgr.getActiveSession()!;
+        getSessionTestHandle(conversation).setHasUserVisibleMessages(true);
+        await mgr.openProjectLanding(PROJECT);
+        const landing = mgr.getActiveSession()!;
+        mgr.setActiveSession(conversation.internalId);
+
+        await mgr.openProjectLanding(PROJECT);
+
+        expect(mgr.getActiveSession()).toBe(landing);
+        expect(mgr.getSessions()).toEqual([conversation, landing]);
+      });
+
+      it("reuses the empty global chat left behind when returning from a chat with messages instead of stacking another https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const mgr = buildManager();
+        const conversation = await mgr.createSession();
+        getSessionTestHandle(conversation).setHasUserVisibleMessages(true);
+        await mgr.openGlobalLanding();
+        const landing = mgr.getActiveSession()!;
+        mgr.setActiveSession(conversation.internalId);
+
+        await mgr.openGlobalLanding();
+
+        expect(mgr.getActiveSession()).toBe(landing);
+        expect(mgr.getSessions()).toEqual([conversation, landing]);
+      });
     });
 
     describe("hidden chat cap while a sessions sidebar is open", () => {

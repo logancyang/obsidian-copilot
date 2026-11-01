@@ -31,7 +31,6 @@ function baseProps(
     onOpenChat: jest.fn(),
     onToggleProject: jest.fn(),
     onOpenProject: jest.fn(),
-    onNewProjectChat: jest.fn(),
     onCreateProject: jest.fn().mockResolvedValue(undefined),
     onProjectDeleted: jest.fn(),
     onViewArchived: jest.fn(),
@@ -219,11 +218,11 @@ describe("SessionsSidebarPanel", () => {
       });
 
       it("starts a chat in the project from the folder's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-        const { onNewProjectChat, onToggleProject } = renderPanel({ projects: projects(2) });
+        const { onOpenProject, onToggleProject } = renderPanel({ projects: projects(2) });
 
         fireEvent.click(screen.getByRole("button", { name: "New chat in Project 2" }));
 
-        expect(onNewProjectChat).toHaveBeenCalledWith("p2");
+        expect(onOpenProject).toHaveBeenCalledWith("p2");
         expect(onToggleProject).not.toHaveBeenCalled();
       });
 
