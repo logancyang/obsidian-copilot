@@ -704,6 +704,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             title={chatTitle}
             onExit={headerIsProject ? handleExitProject : undefined}
             orphaned={headerIsProject && headerOrphaned}
+            sidebarOpen={sidebarOpen}
             menu={
               activeProject ? (
                 <ProjectInfoPopover

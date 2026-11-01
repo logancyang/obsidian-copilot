@@ -24,6 +24,7 @@ const renderHeader: StoryObj<AgentProjectHeaderProps>["render"] = (args) => (
       onExit={args.onExit}
       menu={args.menu}
       orphaned={args.orphaned}
+      sidebarOpen={args.sidebarOpen}
       className={args.className}
     />
   </TooltipProvider>
@@ -41,6 +42,16 @@ export const ProjectConversationLongNames: StoryObj<AgentProjectHeaderProps> = {
     projectName: "Quarterly planning and cross-team research",
     title: "Compare vendor pricing across every region and plan tier we evaluated",
   },
+  render: renderHeader,
+};
+
+export const ProjectSidebarOpen: StoryObj<AgentProjectHeaderProps> = {
+  args: { sidebarOpen: true },
+  render: renderHeader,
+};
+
+export const ProjectConversationSidebarOpen: StoryObj<AgentProjectHeaderProps> = {
+  args: { title: "Compare vendor pricing", sidebarOpen: true },
   render: renderHeader,
 };
 
