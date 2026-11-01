@@ -5,7 +5,8 @@ import { ExternalLink } from "lucide-react";
 import type { App } from "obsidian";
 import * as React from "react";
 
-export const NAVIGATOR_HIGHLIGHT_GIF_URL = "NAVIGATOR_HIGHLIGHT_GIF_URL_PLACEHOLDER";
+export const NAVIGATOR_HIGHLIGHT_GIF_URL =
+  "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-highlight-819ce1d0.gif";
 
 export interface NavigatorUpsellContentProps {
   onUpgrade: () => void;
