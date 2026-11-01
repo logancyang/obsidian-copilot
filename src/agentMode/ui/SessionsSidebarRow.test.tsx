@@ -119,27 +119,73 @@ describe("SessionsSidebarRow", () => {
       expect(row.querySelector(".tw-order-first")).toBeNull();
     });
 
-    it("closes the live session from the row's right end without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("offers Pin chat, Archive chat and More actions, in that order, after the title for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderRow({ isSessionOpen: true });
+
+      const names = screen
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"));
+
+      expect(names).toEqual([null, "Pin chat", "Archive chat", "More actions"]);
+    });
+
+    it("pins an unpinned chat from its Pin chat button without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatPinned: jest.fn(async () => {}) });
+      const { onSelect } = renderRow({ actions });
+
+      fireEvent.click(screen.getByRole("button", { name: "Pin chat" }));
+
+      expect(actions.onSetChatPinned).toHaveBeenCalledWith("chats/plan.md", true);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("unpins a pinned chat from its Unpin chat button for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatPinned: jest.fn(async () => {}) });
+      renderRow({
+        item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, { pinnedAt: 1 }),
+        actions,
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Unpin chat" }));
+
+      expect(actions.onSetChatPinned).toHaveBeenCalledWith("chats/plan.md", false);
+    });
+
+    it("archives the chat from its Archive chat button without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatArchived: jest.fn(async () => {}) });
+      const { onSelect } = renderRow({ actions });
+
+      fireEvent.click(screen.getByRole("button", { name: "Archive chat" }));
+
+      expect(actions.onSetChatArchived).toHaveBeenCalledWith("chats/plan.md", true);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("closes a live session from the row menu's Close chat item without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       const actions = inertChatActions({
         onCloseSession: jest.fn(async () => {}),
         getChatBookmarkState: () => new Promise<never>(() => {}),
       });
       const { onSelect } = renderRow({ isSessionOpen: true, actions });
 
-      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+      expect(screen.queryByRole("button", { name: "Close chat" })).toBeNull();
+      fireEvent.click(within(openRowMenu()).getByRole("menuitem", { name: "Close chat" }));
 
       expect(actions.onCloseSession).toHaveBeenCalledWith("chats/plan.md");
       expect(onSelect).not.toHaveBeenCalled();
     });
 
-    it("offers no close button when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("offers no Close chat when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderRow({
         isSessionOpen: false,
         status: "unread",
-        actions: inertChatActions({ onCloseSession: jest.fn(async () => {}) }),
+        actions: inertChatActions({
+          onCloseSession: jest.fn(async () => {}),
+          getChatBookmarkState: () => new Promise<never>(() => {}),
+        }),
       });
 
-      expect(screen.queryByRole("button", { name: "Close chat" })).toBeNull();
+      expect(within(openRowMenu()).queryByRole("menuitem", { name: "Close chat" })).toBeNull();
       expect(screen.queryByLabelText("Session open")).toBeNull();
     });
 

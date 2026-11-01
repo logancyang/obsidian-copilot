@@ -1,6 +1,7 @@
 import {
   RecentChatMenu,
   RowActionButton,
+  isPinned,
   type RecentChatActions,
 } from "@/agentMode/ui/RecentChatMenu";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
@@ -8,7 +9,7 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { CircleAlert, LoaderCircle, X } from "lucide-react";
+import { Archive, CircleAlert, LoaderCircle, Pin, PinOff } from "lucide-react";
 import React, { useState } from "react";
 
 export type SessionStatus = "idle" | "running" | "waiting" | "unread";
@@ -88,7 +89,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   onSelect,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const closeSession = isSessionOpen ? actions.onCloseSession : undefined;
+  const pinned = isPinned(item);
   return (
     <div
       className={cn(
@@ -121,7 +122,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         )}
         {projectName && <RecentChatProjectBadge name={projectName} />}
         {/* Titles start flush with the panel and the status sits at the right end, where hovering the row swaps it
-            for the row's actions; a long title ellipsizes before the status.
+            for Pin, Archive and More actions; a long title ellipsizes before the status.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
         <span
           className={cn(
@@ -140,14 +141,18 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
-        {closeSession && (
-          <RowActionButton
-            label="Close chat"
-            onClick={() => safeAsyncHandler(closeSession)(item.id)}
-          >
-            <X className="tw-size-3.5" />
-          </RowActionButton>
-        )}
+        <RowActionButton
+          label={pinned ? "Unpin chat" : "Pin chat"}
+          onClick={() => safeAsyncHandler(actions.onSetChatPinned)(item.id, !pinned)}
+        >
+          {pinned ? <PinOff className="tw-size-4" /> : <Pin className="tw-size-4" />}
+        </RowActionButton>
+        <RowActionButton
+          label="Archive chat"
+          onClick={() => safeAsyncHandler(actions.onSetChatArchived)(item.id, true)}
+        >
+          <Archive className="tw-size-4" />
+        </RowActionButton>
         <RecentChatMenu
           item={item}
           isNoteBacked={!isNativeChatId(item.id)}
