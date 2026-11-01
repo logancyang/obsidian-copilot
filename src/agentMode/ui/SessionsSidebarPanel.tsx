@@ -10,8 +10,10 @@ interface SessionsSidebarPanelProps {
   runningChatIds: ReadonlySet<string>;
   waitingChatIds: ReadonlySet<string>;
   attentionChatIds: ReadonlySet<string>;
+  openChatIds: ReadonlySet<string>;
   onNewChat: () => void;
   onOpenChat: (id: string) => void;
+  onCloseSession: (id: string) => void;
 }
 
 export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
@@ -20,8 +22,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   runningChatIds,
   waitingChatIds,
   attentionChatIds,
+  openChatIds,
   onNewChat,
   onOpenChat,
+  onCloseSession,
 }) => {
   const newestFirst = useMemo(
     () => [...items].sort((a, b) => b.lastAccessedAt.getTime() - a.lastAccessedAt.getTime()),
@@ -51,7 +55,9 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                   unread: attentionChatIds.has(item.id),
                   running: runningChatIds.has(item.id),
                 })}
+                isSessionOpen={openChatIds.has(item.id)}
                 onSelect={() => onOpenChat(item.id)}
+                onCloseSession={() => onCloseSession(item.id)}
               />
             </li>
           ))}

@@ -57,6 +57,20 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     }
   }, [manager, plugin]);
 
+  const handleCloseSession = useCallback(
+    async (id: string) => {
+      try {
+        await manager.closeChatSession(id);
+      } catch (error) {
+        logError("[AgentMode] close chat session failed", error);
+        new Notice(
+          `Could not close chat: ${error instanceof Error ? error.message : "Try again."}`
+        );
+      }
+    },
+    [manager]
+  );
+
   return (
     <SessionsSidebarPanel
       items={chatHistoryItems}
@@ -64,8 +78,10 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       runningChatIds={runningChatIds}
       waitingChatIds={waitingChatIds}
       attentionChatIds={attentionChatIds}
+      openChatIds={openChatIds}
       onNewChat={safeAsyncHandler(handleNewChat)}
       onOpenChat={safeAsyncHandler(loadChat)}
+      onCloseSession={safeAsyncHandler(handleCloseSession)}
     />
   );
 };
