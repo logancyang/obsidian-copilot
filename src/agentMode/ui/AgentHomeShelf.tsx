@@ -19,24 +19,16 @@ interface AgentHomeShelfProps {
   onSectionSelect?: (id: string) => void;
 }
 
-interface AgentHomeShelfViewportProps {
-  id: string;
-  labelledBy: string;
+interface AgentHomeShelfViewportProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
 }
 
 function AgentHomeShelfViewport({
-  id,
-  labelledBy,
   children,
+  ...attributes
 }: AgentHomeShelfViewportProps): React.ReactElement {
   return (
-    <div
-      id={id}
-      role="tabpanel"
-      aria-labelledby={labelledBy}
-      className="tw-h-96 tw-max-h-96 tw-min-h-0 tw-overflow-y-auto"
-    >
+    <div {...attributes} className="tw-h-96 tw-max-h-96 tw-min-h-0 tw-overflow-y-auto">
       <div className="tw-flex tw-h-full tw-min-h-full tw-flex-col tw-pb-1">{children}</div>
     </div>
   );
@@ -66,13 +58,23 @@ export function AgentHomeShelf({
 
   if (!active) return <></>;
 
+  const frameClassName = cn(
+    "tw-flex tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
+    className
+  );
+
+  // With the sessions sidebar open only Relevant Notes is left, and a lone tab reads as stray chrome.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
+  if (sections.length === 1) {
+    return (
+      <section aria-label={active.title} className={frameClassName}>
+        <AgentHomeShelfViewport>{active.renderBody()}</AgentHomeShelfViewport>
+      </section>
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "tw-flex tw-min-h-0 tw-flex-col tw-overflow-hidden tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary",
-        className
-      )}
-    >
+    <div className={frameClassName}>
       <div role="tablist" className="tw-flex tw-shrink-0 tw-gap-1 tw-bg-secondary tw-p-1.5">
         {sections.map((section) => (
           <AgentHomeTab
@@ -90,7 +92,7 @@ export function AgentHomeShelf({
           />
         ))}
       </div>
-      <AgentHomeShelfViewport id={panelId} labelledBy={tabId(active.id)}>
+      <AgentHomeShelfViewport id={panelId} role="tabpanel" aria-labelledby={tabId(active.id)}>
         {active.renderBody()}
       </AgentHomeShelfViewport>
     </div>
