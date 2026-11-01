@@ -167,11 +167,23 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
 
   return (
     <div className="tw-flex tw-size-full tw-min-h-0 tw-flex-col tw-gap-2 tw-p-2">
-      <div className="tw-flex tw-items-center tw-gap-1">
+      <div className="tw-flex tw-items-center tw-gap-1 tw-@container/sidebar-header">
         <h2 className="tw-m-0 tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2 tw-px-2 tw-text-ui-medium tw-font-semibold tw-text-normal">
           <CopilotBrandIcon className="tw-size-5" />
           Copilot
         </h2>
+        {/* New chat keeps its label while the header has room and drops to its icon in a narrow sidebar.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        <Button
+          variant="ghost2"
+          aria-label="New chat"
+          title="New chat"
+          className="tw-h-8 tw-shrink-0 tw-gap-2 tw-px-2 tw-text-normal"
+          onClick={onNewChat}
+        >
+          <SquarePen className="tw-size-4" />
+          <span className="tw-hidden @[280px]/sidebar-header:tw-inline">New chat</span>
+        </Button>
         <Button
           variant="ghost2"
           size="icon"
@@ -203,14 +215,6 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <Button
-        variant="ghost2"
-        onClick={onNewChat}
-        className="tw-h-8 tw-w-full tw-justify-start tw-gap-2 tw-px-2 tw-text-normal"
-      >
-        <SquarePen className="tw-size-4" />
-        New chat
-      </Button>
       {searchOpen && (
         <SearchBar
           value={query}
