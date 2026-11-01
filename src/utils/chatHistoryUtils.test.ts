@@ -1,5 +1,5 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
-import { fileToHistoryItem, parseChatTimestamp } from "@/utils/chatHistoryUtils";
+import { extractChatTitle, fileToHistoryItem, parseChatTimestamp } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import type { App, TFile } from "obsidian";
 
@@ -63,6 +63,47 @@ describe("chatHistoryUtils", () => {
       const app = makeApp({ epoch: 1735732800000, projectId: "   " });
       const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());
       expect(item.projectId).toBeUndefined();
+    });
+  });
+
+  describe("extractChatTitle()", () => {
+    function noteNamed(basename: string): TFile {
+      return { path: `test-folder/${basename}.md`, basename } as unknown as TFile;
+    }
+
+    it("uses the note's topic as the title", () => {
+      const app = makeApp({ topic: " Planning ", projectId: "proj-123" });
+      expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Write_a_poem"))).toBe(
+        "Planning"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 uses the agentLabel of an Agent Mode note saved with no topic", () => {
+      const app = makeApp({ agentLabel: "Garden planting schedule" });
+      expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Plan_the_garden"))).toBe(
+        "Garden planting schedule"
+      );
+    });
+
+    it("derives a global chat's title from its filename without the agent prefix, date and time", () => {
+      const app = makeApp({});
+      expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Write_a_poem"))).toBe(
+        "Write a poem"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/809 derives an untitled Agent Mode project chat's title without the agent prefix", () => {
+      const app = makeApp({ projectId: "proj-123" });
+      expect(extractChatTitle(app, noteNamed("agent__20260101_120000__Write_a_poem"))).toBe(
+        "Write a poem"
+      );
+    });
+
+    it("derives a legacy project chat's title without its project id prefix", () => {
+      const app = makeApp({ projectId: "My project" });
+      expect(extractChatTitle(app, noteNamed("My project__20260101_120000__Write_a_poem"))).toBe(
+        "Write a poem"
+      );
     });
   });
 
