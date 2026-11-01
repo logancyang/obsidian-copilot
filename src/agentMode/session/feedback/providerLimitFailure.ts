@@ -7,8 +7,7 @@ const PROVIDER_LIMIT_PATTERNS: readonly RegExp[] = [
   /token_limit_error/i,
   /resource_exhausted/i,
   /credit balance/i,
-  /insufficient (?:credits|funds|balance)/i,
-  /payment required/i,
+  /insufficient credits/i,
   /\b(?:HTTP|status(?: code)?)[\s:]*(?:402|429)\b/i,
 ];
 
