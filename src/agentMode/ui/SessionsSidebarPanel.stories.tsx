@@ -22,8 +22,10 @@ const meta = {
     runningChatIds: none,
     waitingChatIds: none,
     attentionChatIds: none,
+    openChatIds: none,
     onNewChat: () => {},
     onOpenChat: () => {},
+    onCloseSession: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
 } satisfies Meta<SessionsSidebarPanelProps>;
@@ -39,6 +41,7 @@ export const EveryStatus: StoryObj<SessionsSidebarPanelProps> = {
       chat("chats/waiting.md", "Clean up duplicate project notes", 5),
       chat("chats/unread.md", "Draft the release announcement", 30),
       chat("chats/active.md", "Plan the fall product launch", 2),
+      chat("chats/live.md", "Outline the garden journal", 15),
       chat(
         "chats/long.md",
         "Investigate why the nightly sync keeps overwriting the reading list after a rename on mobile",
@@ -49,6 +52,12 @@ export const EveryStatus: StoryObj<SessionsSidebarPanelProps> = {
     runningChatIds: new Set(["chats/running.md"]),
     waitingChatIds: new Set(["chats/waiting.md"]),
     attentionChatIds: new Set(["chats/unread.md", "chats/waiting.md"]),
+    openChatIds: new Set([
+      "chats/running.md",
+      "chats/waiting.md",
+      "chats/active.md",
+      "chats/live.md",
+    ]),
   },
 };
 

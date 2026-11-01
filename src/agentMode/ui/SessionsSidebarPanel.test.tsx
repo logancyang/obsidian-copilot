@@ -33,8 +33,10 @@ function renderPanel(overrides: Partial<React.ComponentProps<typeof SessionsSide
     runningChatIds: NONE,
     waitingChatIds: NONE,
     attentionChatIds: NONE,
+    openChatIds: NONE,
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
+    onCloseSession: jest.fn(),
     ...overrides,
   };
   render(<SessionsSidebarPanel {...props} />);
@@ -114,6 +116,21 @@ describe("SessionsSidebarPanel", () => {
       });
 
       expect(screen.queryByLabelText("Unread result")).toBeNull();
+    });
+
+    it("marks only chats with a live session and closes that session by its history id for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const { onCloseSession, onOpenChat } = renderPanel({
+        openChatIds: new Set(["chats/middle.md"]),
+      });
+
+      expect(screen.getAllByLabelText("Session open")).toHaveLength(1);
+      expect(
+        within(screen.getByRole("button", { name: /Middle chat/ })).getByLabelText("Session open")
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+
+      expect(onCloseSession).toHaveBeenCalledWith("chats/middle.md");
+      expect(onOpenChat).not.toHaveBeenCalled();
     });
 
     it("shows no status on an idle chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
