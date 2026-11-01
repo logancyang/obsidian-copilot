@@ -8,6 +8,7 @@ const PROVIDER_LIMIT_PATTERNS: readonly RegExp[] = [
   /resource_exhausted/i,
   /credit balance/i,
   /insufficient credits/i,
+  /requires more credits/i,
   /\b(?:HTTP|status(?: code)?)[\s:]*(?:402|429)\b/i,
 ];
 
