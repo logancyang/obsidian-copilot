@@ -12,7 +12,6 @@ import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
-import { isProjectContextInline, withoutChatLists } from "@/agentMode/ui/landingChatLists";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
@@ -408,6 +407,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     placementRef.current = null;
   }
   const projectPlacement = placementRef.current;
+  const isProjectContextInline = sidebarOpen || projectPlacement?.standalone === true;
 
   const mainAgentId =
     manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
@@ -524,7 +524,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
 
   const globalShelfSections = useMemo(
-    () => (sidebarOpen ? withoutChatLists(landingSections) : landingSections),
+    () =>
+      sidebarOpen
+        ? landingSections.filter((section) => section.id === "relevant-notes")
+        : landingSections,
     [sidebarOpen, landingSections]
   );
 
@@ -765,9 +768,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       ) : undefined
                     }
                     context={
-                      isProjectLanding &&
-                      !isOrphanedProject &&
-                      isProjectContextInline(projectPlacement?.standalone, sidebarOpen) ? (
+                      isProjectLanding && !isOrphanedProject && isProjectContextInline ? (
                         <div className="tw-px-2 tw-pb-1 tw-pt-3">
                           <AgentContextSection
                             app={app}
@@ -779,8 +780,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement &&
-                        !isProjectContextInline(projectPlacement.standalone, sidebarOpen) ? (
+                        projectPlacement && !isProjectContextInline ? (
                           <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
                         ) : null
                       ) : globalShelfSections.length > 0 ? (

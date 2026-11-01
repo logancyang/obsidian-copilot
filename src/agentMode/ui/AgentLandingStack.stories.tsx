@@ -1,6 +1,5 @@
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
-import { isProjectContextInline, withoutChatLists } from "@/agentMode/ui/landingChatLists";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { Meta, StoryObj } from "@/lib/story";
 import { FileSearch, Files, Folder, MessageSquare, RefreshCw } from "lucide-react";
@@ -158,8 +157,10 @@ function LandingCanvas({
   sidebarOpen,
   project,
 }: Pick<LandingStackCanvasProps, "args"> & { sidebarOpen: boolean; project: boolean }) {
-  const globalSections = sidebarOpen ? withoutChatLists(allSections) : allSections;
-  const contextInline = project && isProjectContextInline(false, sidebarOpen);
+  const globalSections = sidebarOpen
+    ? allSections.filter((section) => section.id === "relevant-notes")
+    : allSections;
+  const contextInline = project && sidebarOpen;
   const shelf = project ? (
     contextInline ? undefined : (
       <AgentHomeShelf sections={projectLandingSections} />
