@@ -102,7 +102,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   return (
     <div
       className={cn(
-        "tw-group tw-flex tw-min-w-0 tw-items-center tw-gap-1 tw-rounded-md",
+        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md",
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
@@ -120,26 +120,37 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         onClick={onSelect}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-transparent"
+          "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
-        {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-        <RecentChatTitle
-          title={item.title}
-          className={cn(status === "unread" && "tw-font-semibold")}
-        />
-        {status === "unread" && (
-          <span role="img" aria-label="Unread result" className="tw-sr-only" />
-        )}
-        {projectName && <RecentChatProjectBadge name={projectName} />}
-        {/* Titles start flush with the panel and the status sits at the right end, where hovering the row swaps it
-            for Pin, Archive and More actions; a long title ellipsizes before the status.
+        {/* Hovering lays Pin, Archive and More actions over the row's right end instead of reflowing it, so the title
+            fades out under them while its ellipsis, badge and the status's space stay put.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        <span
+          className={cn(
+            "tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+            menuOpen
+              ? "[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
+              : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
+          )}
+        >
+          {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+          <RecentChatTitle
+            title={item.title}
+            className={cn(status === "unread" && "tw-font-semibold")}
+          />
+          {status === "unread" && (
+            <span role="img" aria-label="Unread result" className="tw-sr-only" />
+          )}
+          {projectName && <RecentChatProjectBadge name={projectName} />}
+        </span>
+        {/* Titles start flush with the panel and the status sits at the right end; a long title ellipsizes before it.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
         <span
           className={cn(
             "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
-            menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden"
+            menuOpen ? "tw-invisible" : "group-focus-within:tw-invisible group-hover:tw-invisible"
           )}
         >
           <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
@@ -149,7 +160,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
       <div
         className={cn(
-          "tw-shrink-0 tw-items-center tw-pr-1",
+          "tw-absolute tw-right-1 tw-items-center tw-gap-1.5",
           menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
