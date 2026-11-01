@@ -12,7 +12,7 @@ const PROVIDER_LIMIT_PATTERNS: readonly RegExp[] = [
 ];
 
 // Out-of-quota, out-of-credit and rate-limited replies are the provider account's state, which the Copilot team can't act on.
-// https://github.com/logancyang/obsidian-copilot/issues/3944
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/810
 export function isProviderLimitFailure(errorText: string): boolean {
   return PROVIDER_LIMIT_PATTERNS.some((pattern) => pattern.test(errorText));
 }

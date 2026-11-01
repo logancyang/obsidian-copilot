@@ -6167,7 +6167,7 @@ describe("AgentSession", () => {
           });
         });
 
-        it("https://github.com/logancyang/obsidian-copilot/issues/3944 shows no card when the provider's usage limit failed the reply", async () => {
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the provider's usage limit failed the reply", async () => {
           const session = failedSession(true, "Internal error: Free usage limit reached.");
 
           await expect(session.sendPrompt("hi").turn).rejects.toThrow("usage limit");

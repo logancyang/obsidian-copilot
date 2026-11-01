@@ -29,7 +29,7 @@ describe("providerLimitFailure", () => {
       ["Claude plan limit", "You've hit your session limit · resets 3pm"],
       ["Codex plan limit", "You've hit your usage limit. Upgrade to Pro or try again later."],
     ])(
-      "https://github.com/logancyang/obsidian-copilot/issues/3944 recognizes the %s as a provider limit",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/810 recognizes the %s as a provider limit",
       (_label, errorText) => {
         expect(isProviderLimitFailure(errorText)).toBe(true);
       }
