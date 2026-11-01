@@ -345,9 +345,13 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
           { type: "http" as const, url: server.url, headers: { ...server.headers } },
         ])
       );
+      // Only read-only tools skip the prompt, so Claude asks before a Copilot tool writes a drawing or publishes a page.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/807
       options.allowedTools = [
         ...(options.allowedTools ?? []),
-        ...session.mcpServers.map((server) => `mcp__${server.name}`),
+        ...session.mcpServers.flatMap((server) =>
+          server.readOnlyToolNames.map((tool) => `mcp__${server.name}__${tool}`)
+        ),
       ];
     }
     session.thinking = Boolean(this.opts.getEnableThinking?.());
