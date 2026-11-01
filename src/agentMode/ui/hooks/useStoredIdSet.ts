@@ -16,6 +16,14 @@ function readStoredIds(app: App, storageKey: string): ReadonlySet<string> {
   return new Set();
 }
 
+function saveStoredIds(app: App, storageKey: string, ids: ReadonlySet<string>): void {
+  try {
+    app.saveLocalStorage(storageKey, JSON.stringify([...ids]));
+  } catch (e) {
+    logWarn("Failed to persist sessions sidebar state", e);
+  }
+}
+
 export function useStoredIdSet(app: App, storageKey: string) {
   const [ids, setIds] = useState(() => readStoredIds(app, storageKey));
 
@@ -24,16 +32,21 @@ export function useStoredIdSet(app: App, storageKey: string) {
       setIds((current) => {
         const next = new Set(current);
         if (!next.delete(id)) next.add(id);
-        try {
-          app.saveLocalStorage(storageKey, JSON.stringify([...next]));
-        } catch (e) {
-          logWarn("Failed to persist sessions sidebar fold state", e);
-        }
+        saveStoredIds(app, storageKey, next);
         return next;
       });
     },
     [app, storageKey]
   );
 
-  return { ids, toggle };
+  const replace = useCallback(
+    (orderedIds: readonly string[]) => {
+      const next = new Set(orderedIds);
+      saveStoredIds(app, storageKey, next);
+      setIds(next);
+    },
+    [app, storageKey]
+  );
+
+  return { ids, toggle, replace };
 }

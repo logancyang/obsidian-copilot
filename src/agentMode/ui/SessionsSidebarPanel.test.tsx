@@ -1,4 +1,5 @@
 import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { dragByKeyboard, stackRowsVertically } from "@/agentMode/ui/testing/keyboardDrag";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import {
   inertChatActions,
@@ -20,6 +21,7 @@ function baseProps(
     items: [],
     projects: [],
     expandedProjectIds: NONE,
+    projectOrder: NONE,
     activeProjectId: "",
     activeChatIds: NONE,
     runningChatIds: NONE,
@@ -32,6 +34,7 @@ function baseProps(
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
     onToggleProject: jest.fn(),
+    onReorderProjects: jest.fn(),
     onOpenProject: jest.fn(),
     onCreateProject: jest.fn().mockResolvedValue(undefined),
     onProjectDeleted: jest.fn(),
@@ -787,6 +790,98 @@ describe("SessionsSidebarPanel", () => {
 
         expect(screen.queryByPlaceholderText("Search chats...")).toBeNull();
         expect(screen.getByRole("region", { name: "Projects" })).toBeTruthy();
+      });
+    });
+
+    describe("drag reorder", () => {
+      const pins = [
+        sidebarChat("chats/pin-a.md", "Pin A", 1, { pinnedAt: 300 }),
+        sidebarChat("chats/pin-b.md", "Pin B", 1, { pinnedAt: 200 }),
+        sidebarChat("chats/pin-c.md", "Pin C", 1, { pinnedAt: 100 }),
+      ];
+      let layout: jest.SpyInstance;
+
+      beforeEach(() => {
+        jest.useFakeTimers();
+        layout = stackRowsVertically();
+      });
+      afterEach(() => {
+        jest.useRealTimers();
+        layout.mockRestore();
+      });
+
+      it("re-pins a pinned chat dropped by keyboard at a time between its new neighbours for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        const onSetChatPinned = jest.fn().mockResolvedValue(undefined);
+        renderPanel({ items: pins, actions: inertChatActions({ onSetChatPinned }) });
+
+        dragByKeyboard(screen.getByRole("button", { name: "Pin A" }), "ArrowDown", 1);
+
+        expect(onSetChatPinned).toHaveBeenCalledWith("chats/pin-a.md", true, 150);
+      });
+
+      it("stores the new project order when a project is dropped by keyboard for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        const props = renderPanel({ projects: projects(3) });
+        const [first] = within(section("Projects")).getAllByRole("button", { expanded: false });
+
+        dragByKeyboard(first, "ArrowDown", 2);
+
+        expect(props.onReorderProjects).toHaveBeenCalledWith(["p2", "p3", "p1"]);
+      });
+
+      it("keeps Enter for opening a pinned chat or folding a project instead of picking the row up for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        const props = renderPanel({ items: pins, projects: projects(1) });
+        const pin = screen.getByRole("button", { name: "Pin A" });
+        const folder = screen.getByRole("button", { name: "Project 1" });
+
+        fireEvent.keyDown(pin, { code: "Enter" });
+        fireEvent.keyDown(folder, { code: "Enter" });
+        expect(pin.getAttribute("aria-pressed")).toBeNull();
+        expect(folder.getAttribute("aria-pressed")).toBeNull();
+        fireEvent.click(pin);
+        fireEvent.click(folder);
+
+        expect(props.onOpenChat).toHaveBeenCalledWith("chats/pin-a.md");
+        expect(props.onToggleProject).toHaveBeenCalledWith("p1");
+      });
+
+      it("offers reordering on Pinned and project rows only, not on Recents, project chats or search results, for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        renderPanel({
+          items: [...pins, sidebarChat("chats/rec.md", "Rec A", 1), ...projectChats("p1", 1)],
+          projects: projects(1),
+          expandedProjectIds: new Set(["p1"]),
+        });
+        const sortable = () =>
+          screen
+            .queryAllByRole("button")
+            .filter((button) => button.getAttribute("aria-roledescription") === "sortable")
+            .map((button) => button.textContent);
+
+        expect(sortable()).toEqual(["Pin A", "Pin B", "Pin C", "Project 1"]);
+
+        fireEvent.click(screen.getByRole("button", { name: "Search chats" }));
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "A" },
+        });
+        expect(sortable()).toEqual([]);
+      });
+
+      it("ignores a keyboard drag attempt on a Recents row for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        const onSetChatPinned = jest.fn().mockResolvedValue(undefined);
+        const props = renderPanel({
+          items: [
+            ...pins,
+            sidebarChat("chats/rec-1.md", "Rec 1", 1),
+            sidebarChat("chats/rec-2.md", "Rec 2", 2),
+          ],
+          projects: projects(2),
+          actions: inertChatActions({ onSetChatPinned }),
+        });
+
+        dragByKeyboard(screen.getByRole("button", { name: "Rec 1" }), "ArrowDown", 1);
+
+        expect(chatTitles(section("Recents"))).toEqual(["Rec 1", "Rec 2"]);
+        expect(onSetChatPinned).not.toHaveBeenCalled();
+        expect(props.onReorderProjects).not.toHaveBeenCalled();
       });
     });
   });

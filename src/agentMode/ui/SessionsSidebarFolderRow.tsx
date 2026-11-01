@@ -1,6 +1,10 @@
 import { AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { SessionStatusIcon, type SessionStatus } from "@/agentMode/ui/SessionsSidebarRow";
+import {
+  SessionStatusIcon,
+  type SessionStatus,
+  type SortHandle,
+} from "@/agentMode/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
@@ -15,6 +19,7 @@ interface SessionsSidebarFolderRowProps {
   onToggle: () => void;
   onNewChat: () => void;
   onDeleted: (projectId: string) => void;
+  sortHandle?: SortHandle;
 }
 
 export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> = ({
@@ -25,6 +30,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   onToggle,
   onNewChat,
   onDeleted,
+  sortHandle,
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -35,6 +41,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
+      {...sortHandle?.listeners}
       onContextMenu={(event) => {
         event.preventDefault();
         setMenuOpen(true);
@@ -44,6 +51,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
           fill a slot the row always reserves, so showing them never moves the name, status or chevron.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
       <button
+        ref={sortHandle?.ref}
+        {...sortHandle?.attributes}
         type="button"
         aria-expanded={expanded}
         aria-current={active ? "true" : undefined}

@@ -5,6 +5,7 @@ import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import * as projectsState from "@/projects/state";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { dragByKeyboard, stackRowsVertically } from "@/agentMode/ui/testing/keyboardDrag";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";
@@ -468,6 +469,38 @@ describe("SessionsSidebar", () => {
       ]);
     });
 
+    it("keeps a dragged project order across a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", async () => {
+      projectsState.updateCachedProjectRecords([
+        projectRecord("older", "Older project", { created: 1_000 }),
+        projectRecord("newer", "Newer project", { created: 5_000 }),
+      ]);
+      const storage = new FakeLocalStorage();
+      renderSidebar(new FakeManager(), storage);
+      const [newer] = await screen.findAllByRole("button", {
+        expanded: false,
+        name: /^\w+ project$/,
+      });
+      jest.useFakeTimers();
+      const layout = stackRowsVertically();
+      try {
+        dragByKeyboard(newer, "ArrowDown", 1);
+      } finally {
+        jest.useRealTimers();
+        layout.mockRestore();
+      }
+      cleanup();
+      renderSidebar(new FakeManager(), storage);
+
+      const folders = await screen.findAllByRole("button", {
+        expanded: false,
+        name: /^\w+ project$/,
+      });
+      expect(folders.map((folder) => folder.textContent)).toEqual([
+        "Older project",
+        "Newer project",
+      ]);
+    });
+
     it("moves a chat pinned from its row menu into Pinned for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
       const manager = new FakeManager();
@@ -479,7 +512,7 @@ describe("SessionsSidebar", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Pin chat" }));
 
       const pinned = await screen.findByRole("region", { name: "Pinned" });
-      expect(manager.setChatPinned).toHaveBeenCalledWith("b.md", true);
+      expect(manager.setChatPinned).toHaveBeenCalledWith("b.md", true, undefined);
       expect(within(pinned).getByText("Seedling notes")).toBeTruthy();
       expect(screen.getAllByText("Seedling notes")).toHaveLength(1);
     });

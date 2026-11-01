@@ -2,6 +2,7 @@ import { RecentChatMenu, type RecentChatActions } from "@/agentMode/ui/RecentCha
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import { CircleAlert, LoaderCircle, X } from "lucide-react";
@@ -35,6 +36,12 @@ export function mostUrgentStatus(statuses: Iterable<SessionStatus>): SessionStat
   return urgent;
 }
 
+export interface SortHandle {
+  ref: (element: HTMLElement | null) => void;
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+}
+
 interface SessionsSidebarRowProps {
   item: ChatHistoryItem;
   status: SessionStatus;
@@ -43,6 +50,7 @@ interface SessionsSidebarRowProps {
   projectName?: string;
   actions: RecentChatActions;
   onSelect: () => void;
+  sortHandle?: SortHandle;
 }
 
 export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?: boolean }> = ({
@@ -89,6 +97,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   projectName,
   actions,
   onSelect,
+  sortHandle,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeSession = isSessionOpen ? actions.onCloseSession : undefined;
@@ -99,6 +108,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
+      {...sortHandle?.listeners}
       onContextMenu={(event) => {
         event.preventDefault();
         setMenuOpen(true);
@@ -123,6 +133,8 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         </button>
       )}
       <button
+        ref={sortHandle?.ref}
+        {...sortHandle?.attributes}
         type="button"
         aria-current={active ? "true" : undefined}
         onClick={onSelect}

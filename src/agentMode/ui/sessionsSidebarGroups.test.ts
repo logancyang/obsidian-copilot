@@ -1,11 +1,13 @@
 import {
   filterChatsByTitle,
   groupSessionsSidebarChats,
+  pinnedAtAfterMove,
 } from "@/agentMode/ui/sessionsSidebarGroups";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/802";
+const REORDER_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/811";
 
 // Last use runs opposite to creation, so a list ordered by recency would fail these expectations.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
@@ -92,6 +94,30 @@ describe("sessionsSidebarGroups", () => {
       expect(groups.recents.map((item) => item.id)).toEqual(["unpinned"]);
     });
 
+    it(`orders projects by the stored drag order instead of creation time (${REORDER_ISSUE})`, () => {
+      const groups = groupSessionsSidebarChats(
+        [],
+        [project("a", 1_000), project("b", 2_000), project("c", 3_000)],
+        ["a", "c", "b"]
+      );
+
+      expect(groups.projects.map((group) => group.project.id)).toEqual(["a", "c", "b"]);
+    });
+
+    it(`puts projects missing from the stored order first, newest created first, and ignores stored ids of deleted projects (${REORDER_ISSUE})`, () => {
+      const groups = groupSessionsSidebarChats(
+        [],
+        [project("placed", 1_000), project("new-old", 2_000), project("new-new", 3_000)],
+        ["deleted", "placed"]
+      );
+
+      expect(groups.projects.map((group) => group.project.id)).toEqual([
+        "new-new",
+        "new-old",
+        "placed",
+      ]);
+    });
+
     it(`lists a chat of a project that no longer exists in Recents so it stays reachable (${ISSUE})`, () => {
       const groups = groupSessionsSidebarChats(
         [chat("orphan", 1_000, { projectId: "deleted" })],
@@ -99,6 +125,38 @@ describe("sessionsSidebarGroups", () => {
       );
 
       expect(groups.recents.map((item) => item.id)).toEqual(["orphan"]);
+    });
+  });
+
+  describe("pinnedAtAfterMove()", () => {
+    const pinned = [
+      chat("top", 1_000, { pinnedAt: 400 }),
+      chat("middle", 1_000, { pinnedAt: 300 }),
+      chat("bottom", 1_000, { pinnedAt: 100 }),
+    ];
+
+    it(`returns a pin time between the new neighbours of a chat moved inside the list (${REORDER_ISSUE})`, () => {
+      expect(pinnedAtAfterMove(pinned, 0, 1)).toBe(200);
+    });
+
+    it(`returns a pin time just above the first chat for a chat moved to the top (${REORDER_ISSUE})`, () => {
+      expect(pinnedAtAfterMove(pinned, 2, 0)).toBe(401);
+    });
+
+    it(`returns a pin time just below the last chat for a chat moved to the bottom (${REORDER_ISSUE})`, () => {
+      expect(pinnedAtAfterMove(pinned, 0, 2)).toBe(99);
+    });
+
+    it(`places the moved chat at its drop position once Pinned is sorted by the returned time (${REORDER_ISSUE})`, () => {
+      const moved = pinned.map((item) =>
+        item.id === "bottom" ? { ...item, pinnedAt: pinnedAtAfterMove(pinned, 2, 1) } : item
+      );
+
+      expect(groupSessionsSidebarChats(moved, []).pinned.map((item) => item.id)).toEqual([
+        "top",
+        "bottom",
+        "middle",
+      ]);
     });
   });
 

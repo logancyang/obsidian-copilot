@@ -83,6 +83,18 @@ describe("useStoredIdSet", () => {
       expect(JSON.parse(store.get("copilot:other-fold-state:v1") as string)).toEqual(["recents"]);
     });
 
+    it("stores the ids in the given order on replace and restores that order after a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+      const { app, store } = createApp(JSON.stringify(["a", "b"]));
+      const first = renderHook(() => useStoredIdSet(app, STORAGE_KEY));
+
+      act(() => first.result.current.replace(["c", "a", "b"]));
+      first.unmount();
+      const reloaded = renderHook(() => useStoredIdSet(app, STORAGE_KEY));
+
+      expect(JSON.parse(store.get(STORAGE_KEY) as string)).toEqual(["c", "a", "b"]);
+      expect([...reloaded.result.current.ids]).toEqual(["c", "a", "b"]);
+    });
+
     it.each([["not json"], ['{"a":1}'], ["[1,2]"]])(
       "starts with no ids when the stored value %s is not a list of ids",
       (stored) => {
@@ -105,7 +117,7 @@ describe("useStoredIdSet", () => {
 
       expect(result.current.ids.has("a")).toBe(true);
       expect(logWarn).toHaveBeenCalledWith(
-        "Failed to persist sessions sidebar fold state",
+        "Failed to persist sessions sidebar state",
         expect.any(Error)
       );
     });
