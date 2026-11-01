@@ -1,4 +1,8 @@
-import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
+import {
+  AgentHomeShelf,
+  landingSectionsForSidebar,
+  type AgentHomeShelfSection,
+} from "@/agentMode/ui/AgentHomeShelf";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
@@ -155,6 +159,31 @@ describe("AgentHomeShelf", () => {
     it("shows the count badge when the count is positive", () => {
       renderShelf([withCount(3), projectsEnabled]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
+    });
+  });
+
+  describe("landingSectionsForSidebar()", () => {
+    const relevantNotes: AgentHomeShelfSection = {
+      id: "relevant-notes",
+      icon: <span />,
+      title: "Relevant Notes",
+      renderBody: () => <div>NOTES BODY</div>,
+    };
+
+    it("keeps every landing section while the sessions sidebar is closed", () => {
+      const sections = [chats, projectsEnabled, relevantNotes];
+
+      expect(landingSectionsForSidebar(sections, false)).toBe(sections);
+    });
+
+    it("keeps only Relevant Notes while the sessions sidebar is open, since the sidebar lists chats and projects — https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      expect(
+        landingSectionsForSidebar([chats, projectsEnabled, relevantNotes], true).map((s) => s.id)
+      ).toEqual(["relevant-notes"]);
+    });
+
+    it("leaves no sections while the sessions sidebar is open and Relevant Notes is absent — https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      expect(landingSectionsForSidebar([chats, projectsEnabled], true)).toEqual([]);
     });
   });
 });

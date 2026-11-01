@@ -144,15 +144,18 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     ]
   );
 
-  const handleViewArchived = useCallback(
-    () =>
-      new ArchivedChatsModal(app, archivedChatItems, archivedProjects, {
-        onUnarchive: (id) => setChatArchived(id, false),
-        onOpen: loadChat,
-        ...createProjectArchiveActions(app, manager),
-      }).open(),
-    [app, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]
-  );
+  const handleViewArchived = useCallback(() => {
+    const projectActions = createProjectArchiveActions(app, manager);
+    new ArchivedChatsModal(app, archivedChatItems, archivedProjects, {
+      onUnarchive: (id) => setChatArchived(id, false),
+      onOpen: loadChat,
+      ...projectActions,
+      onOpenProject: async (id) => {
+        await projectActions.onOpenProject(id);
+        await plugin.activateAgentView();
+      },
+    }).open();
+  }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
 
   const handleProjectDeleted = useCallback(
     (deletedId: string) => {

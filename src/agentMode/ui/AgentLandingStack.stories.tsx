@@ -1,4 +1,8 @@
-import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
+import {
+  AgentHomeShelf,
+  landingSectionsForSidebar,
+  type AgentHomeShelfSection,
+} from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -157,9 +161,7 @@ function LandingCanvas({
   sidebarOpen,
   project,
 }: Pick<LandingStackCanvasProps, "args"> & { sidebarOpen: boolean; project: boolean }) {
-  const globalSections = sidebarOpen
-    ? allSections.filter((section) => section.id === "relevant-notes")
-    : allSections;
+  const globalSections = landingSectionsForSidebar(allSections, sidebarOpen);
   const contextInline = project && sidebarOpen;
   const shelf = project ? (
     contextInline ? undefined : (

@@ -153,16 +153,20 @@ function CreateProjectDialogPanel(args: Partial<SessionsSidebarPanelProps>) {
 function FilteredPanel(args: Partial<SessionsSidebarPanelProps> & { query: string }) {
   const { query, ...panelArgs } = args;
   const containerRef = useRef<HTMLDivElement>(null);
+  const [searchOpened, setSearchOpened] = useState(false);
   useEffect(() => {
-    const root = containerRef.current;
-    root?.querySelector<HTMLElement>('button[aria-label="Search chats"]')?.click();
-    const input = root?.querySelector<HTMLInputElement>("input");
-    if (!input) return;
+    containerRef.current?.querySelector<HTMLElement>('button[aria-label="Search chats"]')?.click();
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- re-run the query effect once the opened search input has mounted
+    setSearchOpened(true);
+  }, []);
+  useEffect(() => {
+    const input = containerRef.current?.querySelector<HTMLInputElement>("input");
+    if (!searchOpened || !input) return;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- React ignores a plain `input.value =` assignment
     const { set } = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value") ?? {};
     if (set) Reflect.apply(set, input, [query]);
     input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, [query]);
+  }, [query, searchOpened]);
   return (
     <div ref={containerRef} className="tw-size-full">
       <WithToggleableFolders {...panelArgs} />
