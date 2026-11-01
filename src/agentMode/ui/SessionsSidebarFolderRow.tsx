@@ -28,6 +28,10 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
+  const hoverHidden = menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden";
+  const hoverShown = menuOpen
+    ? "tw-block"
+    : "tw-hidden group-focus-within:tw-block group-hover:tw-block";
   return (
     <div
       className={cn(
@@ -40,10 +44,6 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         setMenuOpen(true);
       }}
     >
-      {/* The folder icon starts in the chat title column and a project's chats indent by the icon's width, so their
-          titles line up under the project name; the hover actions fill a slot the row always reserves, so showing
-          them never moves the name, status or chevron.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
       <button
         type="button"
         aria-expanded={expanded}
@@ -51,7 +51,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         onClick={onToggle}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-left tw-shadow-none"
+          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
         <Folder className="tw-size-4 tw-shrink-0 tw-text-muted" />
@@ -65,14 +65,27 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         >
           {project.name}
         </span>
-        {hiddenStatus === "unread" ? (
+        {hiddenStatus === "unread" && (
           <span role="img" aria-label="Unread result" className="tw-sr-only" />
-        ) : (
-          <SessionStatusIcon status={hiddenStatus} />
         )}
-        <span aria-hidden="true" className="tw-w-10 tw-shrink-0" />
+        {/* The bubbled status sits at the right end, in line with chat statuses; hovering swaps it for the actions and
+            the chevron, which stay hidden otherwise so the list reads clean.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        <span
+          className={cn(
+            "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+            hoverHidden
+          )}
+        >
+          {hiddenStatus !== "unread" && <SessionStatusIcon status={hiddenStatus} />}
+        </span>
+        <span aria-hidden="true" className={cn("tw-w-10 tw-shrink-0", hoverShown)} />
         <ChevronRight
-          className={cn("tw-size-4 tw-shrink-0 tw-text-muted", expanded && "tw-rotate-90")}
+          className={cn(
+            "tw-size-4 tw-shrink-0 tw-text-muted",
+            hoverShown,
+            expanded && "tw-rotate-90"
+          )}
         />
       </button>
       <div

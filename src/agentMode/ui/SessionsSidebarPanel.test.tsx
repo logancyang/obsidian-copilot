@@ -498,7 +498,14 @@ describe("SessionsSidebarPanel", () => {
         expect(
           within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText("Session open")
         ).toBeTruthy();
-        fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+        fireEvent.pointerDown(
+          within(screen.getByRole("button", { name: /^Chat B/ }).parentElement!).getByRole(
+            "button",
+            { name: "More actions" }
+          ),
+          { button: 0, ctrlKey: false }
+        );
+        fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
 
         expect(actions.onCloseSession).toHaveBeenCalledWith("chats/b.md");
         expect(onOpenChat).not.toHaveBeenCalled();
