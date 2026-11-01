@@ -17,6 +17,18 @@ export function NavigatorUpsellContent({
 }: NavigatorUpsellContentProps): React.ReactElement {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
+      <div className="tw-flex tw-flex-col tw-gap-2">
+        <p className="tw-m-0">
+          Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays
+          easy to find and manage.
+        </p>
+        <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5">
+          <li>See every chat at a glance, grouped into Pinned, Projects and Recents</li>
+          <li>Keep each Project&apos;s chats together in its own folder</li>
+          <li>Spot which chats are running, waiting for you, or have a new result</li>
+          <li>Pin, archive, search and reorder chats without leaving your conversation</li>
+        </ul>
+      </div>
       <img
         alt="Copilot Navigator scrolling through pinned chats, projects and recent chats"
         className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border"
@@ -24,10 +36,6 @@ export function NavigatorUpsellContent({
         src={NAVIGATOR_HIGHLIGHT_GIF_URL}
         width={600}
       />
-      <p className="tw-m-0">
-        Navigator gives you a more flexible way to manage your long sessions, available for Plus
-        users.
-      </p>
       <div className="tw-flex tw-justify-end">
         <Button
           onClick={() => {
@@ -44,7 +52,7 @@ export function NavigatorUpsellContent({
 
 export class NavigatorUpsellModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Copilot Navigator is a Plus feature");
+    super(app, "Upgrade to Plus to use Copilot Navigator");
   }
 
   protected renderContent(close: () => void): React.ReactElement {

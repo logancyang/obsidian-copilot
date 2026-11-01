@@ -26,15 +26,19 @@ describe("NavigatorUpsell", () => {
   });
 
   describe("NavigatorUpsellContent()", () => {
-    it("previews the Navigator with its highlight GIF and says it is for Plus users for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
-      render(<NavigatorUpsellContent onUpgrade={jest.fn()} />);
+    it("explains what the Navigator does above its highlight GIF for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      const { container } = render(<NavigatorUpsellContent onUpgrade={jest.fn()} />);
 
-      expect(screen.getByRole("img").getAttribute("src")).toBe(NAVIGATOR_HIGHLIGHT_GIF_URL);
-      expect(
-        screen.getByText(
-          "Navigator gives you a more flexible way to manage your long sessions, available for Plus users."
-        )
-      ).toBeTruthy();
+      const intro = screen.getByText(/keeps all your agent chats in one sidebar/);
+      const gif = screen.getByRole("img");
+      expect(gif.getAttribute("src")).toBe(NAVIGATOR_HIGHLIGHT_GIF_URL);
+      expect(intro.compareDocumentPosition(gif) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(Array.from(container.querySelectorAll("li"), (li) => li.textContent)).toEqual([
+        "See every chat at a glance, grouped into Pinned, Projects and Recents",
+        "Keep each Project's chats together in its own folder",
+        "Spot which chats are running, waiting for you, or have a new result",
+        "Pin, archive, search and reorder chats without leaving your conversation",
+      ]);
     });
 
     it("opens the pricing page tagged with the navigator_dialog medium and reports the upgrade for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
@@ -56,10 +60,10 @@ describe("NavigatorUpsell", () => {
     afterEach(() => document.body.replaceChildren());
 
     describe("constructor()", () => {
-      it("titles the dialog as a Plus feature for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      it("titles the dialog with the upgrade message for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
         const modal = new NavigatorUpsellModal(new App());
 
-        expect(modal.titleEl.textContent).toBe("Copilot Navigator is a Plus feature");
+        expect(modal.titleEl.textContent).toBe("Upgrade to Plus to use Copilot Navigator");
       });
     });
 
