@@ -129,6 +129,17 @@ describe("SessionsSidebarRow", () => {
       expect(names).toEqual([null, "Pin chat", "Archive chat", "More actions"]);
     });
 
+    it("keeps the status's space and overlays the hover actions on the row's right end, so hovering moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderRow({ isSessionOpen: true });
+
+      const statusSlot = screen.getByLabelText("Session open").parentElement!;
+      expect(statusSlot.className).toContain("group-hover:tw-invisible");
+      expect(statusSlot.className).not.toContain("group-hover:tw-hidden");
+      expect(screen.getByRole("button", { name: "Pin chat" }).parentElement!.className).toContain(
+        "tw-absolute"
+      );
+    });
+
     it("pins an unpinned chat from its Pin chat button without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       const actions = inertChatActions({ onSetChatPinned: jest.fn(async () => {}) });
       const { onSelect } = renderRow({ actions });

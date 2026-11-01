@@ -28,7 +28,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
-  const hoverHidden = menuOpen ? "tw-hidden" : "group-focus-within:tw-hidden group-hover:tw-hidden";
+  const hoverHidden = menuOpen
+    ? "tw-invisible"
+    : "group-focus-within:tw-invisible group-hover:tw-invisible";
   const hoverShown = menuOpen
     ? "tw-block"
     : "tw-hidden group-focus-within:tw-block group-hover:tw-block";
@@ -51,7 +53,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         onClick={onToggle}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-transparent"
+          "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
         <Folder className="tw-size-4 tw-shrink-0 tw-text-muted" />
@@ -60,7 +62,10 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         <span
           className={cn(
             "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
-            hiddenStatus === "unread" && "tw-font-semibold"
+            hiddenStatus === "unread" && "tw-font-semibold",
+            menuOpen
+              ? "[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
+              : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
           )}
         >
           {project.name}
@@ -68,8 +73,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         {hiddenStatus === "unread" && (
           <span role="img" aria-label="Unread result" className="tw-sr-only" />
         )}
-        {/* The bubbled status sits at the right end, in line with chat statuses; hovering swaps it for the actions and
-            the chevron, which stay hidden otherwise so the list reads clean.
+        {/* The bubbled status sits at the right end, in line with chat statuses; hovering lays the actions and the
+            chevron over it, hidden otherwise so the list reads clean, and the name fades under them instead of reflowing.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <span
           className={cn(
@@ -79,10 +84,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         >
           {hiddenStatus !== "unread" && <SessionStatusIcon status={hiddenStatus} />}
         </span>
-        <span aria-hidden="true" className={cn("tw-w-10 tw-shrink-0", hoverShown)} />
         <ChevronRight
           className={cn(
-            "tw-size-4 tw-shrink-0 tw-text-muted",
+            "tw-absolute tw-right-2 tw-size-4 tw-text-muted",
             hoverShown,
             expanded && "tw-rotate-90"
           )}
@@ -90,7 +94,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       </button>
       <div
         className={cn(
-          "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center",
+          "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center tw-gap-1.5",
           menuOpen
             ? "tw-visible"
             : "tw-invisible group-focus-within:tw-visible group-hover:tw-visible"
