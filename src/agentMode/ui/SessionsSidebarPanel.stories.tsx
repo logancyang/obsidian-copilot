@@ -23,7 +23,7 @@ const meta = {
     waitingChatIds: none,
     attentionChatIds: none,
     openChatIds: none,
-    actions: inertChatActions(),
+    actions: inertChatActions({ onCloseSession: async () => {} }),
     onNewChat: () => {},
     onOpenChat: () => {},
     onToggleProject: () => {},
@@ -90,6 +90,9 @@ export const EveryGroupPopulated: StoryObj<SessionsSidebarPanelProps> = {
     projects,
     expandedProjectIds: new Set(["garden"]),
     activeChatIds: new Set(["chats/garden-1.md"]),
+    openChatIds: new Set(["chats/garden-1.md", "chats/recent-1.md", "chats/recent-2.md"]),
+    runningChatIds: new Set(["chats/recent-1.md"]),
+    attentionChatIds: new Set(["chats/pinned.md"]),
   },
   render: WithToggleableFolders,
 };

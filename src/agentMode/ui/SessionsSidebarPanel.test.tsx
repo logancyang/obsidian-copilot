@@ -371,6 +371,27 @@ describe("SessionsSidebarPanel", () => {
         ).toBeTruthy();
         expect(screen.getAllByLabelText(label)).toHaveLength(1);
       });
+
+      it("marks only chats with a live session and closes that session by its history id for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+        const actions = inertChatActions({
+          onCloseSession: jest.fn(async () => {}),
+          getChatBookmarkState: () => new Promise<never>(() => {}),
+        });
+        const { onOpenChat } = renderPanel({
+          items,
+          actions,
+          openChatIds: new Set(["chats/b.md"]),
+        });
+
+        expect(screen.getAllByLabelText("Session open")).toHaveLength(1);
+        expect(
+          within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText("Session open")
+        ).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+
+        expect(actions.onCloseSession).toHaveBeenCalledWith("chats/b.md");
+        expect(onOpenChat).not.toHaveBeenCalled();
+      });
     });
 
     describe("header", () => {
