@@ -645,6 +645,9 @@ export class AgentSessionManager {
     const persistence = this.opts.persistenceManager;
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
     await persistence.updateTopic(fileId, newTitle);
+    for (const [internalId, session] of this.sessions) {
+      if (this.getSessionSourcePath(internalId) === fileId) session.setLabel(newTitle);
+    }
   }
 
   async setChatPinned(id: string, pinned: boolean, pinnedAt = Date.now()): Promise<PinnedChat> {
