@@ -2,9 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { CHAT_AGENT_VIEWTYPE, SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
 import { makeFakeWorkspaceApp } from "@/agentMode/ui/testing/fakeWorkspaceApp";
+import { setSettings } from "@/settings/model";
 
 describe("useSessionsSidebarOpen", () => {
   describe("useSessionsSidebarOpen()", () => {
+    beforeEach(() => setSettings({ isPaidUser: true }));
     it("is false while the workspace has no sessions sidebar leaf for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const fake = makeFakeWorkspaceApp();
       fake.setLeaves({ [CHAT_AGENT_VIEWTYPE]: 1 });
@@ -42,6 +44,38 @@ describe("useSessionsSidebarOpen", () => {
 
       act(() => fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
 
+      expect(result.current).toBe(true);
+    });
+
+    it("is false for a user without Plus so the tab strip stays visible beside the blocked Navigator for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      setSettings({ isPaidUser: false });
+      const fake = makeFakeWorkspaceApp();
+      fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+
+      const { result } = renderHook(() => useSessionsSidebarOpen(fake.app));
+
+      expect(result.current).toBe(false);
+    });
+
+    it("stays true while entitlement is unknown so a Plus user's tab strip does not flash for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      setSettings({ isPaidUser: undefined });
+      const fake = makeFakeWorkspaceApp();
+      fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+
+      const { result } = renderHook(() => useSessionsSidebarOpen(fake.app));
+
+      expect(result.current).toBe(true);
+    });
+
+    it("follows the user losing and regaining Plus without a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      const fake = makeFakeWorkspaceApp();
+      fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+      const { result } = renderHook(() => useSessionsSidebarOpen(fake.app));
+
+      act(() => setSettings({ isPaidUser: false }));
+      expect(result.current).toBe(false);
+
+      act(() => setSettings({ isPaidUser: true }));
       expect(result.current).toBe(true);
     });
 

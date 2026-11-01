@@ -138,8 +138,12 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
     });
-    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR, () => {
-      void plugin.activateSessionsSidebar();
+    addCheckCommand(plugin, COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR, (checking) => {
+      // The Navigator is a Plus feature; unknown entitlement keeps the command for Plus users.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/813
+      if (getSettings().isPaidUser === false) return false;
+      if (!checking) void plugin.activateSessionsSidebar();
+      return true;
     });
     addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
       void plugin.toggleAgentView();

@@ -1,6 +1,7 @@
 import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
+import { setSettings } from "@/settings/model";
 import { act, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
@@ -23,6 +24,8 @@ function makeView(agentSessionManager: object | undefined) {
 
 describe("SessionsSidebarView", () => {
   describe("SessionsSidebarView", () => {
+    beforeEach(() => setSettings({ isPaidUser: true }));
+
     it("identifies itself with the sessions sidebar view type for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const { view } = makeView({});
 
@@ -48,6 +51,42 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onOpen());
 
       expect(screen.queryByRole("button")).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("shows only the Plus notice and upgrade button instead of the sessions list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+      setSettings({ isPaidUser: false });
+      const { view } = makeView({});
+
+      await act(() => view.onOpen());
+
+      expect(await screen.findByText("Copilot Navigator is for Plus users only")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Upgrade to Plus/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Sidebar content" })).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("keeps the sessions list while entitlement is unknown so a Plus user never sees the notice flash for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+      setSettings({ isPaidUser: undefined });
+      const { view } = makeView({});
+
+      await act(() => view.onOpen());
+
+      expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(screen.queryByText("Copilot Navigator is for Plus users only")).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("swaps between the notice and the sessions list as Plus is lost and regained without a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+      const { view } = makeView({});
+      await act(() => view.onOpen());
+      expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
+
+      act(() => setSettings({ isPaidUser: false }));
+      expect(screen.getByText("Copilot Navigator is for Plus users only")).toBeTruthy();
+
+      act(() => setSettings({ isPaidUser: true }));
+      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
       await act(() => view.onClose());
     });
   });

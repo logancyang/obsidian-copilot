@@ -44,6 +44,7 @@ import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRunti
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
 import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
+import { openSessionsSidebar } from "@/agentMode/ui/openSessionsSidebar";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -281,7 +282,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const attentionChatIds = useAttentionChatIds(manager);
 
   const handleOpenSessionsSidebar = useCallback(() => {
-    plugin.activateSessionsSidebar().catch((e) => logError("[AgentMode] open sidebar failed", e));
+    openSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
   }, [plugin]);
 
   const handleExitProject = useCallback(() => {

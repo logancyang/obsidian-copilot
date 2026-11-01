@@ -95,9 +95,34 @@ describe("commands", () => {
         name: "Open Copilot Agent sessions sidebar",
         icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
       });
-      command?.callback?.();
+      expect(command?.checkCallback?.(false)).toBe(true);
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
     });
+
+    it.each([
+      { who: "a Plus user", isPaidUser: true, available: true },
+      { who: "a user whose entitlement is still unknown", isPaidUser: undefined, available: true },
+      { who: "a user without Plus", isPaidUser: false, available: false },
+    ])(
+      "makes the sessions sidebar command available ($available) to $who for https://github.com/Brevilabs/obsidian-copilot-private/issues/813",
+      ({ isPaidUser, available }) => {
+        jest.mocked(isDesktopRuntime).mockReturnValue(true);
+        const commands: Command[] = [];
+        const plugin = {
+          addCommand: jest.fn((command: Command) => commands.push(command)),
+          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
+          app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        } as unknown as CopilotPlugin;
+        registerCommands(plugin, jest.fn());
+        const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+
+        jest.mocked(getSettings).mockReturnValue({ isPaidUser } as ReturnType<typeof getSettings>);
+
+        expect(command?.checkCallback?.(true)).toBe(available);
+        expect(command?.checkCallback?.(false)).toBe(available);
+        expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(available ? 1 : 0);
+      }
+    );
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
       const activeFile = markdownFile("Notes/Active.md");
