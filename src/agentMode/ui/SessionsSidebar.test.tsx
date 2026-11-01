@@ -41,6 +41,7 @@ class FakeManager {
     this.events.push("landing");
   });
   getChatHistoryItems = jest.fn(async () => this.items);
+  closeChatSession = jest.fn(async (_id: string) => {});
   getOpenChatIds = () => this.open;
   getRunningChatIds = () => this.running;
   getWaitingChatIds = () => this.waiting;
@@ -186,6 +187,31 @@ describe("SessionsSidebar", () => {
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
     });
 
+    it("closes a chat's live session from its row through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.open = new Set(["a.md"]);
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+
+      await waitFor(() => expect(manager.closeChatSession).toHaveBeenCalledWith("a.md"));
+    });
+
+    it("tells the user when a chat's live session cannot be closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.open = new Set(["a.md"]);
+      manager.closeChatSession.mockRejectedValueOnce(new Error("Agent is busy."));
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+
+      await waitFor(() =>
+        expect(Notice).toHaveBeenCalledWith("Could not close chat: Agent is busy.")
+      );
+    });
+
     it("lands on a new global chat in the Agent view after the view is revealed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
@@ -224,7 +250,7 @@ describe("SessionsSidebar", () => {
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
       manager.open = new Set(["b.md"]);
       act(() => manager.emit());
-      await screen.findByRole("button", { name: "Beta" });
+      await screen.findByRole("button", { name: /^Beta Session open$/ });
 
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta finished", 2_000)];
       manager.running = new Set(["b.md"]);

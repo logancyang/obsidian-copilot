@@ -11,7 +11,9 @@ const meta = {
     title: "Plan the fall product launch",
     status: "idle",
     active: false,
+    isSessionOpen: false,
     onSelect: () => {},
+    onCloseSession: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<SessionsSidebarRowProps>;
@@ -29,6 +31,14 @@ export const WaitingForPermission: StoryObj<SessionsSidebarRowProps> = {
 
 export const UnreadResult: StoryObj<SessionsSidebarRowProps> = {
   args: { status: "unread" },
+};
+
+export const SessionOpen: StoryObj<SessionsSidebarRowProps> = {
+  args: { isSessionOpen: true },
+};
+
+export const SessionOpenAndRunning: StoryObj<SessionsSidebarRowProps> = {
+  args: { isSessionOpen: true, status: "running" },
 };
 
 export const Active: StoryObj<SessionsSidebarRowProps> = {

@@ -3,7 +3,7 @@ import {
   resolveSessionStatus,
   type SessionStatus,
 } from "@/agentMode/ui/SessionsSidebarRow";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
 function renderRow(overrides: Partial<React.ComponentProps<typeof SessionsSidebarRow>> = {}) {
@@ -11,7 +11,9 @@ function renderRow(overrides: Partial<React.ComponentProps<typeof SessionsSideba
     title: "Plan the fall launch",
     status: "idle" as SessionStatus,
     active: false,
+    isSessionOpen: false,
     onSelect: jest.fn(),
+    onCloseSession: jest.fn(),
     ...overrides,
   };
   render(<SessionsSidebarRow {...props} />);
@@ -56,13 +58,43 @@ describe("SessionsSidebarRow", () => {
 
       expect(screen.getByRole("button").querySelector("[aria-label]")).toBeNull();
     });
+
+    it("marks an idle chat with a live session with a session-open dot for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true });
+
+      const row = screen.getByRole("button", { name: /Plan the fall launch/ });
+      expect(within(row).getByLabelText("Session open")).toBeTruthy();
+    });
+
+    it("shows only the more urgent status when a chat with a live session is also running for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true, status: "running" });
+
+      expect(screen.getByLabelText("Running")).toBeTruthy();
+      expect(screen.queryByLabelText("Session open")).toBeNull();
+    });
+
+    it("closes the live session from the row's gutter without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const { onSelect, onCloseSession } = renderRow({ isSessionOpen: true });
+
+      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+
+      expect(onCloseSession).toHaveBeenCalledTimes(1);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("offers no close button when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: false, status: "unread" });
+
+      expect(screen.queryByRole("button", { name: "Close chat" })).toBeNull();
+      expect(screen.queryByLabelText("Session open")).toBeNull();
+    });
   });
 
   describe("resolveSessionStatus()", () => {
     it.each([
       [{ waiting: true, unread: true, running: true }, "waiting"],
-      [{ waiting: false, unread: true, running: true }, "unread"],
-      [{ waiting: false, unread: false, running: true }, "running"],
+      [{ waiting: false, unread: true, running: true }, "running"],
+      [{ waiting: false, unread: true, running: false }, "unread"],
       [{ waiting: false, unread: false, running: false }, "idle"],
     ] as const)("resolves %j to %s so the most urgent status wins", (flags, expected) => {
       expect(resolveSessionStatus(flags)).toBe(expected);
