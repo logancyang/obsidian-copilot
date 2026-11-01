@@ -92,7 +92,7 @@ describe("commands", () => {
       const { commands, plugin } = register();
       const command = find(commands);
       expect(command).toMatchObject({
-        name: "Open Copilot Agent sessions sidebar",
+        name: "Open Copilot Navigator",
         icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
       });
       command?.callback?.();
