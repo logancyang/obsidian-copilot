@@ -107,12 +107,13 @@ describe("SessionsSidebarPanel", () => {
       }
     );
 
-    it("marks a row unread when the saved chat is flagged as needing attention for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("clears the unread dot once the live attention flag clears even if the saved snapshot still carries it for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderPanel({
         items: [chat("chats/flagged.md", "Flagged chat", 1_000, { needsAttention: true })],
+        attentionChatIds: NONE,
       });
 
-      expect(screen.getByLabelText("Unread result")).toBeTruthy();
+      expect(screen.queryByLabelText("Unread result")).toBeNull();
     });
 
     it("shows no status on an idle chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
