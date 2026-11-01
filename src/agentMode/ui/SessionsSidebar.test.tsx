@@ -5,7 +5,6 @@ import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import * as projectsState from "@/projects/state";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";
@@ -32,17 +31,12 @@ jest.mock("@/agentMode/ui/ArchivedChatsModal", () => ({
 
 const NONE: ReadonlySet<string> = new Set();
 
-function chat(
-  id: string,
-  title: string,
-  lastAccessedMs: number,
-  extra: Partial<ChatHistoryItem> = {}
-) {
+function chat(id: string, title: string, createdMs: number, extra: Partial<ChatHistoryItem> = {}) {
   return {
     id,
     title,
-    createdAt: new Date(1_000),
-    lastAccessedAt: new Date(lastAccessedMs),
+    createdAt: new Date(createdMs),
+    lastAccessedAt: new Date(createdMs),
     ...extra,
   } satisfies ChatHistoryItem;
 }
@@ -114,11 +108,8 @@ class FakeLocalStorage {
   saveLocalStorage = (key: string, value: unknown) => void this.store.set(key, value);
 }
 
-const usageManager = new RecentUsageManager<string>();
-
 function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage()) {
   jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
-    getProjectUsageTimestampsManager: () => usageManager,
     deleteProject: jest.fn(async () => {}),
   } as unknown as ProjectFileManager);
   const plugin = {
@@ -421,11 +412,28 @@ describe("SessionsSidebar", () => {
       expect(await screen.findByRole("button", { name: "Seedling notes" })).toBeTruthy();
     });
 
-    it("orders projects by last activity and leaves archived projects out for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+    it("keeps a folded group folded after a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Loose chat", 1_000)];
+      const storage = new FakeLocalStorage();
+      renderSidebar(manager, storage);
+      await screen.findByRole("button", { name: "Loose chat" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Recents" }));
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+
+      cleanup();
+      renderSidebar(manager, storage);
+      const header = await screen.findByRole("button", { name: "Recents" });
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+    });
+
+    it("orders projects newest created first, ignoring recent use, and leaves archived projects out for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       projectsState.updateCachedProjectRecords([
-        projectRecord("stale", "Stale project", { UsageTimestamps: 1_000 }),
-        projectRecord("fresh", "Fresh project", { UsageTimestamps: 5_000 }),
-        projectRecord("shelved", "Shelved project", { UsageTimestamps: 9_000, archivedAt: 9_500 }),
+        projectRecord("stale", "Stale project", { created: 1_000, UsageTimestamps: 9_000 }),
+        projectRecord("fresh", "Fresh project", { created: 5_000, UsageTimestamps: 1_000 }),
+        projectRecord("shelved", "Shelved project", { created: 9_000, archivedAt: 9_500 }),
       ]);
       renderSidebar(new FakeManager());
 

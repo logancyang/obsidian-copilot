@@ -25,6 +25,8 @@ function baseProps(
     waitingChatIds: NONE,
     attentionChatIds: NONE,
     openChatIds: NONE,
+    collapsedGroups: NONE,
+    onToggleGroup: jest.fn(),
     actions: inertChatActions({ getChatBookmarkState: () => new Promise<never>(() => {}) }),
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
@@ -52,7 +54,10 @@ function section(name: string): HTMLElement {
 function chatTitles(root: HTMLElement): string[] {
   return within(root)
     .queryAllByRole("button")
-    .filter((button) => /^(Chat|Pin|Rec)/.test(button.textContent ?? ""))
+    .filter(
+      (button) =>
+        !button.hasAttribute("aria-expanded") && /^(Chat|Pin|Rec)/.test(button.textContent ?? "")
+    )
     .map((button) => (button.textContent ?? "").trim());
 }
 
@@ -132,10 +137,53 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.getByRole("button", { name: "Project 1" })).toBeTruthy();
         expect(screen.queryByText("No chats yet")).toBeNull();
       });
+
+      it.each([
+        ["Pinned", "pinned"],
+        ["Projects", "projects"],
+        ["Recents", "recents"],
+      ])(
+        "folds the %s group from its header for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
+        (title, groupId) => {
+          const { onToggleGroup } = renderPanel({
+            items: [
+              sidebarChat("chats/pin.md", "Pinned chat", 1, { pinnedAt: 5 }),
+              sidebarChat("chats/rec.md", "Recent chat", 2),
+            ],
+            projects: projects(1),
+          });
+
+          const header = within(section(title)).getByRole("button", { name: title });
+          expect(header.getAttribute("aria-expanded")).toBe("true");
+          fireEvent.click(header);
+
+          expect(onToggleGroup).toHaveBeenCalledWith(groupId);
+        }
+      );
+
+      it("hides the rows of a folded group but keeps its header for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({
+          items: [
+            sidebarChat("chats/pin.md", "Pinned chat", 1, { pinnedAt: 5 }),
+            sidebarChat("chats/rec.md", "Recent chat", 2),
+          ],
+          projects: projects(1),
+          collapsedGroups: new Set(["pinned", "projects"]),
+        });
+
+        expect(
+          within(section("Pinned"))
+            .getByRole("button", { name: "Pinned" })
+            .getAttribute("aria-expanded")
+        ).toBe("false");
+        expect(screen.queryByText("Pinned chat")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Project 1" })).toBeNull();
+        expect(within(section("Recents")).getByText("Recent chat")).toBeTruthy();
+      });
     });
 
     describe("projects", () => {
-      it("lists projects in the order given, the first 5 before Show more for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      it("lists the first 5 projects before Show more for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         renderPanel({ projects: projects(7) });
 
         const folders = within(section("Projects"))
@@ -169,6 +217,12 @@ describe("SessionsSidebarPanel", () => {
 
         expect(onToggleProject).toHaveBeenCalledWith("p1");
         expect(onOpenChat).not.toHaveBeenCalled();
+      });
+
+      it("says an expanded project has no chats instead of leaving an empty gap for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({ projects: projects(2), expandedProjectIds: new Set(["p1"]) });
+
+        expect(within(section("Projects")).getAllByText("No chats")).toHaveLength(1);
       });
 
       it("hides the chats of a collapsed project", () => {
