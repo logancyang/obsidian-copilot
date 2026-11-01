@@ -71,19 +71,12 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
         </span>
       );
     case "unread":
-      return (
-        <span
-          role="img"
-          aria-label="Unread result"
-          className="tw-size-2 tw-shrink-0 tw-rounded-full tw-bg-interactive-accent"
-        />
-      );
     case "idle":
       return isSessionOpen ? (
         <span
           role="img"
           aria-label="Session open"
-          className="tw-size-1.5 tw-shrink-0 tw-rounded-full tw-bg-interactive-accent"
+          className="tw-bg-green tw-size-2 tw-shrink-0 tw-rounded-full"
         />
       ) : null;
   }
@@ -144,7 +137,15 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           "peer-hover:[&_[data-status-gutter]]:tw-invisible peer-focus-visible:[&_[data-status-gutter]]:tw-invisible"
         )}
       >
-        <RecentChatTitle title={item.title} />
+        {/* An unseen result reads like unread mail, a bold title, so the gutter's one dot keeps meaning "session open".
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+        <RecentChatTitle
+          title={item.title}
+          className={cn(status === "unread" && "tw-font-semibold")}
+        />
+        {status === "unread" && (
+          <span role="img" aria-label="Unread result" className="tw-sr-only" />
+        )}
         {projectName && <RecentChatProjectBadge name={projectName} />}
         {/* The gutter leads visually but follows the title in the DOM, so the row's accessible name starts with the title.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}

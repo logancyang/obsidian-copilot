@@ -115,67 +115,71 @@ export function RecentChatMenu({
       </DropdownMenuTrigger>
       {/* The menu renders in the row's own window, and React events bubble out of the portal to the row, which would open the chat.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
-      <DropdownMenuContent
-        align="end"
-        container={rowBody}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatPinned)(item.id, !pinned)}>
-          {pinned ? <PinOff /> : <Pin />}
-          {pinned ? "Unpin chat" : "Pin chat"}
-        </DropdownMenuItem>
-        {isNoteBacked && (
-          <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
-            <FileText />
-            Open chat note
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuItem
-          onSelect={() =>
-            new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
-          }
+      {/* Closing hides More actions with the row's hover actions, so a menu still fading out would lose its anchor and jump to the window corner.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+      {open && (
+        <DropdownMenuContent
+          align="end"
+          container={rowBody}
+          onClick={(event) => event.stopPropagation()}
         >
-          <Pencil />
-          Rename
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
-          <Link />
-          Copy chat link
-        </DropdownMenuItem>
-        <ChatBookmarkMenuItem
-          getBookmarkState={readBookmarkState}
-          onSetBookmarked={(bookmarked) =>
-            safeAsyncHandler(onSetChatBookmarked)(item.id, item.title, bookmarked)
-          }
-        />
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatArchived)(item.id, true)}>
-          <Archive />
-          Archive chat
-        </DropdownMenuItem>
-        {isSessionOpen && onCloseSession && (
-          <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
-            <Power />
-            Close chat
+          <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatPinned)(item.id, !pinned)}>
+            {pinned ? <PinOff /> : <Pin />}
+            {pinned ? "Unpin chat" : "Pin chat"}
           </DropdownMenuItem>
-        )}
-        <DropdownMenuItem
-          className="tw-text-error focus:tw-text-error"
-          onSelect={() =>
-            new ConfirmModal(
-              app,
-              () => onDeleteChat(item.id),
-              describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined),
-              "Delete chat",
-              "Delete",
-              "Cancel"
-            ).open()
-          }
-        >
-          <Trash2 />
-          Delete
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+          {isNoteBacked && (
+            <DropdownMenuItem onSelect={() => onOpenSourceFile(item.id)}>
+              <FileText />
+              Open chat note
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onSelect={() =>
+              new RenameChatModal(app, item.title, (title) => onUpdateTitle(item.id, title)).open()
+            }
+          >
+            <Pencil />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => safeAsyncHandler(onCopyChatLink)(item.id)}>
+            <Link />
+            Copy chat link
+          </DropdownMenuItem>
+          <ChatBookmarkMenuItem
+            getBookmarkState={readBookmarkState}
+            onSetBookmarked={(bookmarked) =>
+              safeAsyncHandler(onSetChatBookmarked)(item.id, item.title, bookmarked)
+            }
+          />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => safeAsyncHandler(onSetChatArchived)(item.id, true)}>
+            <Archive />
+            Archive chat
+          </DropdownMenuItem>
+          {isSessionOpen && onCloseSession && (
+            <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
+              <Power />
+              Close chat
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            className="tw-text-error focus:tw-text-error"
+            onSelect={() =>
+              new ConfirmModal(
+                app,
+                () => onDeleteChat(item.id),
+                describeChatDelete(item.backendId ? backendRegistry[item.backendId] : undefined),
+                "Delete chat",
+                "Delete",
+                "Cancel"
+              ).open()
+            }
+          >
+            <Trash2 />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      )}
     </DropdownMenu>
   );
 }

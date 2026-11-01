@@ -180,25 +180,29 @@ export function AgentProjectRowMenu({
           <MoreHorizontal className="tw-size-4" />
         </RowActionButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" container={rowBody}>
-        <DropdownMenuItem onSelect={reveal}>
-          <FolderSearch />
-          Reveal in vault
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={edit}>
-          <Pencil />
-          Edit project
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => void archive()}>
-          <Archive />
-          Archive project
-        </DropdownMenuItem>
-        <DropdownMenuItem className="tw-text-error focus:tw-text-error" onSelect={remove}>
-          <Trash2 />
-          Delete project
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+      {/* Reveal in vault switches the sidebar to the file explorer, so a menu still fading out would lose its anchor and jump to the window corner.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+      {open && (
+        <DropdownMenuContent align="end" container={rowBody}>
+          <DropdownMenuItem onSelect={reveal}>
+            <FolderSearch />
+            Reveal in vault
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={edit}>
+            <Pencil />
+            Edit project
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => void archive()}>
+            <Archive />
+            Archive project
+          </DropdownMenuItem>
+          <DropdownMenuItem className="tw-text-error focus:tw-text-error" onSelect={remove}>
+            <Trash2 />
+            Delete project
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      )}
     </DropdownMenu>
   );
 }
