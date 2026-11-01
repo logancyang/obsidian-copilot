@@ -14,9 +14,11 @@ const archivedChat = (id: string, title: string, archivedAt: number): ChatHistor
 });
 
 const CHATS = [
-  archivedChat("chats/old.md", "Old research", 1_000),
-  archivedChat("chats/new.md", "Newly shelved", 3_000),
+  archivedChat("chats/old.md", "Old research", Date.parse("2026-08-28T12:00:00Z")),
+  archivedChat("chats/new.md", "Newly shelved", Date.parse("2026-10-31T12:00:00Z")),
 ];
+
+const rowOf = (title: string) => screen.getByText(title).closest<HTMLElement>("[role=button]")!;
 
 function renderList(overrides: Partial<React.ComponentProps<typeof ArchivedChatsList>> = {}) {
   const props = {
@@ -48,30 +50,56 @@ describe("ArchivedChatsModal", () => {
       expect(rowTitles()).toEqual(["Newly shelved", "Old research"]);
     });
 
-    it("opens the chat whose Open button is clicked", () => {
+    it("shows the full date each chat was archived", () => {
+      renderList();
+
+      expect(within(rowOf("Newly shelved")).getByText("October 31, 2026")).toBeTruthy();
+      expect(within(rowOf("Old research")).getByText("August 28, 2026")).toBeTruthy();
+    });
+
+    it("opens a chat when its row is clicked", () => {
       const { onOpen } = renderList();
 
-      fireEvent.click(
-        within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-          name: "Open",
-        })
-      );
+      fireEvent.click(screen.getByText("Old research"));
 
       expect(onOpen).toHaveBeenCalledWith("chats/old.md");
     });
 
-    it("unarchives the chat whose Unarchive button is clicked and drops it from the list", async () => {
-      const { onUnarchive } = renderList();
+    it.each(["Enter", " "])("opens a chat when its focused row receives %j", (key) => {
+      const { onOpen } = renderList();
+
+      fireEvent.keyDown(rowOf("Old research"), { key });
+
+      expect(onOpen).toHaveBeenCalledWith("chats/old.md");
+    });
+
+    it("offers no Open button because the row itself opens the chat", () => {
+      renderList();
+
+      expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    });
+
+    it("hides the unarchive icon button until the row is hovered or focused while keeping it focusable", () => {
+      renderList();
+
+      const unarchive = within(rowOf("Old research")).getByRole("button", { name: "Unarchive" });
+
+      expect(unarchive.parentElement!.className).toContain("tw-opacity-0");
+      expect(unarchive.parentElement!.className).toContain("focus-within:tw-opacity-100");
+      expect(unarchive.parentElement!.className).toContain("group-hover:tw-opacity-100");
+      expect(unarchive.getAttribute("title")).toBe("Unarchive");
+      expect(unarchive.textContent).toBe("");
+    });
+
+    it("unarchives the chat whose Unarchive icon button is clicked, drops it from the list, and does not open it", async () => {
+      const { onUnarchive, onOpen } = renderList();
 
       await act(async () => {
-        fireEvent.click(
-          within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-            name: "Unarchive",
-          })
-        );
+        fireEvent.click(within(rowOf("Old research")).getByRole("button", { name: "Unarchive" }));
       });
 
       expect(onUnarchive).toHaveBeenCalledWith("chats/old.md");
+      expect(onOpen).not.toHaveBeenCalled();
       expect(rowTitles()).toEqual(["Newly shelved"]);
     });
 
@@ -82,11 +110,7 @@ describe("ArchivedChatsModal", () => {
       renderList({ onUnarchive });
 
       await act(async () => {
-        fireEvent.click(
-          within(screen.getByText("Old research").closest("li")!).getByRole("button", {
-            name: "Unarchive",
-          })
-        );
+        fireEvent.click(within(rowOf("Old research")).getByRole("button", { name: "Unarchive" }));
       });
 
       expect(rowTitles()).toEqual(["Newly shelved", "Old research"]);
@@ -136,13 +160,13 @@ describe("ArchivedChatsModal", () => {
         await act(async () => ReactModal.prototype.onClose.call(modal));
       });
 
-      it("opens the chosen chat and closes the dialog", async () => {
+      it("opens the clicked chat and closes the dialog", async () => {
         const onOpen = jest.fn(async () => {});
         const modal = await openModal({ onUnarchive: jest.fn(), onOpen });
         const close = jest.spyOn(modal, "close");
 
         await act(async () => {
-          fireEvent.click(within(modal.contentEl).getAllByRole("button", { name: "Open" })[0]);
+          fireEvent.click(within(modal.contentEl).getByText("Newly shelved"));
         });
 
         expect(onOpen).toHaveBeenCalledWith("chats/new.md");
