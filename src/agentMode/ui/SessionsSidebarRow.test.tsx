@@ -87,7 +87,17 @@ describe("SessionsSidebarRow", () => {
       expect(screen.getByText("Plan the fall launch").className).not.toContain("tw-font-semibold");
     });
 
-    it("closes the live session from the row's gutter without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("places the status at the row's right end, after the title, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true, status: "waiting" });
+
+      const row = screen.getByRole("button", { name: /Plan the fall launch/ });
+      const title = within(row).getByText("Plan the fall launch");
+      const status = within(row).getByLabelText("Waiting for permission");
+      expect(title.compareDocumentPosition(status) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(row.querySelector(".tw-order-first")).toBeNull();
+    });
+
+    it("closes the live session from the row's right end without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const { onSelect, onCloseSession } = renderRow({ isSessionOpen: true });
 
       fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
