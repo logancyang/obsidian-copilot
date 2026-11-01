@@ -25,5 +25,16 @@ describe("AgentLandingStack", () => {
         "Shelf",
       ]);
     });
+
+    it("centers the greeting and message box vertically when there is no shelf below them for https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      const { container } = render(
+        <AgentLandingStack hero={<div>Hero</div>} composer={<div>Composer</div>} />
+      );
+
+      const children = Array.from(container.children);
+      expect(children.map((node) => node.textContent)).toEqual(["", "Hero", "Composer", ""]);
+      expect(children[0].classList.contains("tw-flex-1")).toBe(true);
+      expect(children[children.length - 1].classList.contains("tw-flex-1")).toBe(true);
+    });
   });
 });
