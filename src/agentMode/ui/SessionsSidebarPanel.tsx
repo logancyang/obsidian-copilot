@@ -150,7 +150,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   const statusOf = (item: ChatHistoryItem) =>
     resolveSessionStatus({
       waiting: waitingChatIds.has(item.id),
-      unread: !!item.needsAttention || attentionChatIds.has(item.id),
+      unread: attentionChatIds.has(item.id),
       running: runningChatIds.has(item.id),
     });
 

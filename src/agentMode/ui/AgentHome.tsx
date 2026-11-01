@@ -22,6 +22,10 @@ import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeRel
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
+  nextProjectLandingPlacement,
+  type ProjectLandingPlacement,
+} from "@/agentMode/ui/projectLandingPlacement";
+import {
   AgentHomeShelf,
   landingSectionsForSidebar,
   type AgentHomeShelfSection,
@@ -397,19 +401,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   });
 
   const landingVisitKey = isProjectLanding ? `${activeProjectId}\0${sessionId}` : null;
-  const placementRef = useRef<{ key: string; standalone: boolean } | null>(null);
-  if (landingVisitKey === null) {
-    placementRef.current = null;
-  } else if (chatHistorySettled) {
-    const hasChats = chatHistoryItems.length > 0;
-    if (placementRef.current?.key !== landingVisitKey) {
-      placementRef.current = { key: landingVisitKey, standalone: !hasChats };
-    } else if (placementRef.current.standalone && hasChats) {
-      placementRef.current = { key: landingVisitKey, standalone: false };
-    }
-  } else if (placementRef.current?.key !== landingVisitKey) {
-    placementRef.current = null;
-  }
+  const placementRef = useRef<ProjectLandingPlacement | null>(null);
+  placementRef.current = nextProjectLandingPlacement(placementRef.current, landingVisitKey, {
+    settled: chatHistorySettled,
+    chatCount: chatHistoryItems.length,
+    archivedChatCount: archivedChatItems.length,
+  });
   const projectPlacement = placementRef.current;
   const isProjectContextInline = sidebarOpen || projectPlacement?.standalone === true;
 
