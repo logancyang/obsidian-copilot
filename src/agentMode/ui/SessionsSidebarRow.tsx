@@ -69,7 +69,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
 }) => (
   <div
     className={cn(
-      "tw-group tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
+      "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
       active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
     )}
   >
@@ -87,13 +87,13 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
       <RecentChatTitle title={title} className={cn(status === "unread" && "tw-font-semibold")} />
       {status === "unread" && <span role="img" aria-label="Unread result" className="tw-sr-only" />}
-      {/* Titles start flush with the panel and the status sits at the right end, where hovering a live chat swaps it
-          for close; a long title ellipsizes before the status.
+      {/* Titles start flush with the panel and the status sits at the right end, where hovering a live chat lays close
+          over it; the status keeps its space, so a long title's ellipsis stays put.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
       <span
         className={cn(
           "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
-          isSessionOpen && "group-focus-within:tw-hidden group-hover:tw-hidden"
+          isSessionOpen && "group-focus-within:tw-invisible group-hover:tw-invisible"
         )}
       >
         <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
@@ -106,7 +106,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         title="Close chat"
         onClick={onCloseSession}
         className={cn(
-          "clickable-icon tw-mr-1.5 tw-hidden tw-size-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-sm tw-p-0",
+          "clickable-icon tw-absolute tw-right-1.5 tw-hidden tw-size-5 tw-items-center tw-justify-center tw-rounded-sm tw-p-0",
           "group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
