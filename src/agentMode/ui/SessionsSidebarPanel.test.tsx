@@ -641,7 +641,7 @@ describe("SessionsSidebarPanel", () => {
     });
 
     describe("header", () => {
-      it("names the sidebar Copilot with the brand icon, search and options on the same row, and New chat below for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      it("names the sidebar Copilot with the brand icon, then New chat, search and options on the same row for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         const { container } = render(
           <AppContext.Provider value={new App()}>
             <SessionsSidebarPanel {...baseProps()} />
@@ -651,10 +651,11 @@ describe("SessionsSidebarPanel", () => {
         const heading = screen.getByRole("heading", { name: "Copilot" });
         expect(heading.querySelector("svg")).not.toBeNull();
         const headerRow = heading.parentElement!;
-        expect(within(headerRow).getByRole("button", { name: "Search chats" })).toBeTruthy();
-        expect(within(headerRow).getByRole("button", { name: "Sidebar options" })).toBeTruthy();
-        expect(within(headerRow).queryByRole("button", { name: "New chat" })).toBeNull();
-        expect(headerRow.nextElementSibling).toBe(screen.getByRole("button", { name: "New chat" }));
+        expect(
+          within(headerRow)
+            .getAllByRole("button")
+            .map((button) => button.getAttribute("aria-label"))
+        ).toEqual(["New chat", "Search chats", "Sidebar options"]);
         container.remove();
       });
 
