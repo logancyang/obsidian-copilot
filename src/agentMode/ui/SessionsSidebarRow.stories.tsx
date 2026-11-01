@@ -54,5 +54,6 @@ export const LongTitle: StoryObj<SessionsSidebarRowProps> = {
     title:
       "Investigate why the nightly sync keeps overwriting the reading list after a rename on mobile",
     status: "waiting",
+    isSessionOpen: true,
   },
 };

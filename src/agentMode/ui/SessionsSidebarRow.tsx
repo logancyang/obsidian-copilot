@@ -69,13 +69,36 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
 }) => (
   <div
     className={cn(
-      "tw-relative tw-rounded-md hover:tw-bg-modifier-hover",
+      "tw-group tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
       active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
     )}
   >
-    {/* The close button covers the status gutter, so hovering or focusing it hides the indicator beneath; every row
-        keeps the gutter so a status appearing never shifts the title.
-        https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+    <button
+      type="button"
+      aria-current={active ? "true" : undefined}
+      onClick={onSelect}
+      className={cn(
+        "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+        "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
+        "hover:tw-bg-transparent focus-visible:tw-bg-modifier-hover"
+      )}
+    >
+      {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+      <RecentChatTitle title={title} className={cn(status === "unread" && "tw-font-semibold")} />
+      {status === "unread" && <span role="img" aria-label="Unread result" className="tw-sr-only" />}
+      {/* Titles start flush with the panel and the status sits at the right end, where hovering a live chat swaps it
+          for close; a long title ellipsizes before the status.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+      <span
+        className={cn(
+          "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+          isSessionOpen && "group-focus-within:tw-hidden group-hover:tw-hidden"
+        )}
+      >
+        <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
+      </span>
+    </button>
     {isSessionOpen && (
       <button
         type="button"
@@ -83,37 +106,12 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         title="Close chat"
         onClick={onCloseSession}
         className={cn(
-          "clickable-icon tw-peer tw-absolute tw-left-1.5 tw-top-1/2 tw-flex tw-size-5 -tw-translate-y-1/2",
-          "tw-items-center tw-justify-center tw-rounded-sm tw-p-0 tw-opacity-0",
-          "hover:tw-opacity-100 focus-visible:tw-opacity-100"
+          "clickable-icon tw-mr-1.5 tw-hidden tw-size-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-sm tw-p-0",
+          "group-focus-within:tw-flex group-hover:tw-flex"
         )}
       >
         <X className="tw-size-3.5" />
       </button>
     )}
-    <button
-      type="button"
-      aria-current={active ? "true" : undefined}
-      onClick={onSelect}
-      className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-w-full tw-min-w-0 tw-items-center tw-gap-2",
-        "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
-        "hover:tw-bg-transparent focus-visible:tw-bg-modifier-hover",
-        "peer-hover:[&_[data-status-gutter]]:tw-invisible peer-focus-visible:[&_[data-status-gutter]]:tw-invisible"
-      )}
-    >
-      {/* An unseen result reads like unread mail, a bold title, so the gutter's one dot keeps meaning "session open".
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      <RecentChatTitle title={title} className={cn(status === "unread" && "tw-font-semibold")} />
-      {status === "unread" && <span role="img" aria-label="Unread result" className="tw-sr-only" />}
-      {/* The gutter leads visually but follows the title in the DOM, so the row's accessible name starts with the title.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      <span
-        data-status-gutter
-        className="tw-order-first tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center"
-      >
-        <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
-      </span>
-    </button>
   </div>
 );
