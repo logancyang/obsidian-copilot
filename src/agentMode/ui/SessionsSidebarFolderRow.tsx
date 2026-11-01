@@ -41,7 +41,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         onClick={onToggle}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-          "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none hover:tw-bg-transparent"
+          "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
         <Folder className="tw-size-4 tw-shrink-0 tw-text-muted" />

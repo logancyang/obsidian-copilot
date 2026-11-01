@@ -469,9 +469,18 @@ describe("SessionsSidebarPanel", () => {
         expect(
           within(headerRow)
             .getAllByRole("button")
-            .map((button) => button.getAttribute("aria-label"))
+            .map((button) => button.getAttribute("aria-label") ?? button.textContent)
         ).toEqual(["New chat", "Search chats", "Sidebar options"]);
         container.remove();
+      });
+
+      it("shows New chat as a primary button named by its own label, with no hover tooltip, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel();
+
+        const newChat = screen.getByRole("button", { name: "New chat" });
+        expect(newChat.classList.contains("mod-cta")).toBe(true);
+        expect(newChat.hasAttribute("aria-label")).toBe(false);
+        expect(newChat.hasAttribute("title")).toBe(false);
       });
 
       it("starts a new chat from the New chat button", () => {

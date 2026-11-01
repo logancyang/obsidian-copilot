@@ -178,17 +178,15 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           <span className="tw-truncate">Copilot</span>
         </h2>
         {/* New chat keeps its label while the header has room, down to Obsidian's default sidebar width, and drops to its icon
-            in a narrower sidebar.
+            in a narrower sidebar; the label stays as its screen-reader name, since an aria-label would show as a tooltip.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <Button
-          variant="ghost2"
-          aria-label="New chat"
-          title="New chat"
-          className="tw-h-8 tw-shrink-0 tw-gap-1.5 tw-px-1.5 tw-text-normal"
+          variant="default"
+          className="tw-h-7 tw-shrink-0 tw-gap-1.5 tw-px-2"
           onClick={onNewChat}
         >
           <SquarePen className="tw-size-4" />
-          <span className="tw-hidden @[258px]/sidebar-header:tw-inline">New chat</span>
+          <span className="tw-sr-only @[258px]/sidebar-header:tw-not-sr-only">New chat</span>
         </Button>
         <Button
           variant="ghost2"
