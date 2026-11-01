@@ -19,6 +19,7 @@ jest.mock("@/projects/ProjectFileManager", () => ({
 }));
 
 import { AgentProjectRowActions, AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
+import { simulateMenuExitAnimation } from "@/agentMode/ui/testing/menuExitAnimation";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { sidebarProject } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
@@ -43,6 +44,13 @@ function openMenu(): HTMLElement {
     ctrlKey: false,
   });
   return screen.getByRole("menu");
+}
+
+function ControlledMenu(): React.ReactElement {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <AgentProjectRowMenu app={new App()} project={PROJECT} open={open} onOpenChange={setOpen} />
+  );
 }
 
 describe("AgentProjectRowActions", () => {
@@ -79,18 +87,7 @@ describe("AgentProjectRowActions", () => {
   describe("AgentProjectRowMenu()", () => {
     it("offers Reveal, Edit, Archive and Delete for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       mockFileManager();
-      const Controlled = () => {
-        const [open, setOpen] = React.useState(false);
-        return (
-          <AgentProjectRowMenu
-            app={new App()}
-            project={PROJECT}
-            open={open}
-            onOpenChange={setOpen}
-          />
-        );
-      };
-      render(<Controlled />);
+      render(<ControlledMenu />);
 
       const labels = within(openMenu())
         .getAllByRole("menuitem")
@@ -168,6 +165,19 @@ describe("AgentProjectRowActions", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Reveal in vault" }));
 
       expect(Notice).toHaveBeenCalledWith(expect.stringContaining("Garden plans"));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/802 removes the menu as soon as an item is chosen instead of animating it out after Reveal in vault hides its row", () => {
+      mockFileManager();
+      render(<ControlledMenu />);
+      const exitAnimation = simulateMenuExitAnimation();
+      try {
+        fireEvent.click(within(openMenu()).getByRole("menuitem", { name: "Reveal in vault" }));
+
+        expect(document.querySelector('[role="menu"]')).toBeNull();
+      } finally {
+        exitAnimation.mockRestore();
+      }
     });
   });
 });
