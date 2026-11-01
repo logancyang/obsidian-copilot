@@ -1,5 +1,5 @@
 import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
-import { COPILOT_AGENT_ICON_ID, SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
+import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { ItemView, WorkspaceLeaf } from "obsidian";
@@ -20,7 +20,7 @@ export default class SessionsSidebarView extends ItemView {
   }
 
   getIcon(): string {
-    return COPILOT_AGENT_ICON_ID;
+    return "panel-left";
   }
 
   getDisplayText(): string {
