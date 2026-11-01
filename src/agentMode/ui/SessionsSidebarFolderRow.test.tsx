@@ -61,6 +61,12 @@ describe("SessionsSidebarFolderRow", () => {
       }
     );
 
+    it("bolds the folder name when a hidden chat has an unseen result for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderFolderRow({ hiddenStatus: "unread" });
+
+      expect(screen.getByText("Garden plans").className).toContain("tw-font-semibold");
+    });
+
     it("shows no status when nothing hidden needs the user", () => {
       renderFolderRow({ hiddenStatus: "idle" });
 

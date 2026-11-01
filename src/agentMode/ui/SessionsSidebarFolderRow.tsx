@@ -43,10 +43,21 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
           "tw-rounded-md tw-bg-transparent tw-py-1.5 tw-pl-8 tw-pr-2 tw-text-left tw-shadow-none"
         )}
       >
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal">
+        {/* A hidden chat's unseen result bolds the folder name, as it bolds a chat title.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        <span
+          className={cn(
+            "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
+            hiddenStatus === "unread" && "tw-font-semibold"
+          )}
+        >
           {project.name}
         </span>
-        <SessionStatusIcon status={hiddenStatus} />
+        {hiddenStatus === "unread" ? (
+          <span role="img" aria-label="Unread result" className="tw-sr-only" />
+        ) : (
+          <SessionStatusIcon status={hiddenStatus} />
+        )}
         <span aria-hidden="true" className="tw-w-5 tw-shrink-0" />
         <ChevronRight
           className={cn("tw-size-4 tw-shrink-0 tw-text-muted", expanded && "tw-rotate-90")}
