@@ -1,7 +1,7 @@
+import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
-import { SessionsSidebarNewProjectRow } from "@/agentMode/ui/SessionsSidebarNewProjectRow";
 import {
   SessionsSidebarRow,
   mostUrgentStatus,
@@ -26,7 +26,7 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
-import { err2String } from "@/utils";
+import { cn } from "@/lib/utils";
 import { Archive, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 
@@ -50,18 +50,26 @@ interface SessionsSidebarPanelProps {
   onViewArchived: () => void;
 }
 
-const Group: React.FC<{ title: string; action?: React.ReactNode; children: React.ReactNode }> = ({
-  title,
-  action,
-  children,
-}) => (
+interface GroupProps {
+  title: string;
+  action?: React.ReactNode;
+  actionPinned?: boolean;
+  children: React.ReactNode;
+}
+
+const Group: React.FC<GroupProps> = ({ title, action, actionPinned, children }) => (
   <section aria-label={title} className="tw-flex tw-flex-col tw-gap-0.5">
     <div className="tw-group tw-flex tw-items-center tw-justify-between tw-pr-1">
       <h3 className="tw-m-0 tw-px-2 tw-pb-0.5 tw-pt-2 tw-text-xs tw-font-medium tw-text-muted">
         {title}
       </h3>
       {action && (
-        <div className="tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100">
+        <div
+          className={cn(
+            "tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100",
+            actionPinned && "tw-opacity-100"
+          )}
+        >
           {action}
         </div>
       )}
@@ -69,12 +77,6 @@ const Group: React.FC<{ title: string; action?: React.ReactNode; children: React
     {children}
   </section>
 );
-
-interface NewProjectDraft {
-  name: string;
-  saving: boolean;
-  error?: string;
-}
 
 const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
   <Button
@@ -114,7 +116,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     () => new Set()
   );
 
-  const [newProject, setNewProject] = useState<NewProjectDraft | null>(null);
+  const [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null);
 
   const groups = useMemo(() => groupSessionsSidebarChats(items, projects), [items, projects]);
   const projectNamesById = useMemo(
@@ -136,21 +138,14 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     setQuery("");
   }, []);
 
-  const submitNewProject = useCallback(async () => {
-    if (!newProject) return;
-    const name = newProject.name.trim();
-    if (!name) {
-      setNewProject(null);
-      return;
-    }
-    setNewProject({ name: newProject.name, saving: true });
-    try {
+  const closeCreateProject = useCallback(() => setCreateAnchor(null), []);
+  const saveNewProject = useCallback(
+    async ({ name }: { name: string }) => {
       await onCreateProject(name);
-      setNewProject(null);
-    } catch (error) {
-      setNewProject({ name: newProject.name, saving: false, error: err2String(error) });
-    }
-  }, [newProject, onCreateProject]);
+      setCreateAnchor(null);
+    },
+    [onCreateProject]
+  );
 
   const statusOf = (item: ChatHistoryItem) =>
     resolveSessionStatus({
@@ -251,23 +246,16 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             )}
             <Group
               title="Projects"
+              actionPinned={createAnchor !== null}
               action={
                 <RowActionButton
                   label="New project"
-                  onClick={() => setNewProject((draft) => draft ?? { name: "", saving: false })}
+                  onClick={(event) => setCreateAnchor(event.currentTarget)}
                 >
                   <Plus className="tw-size-4" />
                 </RowActionButton>
               }
             >
-              {newProject && (
-                <SessionsSidebarNewProjectRow
-                  {...newProject}
-                  onNameChange={(name) => setNewProject({ name, saving: false })}
-                  onSubmit={() => void submitNewProject()}
-                  onCancel={() => setNewProject(null)}
-                />
-              )}
               {visibleProjects.map(({ project, chats }) => {
                 const expanded = expandedProjectIds.has(project.id);
                 const fullyShown = fullyShownProjectIds.has(project.id);
@@ -324,6 +312,13 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           </>
         )}
       </div>
+      {createAnchor && (
+        <CreateProjectPanel
+          anchorEl={createAnchor}
+          onClose={closeCreateProject}
+          onSave={saveNewProject}
+        />
+      )}
     </div>
   );
 };
