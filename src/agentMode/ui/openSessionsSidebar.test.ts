@@ -19,7 +19,7 @@ describe("openSessionsSidebar", () => {
   describe("openSessionsSidebar()", () => {
     beforeEach(() => jest.clearAllMocks());
 
-    it("opens the sessions sidebar for a Plus user for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("opens the Navigator for a Plus user for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       setSettings({ isPaidUser: true });
       const plugin = makePlugin();
 
@@ -29,7 +29,7 @@ describe("openSessionsSidebar", () => {
       expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
 
-    it("opens the Plus upgrade dialog instead of the sessions sidebar for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("opens the Plus upgrade dialog instead of the Navigator for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       setSettings({ isPaidUser: false });
       const plugin = makePlugin();
 
@@ -40,7 +40,7 @@ describe("openSessionsSidebar", () => {
       expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
     });
 
-    it("opens the sessions sidebar while entitlement is unknown so a Plus user is never shown the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("opens the Navigator while entitlement is unknown so a Plus user is never shown the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       setSettings({ isPaidUser: undefined });
       const plugin = makePlugin();
 

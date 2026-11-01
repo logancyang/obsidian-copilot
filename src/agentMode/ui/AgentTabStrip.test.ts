@@ -12,6 +12,7 @@ import {
   type FakeWorkspaceApp,
 } from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
+import { setSettings } from "@/settings/model";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
@@ -140,6 +141,8 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
+    beforeEach(() => setSettings({ isPaidUser: true }));
+
     it("detaches a closed tab without closing its backend session for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", () => {
       const session = {
         internalId: "existing",
@@ -260,6 +263,17 @@ describe("AgentTabStrip", () => {
       renderStrip(makeManagerWithOneChat(), { workspace });
 
       expect(screen.queryByRole("tab")).toBeNull();
+    });
+
+    it("keeps the tabs and the Navigator icon beside a Navigator leaf blocked for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      setSettings({ isPaidUser: false });
+      const workspace: FakeWorkspaceApp = makeFakeWorkspaceApp();
+      workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+
+      renderStrip(makeManagerWithOneChat(), { workspace });
+
+      expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
     });
   });
 });

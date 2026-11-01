@@ -104,7 +104,7 @@ describe("commands", () => {
       { who: "a user whose entitlement is still unknown", isPaidUser: undefined, available: true },
       { who: "a user without Plus", isPaidUser: false, available: false },
     ])(
-      "makes the sessions sidebar command available ($available) to $who for https://github.com/Brevilabs/obsidian-copilot-private/issues/813",
+      "makes the Navigator command available ($available) to $who for https://github.com/Brevilabs/obsidian-copilot-private/issues/813",
       ({ isPaidUser, available }) => {
         jest.mocked(isDesktopRuntime).mockReturnValue(true);
         const commands: Command[] = [];

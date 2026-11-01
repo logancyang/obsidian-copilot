@@ -54,7 +54,7 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("shows only the Plus notice and upgrade button instead of the sessions list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("shows only the Plus-only notice and upgrade button instead of the Navigator list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       setSettings({ isPaidUser: false });
       const { view } = makeView({});
 
@@ -66,7 +66,7 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("keeps the sessions list while entitlement is unknown so a Plus user never sees the notice flash for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("keeps the Navigator list while entitlement is unknown so a Plus user never sees the notice flash for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       setSettings({ isPaidUser: undefined });
       const { view } = makeView({});
 
@@ -77,7 +77,7 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("swaps between the notice and the sessions list as Plus is lost and regained without a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("swaps between the notice and the Navigator list as Plus is lost and regained without a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
       const { view } = makeView({});
       await act(() => view.onOpen());
       expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
