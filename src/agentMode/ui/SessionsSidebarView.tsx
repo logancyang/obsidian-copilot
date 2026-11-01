@@ -32,7 +32,7 @@ export default class SessionsSidebarView extends ItemView {
   }
 
   getDisplayText(): string {
-    return "Copilot";
+    return "Copilot Navigator";
   }
 
   async onOpen(): Promise<void> {
