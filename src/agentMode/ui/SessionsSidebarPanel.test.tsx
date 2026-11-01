@@ -8,7 +8,7 @@ import {
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 
 const NONE: ReadonlySet<string> = new Set();
@@ -456,35 +456,46 @@ describe("SessionsSidebarPanel", () => {
     });
 
     describe("new project", () => {
-      const startProject = () =>
-        fireEvent.click(within(section("Projects")).getByRole("button", { name: "New project" }));
-      const nameField = () => screen.getByRole("textbox", { name: "Project name" });
+      const plusButton = () =>
+        within(section("Projects")).getByRole("button", { name: "New project" });
+      const startProject = () => fireEvent.click(plusButton());
+      const dialog = () => screen.queryByRole("dialog", { name: "New project" });
+      const nameField = () => screen.getByPlaceholderText("Project name");
       const typeName = (name: string) => fireEvent.change(nameField(), { target: { value: name } });
 
-      it("adds an editable row at the top of Projects from the group's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-        renderPanel({ projects: projects(1) });
+      afterEach(() => jest.restoreAllMocks());
 
-        startProject();
-
-        const group = section("Projects");
-        expect(within(group).getByRole("textbox", { name: "Project name" })).toBeTruthy();
-        expect(
-          group
-            .querySelector("input")!
-            .compareDocumentPosition(within(group).getByRole("button", { name: "Project 1" })) &
-            Node.DOCUMENT_POSITION_FOLLOWING
-        ).toBeTruthy();
-      });
-
-      it("offers the plus even when no project exists yet", () => {
+      it("opens the project dialog from the Projects plus even when no project exists yet for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
         renderPanel();
 
+        expect(dialog()).toBeNull();
+
         startProject();
 
+        expect(dialog()).toBeTruthy();
         expect(nameField()).toBeTruthy();
       });
 
-      it("creates the project with the trimmed name on Enter and removes the row for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      it("anchors the dialog to the plus that opened it for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel();
+        jest.spyOn(plusButton(), "getBoundingClientRect").mockReturnValue({
+          top: 100,
+          bottom: 120,
+          left: 300,
+          right: 320,
+          width: 20,
+          height: 20,
+          x: 300,
+          y: 100,
+          toJSON: () => ({}),
+        });
+
+        startProject();
+
+        expect(dialog()!.style.left).toBe("180px");
+      });
+
+      it("creates the project with the trimmed name on Enter and closes the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
         const { onCreateProject } = renderPanel();
         startProject();
         typeName("  Garden plans ");
@@ -494,32 +505,45 @@ describe("SessionsSidebarPanel", () => {
         });
 
         expect(onCreateProject).toHaveBeenCalledWith("Garden plans");
-        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+        expect(dialog()).toBeNull();
       });
 
-      it("creates nothing and removes the row on Escape for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      it("creates the project from the Create button for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
         const { onCreateProject } = renderPanel();
         startProject();
         typeName("Garden plans");
 
-        fireEvent.keyDown(nameField(), { key: "Escape" });
+        await act(async () => {
+          fireEvent.click(within(dialog()!).getByRole("button", { name: "Create" }));
+        });
 
-        expect(onCreateProject).not.toHaveBeenCalled();
-        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+        expect(onCreateProject).toHaveBeenCalledWith("Garden plans");
+        expect(dialog()).toBeNull();
       });
 
-      it("creates nothing and removes the row when Enter is pressed on an empty name for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      it("creates nothing and closes the dialog on Cancel for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
         const { onCreateProject } = renderPanel();
         startProject();
-        typeName("   ");
+        typeName("Garden plans");
 
-        fireEvent.keyDown(nameField(), { key: "Enter" });
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }));
 
         expect(onCreateProject).not.toHaveBeenCalled();
-        expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+        expect(dialog()).toBeNull();
       });
 
-      it("keeps the row with the creation error, then clears the error on the next edit for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      it("creates nothing and closes the dialog on Escape for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("Garden plans");
+
+        fireEvent.keyDown(window, { key: "Escape" });
+
+        expect(onCreateProject).not.toHaveBeenCalled();
+        expect(dialog()).toBeNull();
+      });
+
+      it("keeps the dialog open and reports the creation error when the project cannot be created for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
         const onCreateProject = jest
           .fn()
           .mockRejectedValue(new Error('A project with the name "Garden" already exists'));
@@ -531,28 +555,9 @@ describe("SessionsSidebarPanel", () => {
           fireEvent.keyDown(nameField(), { key: "Enter" });
         });
 
-        expect(screen.getByRole("alert").textContent).toBe(
-          'A project with the name "Garden" already exists'
-        );
+        expect(Notice).toHaveBeenCalledWith('A project with the name "Garden" already exists');
+        expect(dialog()).toBeTruthy();
         expect((nameField() as HTMLInputElement).value).toBe("Garden");
-
-        typeName("Garden 2");
-
-        expect(screen.queryByRole("alert")).toBeNull();
-      });
-
-      it("ignores a second Enter while the project is still being created", async () => {
-        let finish: () => void = () => {};
-        const onCreateProject = jest.fn(() => new Promise<void>((resolve) => (finish = resolve)));
-        renderPanel({ onCreateProject });
-        startProject();
-        typeName("Garden");
-
-        fireEvent.keyDown(nameField(), { key: "Enter" });
-        fireEvent.keyDown(nameField(), { key: "Enter" });
-        await act(async () => finish());
-
-        expect(onCreateProject).toHaveBeenCalledTimes(1);
       });
 
       it("hides the plus while the title filter is active", () => {

@@ -582,13 +582,15 @@ describe("SessionsSidebar", () => {
       ).toBeNull();
     });
 
-    it("creates a project from the new project row, opens its landing and selects its folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+    it("creates a project from the new project dialog, opens its landing and selects its folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       const manager = new FakeManager();
       const plugin = renderSidebar(manager);
       await screen.findByRole("button", { name: "New project" });
 
       fireEvent.click(screen.getByRole("button", { name: "New project" }));
-      const field = screen.getByRole("textbox", { name: "Project name" });
+      const field = within(screen.getByRole("dialog", { name: "New project" })).getByRole(
+        "textbox"
+      );
       fireEvent.change(field, { target: { value: "Garden plans" } });
       await act(async () => {
         fireEvent.keyDown(field, { key: "Enter" });
@@ -598,29 +600,30 @@ describe("SessionsSidebar", () => {
       expect(manager.enterProject).toHaveBeenCalledWith(createProject.mock.calls[0][0].id);
       expect(plugin.activateAgentView).toHaveBeenCalledTimes(1);
       expect(manager.events[0]).toMatch(/^enter:/);
-      expect(screen.queryByRole("textbox", { name: "Project name" })).toBeNull();
+      expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
       expect(
         (await screen.findByRole("button", { name: "Garden plans" })).getAttribute("aria-current")
       ).toBe("true");
     });
 
-    it("keeps the new project row open with createProject's error when the name is taken for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+    it("keeps the new project dialog open and reports createProject's error when the name is taken for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       const manager = new FakeManager();
       renderSidebar(manager);
       createProject.mockRejectedValueOnce(
         new Error('A project with the name "Garden plans" already exists')
       );
       fireEvent.click(await screen.findByRole("button", { name: "New project" }));
-      const field = screen.getByRole("textbox", { name: "Project name" });
+      const field = within(screen.getByRole("dialog", { name: "New project" })).getByRole(
+        "textbox"
+      );
       fireEvent.change(field, { target: { value: "Garden plans" } });
 
       await act(async () => {
         fireEvent.keyDown(field, { key: "Enter" });
       });
 
-      expect(screen.getByRole("alert").textContent).toBe(
-        'A project with the name "Garden plans" already exists'
-      );
+      expect(Notice).toHaveBeenCalledWith('A project with the name "Garden plans" already exists');
+      expect(screen.getByRole("dialog", { name: "New project" })).toBeTruthy();
       expect(manager.enterProject).not.toHaveBeenCalled();
     });
 

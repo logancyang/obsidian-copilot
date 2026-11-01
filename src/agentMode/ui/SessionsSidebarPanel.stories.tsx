@@ -138,6 +138,18 @@ export const ManyRecents: StoryObj<SessionsSidebarPanelProps> = {
   },
 };
 
+function CreateProjectDialogPanel(args: Partial<SessionsSidebarPanelProps>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    containerRef.current?.querySelector<HTMLElement>('button[aria-label="New project"]')?.click();
+  }, []);
+  return (
+    <div ref={containerRef} className="tw-size-full">
+      <WithToggleableFolders {...args} />
+    </div>
+  );
+}
+
 function FilteredPanel(args: Partial<SessionsSidebarPanelProps> & { query: string }) {
   const { query, ...panelArgs } = args;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -175,4 +187,9 @@ export const ProjectLandingOpen: StoryObj<SessionsSidebarPanelProps> = {
 
 export const NoProjectsYet: StoryObj<SessionsSidebarPanelProps> = {
   args: { items: [sidebarChat("chats/recent-1.md", "Summarize the Q3 interview notes", 5)] },
+};
+
+export const CreateProjectDialogOpen: StoryObj<SessionsSidebarPanelProps> = {
+  args: { items: everyGroupItems, projects, expandedProjectIds: new Set(["garden"]) },
+  render: CreateProjectDialogPanel,
 };

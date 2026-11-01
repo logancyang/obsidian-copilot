@@ -1,7 +1,7 @@
+import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
-import { SessionsSidebarNewProjectRow } from "@/agentMode/ui/SessionsSidebarNewProjectRow";
 import {
   SessionsSidebarRow,
   mostUrgentStatus,
@@ -26,7 +26,6 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
-import { err2String } from "@/utils";
 import { Archive, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useMemo, useState } from "react";
 
@@ -70,12 +69,6 @@ const Group: React.FC<{ title: string; action?: React.ReactNode; children: React
   </section>
 );
 
-interface NewProjectDraft {
-  name: string;
-  saving: boolean;
-  error?: string;
-}
-
 const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
   <Button
     type="button"
@@ -114,7 +107,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     () => new Set()
   );
 
-  const [newProject, setNewProject] = useState<NewProjectDraft | null>(null);
+  const [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null);
 
   const groups = useMemo(() => groupSessionsSidebarChats(items, projects), [items, projects]);
   const projectNamesById = useMemo(
@@ -136,21 +129,14 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     setQuery("");
   }, []);
 
-  const submitNewProject = useCallback(async () => {
-    if (!newProject) return;
-    const name = newProject.name.trim();
-    if (!name) {
-      setNewProject(null);
-      return;
-    }
-    setNewProject({ name: newProject.name, saving: true });
-    try {
+  const closeCreateProject = useCallback(() => setCreateAnchor(null), []);
+  const saveNewProject = useCallback(
+    async ({ name }: { name: string }) => {
       await onCreateProject(name);
-      setNewProject(null);
-    } catch (error) {
-      setNewProject({ name: newProject.name, saving: false, error: err2String(error) });
-    }
-  }, [newProject, onCreateProject]);
+      setCreateAnchor(null);
+    },
+    [onCreateProject]
+  );
 
   const statusOf = (item: ChatHistoryItem) =>
     resolveSessionStatus({
@@ -254,20 +240,12 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               action={
                 <RowActionButton
                   label="New project"
-                  onClick={() => setNewProject((draft) => draft ?? { name: "", saving: false })}
+                  onClick={(event) => setCreateAnchor(event.currentTarget)}
                 >
                   <Plus className="tw-size-4" />
                 </RowActionButton>
               }
             >
-              {newProject && (
-                <SessionsSidebarNewProjectRow
-                  {...newProject}
-                  onNameChange={(name) => setNewProject({ name, saving: false })}
-                  onSubmit={() => void submitNewProject()}
-                  onCancel={() => setNewProject(null)}
-                />
-              )}
               {visibleProjects.map(({ project, chats }) => {
                 const expanded = expandedProjectIds.has(project.id);
                 const fullyShown = fullyShownProjectIds.has(project.id);
@@ -324,6 +302,13 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           </>
         )}
       </div>
+      {createAnchor && (
+        <CreateProjectPanel
+          anchorEl={createAnchor}
+          onClose={closeCreateProject}
+          onSave={saveNewProject}
+        />
+      )}
     </div>
   );
 };
