@@ -4,11 +4,12 @@ import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { AGENT_CHAT_MODE } from "@/constants";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { useArchivedProjects } from "@/projects/state";
 import { Notice } from "obsidian";
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useSyncExternalStore } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface SessionsSidebarProps {
@@ -23,15 +24,28 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());
   const attentionChatIds = useAttentionChatIds(manager);
   const activeChatIds = useManagerSetSnapshot(manager, (m) => m.getActiveChatIds());
+  const subscribeToManager = useCallback((l: () => void) => manager.subscribe(l), [manager]);
+  const getHistoryRevision = useCallback(() => manager.getHistoryRevision(), [manager]);
+  const historyRevision = useSyncExternalStore(subscribeToManager, getHistoryRevision);
   const archivedProjectKey = useArchivedProjects()
     .map((project) => project.id)
     .join("\n");
 
-  // The saved list changes when a chat starts, finishes, or when a project's archive state changes.
+  // The saved list changes when a chat starts, finishes, is renamed or deleted, or when a project's archive state changes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
   useEffect(() => {
     void loadChatHistory();
-  }, [loadChatHistory, openChatIds, runningChatIds, archivedProjectKey]);
+  }, [loadChatHistory, openChatIds, runningChatIds, archivedProjectKey, historyRevision]);
+
+  // Pins, archives and note renames made in the landing lists land in the chat note's frontmatter, and a reload
+  // before Obsidian re-reads that note would still list the old state.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+  useEffect(() => {
+    const ref = plugin.app.metadataCache.on("changed", (_file, _data, cache) => {
+      if (cache.frontmatter?.mode === AGENT_CHAT_MODE) void loadChatHistory();
+    });
+    return () => plugin.app.metadataCache.offref(ref);
+  }, [plugin, loadChatHistory]);
 
   const handleNewChat = useCallback(async () => {
     try {

@@ -188,6 +188,7 @@ export class AgentSessionManager {
   private scopeSeq = 0;
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
   private readonly detachedFromTabIds = new Set<string>();
+  private historyRevision = 0;
   private readonly landingCaptureSignatures = new Map<string, string>();
   private readonly contentTracker: ProjectContentTracker;
   private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
@@ -589,6 +590,15 @@ export class AgentSessionManager {
     return this.chatIdsWhere((session) => session.getNeedsAttention());
   }
 
+  getHistoryRevision(): number {
+    return this.historyRevision;
+  }
+
+  private markHistoryChanged(): void {
+    this.historyRevision++;
+    this.notify();
+  }
+
   getActiveChatIds(): ReadonlySet<string> {
     return this.chatIdsWhere((session) => session.internalId === this.activeSessionId);
   }
@@ -609,6 +619,7 @@ export class AgentSessionManager {
       if (!index) throw new Error("Agent session index is not configured.");
       await index.setTitle(native.backendId, native.sessionId, newTitle);
       this.findLiveSession(native.backendId, native.sessionId)?.setLabel(newTitle);
+      this.markHistoryChanged();
       return;
     }
     const persistence = this.opts.persistenceManager;
@@ -684,6 +695,7 @@ export class AgentSessionManager {
     if (persistence) {
       for (const path of notePaths) await persistence.deleteFile(path);
     }
+    this.markHistoryChanged();
   }
 
   // An open chat must be gone before its files are, or autosave writes the note again. Delete never
