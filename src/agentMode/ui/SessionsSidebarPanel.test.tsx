@@ -495,6 +495,21 @@ describe("SessionsSidebarPanel", () => {
         expect(dialog()!.style.left).toBe("180px");
       });
 
+      it("keeps the plus visible while its dialog is open and hides it again after closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel();
+        const wrapper = plusButton().parentElement!;
+
+        expect(wrapper.classList.contains("tw-opacity-100")).toBe(false);
+
+        startProject();
+
+        expect(wrapper.classList.contains("tw-opacity-100")).toBe(true);
+
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }));
+
+        expect(wrapper.classList.contains("tw-opacity-100")).toBe(false);
+      });
+
       it("creates the project with the trimmed name on Enter and closes the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
         const { onCreateProject } = renderPanel();
         startProject();
