@@ -2,6 +2,7 @@ import React from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { App, type Modal } from "obsidian";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
+import { simulateMenuExitAnimation } from "@/agentMode/ui/testing/menuExitAnimation";
 import { AppContext } from "@/context";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -759,6 +760,18 @@ describe("GlobalRecentChatsSection", () => {
       chooseMenuItem(openMenuFromButton("Saved chat"), "Copy chat link");
 
       expect(onLoadChat).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/802 removes the menu as soon as an item is chosen instead of animating it out after its More actions anchor is hidden", () => {
+      renderSection({ items: [makeItem("chats/saved.md", { title: "Saved chat" })] });
+      const exitAnimation = simulateMenuExitAnimation();
+      try {
+        chooseMenuItem(openMenuFromButton("Saved chat"), "Copy chat link");
+
+        expect(document.querySelector('[role="menu"]')).toBeNull();
+      } finally {
+        exitAnimation.mockRestore();
+      }
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/693 leaves Open chat note out for a chat with no saved note", () => {
