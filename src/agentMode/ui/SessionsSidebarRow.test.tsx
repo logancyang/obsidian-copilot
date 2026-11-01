@@ -43,7 +43,6 @@ describe("SessionsSidebarRow", () => {
     it.each([
       ["running", "Running"],
       ["waiting", "Waiting for permission"],
-      ["unread", "Unread result"],
     ] as const)(
       "labels a %s row with its status icon for https://github.com/Brevilabs/obsidian-copilot-private/issues/801",
       (status, label) => {
@@ -71,6 +70,21 @@ describe("SessionsSidebarRow", () => {
 
       expect(screen.getByLabelText("Running")).toBeTruthy();
       expect(screen.queryByLabelText("Session open")).toBeNull();
+    });
+
+    it("bolds the title of a chat with an unseen result and keeps the session-open dot for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true, status: "unread" });
+
+      const row = screen.getByRole("button", { name: /Plan the fall launch/ });
+      expect(within(row).getByLabelText("Unread result")).toBeTruthy();
+      expect(within(row).getByText("Plan the fall launch").className).toContain("tw-font-semibold");
+      expect(within(row).getByLabelText("Session open")).toBeTruthy();
+    });
+
+    it("shows a seen chat's title at normal weight for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true });
+
+      expect(screen.getByText("Plan the fall launch").className).not.toContain("tw-font-semibold");
     });
 
     it("closes the live session from the row's gutter without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
