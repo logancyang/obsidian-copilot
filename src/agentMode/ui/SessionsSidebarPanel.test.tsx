@@ -252,13 +252,13 @@ describe("SessionsSidebarPanel", () => {
         expect(folderStatus("Running")).toBe(false);
       });
 
-      it("treats a chat flagged as needing attention as unread on the folder row", () => {
+      it("ignores a stale needs-attention snapshot once the live attention flag clears for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
         renderPanel({
           projects: projects(1),
           items: projectChats("p1", 2, { needsAttention: true }),
         });
 
-        expect(folderStatus("Unread result")).toBe(true);
+        expect(folderStatus("Unread result")).toBe(false);
       });
 
       it("leaves the folder row clear when every chat is visible and its own row shows the status", () => {
