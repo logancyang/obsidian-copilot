@@ -100,6 +100,9 @@ Then in either case:
 - "Canonical-store skill discovery, symlink lifecycle, SKILL.md
   parser/serializer, Skills settings tab (reads `backends/registry.ts`
   for the brand list)" → `skills/`
+- "A tool call that gets its own card in the agent trail" → a `ToolCardKind`
+  (`ui/activityGroups.ts`) in the tool's feature module, listed in
+  `ui/toolCardKinds.tsx`
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs
