@@ -60,6 +60,8 @@ const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) =
     // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
     <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
+      {/* The header text starts in the chat title column, so first-level rows sit flush under it and their status
+          indicators hang in the margin to the left. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
       <h3 className="tw-m-0">
         <button
           id={headerId}
@@ -68,7 +70,7 @@ const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) =
           onClick={onToggle}
           className={cn(
             "clickable-icon tw-flex tw-h-auto tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-bg-transparent",
-            "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
+            "tw-pb-1 tw-pl-8 tw-pr-2 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
           )}
         >
           <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
