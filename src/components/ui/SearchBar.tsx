@@ -9,6 +9,7 @@ interface SearchBarProps {
   onChange: (value: string) => void;
   placeholder?: string;
   inputClassName?: string;
+  autoFocus?: boolean;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
@@ -16,12 +17,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onChange,
   placeholder = "Search...",
   inputClassName,
+  autoFocus,
 }) => {
   return (
     <div className="tw-relative">
       <Input
         type="text"
         placeholder={placeholder}
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn("tw-pr-10", inputClassName)}
