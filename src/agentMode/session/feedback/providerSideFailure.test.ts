@@ -1,7 +1,7 @@
-import { isProviderLimitFailure } from "./providerLimitFailure";
+import { isProviderSideFailure } from "./providerSideFailure";
 
-describe("providerLimitFailure", () => {
-  describe("isProviderLimitFailure()", () => {
+describe("providerSideFailure", () => {
+  describe("isProviderSideFailure()", () => {
     it.each([
       [
         "OpenCode free usage limit",
@@ -28,6 +28,10 @@ describe("providerLimitFailure", () => {
         "OpenRouter max_tokens affordability",
         "Internal error: This request requires more credits, or fewer max_tokens. You requested up to 256000 tokens, but can only afford 32935. To increase, visit https://openrouter.ai/settings/credits and add more credits",
       ],
+      [
+        "DeepSeek balance",
+        "Internal error: Insufficient Balance (request_id: 69669aa1-63a2-4d12-8591-142347639ee6)",
+      ],
       ["Gemini exhaustion", "RESOURCE_EXHAUSTED: Resource has been exhausted (e.g. check quota)."],
       ["generic throttling", "429 Too Many Requests"],
       ["Claude plan limit", "You've hit your session limit · resets 3pm"],
@@ -35,7 +39,24 @@ describe("providerLimitFailure", () => {
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/810 recognizes the %s as a provider limit",
       (_label, errorText) => {
-        expect(isProviderLimitFailure(errorText)).toBe(true);
+        expect(isProviderSideFailure(errorText)).toBe(true);
+      }
+    );
+
+    it.each([
+      [
+        "refused connection to a custom endpoint",
+        "Internal error: ConnectionRefused: Unable to connect. Is the computer able to access the url?",
+      ],
+      [
+        "reset provider socket",
+        "Internal error: Cannot connect to API: ECONNRESET: The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+      ],
+      ["Node refused connection", "connect ECONNREFUSED 127.0.0.1:11434"],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/826 recognizes a %s as an unreachable provider",
+      (_label, errorText) => {
+        expect(isProviderSideFailure(errorText)).toBe(true);
       }
     );
 
@@ -48,7 +69,7 @@ describe("providerLimitFailure", () => {
       ],
       ["a request id containing 429", "Internal error: request req_4291 failed"],
     ])("treats %s as a possible Copilot failure", (_label, errorText) => {
-      expect(isProviderLimitFailure(errorText)).toBe(false);
+      expect(isProviderSideFailure(errorText)).toBe(false);
     });
   });
 });
