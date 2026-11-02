@@ -4,7 +4,7 @@ import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
-import { useStoredIdSet } from "@/agentMode/navigator/hooks/useStoredIdSet";
+import { useStoredIdSet } from "@/hooks/useStoredIdSet";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
