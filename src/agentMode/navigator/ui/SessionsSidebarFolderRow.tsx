@@ -3,6 +3,7 @@ import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionStatusIcon, type SessionStatus } from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
+import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
 import { ChevronRight, Folder, Plus } from "lucide-react";
 import React, { useState } from "react";
@@ -28,19 +29,18 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
-  const hoverHidden = menuOpen
-    ? "tw-invisible"
-    : "group-focus-within:tw-invisible group-hover:tw-invisible";
-  const hoverShown = menuOpen
-    ? "tw-block"
-    : "tw-hidden group-focus-within:tw-block group-hover:tw-block";
+  const { keyboardFocused, focusWithinProps } = useKeyboardFocusWithin();
+  const revealed = menuOpen || keyboardFocused;
+  const hoverHidden = revealed ? "tw-invisible" : "group-hover:tw-invisible";
+  const hoverShown = revealed ? "tw-block" : "tw-hidden group-hover:tw-block";
   return (
     <div
       className={cn(
-        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md",
-        "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
+        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
+        keyboardFocused && "tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
+      {...focusWithinProps}
       onContextMenu={(event) => {
         event.preventDefault();
         setMenuOpen(true);
@@ -63,9 +63,9 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
           className={cn(
             "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
             hiddenStatus === "unread" && "tw-font-semibold",
-            menuOpen
+            revealed
               ? "[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
-              : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
+              : "group-hover:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
           )}
         >
           {project.name}
@@ -95,9 +95,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       <div
         className={cn(
           "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center tw-gap-1.5",
-          menuOpen
-            ? "tw-visible"
-            : "tw-invisible group-focus-within:tw-visible group-hover:tw-visible"
+          revealed ? "tw-visible" : "tw-invisible group-hover:tw-visible"
         )}
       >
         <RowActionButton label={`New chat in ${project.name}`} onClick={onNewChat}>
