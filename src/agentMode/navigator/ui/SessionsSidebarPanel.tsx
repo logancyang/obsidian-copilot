@@ -28,7 +28,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { cn } from "@/lib/utils";
 import { Archive, ChevronRight, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
-import React, { useCallback, useId, useMemo, useState } from "react";
+import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 
 interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
@@ -176,9 +176,17 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     RECENTS_PAGE_SIZE
   );
 
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
   const toggleSearch = useCallback(() => {
     setSearchOpen((open) => !open);
     setQuery("");
+  }, []);
+  const closeSearchOnEscape = useCallback((event: React.KeyboardEvent) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    setSearchOpen(false);
+    setQuery("");
+    searchButtonRef.current?.focus();
   }, []);
 
   const closeCreateProject = useCallback(() => setCreateAnchor(null), []);
@@ -241,6 +249,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
         <Button
           variant="ghost2"
           size="icon"
+          ref={searchButtonRef}
           aria-label="Search chats"
           aria-pressed={searchOpen}
           title="Search chats"
@@ -270,13 +279,15 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
         </DropdownMenu>
       </div>
       {searchOpen && (
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder="Search chats..."
-          autoFocus
-          inputClassName="!tw-h-7"
-        />
+        <div onKeyDown={closeSearchOnEscape}>
+          <SearchBar
+            value={query}
+            onChange={setQuery}
+            placeholder="Search chats..."
+            autoFocus
+            inputClassName="!tw-h-7"
+          />
+        </div>
       )}
       {/* The list reaches into the panel's right padding so its scrollbar sits at the pane edge, as in Relevant Notes.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
