@@ -525,10 +525,10 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
           type="button"
           variant="ghost2"
           size="sm"
-          className="tw-shrink-0 tw-justify-start tw-gap-2 tw-text-muted"
+          className="tw-mt-1 tw-w-full tw-shrink-0 tw-text-muted"
           onClick={onViewArchived}
         >
-          <Archive className="tw-size-3.5" />
+          <Archive className="tw-size-3" aria-hidden="true" />
           View archived
         </Button>
       )}
