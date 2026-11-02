@@ -4,15 +4,18 @@ import {
   useChangeNavigation,
   type ChangeStep,
 } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import { markedSelectionText } from "@/agentMode/ui/renderedDiff/markedSelection";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
+import type { SelectionReport } from "@/selection/selectionStore";
 import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { App, ItemView, Notice, Plugin, TFile, Workspace, WorkspaceLeaf } from "obsidian";
 import React, { type ReactNode } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 // A diff tab's capture lives only in memory, so tabs restored after a restart or plugin reload are empty.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -48,6 +51,33 @@ export class TurnDiffView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
+  }
+
+  static activeSelection(this: void, app: App): (() => SelectionReport) | null {
+    const view = app.workspace.getActiveViewOfType(TurnDiffView);
+    const state = view?.state;
+    if (!view || !state) return null;
+    const location = turnDiffKey(state.turnId, state.path);
+    return () => {
+      const selection = view.containerEl.ownerDocument.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const inView = range && view.containerEl.contains(range.commonAncestorContainer);
+      const content = inView ? markedSelectionText(range) : "";
+      if (!content) return { location, context: null };
+      return {
+        location,
+        key: `${location}\n${content}`,
+        context: {
+          id: uuidv4(),
+          content,
+          sourceType: "note",
+          noteTitle: basename(state.path).replace(/\.[^.]+$/, ""),
+          notePath: state.path,
+          startLine: 0,
+          endLine: 0,
+        },
+      };
+    };
   }
 
   getViewType(): string {

@@ -333,6 +333,82 @@ describe("TurnDiffView", () => {
         expect(within(header(view)).getByText("deleted")).toBeTruthy();
       });
     });
+
+    describe("activeSelection()", () => {
+      const ISSUE_824 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/824";
+
+      async function activeDiff(): Promise<{ view: TurnDiffView; app: App }> {
+        const view = await renderedDiff();
+        document.body.append(view.containerEl);
+        await waitFor(() => expect(textOf(view.containerEl, "del")).toEqual(["brown"]));
+        const app = { workspace: { getActiveViewOfType: () => view } } as unknown as App;
+        return { view, app };
+      }
+
+      function select(start: Node, startOffset: number, end: Node, endOffset: number): void {
+        const range = document.createRange();
+        range.setStart(start, startOffset);
+        range.setEnd(end, endOffset);
+        document.getSelection()!.removeAllRanges();
+        document.getSelection()!.addRange(range);
+      }
+
+      afterEach(() => {
+        document.getSelection()!.removeAllRanges();
+        document.body.replaceChildren();
+      });
+
+      it(`attaches text selected in the active diff under the note's path with removed and added words marked (${ISSUE_824})`, async () => {
+        const { view, app } = await activeDiff();
+        const paragraph = view.containerEl.querySelector("del")!.parentElement!;
+
+        select(paragraph.firstChild!, 4, paragraph.lastChild!, 4);
+
+        expect(TurnDiffView.activeSelection(app)?.()).toMatchObject({
+          location: "turn-1\nnotes/diff-demo/alpha.md",
+          key: "turn-1\nnotes/diff-demo/alpha.md\nquick <del>brown</del><ins>red</ins> fox",
+          context: {
+            content: "quick <del>brown</del><ins>red</ins> fox",
+            sourceType: "note",
+            noteTitle: "alpha",
+            notePath: "notes/diff-demo/alpha.md",
+            startLine: 0,
+            endLine: 0,
+          },
+        });
+      });
+
+      it(`reports nothing selected in the diff when its selection collapses, so the attached selection clears (${ISSUE_824})`, async () => {
+        const { view, app } = await activeDiff();
+        const deleted = view.containerEl.querySelector("del")!.firstChild!;
+
+        select(deleted, 2, deleted, 2);
+
+        expect(TurnDiffView.activeSelection(app)?.()).toEqual({
+          location: "turn-1\nnotes/diff-demo/alpha.md",
+          context: null,
+        });
+      });
+
+      it(`reports nothing selected in the diff when the selection lies outside it (${ISSUE_824})`, async () => {
+        const { app } = await activeDiff();
+        const elsewhere = document.body.appendChild(document.createElement("p"));
+        elsewhere.textContent = "Elsewhere";
+
+        select(elsewhere.firstChild!, 0, elsewhere.firstChild!, 4);
+
+        expect(TurnDiffView.activeSelection(app)?.()).toEqual({
+          location: "turn-1\nnotes/diff-demo/alpha.md",
+          context: null,
+        });
+      });
+
+      it(`returns no reader when no diff tab is active (${ISSUE_824})`, () => {
+        const app = { workspace: { getActiveViewOfType: () => null } } as unknown as App;
+
+        expect(TurnDiffView.activeSelection(app)).toBeNull();
+      });
+    });
   });
 
   describe("registerTurnDiffCommands()", () => {

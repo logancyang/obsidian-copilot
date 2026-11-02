@@ -216,6 +216,8 @@ When a turn finishes after the agent has edited your vault, a **Files changed** 
 
 Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, including the blank lines between paragraphs, so you can see the exact wording the agent changed without leaving Obsidian. The tab is read-only and never writes to your vault; use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
 
+Select text in the tab to attach it to your next message. Removed and added words in the selection stay marked, so a question such as "why did you change this?" is about exactly that change.
+
 In a long note, a narrow strip along the left edge of the tab shows where the changes are. The strip stands for the whole note, with one mark for each change at its position in the note: green where text was added, red where it was removed, and blue where both happened. Select a mark to jump to that change.
 
 The header shows which change you are at, such as "1 of 6". Use the up and down arrows beside it to move to the previous or next change; moving past the last change returns to the first. The **Go to next change in file diff** and **Go to previous change in file diff** commands do the same, so you can assign them hotkeys in Obsidian's settings.

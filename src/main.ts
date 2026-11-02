@@ -812,7 +812,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   }
 
   initSelectionHandler() {
-    watchSelections(this, [activeDrawingSelection, activePdfSelection]);
+    watchSelections(this, [
+      activeDrawingSelection,
+      activePdfSelection,
+      ...(this.TurnDiffView ? [this.TurnDiffView.activeSelection] : []),
+    ]);
   }
 
   initWebSelectionWatcher() {
