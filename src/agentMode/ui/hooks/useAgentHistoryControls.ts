@@ -9,23 +9,29 @@ import { buildChatDeepLink, getSavedChatDeepLinkId } from "@/utils/chatDeepLink"
 import { extractChatTitle } from "@/utils/chatHistoryUtils";
 import { getUrlBookmarks, isBookmarksPluginDisabled } from "@/utils/obsidianBookmarks";
 import { type App, Notice, TFile } from "obsidian";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const EMPTY_CHAT_HISTORY_ITEMS = Object.freeze([]) as unknown as ChatHistoryItem[];
 
 export interface AgentHistoryControls {
   chatHistoryItems: ChatHistoryItem[];
+  archivedChatItems: ChatHistoryItem[];
   chatHistorySettled: boolean;
   loadChatHistory: () => Promise<void>;
   loadChat: (id: string) => Promise<void>;
   updateChatTitle: (id: string, newTitle: string) => Promise<void>;
   deleteChat: (id: string) => Promise<void>;
   setChatPinned: (id: string, pinned: boolean) => Promise<void>;
+  setChatArchived: (id: string, archived: boolean) => Promise<void>;
   openSourceFile: (id: string) => Promise<void>;
   copyChatLink: (id: string) => Promise<void>;
   getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
   setChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
   setActiveChatBookmarked: (bookmarked: boolean) => Promise<void>;
+}
+
+function keepOrEmpty(items: ChatHistoryItem[]): ChatHistoryItem[] {
+  return items.length === 0 ? EMPTY_CHAT_HISTORY_ITEMS : items;
 }
 
 export type ChatBookmarkState = "unavailable" | "off" | "bookmarked" | "not-bookmarked";
@@ -42,8 +48,16 @@ export function useAgentHistoryControls(
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const effectiveScope = scope ?? GLOBAL_SCOPE;
   const [loadedScope, setLoadedScope] = useState<ProjectScopeId>(effectiveScope);
-  const visibleChatHistoryItems =
+  const scopedChatHistoryItems =
     loadedScope === effectiveScope ? chatHistoryItems : EMPTY_CHAT_HISTORY_ITEMS;
+  const visibleChatHistoryItems = useMemo(
+    () => keepOrEmpty(scopedChatHistoryItems.filter((item) => item.archivedAt === undefined)),
+    [scopedChatHistoryItems]
+  );
+  const archivedChatItems = useMemo(
+    () => keepOrEmpty(scopedChatHistoryItems.filter((item) => item.archivedAt !== undefined)),
+    [scopedChatHistoryItems]
+  );
   const [settledScope, setSettledScope] = useState<ProjectScopeId | null>(null);
   const chatHistorySettled = settledScope === effectiveScope;
 
@@ -165,6 +179,28 @@ export function useAgentHistoryControls(
     [manager, runWithNotice]
   );
 
+  const setChatArchived = useCallback(
+    async (id: string, archived: boolean) => {
+      await runWithNotice(
+        archived ? "archive chat" : "unarchive chat",
+        async () => {
+          const chat = await manager.setChatArchived(id, archived);
+          if (!isMountedRef.current) return;
+          historyRequestRef.current++;
+          // A reload right after the frontmatter write reads the metadata cache's previous archive state.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/805
+          setChatHistoryItems((items) =>
+            items.map((item) =>
+              item.id === id ? { ...item, id: chat.id, archivedAt: chat.archivedAt } : item
+            )
+          );
+        },
+        true
+      );
+    },
+    [manager, runWithNotice]
+  );
+
   const openSourceFile = useCallback(
     async (id: string) => {
       await runWithNotice("open chat source", () => plugin.openChatSourceFile(id));
@@ -254,12 +290,14 @@ export function useAgentHistoryControls(
 
   return {
     chatHistoryItems: visibleChatHistoryItems,
+    archivedChatItems,
     chatHistorySettled,
     loadChatHistory,
     loadChat,
     updateChatTitle,
     deleteChat,
     setChatPinned,
+    setChatArchived,
     openSourceFile,
     copyChatLink,
     getChatBookmarkState,

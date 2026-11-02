@@ -216,12 +216,23 @@ export class AgentChatPersistenceManager {
   }
 
   async setPinnedAt(fileId: string, pinnedAt: number | null): Promise<void> {
-    // A row whose note was moved or deleted must fail the pin instead of showing a pin that was never written.
+    await this.patchExistingNote(fileId, { pinnedAt });
+  }
+
+  async setArchivedAt(fileId: string, archivedAt: number | null): Promise<void> {
+    await this.patchExistingNote(fileId, { archivedAt });
+  }
+
+  private async patchExistingNote(
+    fileId: string,
+    updates: Record<string, number | null>
+  ): Promise<void> {
+    // A row whose note was moved or deleted must fail a pin or archive instead of showing a flag that was never written.
     // https://github.com/logancyang/obsidian-copilot/issues/3195
     if (!(this.app.vault.getAbstractFileByPath(fileId) instanceof TFile)) {
       throw new Error(`Chat note not found: ${fileId}`);
     }
-    await patchFrontmatter(this.app, fileId, { pinnedAt });
+    await patchFrontmatter(this.app, fileId, updates);
   }
 
   async deleteFile(fileId: string): Promise<void> {

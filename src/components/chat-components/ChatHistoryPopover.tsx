@@ -33,6 +33,7 @@ export interface ChatHistoryItem {
   projectId?: string;
   needsAttention?: boolean;
   pinnedAt?: number;
+  archivedAt?: number;
 }
 
 type ChatHistoryIconResolver = (
