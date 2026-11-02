@@ -5,8 +5,7 @@ import { useCallback, useState } from "react";
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
 function readStoredIds(app: App, storageKey: string): ReadonlySet<string> {
   const stored = app.loadLocalStorage(storageKey);
-  const isIdList = Array.isArray(stored) && stored.every((id) => typeof id === "string");
-  return new Set(isIdList ? stored : []);
+  return new Set(Array.isArray(stored) ? stored : []);
 }
 
 export function useStoredIdSet(app: App, storageKey: string) {
