@@ -26,7 +26,7 @@ function EnterLicenseKeyButton({ onOpenSettings }: EnterLicenseKeyButtonProps): 
         openCopilotSettings(app, ownerWindow, "basic");
       }}
     >
-      Already a Believer or Supporter? Enter your license key
+      Already a Supporter? Enter your license key
     </Button>
   );
 }
@@ -76,7 +76,7 @@ export function NavigatorUpsellContent({
 
 export class NavigatorUpsellModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Copilot Navigator is a preview for Believers and Supporters");
+    super(app, "Copilot Navigator is a preview for Supporters");
   }
 
   protected renderContent(close: () => void): React.ReactElement {
@@ -95,8 +95,8 @@ export function NavigatorBlockedNotice({
     <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center tw-gap-3 tw-p-4 tw-text-center">
       <p className="tw-m-0 tw-font-semibold">Your preview access ended</p>
       <p className="tw-m-0 tw-text-sm tw-text-muted">
-        Copilot Navigator is a preview for Believers and Supporters. Your chats are still under
-        Recent chats in Agent Chat.
+        Copilot Navigator is a preview for Supporters. Your chats are still under Recent chats in
+        Agent Chat.
       </p>
       <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
         <Button onClick={() => navigateToPlusPage("navigator_blocked_view")}>

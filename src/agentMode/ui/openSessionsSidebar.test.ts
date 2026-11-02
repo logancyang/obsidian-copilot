@@ -101,7 +101,7 @@ describe("openSessionsSidebar", () => {
 
   describe("openSessionsSidebar()", () => {
     it.each([
-      { who: "a Believer or Supporter", access: "believer", opens: "the Navigator" },
+      { who: "a Supporter", access: "supporter", opens: "the Navigator" },
       {
         who: "a user whose stored entitlement is still being verified at startup",
         access: "unverified",

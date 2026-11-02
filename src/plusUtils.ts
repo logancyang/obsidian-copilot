@@ -26,7 +26,7 @@ export function isSelfHostModeValid(): boolean {
 }
 
 export function isPreviewEnabled(): boolean | undefined {
-  // A stored token still being verified is unknown, so a Believer's restored Navigator never flashes its upsell at startup.
+  // A stored token still being verified is unknown, so a Supporter's restored Navigator never flashes its upsell at startup.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
   const { entitlementToken } = getSettings();
   if (entitlementToken && verified.token !== entitlementToken) return undefined;

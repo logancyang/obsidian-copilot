@@ -12,7 +12,7 @@ jest.mock("@/entitlement");
 
 describe("useSessionsSidebarOpen", () => {
   describe("useSessionsSidebarOpen()", () => {
-    beforeEach(() => setPreviewAccess("believer"));
+    beforeEach(() => setPreviewAccess("supporter"));
     it("is false while the workspace has no sessions sidebar leaf for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const fake = makeFakeWorkspaceApp();
       fake.setLeaves({ [CHAT_AGENT_VIEWTYPE]: 1 });
@@ -63,7 +63,7 @@ describe("useSessionsSidebarOpen", () => {
       expect(result.current).toBe(false);
     });
 
-    it("stays true through startup verification so a Believer's tab strip never flickers for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+    it("stays true through startup verification so a Supporter's tab strip never flickers for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
       await setPreviewAccess("unverified");
       const fake = makeFakeWorkspaceApp();
       fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });

@@ -41,7 +41,7 @@ describe("SessionsSidebarView", () => {
   describe("SessionsSidebarView", () => {
     beforeEach(async () => {
       mockSidebarMounts.mockClear();
-      await setPreviewAccess("believer");
+      await setPreviewAccess("supporter");
     });
 
     it("identifies itself with the sessions sidebar view type for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
@@ -108,7 +108,7 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("keeps a Believer's restored Navigator list mounted through startup verification, without flashing the notice or reopening it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+    it("keeps a Supporter's restored Navigator list mounted through startup verification, without flashing the notice or reopening it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
       await setPreviewAccess("unverified");
       const { view, plugin } = makeView({});
       await act(() => view.onOpen());

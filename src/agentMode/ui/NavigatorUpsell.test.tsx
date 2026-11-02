@@ -74,7 +74,7 @@ describe("NavigatorUpsell", () => {
 
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Already a Believer or Supporter? Enter your license key",
+          name: "Already a Supporter? Enter your license key",
         })
       );
 
@@ -96,12 +96,10 @@ describe("NavigatorUpsell", () => {
     }
 
     describe("constructor()", () => {
-      it("titles the dialog as a preview for Believers and Supporters for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+      it("titles the dialog as a preview for Supporters for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
         const modal = new NavigatorUpsellModal(new App());
 
-        expect(modal.titleEl.textContent).toBe(
-          "Copilot Navigator is a preview for Believers and Supporters"
-        );
+        expect(modal.titleEl.textContent).toBe("Copilot Navigator is a preview for Supporters");
       });
     });
 
@@ -121,7 +119,7 @@ describe("NavigatorUpsell", () => {
 
         fireEvent.click(
           within(modal.contentEl).getByRole("button", {
-            name: "Already a Believer or Supporter? Enter your license key",
+            name: "Already a Supporter? Enter your license key",
           })
         );
 
@@ -139,7 +137,7 @@ describe("NavigatorUpsell", () => {
       expect(screen.getByText("Your preview access ended")).toBeTruthy();
       expect(
         screen.getByText(
-          "Copilot Navigator is a preview for Believers and Supporters. Your chats are still under Recent chats in Agent Chat."
+          "Copilot Navigator is a preview for Supporters. Your chats are still under Recent chats in Agent Chat."
         )
       ).toBeTruthy();
     });
@@ -159,7 +157,7 @@ describe("NavigatorUpsell", () => {
 
       fireEvent.click(
         screen.getByRole("button", {
-          name: "Already a Believer or Supporter? Enter your license key",
+          name: "Already a Supporter? Enter your license key",
         })
       );
 

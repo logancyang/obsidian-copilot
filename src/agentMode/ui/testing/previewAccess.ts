@@ -2,14 +2,14 @@ import { verifyEntitlement, type EntitlementFeature } from "@/entitlement";
 import { applyEntitlement, verifyCachedEntitlement } from "@/plusUtils";
 import { setSettings } from "@/settings/model";
 
-export type PreviewAccess = "believer" | "plus-without-preview" | "free" | "unverified";
+export type PreviewAccess = "supporter" | "plus-without-preview" | "free" | "unverified";
 
 const STORED_TOKEN = "stored-entitlement-token";
 
 function mockSignedClaims(features: EntitlementFeature[]): void {
   jest.mocked(verifyEntitlement).mockResolvedValue({
     user_id: "user-1",
-    plan: "believer",
+    plan: "supporter",
     tier: "plus",
     features,
     iat: 0,

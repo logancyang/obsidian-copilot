@@ -142,7 +142,7 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
-    beforeEach(() => setPreviewAccess("believer"));
+    beforeEach(() => setPreviewAccess("supporter"));
 
     it("detaches a closed tab without closing its backend session for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", () => {
       const session = {

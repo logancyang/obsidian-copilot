@@ -13,7 +13,7 @@ interface PreviewSessionsSidebarProps extends React.ComponentProps<typeof Sessio
 }
 
 function PreviewSessionsSidebar({ onClose, ...props }: PreviewSessionsSidebarProps) {
-  // Unknown preview access (undefined) keeps the list, so a Believer's Navigator never flashes the notice at startup.
+  // Unknown preview access (undefined) keeps the list, so a Supporter's Navigator never flashes the notice at startup.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
   const blocked = useIsPreviewEnabled() === false;
   React.useEffect(() => {
