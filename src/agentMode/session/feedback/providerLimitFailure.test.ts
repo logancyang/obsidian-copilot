@@ -28,6 +28,10 @@ describe("providerLimitFailure", () => {
         "OpenRouter max_tokens affordability",
         "Internal error: This request requires more credits, or fewer max_tokens. You requested up to 256000 tokens, but can only afford 32935. To increase, visit https://openrouter.ai/settings/credits and add more credits",
       ],
+      [
+        "DeepSeek balance",
+        "Internal error: Insufficient Balance (request_id: 69669aa1-63a2-4d12-8591-142347639ee6)",
+      ],
       ["Gemini exhaustion", "RESOURCE_EXHAUSTED: Resource has been exhausted (e.g. check quota)."],
       ["generic throttling", "429 Too Many Requests"],
       ["Claude plan limit", "You've hit your session limit · resets 3pm"],
