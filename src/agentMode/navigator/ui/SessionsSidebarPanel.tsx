@@ -1,4 +1,7 @@
-import { SessionsSidebarRow, resolveSessionStatus } from "@/agentMode/ui/SessionsSidebarRow";
+import {
+  SessionsSidebarRow,
+  resolveSessionStatus,
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
 import { SquarePen } from "lucide-react";

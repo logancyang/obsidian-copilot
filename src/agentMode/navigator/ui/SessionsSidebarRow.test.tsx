@@ -2,7 +2,7 @@ import {
   SessionsSidebarRow,
   resolveSessionStatus,
   type SessionStatus,
-} from "@/agentMode/ui/SessionsSidebarRow";
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 
