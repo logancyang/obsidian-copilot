@@ -1,6 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
+import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -163,10 +164,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
 
   const handleProjectDeleted = useCallback(
-    (deletedId: string) => {
-      if (manager.getActiveProjectId() !== deletedId) return;
-      manager.exitProject().catch((e) => logError("[AgentMode] exit after delete failed", e));
-    },
+    (deletedId: string) => leaveDeletedProject(manager, deletedId),
     [manager]
   );
 
