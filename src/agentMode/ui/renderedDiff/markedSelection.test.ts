@@ -89,6 +89,14 @@ describe("markedSelection", () => {
       );
     });
 
+    it(`keeps the line breaks and indentation between the highlighted tokens of a code block (${ISSUE_824})`, () => {
+      const root = rendered(
+        '<pre><code><span class="token keyword">if</span> <span class="token punctuation">(</span>ok<span class="token punctuation">)</span>\n  <span class="token keyword">return</span><span class="token punctuation">;</span>\n</code></pre>'
+      );
+
+      expect(markedSelectionText(wholeOf(root))).toBe("if (ok)\n  return;");
+    });
+
     it(`joins neighbouring marks of one kind that only spaces separate, such as a changed link and its sentence (${ISSUE_824})`, () => {
       const root = rendered(
         '<p><del data-change="deleted">See </del><a><del data-change="deleted">fox</del></a><del data-change="deleted"> here.</del></p>'

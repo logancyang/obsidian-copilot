@@ -6,6 +6,7 @@ import type { Change } from "@/agentMode/ui/renderedDiff/applySentinels";
 const TAG: Record<Change, string> = { deleted: "del", inserted: "ins" };
 const LINE_ELEMENTS = "br, p, li, tr, h1, h2, h3, h4, h5, h6, blockquote, pre, dt, dd, div";
 const CELL_ELEMENTS = "td, th";
+const BLOCK_ELEMENTS = `${LINE_ELEMENTS}, ${CELL_ELEMENTS}`;
 
 export function markedSelectionText(range: Range): string {
   const common = range.commonAncestorContainer;
@@ -20,11 +21,12 @@ export function markedSelectionText(range: Range): string {
 }
 
 function textOf(node: Node, enclosing: Change | null): string {
-  // Obsidian's renderer leaves newline-only text between table cells and list items, which would split a row.
+  // Obsidian's renderer leaves whitespace between table cells and list items, which would split a row; whitespace
+  // between a code block's highlighted tokens is the code's own line breaks and indentation.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/824
   if (node.nodeType === Node.TEXT_NODE) {
     const value = node.nodeValue ?? "";
-    return /^\s*\n\s*$/.test(value) ? "" : value;
+    return !value.trim() && [node.previousSibling, node.nextSibling].some(isBlock) ? "" : value;
   }
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : null;
   const change = changeOf(element) ?? enclosing;
@@ -40,6 +42,10 @@ function mark(text: string, change: Change | null): string {
   const start = text.indexOf(body);
   const tag = TAG[change];
   return `${text.slice(0, start)}<${tag}>${body}</${tag}>${text.slice(start + body.length)}`;
+}
+
+function isBlock(node: Node | null): boolean {
+  return node?.nodeType === Node.ELEMENT_NODE && (node as Element).matches(BLOCK_ELEMENTS);
 }
 
 function changeOf(element: Element | null): Change | null {
