@@ -21,10 +21,10 @@ const renderHeader: StoryObj<AgentProjectHeaderProps>["render"] = (args) => (
     <AgentProjectHeader
       projectName={args.projectName}
       title={args.title}
-      onExit={args.onExit}
+      onExit={args.onExit ?? (() => undefined)}
       menu={args.menu}
       orphaned={args.orphaned}
-      sidebarOpen={args.sidebarOpen}
+      canLeaveProject={args.canLeaveProject}
       className={args.className}
     />
   </TooltipProvider>
@@ -45,17 +45,17 @@ export const ProjectConversationLongNames: StoryObj<AgentProjectHeaderProps> = {
   render: renderHeader,
 };
 
-export const ProjectSidebarOpen: StoryObj<AgentProjectHeaderProps> = {
-  args: { sidebarOpen: true },
+export const ProjectCannotLeave: StoryObj<AgentProjectHeaderProps> = {
+  args: { canLeaveProject: false },
   render: renderHeader,
 };
 
-export const ProjectConversationSidebarOpen: StoryObj<AgentProjectHeaderProps> = {
-  args: { title: "Compare vendor pricing", sidebarOpen: true },
+export const ProjectConversationCannotLeave: StoryObj<AgentProjectHeaderProps> = {
+  args: { title: "Compare vendor pricing", canLeaveProject: false },
   render: renderHeader,
 };
 
 export const GlobalConversation: StoryObj<AgentProjectHeaderProps> = {
-  args: { projectName: undefined, onExit: undefined, title: "Weekly review" },
+  args: { projectName: undefined, canLeaveProject: false, title: "Weekly review" },
   render: renderHeader,
 };

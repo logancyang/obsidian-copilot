@@ -8,10 +8,10 @@ import React, { memo } from "react";
 interface AgentProjectHeaderProps {
   projectName?: string;
   title?: string;
-  onExit?: () => void;
+  onExit: () => void;
   menu?: React.ReactNode;
   orphaned?: boolean;
-  sidebarOpen?: boolean;
+  canLeaveProject?: boolean;
   className?: string;
 }
 
@@ -22,12 +22,11 @@ export const AgentProjectHeader = memo(
     onExit,
     menu,
     orphaned = false,
-    sidebarOpen = false,
+    canLeaveProject = true,
     className,
   }: AgentProjectHeaderProps): React.ReactElement => (
     <div className={cn("tw-flex tw-w-full tw-items-center tw-gap-1 tw-px-2 tw-py-1.5", className)}>
-      {/* The open sessions sidebar is the navigation, so the header offers no way back. https://github.com/Brevilabs/obsidian-copilot-private/issues/804 */}
-      {onExit && !sidebarOpen && (
+      {canLeaveProject && (
         <Button
           variant="ghost2"
           size="sm"
