@@ -57,9 +57,13 @@ jest.mock("@/instructions/agentsFile", () => ({
 }));
 
 const mockTouchProjectLastUsed = jest.fn(async () => undefined);
+const mockSetProjectArchived = jest.fn(async () => undefined);
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: {
-    getInstance: jest.fn(() => ({ touchProjectLastUsed: mockTouchProjectLastUsed })),
+    getInstance: jest.fn(() => ({
+      touchProjectLastUsed: mockTouchProjectLastUsed,
+      setProjectArchived: mockSetProjectArchived,
+    })),
   },
 }));
 
@@ -5374,6 +5378,19 @@ describe("AgentSessionManager", () => {
         await manager.saveActiveSession();
 
         expect(persistence.setArchivedAt).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/806 unarchives an archived project when the user sends a message in one of its chats, and leaves an active project untouched", async () => {
+        seedProjectRecords([{ id: "shelved", archivedAt: 9_000 }, { id: "active" }]);
+        mockSetProjectArchived.mockClear();
+        const { manager } = buildHistoryHarness();
+        const shelved = await manager.createSession(undefined, "shelved");
+        const active = await manager.createSession(undefined, "active");
+
+        getSessionTestHandle(active).sendPrompt();
+        getSessionTestHandle(shelved).sendPrompt();
+
+        expect(mockSetProjectArchived.mock.calls).toEqual([["shelved", false]]);
       });
     });
 
