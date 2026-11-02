@@ -185,20 +185,30 @@ export function useAgentHistoryControls(
           items.map((item) => (item.id === id ? { ...item, pinnedAt } : item))
         );
       }
-      await runWithNotice(pinned ? "pin chat" : "unpin chat", async () => {
-        const chat = await manager.setChatPinned(id, pinned, pinnedAt);
-        if (!isMountedRef.current) return;
-        historyRequestRef.current++;
-        // A reload right after the frontmatter write reads the metadata cache's previous pin state.
-        // https://github.com/logancyang/obsidian-copilot/issues/3195
-        setChatHistoryItems((items) =>
-          items.map((item) =>
-            item.id === id ? { ...item, id: chat.id, pinnedAt: chat.pinnedAt } : item
-          )
+      try {
+        await runWithNotice(
+          pinned ? "pin chat" : "unpin chat",
+          async () => {
+            const chat = await manager.setChatPinned(id, pinned, pinnedAt);
+            if (!isMountedRef.current) return;
+            historyRequestRef.current++;
+            // A reload right after the frontmatter write reads the metadata cache's previous pin state.
+            // https://github.com/logancyang/obsidian-copilot/issues/3195
+            setChatHistoryItems((items) =>
+              items.map((item) =>
+                item.id === id ? { ...item, id: chat.id, pinnedAt: chat.pinnedAt } : item
+              )
+            );
+          },
+          true
         );
-      });
+      } catch {
+        // A dropped pin whose write failed would keep an order that was never saved, and the next drag would build on it.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/811
+        if (pinnedAt !== undefined) await loadChatHistory();
+      }
     },
-    [manager, runWithNotice]
+    [manager, loadChatHistory, runWithNotice]
   );
 
   const setChatArchived = useCallback(

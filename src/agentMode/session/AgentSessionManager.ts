@@ -131,7 +131,11 @@ const RESUMED_SESSION_BEHIND_EPOCH = -1;
 
 function hasUnsentInput(draft: AgentInputDraft | undefined): boolean {
   return (
-    !!draft && (draft.input.trim() !== "" || draft.images.length > 0 || draft.queue.length > 0)
+    !!draft &&
+    (draft.input.trim() !== "" ||
+      draft.images.length > 0 ||
+      draft.contextNotes.length > 0 ||
+      draft.queue.length > 0)
   );
 }
 
@@ -249,6 +253,7 @@ export class AgentSessionManager {
       indexTimer?: number;
       unsub?: () => void;
       signature?: string;
+      savedLabel?: string | null;
       attentionUnsub?: () => void;
       withholdsSessionId?: boolean;
     }
@@ -1262,7 +1267,7 @@ export class AgentSessionManager {
       const mru = this.sessions.get(mruId);
       if (mru && this.isOpenSession(mru)) return mru;
     }
-    const scoped = this.getSessionsForScope(projectId);
+    const scoped = this.getSessionsForScope(projectId).filter((s) => this.isOpenSession(s));
     return scoped.length > 0 ? scoped[scoped.length - 1] : null;
   }
 
@@ -1569,6 +1574,7 @@ export class AgentSessionManager {
     if (!this.isBackendInstalled(backendId)) return false;
     const probe = this.preloader.refresh(backendId);
     if (!probe) return false;
+    this.presentTranscriptSessionIds.delete(backendId);
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
     return true;
@@ -1997,6 +2003,9 @@ export class AgentSessionManager {
 
     for (const [internalId, state] of this.sessionState.entries()) {
       if (this.getSessionSourcePath(internalId) !== file.path) continue;
+      // A chat left a moment ago still saves into its note while it closes, so reopening waits for that save.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+      await this.closingSessions.get(internalId)?.catch(() => undefined);
       const existing = this.sessions.get(internalId);
       if (existing && this.isOpenSession(existing)) {
         this.setActiveSession(internalId);
@@ -2159,6 +2168,9 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
+    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
 
@@ -2199,7 +2211,6 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
-    await this.untilChatClosed(backendId, sessionId);
     await this.ensureScopeInstructions(
       projectId,
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
@@ -2422,6 +2433,9 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
     });
+    // A chat without a note has no metadata-cache event, so the chat lists only learn of it here.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+    this.markHistoryChanged();
   }
 
   saveActiveSession(): Promise<{ path: string } | null> {
@@ -2467,6 +2481,15 @@ export class AgentSessionManager {
     if (messages.length === 0) return null;
 
     const state = this.getSessionState(session.internalId);
+    const previousSourcePath = this.getSessionSourcePath(session.internalId);
+    // A title edited in the note's Properties since this chat last saved is the chat's title now, not one to overwrite.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
+    if (previousSourcePath) {
+      const topic = (await this.readChatFrontmatter(previousSourcePath))?.topic;
+      if (typeof topic === "string" && topic.trim() && topic.trim() !== state.savedLabel) {
+        session.setLabel(topic);
+      }
+    }
     const label = session.getLabel();
     const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
@@ -2483,7 +2506,6 @@ export class AgentSessionManager {
       return state.source ?? null;
     }
 
-    const previousSourcePath = this.getSessionSourcePath(session.internalId);
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
       existingPath: this.getSessionSourcePath(session.internalId) || undefined,
@@ -2494,6 +2516,7 @@ export class AgentSessionManager {
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
       state.signature = signature;
+      state.savedLabel = label;
       // The first successful save changes relative-link resolution in the mounted chat
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
       // and adds the chat to the saved lists, which reload on the history revision.
