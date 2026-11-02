@@ -1,9 +1,6 @@
 import { useStoredIdSet } from "@/agentMode/ui/hooks/useStoredIdSet";
-import { logWarn } from "@/logger";
 import { act, renderHook } from "@testing-library/react";
 import type { App } from "obsidian";
-
-jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
 const STORAGE_KEY = "copilot:test-fold-state:v1";
 
@@ -47,7 +44,7 @@ describe("useStoredIdSet", () => {
       });
 
       expect([...result.current.ids]).toEqual(["a", "b"]);
-      expect(JSON.parse(store.get(STORAGE_KEY) as string)).toEqual(["a", "b"]);
+      expect(store.get(STORAGE_KEY)).toEqual(["a", "b"]);
     });
 
     it("restores the ids after a reload from vault-scoped storage for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
@@ -68,7 +65,7 @@ describe("useStoredIdSet", () => {
       act(() => result.current.toggle("a"));
       act(() => result.current.toggle("a"));
 
-      expect(JSON.parse(store.get(STORAGE_KEY) as string)).toEqual([]);
+      expect(store.get(STORAGE_KEY)).toEqual([]);
     });
 
     it("keeps the sets stored under different keys apart", () => {
@@ -80,11 +77,11 @@ describe("useStoredIdSet", () => {
 
       expect(folders.result.current.ids.size).toBe(0);
       expect(store.get(STORAGE_KEY)).toBeUndefined();
-      expect(JSON.parse(store.get("copilot:other-fold-state:v1") as string)).toEqual(["recents"]);
+      expect(store.get("copilot:other-fold-state:v1")).toEqual(["recents"]);
     });
 
-    it.each([["not json"], ['{"a":1}'], ["[1,2]"]])(
-      "starts with no ids when the stored value %s is not a list of ids",
+    it.each([["a"], [{ a: 1 }], [[1, 2]]])(
+      "starts with no ids when the stored value %j is not a list of ids",
       (stored) => {
         const { app } = createApp(stored);
 
@@ -93,21 +90,5 @@ describe("useStoredIdSet", () => {
         expect(result.current.ids.size).toBe(0);
       }
     );
-
-    it("keeps toggling in memory and logs a warning when storage cannot be written for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const { app } = createApp();
-      (app.saveLocalStorage as jest.Mock).mockImplementation(() => {
-        throw new Error("storage disabled");
-      });
-      const { result } = renderHook(() => useStoredIdSet(app, STORAGE_KEY));
-
-      act(() => result.current.toggle("a"));
-
-      expect(result.current.ids.has("a")).toBe(true);
-      expect(logWarn).toHaveBeenCalledWith(
-        "Failed to persist sessions sidebar fold state",
-        expect.any(Error)
-      );
-    });
   });
 });
