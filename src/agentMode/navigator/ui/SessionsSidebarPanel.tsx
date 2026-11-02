@@ -32,6 +32,8 @@ import { cn } from "@/lib/utils";
 import {
   DndContext,
   KeyboardSensor,
+  type Announcements,
+  type UniqueIdentifier,
   PointerSensor,
   closestCenter,
   useSensor,
@@ -146,11 +148,30 @@ const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space", "E
 
 interface SortableListProps {
   ids: string[];
+  labels: string[];
   onMove: (from: number, to: number) => void;
   children: React.ReactNode;
 }
 
-const SortableList: React.FC<SortableListProps> = ({ ids, onMove, children }) => {
+// Row ids are chat note paths, so dnd-kit's default announcements would read file paths aloud.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/811
+function dragAnnouncements(ids: string[], labels: string[]): Announcements {
+  const name = (id: UniqueIdentifier) => labels[ids.indexOf(String(id))];
+  const position = (id: UniqueIdentifier) =>
+    `position ${ids.indexOf(String(id)) + 1} of ${ids.length}`;
+  return {
+    onDragStart: ({ active }) => `Picked up ${name(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${name(active.id)} is over ${position(over.id)}.` : undefined,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `${name(active.id)} was dropped at ${position(over.id)}.`
+        : `${name(active.id)} was dropped.`,
+    onDragCancel: ({ active }) => `Moving ${name(active.id)} was cancelled.`,
+  };
+}
+
+const SortableList: React.FC<SortableListProps> = ({ ids, labels, onMove, children }) => {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(KeyboardSensor, {
@@ -161,6 +182,7 @@ const SortableList: React.FC<SortableListProps> = ({ ids, onMove, children }) =>
   return (
     <DndContext
       sensors={sensors}
+      accessibility={{ announcements: dragAnnouncements(ids, labels) }}
       collisionDetection={closestCenter}
       onDragEnd={({ active, over }) => {
         if (over && active.id !== over.id) {
@@ -414,6 +436,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               >
                 <SortableList
                   ids={pinnedIds}
+                  labels={groups.pinned.map((item) => item.title)}
                   onMove={(from, to) =>
                     void actions.onSetChatPinned(
                       pinnedIds[from],
@@ -446,6 +469,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             >
               <SortableList
                 ids={visibleProjects.map(({ project }) => project.id)}
+                labels={visibleProjects.map(({ project }) => project.name)}
                 onMove={(from, to) => onReorderProjects(arrayMove(projectIds, from, to))}
               >
                 {visibleProjects.map(({ project, chats }) => {

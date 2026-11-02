@@ -858,6 +858,16 @@ describe("SessionsSidebarPanel", () => {
         expect(onSetChatPinned).toHaveBeenCalledWith("chats/pin-a.md", true, 150);
       });
 
+      it("announces a keyboard move by the chat's title and position, never its note path, for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+        renderPanel({ items: pins });
+
+        dragByKeyboard(screen.getByRole("button", { name: "Pin A" }), "ArrowDown", 1);
+
+        const announcement = document.querySelector("[aria-live]")?.textContent ?? "";
+        expect(announcement).toContain("Pin A was dropped at position 2 of");
+        expect(announcement).not.toContain(".md");
+      });
+
       it("stores the new project order when a project is dropped by keyboard for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
         const props = renderPanel({ projects: projects(3) });
         const [first] = within(section("Projects")).getAllByRole("button", { expanded: false });
