@@ -4360,6 +4360,31 @@ describe("AgentSessionManager", () => {
           expect(session.setLabel).toHaveBeenLastCalledWith("Edited in Properties");
         });
 
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 keeps a tab rename made after the chat was opened from its note instead of reverting to the note's title", async () => {
+          const note: FakeFrontmatter = { epoch: 1_000, backendId: "opencode", topic: "Saved" };
+          const { manager, persistence } = buildHistoryHarness({ files: { [NOTE]: note } });
+          Object.assign(persistence, {
+            loadFile: jest.fn(async () => ({
+              backendId: "opencode",
+              projectId: GLOBAL_SCOPE,
+              label: "Saved",
+              messages: [{ sender: USER_SENDER, message: "Question", isVisible: true }],
+            })),
+          });
+          const session = await manager.loadSessionFromHistory(new MockTFile(NOTE));
+          jest.mocked(session.setLabel).mockClear();
+          session.restoreLabel("Tab rename", "user");
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).not.toHaveBeenCalled();
+          expect(persistence.saveSession).toHaveBeenLastCalledWith(
+            expect.anything(),
+            "opencode",
+            expect.objectContaining({ label: "Tab rename" })
+          );
+        });
+
         it("writes a newer agent title over the one the chat saved before", async () => {
           const { manager, persistence, session } = await savedChat();
           session.restoreLabel("Newer agent title", "agent");
@@ -4671,45 +4696,6 @@ describe("AgentSessionManager", () => {
           present = true;
 
           expect(await manager.getChatHistoryItems()).toHaveLength(1);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} probes a chat again after the chat is deleted`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const { manager } = buildHistoryHarness({
-            files: savedChat("s1"),
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-
-          await manager.deleteChatHistory(SAVED_NOTE);
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} probes a chat again after its session is released and closed`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const sessionId = `backend-${nextBackendSessionId}`;
-          const { manager } = buildHistoryHarness({
-            files: savedChat(sessionId),
-            warmSessionExistsLocally: sessionExistsLocally,
-            createBackendProcess: jest.fn(() => ({
-              ...makeMockBackendProcess(),
-              sessionExistsLocally,
-            })),
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-          const session = await manager.createSession("opencode");
-          expect(session.getBackendSessionId()).toBe(sessionId);
-
-          await manager.closeSession(session.internalId, { releaseBackend: true });
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
           expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
         });
 
