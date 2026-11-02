@@ -941,15 +941,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     return leaf;
   }
 
-  async activateSessionsSidebar(): Promise<void> {
-    if (!this.requireAgentView()) return;
-    const [existing] = this.app.workspace.getLeavesOfType(SESSIONS_SIDEBAR_VIEWTYPE);
-    const leaf = existing ?? this.app.workspace.getLeftLeaf(false);
-    if (!leaf) return;
-    if (!existing) await leaf.setViewState({ type: SESSIONS_SIDEBAR_VIEWTYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
-  }
-
   async addNoteToAgentChat(note: TFile, openInRightSidebar = false): Promise<void> {
     try {
       const leaf = await this.activateAgentView(openInRightSidebar);
