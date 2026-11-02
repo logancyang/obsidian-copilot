@@ -1,4 +1,4 @@
-import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";

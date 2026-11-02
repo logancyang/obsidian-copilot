@@ -3,7 +3,7 @@ import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryCon
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
-import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
 import { AGENT_CHAT_MODE } from "@/constants";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";

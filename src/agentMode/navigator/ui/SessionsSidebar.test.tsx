@@ -1,5 +1,5 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
+import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
