@@ -53,10 +53,26 @@ function makeBookmarks(urls: string[] = []) {
   return bookmarks;
 }
 
+type VaultListener = (...args: unknown[]) => void;
+const vaultListeners = new Map<string, Set<VaultListener>>();
+
+function emitVault(event: "rename" | "delete", ...args: unknown[]) {
+  for (const listener of vaultListeners.get(event) ?? []) listener(...args);
+}
+
 function makeBookmarkingPlugin(bookmarks: ReturnType<typeof makeBookmarks> | null) {
   const epochs: Record<string, number> = { "chats/agent__a.md": 1_000, "chats/saved.md": 3_000 };
   const app = {
     vault: {
+      on: (event: string, listener: VaultListener) => {
+        const listeners = vaultListeners.get(event) ?? new Set<VaultListener>();
+        listeners.add(listener);
+        vaultListeners.set(event, listeners);
+        return { event, listener };
+      },
+      offref: (ref: { event: string; listener: VaultListener }) => {
+        vaultListeners.get(ref.event)?.delete(ref.listener);
+      },
       getName: () => "Notes",
       getAbstractFileByPath: (path: string) =>
         path in epochs ? new (TFile as unknown as new (path: string) => TFile)(path) : null,
@@ -96,6 +112,31 @@ describe("useAgentHistoryControls", () => {
 
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith(undefined);
       expect(result.current.chatHistoryItems).toHaveLength(2);
+    });
+
+    it("reloads when a listed chat's note is renamed or deleted in the vault, and not for other files, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const manager = makeManager() as AgentSessionManager & { getChatHistoryItems: jest.Mock };
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+      manager.getChatHistoryItems.mockClear();
+
+      await act(async () => {
+        emitVault("rename", { path: "notes/other.md" }, "notes/elsewhere.md");
+        emitVault("delete", { path: "notes/other.md" });
+      });
+      expect(manager.getChatHistoryItems).not.toHaveBeenCalled();
+
+      await act(async () => {
+        emitVault("rename", { path: "chats/renamed.md" }, "a");
+      });
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        emitVault("delete", { path: "b" });
+      });
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
     });
 
     it("loads only the chats of the given project scope", async () => {
@@ -726,7 +767,7 @@ describe("useAgentHistoryControls", () => {
       const copyChatLink = jest.fn(async (resolveNotePath: () => Promise<string>) => {
         linkedNotePath = await resolveNotePath();
       });
-      const linkingPlugin = { copyChatLink } as unknown as CopilotPlugin;
+      const linkingPlugin = { app: plugin.app, copyChatLink } as unknown as CopilotPlugin;
       const { result } = renderHook(() => useAgentHistoryControls(makeManager(), linkingPlugin));
 
       await act(async () => {
@@ -742,7 +783,7 @@ describe("useAgentHistoryControls", () => {
       const copyChatLink = jest.fn(async (resolveNotePath: () => Promise<string>) => {
         linkedNotePath = await resolveNotePath();
       });
-      const linkingPlugin = { copyChatLink } as unknown as CopilotPlugin;
+      const linkingPlugin = { app: plugin.app, copyChatLink } as unknown as CopilotPlugin;
       const manager = makeManager();
       manager.getChatHistoryItems.mockResolvedValue([{ id: NATIVE_ID }]);
       manager.ensureChatNote.mockResolvedValue("chats/saved.md");
