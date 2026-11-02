@@ -26,6 +26,7 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
+import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
 import { Archive, ChevronRight, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -70,11 +71,12 @@ const Group: React.FC<GroupProps> = ({
   children,
 }) => {
   const headerId = useId();
+  const { keyboardFocused, focusWithinProps } = useKeyboardFocusWithin();
   return (
     // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
     <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
-      <div className="tw-group tw-relative">
+      <div className="tw-group tw-relative" {...focusWithinProps}>
         <h3 className="tw-m-0">
           <button
             id={headerId}
@@ -88,11 +90,12 @@ const Group: React.FC<GroupProps> = ({
           >
             <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
             {action && <span aria-hidden="true" className="tw-w-5 tw-shrink-0" />}
-            {/* The fold chevron shows only on hover or focus, like the header's other actions, so the list reads clean.
-                https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+            {/* The fold chevron shows only on hover or keyboard focus, like the header's other actions, so the list
+                reads clean. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
             <ChevronRight
               className={cn(
-                "tw-invisible tw-size-4 tw-shrink-0 group-focus-within:tw-visible group-hover:tw-visible",
+                "tw-size-4 tw-shrink-0",
+                keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible",
                 !collapsed && "tw-rotate-90"
               )}
             />
@@ -105,9 +108,7 @@ const Group: React.FC<GroupProps> = ({
           <div
             className={cn(
               "tw-absolute tw-bottom-0.5 tw-right-8 tw-flex tw-items-center",
-              actionPinned
-                ? "tw-visible"
-                : "tw-invisible group-focus-within:tw-visible group-hover:tw-visible"
+              actionPinned || keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible"
             )}
           >
             {action}
