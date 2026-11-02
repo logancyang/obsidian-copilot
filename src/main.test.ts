@@ -96,6 +96,9 @@ import type { WebSelectionTrackingOptions } from "@/services/webViewerService/we
 const mockStartSelectionTracker = jest.fn();
 const mockSelectionTrackerOptions = jest.fn();
 jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
+  ...jest.requireActual<typeof import("@/services/webViewerService/webViewerServiceSelection")>(
+    "@/services/webViewerService/webViewerServiceSelection"
+  ),
   WebSelectionTracker: class {
     constructor(options: WebSelectionTrackingOptions) {
       mockSelectionTrackerOptions(options);
