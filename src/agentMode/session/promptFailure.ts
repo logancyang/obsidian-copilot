@@ -46,6 +46,11 @@ function findProviderErrorPayload(
   if (record.data) {
     const nested = findProviderErrorPayload(record.data, seen);
     if (nested) return nested;
+    // Codex reports a used-up plan only in the JSON-RPC error's plain-text data.message, under a bare "Internal error".
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/810
+    const dataMessage =
+      typeof record.data === "object" && (record.data as Record<string, unknown>).message;
+    if (typeof dataMessage === "string") return { message: dataMessage };
   }
   if (Array.isArray(record.errors)) {
     for (const item of record.errors) {
