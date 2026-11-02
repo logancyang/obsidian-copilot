@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { CHAT_AGENT_VIEWTYPE, SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
+import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { makeFakeWorkspaceApp } from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import {
   applyLicenseWithPreview,

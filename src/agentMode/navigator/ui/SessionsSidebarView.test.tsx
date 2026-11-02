@@ -1,4 +1,4 @@
-import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
+import SessionsSidebarView from "@/agentMode/navigator/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import {
@@ -12,7 +12,7 @@ import type { WorkspaceLeaf } from "obsidian";
 jest.mock("@/entitlement");
 
 const mockSidebarMounts = jest.fn();
-jest.mock("@/agentMode/ui/SessionsSidebar", () => {
+jest.mock("@/agentMode/navigator/ui/SessionsSidebar", () => {
   const React = jest.requireActual<typeof import("react")>("react");
   return {
     SessionsSidebar: () => {

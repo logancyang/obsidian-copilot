@@ -2,7 +2,7 @@ import {
   NavigatorBlockedNotice,
   NavigatorUpsellContent,
   type NavigatorUpsellContentProps,
-} from "@/agentMode/ui/NavigatorUpsell";
+} from "@/agentMode/navigator/ui/NavigatorUpsell";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 

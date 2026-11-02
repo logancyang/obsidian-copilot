@@ -1,8 +1,8 @@
-import { NavigatorUpsellModal } from "@/agentMode/ui/NavigatorUpsell";
 import {
   openNavigatorWhenPreviewActivates,
   openSessionsSidebar,
-} from "@/agentMode/ui/openSessionsSidebar";
+} from "@/agentMode/navigator/openSessionsSidebar";
+import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import {
   applyLicenseWithPreview,
   verifyStoredToken,
@@ -14,7 +14,7 @@ import { setSettings } from "@/settings/model";
 jest.mock("@/entitlement");
 
 const mockOpenUpsell = jest.fn();
-jest.mock("@/agentMode/ui/NavigatorUpsell", () => ({
+jest.mock("@/agentMode/navigator/ui/NavigatorUpsell", () => ({
   NavigatorUpsellModal: jest.fn(() => ({ open: mockOpenUpsell })),
 }));
 

@@ -1,13 +1,14 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
+import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
-import { useStoredIdSet } from "@/agentMode/ui/hooks/useStoredIdSet";
+import { useStoredIdSet } from "@/agentMode/navigator/hooks/useStoredIdSet";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
-import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
 import { AGENT_CHAT_MODE } from "@/constants";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -163,10 +164,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
 
   const handleProjectDeleted = useCallback(
-    (deletedId: string) => {
-      if (manager.getActiveProjectId() !== deletedId) return;
-      manager.exitProject().catch((e) => logError("[AgentMode] exit after delete failed", e));
-    },
+    (deletedId: string) => leaveDeletedProject(manager, deletedId),
     [manager]
   );
 

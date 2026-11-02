@@ -1,4 +1,4 @@
-import { NavigatorUpsellModal } from "@/agentMode/ui/NavigatorUpsell";
+import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import type CopilotPlugin from "@/main";
 import { isPreviewEnabled, subscribeToPreviewAccess } from "@/plusUtils";
 

@@ -1,13 +1,13 @@
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
+import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
 import {
   SessionsSidebarRow,
   mostUrgentStatus,
   resolveSessionStatus,
   type SortHandle,
-} from "@/agentMode/ui/SessionsSidebarRow";
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import {
   RECENTS_PAGE_SIZE,
   VISIBLE_CHATS_PER_PROJECT,
@@ -15,7 +15,7 @@ import {
   filterChatsByTitle,
   groupSessionsSidebarChats,
   pinnedAtAfterMove,
-} from "@/agentMode/ui/sessionsSidebarGroups";
+} from "@/agentMode/navigator/ui/sessionsSidebarGroups";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
@@ -376,7 +376,9 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           inputClassName="!tw-h-7"
         />
       )}
-      <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto">
+      {/* The list reaches into the panel's right padding so its scrollbar sits at the pane edge, as in Relevant Notes.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+      <div className="-tw-mr-2 tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-pr-2">
         {matches ? (
           matches.length === 0 ? (
             <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No matching chats</div>

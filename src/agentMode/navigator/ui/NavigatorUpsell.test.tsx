@@ -3,7 +3,7 @@ import {
   NavigatorBlockedNotice,
   NavigatorUpsellContent,
   NavigatorUpsellModal,
-} from "@/agentMode/ui/NavigatorUpsell";
+} from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { AppContext } from "@/context";
 import { openCopilotSettings } from "@/settings/openSettings";

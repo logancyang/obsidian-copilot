@@ -1,6 +1,6 @@
-import { NavigatorBlockedNotice } from "@/agentMode/ui/NavigatorUpsell";
-import { openNavigatorWhenPreviewActivates } from "@/agentMode/ui/openSessionsSidebar";
-import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
+import { openNavigatorWhenPreviewActivates } from "@/agentMode/navigator/openSessionsSidebar";
+import { NavigatorBlockedNotice } from "@/agentMode/navigator/ui/NavigatorUpsell";
+import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { useIsPreviewEnabled } from "@/plusUtils";

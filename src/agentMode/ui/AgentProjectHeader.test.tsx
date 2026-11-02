@@ -15,10 +15,10 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
       <AgentProjectHeader
         projectName={"projectName" in props ? props.projectName : "Demo"}
         title={props.title}
-        onExit={"onExit" in props ? props.onExit : onExit}
+        onExit={onExit}
         menu={menu}
         orphaned={props.orphaned}
-        sidebarOpen={props.sidebarOpen}
+        canLeaveProject={props.canLeaveProject}
       />
     </TooltipProvider>
   );
@@ -38,8 +38,8 @@ describe("AgentProjectHeader", () => {
       expect(onExit).toHaveBeenCalledTimes(1);
     });
 
-    it("hides the leave button while the sessions sidebar is open, keeping the project name and menu, for https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
-      renderHeader({ projectName: "Research", title: "Compare vendors", sidebarOpen: true });
+    it("hides the leave button when leaving the project is not allowed, keeping the project name and menu, for https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      renderHeader({ projectName: "Research", title: "Compare vendors", canLeaveProject: false });
 
       expect(screen.queryByRole("button", { name: "Leave project" })).toBeNull();
       expect(screen.getByText("Research")).toBeTruthy();
@@ -79,7 +79,7 @@ describe("AgentProjectHeader", () => {
       renderHeader({
         projectName: undefined,
         title: "Weekly review",
-        onExit: undefined,
+        canLeaveProject: false,
         menu: undefined,
       });
 
