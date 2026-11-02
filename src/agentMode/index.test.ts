@@ -77,6 +77,7 @@ jest.mock("./ui/permissionPrompter", () => ({
 }));
 jest.mock("./ui/CopilotAgentView", () => ({}));
 jest.mock("./ui/SessionsSidebarView", () => ({}));
+jest.mock("./ui/openSessionsSidebar", () => ({}));
 jest.mock("./ui/useBackendDescriptor", () => ({}));
 jest.mock("./backends/opencode/opencodeProbePartition", () => ({}));
 jest.mock("./backends/opencode/opencodeModelResolve", () => ({}));
