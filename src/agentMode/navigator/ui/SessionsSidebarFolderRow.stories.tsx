@@ -1,5 +1,5 @@
-import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
-import { sidebarProject } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
+import { sidebarProject } from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 

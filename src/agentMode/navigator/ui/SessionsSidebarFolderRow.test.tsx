@@ -1,6 +1,6 @@
-import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
+import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
-import { sidebarProject } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import { sidebarProject } from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import { AppContext } from "@/context";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { App } from "obsidian";

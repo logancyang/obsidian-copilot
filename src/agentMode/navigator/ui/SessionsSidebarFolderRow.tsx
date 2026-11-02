@@ -1,5 +1,5 @@
 import { AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
-import { SessionStatusIcon, type SessionStatus } from "@/agentMode/ui/SessionsSidebarRow";
+import { SessionStatusIcon, type SessionStatus } from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
