@@ -2189,13 +2189,9 @@ export class AgentSessionManager {
   }
 
   private async untilChatClosed(backendId: BackendId, sessionId: SessionId): Promise<void> {
-    const closing = Array.from(this.closingSessions, ([id, done]) => ({
-      session: this.sessions.get(id),
-      done,
-    }));
-    for (const { session, done } of closing) {
-      if (session?.backendId !== backendId || session.getBackendSessionId() !== sessionId) continue;
-      await done.catch(() => undefined);
+    for (const session of Array.from(this.sessions.values())) {
+      if (session.backendId !== backendId || session.getBackendSessionId() !== sessionId) continue;
+      await this.closingSessions.get(session.internalId)?.catch(() => undefined);
     }
   }
 
