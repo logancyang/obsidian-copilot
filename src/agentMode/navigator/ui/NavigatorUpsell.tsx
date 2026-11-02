@@ -8,7 +8,7 @@ import type { App } from "obsidian";
 import * as React from "react";
 
 export const NAVIGATOR_HIGHLIGHT_URL =
-  "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-17ec159c.webp";
+  "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-c5abf409.webp";
 
 interface EnterLicenseKeyButtonProps {
   onOpenSettings?: () => void;
