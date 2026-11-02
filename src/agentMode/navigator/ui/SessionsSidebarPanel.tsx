@@ -1,19 +1,19 @@
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { SessionsSidebarFolderRow } from "@/agentMode/ui/SessionsSidebarFolderRow";
+import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
 import {
   SessionsSidebarRow,
   mostUrgentStatus,
   resolveSessionStatus,
-} from "@/agentMode/ui/SessionsSidebarRow";
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import {
   RECENTS_PAGE_SIZE,
   VISIBLE_CHATS_PER_PROJECT,
   VISIBLE_PROJECTS,
   filterChatsByTitle,
   groupSessionsSidebarChats,
-} from "@/agentMode/ui/sessionsSidebarGroups";
+} from "@/agentMode/navigator/ui/sessionsSidebarGroups";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,8 @@
-import { SessionsSidebarRow } from "@/agentMode/ui/SessionsSidebarRow";
-import { inertChatActions, sidebarChat } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import { SessionsSidebarRow } from "@/agentMode/navigator/ui/SessionsSidebarRow";
+import {
+  inertChatActions,
+  sidebarChat,
+} from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 

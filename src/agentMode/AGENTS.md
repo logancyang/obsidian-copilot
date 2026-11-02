@@ -27,6 +27,11 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
 8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail. It may import
    `ui/` and `session/`, and only `ui/` imports it, so the rest of `src/miyo`
    stays free of Agent Mode.
+9. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
+   components, hooks, and stories. It may import `ui/` and `session/`. Code
+   outside it imports only `navigator/index.ts`, so removing the Navigator
+   means deleting the folder and those imports. Navigator-only code belongs
+   here, not in `ui/`.
 
 ## Why two adapters under one session
 
