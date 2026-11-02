@@ -2424,6 +2424,21 @@ describe("AgentSessionManager", () => {
 
         expect(manager.getHistoryRevision()).toBeGreaterThan(before);
       });
+
+      it("moves forward once a chat without a note is recorded in the session index so it gets listed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const { manager, index } = buildHistoryHarness();
+        const session = await manager.createSession();
+        const before = manager.getHistoryRevision();
+
+        getSessionTestHandle(session).setMessages([{ message: "Question" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+
+        expect(await index.getEntries()).toHaveLength(1);
+        expect(manager.getHistoryRevision()).toBeGreaterThan(before);
+        await manager.shutdown();
+      });
     });
 
     describe("openGlobalLanding()", () => {
