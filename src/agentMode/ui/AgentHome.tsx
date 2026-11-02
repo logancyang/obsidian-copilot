@@ -40,7 +40,7 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
-import { useSessionsSidebarOpen } from "@/agentMode/navigator";
+import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
