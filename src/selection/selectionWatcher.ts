@@ -1,9 +1,4 @@
-import {
-  reportSelection,
-  type KeyedSelection,
-  type SelectionReport,
-} from "@/selection/selectionStore";
-import type { WebSelectedTextContext } from "@/types/message";
+import { reportSelection, type SelectionReport } from "@/selection/selectionStore";
 import { EditorView } from "@codemirror/view";
 import {
   editorInfoField,
@@ -38,10 +33,6 @@ export function editorSelectionReport({
       endLine,
     },
   };
-}
-
-export function webSelectionReport(context: WebSelectedTextContext): KeyedSelection {
-  return { location: context.url, key: `web:${context.url}:${context.content}`, context };
 }
 
 export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
