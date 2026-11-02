@@ -2014,7 +2014,9 @@ export class AgentSessionManager {
       if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
-    this.getSessionState(session.internalId).source = file;
+    const state = this.getSessionState(session.internalId);
+    state.source = file;
+    state.savedLabel = loaded.label;
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2397,7 +2399,7 @@ export class AgentSessionManager {
 
     const state = this.getSessionState(session.internalId);
     const previousSourcePath = this.getSessionSourcePath(session.internalId);
-    // A title edited in the note's Properties since this chat last saved is the chat's title now, not one to overwrite.
+    // A title edited in the note's Properties since this chat last loaded or saved it is the chat's title now, not one to overwrite.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
     if (previousSourcePath) {
       const topic = (await this.readChatFrontmatter(previousSourcePath))?.topic;
