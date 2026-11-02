@@ -1,4 +1,4 @@
-import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
+import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
