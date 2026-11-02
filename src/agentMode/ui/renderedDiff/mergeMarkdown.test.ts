@@ -32,12 +32,22 @@ import {
   buildRenderedDiffPlan,
   diffCodeLines,
   isMarkdownPath,
+  type DiffRun,
 } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/testing/fixtureParserApp";
+import {
+  appParsing,
+  type RecordedParse,
+} from "@/agentMode/ui/renderedDiff/testing/recordedParserApp";
 import { logWarn } from "@/logger";
 import type { App } from "obsidian";
 
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
+
+const run = (before: [number, number], after: [number, number]): DiffRun => ({
+  before: { start: before[0], end: before[1] },
+  after: { start: after[0], end: after[1] },
+});
 
 describe("mergeMarkdown", () => {
   describe("isMarkdownPath()", () => {
@@ -95,6 +105,61 @@ describe("mergeMarkdown", () => {
   describe("buildRenderedDiffPlan()", () => {
     const app = appParsingRecordedFixtures();
 
+    it("groups the changed blocks between two unchanged blocks into one run spanning the lines between those blocks (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      const before =
+        "Intro stays.\n\nThe pilot runs for six weeks.\n\nMiddle stays.\n\nWe report every Friday.\n";
+      const after =
+        "Intro stays.\n\nThe pilot runs for eight weeks.\n\nBudget is fixed.\n\nMiddle stays.\n\nWe report every Monday.\n";
+      const parses = new Map<string, RecordedParse>([
+        [before, { sections: [0, 2, 4, 6].map((line) => ["paragraph", line, line] as const) }],
+        [after, { sections: [0, 2, 4, 6, 8].map((line) => ["paragraph", line, line] as const) }],
+      ]);
+
+      const plan = await buildRenderedDiffPlan(
+        appParsing((source) => parses.get(source)!),
+        before,
+        after,
+        true
+      );
+
+      expect(plan.map((segment) => segment.run)).toEqual([
+        undefined,
+        run([1, 4], [1, 6]),
+        run([1, 4], [1, 6]),
+        undefined,
+        run([5, 8], [7, 10]),
+      ]);
+      expect(plan[1].run).toBe(plan[2].run);
+      expect(plan[2]).toEqual({
+        kind: "block",
+        change: "inserted",
+        markdown: "Budget is fixed.",
+        run: run([1, 4], [1, 6]),
+      });
+    });
+
+    it("groups consecutive changed lines of a line diff into runs, the last one reaching the end of both texts so it covers the final newline (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      const plan = await buildRenderedDiffPlan(
+        app,
+        "alpha: 1\nbeta: 2\ngamma: 3\n",
+        "alpha: 1\nbeta: 20\ngamma: 3\ndelta: 4\n",
+        false
+      );
+
+      expect(plan).toEqual([
+        {
+          kind: "code",
+          lines: [
+            { change: "unchanged", text: "alpha: 1" },
+            { change: "deleted", text: "beta: 2", run: run([1, 2], [1, 2]) },
+            { change: "inserted", text: "beta: 20", run: run([1, 2], [1, 2]) },
+            { change: "unchanged", text: "gamma: 3" },
+            { change: "inserted", text: "delta: 4", run: run([3, 4], [3, 5]) },
+          ],
+        },
+      ]);
+    });
+
     it("preserves raw markers in an unchanged note verbatim without highlighting them (https://github.com/Brevilabs/obsidian-copilot-private/issues/348)", async () => {
       const text = "Keep \uE000 literal \uE003.";
       expect(await buildRenderedDiffPlan(app, text, text, true)).toEqual([
@@ -108,8 +173,8 @@ describe("mergeMarkdown", () => {
         {
           kind: "code",
           lines: [
-            { change: "deleted", text: marked },
-            { change: "inserted", text: "plain" },
+            { change: "deleted", text: marked, run: run([0, 1], [0, 1]) },
+            { change: "inserted", text: "plain", run: run([0, 1], [0, 1]) },
           ],
         },
       ]);
@@ -132,7 +197,7 @@ describe("mergeMarkdown", () => {
           lines: [
             { change: "unchanged", text: "Alpha" },
             { change: "unchanged", text: "" },
-            { change: "inserted", text: "" },
+            { change: "inserted", text: "", run: run([2, 2], [2, 3]) },
             { change: "unchanged", text: "Beta" },
           ],
         },
@@ -146,8 +211,8 @@ describe("mergeMarkdown", () => {
         {
           kind: "code",
           lines: [
-            { change: "deleted", text: "The pilot runs." },
-            { change: "inserted", text: "The pilot  runs." },
+            { change: "deleted", text: "The pilot runs.", run: run([0, 1], [0, 1]) },
+            { change: "inserted", text: "The pilot  runs.", run: run([0, 1], [0, 1]) },
             { change: "unchanged", text: "We report weekly." },
           ],
         },
@@ -161,6 +226,7 @@ describe("mergeMarkdown", () => {
         {
           kind: "markdown",
           markdown: `| Region | Partners | Status |\n| --- | --- | --- |\n| EMEA | ${DEL_OPEN}2${DEL_CLOSE}${INS_OPEN}3${INS_CLOSE} | Ready |\n| APAC | 1 | Blocked |`,
+          run: run([0, 5], [0, 5]),
         },
       ]);
     });
@@ -173,11 +239,13 @@ describe("mergeMarkdown", () => {
           kind: "block",
           change: "deleted",
           markdown: "| Region | Partners |\n| --- | --- |\n| EMEA | 2 |",
+          run: run([0, 4], [0, 4]),
         },
         {
           kind: "block",
           change: "inserted",
           markdown: "| Region | Partners | Status |\n| --- | --- | --- |\n| EMEA | 2 | Ready |",
+          run: run([0, 4], [0, 4]),
         },
       ]);
     });
@@ -212,6 +280,7 @@ describe("mergeMarkdown", () => {
           { change: "unchanged", text: "status: draft" },
           { change: "unchanged", text: "---" },
         ],
+        run: run([0, 6], [0, 7]),
       });
       expect(plan[1]).toEqual({ kind: "markdown", markdown: "The pilot runs for six weeks." });
     });
@@ -246,6 +315,7 @@ describe("mergeMarkdown", () => {
           { change: "unchanged", text: "npm run verify" },
           { change: "unchanged", text: "```" },
         ],
+        run: run([1, 7], [1, 7]),
       });
     });
 
@@ -258,6 +328,7 @@ describe("mergeMarkdown", () => {
           change: "inserted",
           markdown:
             "# Migration review\n\nAttendees: Ana, Bo, Kit.\n\n- Runbook is drafted\n- Rollback still open",
+          run: run([0, 1], [0, 7]),
         },
       ]);
     });
@@ -274,12 +345,22 @@ describe("mergeMarkdown", () => {
       const plan = await buildRenderedDiffPlan(app, BLOCK_MOVED.before, BLOCK_MOVED.after, true);
 
       expect(plan).toEqual([
-        { kind: "block", change: "deleted", markdown: "Budget is fixed for the quarter." },
+        {
+          kind: "block",
+          change: "deleted",
+          markdown: "Budget is fixed for the quarter.",
+          run: run([0, 2], [0, 0]),
+        },
         {
           kind: "markdown",
           markdown: "The pilot runs for six weeks.\n\nWe report progress every Friday.",
         },
-        { kind: "block", change: "inserted", markdown: "Budget is fixed for the quarter." },
+        {
+          kind: "block",
+          change: "inserted",
+          markdown: "Budget is fixed for the quarter.",
+          run: run([5, 6], [3, 6]),
+        },
       ]);
     });
 
@@ -290,19 +371,24 @@ describe("mergeMarkdown", () => {
       expect(plan).toEqual([{ kind: "markdown", markdown: "# Alpha\n\n- One\n- Two" }]);
     });
 
-    it("keeps each blank line past the first between blocks as a line break inside the same Markdown, so reference links and footnotes still resolve across them (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
+    it("keeps each blank line past the first between blocks as a line break inside the Markdown of the block it precedes, so reference links and footnotes still resolve across them (https://github.com/Brevilabs/obsidian-copilot-private/issues/751)", async () => {
       const { before, after } = SPACED_WORDING_CHANGE;
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
+        { kind: "markdown", markdown: "# Alpha pilot" },
         {
           kind: "markdown",
           markdown: [
-            "# Alpha pilot",
             '<div aria-hidden="true"><br><br></div>',
             `The pilot runs for ${DEL_OPEN}six${DEL_CLOSE}${INS_OPEN}eight${INS_CLOSE} weeks.`,
-            '<div aria-hidden="true"><br></div>',
-            "We report progress every Friday.",
           ].join("\n\n"),
+          run: run([1, 7], [1, 7]),
+        },
+        {
+          kind: "markdown",
+          markdown: ['<div aria-hidden="true"><br></div>', "We report progress every Friday."].join(
+            "\n\n"
+          ),
         },
       ]);
     });
@@ -320,6 +406,7 @@ describe("mergeMarkdown", () => {
           change: "inserted",
           markdown: "- How long do we keep the old index?",
           continuesList: true,
+          run: run([2, 3], [2, 4]),
         },
       ]);
     });
@@ -334,6 +421,7 @@ describe("mergeMarkdown", () => {
           change: "deleted",
           markdown: "- Do we still need the staging vault?",
           continuesList: true,
+          run: run([1, 2], [1, 1]),
         },
         { kind: "markdown", markdown: "- What does the rollback look like?", continuesList: true },
       ]);
@@ -344,7 +432,7 @@ describe("mergeMarkdown", () => {
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         { kind: "markdown", markdown: "Questions:" },
-        { kind: "block", change: "deleted", markdown: "- One" },
+        { kind: "block", change: "deleted", markdown: "- One", run: run([1, 3], [1, 2]) },
         { kind: "markdown", markdown: "- Two" },
       ]);
     });
@@ -353,7 +441,12 @@ describe("mergeMarkdown", () => {
       const { before, after } = TASK_LIST_REORDERED;
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
-        { kind: "block", change: "inserted", markdown: "- [ ] Send the invite" },
+        {
+          kind: "block",
+          change: "inserted",
+          markdown: "- [ ] Send the invite",
+          run: run([0, 0], [0, 1]),
+        },
         {
           kind: "markdown",
           markdown: "- [ ] Draft the migration runbook\n- [ ] Book the review slot",
@@ -364,18 +457,21 @@ describe("mergeMarkdown", () => {
           change: "deleted",
           markdown: "- [ ] Send the invite",
           continuesList: true,
+          run: run([2, 4], [3, 4]),
         },
       ]);
     });
 
-    it("keeps one rendered list when a toggled task sits among unchanged tasks", async () => {
+    it("renders a toggled task as its own run while the unchanged task after it continues the list", async () => {
       const { before, after } = TASK_CHECKBOX_TOGGLED;
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         {
           kind: "markdown",
-          markdown: `- [ ] ${DEL_OPEN}Draft the migration runbook${DEL_CLOSE}\n- [x] ${INS_OPEN}Draft the migration runbook${INS_CLOSE}\n- [ ] Book the review slot`,
+          markdown: `- [ ] ${DEL_OPEN}Draft the migration runbook${DEL_CLOSE}\n- [x] ${INS_OPEN}Draft the migration runbook${INS_CLOSE}`,
+          run: run([0, 1], [0, 1]),
         },
+        { kind: "markdown", markdown: "- [ ] Book the review slot", continuesList: true },
       ]);
     });
 
@@ -384,7 +480,13 @@ describe("mergeMarkdown", () => {
 
       expect(await buildRenderedDiffPlan(app, before, after, true)).toEqual([
         { kind: "markdown", markdown: "1. Draft\n2. Review\n3. Ship" },
-        { kind: "block", change: "inserted", markdown: "4. Announce", continuesList: true },
+        {
+          kind: "block",
+          change: "inserted",
+          markdown: "4. Announce",
+          continuesList: true,
+          run: run([3, 4], [3, 5]),
+        },
       ]);
     });
 
@@ -401,6 +503,7 @@ describe("mergeMarkdown", () => {
             { change: "inserted", text: "  npm run verify --strict" },
             { change: "unchanged", text: "  ```" },
           ],
+          run: run([0, 4], [0, 4]),
         },
         { kind: "markdown", markdown: "- Ship the build", continuesList: true },
       ]);
@@ -413,6 +516,7 @@ describe("mergeMarkdown", () => {
         {
           kind: "markdown",
           markdown: `- Who owns the runbook?\n\n- What does the rollback look ${DEL_OPEN}like?${DEL_CLOSE}${INS_OPEN}like today?${INS_CLOSE}`,
+          run: run([0, 4], [0, 4]),
         },
       ]);
     });
@@ -445,8 +549,8 @@ describe("mergeMarkdown", () => {
           lines: [
             { change: "unchanged", text: "| Region | Partners | Status |" },
             { change: "unchanged", text: "| --- | --- | --- |" },
-            { change: "deleted", text: "| EMEA | 2 | Ready |" },
-            { change: "inserted", text: "| EMEA | 3 | Ready |" },
+            { change: "deleted", text: "| EMEA | 2 | Ready |", run: run([2, 3], [2, 3]) },
+            { change: "inserted", text: "| EMEA | 3 | Ready |", run: run([2, 3], [2, 3]) },
             { change: "unchanged", text: "| APAC | 1 | Blocked |" },
           ],
         },

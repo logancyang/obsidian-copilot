@@ -84,16 +84,29 @@ export function alignSequences<T>(
     comparator: (left, right) => rules.isEqual(left, right),
   });
   const pairings: Pairing<T>[] = [];
+  // Equal values can still differ elsewhere, such as a block's line, so each side keeps its own.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
+  let beforeIndex = 0;
+  let afterIndex = 0;
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
     if (!part.added && !part.removed) {
-      for (const value of part.value)
-        pairings.push({ kind: "unchanged", before: value, after: value });
+      for (let offset = 0; offset < part.value.length; offset++) {
+        pairings.push({
+          kind: "unchanged",
+          before: before[beforeIndex + offset],
+          after: after[afterIndex + offset],
+        });
+      }
+      beforeIndex += part.value.length;
+      afterIndex += part.value.length;
       continue;
     }
     const next = parts[index + 1];
     if (part.removed && next?.added) {
       pairings.push(...pairRuns(part.value, next.value, rules.similarity));
+      beforeIndex += part.value.length;
+      afterIndex += next.value.length;
       index++;
       continue;
     }
@@ -102,6 +115,8 @@ export function alignSequences<T>(
         part.removed ? { kind: "deleted", before: value } : { kind: "inserted", after: value }
       );
     }
+    if (part.removed) beforeIndex += part.value.length;
+    else afterIndex += part.value.length;
   }
   return pairings.length === 0 ? EMPTY_PAIRINGS : pairings;
 }
