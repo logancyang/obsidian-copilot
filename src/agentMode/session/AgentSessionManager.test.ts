@@ -4699,45 +4699,6 @@ describe("AgentSessionManager", () => {
           expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
         });
 
-        it(`${issue} probes a chat again after the chat is deleted`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const { manager } = buildHistoryHarness({
-            files: savedChat("s1"),
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-
-          await manager.deleteChatHistory(SAVED_NOTE);
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} probes a chat again after its session is released and closed`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const sessionId = `backend-${nextBackendSessionId}`;
-          const { manager } = buildHistoryHarness({
-            files: savedChat(sessionId),
-            warmSessionExistsLocally: sessionExistsLocally,
-            createBackendProcess: jest.fn(() => ({
-              ...makeMockBackendProcess(),
-              sessionExistsLocally,
-            })),
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-          const session = await manager.createSession("opencode");
-          expect(session.getBackendSessionId()).toBe(sessionId);
-
-          await manager.closeSession(session.internalId, { releaseBackend: true });
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
         it(`${issue} probes a chat again after its backend process exits`, async () => {
           let present = true;
           const sessionExistsLocally = jest.fn(async () => present);

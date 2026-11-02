@@ -719,7 +719,6 @@ export class AgentSessionManager {
     if (persistence) {
       for (const path of notePaths) await persistence.deleteFile(path);
     }
-    if (ref) this.presentTranscriptSessionIds.get(ref.backendId)?.delete(ref.sessionId);
     this.markHistoryChanged();
   }
 
@@ -1652,7 +1651,6 @@ export class AgentSessionManager {
     const session = this.sessions.get(id);
     if (!session) return;
     const closedScope = session.projectId;
-    const closedBackendSessionId = session.getBackendSessionId();
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
     const closedIdx = scopeIdsBefore.indexOf(id);
     // User-requested release must block new sends before cancellation and saving.
@@ -1685,9 +1683,6 @@ export class AgentSessionManager {
     this.detachAutoSave(id);
     this.opts.copilotMcpServer?.disconnect(id);
     this.sessions.delete(id);
-    if (closedBackendSessionId) {
-      this.presentTranscriptSessionIds.get(session.backendId)?.delete(closedBackendSessionId);
-    }
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
