@@ -666,6 +666,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     });
 
   const showHeader = isProjectScope || chatTitle !== undefined;
+  const collapsibleHeaderRef = useRef<HTMLDivElement>(null);
+  // The collapsed header stays mounted for its animation, so it is made inert to keep its buttons out of the tab order.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
+  useEffect(() => {
+    if (collapsibleHeaderRef.current) collapsibleHeaderRef.current.inert = !showHeader;
+  }, [showHeader]);
   const headerIsProject = isProjectScope || chatTitle === undefined;
   // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
@@ -690,6 +696,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             : "tw-pointer-events-none tw-grid-rows-[0fr] tw-opacity-0"
         )}
         aria-hidden={!showHeader}
+        ref={collapsibleHeaderRef}
       >
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
