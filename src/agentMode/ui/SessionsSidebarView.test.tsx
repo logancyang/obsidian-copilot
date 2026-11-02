@@ -1,16 +1,26 @@
 import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
-import { setSettings } from "@/settings/model";
+import {
+  applyLicenseWithPreview,
+  setPreviewAccess,
+  verifyStoredToken,
+} from "@/agentMode/ui/testing/previewAccess";
 import { act, fireEvent, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
-jest.mock("@/agentMode/ui/SessionsSidebar", () => ({
-  SessionsSidebar: () =>
-    jest
-      .requireActual<typeof import("react")>("react")
-      .createElement("button", { type: "button" }, "Sidebar content"),
-}));
+jest.mock("@/entitlement");
+
+const mockSidebarMounts = jest.fn();
+jest.mock("@/agentMode/ui/SessionsSidebar", () => {
+  const React = jest.requireActual<typeof import("react")>("react");
+  return {
+    SessionsSidebar: () => {
+      React.useEffect(() => mockSidebarMounts(), []);
+      return React.createElement("button", { type: "button" }, "Sidebar content");
+    },
+  };
+});
 
 function makeView(agentSessionManager: object | undefined) {
   const plugin = {
@@ -29,7 +39,10 @@ function makeView(agentSessionManager: object | undefined) {
 
 describe("SessionsSidebarView", () => {
   describe("SessionsSidebarView", () => {
-    beforeEach(() => setSettings({ isPaidUser: true }));
+    beforeEach(async () => {
+      mockSidebarMounts.mockClear();
+      await setPreviewAccess("believer");
+    });
 
     it("identifies itself with the sessions sidebar view type for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const { view } = makeView({});
@@ -59,20 +72,20 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("shows only the subscription-ended notice instead of the Navigator list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      setSettings({ isPaidUser: false });
+    it("shows only the preview notice instead of the Navigator list for a Plus user without preview for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("plus-without-preview");
       const { view } = makeView({});
 
       await act(() => view.onOpen());
 
-      expect(await screen.findByText("Your Copilot Plus subscription ended")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /Renew Plus/ })).toBeTruthy();
+      expect(await screen.findByText("Your preview access ended")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /See plans/ })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Sidebar content" })).toBeNull();
       await act(() => view.onClose());
     });
 
     it("closes its own leaf from the notice's Close button for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      setSettings({ isPaidUser: false });
+      await setPreviewAccess("free");
       const { view, leaf } = makeView({});
       await act(() => view.onOpen());
 
@@ -82,52 +95,43 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("reveals the Navigator when Plus becomes active after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      setSettings({ isPaidUser: false });
+    it("reveals the Navigator when a license key with preview is applied after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
       const { view, plugin } = makeView({});
       await act(() => view.onOpen());
-      await screen.findByText("Your Copilot Plus subscription ended");
+      await screen.findByText("Your preview access ended");
 
-      act(() => setSettings({ isPaidUser: true }));
+      await act(() => applyLicenseWithPreview());
 
       expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
       await act(() => view.onClose());
     });
 
-    it("never reveals the Navigator on Plus activation for a user who was not shown the notice for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      setSettings({ isPaidUser: undefined });
+    it("keeps a Believer's restored Navigator list mounted through startup verification, without flashing the notice or reopening it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("unverified");
       const { view, plugin } = makeView({});
       await act(() => view.onOpen());
       await screen.findByRole("button", { name: "Sidebar content" });
 
-      act(() => setSettings({ isPaidUser: true }));
+      await act(() => verifyStoredToken(true));
 
+      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(screen.queryByText("Your preview access ended")).toBeNull();
+      expect(mockSidebarMounts).toHaveBeenCalledTimes(1);
       expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
       await act(() => view.onClose());
     });
 
-    it("keeps the Navigator list while entitlement is unknown so a Plus user never sees the notice flash for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
-      setSettings({ isPaidUser: undefined });
-      const { view } = makeView({});
-
-      await act(() => view.onOpen());
-
-      expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
-      expect(screen.queryByText("Your Copilot Plus subscription ended")).toBeNull();
-      await act(() => view.onClose());
-    });
-
-    it("swaps between the notice and the Navigator list as Plus is lost and regained without a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("shows the notice once startup verification finds no preview access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("unverified");
       const { view } = makeView({});
       await act(() => view.onOpen());
-      expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      await screen.findByRole("button", { name: "Sidebar content" });
 
-      act(() => setSettings({ isPaidUser: false }));
-      expect(screen.getByText("Your Copilot Plus subscription ended")).toBeTruthy();
+      await act(() => verifyStoredToken(false));
 
-      act(() => setSettings({ isPaidUser: true }));
-      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(screen.getByText("Your preview access ended")).toBeTruthy();
       await act(() => view.onClose());
     });
   });

@@ -26,7 +26,7 @@ function EnterLicenseKeyButton({ onOpenSettings }: EnterLicenseKeyButtonProps): 
         openCopilotSettings(app, ownerWindow, "basic");
       }}
     >
-      Already have Plus? Enter your license key
+      Already a Believer or Supporter? Enter your license key
     </Button>
   );
 }
@@ -67,7 +67,7 @@ export function NavigatorUpsellContent({
             onClose();
           }}
         >
-          Upgrade to Plus <ExternalLink className="tw-size-4" />
+          See plans <ExternalLink className="tw-size-4" />
         </Button>
       </div>
     </div>
@@ -76,7 +76,7 @@ export function NavigatorUpsellContent({
 
 export class NavigatorUpsellModal extends ReactModal {
   constructor(app: App) {
-    super(app, "Upgrade to Plus to use Copilot Navigator");
+    super(app, "Copilot Navigator is a preview for Believers and Supporters");
   }
 
   protected renderContent(close: () => void): React.ReactElement {
@@ -93,13 +93,14 @@ export function NavigatorBlockedNotice({
 }: NavigatorBlockedNoticeProps): React.ReactElement {
   return (
     <div className="tw-flex tw-h-full tw-flex-col tw-items-center tw-justify-center tw-gap-3 tw-p-4 tw-text-center">
-      <p className="tw-m-0 tw-font-semibold">Your Copilot Plus subscription ended</p>
+      <p className="tw-m-0 tw-font-semibold">Your preview access ended</p>
       <p className="tw-m-0 tw-text-sm tw-text-muted">
-        Renew to get Copilot Navigator back. Your chats are still under Recent chats in Agent Chat.
+        Copilot Navigator is a preview for Believers and Supporters. Your chats are still under
+        Recent chats in Agent Chat.
       </p>
       <div className="tw-flex tw-flex-wrap tw-justify-center tw-gap-2">
         <Button onClick={() => navigateToPlusPage("navigator_blocked_view")}>
-          Renew Plus <ExternalLink className="tw-size-4" />
+          See plans <ExternalLink className="tw-size-4" />
         </Button>
         <Button variant="secondary" onClick={onClose}>
           Close

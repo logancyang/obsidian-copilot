@@ -1,10 +1,17 @@
 import { NavigatorUpsellModal } from "@/agentMode/ui/NavigatorUpsell";
 import {
-  openNavigatorWhenPlusActivates,
+  openNavigatorWhenPreviewActivates,
   openSessionsSidebar,
 } from "@/agentMode/ui/openSessionsSidebar";
+import {
+  applyLicenseWithPreview,
+  verifyStoredToken,
+  setPreviewAccess,
+} from "@/agentMode/ui/testing/previewAccess";
 import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
+
+jest.mock("@/entitlement");
 
 const mockOpenUpsell = jest.fn();
 jest.mock("@/agentMode/ui/NavigatorUpsell", () => ({
@@ -29,101 +36,106 @@ function makePlugin(): TestPlugin {
 describe("openSessionsSidebar", () => {
   beforeEach(() => jest.clearAllMocks());
 
-  describe("openNavigatorWhenPlusActivates()", () => {
-    it("opens the Navigator once when Plus becomes active after a prompt for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      setSettings({ isPaidUser: false });
+  describe("openNavigatorWhenPreviewActivates()", () => {
+    it("opens the Navigator once when a license key with preview is applied after a prompt for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("plus-without-preview");
       const { plugin, unload } = makePlugin();
 
-      openNavigatorWhenPlusActivates(plugin);
-      setSettings({ isPaidUser: true });
-      setSettings({ isPaidUser: false });
-      setSettings({ isPaidUser: true });
+      openNavigatorWhenPreviewActivates(plugin);
+      await applyLicenseWithPreview();
+      await verifyStoredToken(false);
+      await applyLicenseWithPreview();
 
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
       unload();
     });
 
-    it("keeps waiting through settings changes that do not activate Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      setSettings({ isPaidUser: false });
+    it("opens the Navigator when verifying the stored token grants preview without any settings write for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("plus-without-preview");
       const { plugin, unload } = makePlugin();
 
-      openNavigatorWhenPlusActivates(plugin);
-      setSettings({ plusLicenseKey: "typed-but-not-applied" });
-      setSettings({ isPaidUser: undefined });
+      openNavigatorWhenPreviewActivates(plugin);
+      await verifyStoredToken(true);
+
+      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      unload();
+    });
+
+    it("keeps waiting through settings changes and verifications that do not grant preview for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("plus-without-preview");
+      const { plugin, unload } = makePlugin();
+
+      openNavigatorWhenPreviewActivates(plugin);
+      setSettings({ isPaidUser: true });
+      await verifyStoredToken(false);
 
       expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
-      setSettings({ isPaidUser: true });
+      await applyLicenseWithPreview();
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
       unload();
     });
 
-    it("opens a single Navigator when several prompts were shown before Plus activates for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      setSettings({ isPaidUser: false });
+    it("opens a single Navigator when several prompts were shown before preview activates for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
       const { plugin, unload } = makePlugin();
 
-      openNavigatorWhenPlusActivates(plugin);
-      openNavigatorWhenPlusActivates(plugin);
-      setSettings({ isPaidUser: true });
+      openNavigatorWhenPreviewActivates(plugin);
+      openNavigatorWhenPreviewActivates(plugin);
+      await applyLicenseWithPreview();
 
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
       unload();
     });
 
-    it("stops waiting once the plugin unloads for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      setSettings({ isPaidUser: false });
+    it("stops waiting once the plugin unloads for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
       const { plugin, unload } = makePlugin();
 
-      openNavigatorWhenPlusActivates(plugin);
+      openNavigatorWhenPreviewActivates(plugin);
       unload();
-      setSettings({ isPaidUser: true });
+      await applyLicenseWithPreview();
 
       expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
     });
   });
 
   describe("openSessionsSidebar()", () => {
-    it("opens the Navigator for a Plus user for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
-      setSettings({ isPaidUser: true });
-      const { plugin } = makePlugin();
+    it.each([
+      { who: "a Believer or Supporter", access: "believer", opens: "the Navigator" },
+      {
+        who: "a user whose stored entitlement is still being verified at startup",
+        access: "unverified",
+        opens: "the Navigator",
+      },
+      { who: "a Plus user without preview", access: "plus-without-preview", opens: "the dialog" },
+      { who: "a free user", access: "free", opens: "the dialog" },
+    ] as const)(
+      "opens $opens for $who for https://github.com/Brevilabs/obsidian-copilot-private/issues/819",
+      async ({ access, opens }) => {
+        await setPreviewAccess(access);
+        const { plugin, unload } = makePlugin();
 
-      await openSessionsSidebar(plugin);
+        await openSessionsSidebar(plugin);
 
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
-      expect(mockOpenUpsell).not.toHaveBeenCalled();
-      expect(plugin.register).not.toHaveBeenCalled();
-    });
+        const opensNavigator = opens === "the Navigator";
+        expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(opensNavigator ? 1 : 0);
+        expect(jest.mocked(NavigatorUpsellModal).mock.calls).toEqual(
+          opensNavigator ? [] : [[plugin.app]]
+        );
+        expect(mockOpenUpsell).toHaveBeenCalledTimes(opensNavigator ? 0 : 1);
+        unload();
+      }
+    );
 
-    it("opens the Plus upgrade dialog instead of the Navigator for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
-      setSettings({ isPaidUser: false });
+    it("opens the Navigator when preview becomes active after the dialog was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
       const { plugin, unload } = makePlugin();
 
       await openSessionsSidebar(plugin);
-
-      expect(NavigatorUpsellModal).toHaveBeenCalledWith(plugin.app);
-      expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
-      expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
-      unload();
-    });
-
-    it("opens the Navigator when Plus becomes active after the upgrade dialog was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      setSettings({ isPaidUser: false });
-      const { plugin, unload } = makePlugin();
-
-      await openSessionsSidebar(plugin);
-      setSettings({ isPaidUser: true });
+      await applyLicenseWithPreview();
 
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
       unload();
-    });
-
-    it("opens the Navigator while entitlement is unknown so a Plus user is never shown the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
-      setSettings({ isPaidUser: undefined });
-      const { plugin } = makePlugin();
-
-      await openSessionsSidebar(plugin);
-
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
-      expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
   });
 });

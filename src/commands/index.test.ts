@@ -1,3 +1,4 @@
+import { openSessionsSidebar } from "@/agentMode";
 import { registerCommands } from "@/commands";
 import { COMMAND_ICONS, COMMAND_IDS, COMMAND_NAMES } from "@/constants";
 import type CopilotPlugin from "@/main";
@@ -9,15 +10,7 @@ import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
 
-const mockOpenUpsell = jest.fn();
-jest.mock("@/agentMode", () => ({
-  openSessionsSidebar: jest.requireActual<typeof import("@/agentMode/ui/openSessionsSidebar")>(
-    "@/agentMode/ui/openSessionsSidebar"
-  ).openSessionsSidebar,
-}));
-jest.mock("@/agentMode/ui/NavigatorUpsell", () => ({
-  NavigatorUpsellModal: jest.fn(() => ({ open: mockOpenUpsell })),
-}));
+jest.mock("@/agentMode", () => ({ openSessionsSidebar: jest.fn() }));
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
 }));
@@ -85,7 +78,6 @@ describe("commands", () => {
         const commands: Command[] = [];
         const plugin = {
           addCommand: jest.fn((command: Command) => commands.push(command)),
-          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
           app: { workspace: { getActiveFile: jest.fn(() => null) } },
         } as unknown as CopilotPlugin;
         registerCommands(plugin, jest.fn());
@@ -105,40 +97,23 @@ describe("commands", () => {
         icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
       });
       await command?.callback?.();
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      expect(openSessionsSidebar).toHaveBeenCalledWith(plugin);
     });
 
-    it.each([
-      { who: "a Plus user", isPaidUser: true, opens: "the Navigator" },
-      {
-        who: "a user whose entitlement is still unknown",
-        isPaidUser: undefined,
-        opens: "the Navigator",
-      },
-      { who: "a user without Plus", isPaidUser: false, opens: "the upgrade dialog" },
-    ])(
-      "lists the Navigator command for $who and opens $opens for https://github.com/Brevilabs/obsidian-copilot-private/issues/819",
-      async ({ isPaidUser, opens }) => {
-        jest.mocked(isDesktopRuntime).mockReturnValue(true);
-        jest.mocked(getSettings).mockReturnValue({ isPaidUser } as ReturnType<typeof getSettings>);
-        const commands: Command[] = [];
-        const plugin = {
-          addCommand: jest.fn((command: Command) => commands.push(command)),
-          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
-          register: jest.fn(),
-          app: { workspace: { getActiveFile: jest.fn(() => null) } },
-        } as unknown as CopilotPlugin;
-        registerCommands(plugin, jest.fn());
-        const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+    it("lists the Navigator command for every user so one without preview access reaches the upsell dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
 
-        expect(command?.checkCallback).toBeUndefined();
-        await command?.callback?.();
+      registerCommands(plugin, jest.fn());
 
-        const opensNavigator = opens === "the Navigator";
-        expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(opensNavigator ? 1 : 0);
-        expect(mockOpenUpsell).toHaveBeenCalledTimes(opensNavigator ? 0 : 1);
-      }
-    );
+      const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+      expect(command?.callback).toBeDefined();
+      expect(command?.checkCallback).toBeUndefined();
+    });
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {
       const activeFile = markdownFile("Notes/Active.md");

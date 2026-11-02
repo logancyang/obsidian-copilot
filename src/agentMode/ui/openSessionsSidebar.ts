@@ -1,29 +1,29 @@
 import { NavigatorUpsellModal } from "@/agentMode/ui/NavigatorUpsell";
 import type CopilotPlugin from "@/main";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { isPreviewEnabled, subscribeToPreviewAccess } from "@/plusUtils";
 
-const pluginsAwaitingPlus = new WeakSet<CopilotPlugin>();
+const pluginsAwaitingPreview = new WeakSet<CopilotPlugin>();
 
-export function openNavigatorWhenPlusActivates(plugin: CopilotPlugin): void {
-  // A user who buys Plus from a Navigator prompt lands in the Navigator without finding its icon again.
+export function openNavigatorWhenPreviewActivates(plugin: CopilotPlugin): void {
+  // A Believer or Supporter who unlocks preview from a Navigator prompt lands in the Navigator without finding its icon again.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  if (pluginsAwaitingPlus.has(plugin)) return;
-  pluginsAwaitingPlus.add(plugin);
-  const unsubscribe = subscribeToSettingsChange((prev, next) => {
-    if (prev.isPaidUser === true || next.isPaidUser !== true) return;
+  if (pluginsAwaitingPreview.has(plugin)) return;
+  pluginsAwaitingPreview.add(plugin);
+  const unsubscribe = subscribeToPreviewAccess(() => {
+    if (isPreviewEnabled() !== true) return;
     unsubscribe();
-    pluginsAwaitingPlus.delete(plugin);
+    pluginsAwaitingPreview.delete(plugin);
     void plugin.activateSessionsSidebar();
   });
   plugin.register(unsubscribe);
 }
 
 export async function openSessionsSidebar(plugin: CopilotPlugin): Promise<void> {
-  // The tab-strip icon stays clickable without Plus and explains the upgrade instead.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/813
-  if (getSettings().isPaidUser === false) {
+  // The Navigator is a Believer and Supporter preview; its entry points stay visible and explain it instead.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
+  if (isPreviewEnabled() === false) {
     new NavigatorUpsellModal(plugin.app).open();
-    openNavigatorWhenPlusActivates(plugin);
+    openNavigatorWhenPreviewActivates(plugin);
     return;
   }
   await plugin.activateSessionsSidebar();

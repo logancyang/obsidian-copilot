@@ -12,11 +12,12 @@ import {
   type FakeWorkspaceApp,
 } from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
-import { setSettings } from "@/settings/model";
+import { setPreviewAccess } from "@/agentMode/ui/testing/previewAccess";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
+jest.mock("@/entitlement");
 
 function renderStrip(
   manager: unknown,
@@ -141,7 +142,7 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
-    beforeEach(() => setSettings({ isPaidUser: true }));
+    beforeEach(() => setPreviewAccess("believer"));
 
     it("detaches a closed tab without closing its backend session for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", () => {
       const session = {
@@ -265,8 +266,8 @@ describe("AgentTabStrip", () => {
       expect(screen.queryByRole("tab")).toBeNull();
     });
 
-    it("keeps the tabs and the Navigator icon beside a Navigator leaf blocked for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
-      setSettings({ isPaidUser: false });
+    it("keeps the tabs and the Navigator icon beside a Navigator leaf blocked for a user without preview access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
       const workspace: FakeWorkspaceApp = makeFakeWorkspaceApp();
       workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
 

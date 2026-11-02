@@ -57,7 +57,7 @@ describe("NavigatorUpsell", () => {
       const onClose = jest.fn();
       renderWithApp(new App(), <NavigatorUpsellContent onClose={onClose} />);
 
-      fireEvent.click(screen.getByRole("button", { name: /Upgrade to Plus/ }));
+      fireEvent.click(screen.getByRole("button", { name: /See plans/ }));
 
       expect(open).toHaveBeenCalledWith(
         expect.stringContaining("https://www.obsidiancopilot.com/pricing"),
@@ -73,7 +73,9 @@ describe("NavigatorUpsell", () => {
       renderWithApp(app, <NavigatorUpsellContent onClose={onClose} />);
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Already have Plus? Enter your license key" })
+        screen.getByRole("button", {
+          name: "Already a Believer or Supporter? Enter your license key",
+        })
       );
 
       expect(openCopilotSettings).toHaveBeenCalledWith(app, window, "basic");
@@ -94,10 +96,12 @@ describe("NavigatorUpsell", () => {
     }
 
     describe("constructor()", () => {
-      it("titles the dialog with the upgrade message for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+      it("titles the dialog as a preview for Believers and Supporters for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
         const modal = new NavigatorUpsellModal(new App());
 
-        expect(modal.titleEl.textContent).toBe("Upgrade to Plus to use Copilot Navigator");
+        expect(modal.titleEl.textContent).toBe(
+          "Copilot Navigator is a preview for Believers and Supporters"
+        );
       });
     });
 
@@ -105,7 +109,7 @@ describe("NavigatorUpsell", () => {
       it("closes the dialog after sending the user to the pricing page for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
         const modal = await openModal();
 
-        fireEvent.click(within(modal.contentEl).getByRole("button", { name: /Upgrade to Plus/ }));
+        fireEvent.click(within(modal.contentEl).getByRole("button", { name: /See plans/ }));
 
         expect(openedUtmMedium(open)).toBe("navigator_dialog");
         expect(modal.close).toHaveBeenCalledTimes(1);
@@ -117,7 +121,7 @@ describe("NavigatorUpsell", () => {
 
         fireEvent.click(
           within(modal.contentEl).getByRole("button", {
-            name: "Already have Plus? Enter your license key",
+            name: "Already a Believer or Supporter? Enter your license key",
           })
         );
 
@@ -129,21 +133,21 @@ describe("NavigatorUpsell", () => {
   });
 
   describe("NavigatorBlockedNotice()", () => {
-    it("tells the user their Plus subscription ended and where their chats still are for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+    it("tells the user their preview access ended, who the preview is for, and where their chats still are for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
       renderWithApp(new App(), <NavigatorBlockedNotice onClose={jest.fn()} />);
 
-      expect(screen.getByText("Your Copilot Plus subscription ended")).toBeTruthy();
+      expect(screen.getByText("Your preview access ended")).toBeTruthy();
       expect(
         screen.getByText(
-          "Renew to get Copilot Navigator back. Your chats are still under Recent chats in Agent Chat."
+          "Copilot Navigator is a preview for Believers and Supporters. Your chats are still under Recent chats in Agent Chat."
         )
       ).toBeTruthy();
     });
 
-    it("opens the pricing page tagged with the navigator_blocked_view medium from Renew Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+    it("opens the pricing page tagged with the navigator_blocked_view medium from See plans for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
       renderWithApp(new App(), <NavigatorBlockedNotice onClose={jest.fn()} />);
 
-      fireEvent.click(screen.getByRole("button", { name: /Renew Plus/ }));
+      fireEvent.click(screen.getByRole("button", { name: /See plans/ }));
 
       expect(openedUtmMedium(open)).toBe("navigator_blocked_view");
     });
@@ -154,7 +158,9 @@ describe("NavigatorUpsell", () => {
       renderWithApp(app, <NavigatorBlockedNotice onClose={onClose} />);
 
       fireEvent.click(
-        screen.getByRole("button", { name: "Already have Plus? Enter your license key" })
+        screen.getByRole("button", {
+          name: "Already a Believer or Supporter? Enter your license key",
+        })
       );
 
       expect(openCopilotSettings).toHaveBeenCalledWith(app, window, "basic");
