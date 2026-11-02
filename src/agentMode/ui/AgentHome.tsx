@@ -673,9 +673,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (collapsibleHeaderRef.current) collapsibleHeaderRef.current.inert = !showHeader;
   }, [showHeader]);
   const headerIsProject = isProjectScope || chatTitle === undefined;
-  // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
-  const canLeaveProject = headerIsProject && !sidebarOpen;
 
   const handleReportError = () => {
     const evidence = activeSession?.getReportEvidence();
@@ -704,7 +701,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             title={chatTitle}
             onExit={handleExitProject}
             orphaned={headerIsProject && headerOrphaned}
-            canLeaveProject={canLeaveProject}
+            // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
+            canLeaveProject={!sidebarOpen}
             menu={
               activeProject ? (
                 <ProjectInfoPopover

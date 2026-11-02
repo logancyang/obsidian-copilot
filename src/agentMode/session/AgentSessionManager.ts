@@ -714,7 +714,6 @@ export class AgentSessionManager {
     if (persistence) {
       for (const path of notePaths) await persistence.deleteFile(path);
     }
-    if (ref) this.presentTranscriptSessionIds.get(ref.backendId)?.delete(ref.sessionId);
     this.markHistoryChanged();
   }
 
@@ -1658,7 +1657,6 @@ export class AgentSessionManager {
     const session = this.sessions.get(id);
     if (!session) return;
     const closedScope = session.projectId;
-    const closedBackendSessionId = session.getBackendSessionId();
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
     const closedIdx = scopeIdsBefore.indexOf(id);
     // User-requested release must block new sends before cancellation and saving.
@@ -1693,9 +1691,6 @@ export class AgentSessionManager {
     this.sessions.delete(id);
     if (!this.getLiveChatInputIds().includes(session.chatInputId)) {
       this.promptedChatInputIds.delete(session.chatInputId);
-    }
-    if (closedBackendSessionId) {
-      this.presentTranscriptSessionIds.get(session.backendId)?.delete(closedBackendSessionId);
     }
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
@@ -2076,6 +2071,7 @@ export class AgentSessionManager {
     session.seedSessionUsage(loaded.usage);
     const state = this.getSessionState(session.internalId);
     state.source = file;
+    state.savedLabel = loaded.label;
     // A fresh session has no transcript until its first prompt, and a note pointing at a missing transcript drops out of the chat lists.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/814
     if (!resumed) state.withholdsSessionId = true;
@@ -2478,7 +2474,7 @@ export class AgentSessionManager {
 
     const state = this.getSessionState(session.internalId);
     const previousSourcePath = this.getSessionSourcePath(session.internalId);
-    // A title edited in the note's Properties since this chat last saved is the chat's title now, not one to overwrite.
+    // A title edited in the note's Properties since this chat last loaded or saved it is the chat's title now, not one to overwrite.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
     if (previousSourcePath) {
       const topic = (await this.readChatFrontmatter(previousSourcePath))?.topic;

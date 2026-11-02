@@ -1,5 +1,4 @@
 const mockConfirmModals: { onConfirm: () => Promise<void> | void; content: unknown }[] = [];
-const mockOpenedEditModals: unknown[] = [];
 
 jest.mock("@/components/modals/ConfirmModal", () => ({
   ConfirmModal: jest.fn().mockImplementation((_app, onConfirm, content) => {
@@ -8,27 +7,20 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
   }),
 }));
 
-jest.mock("@/components/modals/project/AddProjectModal", () => ({
-  AddProjectModal: jest.fn().mockImplementation((_app, _onSave, project) => ({
-    open: () => mockOpenedEditModals.push(project),
-  })),
-}));
-
 jest.mock("@/logger", () => ({ ...jest.requireActual("@/logger"), logError: jest.fn() }));
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: jest.fn() },
 }));
 
 import { AgentProjectRowActions, leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
-import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import type { ProjectConfig } from "@/aiParams";
 import { logError } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { App, Notice } from "obsidian";
+import { App } from "obsidian";
 import React from "react";
 
-const PROJECT = { id: "garden", name: "Garden plans", created: 0 } as ProjectConfig;
+const PROJECT = { id: "garden", name: "Garden plans" } as ProjectConfig;
 
 function mockFileManager() {
   const manager = {
@@ -40,11 +32,8 @@ function mockFileManager() {
 }
 
 describe("AgentProjectRowActions", () => {
-  beforeAll(installRadixMenuPolyfills);
   beforeEach(() => {
     mockConfirmModals.length = 0;
-    mockOpenedEditModals.length = 0;
-    jest.mocked(Notice).mockClear();
   });
 
   describe("AgentProjectRowActions()", () => {

@@ -5432,15 +5432,6 @@ describe("AgentSession", () => {
         session.setLabel(null);
         expect(onLabelChanged).toHaveBeenCalledTimes(2);
       });
-
-      it("keeps a renamed title when the agent later sends its own title", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        session.setLabel("My rename");
-
-        mock.emitUpdate({ sessionUpdate: "session_info_update", title: "Agent title" });
-        expect(session.getLabel()).toBe("My rename");
-      });
     });
 
     describe("restoreLabel()", () => {

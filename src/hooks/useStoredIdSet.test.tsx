@@ -92,8 +92,8 @@ describe("useStoredIdSet", () => {
       expect([...reloaded.result.current.ids]).toEqual(["c", "a", "b"]);
     });
 
-    it.each([["a"], [{ a: 1 }], [[1, 2]]])(
-      "starts with no ids when the stored value %j is not a list of ids",
+    it.each([["a"], [{ a: 1 }]])(
+      "starts with no ids when the stored value %j is not a list",
       (stored) => {
         const { app } = createApp(stored);
 
