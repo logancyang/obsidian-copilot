@@ -1578,6 +1578,7 @@ export class AgentSessionManager {
     if (!this.isBackendInstalled(backendId)) return false;
     const probe = this.preloader.refresh(backendId);
     if (!probe) return false;
+    this.presentTranscriptSessionIds.delete(backendId);
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
     return true;
