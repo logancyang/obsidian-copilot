@@ -14,14 +14,20 @@ jest.mock("@/components/modals/project/AddProjectModal", () => ({
   })),
 }));
 
+jest.mock("@/logger", () => ({ ...jest.requireActual("@/logger"), logError: jest.fn() }));
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: jest.fn() },
 }));
 
-import { AgentProjectRowActions, AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
+import {
+  AgentProjectRowActions,
+  AgentProjectRowMenu,
+  leaveDeletedProject,
+} from "@/agentMode/ui/AgentProjectRowActions";
 import { simulateMenuExitAnimation } from "@/agentMode/ui/testing/menuExitAnimation";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { sidebarProject } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import { logError } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App, Notice } from "obsidian";
@@ -178,6 +184,39 @@ describe("AgentProjectRowActions", () => {
       } finally {
         exitAnimation.mockRestore();
       }
+    });
+  });
+
+  describe("leaveDeletedProject()", () => {
+    function sessionManager(activeProjectId: string, exit = Promise.resolve()) {
+      return { getActiveProjectId: () => activeProjectId, exitProject: jest.fn(() => exit) };
+    }
+
+    it("leaves the open project when that project is deleted", () => {
+      const manager = sessionManager("garden");
+
+      leaveDeletedProject(manager, "garden");
+
+      expect(manager.exitProject).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays in the open project when a different project is deleted", () => {
+      const manager = sessionManager("garden");
+
+      leaveDeletedProject(manager, "kitchen");
+
+      expect(manager.exitProject).not.toHaveBeenCalled();
+    });
+
+    it("logs a failed exit instead of rejecting", async () => {
+      const failure = new Error("exit failed");
+      const exit = Promise.reject(failure);
+      const manager = sessionManager("garden", exit);
+
+      leaveDeletedProject(manager, "garden");
+      await exit.catch(() => undefined);
+
+      expect(logError).toHaveBeenCalledWith("[AgentMode] exit after delete failed", failure);
     });
   });
 });
