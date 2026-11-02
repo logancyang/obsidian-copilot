@@ -29,6 +29,9 @@ function textOf(node: Node, enclosing: Change | null): string {
     return !value.trim() && [node.previousSibling, node.nextSibling].some(isBlock) ? "" : value;
   }
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : null;
+  // A selection across a run also spans its Revoke button, whose label is not note text.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/824
+  if (element?.matches("button")) return "";
   const change = changeOf(element) ?? enclosing;
   const inner = Array.from(node.childNodes, (child) => textOf(child, change)).join("");
   const text = change === enclosing ? inner : mark(inner, change);

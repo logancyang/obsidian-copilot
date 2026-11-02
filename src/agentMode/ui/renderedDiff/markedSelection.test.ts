@@ -105,6 +105,14 @@ describe("markedSelection", () => {
       expect(markedSelectionText(wholeOf(root))).toBe("<del>See fox here.</del>");
     });
 
+    it(`leaves out the labels of buttons inside the diff, such as a run's Revoke (${ISSUE_824})`, () => {
+      const root = rendered(
+        '<div><p>The <ins data-change="inserted">slow</ins> fox.</p><button>Revoke</button></div><p>Next.</p>'
+      );
+
+      expect(markedSelectionText(wholeOf(root))).toBe("The <ins>slow</ins> fox.\nNext.");
+    });
+
     it(`keeps spaces outside the marks and drops a mark around nothing but an image (${ISSUE_824})`, () => {
       const root = rendered(
         '<p>A <del data-change="deleted">quick </del><span data-change="inserted"><img alt="fox"></span>fox</p>'
