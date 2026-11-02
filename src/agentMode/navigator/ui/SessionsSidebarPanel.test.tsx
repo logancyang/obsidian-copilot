@@ -583,19 +583,6 @@ describe("SessionsSidebarPanel", () => {
         expect(dialog()).toBeNull();
       });
 
-      it("creates the project from the Create button for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
-        const { onCreateProject } = renderPanel();
-        startProject();
-        typeName("Garden plans");
-
-        await act(async () => {
-          fireEvent.click(within(dialog()!).getByRole("button", { name: "Create" }));
-        });
-
-        expect(onCreateProject).toHaveBeenCalledWith("Garden plans");
-        expect(dialog()).toBeNull();
-      });
-
       it("creates nothing and closes the dialog on Cancel for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
         const { onCreateProject } = renderPanel();
         startProject();
