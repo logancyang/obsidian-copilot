@@ -10,18 +10,22 @@ describe("AgentLandingStack", () => {
           hero={<div>Hero</div>}
           composer={<div>Composer</div>}
           context={<div>Context</div>}
+          announcement={<div>Announcement</div>}
           shelf={<div>Shelf</div>}
         />
       );
 
       expect(
-        screen.getAllByText(/Hero|Composer|Context|Shelf/).map((node) => node.textContent)
-      ).toEqual(["Hero", "Composer", "Context", "Shelf"]);
+        screen
+          .getAllByText(/Hero|Composer|Context|Announcement|Shelf/)
+          .map((node) => node.textContent)
+      ).toEqual(["Hero", "Composer", "Context", "Announcement", "Shelf"]);
       expect(Array.from(container.children).map((node) => node.textContent)).toEqual([
         "",
         "Hero",
         "Composer",
         "Context",
+        "Announcement",
         "Shelf",
       ]);
     });

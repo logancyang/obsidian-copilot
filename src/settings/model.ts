@@ -53,6 +53,7 @@ export interface CopilotSettings {
   defaultModelKey: string;
   contextTurns: number;
   lastDismissedVersion: string | null;
+  navigatorHomeCardDismissed: boolean;
   lastShownStartupVersion: string | null;
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;

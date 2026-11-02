@@ -4,6 +4,7 @@ import {
   type AgentHomeShelfSection,
 } from "@/agentMode/ui/AgentHomeShelf";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
+import { NavigatorHomeCard } from "@/agentMode/ui/NavigatorHomeCard";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import type { Meta, StoryObj } from "@/lib/story";
 import { FileSearch, Files, Folder, MessageSquare, RefreshCw } from "lucide-react";
@@ -160,10 +161,12 @@ function LandingCanvas({
   sidebarOpen,
   project,
   relevantNotesInSidePanel = false,
+  navigatorCard = false,
 }: Pick<LandingStackCanvasProps, "args"> & {
   sidebarOpen: boolean;
   project: boolean;
   relevantNotesInSidePanel?: boolean;
+  navigatorCard?: boolean;
 }) {
   const globalSections = landingSectionsForSidebar(
     relevantNotesInSidePanel
@@ -185,6 +188,15 @@ function LandingCanvas({
         hero={args.hero ?? null}
         composer={args.composer ?? null}
         context={contextInline ? <div className="tw-pt-3">{projectContextBody}</div> : undefined}
+        announcement={
+          navigatorCard ? (
+            <NavigatorHomeCard
+              showPlusMarker
+              onOpen={() => undefined}
+              onDismiss={() => undefined}
+            />
+          ) : undefined
+        }
         shelf={shelf}
       />
     </div>
@@ -240,4 +252,8 @@ export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackPro
   render: (args) => (
     <LandingCanvas args={args} sidebarOpen project={false} relevantNotesInSidePanel />
   ),
+};
+
+export const GlobalLandingWithNavigatorCard: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen={false} project={false} navigatorCard />,
 };

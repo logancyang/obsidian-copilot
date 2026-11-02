@@ -43,6 +43,10 @@ import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRunti
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
 import { useSessionsSidebarOpen } from "@/agentMode/ui/hooks/useSessionsSidebarOpen";
+import {
+  AgentHomeNavigatorCard,
+  useNavigatorHomeCardVisible,
+} from "@/agentMode/ui/NavigatorHomeCard";
 import { openSessionsSidebar } from "@/agentMode/ui/openSessionsSidebar";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -107,6 +111,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
   const sidebarOpen = useSessionsSidebarOpen(app);
+  const navigatorCardVisible = useNavigatorHomeCardVisible(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
   useChatInputAutoFocus();
@@ -764,6 +769,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             popoverContainer={rootEl}
                           />
                         </div>
+                      ) : undefined
+                    }
+                    announcement={
+                      navigatorCardVisible && !isProjectLanding ? (
+                        <AgentHomeNavigatorCard plugin={plugin} />
                       ) : undefined
                     }
                     shelf={
