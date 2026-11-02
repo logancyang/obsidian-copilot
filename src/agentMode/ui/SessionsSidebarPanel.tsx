@@ -228,8 +228,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           <CopilotBrandIcon className="tw-size-5 tw-shrink-0" />
           <span className="tw-truncate">Copilot</span>
         </h2>
-        {/* New chat keeps its label while the header has room, down to Obsidian's default sidebar width, and drops to its icon
-            in a narrower sidebar; the label stays as its screen-reader name, since an aria-label would show as a tooltip.
+        {/* New chat keeps its label only while at least 16px stays between it and the Copilot title, and drops to its icon
+            otherwise; the label stays as its screen-reader name, since an aria-label would show as a tooltip.
             Obsidian's grey focus shadow beats the Button ring and barely shows beside the accent fill, so focus adds an outline.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
         <Button
@@ -241,7 +241,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           onClick={onNewChat}
         >
           <SquarePen className="tw-size-4" />
-          <span className="tw-sr-only @[258px]/sidebar-header:tw-not-sr-only">New chat</span>
+          <span className="tw-sr-only @[272px]/sidebar-header:tw-not-sr-only">New chat</span>
         </Button>
         <Button
           variant="ghost2"
