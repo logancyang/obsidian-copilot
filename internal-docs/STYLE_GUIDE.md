@@ -47,6 +47,14 @@ in `src/agentMode/AGENTS.md` updated to match.
 
 - Custom hooks for reusable logic
 - Props interfaces defined above components
+- Design every component as a reusable, isolated module that makes no
+  assumption about where it is rendered. Name its props, branches, and tests
+  after what the component does, not after the caller's state: an
+  `AgentProjectHeader` takes `canLeaveProject`, not `sidebarOpen`. The caller
+  maps its own state onto those props (`canLeaveProject={!sidebarOpen}`), and
+  any comment explaining why lives at that mapping. Caller-specific selection
+  logic, such as which sections a particular screen shows, belongs in the
+  caller, not in the component's module.
 - Prefer `useSyncExternalStore` for mutable external sources that expose a
   snapshot and subscription. Do not subscribe and increment dummy state solely
   to force a render. Snapshots must remain referentially stable while their

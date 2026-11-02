@@ -1,3 +1,4 @@
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
@@ -40,6 +41,14 @@ export function revealProjectFolder(app: App, project: ProjectConfig): void {
     }
   }
   new Notice(`Can't reveal "${project.name}" — its folder isn't visible in the file explorer.`);
+}
+
+export function leaveDeletedProject(
+  manager: Pick<AgentSessionManager, "getActiveProjectId" | "exitProject">,
+  deletedId: string
+): void {
+  if (manager.getActiveProjectId() !== deletedId) return;
+  manager.exitProject().catch((e) => logError("[AgentMode] exit after delete failed", e));
 }
 
 interface AgentProjectRowActionsProps {
