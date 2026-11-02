@@ -7,8 +7,8 @@ import { ExternalLink } from "lucide-react";
 import type { App } from "obsidian";
 import * as React from "react";
 
-export const NAVIGATOR_HIGHLIGHT_GIF_URL =
-  "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-highlight-819ce1d0.gif";
+export const NAVIGATOR_HIGHLIGHT_URL =
+  "https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-17ec159c.webp";
 
 interface EnterLicenseKeyButtonProps {
   onOpenSettings?: () => void;
@@ -39,26 +39,24 @@ export function NavigatorUpsellContent({
   onClose,
 }: NavigatorUpsellContentProps): React.ReactElement {
   return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <div className="tw-flex tw-flex-col tw-gap-2">
-        <p className="tw-m-0">
-          Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays
-          easy to find and manage.
-        </p>
-        <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5">
-          <li>See every chat at a glance, grouped into Pinned, Projects and Recents</li>
-          <li>Keep each Project&apos;s chats together in its own folder</li>
-          <li>Spot which chats are running, waiting for you, or have a new result</li>
-          <li>Pin, archive, search and reorder chats without leaving your conversation</li>
-        </ul>
-      </div>
-      {/* Width cap keeps the 4:3 GIF under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819 */}
+    <div className="tw-flex tw-flex-col tw-gap-4 tw-text-sm">
+      <p className="tw-m-0">
+        Copilot Navigator keeps all your agent chats in one sidebar, so long-running work stays easy
+        to find and manage.
+      </p>
+      <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5">
+        <li>See every chat at a glance, grouped into Pinned, Projects and Recents</li>
+        <li>Keep each Project&apos;s chats together in its own folder</li>
+        <li>Spot which chats are running, waiting for you, or have a new result</li>
+        <li>Pin, archive, search and reorder chats without leaving your conversation</li>
+      </ul>
+      {/* Width cap keeps the 4:3 animation under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819 */}
       <img
-        alt="Copilot Navigator scrolling through pinned chats, projects and recent chats"
+        alt="The Copilot Navigator sidebar lifts out of the Obsidian workspace, fills with pinned chats, projects and recent chats, then a chat finishes and another gets pinned"
         className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-max-w-[calc(40vh*4/3)] tw-rounded-md tw-border tw-border-solid tw-border-border"
-        height={450}
-        src={NAVIGATOR_HIGHLIGHT_GIF_URL}
-        width={600}
+        height={900}
+        src={NAVIGATOR_HIGHLIGHT_URL}
+        width={1200}
       />
       <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
         <EnterLicenseKeyButton onOpenSettings={onClose} />
