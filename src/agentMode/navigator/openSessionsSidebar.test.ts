@@ -1,10 +1,10 @@
-import { NavigatorUpsellModal } from "@/agentMode/ui/NavigatorUpsell";
-import { openSessionsSidebar } from "@/agentMode/ui/openSessionsSidebar";
+import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
+import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
 import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
 
 const mockOpenUpsell = jest.fn();
-jest.mock("@/agentMode/ui/NavigatorUpsell", () => ({
+jest.mock("@/agentMode/navigator/ui/NavigatorUpsell", () => ({
   NavigatorUpsellModal: jest.fn(() => ({ open: mockOpenUpsell })),
 }));
 

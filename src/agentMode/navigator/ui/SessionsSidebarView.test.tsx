@@ -1,11 +1,11 @@
-import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
+import SessionsSidebarView from "@/agentMode/navigator/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
 import { act, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
-jest.mock("@/agentMode/ui/SessionsSidebar", () => ({
+jest.mock("@/agentMode/navigator/ui/SessionsSidebar", () => ({
   SessionsSidebar: () =>
     jest
       .requireActual<typeof import("react")>("react")

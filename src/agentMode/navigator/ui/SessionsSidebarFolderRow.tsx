@@ -4,7 +4,7 @@ import {
   SessionStatusIcon,
   type SessionStatus,
   type SortHandle,
-} from "@/agentMode/ui/SessionsSidebarRow";
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
