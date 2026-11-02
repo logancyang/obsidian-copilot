@@ -128,6 +128,7 @@ function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage
   const plugin = {
     app: {
       metadataCache,
+      vault: { on: jest.fn(() => ({})), offref: jest.fn() },
       loadLocalStorage: localStorage.loadLocalStorage,
       saveLocalStorage: localStorage.saveLocalStorage,
     },
