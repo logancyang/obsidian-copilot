@@ -858,6 +858,7 @@ function buildHistoryHarness(opts?: {
           proc.sessionExistsLocally = opts.warmSessionExistsLocally;
         return [{ backendId, proc }];
       }),
+      refresh: jest.fn(async () => undefined),
     },
   });
   return { manager, index, persistence, descriptor };
@@ -4649,6 +4650,22 @@ describe("AgentSessionManager", () => {
           await manager.createSession("opencode");
 
           for (const exit of mockBackendExitListeners) exit();
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after a config change replaces the warm process`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+
+          await manager.restartBackend("opencode", "config dir changed");
           present = false;
 
           expect(await manager.getChatHistoryItems()).toHaveLength(0);
