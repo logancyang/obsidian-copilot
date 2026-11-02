@@ -2,7 +2,7 @@ import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSideb
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { sidebarProject } from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import { AppContext } from "@/context";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { App } from "obsidian";
 import React from "react";
 
@@ -78,6 +78,33 @@ describe("SessionsSidebarFolderRow", () => {
         "tw-absolute"
       );
     });
+
+    it.each([
+      [
+        "keeps the status and hides the chevron and actions after a mouse click focuses the row",
+        false,
+      ],
+      ["lays the chevron and actions over the status when the keyboard focuses the row", true],
+    ])(
+      "%s for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
+      (_title, keyboardFocus) => {
+        const revealed = keyboardFocus;
+        renderFolderRow({ hiddenStatus: "waiting" });
+        const toggle = screen.getByText("Garden plans").closest("button")!;
+        jest.spyOn(toggle, "matches").mockReturnValue(keyboardFocus);
+
+        act(() => toggle.focus());
+
+        const statusSlot = screen.getByLabelText("Waiting for permission").parentElement!;
+        const chevron = toggle.querySelector(".lucide-chevron-right")!;
+        const actions = screen.getByRole("button", {
+          name: "More actions for Garden plans",
+        }).parentElement!;
+        expect(statusSlot.classList.contains("tw-invisible")).toBe(revealed);
+        expect(chevron.classList.contains("tw-hidden")).toBe(!revealed);
+        expect(actions.classList.contains("tw-visible")).toBe(revealed);
+      }
+    );
 
     it("shows no status when nothing hidden needs the user", () => {
       renderFolderRow({ hiddenStatus: "idle" });

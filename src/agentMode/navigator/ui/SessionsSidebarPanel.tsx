@@ -24,6 +24,7 @@ import {
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
+import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
 import { Archive, ChevronRight, MoreHorizontal, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useId, useMemo, useRef, useState } from "react";
@@ -56,11 +57,12 @@ interface GroupProps {
 
 const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) => {
   const headerId = useId();
+  const { keyboardFocused, focusWithinProps } = useKeyboardFocusWithin();
   return (
     // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
     <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
-      <h3 className="tw-group tw-m-0">
+      <h3 className="tw-group tw-m-0" {...focusWithinProps}>
         <button
           id={headerId}
           type="button"
@@ -72,11 +74,12 @@ const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) =
           )}
         >
           <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
-          {/* The fold chevron shows only on hover or focus, like the header's other actions, so the list reads clean.
-              https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+          {/* The fold chevron shows only on hover or keyboard focus, like the header's other actions, so the list reads
+              clean. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
           <ChevronRight
             className={cn(
-              "tw-invisible tw-size-4 tw-shrink-0 group-focus-within:tw-visible group-hover:tw-visible",
+              "tw-size-4 tw-shrink-0",
+              keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible",
               !collapsed && "tw-rotate-90"
             )}
           />
