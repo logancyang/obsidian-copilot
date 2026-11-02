@@ -12,13 +12,6 @@ export interface AgentHomeShelfSection {
   disabledTooltip?: string;
 }
 
-export function landingSectionsForSidebar(
-  sections: AgentHomeShelfSection[],
-  sidebarOpen: boolean
-): AgentHomeShelfSection[] {
-  return sidebarOpen ? sections.filter((section) => section.id === "relevant-notes") : sections;
-}
-
 interface AgentHomeShelfProps {
   sections: AgentHomeShelfSection[];
   className?: string;
@@ -70,7 +63,7 @@ export function AgentHomeShelf({
     className
   );
 
-  // With the sessions sidebar open only Relevant Notes is left, and a lone tab reads as stray chrome.
+  // A lone tab reads as stray chrome, so a single section renders without a tab bar.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   if (sections.length === 1) {
     return (

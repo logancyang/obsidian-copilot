@@ -24,11 +24,7 @@ import {
   nextProjectLandingPlacement,
   type ProjectLandingPlacement,
 } from "@/agentMode/ui/projectLandingPlacement";
-import {
-  AgentHomeShelf,
-  landingSectionsForSidebar,
-  type AgentHomeShelfSection,
-} from "@/agentMode/ui/AgentHomeShelf";
+import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
@@ -515,11 +511,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
-  // The sessions sidebar already lists chats and projects, so the landing drops its own lists and shows the project
-  // context inline instead of a shelf.
+  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and shows the
+  // project context inline instead of a shelf.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   const globalShelfSections = useMemo(
-    () => landingSectionsForSidebar(landingSections, sidebarOpen),
+    () =>
+      sidebarOpen
+        ? landingSections.filter((section) => section.id === "relevant-notes")
+        : landingSections,
     [sidebarOpen, landingSections]
   );
 
@@ -668,6 +667,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const showHeader = isProjectScope || chatTitle !== undefined;
   const headerIsProject = isProjectScope || chatTitle === undefined;
+  // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
+  const canLeaveProject = headerIsProject && !sidebarOpen;
 
   const handleReportError = () => {
     const evidence = activeSession?.getReportEvidence();
@@ -693,9 +695,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           <AgentProjectHeader
             projectName={headerIsProject ? headerName : undefined}
             title={chatTitle}
-            onExit={headerIsProject ? handleExitProject : undefined}
+            onExit={handleExitProject}
             orphaned={headerIsProject && headerOrphaned}
-            sidebarOpen={sidebarOpen}
+            canLeaveProject={canLeaveProject}
             menu={
               activeProject ? (
                 <ProjectInfoPopover
