@@ -526,6 +526,14 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByPlaceholderText("Search chats...")).toBeNull();
       });
 
+      it("puts the cursor in the search field as soon as the header search icon opens it for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({ items });
+
+        fireEvent.click(screen.getByRole("button", { name: "Search chats" }));
+
+        expect(document.activeElement).toBe(screen.getByPlaceholderText("Search chats..."));
+      });
+
       it("lists matching chats from every group in one list, even from a collapsed project, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         renderPanel({ items, projects: projects(1) });
 
