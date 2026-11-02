@@ -80,7 +80,7 @@ describe("commands", () => {
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
     });
 
-    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const register = (): { commands: Command[]; plugin: CopilotPlugin } => {
         const commands: Command[] = [];
         const plugin = {
@@ -104,7 +104,7 @@ describe("commands", () => {
         name: "Open Copilot Navigator",
         icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
       });
-      command?.callback?.();
+      await command?.callback?.();
       expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
     });
 
@@ -118,7 +118,7 @@ describe("commands", () => {
       { who: "a user without Plus", isPaidUser: false, opens: "the upgrade dialog" },
     ])(
       "lists the Navigator command for $who and opens $opens for https://github.com/Brevilabs/obsidian-copilot-private/issues/819",
-      ({ isPaidUser, opens }) => {
+      async ({ isPaidUser, opens }) => {
         jest.mocked(isDesktopRuntime).mockReturnValue(true);
         jest.mocked(getSettings).mockReturnValue({ isPaidUser } as ReturnType<typeof getSettings>);
         const commands: Command[] = [];
@@ -132,7 +132,7 @@ describe("commands", () => {
         const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
 
         expect(command?.checkCallback).toBeUndefined();
-        command?.callback?.();
+        await command?.callback?.();
 
         const opensNavigator = opens === "the Navigator";
         expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(opensNavigator ? 1 : 0);
