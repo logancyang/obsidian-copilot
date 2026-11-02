@@ -17,6 +17,7 @@ import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
 import { writePermissionRequest } from "./testing/permissionPrompts";
+import { makeFakeVault } from "./testing/fakeVault";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
@@ -3033,19 +3034,6 @@ describe("AgentSession", () => {
       });
 
       describe("turn file changes", () => {
-        function makeVault(initial: Record<string, string>) {
-          const files = new Map(Object.entries(initial));
-          const adapter = new FileSystemAdapter();
-          adapter.read = jest.fn((p: string) => {
-            const content = files.get(p);
-            return content === undefined
-              ? Promise.reject(new Error(`ENOENT: ${p}`))
-              : Promise.resolve(content);
-          });
-          const app = { vault: { adapter } } as unknown as App;
-          return { files, adapter, app };
-        }
-
         function makeSession(mock: ReturnType<typeof makeMockBackend>, app: App) {
           const session = new AgentSession({
             backend: mock.asBackend,
@@ -3101,7 +3089,7 @@ describe("AgentSession", () => {
         });
 
         it("reports one change per file, from the file the turn first saw to the file at turn end", async () => {
-          const vault = makeVault({ "notes/a.md": "one\ntwo\n" });
+          const vault = makeFakeVault({ "notes/a.md": "one\ntwo\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementation(async () => {
             mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3127,7 +3115,7 @@ describe("AgentSession", () => {
         });
 
         it("https://github.com/Brevilabs/obsidian-copilot-private/issues/509 reports one Files changed card for a turn a queued message extended, counting edits from before and after it", async () => {
-          const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+          const vault = makeFakeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
           const mock = makeMockBackend();
           const sent = recordPrompts(mock);
           const session = new AgentSession({
@@ -3163,7 +3151,7 @@ describe("AgentSession", () => {
         });
 
         it("reports a file missing when the turn first named it as created, and one missing at turn end as deleted", async () => {
-          const vault = makeVault({ "notes/old.md": "stale\n" });
+          const vault = makeFakeVault({ "notes/old.md": "stale\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementation(async () => {
             mock.emit(editCall("t1", "/vault/notes/new.md"));
@@ -3197,7 +3185,7 @@ describe("AgentSession", () => {
         });
 
         it("reports nothing for a file the turn edited and then restored", async () => {
-          const vault = makeVault({ "notes/a.md": "original\n" });
+          const vault = makeFakeVault({ "notes/a.md": "original\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementation(async () => {
             mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3213,7 +3201,7 @@ describe("AgentSession", () => {
         });
 
         it("leaves a file the turn only read out of the reported changes https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-          const vault = makeVault({ "notes/a.md": "unchanged\n" });
+          const vault = makeFakeVault({ "notes/a.md": "unchanged\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementation(async () => {
             mock.emit(toolCall("t1", "read", ["/vault/notes/a.md"]));
@@ -3228,7 +3216,7 @@ describe("AgentSession", () => {
         });
 
         it("ignores paths outside the vault and inside hidden folders https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-          const vault = makeVault({});
+          const vault = makeFakeVault({});
           const mock = makeMockBackend();
           mock.prompt.mockImplementation(async () => {
             mock.emit(editCall("t1", "/tmp/scratch.md"));
@@ -3245,7 +3233,7 @@ describe("AgentSession", () => {
         });
 
         it("still reports what landed when the user cancels the turn", async () => {
-          const vault = makeVault({ "notes/a.md": "one\n" });
+          const vault = makeFakeVault({ "notes/a.md": "one\n" });
           const mock = makeMockBackend();
           let markPromptEntered!: () => void;
           const promptEntered = new Promise<void>((resolve) => {
@@ -3270,7 +3258,7 @@ describe("AgentSession", () => {
         });
 
         it("starts each turn from a clean slate so an earlier turn's files are not re-reported", async () => {
-          const vault = makeVault({ "notes/a.md": "one\n" });
+          const vault = makeFakeVault({ "notes/a.md": "one\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementationOnce(async () => {
             mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3288,7 +3276,7 @@ describe("AgentSession", () => {
         });
 
         it("ignores a late update to an earlier turn's edit so the current turn does not report it https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-          const vault = makeVault({ "notes/a.md": "one\n" });
+          const vault = makeFakeVault({ "notes/a.md": "one\n" });
           const mock = makeMockBackend();
           mock.prompt.mockImplementationOnce(async () => {
             mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3329,7 +3317,7 @@ describe("AgentSession", () => {
 
         describe("before text from the first-mention snapshot", () => {
           it("snapshots as soon as a permission request names the file it wants to edit", async () => {
-            const vault = makeVault({ "notes/a.md": "before the turn\n" });
+            const vault = makeFakeVault({ "notes/a.md": "before the turn\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               void session.handleToolPermission({
@@ -3356,7 +3344,7 @@ describe("AgentSession", () => {
           });
 
           it("keeps the snapshot from an earlier read so a later write's announcement cannot overtake it", async () => {
-            const vault = makeVault({ "notes/a.md": "before the turn\n" });
+            const vault = makeFakeVault({ "notes/a.md": "before the turn\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(toolCall("t1", "read", ["/vault/notes/a.md"]));
@@ -3374,7 +3362,7 @@ describe("AgentSession", () => {
           });
 
           it("captures an edit whose path and kind arrive only in later updates to the tool call", async () => {
-            const vault = makeVault({ "notes/a.md": "one\n" });
+            const vault = makeFakeVault({ "notes/a.md": "one\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit({
@@ -3411,7 +3399,7 @@ describe("AgentSession", () => {
 
         describe("before text from tool result originals", () => {
           it("takes the original a tool result reports over a snapshot the write overtook https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-            const vault = makeVault({ "notes/a.md": "already written by the agent\n" });
+            const vault = makeFakeVault({ "notes/a.md": "already written by the agent\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3428,7 +3416,7 @@ describe("AgentSession", () => {
           });
 
           it("keeps the first original when a later edit to the same file reports its own https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-            const vault = makeVault({ "notes/a.md": "third\n" });
+            const vault = makeFakeVault({ "notes/a.md": "third\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3447,7 +3435,7 @@ describe("AgentSession", () => {
           });
 
           it("matches each original to its own file when one call changes several https://github.com/Brevilabs/obsidian-copilot-private/issues/687", async () => {
-            const vault = makeVault({ "notes/a.md": "a after\n", "notes/moved.md": "moved\n" });
+            const vault = makeFakeVault({ "notes/a.md": "a after\n", "notes/moved.md": "moved\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(
@@ -3496,7 +3484,7 @@ describe("AgentSession", () => {
           };
 
           it("recovers a file's before text by reversing the turn diff over a snapshot the write overtook https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-            const vault = makeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
+            const vault = makeFakeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3517,7 +3505,7 @@ describe("AgentSession", () => {
           });
 
           it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends the turn without a file change card when the turn diff is malformed", async () => {
-            const vault = makeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
+            const vault = makeFakeVault({ "notes/a.md": "one\nTWO\ninserted\nthree\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3534,7 +3522,7 @@ describe("AgentSession", () => {
           });
 
           it("falls back to the snapshot for a file the turn diff no longer applies to https://github.com/Brevilabs/obsidian-copilot-private/issues/347", async () => {
-            const vault = makeVault({ "notes/a.md": "snapshot\n" });
+            const vault = makeFakeVault({ "notes/a.md": "snapshot\n" });
             const mock = makeMockBackend();
             mock.prompt.mockImplementation(async () => {
               mock.emit(editCall("t1", "/vault/notes/a.md"));
@@ -3615,7 +3603,7 @@ describe("AgentSession", () => {
           }
 
           it("gives a run the agent started on its own, after a subagent finished, its own Files changed card", async () => {
-            const vault = makeVault({ "notes/a.md": "a\n", "notes/plan.md": "plan\n" });
+            const vault = makeFakeVault({ "notes/a.md": "a\n", "notes/plan.md": "plan\n" });
             const chat = liveChat(vault.app);
             const { turn: launch } = await chat.send("note the plan and start a subagent");
             chat.run("launch", [
@@ -3644,7 +3632,7 @@ describe("AgentSession", () => {
           });
 
           it("leaves a subagent's edit made during a later user run off that run's card and puts it in the subagent's capture", async () => {
-            const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+            const vault = makeFakeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
             const chat = liveChat(vault.app);
             const { turn: launch } = await chat.send("start a subagent that rewrites b");
             chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
@@ -3673,7 +3661,7 @@ describe("AgentSession", () => {
           });
 
           it("counts a subagent's permission request toward the subagent's capture, not the card of the user run open beside it", async () => {
-            const vault = makeVault({ "notes/b.md": "before the write\n" });
+            const vault = makeFakeVault({ "notes/b.md": "before the write\n" });
             const chat = liveChat(vault.app);
             const { turn: launch } = await chat.send("start a subagent that rewrites b");
             chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
@@ -3717,7 +3705,7 @@ describe("AgentSession", () => {
           });
 
           it("captures a subagent's edit made after its launching run ended, from the file as the subagent's write found it", async () => {
-            const vault = makeVault({ "notes/b.md": "changed before the write landed\n" });
+            const vault = makeFakeVault({ "notes/b.md": "changed before the write landed\n" });
             const chat = liveChat(vault.app);
             const { turn: launch } = await chat.send("start a subagent that rewrites b");
             chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
@@ -3752,7 +3740,7 @@ describe("AgentSession", () => {
           });
 
           it("extends an agent-started run's capture with a mid-turn message's edits, showing one card on the run's last reply", async () => {
-            const vault = makeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+            const vault = makeFakeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
             const chat = liveChat(vault.app);
             chat.run("agent-started", [editCall("e1", "/vault/notes/a.md")]);
             vault.files.set("notes/a.md", "A\n");
@@ -3773,7 +3761,7 @@ describe("AgentSession", () => {
           });
 
           it("keeps the edits a subagent made before the composer's Stop ended it, and leaves them off the stopped reply", async () => {
-            const vault = makeVault({ "notes/b.md": "b\n" });
+            const vault = makeFakeVault({ "notes/b.md": "b\n" });
             const chat = liveChat(vault.app);
             const { turn: launch } = await chat.send("rewrite b in a subagent and wait for it");
             chat.run("launch", [
@@ -3799,7 +3787,196 @@ describe("AgentSession", () => {
             await waitFor(() => expect(chat.subagentChanges()).toEqual(["notes/b.md"]));
             expect(fileChangesOf(chat.session)).toBeUndefined();
           });
+
+          it("https://github.com/Brevilabs/obsidian-copilot-private/issues/763 gives a note the vault reports created to the open run, not a subagent's card beside it", async () => {
+            const vault = makeFakeVault({});
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("start a subagent");
+            chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
+            chat.mock.emit(fromSubagent(toolCall("subagent-read", "read", ["/vault/notes/x.md"])));
+            vault.create("notes/made.md", "made\n");
+            chat.endRun("launch");
+            await launch;
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            expect(fileChangesOf(chat.session)?.map((change) => change.path)).toEqual([
+              "notes/made.md",
+            ]);
+            await waitFor(() => expect(chat.session.getTasks()[0]?.status).toBe("completed"));
+            expect(chat.subagentChanges()).toBeUndefined();
+          });
+
+          it("https://github.com/Brevilabs/obsidian-copilot-private/issues/763 gives a note the vault reports created after the run ended to the subagent still running", async () => {
+            const vault = makeFakeVault({});
+            const chat = liveChat(vault.app);
+            const { turn: launch } = await chat.send("start a subagent");
+            chat.run("launch", [AGENT_CARD, SUBAGENT_STARTED, text("Started.")]);
+            chat.endRun("launch");
+            await launch;
+            chat.mock.emit(fromSubagent(toolCall("subagent-read", "read", ["/vault/notes/x.md"])));
+            vault.create("notes/made.md", "made\n");
+            chat.mock.emitUpdate({
+              sessionUpdate: "task_ended",
+              taskId: "task-1",
+              status: "completed",
+            });
+
+            await waitFor(() => expect(chat.subagentChanges()).toEqual(["notes/made.md"]));
+            expect(fileChangesOf(chat.session)).toBeUndefined();
+          });
         });
+
+        describe("https://github.com/Brevilabs/obsidian-copilot-private/issues/763 with vault create, rename, and delete events", () => {
+          function runTurn(
+            vault: ReturnType<typeof makeFakeVault>,
+            steps: (mock: ReturnType<typeof makeMockBackend>) => void
+          ) {
+            const mock = makeMockBackend();
+            mock.prompt.mockImplementation(async () => {
+              steps(mock);
+              return { stopReason: "end_turn" as const };
+            });
+            const session = makeSession(mock, vault.app);
+            return { session, turn: session.sendPrompt("change the notes").turn };
+          }
+
+          it("reports a note edited and then renamed through the vault once, at its new path against its original text", async () => {
+            const vault = makeFakeVault({ "notes/a.md": "original\n" });
+            const { session, turn } = runTurn(vault, (mock) => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              vault.files.set("notes/a.md", "edited\n");
+              vault.renameFile("notes/a.md", "notes/b.md");
+            });
+            await turn;
+
+            expect(fileChangesOf(session)).toEqual([
+              {
+                path: "notes/b.md",
+                status: "modified",
+                before: "original\n",
+                after: "edited\n",
+                additions: 1,
+                deletions: 1,
+              },
+            ]);
+          });
+
+          it("reports a note edited and then moved by the shell as its old path's deletion plus the new path's creation with its content", async () => {
+            const vault = makeFakeVault({ "notes/a.md": "original\n" });
+            const { session, turn } = runTurn(vault, (mock) => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              vault.files.set("notes/a.md", "edited\n");
+              vault.shellMove("notes/a.md", "notes/b.md");
+            });
+            await turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/a.md", status: "deleted", before: "original\n", after: null },
+              { path: "notes/b.md", status: "created", before: null, after: "edited\n" },
+            ]);
+          });
+
+          it("follows a note through its folder's rename to one change at its new path", async () => {
+            const vault = makeFakeVault({ "F/a.md": "original\n" });
+            const { session, turn } = runTurn(vault, (mock) => {
+              mock.emit(editCall("t1", "/vault/F/a.md"));
+              vault.files.set("F/a.md", "edited\n");
+              vault.renameFolder("F", "G");
+            });
+            await turn;
+
+            expect(fileChangesOf(session)?.map(({ path, status }) => ({ path, status }))).toEqual([
+              { path: "G/a.md", status: "modified" },
+            ]);
+          });
+
+          it("leaves out notes the vault creates, renames, or deletes while no reply is open", async () => {
+            const vault = makeFakeVault({ "notes/a.md": "a\n", "notes/b.md": "b\n" });
+            const { session, turn } = runTurn(vault, (mock) => {
+              mock.emit(editCall("t1", "/vault/notes/a.md"));
+              vault.files.set("notes/a.md", "A\n");
+            });
+            await turn;
+            const firstCard = fileChangesOf(session);
+            vault.create("notes/idle.md", "made between turns\n");
+            vault.renameFile("notes/a.md", "notes/a2.md");
+            vault.delete("notes/b.md");
+
+            expect(fileChangesOf(session)).toBe(firstCard);
+            expect(firstCard?.map((change) => change.path)).toEqual(["notes/a.md"]);
+          });
+
+          it("leaves out the chat note Copilot saves into its conversations folder during the turn", async () => {
+            jest
+              .mocked(getSettings)
+              .mockReturnValue({ agentMode: {}, copilotFolder: "AI" } as never);
+            const vault = makeFakeVault({});
+            const { session, turn } = runTurn(vault, () => {
+              vault.create("AI/copilot-conversations/agent__chat.md", "saved chat\n");
+              vault.create("notes/new.md", "fresh\n");
+            });
+            await turn;
+            jest.mocked(getSettings).mockReturnValue({ agentMode: {} } as never);
+
+            expect(fileChangesOf(session)?.map((change) => change.path)).toEqual(["notes/new.md"]);
+          });
+
+          it("leaves out a non-note file the vault reports created, such as an image", async () => {
+            const vault = makeFakeVault({});
+            const { session, turn } = runTurn(vault, () => {
+              vault.create("assets/chart.png", "binary");
+            });
+            await turn;
+
+            expect(fileChangesOf(session)).toBeUndefined();
+          });
+
+          it("still reports a note the vault created when the user cancels the turn", async () => {
+            const vault = makeFakeVault({});
+            const mock = makeMockBackend();
+            let markCreated!: () => void;
+            const created = new Promise<void>((resolve) => {
+              markCreated = resolve;
+            });
+            mock.prompt.mockImplementation(() => {
+              vault.create("notes/new.md", "fresh\n");
+              markCreated();
+              return new Promise<never>(() => {});
+            });
+            const session = makeSession(mock, vault.app);
+
+            const { turn } = session.sendPrompt("make a note");
+            await created;
+            await session.cancel();
+            await turn;
+
+            expect(fileChangesOf(session)).toMatchObject([
+              { path: "notes/new.md", status: "created", after: "fresh\n" },
+            ]);
+          });
+        });
+      });
+    });
+
+    describe("dispose()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/763 stops listening to vault file events so a closed chat does not keep capturing", async () => {
+        const vault = makeFakeVault({});
+        const session = new AgentSession({
+          backend: makeMockBackend().asBackend,
+          backendSessionId: "acp-1",
+          internalId: "internal-1",
+          backendId: "claude",
+          getApp: () => vault.app,
+        });
+        expect(vault.listenerCount()).toBe(3);
+
+        await session.dispose();
+
+        expect(vault.listenerCount()).toBe(0);
       });
     });
 
@@ -4104,7 +4281,8 @@ describe("AgentSession", () => {
         const sent = recordPrompts(mock);
         const session = makeSession(mock, {
           getDescriptor: midTurnDescriptor,
-          getApp: () => ({ vault: { adapter } }) as unknown as App,
+          getApp: () =>
+            ({ vault: { adapter, on: jest.fn(), offref: jest.fn() } }) as unknown as App,
         });
         const first = session.sendPrompt("edit a");
         await waitFor(() => expect(sent).toHaveLength(1));
@@ -4148,7 +4326,8 @@ describe("AgentSession", () => {
         const sent = recordPrompts(mock);
         const session = makeSession(mock, {
           getDescriptor: midTurnDescriptor,
-          getApp: () => ({ vault: { adapter } }) as unknown as App,
+          getApp: () =>
+            ({ vault: { adapter, on: jest.fn(), offref: jest.fn() } }) as unknown as App,
         });
         const first = session.sendPrompt("edit a");
         await waitFor(() => expect(sent).toHaveLength(1));
