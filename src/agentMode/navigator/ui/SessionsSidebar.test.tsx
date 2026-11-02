@@ -76,7 +76,7 @@ const metadataCache = new FakeMetadataCache();
 
 function renderSidebar(manager: FakeManager) {
   const plugin = {
-    app: { metadataCache },
+    app: { metadataCache, vault: { on: jest.fn(() => ({})), offref: jest.fn() } },
     loadChatById: jest.fn(async () => {}),
     activateAgentView: jest.fn(async () => {
       manager.events.push("view");
