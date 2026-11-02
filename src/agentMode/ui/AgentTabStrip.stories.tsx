@@ -1,11 +1,12 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { AgentSessionStatus } from "@/agentMode/session/AgentSession";
-import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import { AgentTabOverflowMenu, AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
 type AgentTabStripProps = React.ComponentProps<typeof AgentTabStrip>;
+type AgentTabOverflowMenuProps = React.ComponentProps<typeof AgentTabOverflowMenu>;
 
 interface StoryChat {
   label: string;
@@ -13,15 +14,22 @@ interface StoryChat {
   needsAttention?: boolean;
 }
 
+function makeSessions(chats: StoryChat[]): AgentSession[] {
+  return chats.map(
+    (chat, index) =>
+      ({
+        internalId: `chat-${index}`,
+        backendId: "claude",
+        subscribe: () => () => {},
+        getLabel: () => chat.label,
+        getStatus: () => chat.status ?? "idle",
+        getNeedsAttention: () => chat.needsAttention ?? false,
+      }) as unknown as AgentSession
+  );
+}
+
 function makeManager(chats: StoryChat[], activeIndex = 0): AgentSessionManager {
-  const sessions = chats.map((chat, index) => ({
-    internalId: `chat-${index}`,
-    backendId: "claude",
-    subscribe: () => () => {},
-    getLabel: () => chat.label,
-    getStatus: () => chat.status ?? "idle",
-    getNeedsAttention: () => chat.needsAttention ?? false,
-  }));
+  const sessions = makeSessions(chats);
   return {
     subscribe: () => () => {},
     getSessionsForScope: () => sessions,
@@ -62,4 +70,36 @@ export const EveryStatus: StoryObj<AgentTabStripProps> = {
       { label: "Review the weekly template" },
     ]),
   },
+};
+
+const HIDDEN_CHATS = makeSessions([
+  { label: "Plan the garden renovation" },
+  { label: "Review the weekly template", status: "running" },
+  { label: "Draft the release announcement", needsAttention: true },
+]);
+
+const OpenOverflowMenu: React.FC<Partial<AgentTabOverflowMenuProps>> = ({ showPlusMarker }) => (
+  <TooltipProvider>
+    <div className="tw-flex tw-h-72 tw-justify-end">
+      <AgentTabOverflowMenu
+        sessions={HIDDEN_CHATS}
+        activeId={null}
+        showPlusMarker={showPlusMarker ?? false}
+        onActivate={() => {}}
+        onClose={() => {}}
+        onOpenNavigator={() => {}}
+        defaultOpen
+      />
+    </div>
+  </TooltipProvider>
+);
+
+export const OverflowMenuWithoutPlus: StoryObj<AgentTabOverflowMenuProps> = {
+  render: OpenOverflowMenu,
+  args: { showPlusMarker: true },
+};
+
+export const OverflowMenuWithPlus: StoryObj<AgentTabOverflowMenuProps> = {
+  render: OpenOverflowMenu,
+  args: { showPlusMarker: false },
 };

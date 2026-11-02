@@ -1,8 +1,10 @@
 import {
+  AgentTabOverflowMenu,
   AgentTabStrip,
   computeVisibleCount,
   partitionSessions,
 } from "@/agentMode/ui/AgentTabStrip";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
@@ -38,22 +40,54 @@ function renderStrip(
   );
 }
 
-function makeManagerWithOneChat() {
-  const session = {
-    internalId: "existing",
-    backendId: "test",
-    subscribe: () => () => {},
-    getLabel: () => "Existing chat",
-    getStatus: () => "idle",
-    getNeedsAttention: () => false,
-  };
+function makeSessions(labels: string[]): AgentSession[] {
+  return labels.map(
+    (label, index) =>
+      ({
+        internalId: index === 0 ? "existing" : `chat-${index}`,
+        backendId: "test",
+        subscribe: () => () => {},
+        getLabel: () => label,
+        getStatus: () => "idle",
+        getNeedsAttention: () => false,
+      }) as unknown as AgentSession
+  );
+}
+
+function makeManagerWithChats(labels: string[]) {
+  const sessions = makeSessions(labels);
   return {
     subscribe: () => () => {},
-    getSessionsForScope: () => [session],
+    getSessionsForScope: () => sessions,
     getActiveProjectId: () => null,
-    getActiveSession: () => session,
+    getActiveSession: () => sessions[0],
     getIsStarting: () => false,
   };
+}
+
+function makeManagerWithOneChat() {
+  return makeManagerWithChats(["Existing chat"]);
+}
+
+const CARD_COPY = "Too many chats? Copilot Navigator keeps every agent chat in one sidebar.";
+
+function renderOverflowMenu(props: Partial<React.ComponentProps<typeof AgentTabOverflowMenu>>) {
+  return render(
+    React.createElement(
+      TooltipProvider,
+      null,
+      React.createElement(AgentTabOverflowMenu, {
+        sessions: makeSessions(["Plan the garden", "Review the template"]),
+        activeId: null,
+        showPlusMarker: false,
+        onActivate: jest.fn(),
+        onClose: jest.fn(),
+        onOpenNavigator: jest.fn(),
+        defaultOpen: true,
+        ...props,
+      })
+    )
+  );
 }
 
 describe("AgentTabStrip", () => {
@@ -137,6 +171,53 @@ describe("AgentTabStrip", () => {
       });
       expect(visibleSessions.map((x) => x.internalId)).toEqual(["c"]);
       expect(overflowSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
+    });
+  });
+
+  describe("AgentTabOverflowMenu()", () => {
+    it("starts the open menu with the Copilot Navigator card, separated from the hidden chats below it for https://github.com/Brevilabs/obsidian-copilot-private/issues/820", () => {
+      renderOverflowMenu({});
+
+      const card = screen.getByText(CARD_COPY);
+      const separator = screen.getByRole("separator");
+      const firstHiddenChat = screen.getByText("Plan the garden");
+      expect(card.compareDocumentPosition(separator)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(separator.compareDocumentPosition(firstHiddenChat)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      );
+      expect(screen.getByText("Review the template")).toBeTruthy();
+    });
+
+    it.each([
+      { showPlusMarker: true, markerCount: 1 },
+      { showPlusMarker: false, markerCount: 0 },
+    ])(
+      "shows $markerCount Plus marker(s) on the card when showPlusMarker is $showPlusMarker for https://github.com/Brevilabs/obsidian-copilot-private/issues/820",
+      ({ showPlusMarker, markerCount }) => {
+        renderOverflowMenu({ showPlusMarker });
+
+        expect(screen.queryAllByText("Plus")).toHaveLength(markerCount);
+      }
+    );
+
+    it("opens Copilot Navigator once and closes the menu when the card action is chosen", () => {
+      const onOpenNavigator = jest.fn();
+      renderOverflowMenu({ onOpenNavigator });
+
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open Copilot Navigator" }));
+
+      expect(onOpenNavigator).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(CARD_COPY)).toBeNull();
+    });
+
+    it("activates a hidden chat and closes the menu when its row is clicked", () => {
+      const onActivate = jest.fn();
+      renderOverflowMenu({ onActivate });
+
+      fireEvent.click(screen.getByText("Review the template"));
+
+      expect(onActivate).toHaveBeenCalledWith("chat-1");
+      expect(screen.queryByText(CARD_COPY)).toBeNull();
     });
   });
 
@@ -264,6 +345,29 @@ describe("AgentTabStrip", () => {
 
       expect(screen.queryByRole("tab")).toBeNull();
     });
+
+    it.each([
+      { tier: "a user without Plus", isPaidUser: false, markerCount: 1 },
+      { tier: "a Plus user", isPaidUser: true, markerCount: 0 },
+      { tier: "a user whose tier is unknown", isPaidUser: undefined, markerCount: 0 },
+    ])(
+      "shows $markerCount Plus marker(s) on the overflow card for $tier and opens the sidebar from its action for https://github.com/Brevilabs/obsidian-copilot-private/issues/820",
+      ({ isPaidUser, markerCount }) => {
+        setSettings({ isPaidUser });
+        const onOpenSidebar = jest.fn();
+        renderStrip(makeManagerWithChats(["First chat", "Second chat", "Third chat"]), {
+          onOpenSidebar,
+        });
+
+        fireEvent.keyDown(screen.getByRole("button", { name: "Show 2 more chats" }), {
+          key: "Enter",
+        });
+        expect(screen.queryAllByText("Plus")).toHaveLength(markerCount);
+        fireEvent.click(screen.getByRole("menuitem", { name: "Open Copilot Navigator" }));
+
+        expect(onOpenSidebar).toHaveBeenCalledTimes(1);
+      }
+    );
 
     it("keeps the tabs and the Navigator icon beside a Navigator leaf blocked for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
       setSettings({ isPaidUser: false });
