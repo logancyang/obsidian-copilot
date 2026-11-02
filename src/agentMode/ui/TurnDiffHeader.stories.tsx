@@ -1,5 +1,6 @@
 import { TurnDiffHeader, type TurnDiffHeaderProps } from "@/agentMode/ui/TurnDiffHeader";
 import type { Meta, StoryObj } from "@/lib/story";
+import React from "react";
 
 const meta = {
   title: "Agent Mode/Turn Diff Header",
@@ -37,6 +38,42 @@ export const SteppingThroughChanges: StoryObj<TurnDiffHeaderProps> = {
     changes: { current: 1, total: 6, onStep: () => {} },
     onOpenNote: () => {},
   },
+};
+
+export const RevokeAll: StoryObj<TurnDiffHeaderProps> = {
+  args: {
+    path: "Research/Onboarding interviews.md",
+    status: "modified",
+    additions: 9,
+    deletions: 7,
+    changes: { current: 0, total: 6, onStep: () => {} },
+    revokeAll: { changedAfterTurn: false, onRevokeAll: () => {} },
+    onOpenNote: () => {},
+  },
+};
+
+function FocusedBlockedRevokeAll(): React.ReactElement {
+  const root = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    root.current?.querySelector<HTMLElement>("button[aria-disabled=true]")?.focus();
+  }, []);
+  return (
+    <div ref={root}>
+      <TurnDiffHeader
+        path="Research/Onboarding interviews.md"
+        status="modified"
+        additions={9}
+        deletions={7}
+        changes={{ current: 0, total: 6, onStep: () => {} }}
+        revokeAll={{ changedAfterTurn: true, onRevokeAll: () => {} }}
+        onOpenNote={() => {}}
+      />
+    </div>
+  );
+}
+
+export const RevokeAllBlockedAfterNoteEdit: StoryObj<TurnDiffHeaderProps> = {
+  render: FocusedBlockedRevokeAll,
 };
 
 export const Deleted: StoryObj<TurnDiffHeaderProps> = {
