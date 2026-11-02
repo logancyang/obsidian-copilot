@@ -52,9 +52,10 @@ export function NavigatorUpsellContent({
           <li>Pin, archive, search and reorder chats without leaving your conversation</li>
         </ul>
       </div>
+      {/* Width cap keeps the 4:3 GIF under 40vh tall so the footer buttons fit short windows: https://github.com/Brevilabs/obsidian-copilot-private/issues/819 */}
       <img
         alt="Copilot Navigator scrolling through pinned chats, projects and recent chats"
-        className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-rounded-md tw-border tw-border-solid tw-border-border"
+        className="tw-mx-auto tw-block tw-h-auto tw-w-full tw-max-w-[calc(40vh*4/3)] tw-rounded-md tw-border tw-border-solid tw-border-border"
         height={450}
         src={NAVIGATOR_HIGHLIGHT_GIF_URL}
         width={600}
