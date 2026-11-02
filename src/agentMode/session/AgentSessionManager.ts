@@ -2344,6 +2344,9 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
     });
+    // A chat without a note has no metadata-cache event, so the chat lists only learn of it here.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+    this.markHistoryChanged();
   }
 
   saveActiveSession(): Promise<{ path: string } | null> {
