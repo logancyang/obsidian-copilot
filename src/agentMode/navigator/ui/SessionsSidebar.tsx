@@ -15,6 +15,7 @@ import type CopilotPlugin from "@/main";
 import { useActiveProjects, useArchivedProjects } from "@/projects/state";
 import { Notice } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { debounce } from "@/utils/debounce";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface SessionsSidebarProps {
@@ -69,11 +70,17 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   // Pins, archives and note renames made in the landing lists land in the chat note's frontmatter, and a reload
   // before Obsidian re-reads that note would still list the old state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+  // A burst of chat notes (a Sync download) reloads once, not once per note.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/808
   useEffect(() => {
+    const reload = debounce(() => void loadChatHistory(), 500, { leading: true });
     const ref = plugin.app.metadataCache.on("changed", (_file, _data, cache) => {
-      if (cache.frontmatter?.mode === AGENT_CHAT_MODE) void loadChatHistory();
+      if (cache.frontmatter?.mode === AGENT_CHAT_MODE) reload();
     });
-    return () => plugin.app.metadataCache.offref(ref);
+    return () => {
+      plugin.app.metadataCache.offref(ref);
+      reload.cancel();
+    };
   }, [plugin, loadChatHistory]);
 
   const handleNewChat = useCallback(async () => {
