@@ -1,4 +1,5 @@
 import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
+import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 
@@ -9,5 +10,5 @@ export async function openSessionsSidebar(plugin: CopilotPlugin): Promise<void> 
     new NavigatorUpsellModal(plugin.app).open();
     return;
   }
-  await plugin.activateSessionsSidebar();
+  await revealSessionsSidebar(plugin);
 }

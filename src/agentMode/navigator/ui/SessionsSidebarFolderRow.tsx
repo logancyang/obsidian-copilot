@@ -1,4 +1,4 @@
-import { AgentProjectRowMenu } from "@/agentMode/ui/AgentProjectRowActions";
+import { AgentProjectRowMenu } from "@/agentMode/navigator/ui/AgentProjectRowMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import {
   SessionStatusIcon,

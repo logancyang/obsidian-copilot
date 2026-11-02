@@ -1,18 +1,19 @@
 import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
+import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
 
 const mockOpenUpsell = jest.fn();
+jest.mock("@/agentMode/navigator/revealSessionsSidebar", () => ({
+  revealSessionsSidebar: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock("@/agentMode/navigator/ui/NavigatorUpsell", () => ({
   NavigatorUpsellModal: jest.fn(() => ({ open: mockOpenUpsell })),
 }));
 
 function makePlugin(): CopilotPlugin {
-  return {
-    app: {},
-    activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
-  } as unknown as CopilotPlugin;
+  return { app: {} } as unknown as CopilotPlugin;
 }
 
 describe("openSessionsSidebar", () => {
@@ -25,7 +26,7 @@ describe("openSessionsSidebar", () => {
 
       await openSessionsSidebar(plugin);
 
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin);
       expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
 
@@ -37,7 +38,7 @@ describe("openSessionsSidebar", () => {
 
       expect(NavigatorUpsellModal).toHaveBeenCalledWith(plugin.app);
       expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
-      expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
+      expect(revealSessionsSidebar).not.toHaveBeenCalled();
     });
 
     it("opens the Navigator while entitlement is unknown so a Plus user is never shown the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
@@ -46,7 +47,7 @@ describe("openSessionsSidebar", () => {
 
       await openSessionsSidebar(plugin);
 
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin);
       expect(mockOpenUpsell).not.toHaveBeenCalled();
     });
   });
