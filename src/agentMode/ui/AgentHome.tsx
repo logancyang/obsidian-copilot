@@ -17,7 +17,6 @@ import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
-import { AgentWelcomeCard } from "@/agentMode/ui/AgentWelcomeCard";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
@@ -76,7 +75,7 @@ import {
   useArchivedProjects,
   useProjects,
 } from "@/projects/state";
-import { getSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import { useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -325,10 +324,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     [app, manager]
   );
-
-  const handleDismissWelcome = useCallback(() => {
-    updateSetting("agentMode", { ...getSettings().agentMode, welcomeDismissed: true });
-  }, []);
 
   useEffect(() => {
     if (isOrphanedProject) new Notice("This project no longer exists.");
@@ -759,16 +754,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         {queuedMessagesNode}
                         {composerNode}
                       </>
-                    }
-                    floating={
-                      !isProjectLanding &&
-                      projects.length === 0 &&
-                      !settings.agentMode.welcomeDismissed ? (
-                        <AgentWelcomeCard
-                          onCreate={handleCreateProject}
-                          onDismiss={handleDismissWelcome}
-                        />
-                      ) : undefined
                     }
                     context={
                       isProjectLanding && !isOrphanedProject && isProjectContextInline ? (
