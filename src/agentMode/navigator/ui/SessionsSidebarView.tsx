@@ -1,5 +1,5 @@
-import { NavigatorBlockedNotice } from "@/agentMode/ui/NavigatorUpsell";
-import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
+import { NavigatorBlockedNotice } from "@/agentMode/navigator/ui/NavigatorUpsell";
+import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { useIsPaidUser } from "@/plusUtils";

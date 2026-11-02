@@ -1,11 +1,11 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
+import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import * as projectsState from "@/projects/state";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
-import { dragByKeyboard, stackRowsVertically } from "@/agentMode/ui/testing/keyboardDrag";
+import { dragByKeyboard, stackRowsVertically } from "@/agentMode/navigator/ui/testing/keyboardDrag";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";

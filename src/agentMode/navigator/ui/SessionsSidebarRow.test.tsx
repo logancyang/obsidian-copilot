@@ -3,9 +3,12 @@ import {
   mostUrgentStatus,
   resolveSessionStatus,
   type SessionStatus,
-} from "@/agentMode/ui/SessionsSidebarRow";
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
-import { inertChatActions, sidebarChat } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import {
+  inertChatActions,
+  sidebarChat,
+} from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import { AppContext } from "@/context";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "obsidian";
