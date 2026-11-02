@@ -36,6 +36,7 @@ import {
   setHomeShelfTab,
   HOME_SHELF_TAB_STORAGE_KEY,
 } from "@/agentMode/ui/homeShelfPrefs";
+import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
@@ -291,13 +292,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [manager]);
 
   const handleProjectDeleted = useCallback(
-    (deletedId: string) => {
-      if (manager.getActiveProjectId() === deletedId) {
-        manager.exitProject().catch((e) => {
-          logError("[AgentMode] exit after delete failed", e);
-        });
-      }
-    },
+    (deletedId: string) => leaveDeletedProject(manager, deletedId),
     [manager]
   );
 
