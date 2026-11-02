@@ -1,4 +1,4 @@
-import * as agentWelcomeStories from "@/agentMode/ui/AgentWelcomeCard.stories";
+import * as agentHomeShelfStories from "@/agentMode/ui/AgentHomeShelf.stories";
 import * as galleryHostStories from "@/components/gallery-hosts.stories";
 import * as badgeStories from "@/components/ui/badge.stories";
 import * as buttonStories from "@/components/ui/button.stories";
@@ -87,7 +87,7 @@ function makeCatalog(): GalleryCatalog {
     componentCount: 4,
     coveredCount: 4,
     stories: [
-      makeStory("Agent Mode/Agent Welcome Card/Default", { layout: "fullscreen" }),
+      makeStory("Agent Mode/Agent Home Shelf/Default", { layout: "fullscreen" }),
       makeStory("UI/Badge/Status", { layout: "centered" }),
       makeStory("UI/Button/Modal", { host: "modal" }),
       makeStory("UI/Button/Popover", { host: "popover" }),
@@ -166,8 +166,8 @@ describe("Gallery", () => {
       const catalog = createGalleryCatalog(
         [
           {
-            componentId: "@/agentMode/ui/AgentWelcomeCard",
-            storyModule: agentWelcomeStories,
+            componentId: "@/agentMode/ui/AgentHomeShelf",
+            storyModule: agentHomeShelfStories,
           },
           { componentId: null, storyModule: galleryHostStories },
           { componentId: "@/components/ui/badge", storyModule: badgeStories },
@@ -179,7 +179,7 @@ describe("Gallery", () => {
       expect(catalog.componentCount).toBe(5);
       expect(catalog.coveredCount).toBe(3);
       expect(catalog.stories.map((story) => story.id)).toEqual([
-        "Agent Mode/Agent Welcome Card/Default",
+        "Agent Mode/Agent Home Shelf/Default",
         "Gallery/Host Environments/DefaultLeaf",
         "Gallery/Host Environments/DeleteConfirmation",
         "Gallery/Host Environments/ModelPreferences",
@@ -207,8 +207,7 @@ describe("Gallery", () => {
           <AppContext.Provider value={GALLERY_APP}>{story.render()}</AppContext.Provider>
         );
         if (story.id.startsWith("Agent Mode/")) {
-          fireEvent.click(renderedStory.getByRole("button", { name: "Dismiss" }));
-          fireEvent.click(renderedStory.getByRole("button", { name: "New project" }));
+          expect(renderedStory.getByRole("tab", { name: "Recent Chats" })).toBeTruthy();
         }
         renderedStory.unmount();
       }
@@ -397,11 +396,11 @@ describe("Gallery", () => {
       expect(
         within(navigation).getByRole("button", { name: "Default" }).getAttribute("aria-current")
       ).toBe("true");
-      expect(gallery.getByText("Agent Mode/Agent Welcome Card/Default")).toBeTruthy();
+      expect(gallery.getByText("Agent Mode/Agent Home Shelf/Default")).toBeTruthy();
       expect(gallery.container.querySelectorAll("[data-gallery-story-id]")).toHaveLength(1);
       expect(
         gallery.container.querySelector(
-          '[data-story="Agent Mode/Agent Welcome Card/Default"][data-story-width="400"]'
+          '[data-story="Agent Mode/Agent Home Shelf/Default"][data-story-width="400"]'
         )
       ).toBeTruthy();
 
@@ -794,7 +793,7 @@ describe("Gallery", () => {
       expect(canvas?.style.width).toBe("300px");
       expect(
         gallery.container.querySelector(
-          '[data-story="Agent Mode/Agent Welcome Card/Default"][data-story-width="300"]'
+          '[data-story="Agent Mode/Agent Home Shelf/Default"][data-story-width="300"]'
         )
       ).toBeTruthy();
     });
