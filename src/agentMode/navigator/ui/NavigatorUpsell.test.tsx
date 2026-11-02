@@ -1,5 +1,5 @@
 import {
-  NAVIGATOR_HIGHLIGHT_GIF_URL,
+  NAVIGATOR_HIGHLIGHT_URL,
   NavigatorBlockedNotice,
   NavigatorUpsellContent,
   NavigatorUpsellModal,
@@ -35,16 +35,18 @@ describe("NavigatorUpsell", () => {
   });
 
   describe("NavigatorUpsellContent()", () => {
-    it("explains what the Navigator does above its highlight GIF for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
+    it("explains what the Navigator does above its highlight animation for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", () => {
       const { container } = renderWithApp(
         new App(),
         <NavigatorUpsellContent onClose={jest.fn()} />
       );
 
       const intro = screen.getByText(/keeps all your agent chats in one sidebar/);
-      const gif = screen.getByRole("img");
-      expect(gif.getAttribute("src")).toBe(NAVIGATOR_HIGHLIGHT_GIF_URL);
-      expect(intro.compareDocumentPosition(gif) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const animation = screen.getByRole("img");
+      expect(animation.getAttribute("src")).toBe(NAVIGATOR_HIGHLIGHT_URL);
+      expect(
+        intro.compareDocumentPosition(animation) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
       expect(Array.from(container.querySelectorAll("li"), (li) => li.textContent)).toEqual([
         "See every chat at a glance, grouped into Pinned, Projects and Recents",
         "Keep each Project's chats together in its own folder",
