@@ -22,6 +22,7 @@ import {
   TABLE_ROW_REMOVED,
   TASK_CHECKBOX_TOGGLED,
   TASK_LIST_REORDERED,
+  TWO_PARAGRAPHS_REWORDED,
   WHOLE_NOTE,
   WIKILINK_RENAME,
   WORDING_CHANGE,
@@ -29,6 +30,7 @@ import {
 } from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import { RenderedDiff, type RenderedDiffProps } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import type { Meta, StoryObj } from "@/lib/story";
+import * as React from "react";
 
 const meta = {
   title: "Agent Mode/Rendered Diff",
@@ -103,4 +105,46 @@ export const ReservedMarkerFallback: StoryObj<RenderedDiffProps> = {
     after:
       "# Imported symbols\nKeep \uE000addition\uE001 and \uE002deletion\uE003 literal.\nStatus: reviewed",
   },
+};
+
+const ignoreRevoke = (): void => {};
+
+export const RevokeRuns: StoryObj<RenderedDiffProps> = {
+  args: {
+    ...TWO_PARAGRAPHS_REWORDED,
+    revoke: { current: TWO_PARAGRAPHS_REWORDED.after, onRevoke: ignoreRevoke },
+  },
+};
+
+const NOTE_EDITED_AFTER_TURN = TWO_PARAGRAPHS_REWORDED.after!.replace(
+  "every Monday",
+  "every Tuesday"
+);
+
+function FocusedBlockedRevoke(): React.ReactElement {
+  const root = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const container = root.current;
+    if (!container) return;
+    const observer = new MutationObserver(() => {
+      const blocked = container.querySelector<HTMLElement>("button[aria-disabled=true]");
+      if (!blocked) return;
+      observer.disconnect();
+      blocked.focus();
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <div ref={root}>
+      <RenderedDiff
+        {...TWO_PARAGRAPHS_REWORDED}
+        revoke={{ current: NOTE_EDITED_AFTER_TURN, onRevoke: ignoreRevoke }}
+      />
+    </div>
+  );
+}
+
+export const RevokeBlockedAfterNoteEdit: StoryObj<RenderedDiffProps> = {
+  render: FocusedBlockedRevoke,
 };

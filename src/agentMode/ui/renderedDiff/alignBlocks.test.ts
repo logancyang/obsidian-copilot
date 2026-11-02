@@ -5,8 +5,8 @@ import {
 } from "@/agentMode/ui/renderedDiff/alignBlocks";
 import type { MarkdownBlock } from "@/agentMode/ui/renderedDiff/splitBlocks";
 
-const paragraph = (text: string): MarkdownBlock => ({ type: "text", text });
-const heading = (text: string): MarkdownBlock => ({ type: "heading", text });
+const paragraph = (text: string, line = 0): MarkdownBlock => ({ type: "text", text, line });
+const heading = (text: string): MarkdownBlock => ({ type: "heading", text, line: 0 });
 
 describe("alignBlocks", () => {
   describe("diceSimilarity()", () => {
@@ -119,6 +119,20 @@ describe("alignBlocks", () => {
         { kind: "unchanged", before: pilot, after: pilot },
         { kind: "inserted", after: budget },
       ]);
+    });
+
+    it("pairs an unchanged block with its own copy on each side, so each side keeps the line it sits on (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+      const before = [paragraph("Budget is fixed.", 0), paragraph("The pilot runs.", 2)];
+      const after = [paragraph("The pilot runs.", 0)];
+
+      expect(alignBlocks(before, after)).toEqual([
+        { kind: "deleted", before: before[0] },
+        { kind: "unchanged", before: before[1], after: after[0] },
+      ]);
+      expect(alignBlocks(before, after)[1]).toMatchObject({
+        before: { line: 2 },
+        after: { line: 0 },
+      });
     });
   });
 });
