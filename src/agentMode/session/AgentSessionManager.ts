@@ -2351,9 +2351,20 @@ export class AgentSessionManager {
       onPromptSent: () => {
         this.getSessionState(session.internalId).withholdsSessionId = false;
         this.unarchiveSavedChat(session);
+        this.unarchiveSessionProject(session);
       },
     });
     this.getSessionState(session.internalId).unsub = unsubscribe;
+  }
+
+  // An archived project hides its chats, so sending in one unarchives the project to keep the chat listed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/806
+  private unarchiveSessionProject(session: AgentSession): void {
+    const { projectId } = session;
+    if (getCachedProjectRecordById(projectId)?.project.archivedAt === undefined) return;
+    ProjectFileManager.getInstance(this.app)
+      .setProjectArchived(projectId, false)
+      .catch((e) => logWarn(`[AgentMode] unarchive on send failed for project ${projectId}`, e));
   }
 
   // The note write joins the chat's save chain so it never interleaves with an autosave rewriting the same note.
