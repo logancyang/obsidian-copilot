@@ -2,7 +2,7 @@ import SessionsSidebarView from "@/agentMode/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { setSettings } from "@/settings/model";
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
 jest.mock("@/agentMode/ui/SessionsSidebar", () => ({
@@ -13,13 +13,18 @@ jest.mock("@/agentMode/ui/SessionsSidebar", () => ({
 }));
 
 function makeView(agentSessionManager: object | undefined) {
-  const plugin = { app: {}, agentSessionManager } as unknown as CopilotPlugin;
-  const leaf = { app: plugin.app } as unknown as WorkspaceLeaf;
+  const plugin = {
+    app: {},
+    agentSessionManager,
+    activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
+    register: jest.fn(),
+  } as unknown as CopilotPlugin;
+  const leaf = { app: plugin.app, detach: jest.fn() } as unknown as WorkspaceLeaf;
   const view = new SessionsSidebarView(leaf, plugin);
   const stopMigrationWatch = jest.fn();
   view.containerEl.onWindowMigrated = jest.fn(() => stopMigrationWatch);
   document.body.appendChild(view.containerEl);
-  return { view, stopMigrationWatch };
+  return { view, plugin, leaf, stopMigrationWatch };
 }
 
 describe("SessionsSidebarView", () => {
@@ -54,15 +59,51 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("shows only the Plus-only notice and upgrade button instead of the Navigator list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/813", async () => {
+    it("shows only the subscription-ended notice instead of the Navigator list for a user without Plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
       setSettings({ isPaidUser: false });
       const { view } = makeView({});
 
       await act(() => view.onOpen());
 
-      expect(await screen.findByText("Copilot Navigator is for Plus users only")).toBeTruthy();
-      expect(screen.getByRole("button", { name: /Upgrade to Plus/ })).toBeTruthy();
+      expect(await screen.findByText("Your Copilot Plus subscription ended")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Renew Plus/ })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Sidebar content" })).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("closes its own leaf from the notice's Close button for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      setSettings({ isPaidUser: false });
+      const { view, leaf } = makeView({});
+      await act(() => view.onOpen());
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+
+      expect(leaf.detach).toHaveBeenCalledTimes(1);
+      await act(() => view.onClose());
+    });
+
+    it("reveals the Navigator when Plus becomes active after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      setSettings({ isPaidUser: false });
+      const { view, plugin } = makeView({});
+      await act(() => view.onOpen());
+      await screen.findByText("Your Copilot Plus subscription ended");
+
+      act(() => setSettings({ isPaidUser: true }));
+
+      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      await act(() => view.onClose());
+    });
+
+    it("never reveals the Navigator on Plus activation for a user who was not shown the notice for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      setSettings({ isPaidUser: undefined });
+      const { view, plugin } = makeView({});
+      await act(() => view.onOpen());
+      await screen.findByRole("button", { name: "Sidebar content" });
+
+      act(() => setSettings({ isPaidUser: true }));
+
+      expect(plugin.activateSessionsSidebar).not.toHaveBeenCalled();
       await act(() => view.onClose());
     });
 
@@ -73,7 +114,7 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onOpen());
 
       expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
-      expect(screen.queryByText("Copilot Navigator is for Plus users only")).toBeNull();
+      expect(screen.queryByText("Your Copilot Plus subscription ended")).toBeNull();
       await act(() => view.onClose());
     });
 
@@ -83,7 +124,7 @@ describe("SessionsSidebarView", () => {
       expect(await screen.findByRole("button", { name: "Sidebar content" })).toBeTruthy();
 
       act(() => setSettings({ isPaidUser: false }));
-      expect(screen.getByText("Copilot Navigator is for Plus users only")).toBeTruthy();
+      expect(screen.getByText("Your Copilot Plus subscription ended")).toBeTruthy();
 
       act(() => setSettings({ isPaidUser: true }));
       expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();

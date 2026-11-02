@@ -1,10 +1,12 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { TruncatedText } from "@/components/TruncatedText";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -14,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { useIsPaidUser } from "@/plusUtils";
 import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
@@ -103,6 +106,8 @@ function useSessionDisplay(session: AgentSession) {
 
 export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
   const isHidden = useSessionsSidebarOpen(useApp());
+  // Free users see a Plus marker so the overflow card's upgrade dialog is no surprise. https://github.com/Brevilabs/obsidian-copilot-private/issues/820
+  const showPlusMarker = useIsPaidUser() === false;
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
 
@@ -199,11 +204,13 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
           ))}
         </div>
         {overflowSessions.length > 0 && (
-          <OverflowMenu
+          <AgentTabOverflowMenu
             sessions={overflowSessions}
             activeId={activeId}
+            showPlusMarker={showPlusMarker}
             onActivate={(id) => manager.setActiveSession(id)}
             onClose={handleClose}
+            onOpenNavigator={onOpenSidebar}
           />
         )}
         <Tooltip>
@@ -417,15 +424,26 @@ const BrandIcon: React.FC<BrandIconProps> = ({
   );
 };
 
-interface OverflowMenuProps {
+export interface AgentTabOverflowMenuProps {
   sessions: AgentSession[];
   activeId: string | null;
+  showPlusMarker: boolean;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
+  onOpenNavigator: () => void;
+  defaultOpen?: boolean;
 }
 
-const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActivate, onClose }) => {
-  const [open, setOpen] = React.useState(false);
+export const AgentTabOverflowMenu: React.FC<AgentTabOverflowMenuProps> = ({
+  sessions,
+  activeId,
+  showPlusMarker,
+  onActivate,
+  onClose,
+  onOpenNavigator,
+  defaultOpen = false,
+}) => {
+  const [open, setOpen] = React.useState(defaultOpen);
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
@@ -439,6 +457,26 @@ const OverflowMenu: React.FC<OverflowMenuProps> = ({ sessions, activeId, onActiv
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="tw-w-64">
+        <div className="tw-flex tw-flex-col tw-gap-1 tw-rounded-sm tw-bg-secondary tw-p-2">
+          <div className="tw-flex tw-items-start tw-gap-2">
+            <p className="tw-m-0 tw-flex-1 tw-text-xs tw-text-muted">
+              Too many chats? Copilot Navigator keeps every agent chat in one sidebar.
+            </p>
+            {showPlusMarker && (
+              <Badge variant="outline" className="tw-shrink-0 tw-px-1.5 tw-py-0 tw-text-muted">
+                Plus
+              </Badge>
+            )}
+          </div>
+          <DropdownMenuItem
+            onSelect={onOpenNavigator}
+            className="-tw-mx-1 tw-cursor-pointer tw-p-1 tw-text-xs tw-text-accent focus:tw-text-accent"
+          >
+            <PanelLeft />
+            Open Copilot Navigator
+          </DropdownMenuItem>
+        </div>
+        <DropdownMenuSeparator />
         {sessions.map((session) => (
           <OverflowRow
             key={session.internalId}
