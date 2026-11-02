@@ -1,11 +1,11 @@
-import { SessionsSidebarPanel } from "@/agentMode/ui/SessionsSidebarPanel";
-import { dragByKeyboard, stackRowsVertically } from "@/agentMode/ui/testing/keyboardDrag";
+import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
+import { dragByKeyboard, stackRowsVertically } from "@/agentMode/navigator/ui/testing/keyboardDrag";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import {
   inertChatActions,
   sidebarChat,
   sidebarProject,
-} from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+} from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
