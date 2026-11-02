@@ -40,6 +40,19 @@ describe("promptFailure", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 appends a plain-text message the agent put under the error's data", () => {
+      const error = Object.assign(new Error("Internal error"), {
+        data: {
+          message: "You've hit your usage limit. Try again at 12:35 AM.",
+          codexErrorInfo: "usageLimitExceeded",
+        },
+      });
+
+      expect(formatPromptFailure(error)).toBe(
+        "Internal error\nProviderError: You've hit your usage limit. Try again at 12:35 AM."
+      );
+    });
+
     it("finds a provider error in an errors list", () => {
       const error = Object.assign(new Error("failed"), {
         errors: [{ note: "unrelated" }, { error: { message: "quota exhausted" } }],
