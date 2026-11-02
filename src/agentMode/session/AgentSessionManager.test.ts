@@ -377,7 +377,7 @@ function buildApp(basePath = "/vault"): App {
   };
   return {
     vault: { adapter, ...events, ...vaultFiles },
-    metadataCache: { ...events },
+    metadataCache: { ...events, getFileCache: jest.fn(() => null) },
     workspace: buildWorkspace(),
   } as unknown as App;
 }
@@ -862,6 +862,7 @@ function buildHistoryHarness(opts?: {
           proc.sessionExistsLocally = opts.warmSessionExistsLocally;
         return [{ backendId, proc }];
       }),
+      refresh: jest.fn(async () => undefined),
     },
   });
   return { manager, index, persistence, descriptor };
@@ -2579,6 +2580,21 @@ describe("AgentSessionManager", () => {
 
         expect(afterFirstSave).toBeGreaterThan(before);
         expect(mgr.getHistoryRevision()).toBe(afterFirstSave);
+      });
+
+      it("moves forward once a chat without a note is recorded in the session index so it gets listed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const { manager, index } = buildHistoryHarness();
+        const session = await manager.createSession();
+        const before = manager.getHistoryRevision();
+
+        getSessionTestHandle(session).setMessages([{ message: "Question" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+
+        expect(await index.getEntries()).toHaveLength(1);
+        expect(manager.getHistoryRevision()).toBeGreaterThan(before);
+        await manager.shutdown();
       });
     });
 
@@ -4396,6 +4412,65 @@ describe("AgentSessionManager", () => {
         );
         await mgr.shutdown();
       });
+
+      describe("a saved chat whose note title changes", () => {
+        const NOTE = "chats/agent__saved.md";
+
+        async function savedChat() {
+          const note: FakeFrontmatter = { epoch: 1_000, backendId: "opencode" };
+          const harness = buildHistoryHarness({ files: { [NOTE]: note } });
+          const session = await harness.manager.createSession("opencode");
+          session.restoreLabel("Agent title", "agent");
+          const handle = getSessionTestHandle(session);
+          handle.setMessages([{ message: "Question" }]);
+          await harness.manager.saveActiveSession();
+          note.topic = "Agent title";
+          handle.setMessages([{ message: "Question" }, { message: "Answer" }]);
+          return { ...harness, note, session };
+        }
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 takes the title edited in the note's Properties instead of overwriting it with the chat's stale title", async () => {
+          const { manager, note, session } = await savedChat();
+          note.topic = "Edited in Properties";
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).toHaveBeenCalledWith("Edited in Properties");
+        });
+
+        it("takes the title edited in the note's Properties after the chat was opened from that note", async () => {
+          const note: FakeFrontmatter = { epoch: 1_000, backendId: "opencode", topic: "Saved" };
+          const { manager, persistence } = buildHistoryHarness({ files: { [NOTE]: note } });
+          Object.assign(persistence, {
+            loadFile: jest.fn(async () => ({
+              backendId: "opencode",
+              projectId: GLOBAL_SCOPE,
+              label: "Saved",
+              messages: [{ sender: USER_SENDER, message: "Question", isVisible: true }],
+            })),
+          });
+          const session = await manager.loadSessionFromHistory(new MockTFile(NOTE));
+          note.topic = "Edited in Properties";
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).toHaveBeenLastCalledWith("Edited in Properties");
+        });
+
+        it("writes a newer agent title over the one the chat saved before", async () => {
+          const { manager, persistence, session } = await savedChat();
+          session.restoreLabel("Newer agent title", "agent");
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).not.toHaveBeenCalled();
+          expect(persistence.saveSession).toHaveBeenLastCalledWith(
+            expect.anything(),
+            "opencode",
+            expect.objectContaining({ label: "Newer agent title" })
+          );
+        });
+      });
     });
 
     describe("getSessionSourcePath()", () => {
@@ -4747,6 +4822,22 @@ describe("AgentSessionManager", () => {
           await manager.createSession("opencode");
 
           for (const exit of mockBackendExitListeners) exit();
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after a config change replaces the warm process`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+
+          await manager.restartBackend("opencode", "config dir changed");
           present = false;
 
           expect(await manager.getChatHistoryItems()).toHaveLength(0);
