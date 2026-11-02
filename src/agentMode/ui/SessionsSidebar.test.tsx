@@ -167,10 +167,7 @@ function rowTitles(): string[] {
 
 function preExpanded(...projectIds: string[]): FakeLocalStorage {
   const storage = new FakeLocalStorage();
-  storage.saveLocalStorage(
-    "copilot:sessions-sidebar-expanded-projects:v1",
-    JSON.stringify(projectIds)
-  );
+  storage.saveLocalStorage("copilot:sessions-sidebar-expanded-projects:v1", projectIds);
   return storage;
 }
 
