@@ -377,7 +377,7 @@ function buildApp(basePath = "/vault"): App {
   };
   return {
     vault: { adapter, ...events, ...vaultFiles },
-    metadataCache: { ...events },
+    metadataCache: { ...events, getFileCache: jest.fn(() => null) },
     workspace: buildWorkspace(),
   } as unknown as App;
 }
@@ -862,6 +862,7 @@ function buildHistoryHarness(opts?: {
           proc.sessionExistsLocally = opts.warmSessionExistsLocally;
         return [{ backendId, proc }];
       }),
+      refresh: jest.fn(async () => undefined),
     },
   });
   return { manager, index, persistence, descriptor };
@@ -2146,6 +2147,19 @@ describe("AgentSessionManager", () => {
         expect(mgr.drafts.get(drafted.chatInputId)?.input).toBe("half-written");
       });
 
+      it("keeps a chat without a sent message open while its composer holds an attached note, which closing would discard, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager();
+        const drafted = await mgr.createSession();
+        const note = mockTFile({ path: "notes/Context.md" });
+        mgr.drafts.update(drafted.chatInputId, (draft) => ({ ...draft, contextNotes: [note] }));
+        await mgr.createSession();
+
+        mgr.detachSessionFromTab(drafted.internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.drafts.get(drafted.chatInputId)?.contextNotes).toEqual([note]);
+      });
+
       it("keeps an empty chat holding unsent text when a saved chat is opened from it, which would otherwise take its place and discard the text, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",
@@ -2566,6 +2580,21 @@ describe("AgentSessionManager", () => {
 
         expect(afterFirstSave).toBeGreaterThan(before);
         expect(mgr.getHistoryRevision()).toBe(afterFirstSave);
+      });
+
+      it("moves forward once a chat without a note is recorded in the session index so it gets listed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const { manager, index } = buildHistoryHarness();
+        const session = await manager.createSession();
+        const before = manager.getHistoryRevision();
+
+        getSessionTestHandle(session).setMessages([{ message: "Question" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+
+        expect(await index.getEntries()).toHaveLength(1);
+        expect(manager.getHistoryRevision()).toBeGreaterThan(before);
+        await manager.shutdown();
       });
     });
 
@@ -4383,6 +4412,65 @@ describe("AgentSessionManager", () => {
         );
         await mgr.shutdown();
       });
+
+      describe("a saved chat whose note title changes", () => {
+        const NOTE = "chats/agent__saved.md";
+
+        async function savedChat() {
+          const note: FakeFrontmatter = { epoch: 1_000, backendId: "opencode" };
+          const harness = buildHistoryHarness({ files: { [NOTE]: note } });
+          const session = await harness.manager.createSession("opencode");
+          session.restoreLabel("Agent title", "agent");
+          const handle = getSessionTestHandle(session);
+          handle.setMessages([{ message: "Question" }]);
+          await harness.manager.saveActiveSession();
+          note.topic = "Agent title";
+          handle.setMessages([{ message: "Question" }, { message: "Answer" }]);
+          return { ...harness, note, session };
+        }
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 takes the title edited in the note's Properties instead of overwriting it with the chat's stale title", async () => {
+          const { manager, note, session } = await savedChat();
+          note.topic = "Edited in Properties";
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).toHaveBeenCalledWith("Edited in Properties");
+        });
+
+        it("takes the title edited in the note's Properties after the chat was opened from that note", async () => {
+          const note: FakeFrontmatter = { epoch: 1_000, backendId: "opencode", topic: "Saved" };
+          const { manager, persistence } = buildHistoryHarness({ files: { [NOTE]: note } });
+          Object.assign(persistence, {
+            loadFile: jest.fn(async () => ({
+              backendId: "opencode",
+              projectId: GLOBAL_SCOPE,
+              label: "Saved",
+              messages: [{ sender: USER_SENDER, message: "Question", isVisible: true }],
+            })),
+          });
+          const session = await manager.loadSessionFromHistory(new MockTFile(NOTE));
+          note.topic = "Edited in Properties";
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).toHaveBeenLastCalledWith("Edited in Properties");
+        });
+
+        it("writes a newer agent title over the one the chat saved before", async () => {
+          const { manager, persistence, session } = await savedChat();
+          session.restoreLabel("Newer agent title", "agent");
+
+          await manager.saveActiveSession();
+
+          expect(session.setLabel).not.toHaveBeenCalled();
+          expect(persistence.saveSession).toHaveBeenLastCalledWith(
+            expect.anything(),
+            "opencode",
+            expect.objectContaining({ label: "Newer agent title" })
+          );
+        });
+      });
     });
 
     describe("getSessionSourcePath()", () => {
@@ -4734,6 +4822,22 @@ describe("AgentSessionManager", () => {
           await manager.createSession("opencode");
 
           for (const exit of mockBackendExitListeners) exit();
+          present = false;
+
+          expect(await manager.getChatHistoryItems()).toHaveLength(0);
+          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
+        });
+
+        it(`${issue} probes a chat again after a config change replaces the warm process`, async () => {
+          let present = true;
+          const sessionExistsLocally = jest.fn(async () => present);
+          const { manager } = buildHistoryHarness({
+            files: savedChat("s1"),
+            warmSessionExistsLocally: sessionExistsLocally,
+          });
+          expect(await manager.getChatHistoryItems()).toHaveLength(1);
+
+          await manager.restartBackend("opencode", "config dir changed");
           present = false;
 
           expect(await manager.getChatHistoryItems()).toHaveLength(0);
@@ -5661,6 +5765,32 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
+      it("saves a chat left without a sent message into its own note when it is reopened while still closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+        const file = mockTFile({ path: "chat/Saved.md" });
+        const saveSession = jest.fn(async () => ({ path: file.path }));
+        const mgr = buildManager({
+          persistence: { loadFile: savedChat(savedTurn), saveSession },
+        });
+        const left = await mgr.loadSessionFromHistory(file);
+        getSessionTestHandle(left).setMessages([{ message: "Renamed while open" }], true);
+        const cancelled = deferred<undefined>();
+        mockSessionCancel.mockImplementationOnce(() => cancelled.promise);
+        await mgr.createSession();
+        const closed = untilClosed(mgr, left);
+
+        const reopening = mgr.loadSessionFromHistory(file);
+        cancelled.resolve(undefined);
+        await Promise.all([closed, reopening]);
+
+        expect(saveSession).toHaveBeenCalledWith(
+          [{ message: "Renamed while open" }],
+          left.backendId,
+          expect.objectContaining({ existingPath: file.path })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the replayed chat with its tool calls instead of the note's text when the session reattaches, and drops frames that arrive after the load response", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
@@ -6228,6 +6358,29 @@ describe("AgentSessionManager", () => {
         expect(liveSessionsAtLoad[1]).not.toContain(left);
         expect(manager.getActiveSession()).toBe(reopened);
       });
+
+      it("reopens the same session when the chat's Close chat fails while the chat is being reopened for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const replay = buildReplayingBackend();
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+        const chat = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        let failRelease!: (error: Error) => void;
+        replay.backend.closeSession.mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) => {
+              failRelease = reject;
+            })
+        );
+
+        const closing = manager.closeChatSession(nativeIdOf(chat));
+        const reopening = manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        failRelease(new Error("release failed"));
+
+        await expect(closing).rejects.toThrow("release failed");
+        await expect(reopening).resolves.toBe(chat);
+        expect(manager.getSessions()).toEqual([chat]);
+      });
     });
 
     describe("enterProject()", () => {
@@ -6271,6 +6424,22 @@ describe("AgentSessionManager", () => {
 
         expect(closedSessions()).toEqual([landing]);
         expect(mgr.getSessions()).toContain(worked);
+      });
+
+      it("shows a new global chat, not the one left without a sent message, when the project is left before that chat finishes closing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager();
+        const left = await mgr.createSession();
+        const cancelled = deferred<undefined>();
+        mockSessionCancel.mockImplementationOnce(() => cancelled.promise);
+        await mgr.enterProject(PROJECT_ID);
+
+        await mgr.exitProject();
+        const shown = mgr.getActiveSession();
+        cancelled.resolve(undefined);
+
+        expect(shown).not.toBeNull();
+        expect(shown).not.toBe(left);
+        expect(shown?.projectId).toBe(GLOBAL_SCOPE);
       });
 
       it("touches last-used after a successful enter that spawns a session", async () => {
