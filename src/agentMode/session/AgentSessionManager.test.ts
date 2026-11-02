@@ -2146,6 +2146,19 @@ describe("AgentSessionManager", () => {
         expect(mgr.drafts.get(drafted.chatInputId)?.input).toBe("half-written");
       });
 
+      it("keeps a chat without a sent message open while its composer holds an attached note, which closing would discard, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager();
+        const drafted = await mgr.createSession();
+        const note = mockTFile({ path: "notes/Context.md" });
+        mgr.drafts.update(drafted.chatInputId, (draft) => ({ ...draft, contextNotes: [note] }));
+        await mgr.createSession();
+
+        mgr.detachSessionFromTab(drafted.internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.drafts.get(drafted.chatInputId)?.contextNotes).toEqual([note]);
+      });
+
       it("keeps an empty chat holding unsent text when a saved chat is opened from it, which would otherwise take its place and discard the text, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",
@@ -5661,6 +5674,32 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
+      it("saves a chat left without a sent message into its own note when it is reopened while still closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+        const file = mockTFile({ path: "chat/Saved.md" });
+        const saveSession = jest.fn(async () => ({ path: file.path }));
+        const mgr = buildManager({
+          persistence: { loadFile: savedChat(savedTurn), saveSession },
+        });
+        const left = await mgr.loadSessionFromHistory(file);
+        getSessionTestHandle(left).setMessages([{ message: "Renamed while open" }], true);
+        const cancelled = deferred<undefined>();
+        mockSessionCancel.mockImplementationOnce(() => cancelled.promise);
+        await mgr.createSession();
+        const closed = untilClosed(mgr, left);
+
+        const reopening = mgr.loadSessionFromHistory(file);
+        cancelled.resolve(undefined);
+        await Promise.all([closed, reopening]);
+
+        expect(saveSession).toHaveBeenCalledWith(
+          [{ message: "Renamed while open" }],
+          left.backendId,
+          expect.objectContaining({ existingPath: file.path })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 shows the replayed chat with its tool calls instead of the note's text when the session reattaches, and drops frames that arrive after the load response", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
@@ -6228,6 +6267,29 @@ describe("AgentSessionManager", () => {
         expect(liveSessionsAtLoad[1]).not.toContain(left);
         expect(manager.getActiveSession()).toBe(reopened);
       });
+
+      it("reopens the same session when the chat's Close chat fails while the chat is being reopened for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const replay = buildReplayingBackend();
+        const { manager } = buildHistoryHarness({
+          createBackendProcess: jest.fn(() => replay.backend),
+        });
+        const chat = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        let failRelease!: (error: Error) => void;
+        replay.backend.closeSession.mockImplementationOnce(
+          () =>
+            new Promise((_resolve, reject) => {
+              failRelease = reject;
+            })
+        );
+
+        const closing = manager.closeChatSession(nativeIdOf(chat));
+        const reopening = manager.loadNativeSessionFromHistory("opencode", "saved-chat");
+        failRelease(new Error("release failed"));
+
+        await expect(closing).rejects.toThrow("release failed");
+        await expect(reopening).resolves.toBe(chat);
+        expect(manager.getSessions()).toEqual([chat]);
+      });
     });
 
     describe("enterProject()", () => {
@@ -6271,6 +6333,22 @@ describe("AgentSessionManager", () => {
 
         expect(closedSessions()).toEqual([landing]);
         expect(mgr.getSessions()).toContain(worked);
+      });
+
+      it("shows a new global chat, not the one left without a sent message, when the project is left before that chat finishes closing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager();
+        const left = await mgr.createSession();
+        const cancelled = deferred<undefined>();
+        mockSessionCancel.mockImplementationOnce(() => cancelled.promise);
+        await mgr.enterProject(PROJECT_ID);
+
+        await mgr.exitProject();
+        const shown = mgr.getActiveSession();
+        cancelled.resolve(undefined);
+
+        expect(shown).not.toBeNull();
+        expect(shown).not.toBe(left);
+        expect(shown?.projectId).toBe(GLOBAL_SCOPE);
       });
 
       it("touches last-used after a successful enter that spawns a session", async () => {

@@ -131,7 +131,11 @@ const RESUMED_SESSION_BEHIND_EPOCH = -1;
 
 function hasUnsentInput(draft: AgentInputDraft | undefined): boolean {
   return (
-    !!draft && (draft.input.trim() !== "" || draft.images.length > 0 || draft.queue.length > 0)
+    !!draft &&
+    (draft.input.trim() !== "" ||
+      draft.images.length > 0 ||
+      draft.contextNotes.length > 0 ||
+      draft.queue.length > 0)
   );
 }
 
@@ -1261,7 +1265,7 @@ export class AgentSessionManager {
       const mru = this.sessions.get(mruId);
       if (mru && this.isOpenSession(mru)) return mru;
     }
-    const scoped = this.getSessionsForScope(projectId);
+    const scoped = this.getSessionsForScope(projectId).filter((s) => this.isOpenSession(s));
     return scoped.length > 0 ? scoped[scoped.length - 1] : null;
   }
 
@@ -1996,6 +2000,9 @@ export class AgentSessionManager {
 
     for (const [internalId, state] of this.sessionState.entries()) {
       if (this.getSessionSourcePath(internalId) !== file.path) continue;
+      // A chat left a moment ago still saves into its note while it closes, so reopening waits for that save.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+      await this.closingSessions.get(internalId)?.catch(() => undefined);
       const existing = this.sessions.get(internalId);
       if (existing && this.isOpenSession(existing)) {
         this.setActiveSession(internalId);
@@ -2154,6 +2161,9 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
+    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
 
@@ -2194,7 +2204,6 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
-    await this.untilChatClosed(backendId, sessionId);
     await this.ensureScopeInstructions(
       projectId,
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
