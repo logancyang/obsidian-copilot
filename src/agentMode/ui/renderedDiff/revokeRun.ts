@@ -7,34 +7,40 @@ export interface RevokedRun {
 }
 
 // The run's lines must reach the current note untouched and in order. A run that only removed text
-// leaves nothing of its own to find, so the line on each side of it must reach the note too.
+// leaves nothing of its own to find, so the line on each side of it must reach the note too. The run
+// is found by its first non-blank line, since a diff may pair its blank edge with another blank line.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
 export function locateRun(after: string, current: string, run: DiffRun): LineRange | null {
   const afterLines = after.split("\n");
+  const currentLines = current.split("\n");
   const removalOnly = afterLines
     .slice(run.after.start, run.after.end)
     .every((line) => line.trim() === "");
   const from = removalOnly ? Math.max(run.after.start - 1, 0) : run.after.start;
-  const to = removalOnly ? Math.min(run.after.end + 1, afterLines.length) : run.after.end;
-  const kept = new Map<number, number>();
+  const region = afterLines.slice(from, removalOnly ? run.after.end + 1 : run.after.end);
+  const anchor = Math.max(
+    region.findIndex((line) => line.trim() !== ""),
+    0
+  );
+  const anchorLine = currentLineOf(afterLines, currentLines, from + anchor);
+  const start = anchorLine === null ? -1 : anchorLine - anchor;
+  if (start < 0 || region.some((line, offset) => currentLines[start + offset] !== line))
+    return null;
+  return { start: start + run.after.start - from, end: start + run.after.end - from };
+}
+
+function currentLineOf(afterLines: string[], currentLines: string[], line: number): number | null {
   let afterLine = 0;
   let currentLine = 0;
-  for (const part of diffArrays(afterLines, current.split("\n"))) {
+  for (const part of diffArrays(afterLines, currentLines)) {
     const count = part.value.length;
-    if (!part.added && !part.removed) {
-      for (let offset = 0; offset < count; offset++) {
-        kept.set(afterLine + offset, currentLine + offset);
-      }
+    if (!part.added && line < afterLine + count) {
+      return part.removed ? null : currentLine + line - afterLine;
     }
     if (!part.added) afterLine += count;
     if (!part.removed) currentLine += count;
   }
-  const start = kept.get(from);
-  if (start === undefined) return null;
-  for (let line = from; line < to; line++) {
-    if (kept.get(line) !== start + line - from) return null;
-  }
-  return { start: start + run.after.start - from, end: start + run.after.end - from };
+  return null;
 }
 
 export function revokeRun(

@@ -20,6 +20,12 @@ describe("revokeRun", () => {
       expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
     });
 
+    it("follows the run when a paragraph was added right above it after the turn, though the diff pairs the run's leading blank line with the added one (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+      const current = AFTER.replace("Budget is open.\n\n", "Budget is open.\n\nAdded later.\n\n");
+
+      expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
+    });
+
     it("finds no location once text inside the run changed after the turn", () => {
       const current = AFTER.replace("every Monday", "every Tuesday");
 

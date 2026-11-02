@@ -216,7 +216,7 @@ When a turn finishes after the agent has edited your vault, a **Files changed** 
 
 Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, including the blank lines between paragraphs, so you can see the exact wording the agent changed without leaving Obsidian. Use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
 
-To undo part of a turn, hover over a stretch of changes and select **Revoke**. A stretch is every change between two unchanged paragraphs, list items, or other blocks, or between two unchanged lines in a file that is not a note. Revoke puts that stretch back to what the note said before the turn and keeps the rest of the note as it is now; the stretch then reads as unchanged in the tab. Revoke is unavailable for a stretch that you or a later turn edited after this turn, and for notes the agent created or deleted. The agent is not told about a revoke.
+To undo part of a turn, hover over a stretch of changes and select **Revoke**. That stretch goes back to what the note said before the turn, and the rest of the note stays as it is. Revoke is unavailable for a stretch that you or a later turn edited after this turn, and for notes the agent created or deleted. The agent is not told about a revoke.
 
 In a long note, a narrow strip along the left edge of the tab shows where the changes are. The strip stands for the whole note, with one mark for each change at its position in the note: green where text was added, red where it was removed, and blue where both happened. Select a mark to jump to that change.
 
