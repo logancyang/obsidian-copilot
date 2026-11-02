@@ -726,6 +726,20 @@ describe("SessionsSidebarPanel", () => {
         expect(document.activeElement).toBe(screen.getByPlaceholderText("Search chats..."));
       });
 
+      it("closes search on Escape, restores every group and returns focus to the search button for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        renderPanel({ items });
+        fireEvent.click(screen.getByRole("button", { name: "Search chats" }));
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "zzz" },
+        });
+
+        fireEvent.keyDown(screen.getByPlaceholderText("Search chats..."), { key: "Escape" });
+
+        expect(screen.queryByPlaceholderText("Search chats...")).toBeNull();
+        expect(screen.queryByText("No matching chats")).toBeNull();
+        expect(document.activeElement).toBe(screen.getByRole("button", { name: "Search chats" }));
+      });
+
       it("lists matching chats from every group in one list, even from a collapsed project, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         renderPanel({ items, projects: projects(1) });
 
