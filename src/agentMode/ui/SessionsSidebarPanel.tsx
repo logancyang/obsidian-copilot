@@ -274,6 +274,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           value={query}
           onChange={setQuery}
           placeholder="Search chats..."
+          autoFocus
           inputClassName="!tw-h-7"
         />
       )}
