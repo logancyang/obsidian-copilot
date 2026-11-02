@@ -1,3 +1,4 @@
+import { revealSessionsSidebar } from "@/agentMode";
 import { registerCommands } from "@/commands";
 import { COMMAND_ICONS, COMMAND_IDS, COMMAND_NAMES } from "@/constants";
 import type CopilotPlugin from "@/main";
@@ -9,6 +10,7 @@ import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
 
+jest.mock("@/agentMode", () => ({ revealSessionsSidebar: jest.fn() }));
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
 }));
@@ -71,12 +73,11 @@ describe("commands", () => {
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
     });
 
-    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const register = (): { commands: Command[]; plugin: CopilotPlugin } => {
         const commands: Command[] = [];
         const plugin = {
           addCommand: jest.fn((command: Command) => commands.push(command)),
-          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
           app: { workspace: { getActiveFile: jest.fn(() => null) } },
         } as unknown as CopilotPlugin;
         registerCommands(plugin, jest.fn());
@@ -96,7 +97,7 @@ describe("commands", () => {
         icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
       });
       expect(command?.checkCallback?.(false)).toBe(true);
-      expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin));
     });
 
     it.each([
@@ -105,22 +106,26 @@ describe("commands", () => {
       { who: "a user without Plus", isPaidUser: false, available: false },
     ])(
       "makes the Navigator command available ($available) to $who for https://github.com/Brevilabs/obsidian-copilot-private/issues/813",
-      ({ isPaidUser, available }) => {
+      async ({ isPaidUser, available }) => {
         jest.mocked(isDesktopRuntime).mockReturnValue(true);
         const commands: Command[] = [];
         const plugin = {
           addCommand: jest.fn((command: Command) => commands.push(command)),
-          activateSessionsSidebar: jest.fn().mockResolvedValue(undefined),
           app: { workspace: { getActiveFile: jest.fn(() => null) } },
         } as unknown as CopilotPlugin;
         registerCommands(plugin, jest.fn());
         const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+        jest.mocked(revealSessionsSidebar).mockClear();
 
         jest.mocked(getSettings).mockReturnValue({ isPaidUser } as ReturnType<typeof getSettings>);
 
         expect(command?.checkCallback?.(true)).toBe(available);
         expect(command?.checkCallback?.(false)).toBe(available);
-        expect(plugin.activateSessionsSidebar).toHaveBeenCalledTimes(available ? 1 : 0);
+        if (available) {
+          await waitFor(() => expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin));
+        } else {
+          expect(revealSessionsSidebar).not.toHaveBeenCalled();
+        }
       }
     );
 
