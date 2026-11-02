@@ -2,7 +2,7 @@ import {
   filterChatsByTitle,
   groupSessionsSidebarChats,
   pinnedAtAfterMove,
-} from "@/agentMode/ui/sessionsSidebarGroups";
+} from "@/agentMode/navigator/ui/sessionsSidebarGroups";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 

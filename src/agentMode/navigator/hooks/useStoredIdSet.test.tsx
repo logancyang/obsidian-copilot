@@ -1,4 +1,4 @@
-import { useStoredIdSet } from "@/agentMode/ui/hooks/useStoredIdSet";
+import { useStoredIdSet } from "@/agentMode/navigator/hooks/useStoredIdSet";
 import { act, renderHook } from "@testing-library/react";
 import type { App } from "obsidian";
 
