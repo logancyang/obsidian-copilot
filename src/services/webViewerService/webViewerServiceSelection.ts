@@ -1,7 +1,12 @@
+import type { KeyedSelection } from "@/selection/selectionStore";
 import * as actions from "@/services/webViewerService/webViewerServiceActions";
 import type { WebViewerLeaf } from "@/services/webViewerService/webViewerServiceTypes";
 import type { WebSelectedTextContext } from "@/types/message";
 import { v4 as uuidv4 } from "uuid";
+
+export function webSelectionReport(context: WebSelectedTextContext): KeyedSelection {
+  return { location: context.url, key: `web:${context.url}:${context.content}`, context };
+}
 
 export interface WebSelectionTrackingOptions {
   intervalMs?: number;
