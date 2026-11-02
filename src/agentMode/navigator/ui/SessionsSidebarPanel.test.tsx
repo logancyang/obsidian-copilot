@@ -188,6 +188,24 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("button", { name: "Project 1" })).toBeNull();
         expect(within(section("Recents")).getByText("Recent chat")).toBeTruthy();
       });
+
+      it.each([
+        ["keeps the fold chevron hidden after a mouse click focuses a group header", false],
+        ["shows the fold chevron when the keyboard focuses a group header", true],
+      ])(
+        "%s for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
+        (_title, keyboardFocus) => {
+          renderPanel({ items: [sidebarChat("chats/rec.md", "Recent chat", 2)] });
+          const header = within(section("Recents")).getByRole("button", { name: "Recents" });
+          jest.spyOn(header, "matches").mockReturnValue(keyboardFocus);
+
+          act(() => header.focus());
+
+          const chevron = header.querySelector(".lucide-chevron-right")!;
+          expect(chevron.classList.contains("tw-visible")).toBe(keyboardFocus);
+          expect(chevron.classList.contains("tw-invisible")).toBe(!keyboardFocus);
+        }
+      );
     });
 
     describe("projects", () => {
