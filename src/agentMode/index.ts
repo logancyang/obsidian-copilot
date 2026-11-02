@@ -57,7 +57,8 @@ import {
 } from "./ui/permissionPrompter";
 
 export { default as CopilotAgentView } from "./ui/CopilotAgentView";
-export { SessionsSidebarView } from "./navigator";
+export { revealSessionsSidebar } from "./navigator/revealSessionsSidebar";
+export { default as SessionsSidebarView } from "./navigator/ui/SessionsSidebarView";
 export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBackendDescriptor";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { BackendDescriptor, BackendId } from "./session/types";
