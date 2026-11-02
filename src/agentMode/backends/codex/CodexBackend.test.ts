@@ -41,7 +41,6 @@ function useCodexSettings(codex?: Record<string, unknown>): void {
       offerFeedbackCards: true,
       notificationSound: false,
       notificationSoundId: "piano",
-      welcomeDismissed: false,
       skills: { folder: "copilot/skills" },
       backends: codex ? { codex } : {},
     },

@@ -33,7 +33,8 @@ import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { attachSelection } from "@/selection/selectionStore";
-import { editorSelectionReport, webSelectionReport } from "@/selection/selectionWatcher";
+import { editorSelectionReport } from "@/selection/selectionWatcher";
+import { webSelectionReport } from "@/services/webViewerService/webViewerServiceSelection";
 
 type PublishFile = (file: TFile) => void;
 

@@ -12,7 +12,6 @@ function makeAgentMode(partial: Partial<AgentMode> = {}): AgentMode {
     offerFeedbackCards: true,
     notificationSound: false,
     notificationSoundId: "piano",
-    welcomeDismissed: false,
     skills: { folder: "copilot/skills" },
     ...partial,
   };

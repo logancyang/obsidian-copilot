@@ -6157,10 +6157,13 @@ describe("AgentSession", () => {
       });
 
       describe("after a failed reply", () => {
-        const failedSession = (offerFeedbackCards: boolean) => {
+        const failedSession = (
+          offerFeedbackCards: boolean,
+          errorText = "model not supported: gemini-4"
+        ) => {
           jest.mocked(getSettings).mockReturnValue({ agentMode: { offerFeedbackCards } } as never);
           const mock = makeMockBackend();
-          mock.prompt.mockRejectedValue(new Error("model not supported: gemini-4"));
+          mock.prompt.mockRejectedValue(new Error(errorText));
           return makeSession(mock, { backendId: "opencode" });
         };
 
@@ -6188,6 +6191,14 @@ describe("AgentSession", () => {
             afterUserMessageId: userMessageId,
             status: "open",
           });
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the provider's usage limit failed the reply", async () => {
+          const session = failedSession(true, "Internal error: Free usage limit reached.");
+
+          await expect(session.sendPrompt("hi").turn).rejects.toThrow("usage limit");
+
+          expect(session.getFeedbackOffer()).toBeNull();
         });
 
         it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", async () => {

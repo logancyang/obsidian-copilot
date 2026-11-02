@@ -110,7 +110,6 @@ function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProp
       <AgentLandingStack
         hero={args.hero ?? null}
         composer={args.composer ?? null}
-        floating={args.floating}
         context={args.context}
         shelf={shelf}
       />
