@@ -26,14 +26,14 @@ import {
 } from "@/agentMode/ui/AgentProjectRowActions";
 import { simulateMenuExitAnimation } from "@/agentMode/ui/testing/menuExitAnimation";
 import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
-import { sidebarProject } from "@/agentMode/ui/testing/sessionsSidebarFixtures";
+import type { ProjectConfig } from "@/aiParams";
 import { logError } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App, Notice } from "obsidian";
 import React from "react";
 
-const PROJECT = sidebarProject("garden", "Garden plans");
+const PROJECT = { id: "garden", name: "Garden plans", created: 0 } as ProjectConfig;
 
 function mockFileManager() {
   const manager = {

@@ -1,4 +1,4 @@
-import { SessionsSidebar } from "@/agentMode/ui/SessionsSidebar";
+import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
