@@ -1,3 +1,4 @@
+import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
 import type { TurnFileChange } from "@/agentMode/session/types";
 import {
   ChangeScroller,
@@ -5,7 +6,9 @@ import {
   type ChangeStep,
 } from "@/agentMode/ui/renderedDiff/ChangeScroller";
 import { markedSelectionText } from "@/agentMode/ui/renderedDiff/markedSelection";
+import type { DiffRun } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
+import { revokeRun } from "@/agentMode/ui/renderedDiff/revokeRun";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
@@ -13,7 +16,16 @@ import { logError } from "@/logger";
 import type { SelectionReport } from "@/selection/selectionStore";
 import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
-import { App, ItemView, Notice, Plugin, TFile, Workspace, WorkspaceLeaf } from "obsidian";
+import {
+  App,
+  ItemView,
+  Notice,
+  Plugin,
+  TAbstractFile,
+  TFile,
+  Workspace,
+  WorkspaceLeaf,
+} from "obsidian";
 import React, { type ReactNode } from "react";
 import { v4 as uuidv4 } from "uuid";
 
@@ -48,6 +60,7 @@ export class TurnDiffView extends ItemView {
   private viewRoot: PluginViewRootHandle | null = null;
   private state: TurnDiffViewState | null = null;
   private stepper: ((direction: ChangeStep) => void) | null = null;
+  private revoking = false;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -135,9 +148,42 @@ export class TurnDiffView extends ItemView {
     this.stepper = stepper;
   };
 
+  // The tab keeps its own copy of the turn's result, so a revoked run reads as unchanged until the
+  // tab closes. A click from a render older than the current state carries stale line ranges.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
+  private readonly revoke = async (state: TurnDiffViewState, run: DiffRun): Promise<void> => {
+    const file = this.app.vault.getAbstractFileByPath(state.path);
+    const { before, after } = state;
+    if (this.revoking || state !== this.state || !(file instanceof TFile)) return;
+    if (before === null || after === null) return;
+    this.revoking = true;
+    let revokedAfter: string | null = null;
+    try {
+      await this.app.vault.process(file, (current) => {
+        const revoked = revokeRun(before, after, current, run);
+        revokedAfter = revoked?.after ?? null;
+        return revoked?.current ?? current;
+      });
+    } finally {
+      this.revoking = false;
+    }
+    if (revokedAfter === null) {
+      new Notice("This text changed in the note after the turn, so it was not revoked.");
+      return;
+    }
+    const counts = buildTurnFileChange(state.path, before, revokedAfter);
+    this.state = {
+      ...state,
+      after: revokedAfter,
+      additions: counts?.additions ?? 0,
+      deletions: counts?.deletions ?? 0,
+    };
+    this.viewRoot?.rerender();
+  };
+
   private renderTree(): ReactNode {
     return this.state ? (
-      <TurnDiffPane state={this.state} onStepperChange={this.setStepper} />
+      <TurnDiffPane state={this.state} onStepperChange={this.setStepper} onRevoke={this.revoke} />
     ) : null;
   }
 }
@@ -145,11 +191,13 @@ export class TurnDiffView extends ItemView {
 interface TurnDiffPaneProps {
   state: TurnDiffViewState;
   onStepperChange: (stepper: ((direction: ChangeStep) => void) | null) => void;
+  onRevoke: (state: TurnDiffViewState, run: DiffRun) => Promise<void>;
 }
 
-const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange }) => {
+const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange, onRevoke }) => {
   const app = useApp();
   const navigation = useChangeNavigation();
+  const current = useNoteText(app, state.path);
   const total = navigation.layout.ticks.length;
   React.useEffect(() => {
     onStepperChange(total > 0 ? navigation.step : null);
@@ -167,11 +215,61 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange }) =
         }
       />
       <ChangeScroller navigation={navigation}>
-        <RenderedDiff before={state.before} after={state.after} path={state.path} />
+        <RenderedDiff
+          before={state.before}
+          after={state.after}
+          path={state.path}
+          revoke={
+            state.status === "modified" && current !== undefined
+              ? {
+                  current,
+                  onRevoke: (run) =>
+                    void onRevoke(state, run).catch((error: unknown) =>
+                      logError("[TurnDiffView] failed to revoke a change", error)
+                    ),
+                }
+              : undefined
+          }
+        />
       </ChangeScroller>
     </div>
   );
 };
+
+// Revoke compares each run with the note as it is now, so the tab follows the note while it is open.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/823
+function useNoteText(app: App, path: string): string | null | undefined {
+  const [text, setText] = React.useState<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    let latest = 0;
+    const load = (): void => {
+      const read = ++latest;
+      const file = app.vault.getAbstractFileByPath(path);
+      const content = file instanceof TFile ? app.vault.cachedRead(file) : Promise.resolve(null);
+      void content.then(
+        (value) => {
+          if (read === latest) setText(value);
+        },
+        (error: unknown) => logError("[TurnDiffView] failed to read the note", error)
+      );
+    };
+    const onChange = (file: TAbstractFile, oldPath?: string): void => {
+      if (file.path === path || oldPath === path) load();
+    };
+    const refs = [
+      app.vault.on("modify", onChange),
+      app.vault.on("create", onChange),
+      app.vault.on("delete", onChange),
+      app.vault.on("rename", onChange),
+    ];
+    load();
+    return () => {
+      latest = -1;
+      for (const ref of refs) app.vault.offref(ref);
+    };
+  }, [app, path]);
+  return text;
+}
 
 export async function openTurnDiff(
   app: App,

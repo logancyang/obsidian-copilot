@@ -214,7 +214,9 @@ Claude runs subagents and long commands in the background unless it needs to wai
 
 When a turn finishes after the agent has edited your vault, a **Files changed** card closes that turn. It lists one row per note, with the number of added and removed lines, and a **new** or **deleted** badge for notes the agent created or removed. The card totals the changes in its header and scrolls when a turn touched many files. A subagent's edits show on a card in that subagent's view instead.
 
-Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, including the blank lines between paragraphs, so you can see the exact wording the agent changed without leaving Obsidian. The tab is read-only and never writes to your vault; use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
+Select a row to open that note's before and after as a single tab. Removed text is struck through, added text is highlighted, and everything else reads as the note normally does, including the blank lines between paragraphs, so you can see the exact wording the agent changed without leaving Obsidian. Use **Open note** in its header to open the note itself and edit it there. Files that are not notes, such as canvases, are shown as a plain line-by-line comparison.
+
+To undo part of a turn, hover over a stretch of changes and select **Revoke**. That stretch goes back to what the note said before the turn, and the rest of the note stays as it is. Revoke is unavailable for a stretch that you or a later turn edited after this turn, and for notes the agent created or deleted. The agent is not told about a revoke.
 
 Select text in the tab to attach it to your next message. Removed and added words in the selection stay marked, so a question such as "why did you change this?" is about exactly that change.
 

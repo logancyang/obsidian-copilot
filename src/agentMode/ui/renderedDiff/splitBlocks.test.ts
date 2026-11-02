@@ -4,7 +4,7 @@ import { splitMarkdown } from "@/agentMode/ui/renderedDiff/splitBlocks";
 
 describe("splitBlocks", () => {
   describe("splitMarkdown()", () => {
-    it("separates a leading frontmatter section, fences included, from the body blocks", async () => {
+    it("separates a leading frontmatter section, fences included, from the body blocks, each recording the line it starts on", async () => {
       const source =
         "---\ntags: [pilot]\n---\n# Alpha pilot\nThe pilot runs in three regions.\n## Rollout\n| Region | Partners |\n| --- | --- |\n| EMEA | 2 |\n\n```bash\nnpm run migrate\n\nnpm run verify\n```\n\n- Kickoff Monday\n- Review Friday\n";
       const app = appParsing({
@@ -28,13 +28,13 @@ describe("splitBlocks", () => {
       expect(split).toEqual({
         frontmatter: "---\ntags: [pilot]\n---",
         blocks: [
-          { type: "heading", text: "# Alpha pilot" },
-          { type: "text", text: "The pilot runs in three regions." },
-          { type: "heading", text: "## Rollout" },
-          { type: "table", text: "| Region | Partners |\n| --- | --- |\n| EMEA | 2 |" },
-          { type: "code", text: "```bash\nnpm run migrate\n\nnpm run verify\n```" },
-          { type: "text", text: "- Kickoff Monday" },
-          { type: "text", text: "- Review Friday", continuesList: true },
+          { type: "heading", text: "# Alpha pilot", line: 3 },
+          { type: "text", text: "The pilot runs in three regions.", line: 4 },
+          { type: "heading", text: "## Rollout", line: 5 },
+          { type: "table", text: "| Region | Partners |\n| --- | --- |\n| EMEA | 2 |", line: 6 },
+          { type: "code", text: "```bash\nnpm run migrate\n\nnpm run verify\n```", line: 10 },
+          { type: "text", text: "- Kickoff Monday", line: 16 },
+          { type: "text", text: "- Review Friday", line: 17, continuesList: true },
         ],
       });
     });
@@ -58,10 +58,10 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, source);
 
       expect(split.blocks).toEqual([
-        { type: "heading", text: "# Alpha pilot" },
-        { type: "text", text: "The pilot runs.", extraBlankLines: 2 },
-        { type: "text", text: "- Kickoff", extraBlankLines: 1 },
-        { type: "text", text: "- Review", continuesList: true },
+        { type: "heading", text: "# Alpha pilot", line: 5 },
+        { type: "text", text: "The pilot runs.", line: 9, extraBlankLines: 2 },
+        { type: "text", text: "- Kickoff", line: 12, extraBlankLines: 1 },
+        { type: "text", text: "- Review", line: 13, continuesList: true },
       ]);
     });
 
@@ -82,7 +82,7 @@ describe("splitBlocks", () => {
       );
 
       expect(split.frontmatter).toBeNull();
-      expect(split.blocks).toEqual([{ type: "heading", text: "# Alpha pilot" }]);
+      expect(split.blocks).toEqual([{ type: "heading", text: "# Alpha pilot", line: 0 }]);
     });
 
     it("classifies callout sections and paragraphs as text blocks", async () => {
@@ -97,8 +97,8 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, source);
 
       expect(split.blocks).toEqual([
-        { type: "text", text: "> [!note]\n> Hi" },
-        { type: "text", text: "After" },
+        { type: "text", text: "> [!note]\n> Hi", line: 0 },
+        { type: "text", text: "After", line: 3 },
       ]);
     });
 
@@ -119,10 +119,10 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, source);
 
       expect(split.blocks).toEqual([
-        { type: "code", text: "# Plan %%draft%%" },
-        { type: "code", text: "After\n%%hidden%%" },
-        { type: "text", text: "- One" },
-        { type: "code", text: "- Two %%todo%%", continuesList: true },
+        { type: "code", text: "# Plan %%draft%%", line: 0 },
+        { type: "code", text: "After\n%%hidden%%", line: 2 },
+        { type: "text", text: "- One", line: 5 },
+        { type: "code", text: "- Two %%todo%%", line: 6, continuesList: true },
       ]);
     });
 
@@ -144,13 +144,13 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, source);
 
       expect(split.blocks).toEqual([
-        { type: "text", text: "Before" },
-        { type: "code", text: "%%\nhidden note\nsecond\n%%" },
-        { type: "text", text: "See [ref]." },
-        { type: "code", text: "[ref]: https://example.com/a" },
-        { type: "code", text: "$$\nx^2\ny^2\n$$" },
-        { type: "code", text: "<div>\n  hi\n</div>" },
-        { type: "text", text: "After" },
+        { type: "text", text: "Before", line: 0 },
+        { type: "code", text: "%%\nhidden note\nsecond\n%%", line: 2 },
+        { type: "text", text: "See [ref].", line: 7 },
+        { type: "code", text: "[ref]: https://example.com/a", line: 9 },
+        { type: "code", text: "$$\nx^2\ny^2\n$$", line: 11 },
+        { type: "code", text: "<div>\n  hi\n</div>", line: 16 },
+        { type: "text", text: "After", line: 20 },
       ]);
     });
 
@@ -167,8 +167,8 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, "Body[^1]\n\n[^1]: Footnote text.");
 
       expect(split.blocks).toEqual([
-        { type: "text", text: "Body[^1]" },
-        { type: "text", text: "[^1]: Footnote text." },
+        { type: "text", text: "Body[^1]", line: 0 },
+        { type: "text", text: "[^1]: Footnote text.", line: 2 },
       ]);
     });
 
@@ -192,11 +192,11 @@ describe("splitBlocks", () => {
       const split = await splitMarkdown(app, source);
 
       expect(split.blocks).toEqual([
-        { type: "text", text: "- [ ] a\n  - nested" },
-        { type: "code", text: "- [x] b\n  ```bash\n  x\n  ```", continuesList: true },
-        { type: "text", text: "- c", continuesList: true },
-        { type: "text", text: "1. one" },
-        { type: "text", text: "2. two", continuesList: true },
+        { type: "text", text: "- [ ] a\n  - nested", line: 0 },
+        { type: "code", text: "- [x] b\n  ```bash\n  x\n  ```", line: 2, continuesList: true },
+        { type: "text", text: "- c", line: 6, continuesList: true },
+        { type: "text", text: "1. one", line: 8 },
+        { type: "text", text: "2. two", line: 9, continuesList: true },
       ]);
     });
 
@@ -211,7 +211,7 @@ describe("splitBlocks", () => {
 
       const split = await splitMarkdown(app, "- a\n\n- b\n");
 
-      expect(split.blocks).toEqual([{ type: "text", text: "- a\n\n- b" }]);
+      expect(split.blocks).toEqual([{ type: "text", text: "- a\n\n- b", line: 0 }]);
     });
 
     it("classifies only the item holding a tab-indented fence as code (https://github.com/Brevilabs/obsidian-copilot-private/issues/349)", async () => {
@@ -236,7 +236,7 @@ describe("splitBlocks", () => {
         "Title\n---\n"
       );
 
-      expect(split.blocks).toEqual([{ type: "heading", text: "Title\n---" }]);
+      expect(split.blocks).toEqual([{ type: "heading", text: "Title\n---", line: 0 }]);
     });
 
     it("keeps inline triple backticks in a paragraph as text and splits the sections after it", async () => {
@@ -259,7 +259,7 @@ describe("splitBlocks", () => {
 
       const split = await splitMarkdown(appParsing({ sections: [["list", 0, 5]] }), source);
 
-      expect(split.blocks).toEqual([{ type: "code", text: source.trimEnd() }]);
+      expect(split.blocks).toEqual([{ type: "code", text: source.trimEnd(), line: 0 }]);
     });
 
     it("keeps an unclosed frontmatter fence in the body because the parser reports no yaml section", async () => {
@@ -276,9 +276,9 @@ describe("splitBlocks", () => {
 
       expect(split.frontmatter).toBeNull();
       expect(split.blocks).toEqual([
-        { type: "text", text: "---" },
-        { type: "text", text: "tags:" },
-        { type: "text", text: "  - project" },
+        { type: "text", text: "---", line: 0 },
+        { type: "text", text: "tags:", line: 1 },
+        { type: "text", text: "  - project", line: 2 },
       ]);
     });
 

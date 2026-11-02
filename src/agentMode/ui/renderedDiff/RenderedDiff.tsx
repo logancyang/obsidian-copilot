@@ -3,27 +3,48 @@ import {
   type Change,
   frameMedia,
 } from "@/agentMode/ui/renderedDiff/applySentinels";
-import type { CodeDiffLine, DiffSegment } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
+import type { CodeDiffLine, DiffRun, DiffSegment } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { buildRenderedDiffPlan, isMarkdownPath } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
+import { locateRun } from "@/agentMode/ui/renderedDiff/revokeRun";
 import { Markdown } from "@/components/Markdown";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
+import { Undo2 } from "lucide-react";
 import * as React from "react";
+
+export interface RunRevoke {
+  current: string | null;
+  onRevoke: (run: DiffRun) => void;
+}
 
 export interface RenderedDiffProps {
   before: string | null;
   after: string | null;
   path: string;
+  revoke?: RunRevoke;
 }
 
-interface ResolvedPlan extends RenderedDiffProps {
+interface ResolvedPlan {
+  before: string | null;
+  after: string | null;
+  path: string;
   segments: readonly DiffSegment[];
 }
+
+interface RevokeContextValue {
+  after: string;
+  revoke: RunRevoke;
+}
+
+const RevokeContext = React.createContext<RevokeContextValue | null>(null);
 
 export function RenderedDiff({
   before,
   after,
   path,
+  revoke,
 }: RenderedDiffProps): React.ReactElement | null {
   const app = useApp();
   const [plan, setPlan] = React.useState<ResolvedPlan | null>(null);
@@ -48,15 +69,88 @@ export function RenderedDiff({
     // do between blocks of the note instead of being cut at each segment's first and last child.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/751
     <div className="markdown-rendered [--checklist-done-decoration:none]">
-      {plan.segments.map((segment, index) => (
-        <DiffSegmentView
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- the plan is rebuilt whole whenever the file content changes and nothing reorders it, so position is a segment identity
-          key={index}
-          continued={continuesList(plan.segments[index + 1])}
-          path={path}
-          segment={segment}
-        />
-      ))}
+      <RevokeContext.Provider value={revoke ? { after: after ?? "", revoke } : null}>
+        {groupByRun(plan.segments).map(({ run, start, items }) => (
+          <RunFrame key={start} run={run}>
+            {items.map((segment, offset) => (
+              <DiffSegmentView
+                // eslint-disable-next-line @eslint-react/no-array-index-key -- the plan is rebuilt whole whenever the file content changes and nothing reorders it, so position is a segment identity
+                key={start + offset}
+                continued={continuesList(plan.segments[start + offset + 1])}
+                path={path}
+                segment={segment}
+              />
+            ))}
+          </RunFrame>
+        ))}
+      </RevokeContext.Provider>
+    </div>
+  );
+}
+
+interface RunGroup<T> {
+  run: DiffRun | undefined;
+  start: number;
+  items: T[];
+}
+
+function groupByRun<T extends { run?: DiffRun }>(items: readonly T[]): RunGroup<T>[] {
+  const groups: RunGroup<T>[] = [];
+  items.forEach((item, index) => {
+    const last = groups[groups.length - 1];
+    if (last && last.run === item.run) last.items.push(item);
+    else groups.push({ run: item.run, start: index, items: [item] });
+  });
+  return groups;
+}
+
+interface RunFrameProps {
+  run: DiffRun | undefined;
+  children: React.ReactNode;
+}
+
+function RunFrame({ run, children }: RunFrameProps): React.ReactElement {
+  const context = React.useContext(RevokeContext);
+  const after = context?.after;
+  const current = context?.revoke.current;
+  const blocked = React.useMemo(() => {
+    if (run === undefined || after === undefined || current === undefined) return null;
+    if (current === null) return "This note no longer exists.";
+    return locateRun(after, current, run) === null
+      ? "This text changed in the note after the turn."
+      : null;
+  }, [after, current, run]);
+  if (run === undefined || context === null) return <>{children}</>;
+  const button = (
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-disabled={blocked !== null || undefined}
+      className={cn(
+        "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
+        blocked === null
+          ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
+          : "tw-cursor-not-allowed group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
+      )}
+      onClick={blocked === null ? () => context.revoke.onRevoke(run) : undefined}
+    >
+      <Undo2 className="tw-size-3" />
+      Revoke
+    </Button>
+  );
+  return (
+    <div className="tw-group tw-relative tw-rounded-sm focus-within:tw-ring-1 focus-within:tw-ring-ring hover:tw-ring-1 hover:tw-ring-ring">
+      {children}
+      {blocked === null ? (
+        button
+      ) : (
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent side="left">{blocked}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
     </div>
   );
 }
@@ -143,18 +237,22 @@ interface CodeDiffViewProps {
 function CodeDiffView({ lines }: CodeDiffViewProps): React.ReactElement {
   return (
     <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-rounded-sm tw-bg-secondary tw-p-2 tw-text-smaller">
-      {lines.map((line, index) => (
-        <div
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- line order is the only identity a verbatim line diff has
-          key={index}
-          data-change={line.change}
-          className={cn(
-            line.change === "deleted" && "tw-bg-error",
-            line.change === "inserted" && "tw-bg-success"
-          )}
-        >
-          {line.text === "" ? " " : line.text}
-        </div>
+      {groupByRun(lines).map(({ run, start, items }) => (
+        <RunFrame key={start} run={run}>
+          {items.map((line, offset) => (
+            <div
+              // eslint-disable-next-line @eslint-react/no-array-index-key -- line order is the only identity a verbatim line diff has
+              key={start + offset}
+              data-change={line.change}
+              className={cn(
+                line.change === "deleted" && "tw-bg-error",
+                line.change === "inserted" && "tw-bg-success"
+              )}
+            >
+              {line.text === "" ? " " : line.text}
+            </div>
+          ))}
+        </RunFrame>
       ))}
     </pre>
   );

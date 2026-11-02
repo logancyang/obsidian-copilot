@@ -6,15 +6,16 @@ import {
   TABLE_COLUMN_ADDED,
   TASK_BLOCK_INSERTED,
   TASK_CHECKBOX_TOGGLED,
+  TWO_PARAGRAPHS_REWORDED,
   WORDING_CHANGE,
   type RenderedDiffFixture,
 } from "@/agentMode/ui/renderedDiff/testing/fixtures";
 import * as mergeMarkdown from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { appParsingRecordedFixtures } from "@/agentMode/ui/renderedDiff/testing/fixtureParserApp";
-import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
+import { RenderedDiff, type RunRevoke } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { App } from "obsidian";
 import * as React from "react";
 
@@ -22,12 +23,25 @@ jest.mock("@/utils/renderMarkdown", () => ({ renderMarkdown: jest.fn() }));
 
 const recordedApp = appParsingRecordedFixtures();
 
-function diffElement(fixture: RenderedDiffFixture, app: App = recordedApp): React.ReactElement {
+function diffElement(
+  fixture: RenderedDiffFixture,
+  app: App = recordedApp,
+  revoke?: RunRevoke
+): React.ReactElement {
   return (
     <AppContext.Provider value={app}>
-      <RenderedDiff after={fixture.after} before={fixture.before} path={fixture.path} />
+      <RenderedDiff
+        after={fixture.after}
+        before={fixture.before}
+        path={fixture.path}
+        revoke={revoke}
+      />
     </AppContext.Provider>
   );
+}
+
+async function revokeButtons(): Promise<HTMLElement[]> {
+  return screen.findAllByRole("button", { name: "Revoke" });
 }
 
 function appHoldingParse(source: string): { app: App; release: () => void } {
@@ -176,6 +190,87 @@ describe("RenderedDiff", () => {
         expect(boxes.every((box) => box.disabled)).toBe(true);
       }
     );
+
+    it("frames each run of changes with its own Revoke button, leaving unchanged blocks outside every frame (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      const revoke: RunRevoke = { current: TWO_PARAGRAPHS_REWORDED.after, onRevoke: jest.fn() };
+      render(diffElement(TWO_PARAGRAPHS_REWORDED, recordedApp, revoke));
+
+      const frames = (await revokeButtons()).map((button) => button.parentElement!.textContent);
+
+      expect(frames).toEqual([
+        expect.stringContaining("The pilot runs for"),
+        expect.stringContaining("We report progress every"),
+      ]);
+      expect(frames.join("")).not.toContain("Budget is fixed");
+    });
+
+    it("hands the clicked run's line ranges to the revoke handler", async () => {
+      const onRevoke = jest.fn();
+      render(
+        diffElement(TWO_PARAGRAPHS_REWORDED, recordedApp, {
+          current: TWO_PARAGRAPHS_REWORDED.after,
+          onRevoke,
+        })
+      );
+
+      fireEvent.click((await revokeButtons())[1]);
+
+      expect(onRevoke).toHaveBeenCalledWith({
+        before: { start: 5, end: 8 },
+        after: { start: 5, end: 8 },
+      });
+    });
+
+    it("disables only the Revoke of a run whose text changed in the note after the turn and says why on focus (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      const onRevoke = jest.fn();
+      const current = TWO_PARAGRAPHS_REWORDED.after!.replace("every Monday", "every Tuesday");
+      render(diffElement(TWO_PARAGRAPHS_REWORDED, recordedApp, { current, onRevoke }));
+
+      const [first, second] = await revokeButtons();
+      fireEvent.click(second);
+      fireEvent.focus(second);
+
+      expect(first.getAttribute("aria-disabled")).toBeNull();
+      expect(second.getAttribute("aria-disabled")).toBe("true");
+      expect(onRevoke).not.toHaveBeenCalled();
+      expect(
+        (await screen.findAllByText("This text changed in the note after the turn.")).length
+      ).toBeGreaterThan(0);
+    });
+
+    it("disables every Revoke when the note no longer exists (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      render(
+        diffElement(TWO_PARAGRAPHS_REWORDED, recordedApp, { current: null, onRevoke: jest.fn() })
+      );
+
+      const buttons = await revokeButtons();
+
+      expect(buttons.map((button) => button.getAttribute("aria-disabled"))).toEqual([
+        "true",
+        "true",
+      ]);
+    });
+
+    it("frames the changed lines of a non-Markdown file as one run with its Revoke button", async () => {
+      render(
+        diffElement(NON_MARKDOWN_FILE, recordedApp, {
+          current: NON_MARKDOWN_FILE.after,
+          onRevoke: jest.fn(),
+        })
+      );
+
+      const [button] = await revokeButtons();
+
+      expect(button.closest("pre")).not.toBeNull();
+      expect(button.parentElement!.querySelectorAll("[data-change=unchanged]")).toHaveLength(0);
+    });
+
+    it("offers no Revoke when no revoke handler is given", async () => {
+      const { container } = render(diffElement(TWO_PARAGRAPHS_REWORDED));
+
+      await waitFor(() => expect(textOf(container, "del")).not.toEqual([]));
+      expect(screen.queryByRole("button", { name: "Revoke" })).toBeNull();
+    });
 
     it("keeps the diff plan when re-rendered with the same file contents and path", async () => {
       const build = jest.spyOn(mergeMarkdown, "buildRenderedDiffPlan");

@@ -5,6 +5,7 @@ export type MarkdownBlockType = "code" | "heading" | "table" | "text";
 export interface MarkdownBlock {
   type: MarkdownBlockType;
   text: string;
+  line: number;
   continuesList?: true;
   extraBlankLines?: number;
 }
@@ -55,8 +56,8 @@ const LIST_FENCE = /^[ \t]*(?:`{3,}|~{3,})/m;
 // Obsidian labels only block-form comments as comment sections; an inline %%comment%% hides its
 // edit from a rendered word diff, so any block holding one gets a line diff.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-function blockOf(type: MarkdownBlockType, text: string): MarkdownBlock {
-  return { type: text.includes("%%") ? "code" : type, text };
+function blockOf(type: MarkdownBlockType, text: string, line: number): MarkdownBlock {
+  return { type: text.includes("%%") ? "code" : type, text, line };
 }
 
 // Items split only when no blank line separates them, so joining them with one newline restores the
@@ -76,7 +77,7 @@ function listBlocks(
       : [[first, last]];
   return spans.map(([start, end], index) => {
     const text = lines.slice(start, end + 1).join("\n");
-    const block = blockOf(LIST_FENCE.test(text) ? "code" : "text", text);
+    const block = blockOf(LIST_FENCE.test(text) ? "code" : "text", text, start);
     return index > 0 ? { ...block, continuesList: true } : block;
   });
 }
@@ -109,7 +110,7 @@ export async function splitMarkdown(app: App, source: string): Promise<MarkdownS
       const sectionBlocks =
         type === "list"
           ? listBlocks(lines, position.start.line, position.end.line, itemStarts)
-          : [blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text)];
+          : [blockOf(SECTION_BLOCK_TYPES[type] ?? "text", text, position.start.line)];
       // Rendering merges a run of blank lines into one paragraph break, while Live Preview shows
       // each one, so the block keeps the count past the first.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/751

@@ -298,6 +298,14 @@ Budget is fixed for the quarter, and the pilot owns it.
 `,
 };
 
+export const TWO_PARAGRAPHS_REWORDED: RenderedDiffFixture = {
+  path: "projects/Alpha/Project brief.md",
+  before:
+    "# Alpha pilot\n\nThe pilot runs for six weeks with two design partners.\n\nBudget is fixed for the quarter.\n\nWe report progress every Friday.\n",
+  after:
+    "# Alpha pilot\n\nThe pilot runs for eight weeks with three design partners.\n\nBudget is fixed for the quarter.\n\nWe report progress every Monday in the team channel.\n",
+};
+
 // Recorded from Obsidian 1.14.4's computeMetadataAsync on each Markdown fixture, with CRLF read as LF,
 // so unit tests split blocks the way the app does: https://github.com/Brevilabs/obsidian-copilot-private/issues/348
 export const RECORDED_PARSES: ReadonlyMap<
@@ -760,6 +768,27 @@ export const RECORDED_PARSES: ReadonlyMap<
           ["paragraph", 0, 0],
           ["paragraph", 2, 2],
           ["paragraph", 4, 4],
+        ],
+      },
+    },
+  ],
+  [
+    TWO_PARAGRAPHS_REWORDED,
+    {
+      before: {
+        sections: [
+          ["heading", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
+          ["paragraph", 6, 6],
+        ],
+      },
+      after: {
+        sections: [
+          ["heading", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
+          ["paragraph", 6, 6],
         ],
       },
     },
