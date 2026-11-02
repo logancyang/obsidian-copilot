@@ -127,8 +127,10 @@ function RunFrame({ run, children }: RunFrameProps): React.ReactElement {
       size="sm"
       aria-disabled={blocked !== null || undefined}
       className={cn(
-        "tw-absolute tw-right-0 tw-top-0 tw-opacity-0 group-focus-within:tw-opacity-100 group-hover:tw-opacity-100",
-        blocked !== null && "tw-cursor-not-allowed tw-text-faint"
+        "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
+        blocked === null
+          ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
+          : "tw-cursor-not-allowed group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
       )}
       onClick={blocked === null ? () => context.revoke.onRevoke(run) : undefined}
     >
