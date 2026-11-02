@@ -111,6 +111,21 @@ export function useAgentHistoryControls(
     }
   }, [manager, runWithNotice, scope]);
 
+  // A chat note renamed or deleted outside Copilot would leave a row pointing at a path that no longer exists.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+  useEffect(() => {
+    const { vault } = plugin.app;
+    const listedIds = new Set(chatHistoryItems.map((item) => item.id));
+    const reloadIfListed = (path: string) => {
+      if (listedIds.has(path)) void loadChatHistory();
+    };
+    const refs = [
+      vault.on("rename", (_file, oldPath) => reloadIfListed(oldPath)),
+      vault.on("delete", (file) => reloadIfListed(file.path)),
+    ];
+    return () => refs.forEach((ref) => vault.offref(ref));
+  }, [plugin, chatHistoryItems, loadChatHistory]);
+
   const loadChat = useCallback(
     async (id: string) => {
       await runWithNotice("load chat", () => plugin.loadChatById(id));

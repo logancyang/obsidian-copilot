@@ -2075,7 +2075,10 @@ export class AgentSessionManager {
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
     if (!previousActiveId || previousActiveId === loaded.internalId) return;
     const previous = this.sessions.get(previousActiveId);
-    if (!previous || previous.hasUserVisibleMessages()) return;
+    // An empty chat holding unsent text is kept like any chat left with a draft, so opening a saved chat cannot discard it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    if (!previous || previous.hasUserVisibleMessages() || this.keepsSessionWhenLeft(previous))
+      return;
     const oldIdx = Array.from(this.sessions.keys()).indexOf(previousActiveId);
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, loaded.internalId, oldIdx);

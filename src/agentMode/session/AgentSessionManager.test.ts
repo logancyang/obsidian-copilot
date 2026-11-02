@@ -2146,6 +2146,23 @@ describe("AgentSessionManager", () => {
         expect(mgr.drafts.get(drafted.chatInputId)?.input).toBe("half-written");
       });
 
+      it("keeps an empty chat holding unsent text when a saved chat is opened from it, which would otherwise take its place and discard the text, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const loadFile = jest.fn().mockResolvedValue({
+          backendId: "opencode",
+          projectId: GLOBAL_SCOPE,
+          messages: [{ message: "Loaded" }],
+        });
+        const mgr = buildManager({ persistence: { loadFile } });
+        const drafted = await mgr.createSession();
+        mgr.drafts.update(drafted.chatInputId, (draft) => ({ ...draft, input: "half-written" }));
+
+        await mgr.loadSessionFromHistory(mockTFile({ path: "chat/Loaded.md" }));
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.getSessions()).toContain(drafted);
+        expect(mgr.drafts.get(drafted.chatInputId)?.input).toBe("half-written");
+      });
+
       it("closes a chat left while it was still starting once it has started for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const mgr = buildManager();
         const started = deferred();
