@@ -557,7 +557,7 @@ describe("TurnDiffView", () => {
         expect(within(header(view)).getByText("+2")).toBeTruthy();
       });
 
-      it(`moves a note the turn created to the trash through Obsidian's file manager (${ISSUE_825})`, async () => {
+      it(`moves a note the turn created to the trash through Obsidian's file manager and stops offering Open note (${ISSUE_825})`, async () => {
         const { app, view, contents } = await noteDiff(
           { status: "created", before: null, additions: 5, deletions: 0 },
           { "notes/diff-demo/alpha.md": AFTER }
@@ -570,6 +570,7 @@ describe("TurnDiffView", () => {
         );
         expect(contents.has("notes/diff-demo/alpha.md")).toBe(false);
         await expectNoChangesLeft(view);
+        expect(within(header(view)).queryByText("Open note")).toBeNull();
       });
 
       it(`keeps a created note that changed just before the write and says so (${ISSUE_825})`, async () => {
@@ -590,7 +591,7 @@ describe("TurnDiffView", () => {
         );
       });
 
-      it(`recreates a note the turn deleted with its text from before the turn, creating its missing folders (${ISSUE_825})`, async () => {
+      it(`recreates a note the turn deleted with its text from before the turn, creating its missing folders, and offers Open note (${ISSUE_825})`, async () => {
         const { app, view, contents } = await noteDiff(
           { status: "deleted", after: null, additions: 0, deletions: 5 },
           {}
@@ -604,6 +605,7 @@ describe("TurnDiffView", () => {
         ]);
         expect(contents.get("notes/diff-demo/alpha.md")).toBe(BEFORE);
         await expectNoChangesLeft(view);
+        expect(within(header(view)).getByText("Open note")).toBeTruthy();
       });
 
       it(`disables Revoke all for a deleted note once another file takes its path (${ISSUE_825})`, async () => {

@@ -16,6 +16,7 @@ import { logError } from "@/logger";
 import type { SelectionReport } from "@/selection/selectionStore";
 import { ensureFolderExists } from "@/utils";
 import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
+import { parentDir } from "@/utils/pathUtils";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import {
@@ -257,9 +258,7 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({
                   ),
               }
         }
-        onOpenNote={
-          state.status === "deleted" ? undefined : (pane) => openNote(app, state.path, pane)
-        }
+        onOpenNote={state.after === null ? undefined : (pane) => openNote(app, state.path, pane)}
       />
       <ChangeScroller navigation={navigation}>
         <RenderedDiff
@@ -328,7 +327,7 @@ async function restoreBefore(
   const file = app.vault.getAbstractFileByPath(path);
   if (after === null) {
     if (file !== null) return undefined;
-    await ensureFolderExists(app.vault, path.slice(0, Math.max(path.lastIndexOf("/"), 0)));
+    await ensureFolderExists(app.vault, parentDir(path));
     await app.vault.create(path, before ?? "");
     return before;
   }
