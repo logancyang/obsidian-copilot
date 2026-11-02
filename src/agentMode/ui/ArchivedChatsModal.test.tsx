@@ -1,5 +1,6 @@
 import { ArchivedChatsList, ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import { ReactModal } from "@/components/modals/ReactModal";
+import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { App } from "obsidian";
@@ -13,6 +14,21 @@ const archivedChat = (id: string, title: string, archivedAt: number): ChatHistor
   archivedAt,
 });
 
+const archivedProject = (id: string, name: string, archivedAt: number): ProjectConfig => ({
+  id,
+  name,
+  systemPrompt: "",
+  contextSource: {},
+  created: 1_000,
+  UsageTimestamps: 2_000,
+  archivedAt,
+});
+
+const PROJECTS = [
+  archivedProject("proj-old", "Thesis", new Date(2026, 8, 5, 12).getTime()),
+  archivedProject("proj-new", "Launch plan", new Date(2026, 9, 20, 12).getTime()),
+];
+
 const CHATS = [
   archivedChat("chats/old.md", "Old research", new Date(2026, 7, 28, 12).getTime()),
   archivedChat("chats/new.md", "Newly shelved", new Date(2026, 9, 31, 12).getTime()),
@@ -23,8 +39,11 @@ const rowOf = (title: string) => screen.getByText(title).closest<HTMLElement>("[
 function renderList(overrides: Partial<React.ComponentProps<typeof ArchivedChatsList>> = {}) {
   const props = {
     items: CHATS,
+    projects: [] as ProjectConfig[],
     onUnarchive: jest.fn(async () => {}),
     onOpen: jest.fn(async () => {}),
+    onUnarchiveProject: jest.fn(async () => {}),
+    onOpenProject: jest.fn(async () => {}),
     ...overrides,
   };
   render(<ArchivedChatsList {...props} />);
@@ -37,10 +56,10 @@ function rowTitles(): string[] {
 
 describe("ArchivedChatsModal", () => {
   describe("ArchivedChatsList()", () => {
-    it("explains that nothing is archived when there are no archived chats", () => {
+    it("explains that nothing is archived when there are no archived chats or projects", () => {
       renderList({ items: [] });
 
-      expect(screen.getByText("No archived chats")).toBeTruthy();
+      expect(screen.getByText("Nothing archived")).toBeTruthy();
       expect(screen.queryByRole("listitem")).toBeNull();
     });
 
@@ -123,18 +142,83 @@ describe("ArchivedChatsModal", () => {
         fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
       });
 
-      expect(screen.getByText("No archived chats")).toBeTruthy();
+      expect(screen.getByText("Nothing archived")).toBeTruthy();
+    });
+
+    it("lists archived projects before archived chats, each group most recently archived first", () => {
+      renderList({ projects: PROJECTS });
+
+      expect(rowTitles()).toEqual(["Launch plan", "Thesis", "Newly shelved", "Old research"]);
+    });
+
+    it("shows the full date each project was archived", () => {
+      renderList({ projects: PROJECTS });
+
+      expect(within(rowOf("Launch plan")).getByText("October 20, 2026")).toBeTruthy();
+      expect(within(rowOf("Thesis")).getByText("September 5, 2026")).toBeTruthy();
+    });
+
+    it("unarchives the project whose Unarchive icon button is clicked, drops only that project, and does not open it", async () => {
+      const { onUnarchive, onUnarchiveProject, onOpenProject } = renderList({
+        projects: PROJECTS,
+      });
+
+      await act(async () => {
+        fireEvent.click(within(rowOf("Thesis")).getByRole("button", { name: "Unarchive" }));
+      });
+
+      expect(onUnarchiveProject).toHaveBeenCalledWith("proj-old");
+      expect(onUnarchive).not.toHaveBeenCalled();
+      expect(onOpenProject).not.toHaveBeenCalled();
+      expect(rowTitles()).toEqual(["Launch plan", "Newly shelved", "Old research"]);
+    });
+
+    it("keeps a project listed when unarchiving it fails", async () => {
+      const onUnarchiveProject = jest.fn(async () => {
+        throw new Error("project file not found");
+      });
+      renderList({ items: [], projects: [PROJECTS[0]], onUnarchiveProject });
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
+      });
+
+      expect(rowTitles()).toEqual(["Thesis"]);
+    });
+
+    it("opens a project when its row is clicked", () => {
+      const { onOpenProject, onOpen } = renderList({ projects: PROJECTS });
+
+      fireEvent.click(screen.getByText("Launch plan"));
+
+      expect(onOpenProject).toHaveBeenCalledWith("proj-new");
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it.each(["Enter", " "])("opens a project when its focused row receives %j", (key) => {
+      const { onOpenProject } = renderList({ projects: PROJECTS });
+
+      fireEvent.keyDown(rowOf("Thesis"), { key });
+
+      expect(onOpenProject).toHaveBeenCalledWith("proj-old");
     });
   });
 
   describe("ArchivedChatsModal", () => {
     afterEach(() => document.body.replaceChildren());
 
-    async function openModal(actions: {
-      onUnarchive: (id: string) => Promise<void>;
-      onOpen: (id: string) => Promise<void>;
-    }) {
-      const modal = new ArchivedChatsModal(new App(), CHATS, actions);
+    const noopActions = {
+      onUnarchive: jest.fn(),
+      onOpen: jest.fn(),
+      onUnarchiveProject: jest.fn(),
+      onOpenProject: jest.fn(),
+    };
+
+    async function openModal(actions: Partial<typeof noopActions> = {}) {
+      const modal = new ArchivedChatsModal(new App(), CHATS, PROJECTS, {
+        ...noopActions,
+        ...actions,
+      });
       modal.contentEl.empty = () => modal.contentEl.replaceChildren();
       document.body.appendChild(modal.containerEl);
       await act(async () => ReactModal.prototype.onOpen.call(modal));
@@ -143,26 +227,23 @@ describe("ArchivedChatsModal", () => {
 
     describe("constructor()", () => {
       it("titles the native dialog Archived", () => {
-        const modal = new ArchivedChatsModal(new App(), CHATS, {
-          onUnarchive: jest.fn(),
-          onOpen: jest.fn(),
-        });
+        const modal = new ArchivedChatsModal(new App(), CHATS, PROJECTS, noopActions);
 
         expect(modal.titleEl.textContent).toBe("Archived");
       });
     });
 
     describe("onOpen()", () => {
-      it("lists the archived chats it was given", async () => {
-        const modal = await openModal({ onUnarchive: jest.fn(), onOpen: jest.fn() });
+      it("lists the archived projects and chats it was given", async () => {
+        const modal = await openModal();
 
-        expect(within(modal.contentEl).getAllByRole("listitem")).toHaveLength(2);
+        expect(within(modal.contentEl).getAllByRole("listitem")).toHaveLength(4);
         await act(async () => ReactModal.prototype.onClose.call(modal));
       });
 
       it("opens the clicked chat and closes the dialog", async () => {
         const onOpen = jest.fn(async () => {});
-        const modal = await openModal({ onUnarchive: jest.fn(), onOpen });
+        const modal = await openModal({ onOpen });
         const close = jest.spyOn(modal, "close");
 
         await act(async () => {
@@ -170,6 +251,20 @@ describe("ArchivedChatsModal", () => {
         });
 
         expect(onOpen).toHaveBeenCalledWith("chats/new.md");
+        expect(close).toHaveBeenCalledTimes(1);
+        await act(async () => ReactModal.prototype.onClose.call(modal));
+      });
+
+      it("opens the chosen project and closes the dialog", async () => {
+        const onOpenProject = jest.fn(async () => {});
+        const modal = await openModal({ onOpenProject });
+        const close = jest.spyOn(modal, "close");
+
+        await act(async () => {
+          fireEvent.click(within(modal.contentEl).getByText("Thesis"));
+        });
+
+        expect(onOpenProject).toHaveBeenCalledWith("proj-old");
         expect(close).toHaveBeenCalledTimes(1);
         await act(async () => ReactModal.prototype.onClose.call(modal));
       });

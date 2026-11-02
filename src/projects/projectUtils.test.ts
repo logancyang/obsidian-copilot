@@ -55,6 +55,11 @@ function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> |
   return app;
 }
 
+function toRawNote(frontmatter: Record<string, string | number>): string {
+  const lines = Object.entries(frontmatter).map(([key, value]) => `${key}: ${value}`);
+  return ["---", ...lines, "---", "Body"].join("\n");
+}
+
 function makeConfigFile(folderName: string, fileName: string): TFile {
   const path = `copilot-projects/${folderName}/${fileName}`;
   return mockTFile({
@@ -187,6 +192,30 @@ describe("projectUtils", () => {
       expect(result!.project.UsageTimestamps).toBe(1700000001000);
       expect(result!.filePath).toBe(VALID_PATH);
       expect(result!.folderName).toBe("my-project");
+    });
+
+    it("reads copilot-project-archived-at as the project's archivedAt", async () => {
+      const frontmatter = {
+        "copilot-project-id": "my-project",
+        "copilot-project-archived-at": 1700000002000,
+      };
+      const app = setupAppMock(toRawNote(frontmatter), frontmatter);
+
+      const result = await parseProjectConfigFile(app, makeMockFile(VALID_PATH));
+
+      expect(result!.project.archivedAt).toBe(1700000002000);
+    });
+
+    it.each([
+      ["a project saved before archiving existed", {}],
+      ["a non-numeric archive property", { "copilot-project-archived-at": "never" }],
+    ])("loads %s as not archived", async (_label, extra) => {
+      const frontmatter = { "copilot-project-id": "my-project", ...extra };
+      const app = setupAppMock(toRawNote(frontmatter), frontmatter);
+
+      const result = await parseProjectConfigFile(app, makeMockFile(VALID_PATH));
+
+      expect(result!.project.archivedAt).toBeUndefined();
     });
 
     it("returns null when copilot-project-id is missing from frontmatter", async () => {

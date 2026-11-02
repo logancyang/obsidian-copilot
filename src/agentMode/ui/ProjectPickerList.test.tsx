@@ -2,11 +2,16 @@ jest.mock("@/components/modals/project/context-manage-modal", () => ({
   ContextManageModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
 }));
 
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: { getInstance: jest.fn() },
+}));
+
 import { ProjectConfig } from "@/aiParams";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 
 const app = {} as App;
@@ -32,6 +37,14 @@ function renderedOrder(container: HTMLElement, names: string[]): string[] {
   return rows
     .map((row) => names.find((name) => row.textContent?.includes(name)))
     .filter((name): name is string => Boolean(name));
+}
+
+function mockProjectFileManager() {
+  const setProjectArchived = jest.fn();
+  jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
+    setProjectArchived,
+  } as unknown as ProjectFileManager);
+  return { setProjectArchived };
 }
 
 describe("ProjectPickerList", () => {
@@ -154,13 +167,44 @@ describe("ProjectPickerList", () => {
       expect(renderedOrder(container, names)).toEqual(["A", "C", "B"]);
     });
 
-    it("surfaces the inline Reveal / Edit / Delete actions on every row", () => {
+    it("surfaces the inline Reveal / Edit / Archive / Delete actions on every row", () => {
       const { getByLabelText } = renderPicker();
       for (const name of names) {
         expect(getByLabelText(`Reveal ${name} in vault`)).toBeTruthy();
+        expect(getByLabelText(`Archive project ${name}`)).toBeTruthy();
         expect(getByLabelText(`Edit project ${name}`)).toBeTruthy();
         expect(getByLabelText(`Delete project ${name}`)).toBeTruthy();
       }
+    });
+
+    it("archives the project of the clicked row without opening it", async () => {
+      const { setProjectArchived } = mockProjectFileManager();
+      setProjectArchived.mockResolvedValue(undefined);
+      const onSelect = jest.fn();
+      const { getByLabelText } = render(
+        <ProjectPickerList projects={[projectA, projectB]} onSelect={onSelect} app={app} />
+      );
+
+      await act(async () => {
+        fireEvent.click(getByLabelText("Archive project B"));
+      });
+
+      expect(setProjectArchived).toHaveBeenCalledTimes(1);
+      expect(setProjectArchived).toHaveBeenCalledWith("B", true);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("tells the user when the project could not be archived", async () => {
+      mockProjectFileManager().setProjectArchived.mockRejectedValue(
+        new Error("project file not found")
+      );
+      const { getByLabelText } = renderPicker();
+
+      await act(async () => {
+        fireEvent.click(getByLabelText("Archive project A"));
+      });
+
+      expect(Notice).toHaveBeenCalledWith('Failed to archive project "A".');
     });
   });
 });

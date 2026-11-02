@@ -66,7 +66,9 @@ Inside a Project:
 - **New chat** starts a clean conversation with the latest Project instructions and context.
 - **Leave project** returns to the Agent Chat home screen.
 
-From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, or **Delete** it. The global **Recent chats** list on the Agent Chat home screen includes conversations from across Projects.
+From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, **Archive**, or **Delete** it. The global **Recent chats** list on the Agent Chat home screen includes conversations from across Projects.
+
+Archiving a Project puts it away without deleting it. The Project and all of its chats, pinned ones included, disappear from the Projects list, **Recent chats** and **Chat history**. A chat that is still running keeps running. Select **View archived** below **Recent chats** to unarchive the Project, which brings back the Project and every chat in it, or to open it.
 
 Deleting a Project removes its Copilot Project configuration. It does not delete your ordinary vault notes or conversation notes already saved in the vault.
 

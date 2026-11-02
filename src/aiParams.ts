@@ -42,6 +42,7 @@ export interface ProjectConfig {
   };
   created: number;
   UsageTimestamps: number;
+  archivedAt?: number;
 }
 
 export interface ModelConfig {

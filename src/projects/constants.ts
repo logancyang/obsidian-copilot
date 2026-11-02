@@ -15,6 +15,7 @@ export const COPILOT_PROJECT_NAME = "copilot-project-name";
 export const COPILOT_PROJECT_DESCRIPTION = "copilot-project-description";
 export const COPILOT_PROJECT_CREATED = "copilot-project-created";
 export const COPILOT_PROJECT_LAST_USED = "copilot-project-last-used";
+export const COPILOT_PROJECT_ARCHIVED_AT = "copilot-project-archived-at";
 export const COPILOT_PROJECT_INCLUSIONS = "copilot-project-inclusions";
 export const COPILOT_PROJECT_EXCLUSIONS = "copilot-project-exclusions";
 export const COPILOT_PROJECT_WEB_URLS = "copilot-project-web-urls";

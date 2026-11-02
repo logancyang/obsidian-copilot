@@ -1,5 +1,6 @@
 import { ProjectConfig } from "@/aiParams";
 import {
+  COPILOT_PROJECT_ARCHIVED_AT,
   COPILOT_PROJECT_CREATED,
   COPILOT_PROJECT_DESCRIPTION,
   COPILOT_PROJECT_EXCLUSIONS,
@@ -164,6 +165,7 @@ export async function parseProjectConfigFile(
     file.stat?.ctime ?? 0
   );
   const lastUsedMs = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_LAST_USED], 0);
+  const archivedAtMs = coerceFrontmatterNumber(frontmatter?.[COPILOT_PROJECT_ARCHIVED_AT], 0);
 
   return {
     project: {
@@ -180,6 +182,7 @@ export async function parseProjectConfigFile(
       },
       created: Number.isFinite(createdMs) && createdMs > 0 ? createdMs : 0,
       UsageTimestamps: Number.isFinite(lastUsedMs) && lastUsedMs > 0 ? lastUsedMs : 0,
+      ...(archivedAtMs > 0 ? { archivedAt: archivedAtMs } : {}),
     },
     filePath: file.path,
     folderName,

@@ -6,7 +6,7 @@ import { logError } from "@/logger";
 import { getProjectFolderPath } from "@/projects/projectPaths";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
-import { FolderSearch, Pencil, Trash2 } from "lucide-react";
+import { Archive, FolderSearch, Pencil, Trash2 } from "lucide-react";
 import { App, Notice, TFolder } from "obsidian";
 import React, { memo } from "react";
 
@@ -50,6 +50,15 @@ export const AgentProjectRowActions = memo(
         },
         project
       ).open();
+    };
+
+    const handleArchive = async () => {
+      try {
+        await ProjectFileManager.getInstance(app).setProjectArchived(project.id, true);
+      } catch (e) {
+        logError("[AgentProjectRowActions] archive project failed", e);
+        new Notice(`Failed to archive project "${project.name}".`);
+      }
     };
 
     const handleDelete = () => {
@@ -98,6 +107,19 @@ export const AgentProjectRowActions = memo(
           }}
         >
           <Pencil className="tw-size-3.5" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          aria-label={`Archive project ${project.name}`}
+          title="Archive"
+          className="tw-size-5 tw-p-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleArchive();
+          }}
+        >
+          <Archive className="tw-size-3.5" />
         </Button>
         <Button
           size="sm"

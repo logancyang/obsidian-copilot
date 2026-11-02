@@ -451,11 +451,23 @@ export class AgentSessionManager {
     }
 
     markdownEntries = await this.dropNonLocalMarkdownEntries(markdownEntries);
-    if (!index) return markdownEntries.map((e) => e.item);
+    if (!index) return this.hideArchivedProjectChats(markdownEntries.map((e) => e.item));
 
     await this.refreshNativeSessionsFromBackends();
     const nativeEntries = await index.getEntries();
-    return mergeChatHistoryItems(markdownEntries, nativeEntries);
+    return this.hideArchivedProjectChats(mergeChatHistoryItems(markdownEntries, nativeEntries));
+  }
+
+  // The global view drops every chat of an archived project; the project's own view still lists them.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/806
+  private hideArchivedProjectChats(items: ChatHistoryItem[]): ChatHistoryItem[] {
+    const archivedProjectIds = new Set(
+      getCachedProjectRecords()
+        .filter((record) => record.project.archivedAt !== undefined)
+        .map((record) => record.project.id)
+    );
+    if (archivedProjectIds.size === 0) return items;
+    return items.filter((item) => !item.projectId || !archivedProjectIds.has(item.projectId));
   }
 
   private collectLiveAttentionPaths(): Set<string> {
