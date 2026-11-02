@@ -22,17 +22,10 @@ import {
 } from "@/selection/selectionWatcher";
 import type { Extension, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import {
-  editorInfoField,
-  MarkdownView,
-  type App,
-  type MarkdownFileInfo,
-  type Plugin,
-} from "obsidian";
+import { editorInfoField, type App, type MarkdownFileInfo, type Plugin } from "obsidian";
 
 const ISSUE_597 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/597";
 const ISSUE_794 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/794";
-const ISSUE_818 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/818";
 
 const research = { path: "Research.md", basename: "Research" };
 
@@ -43,21 +36,6 @@ function readingNote(text: string) {
   const view = { file: research, getMode: () => "preview", previewMode: { containerEl: preview } };
   const app = { workspace: { getActiveViewOfType: () => view, on: jest.fn() } } as unknown as App;
   return { preview, app };
-}
-
-function openPdf(text: string, viewType = "pdf") {
-  const page = document.createElement("div");
-  page.textContent = text;
-  document.body.append(page);
-  const view = {
-    file: { path: "Papers/Attention.pdf", basename: "Attention" },
-    contentEl: page,
-    getViewType: () => viewType,
-  };
-  const app = {
-    workspace: { getActiveViewOfType: (type: unknown) => (type === MarkdownView ? null : view) },
-  } as unknown as App;
-  return { page, app };
 }
 
 function selectText(node: Node, end: number): void {
@@ -134,41 +112,6 @@ describe("selectionWatcher", () => {
       chat.textContent = "Chat input";
       document.body.append(chat);
       selectText(chat.firstChild!, 4);
-
-      expect(readingSelectionReport(app, document)).toBeNull();
-    });
-
-    it(`reports text selected in an open PDF under the PDF's path (${ISSUE_818})`, () => {
-      const { page, app } = openPdf("Attention is all you need");
-      selectText(page.firstChild!, 9);
-
-      expect(readingSelectionReport(app, document)).toMatchObject({
-        location: "Papers/Attention.pdf",
-        key: "preview:Papers/Attention.pdf:Attention",
-        context: {
-          content: "Attention",
-          sourceType: "note",
-          noteTitle: "Attention",
-          notePath: "Papers/Attention.pdf",
-          startLine: 0,
-          endLine: 0,
-        },
-      });
-    });
-
-    it(`reports nothing selected in the PDF when its selection collapses (${ISSUE_818})`, () => {
-      const { page, app } = openPdf("Attention is all you need");
-      selectText(page.firstChild!, 0);
-
-      expect(readingSelectionReport(app, document)).toEqual({
-        location: "Papers/Attention.pdf",
-        context: null,
-      });
-    });
-
-    it(`ignores text selected in other non-Markdown file views (${ISSUE_818})`, () => {
-      const { page, app } = openPdf("Some image caption", "image");
-      selectText(page.firstChild!, 4);
 
       expect(readingSelectionReport(app, document)).toBeNull();
     });

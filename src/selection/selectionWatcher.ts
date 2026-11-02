@@ -7,12 +7,10 @@ import type { WebSelectedTextContext } from "@/types/message";
 import { EditorView } from "@codemirror/view";
 import {
   editorInfoField,
-  FileView,
   MarkdownView,
   type App,
   type MarkdownFileInfo,
   type Plugin,
-  type TFile,
 } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
@@ -46,30 +44,18 @@ export function webSelectionReport(context: WebSelectedTextContext): KeyedSelect
   return { location: context.url, key: `web:${context.url}:${context.content}`, context };
 }
 
-function renderedSelectionRoot(app: App): { file: TFile; el: HTMLElement } | null {
-  const markdown = app.workspace.getActiveViewOfType(MarkdownView);
-  if (markdown?.file && markdown.getMode() === "preview") {
-    return { file: markdown.file, el: markdown.previewMode.containerEl };
-  }
-  // Obsidian's PDF viewer renders a selectable text layer, so its selections attach like Reading view's.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/818
-  const view = app.workspace.getActiveViewOfType(FileView);
-  return view?.file && view.getViewType() === "pdf"
-    ? { file: view.file, el: view.contentEl }
-    : null;
-}
-
 export function readingSelectionReport(app: App, doc: Document): SelectionReport | null {
   const selection = doc.getSelection();
   const anchor = selection?.anchorNode;
   const focus = selection?.focusNode;
-  const root = renderedSelectionRoot(app);
-  if (!anchor || !focus || !root) return null;
-  const { file, el } = root;
+  const view = app.workspace.getActiveViewOfType(MarkdownView);
+  const file = view?.file;
+  if (!anchor || !focus || !file || view.getMode() !== "preview") return null;
 
   // Only rendered text inside the note is a note selection; a later chat
   // selection leaves the pending one attached. https://github.com/Brevilabs/obsidian-copilot-private/issues/597
-  if (!el.contains(anchor) || !el.contains(focus)) return null;
+  const readingEl = view.previewMode.containerEl;
+  if (!readingEl.contains(anchor) || !readingEl.contains(focus)) return null;
 
   const content = selection.toString();
   if (!content.trim()) return { location: file.path, context: null };
