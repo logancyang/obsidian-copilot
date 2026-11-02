@@ -4,12 +4,7 @@ import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
-import {
-  AI_SENDER,
-  CHAT_AGENT_VIEWTYPE,
-  SESSIONS_SIDEBAR_VIEWTYPE,
-  USER_SENDER,
-} from "@/constants";
+import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { playNotificationSound } from "@/utils/notificationSound";
@@ -535,17 +530,6 @@ function closedSessions(): unknown[] {
   return mockSessionCancel.mock.contexts;
 }
 
-function openSessionsSidebar(app: App): void {
-  const original = app.workspace.getLeavesOfType as jest.Mock;
-  original.mockImplementation((viewType: string) =>
-    viewType === SESSIONS_SIDEBAR_VIEWTYPE
-      ? [{ view: { getViewType: () => SESSIONS_SIDEBAR_VIEWTYPE } }]
-      : viewType === CHAT_AGENT_VIEWTYPE
-        ? [{ view: { getViewType: () => CHAT_AGENT_VIEWTYPE } }]
-        : []
-  );
-}
-
 async function hideChats(mgr: AgentSessionManager, count: number): Promise<AgentSession[]> {
   const chats: AgentSession[] = [];
   for (let i = 0; i < count; i++) chats.push(await mgr.createSession());
@@ -807,7 +791,6 @@ function buildHistoryHarness(opts?: {
       on: jest.fn(() => ({}) as never),
       offref: jest.fn(),
     },
-    workspace: buildWorkspace(),
   } as unknown as App;
   const plugin = {
     manifest: { version: "1.0.0" },
@@ -2587,68 +2570,6 @@ describe("AgentSessionManager", () => {
 
         expect(mgr.getActiveSession()).toBe(landing);
         expect(mgr.getSessions()).toEqual([conversation, landing]);
-      });
-    });
-
-    describe("hidden chat cap while a sessions sidebar is open", () => {
-      it("counts every chat but the active one as hidden and closes the oldest idle chat once a fourth is hidden for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
-        const app = buildApp();
-        openSessionsSidebar(app);
-        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
-        const chats: AgentSession[] = [];
-        for (let i = 0; i < 4; i++) chats.push(await mgr.createSession());
-        expect(closedSessions()).toEqual([]);
-        const closed = untilClosed(mgr, chats[0]);
-
-        await mgr.createSession();
-        await closed;
-
-        expect(closedSessions()).toEqual([chats[0]]);
-        expect(mgr.getSessions()).toEqual(expect.arrayContaining(chats.slice(1)));
-      });
-
-      it("enforces the cap when the active chat switches to an already open chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
-        const app = buildApp();
-        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
-        const chats: AgentSession[] = [];
-        for (let i = 0; i < 5; i++) chats.push(await mgr.createSession());
-        expect(closedSessions()).toEqual([]);
-        openSessionsSidebar(app);
-        const closed = untilClosed(mgr, chats[0]);
-
-        mgr.setActiveSession(chats[3].internalId);
-        await closed;
-
-        expect(closedSessions()).toEqual([chats[0]]);
-        expect(mgr.getActiveSession()).toBe(chats[3]);
-      });
-
-      it("keeps every idle chat open when no sessions sidebar is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
-        const mgr = buildManager({ descriptor: buildDescriptor({ processPerChat: true }) });
-        const chats: AgentSession[] = [];
-        for (let i = 0; i < 5; i++) chats.push(await mgr.createSession());
-
-        mgr.setActiveSession(chats[0].internalId);
-
-        expect(closedSessions()).toEqual([]);
-        expect(mgr.getSessions()).toEqual(chats);
-      });
-
-      it("keeps a background chat that is still working while a sessions sidebar is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
-        const app = buildApp();
-        openSessionsSidebar(app);
-        const mgr = buildManager({ app, descriptor: buildDescriptor({ processPerChat: true }) });
-        const working = await mgr.createSession();
-        getSessionTestHandle(working).setStatus("running");
-        const rest: AgentSession[] = [];
-        for (let i = 0; i < 3; i++) rest.push(await mgr.createSession());
-        const closed = untilClosed(mgr, rest[0]);
-
-        await mgr.createSession();
-        await closed;
-
-        expect(closedSessions()).toEqual([rest[0]]);
-        expect(mgr.getSessions()).toContain(working);
       });
     });
 

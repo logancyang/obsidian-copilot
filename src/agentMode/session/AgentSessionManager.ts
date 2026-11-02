@@ -30,7 +30,7 @@ import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "
 import type { AgentChatPersistenceManager, LoadedAgentChat } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import { buildNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
-import { CHAT_AGENT_VIEWTYPE, SESSIONS_SIDEBAR_VIEWTYPE, USER_SENDER } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { playNotificationSound } from "@/utils/notificationSound";
 import type { AgentSessionIndex, AgentSessionIndexEntry } from "./AgentSessionIndex";
 import {
@@ -560,24 +560,8 @@ export class AgentSessionManager {
     this.notify();
   }
 
-  // With a sessions sidebar open there are no tabs to close, so every chat but the active one counts as hidden.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
-  private isSessionsSidebarOpen(): boolean {
-    return this.app.workspace.getLeavesOfType(SESSIONS_SIDEBAR_VIEWTYPE).length > 0;
-  }
-
-  private closeIdleHiddenChatsOverSidebarCap(): void {
-    if (this.isSessionsSidebarOpen()) this.closeIdleHiddenChatsOverCap();
-  }
-
   private closeIdleHiddenChatsOverCap(): void {
-    const hiddenIds = new Set(this.detachedFromTabIds);
-    if (this.isSessionsSidebarOpen()) {
-      for (const id of this.sessions.keys()) {
-        if (id !== this.activeSessionId) hiddenIds.add(id);
-      }
-    }
-    const hidden = Array.from(hiddenIds, (id) => this.sessions.get(id)).filter(
+    const hidden = Array.from(this.detachedFromTabIds, (id) => this.sessions.get(id)).filter(
       (session): session is AgentSession =>
         !!session && this.opts.resolveDescriptor(session.backendId)?.processPerChat === true
     );
@@ -1005,7 +989,6 @@ export class AgentSessionManager {
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.notify();
-    this.closeIdleHiddenChatsOverSidebarCap();
 
     void session.ready
       .then(async () => {
@@ -1716,7 +1699,6 @@ export class AgentSessionManager {
     this.lastActiveByScope.set(session.projectId, id);
     session.clearNeedsAttention();
     this.notify();
-    this.closeIdleHiddenChatsOverSidebarCap();
   }
 
   async replaceSessionInPlace(
