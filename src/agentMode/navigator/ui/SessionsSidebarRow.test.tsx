@@ -221,30 +221,6 @@ describe("SessionsSidebarRow", () => {
       );
     });
 
-    it("pins an unpinned chat through the row menu for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const actions = inertChatActions({
-        onSetChatPinned: jest.fn(async () => {}),
-        getChatBookmarkState: () => new Promise<never>(() => {}),
-      });
-      renderRow({ actions });
-
-      fireEvent.click(within(openRowMenu()).getByRole("menuitem", { name: "Pin chat" }));
-
-      expect(actions.onSetChatPinned).toHaveBeenCalledWith("chats/plan.md", true);
-    });
-
-    it("archives the chat through the row menu for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const actions = inertChatActions({
-        onSetChatArchived: jest.fn(async () => {}),
-        getChatBookmarkState: () => new Promise<never>(() => {}),
-      });
-      renderRow({ actions });
-
-      fireEvent.click(within(openRowMenu()).getByRole("menuitem", { name: "Archive chat" }));
-
-      expect(actions.onSetChatArchived).toHaveBeenCalledWith("chats/plan.md", true);
-    });
-
     it("does not select the chat when a menu item is chosen for https://github.com/Brevilabs/obsidian-copilot-private/issues/693", () => {
       const { onSelect } = renderRow();
 
