@@ -116,7 +116,7 @@ describe("AgentHomeShelf", () => {
     });
 
     it("renders Recent Chats without a cumulative count when the caller omits it", () => {
-      renderShelf([chats]);
+      renderShelf([chats, projectsEnabled]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toMatch(/\d/);
     });
 
@@ -136,15 +136,24 @@ describe("AgentHomeShelf", () => {
       expect(screen.queryByText("PROJECTS BODY")).not.toBeNull();
     });
 
+    it("shows a lone section's body without a tab bar, so a single tab never stands alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
+      renderShelf([chats]);
+      expect(screen.queryByRole("tablist")).toBeNull();
+      expect(screen.queryByRole("tab")).toBeNull();
+      expect(screen.getByRole("region", { name: "Recent Chats" }).textContent).toContain(
+        "CHATS BODY"
+      );
+    });
+
     it("hides the count badge when the count is zero", () => {
-      renderShelf([withCount(0)]);
+      renderShelf([withCount(0), projectsEnabled]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").not.toContain(
         "0"
       );
     });
 
     it("shows the count badge when the count is positive", () => {
-      renderShelf([withCount(3)]);
+      renderShelf([withCount(3), projectsEnabled]);
       expect(screen.getByRole("tab", { name: /Recent Chats/ }).textContent ?? "").toContain("3");
     });
   });

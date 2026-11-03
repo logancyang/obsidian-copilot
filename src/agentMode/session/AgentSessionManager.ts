@@ -239,6 +239,7 @@ export class AgentSessionManager {
       indexTimer?: number;
       unsub?: () => void;
       signature?: string;
+      savedLabel?: string | null;
       attentionUnsub?: () => void;
     }
   >();
@@ -609,6 +610,9 @@ export class AgentSessionManager {
     const persistence = this.opts.persistenceManager;
     if (!persistence) throw new Error("Agent chat persistence is not configured.");
     await persistence.updateTopic(fileId, newTitle);
+    for (const [internalId, session] of this.sessions) {
+      if (this.getSessionSourcePath(internalId) === fileId) session.setLabel(newTitle);
+    }
   }
 
   async setChatPinned(id: string, pinned: boolean): Promise<PinnedChat> {
@@ -1992,7 +1996,9 @@ export class AgentSessionManager {
       if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
-    this.getSessionState(session.internalId).source = file;
+    const state = this.getSessionState(session.internalId);
+    state.source = file;
+    state.savedLabel = loaded.label;
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2386,6 +2392,16 @@ export class AgentSessionManager {
     const messages = session.store.getDisplayMessages();
     if (messages.length === 0) return null;
 
+    const state = this.getSessionState(session.internalId);
+    const previousSourcePath = this.getSessionSourcePath(session.internalId);
+    // A title edited in the note's Properties since this chat last loaded or saved it is the chat's title now, not one to overwrite.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
+    if (previousSourcePath) {
+      const topic = (await this.readChatFrontmatter(previousSourcePath))?.topic;
+      if (typeof topic === "string" && topic.trim() && topic.trim() !== state.savedLabel) {
+        session.setLabel(topic);
+      }
+    }
     const label = session.getLabel();
     const sessionId = session.getBackendSessionId();
     const usage = session.getSessionUsage();
@@ -2398,12 +2414,10 @@ export class AgentSessionManager {
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
     }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
-    const state = this.getSessionState(session.internalId);
     if (state.signature === signature) {
       return state.source ?? null;
     }
 
-    const previousSourcePath = this.getSessionSourcePath(session.internalId);
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
       existingPath: this.getSessionSourcePath(session.internalId) || undefined,
@@ -2414,6 +2428,7 @@ export class AgentSessionManager {
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
       state.signature = signature;
+      state.savedLabel = label;
       // The first successful save changes relative-link resolution in the mounted chat
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
       // and adds the chat to the saved lists, which reload on the history revision.

@@ -63,7 +63,6 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
 export interface LoadedAgentChat {
   messages: AgentChatMessage[];
   backendId: BackendId;
-  topic?: string;
   label?: string;
   sessionId?: string;
   projectId: string;
@@ -193,8 +192,9 @@ export class AgentChatPersistenceManager {
     if (!backendId) {
       throw new Error(`Missing backendId in agent chat frontmatter: ${file.path}`);
     }
-    const topic = frontmatter.topic?.trim() || undefined;
-    const label = frontmatter.agentLabel?.trim() || undefined;
+    // A chat has one title, in topic; notes saved before kept the agent's title only in agentLabel.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/815
+    const label = frontmatter.topic?.trim() || frontmatter.agentLabel?.trim() || undefined;
     const sessionId = frontmatter.sessionId?.trim() || undefined;
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
@@ -203,7 +203,7 @@ export class AgentChatPersistenceManager {
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, topic, label, sessionId, projectId, usage };
+    return { messages, backendId, label, sessionId, projectId, usage };
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
@@ -420,7 +420,7 @@ export class AgentChatPersistenceManager {
       ["backendId", `backendId: ${args.backendId}`],
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
-      ["agentLabel", quoted("agentLabel", args.label)],
+      ["topic", quoted("topic", args.label)],
       ["modelKey", quoted("modelKey", args.modelKey)],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
       ["tags", `tags:\n  - ${COPILOT_CONVERSATION_TAG}`],
