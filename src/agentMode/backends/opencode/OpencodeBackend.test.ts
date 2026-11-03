@@ -637,7 +637,7 @@ describe("OpencodeBackend", () => {
       });
     });
 
-    it("drops the /v1 from an AIHubMix base URL because its OpenCode SDK appends /v1 itself https://github.com/logancyang/obsidian-copilot/issues/3641", async () => {
+    it("gives OpenCode an AIHubMix gateway URL without the /v1 its SDK adds itself, so requests reach /v1 once (https://github.com/logancyang/obsidian-copilot/issues/3641)", async () => {
       const provider = makeProvider(
         "p-aihubmix",
         { kind: "byok", catalogProviderId: "aihubmix" },

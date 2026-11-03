@@ -21,8 +21,22 @@ export function groqHostBaseUrl(baseUrl: string | undefined): string | undefined
   return trimmed.replace(/(\/openai\/v1|\/openai|\/v1)$/i, "") || undefined;
 }
 
-export function aihubmixHostBaseUrl(baseUrl: string | undefined): string | undefined {
-  return trimBaseUrl(baseUrl)?.replace(/\/v1$/i, "") || undefined;
+// OpenCode hands the saved base URL to each provider's own SDK, and these SDKs expect a different ending than Copilot's clients.
+// https://github.com/logancyang/obsidian-copilot/issues/3641
+const OPENCODE_SDK_URL_ENDINGS = new Map<string, { copilotEnding: RegExp; sdkEnding: string }>([
+  ["aihubmix", { copilotEnding: /\/v1$/i, sdkEnding: "" }],
+  ["anthropic", { copilotEnding: /(?<!\/v1)$/i, sdkEnding: "/v1" }],
+  ["cohere", { copilotEnding: /\/compatibility\/v1$/i, sdkEnding: "/v2" }],
+  ["google", { copilotEnding: /(?<!\/v1(?:alpha|beta)?)$/i, sdkEnding: "/v1beta" }],
+]);
+
+export function opencodeSdkBaseUrl(
+  catalogProviderId: string | undefined,
+  baseUrl: string | undefined
+): string | undefined {
+  const endings = catalogProviderId ? OPENCODE_SDK_URL_ENDINGS.get(catalogProviderId) : undefined;
+  if (!endings) return baseUrl;
+  return trimBaseUrl(baseUrl)?.replace(endings.copilotEnding, endings.sdkEnding);
 }
 
 const CATALOG_DEFAULT_ORIGINS: Record<string, string> = {

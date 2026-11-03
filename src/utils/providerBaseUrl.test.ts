@@ -1,8 +1,8 @@
 import {
-  aihubmixHostBaseUrl,
   googleHostBaseUrl,
   groqHostBaseUrl,
   isCatalogProviderDefaultEndpoint,
+  opencodeSdkBaseUrl,
 } from "./providerBaseUrl";
 
 describe("providerBaseUrl", () => {
@@ -73,18 +73,54 @@ describe("providerBaseUrl", () => {
     });
   });
 
-  describe("aihubmixHostBaseUrl()", () => {
-    it("strips the trailing /v1 that the AIHubMix SDK appends itself https://github.com/logancyang/obsidian-copilot/issues/3641", () => {
-      expect(aihubmixHostBaseUrl("https://api.inferera.com/v1/")).toBe("https://api.inferera.com");
+  describe("opencodeSdkBaseUrl()", () => {
+    it("passes the saved URL through unchanged when the provider's SDK reads it the way Copilot saves it", () => {
+      expect(opencodeSdkBaseUrl("mistral", "https://api.mistral.ai/v1")).toBe(
+        "https://api.mistral.ai/v1"
+      );
+      expect(opencodeSdkBaseUrl("deepinfra", "https://api.deepinfra.com/v1/openai")).toBe(
+        "https://api.deepinfra.com/v1/openai"
+      );
+      expect(opencodeSdkBaseUrl("perplexity", "https://api.perplexity.ai/v1")).toBe(
+        "https://api.perplexity.ai/v1"
+      );
+      expect(opencodeSdkBaseUrl(undefined, "https://gateway.example.com/v1")).toBe(
+        "https://gateway.example.com/v1"
+      );
     });
 
-    it("leaves a host-only URL unchanged", () => {
-      expect(aihubmixHostBaseUrl("https://aihubmix.com")).toBe("https://aihubmix.com");
+    it.each([
+      ["aihubmix", "https://api.inferera.com/v1", "https://api.inferera.com"],
+      ["cohere", "https://api.cohere.com/compatibility/v1", "https://api.cohere.com/v2"],
+      ["anthropic", "https://claude-proxy.example.com", "https://claude-proxy.example.com/v1"],
+      ["google", "https://gemini-proxy.example.com", "https://gemini-proxy.example.com/v1beta"],
+    ])(
+      "rewrites a %s URL saved as %s to %s, the ending its OpenCode SDK expects (https://github.com/logancyang/obsidian-copilot/issues/3641)",
+      (catalogProviderId, saved, expected) => {
+        expect(opencodeSdkBaseUrl(catalogProviderId, saved)).toBe(expected);
+      }
+    );
+
+    it.each([
+      ["anthropic", "https://claude-proxy.example.com/v1"],
+      ["google", "https://gemini-proxy.example.com/v1beta"],
+      ["google", "https://gemini-proxy.example.com/v1"],
+      ["google", "https://gemini-proxy.example.com/v1alpha"],
+      ["cohere", "https://api.cohere.com/v2"],
+      ["aihubmix", "https://aihubmix.com"],
+    ])("leaves a %s URL already in its SDK's shape unchanged: %s", (catalogProviderId, saved) => {
+      expect(opencodeSdkBaseUrl(catalogProviderId, saved)).toBe(saved);
     });
 
-    it("returns undefined for blank input", () => {
-      expect(aihubmixHostBaseUrl(undefined)).toBeUndefined();
-      expect(aihubmixHostBaseUrl("  ")).toBeUndefined();
+    it("keeps a gateway's own path prefix and rewrites only the ending, ignoring a trailing slash", () => {
+      expect(opencodeSdkBaseUrl("aihubmix", "https://gw.example.com/team/aihubmix/v1/")).toBe(
+        "https://gw.example.com/team/aihubmix"
+      );
+    });
+
+    it("returns undefined when no base URL is saved", () => {
+      expect(opencodeSdkBaseUrl("aihubmix", undefined)).toBeUndefined();
+      expect(opencodeSdkBaseUrl("mistral", undefined)).toBeUndefined();
     });
   });
 
