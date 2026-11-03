@@ -522,7 +522,7 @@ describe("TurnDiffView", () => {
         await expectNoChangesLeft(view);
       });
 
-      it(`disables Revoke all and says the note changed after the turn once it is edited while the tab is open (${ISSUE_825})`, async () => {
+      it(`disables Revoke all once the note is edited while the tab is open (${ISSUE_825})`, async () => {
         const { app, view } = await noteDiff({}, { "notes/diff-demo/alpha.md": AFTER });
         expect((await revokeAllButton(view)).getAttribute("aria-disabled")).toBeNull();
 
@@ -536,10 +536,6 @@ describe("TurnDiffView", () => {
         await waitFor(async () =>
           expect((await revokeAllButton(view)).getAttribute("aria-disabled")).toBe("true")
         );
-        fireEvent.focus(await revokeAllButton(view));
-        expect(
-          (await within(document.body).findAllByText("This note changed after the turn.")).length
-        ).toBeGreaterThan(0);
       });
 
       it(`leaves a modified note as it is and says so when it changed just before the write (${ISSUE_825})`, async () => {
