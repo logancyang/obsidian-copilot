@@ -25,14 +25,6 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
-export function isNavigatorEnabled(): boolean | undefined {
-  // A stored token still being verified is unknown, so a Supporter's restored Navigator never flashes its upsell at startup.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  const { entitlementToken } = getSettings();
-  if (entitlementToken && verified.token !== entitlementToken) return undefined;
-  return hasVerifiedFeature("navigator");
-}
-
 function isPlusModel(modelKey: string): boolean {
   const settings = getSettings();
   const configuredModel = settings.configuredModels.find(
@@ -59,7 +51,7 @@ export function isUsingLicensedModels(settings: CopilotSettings): boolean {
   });
 }
 
-function isEntitlementExpired(settings: CopilotSettings): boolean {
+export function isEntitlementExpired(settings: CopilotSettings): boolean {
   return settings.entitlementExpiresAt > 0 && Date.now() >= settings.entitlementExpiresAt;
 }
 
@@ -114,31 +106,20 @@ function hasLiveEntitlement(): boolean {
   );
 }
 
-function hasVerifiedFeature(feature: EntitlementFeature): boolean {
+export function hasVerifiedFeature(feature: EntitlementFeature): boolean {
   return hasLiveEntitlement() && verified.features.has(feature);
 }
 
-export function isPlusEnabled(): boolean {
-  const settings = getSettings();
-  if (settings.entitlementExpiresAt > 0) {
-    return hasVerifiedFeature("multi_agent");
-  }
-  return settings.isPlusUser === true;
+export function isEntitlementVerificationPending(): boolean {
+  const { entitlementToken } = getSettings();
+  return entitlementToken !== "" && verified.token !== entitlementToken;
 }
 
 export function useIsPaidUser(): boolean | undefined {
   return useSettingsValue().isPaidUser;
 }
 
-function useIsPlusUser(): boolean | undefined {
-  const settings = useSettingsValue();
-  if (isEntitlementExpired(settings)) {
-    return false;
-  }
-  return settings.isPlusUser;
-}
-
-async function ensureFeatureEntitlement(
+export async function ensureEntitlement(
   app: App | undefined,
   feature: EntitlementFeature,
   isGranted: () => boolean
@@ -152,26 +133,6 @@ async function ensureFeatureEntitlement(
   if (granted) return true;
   await check;
   return isGranted();
-}
-
-export function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
-  return ensureFeatureEntitlement(app, "multi_agent", isPlusEnabled);
-}
-
-export function ensureNavigatorEntitlement(app?: App): Promise<boolean> {
-  return ensureFeatureEntitlement(app, "navigator", () => isNavigatorEnabled() !== false);
-}
-
-export function showMultiAgentUpgradePrompt(): void {
-  new Notice(
-    "Multi-agent answers (@-mentioning more than one agent in a message) are a Copilot Plus feature. Opening the upgrade page…",
-    8000
-  );
-  navigateToPlusPage("multi_agent");
-}
-
-export function useCanUseMultiAgent(): boolean {
-  return useIsPlusUser() === true;
 }
 
 export async function checkIsPaidUser(
@@ -219,10 +180,6 @@ export function useLicenseState(): LicenseState {
   return settings.isPaidUser === true && !isEntitlementExpired(settings)
     ? UNNAMED_ACTIVE_LICENSE
     : INACTIVE_LICENSE;
-}
-
-export function useIsNavigatorEnabled(): boolean | undefined {
-  return React.useSyncExternalStore(subscribeToEntitlementChange, isNavigatorEnabled);
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {

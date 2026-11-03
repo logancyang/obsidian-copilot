@@ -1,5 +1,5 @@
+import { useIsNavigatorEnabled } from "@/agentMode/navigator/navigatorEntitlement";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import { useIsNavigatorEnabled } from "@/plusUtils";
 import type { App } from "obsidian";
 import { useCallback, useSyncExternalStore } from "react";
 

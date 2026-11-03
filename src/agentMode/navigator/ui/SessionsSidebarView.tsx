@@ -1,9 +1,9 @@
+import { useIsNavigatorEnabled } from "@/agentMode/navigator/navigatorEntitlement";
 import { openNavigatorWhenUnlocked } from "@/agentMode/navigator/openSessionsSidebar";
 import { NavigatorBlockedNotice } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
-import { useIsNavigatorEnabled } from "@/plusUtils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";

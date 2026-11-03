@@ -39,7 +39,10 @@ import {
 } from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
-import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
+import {
+  ensureMultiAgentEntitlement,
+  showMultiAgentUpgradePrompt,
+} from "@/agentMode/session/fanout/multiAgentEntitlement";
 import type { App, DataAdapter } from "obsidian";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import {

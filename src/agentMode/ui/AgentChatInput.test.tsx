@@ -19,8 +19,10 @@ import React from "react";
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 const mockUseCanUseMultiAgent = jest.fn<boolean, []>();
-jest.mock("@/plusUtils", () => ({
+jest.mock("@/agentMode/session/fanout/multiAgentEntitlement", () => ({
   useCanUseMultiAgent: () => mockUseCanUseMultiAgent(),
+}));
+jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: jest.fn(),
 }));
 

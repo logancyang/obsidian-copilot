@@ -4,8 +4,8 @@ import type CopilotPlugin from "@/main";
 import {
   ensureNavigatorEntitlement,
   isNavigatorEnabled,
-  subscribeToEntitlementChange,
-} from "@/plusUtils";
+} from "@/agentMode/navigator/navigatorEntitlement";
+import { subscribeToEntitlementChange } from "@/plusUtils";
 
 const pluginsAwaitingUnlock = new WeakSet<CopilotPlugin>();
 
