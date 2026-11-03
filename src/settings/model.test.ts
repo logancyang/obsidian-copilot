@@ -135,7 +135,6 @@ describe("model", () => {
             "obsidian-markdown": { disabledAgents: ["claude"] },
             "obsidian-bases": { disabledAgents: ["claude"] },
             "json-canvas": { disabledAgents: ["claude", "codex"] },
-            "obsidian-cli": { disabledAgents: ["claude", "codex"] },
           },
         },
       });

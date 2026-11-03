@@ -235,16 +235,26 @@ export async function runObsidianCliCommand(
   if (!command) {
     throw new Error("Obsidian CLI command is required");
   }
+  return await runObsidianCliArgs(
+    command,
+    buildObsidianCliArgs({ ...invocation, command }),
+    invocation
+  );
+}
 
+export async function runObsidianCliArgs(
+  command: string,
+  args: string[],
+  options: Pick<ObsidianCliInvocation, "timeoutMs" | "maxBufferBytes" | "binary"> = {}
+): Promise<ObsidianCliProcessResult> {
   if (!isDesktopRuntime()) {
     throw new Error("Obsidian CLI commands are only supported in desktop Obsidian.");
   }
 
-  const args = buildObsidianCliArgs({ ...invocation, command });
-  const timeoutMs = invocation.timeoutMs ?? DEFAULT_OBSIDIAN_CLI_TIMEOUT_MS;
-  const maxBufferBytes = invocation.maxBufferBytes ?? DEFAULT_OBSIDIAN_CLI_MAX_BUFFER_BYTES;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_OBSIDIAN_CLI_TIMEOUT_MS;
+  const maxBufferBytes = options.maxBufferBytes ?? DEFAULT_OBSIDIAN_CLI_MAX_BUFFER_BYTES;
   const execFile = getExecFileFunction();
-  const candidateBinaries = resolveBinaryCandidates(invocation.binary);
+  const candidateBinaries = resolveBinaryCandidates(options.binary);
   const attemptedBinaries: string[] = [];
 
   let lastResult: ObsidianCliProcessResult | null = null;

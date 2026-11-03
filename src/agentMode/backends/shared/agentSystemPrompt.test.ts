@@ -42,7 +42,7 @@ const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_717 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/717";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
-const ISSUE_726 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/726";
+const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/833";
 const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
 const ISSUE_3868 = "https://github.com/logancyang/obsidian-copilot/issues/3868";
 const AGENT = "opencode";
@@ -117,8 +117,8 @@ describe("agentSystemPrompt", () => {
         "copilot-web-fetch": { disabled: true },
         "copilot-youtube-transcript": { disabled: true },
         "copilot-fetch-x": { disabled: true },
-        "obsidian-cli": { disabled: true },
       });
+      mockIsObsidianCliEnabled.mockReturnValue(false);
       const alwaysOn = buildAgentSystemPrompt(AGENT, APP);
 
       updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: true });
@@ -126,6 +126,7 @@ describe("agentSystemPrompt", () => {
       updateSetting("enableMiyoDocumentProcessing", true);
       updateSetting("enableMiyoSearchSkill", true);
       setBuiltinPreferences({});
+      mockIsObsidianCliEnabled.mockReturnValue(true);
       const allOn = buildAgentSystemPrompt(AGENT, APP);
 
       expect(allOn.startsWith(`${alwaysOn}\n\n`)).toBe(true);
@@ -299,30 +300,21 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it(`steers only OpenCode to obsidian-cli under default settings (${ISSUE_726})`, () => {
-      expect(buildAgentSystemPrompt("opencode", APP)).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(buildAgentSystemPrompt("codex", APP)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(buildAgentSystemPrompt("claude", APP)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
+    it(`tells every agent the running Obsidian app is reachable through the obsidian_cli tool while Obsidian's command line interface is on (${ISSUE_833})`, () => {
+      mockIsObsidianCliEnabled.mockReturnValue(true);
+      for (const agent of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(agent, APP)).toContain(
+          "Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, typed properties, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results, and over hand-editing frontmatter to set a typed property."
+        );
+      }
     });
 
-    it(`tells the agent the running Obsidian app is reachable through obsidian-cli only while that skill is enabled for it (${ISSUE_726})`, () => {
-      setBuiltinPreferences({});
-      expect(buildAgentSystemPrompt(AGENT, APP)).toContain(
-        "Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results."
-      );
-
-      setBuiltinPreferences({ "obsidian-cli": { disabledAgents: [AGENT] } });
-      expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(buildAgentSystemPrompt("claude", APP)).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-    });
-
-    it(`drops the obsidian-cli line while Obsidian's command line interface is off (${ISSUE_726})`, () => {
-      setBuiltinPreferences({});
+    it(`drops the obsidian_cli line while Obsidian's command line interface is off (${ISSUE_833})`, () => {
       mockIsObsidianCliEnabled.mockReturnValue(false);
 
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(prompt).not.toContain("obsidian-cli");
+      expect(prompt).not.toContain("obsidian_cli");
     });
 
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {

@@ -1,9 +1,7 @@
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
-import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import {
   BUILTIN_SKILLS,
-  builtinSkillUnavailableReason,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
   PLUS_ENV,
@@ -11,12 +9,6 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "./builtinSkills";
-
-jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
-  isObsidianCliEnabled: jest.fn(() => true),
-}));
-
-const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
 function scriptOf(name: string, ext: ".sh" | ".cmd" | ".ps1" = ".sh"): string {
   const skill = BUILTIN_SKILLS.find((s) => s.name === name);
@@ -55,7 +47,6 @@ describe("builtinSkills", () => {
         "obsidian-markdown",
         "obsidian-bases",
         "json-canvas",
-        "obsidian-cli",
       ]);
     });
 
@@ -243,28 +234,7 @@ describe("builtinSkills", () => {
         "obsidian-markdown": { disabledAgents: ["claude"] },
         "obsidian-bases": { disabledAgents: ["claude"] },
         "json-canvas": { disabledAgents: ["claude", "codex"] },
-        "obsidian-cli": { disabledAgents: ["claude", "codex"] },
       });
-    });
-  });
-
-  describe("builtinSkillUnavailableReason()", () => {
-    it("leaves every skill available while Obsidian's command line interface is on", () => {
-      mockIsObsidianCliEnabled.mockReturnValue(true);
-      for (const skill of BUILTIN_SKILLS) {
-        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
-      }
-    });
-
-    it("makes only obsidian-cli unavailable, naming the Obsidian setting, while the command line interface is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
-      mockIsObsidianCliEnabled.mockReturnValue(false);
-      expect(builtinSkillUnavailableReason("obsidian-cli")).toBe(
-        "Turn on Command line interface in Obsidian's Settings → General to use this skill."
-      );
-      for (const skill of BUILTIN_SKILLS.filter((skill) => skill.name !== "obsidian-cli")) {
-        expect(builtinSkillUnavailableReason(skill.name)).toBeUndefined();
-      }
-      mockIsObsidianCliEnabled.mockReturnValue(true);
     });
   });
 

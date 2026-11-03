@@ -6,20 +6,15 @@ import {
   type BuiltinPreferences,
 } from "./reconcileBuiltinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
-import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import type { BuiltinSeedFs } from "./seedBuiltinSkills";
 
 jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
-jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
-  isObsidianCliEnabled: jest.fn(),
-}));
-
-const mockIsObsidianCliEnabled = jest.mocked(isObsidianCliEnabled);
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const ISSUE_736 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/736";
 const ISSUE_656 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/656";
 const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/740";
+const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/833";
 const INSTALLED_PLUS_READ_PDF_MD = `---
 name: copilot-read-pdf
 description: Extract the full text of a PDF as Markdown using Copilot Plus.
@@ -126,26 +121,15 @@ describe("reconcileBuiltinSkills", () => {
     });
   });
   describe("reconcileBuiltinSkills()", () => {
-    beforeEach(() => {
-      mockIsObsidianCliEnabled.mockReturnValue(true);
-    });
-
-    it("creates no obsidian-cli folder while Obsidian's command line interface is off, and keeps a synced copy for devices that have it on https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
-      const f = fixture({});
+    it(`removes an installed obsidian-cli skill, even one with saved agent choices, now that the CLI is the obsidian_cli tool ${ISSUE_833}`, async () => {
+      const f = fixture({ "obsidian-cli": { disabledAgents: ["claude", "codex"] } });
+      f.files.set(
+        f.path("obsidian-cli"),
+        BUILTIN_SKILLS[0].skillMd.replace(`name: ${BUILTIN_SKILLS[0].name}`, "name: obsidian-cli")
+      );
       f.options.availableAgents = ["opencode"];
-      mockIsObsidianCliEnabled.mockReturnValue(false);
       await reconcileBuiltinSkills(f.options);
       expect(f.files.has(f.path("obsidian-cli"))).toBe(false);
-      expect(f.files.has(f.path("obsidian-markdown"))).toBe(true);
-
-      mockIsObsidianCliEnabled.mockReturnValue(true);
-      await reconcileBuiltinSkills(f.options);
-      const content = f.files.get(f.path("obsidian-cli"));
-      expect(content).toBeDefined();
-
-      mockIsObsidianCliEnabled.mockReturnValue(false);
-      await reconcileBuiltinSkills(f.options);
-      expect(f.files.get(f.path("obsidian-cli"))).toBe(content);
     });
 
     it(`keeps canonical metadata stable across devices and retains existing files without a local agent ${ISSUE}`, async () => {

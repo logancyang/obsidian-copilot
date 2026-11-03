@@ -7,11 +7,12 @@ jest.mock("@/settings/model", () => ({
 }));
 
 const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/429";
+const usedAt = new Date("2026-01-01T00:00:00Z");
 const history = ["Open research", "Saved research"].map((title) => ({
   id: title,
   title,
-  createdAt: new Date(),
-  lastAccessedAt: new Date(),
+  createdAt: usedAt,
+  lastAccessedAt: usedAt,
 }));
 
 describe("ChatHistoryPopover", () => {
