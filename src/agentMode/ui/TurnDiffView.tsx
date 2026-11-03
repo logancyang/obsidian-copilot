@@ -57,7 +57,6 @@ export class TurnDiffView extends ItemView {
   private viewRoot: PluginViewRootHandle | null = null;
   private state: TurnDiffViewState | null = null;
   private stepper: ((direction: ChangeStep) => void) | null = null;
-  private revoking = false;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -119,24 +118,18 @@ export class TurnDiffView extends ItemView {
   };
 
   // The tab keeps its own copy of the turn's result, so a revoked run reads as unchanged until the
-  // tab closes. A click from a render older than the current state carries stale line ranges.
+  // tab closes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
   private readonly revoke = async (state: TurnDiffViewState, run: DiffRun): Promise<void> => {
     const file = this.app.vault.getAbstractFileByPath(state.path);
     const { before, after } = state;
-    if (this.revoking || state !== this.state || !(file instanceof TFile)) return;
-    if (before === null || after === null) return;
-    this.revoking = true;
+    if (!(file instanceof TFile) || before === null || after === null) return;
     let revokedAfter: string | null = null;
-    try {
-      await this.app.vault.process(file, (current) => {
-        const revoked = revokeRun(before, after, current, run);
-        revokedAfter = revoked?.after ?? null;
-        return revoked?.current ?? current;
-      });
-    } finally {
-      this.revoking = false;
-    }
+    await this.app.vault.process(file, (current) => {
+      const revoked = revokeRun(before, after, current, run);
+      revokedAfter = revoked?.after ?? null;
+      return revoked?.current ?? current;
+    });
     if (revokedAfter === null) {
       new Notice("This text changed in the note after the turn, so it was not revoked.");
       return;

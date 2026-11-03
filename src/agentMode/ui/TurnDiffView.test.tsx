@@ -386,24 +386,6 @@ describe("TurnDiffView", () => {
         expect(textOf(view.containerEl, "ins")).toEqual(["red", "leaps"]);
       });
 
-      it("writes one revoke at a time, ignoring a click while another revoke is being written", async () => {
-        const { app, view } = await revokableDiff();
-        const [first, second] = await revokeButtons(view);
-        let finishWrite!: () => void;
-        jest.mocked(app.vault.process).mockImplementationOnce(
-          () =>
-            new Promise((resolve) => {
-              finishWrite = () => resolve("");
-            })
-        );
-
-        fireEvent.click(first);
-        fireEvent.click(second);
-        await act(async () => finishWrite());
-
-        expect(app.vault.process).toHaveBeenCalledTimes(1);
-      });
-
       it("offers no Revoke for a note the turn created (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
         const file = noteFile("notes/diff-demo/epsilon.md");
         const view = await openView(fakeApp([file], ALPHA_PARSE, new Map([[file.path, AFTER]])));
