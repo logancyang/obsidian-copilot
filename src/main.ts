@@ -761,8 +761,10 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
   async autosaveCurrentChat() {
     if (getSettings().autosaveChat) {
-      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
-      if (chatView) {
+      const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view;
+      // A Quick Chat tab restored in the background stays deferred, with no chat to save, until it is shown.
+      // https://github.com/logancyang/obsidian-copilot/issues/3543
+      if (chatView instanceof CopilotView) {
         await chatView.saveChat();
       }
     }
@@ -1333,9 +1335,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     await this.autosaveCurrentChat();
 
-    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
-    if (existingView) {
-      const copilotView = existingView.view as CopilotView;
+    const copilotView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view;
+    if (copilotView instanceof CopilotView) {
       const abortEvent = new CustomEvent(EVENT_NAMES.ABORT_STREAM, {
         detail: { reason: ABORT_REASON.NEW_CHAT },
       });
@@ -1344,12 +1345,12 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     this.chatUIState.clearMessages();
 
-    if (existingView) {
-      const copilotView = existingView.view as CopilotView;
+    if (copilotView instanceof CopilotView) {
       copilotView.updateView();
-    } else {
-      await this.activateView();
     }
+    // The command must show the new chat even when Quick Chat sits in a background or deferred tab.
+    // https://github.com/logancyang/obsidian-copilot/issues/3543
+    await this.activateView();
   }
 
   async newChat() {

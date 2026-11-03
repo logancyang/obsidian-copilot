@@ -30,7 +30,11 @@ jest.mock("@/services/settingsPersistence", () => ({
   resetPersistenceState: jest.fn(),
 }));
 jest.mock("@/logFileManager", () => ({
-  logFileManager: { flush: jest.fn().mockResolvedValue(undefined), setApp: jest.fn() },
+  logFileManager: {
+    clear: jest.fn().mockResolvedValue(undefined),
+    flush: jest.fn().mockResolvedValue(undefined),
+    setApp: jest.fn(),
+  },
 }));
 jest.mock("@/settings/migrations", () => ({ runSettingsMigrations: jest.fn() }));
 jest.mock("@/settings/migrations/legacyIndexRemovalMigration", () => ({
@@ -79,7 +83,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import * as obsidianModule from "obsidian";
 import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts } from "@/selection/selectionStore";
-import { DEFAULT_SETTINGS } from "@/constants";
+import { DEFAULT_SETTINGS, EVENT_NAMES } from "@/constants";
 import {
   APPLY_VIEW_TYPE,
   CHAT_AGENT_VIEWTYPE,
@@ -282,6 +286,58 @@ describe("main", () => {
         options.onSelectionClear({ url: quote.url, reason: "selection-cleared" });
         expect(getSelectedTextContexts()).toEqual([]);
         (isDesktopRuntime as jest.Mock).mockReturnValue(false);
+      });
+    });
+
+    describe("newChat()", () => {
+      function createNewChatPlugin(leaf: WorkspaceLeaf) {
+        const plugin = createPluginUnderTest([]);
+        const revealLeaf = jest.fn();
+        const chatUIState = { clearMessages: jest.fn() };
+        Object.assign(plugin, {
+          chatUIState,
+          app: { workspace: { getLeavesOfType: jest.fn(() => [leaf]), revealLeaf } },
+        });
+        return { plugin, revealLeaf, chatUIState };
+      }
+
+      beforeEach(() => {
+        jest.clearAllMocks();
+        settingsStore.set(settingsAtom, {
+          ...DEFAULT_SETTINGS,
+          autosaveChat: true,
+          enableRecentConversations: false,
+        });
+      });
+
+      it("saves the open Quick Chat, stops its stream, clears it, and shows the empty chat", async () => {
+        const view = Object.assign(Object.create(CopilotView.prototype) as CopilotView, {
+          saveChat: jest.fn().mockResolvedValue(undefined),
+          updateView: jest.fn(),
+          eventTarget: { dispatchEvent: jest.fn() },
+        });
+        const leaf = { view } as unknown as WorkspaceLeaf;
+        const { plugin, revealLeaf, chatUIState } = createNewChatPlugin(leaf);
+
+        await plugin.newChat();
+
+        expect(view.saveChat).toHaveBeenCalled();
+        expect(view.eventTarget.dispatchEvent).toHaveBeenCalledWith(
+          expect.objectContaining({ type: EVENT_NAMES.ABORT_STREAM })
+        );
+        expect(chatUIState.clearMessages).toHaveBeenCalled();
+        expect(view.updateView).toHaveBeenCalled();
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
+      });
+
+      it("shows a Quick Chat tab restored in the background, whose view is still deferred, instead of failing https://github.com/logancyang/obsidian-copilot/issues/3543", async () => {
+        const leaf = { view: { getViewType: () => CHAT_VIEWTYPE } } as unknown as WorkspaceLeaf;
+        const { plugin, revealLeaf, chatUIState } = createNewChatPlugin(leaf);
+
+        await expect(plugin.newChat()).resolves.toBeUndefined();
+
+        expect(chatUIState.clearMessages).toHaveBeenCalled();
+        expect(revealLeaf).toHaveBeenCalledWith(leaf);
       });
     });
 
