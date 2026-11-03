@@ -1,5 +1,41 @@
 # Release Notes
 
+# v4.0.18 - Copilot Navigator preview, selections from drawings, PDFs and diffs, revoke agent changes
+
+![Copilot Navigator lifting out of the Obsidian sidebar, listing Pinned, Projects and Recents chats with a running chat finishing and another pinned](https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-67838ace.webp)
+
+Copilot Navigator puts all your agent chats in Obsidian's left sidebar, grouped into Pinned, Projects and Recents. Each chat shows whether it is running, waiting for your permission, or holding a result you have not read yet, so you can run several agents at once and see which one needs you. Navigator is a preview for Supporters on desktop.
+
+This release also lets you show the agent exactly what you mean. Select shapes in an Excalidraw drawing, text in a PDF, or a change in an agent's diff, and Copilot attaches it to your next message. You can also revoke an agent's changes from its diff, one stretch at a time or the whole note at once.
+
+## ✨ Enhancements
+
+- Open **Copilot Navigator** from the sidebar icon beside the Agent Chat tabs or with the **Open Copilot Navigator** command. It replaces the tabs while it is open and stays fast with thousands of chats. ([#3936](https://github.com/logancyang/obsidian-copilot/pull/3936), [#3939](https://github.com/logancyang/obsidian-copilot/pull/3939), [#3941](https://github.com/logancyang/obsidian-copilot/pull/3941), [#3947](https://github.com/logancyang/obsidian-copilot/pull/3947), [#3970](https://github.com/logancyang/obsidian-copilot/pull/3970), @zeroliu)
+- Start chats and Projects, search chat titles, and pin, rename, archive or delete chats from the Navigator. Drag pinned chats and Projects to put them in your order. ([#3938](https://github.com/logancyang/obsidian-copilot/pull/3938), [#3940](https://github.com/logancyang/obsidian-copilot/pull/3940), [#3950](https://github.com/logancyang/obsidian-copilot/pull/3950), @zeroliu)
+- Chats you sent a message in keep working in the background until you close them, and chats you only opened to read close when you move on. ([#3969](https://github.com/logancyang/obsidian-copilot/pull/3969), @zeroliu)
+- Chats saved on another device appear in the Navigator and **Recent chats**, and continue from their saved turns. ([#3974](https://github.com/logancyang/obsidian-copilot/pull/3974), @zeroliu)
+- Select shapes in an Excalidraw drawing, text in a PDF, or text in an agent's diff tab, and Copilot attaches it to your next message, so you can ask the agent to "make these red" or "why did you change this?". A diff selection tells the agent which words were removed and which were added. ([#3905](https://github.com/logancyang/obsidian-copilot/pull/3905), [#3976](https://github.com/logancyang/obsidian-copilot/pull/3976), [#4003](https://github.com/logancyang/obsidian-copilot/pull/4003), [#3908](https://github.com/logancyang/obsidian-copilot/pull/3908), @zeroliu)
+- **Revoke** a stretch of an agent's changes from its diff tab, or **Revoke all** to put the note back as it was before the turn, including a note the agent created or deleted. ([#4002](https://github.com/logancyang/obsidian-copilot/pull/4002), [#4004](https://github.com/logancyang/obsidian-copilot/pull/4004), @zeroliu)
+- Archive Agent Mode chats and Projects you are done with, and bring them back from **View archived**. Nothing is deleted. ([#3932](https://github.com/logancyang/obsidian-copilot/pull/3932), [#3934](https://github.com/logancyang/obsidian-copilot/pull/3934), @zeroliu)
+- Claude asks before running Copilot tools that change something, such as creating an Excalidraw drawing or publishing an OpenArtifacts page, following the chat's mode. ([#3935](https://github.com/logancyang/obsidian-copilot/pull/3935), @zeroliu)
+- A Copilot link to a note that is already open switches to its tab instead of opening a second one. ([#3907](https://github.com/logancyang/obsidian-copilot/pull/3907), @zeroliu)
+- **Open chat note** in a chat's **More actions** menu opens the note the chat is saved in. ([#3918](https://github.com/logancyang/obsidian-copilot/pull/3918), @zeroliu)
+- Middle-click an agent chat tab to close it. ([#3910](https://github.com/logancyang/obsidian-copilot/pull/3910), @zeroliu)
+- When a reply fails because of your provider account or connection, such as a used-up quota, a rate limit, a low balance or a refused connection, Copilot shows the error without offering a report. Codex's usage-limit message now shows in full. ([#3945](https://github.com/logancyang/obsidian-copilot/pull/3945), [#3946](https://github.com/logancyang/obsidian-copilot/pull/3946), [#3972](https://github.com/logancyang/obsidian-copilot/pull/3972), [#4001](https://github.com/logancyang/obsidian-copilot/pull/4001), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Quick Ask and Quick Command fit on phone screens, and you can move and resize them by touch. ([#3913](https://github.com/logancyang/obsidian-copilot/pull/3913), [#3914](https://github.com/logancyang/obsidian-copilot/pull/3914), @zeroliu)
+- Agents group icons with their shapes when they create an Excalidraw drawing. ([#3973](https://github.com/logancyang/obsidian-copilot/pull/3973), @zeroliu)
+- A background task that a subagent starts shows its own task card inside the subagent. ([#3902](https://github.com/logancyang/obsidian-copilot/pull/3902), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.17 - Excalidraw integration, Miyo search control
 
 [![Demo video: Obsidian Copilot 4.0.17: Excalidraw Drawings, Send Now, Miyo Limits](https://images.brevilabs.com/newsletters/copilot-releases/4.0.17/video-thumbnail-25ea4ac7.png)](https://youtube.com/shorts/ZYazABOaBMk)
