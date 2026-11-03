@@ -7,7 +7,7 @@ import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
-import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
+import { aihubmixHostBaseUrl, isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -252,12 +252,16 @@ export async function buildOpencodeConfig(
         );
         continue;
       }
+      // OpenCode's AIHubMix SDK appends /v1 itself, but the model list and Quick Chat need it in the saved base URL.
+      // https://github.com/logancyang/obsidian-copilot/issues/3641
+      const sdkBaseURL =
+        catalogProviderId === "aihubmix" ? aihubmixHostBaseUrl(rawBaseURL) : rawBaseURL;
       const baseURL =
         hasCatalogIdentity &&
         rawBaseURL &&
         isCatalogProviderDefaultEndpoint(catalogProviderId, rawBaseURL)
           ? undefined
-          : rawBaseURL;
+          : sdkBaseURL;
       models = {};
       modelsByProvider[mapping.id] = models;
       providers[mapping.id] = {

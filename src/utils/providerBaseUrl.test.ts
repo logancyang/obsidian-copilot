@@ -1,4 +1,5 @@
 import {
+  aihubmixHostBaseUrl,
   googleHostBaseUrl,
   groqHostBaseUrl,
   isCatalogProviderDefaultEndpoint,
@@ -69,6 +70,21 @@ describe("providerBaseUrl", () => {
     it("returns undefined for blank input", () => {
       expect(groqHostBaseUrl(undefined)).toBeUndefined();
       expect(groqHostBaseUrl("")).toBeUndefined();
+    });
+  });
+
+  describe("aihubmixHostBaseUrl()", () => {
+    it("strips the trailing /v1 that the AIHubMix SDK appends itself https://github.com/logancyang/obsidian-copilot/issues/3641", () => {
+      expect(aihubmixHostBaseUrl("https://api.inferera.com/v1/")).toBe("https://api.inferera.com");
+    });
+
+    it("leaves a host-only URL unchanged", () => {
+      expect(aihubmixHostBaseUrl("https://aihubmix.com")).toBe("https://aihubmix.com");
+    });
+
+    it("returns undefined for blank input", () => {
+      expect(aihubmixHostBaseUrl(undefined)).toBeUndefined();
+      expect(aihubmixHostBaseUrl("  ")).toBeUndefined();
     });
   });
 

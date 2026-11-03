@@ -21,6 +21,10 @@ export function groqHostBaseUrl(baseUrl: string | undefined): string | undefined
   return trimmed.replace(/(\/openai\/v1|\/openai|\/v1)$/i, "") || undefined;
 }
 
+export function aihubmixHostBaseUrl(baseUrl: string | undefined): string | undefined {
+  return trimBaseUrl(baseUrl)?.replace(/\/v1$/i, "") || undefined;
+}
+
 const CATALOG_DEFAULT_ORIGINS: Record<string, string> = {
   anthropic: "https://api.anthropic.com",
   google: "https://generativelanguage.googleapis.com",
