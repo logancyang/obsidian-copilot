@@ -2,6 +2,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { openLinkInSystemBrowser } from "@/utils/electronShell";
 import { AlertCircle, AlertTriangle } from "lucide-react";
 import React from "react";
 
@@ -92,7 +93,12 @@ export const AgentStatusCard: React.FC<AgentStatusCardProps> = ({
           variant="secondary"
           size="sm"
         >
-          <a href={action.href} target="_blank" rel="noopener noreferrer">
+          <a
+            href={action.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={openLinkInSystemBrowser}
+          >
             {action.label}
           </a>
         </Button>

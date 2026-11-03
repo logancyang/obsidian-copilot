@@ -2,6 +2,9 @@ import { AgentStatusCard } from "@/agentMode/ui/AgentStatusCard";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
+const openExternal = jest.fn<Promise<void>, [string]>();
+jest.mock("electron", () => ({ shell: { openExternal } }), { virtual: true });
+
 describe("AgentStatusCard", () => {
   describe("AgentStatusCard()", () => {
     it("shows installation progress when requested (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", () => {
@@ -108,6 +111,21 @@ describe("AgentStatusCard", () => {
         screen.getByRole("link", { name: "Waiting for sign-in URL" }).getAttribute("href")
       ).toBe("");
       expect(screen.queryByRole("button")).toBeNull();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3985 opens the sign-in link in the system browser, not an Obsidian tab", () => {
+      openExternal.mockResolvedValue(undefined);
+      render(
+        <AgentStatusCard
+          message="Signing in to Claude…"
+          action={{ label: "Open sign-in page", href: "https://example.com/sign-in" }}
+        />
+      );
+
+      const notPrevented = fireEvent.click(screen.getByRole("link", { name: "Open sign-in page" }));
+
+      expect(openExternal).toHaveBeenCalledWith("https://example.com/sign-in");
+      expect(notPrevented).toBe(false);
     });
   });
 });
