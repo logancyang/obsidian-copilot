@@ -5,8 +5,8 @@ export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf58222
 // In the Obsidian skills eval Claude and Codex wrote this syntax as well without the skills, except
 // Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
 const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
-const FORMAT_SKILL_VERSION = 2;
-const MARKDOWN_SKILL_VERSION = 3;
+const FORMAT_SKILL_VERSION = 3;
+const MARKDOWN_SKILL_VERSION = 4;
 const OBSIDIAN_CLI_VERSION = 4;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
@@ -34,7 +34,7 @@ SOFTWARE.
 
 const OBSIDIAN_MARKDOWN_SKILL_MD = String.raw`---
 name: obsidian-markdown
-description: Create and edit Obsidian-specific Markdown syntax, including wikilinks, embeds, block references and block IDs, callouts, properties, tags, aliases, and comments. Load before adding or changing any of these in a note.
+description: Create and edit Obsidian-specific Markdown in .md notes, including wikilinks, block IDs (^id) with block and list embeds, heading embeds, callouts, properties and frontmatter, tags, aliases, and comments. Load before adding or changing any of these in a note, such as linking or embedding a paragraph, list or section, or setting a note's properties.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
@@ -227,7 +227,7 @@ Prefer YAML lists when a property naturally has multiple values.
 
 const OBSIDIAN_BASES_SKILL_MD = String.raw`---
 name: obsidian-bases
-description: Create and edit Obsidian Bases (.base files) with valid YAML schemas, filters, formulas, properties, summaries, and views. Use for database-like Obsidian views or when the user mentions Bases, .base files, table/card/list views, filters, formulas, or summaries.
+description: Create and edit Obsidian Bases (.base files) with valid YAML filters, formulas, properties, summaries, and table/cards/list views, including the columns a view shows (order) and its row sorting (sort). Load before writing or changing any .base file or embedding a base view, or when the user mentions Bases, database-like views, filters, formulas, sorting, grouping, or summaries.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
@@ -452,7 +452,7 @@ views:
 
 const JSON_CANVAS_SKILL_MD = String.raw`---
 name: json-canvas
-description: Create and edit JSON Canvas (.canvas) files with valid nodes, edges, groups, colors, layout, IDs, and referential integrity. Use for Obsidian Canvas files, visual maps, flowcharts, project boards, or any request involving the JSON Canvas format.
+description: Create and edit JSON Canvas (.canvas) files with valid text, file, link, and group nodes, edges, colors, layout, and IDs, including file cards that show one section or block of a note (subpath). Load before writing or changing any .canvas file, or for Obsidian Canvas boards, visual maps, flowcharts, or any request involving the JSON Canvas format.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
