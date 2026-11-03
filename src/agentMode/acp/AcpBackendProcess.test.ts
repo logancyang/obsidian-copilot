@@ -1121,6 +1121,7 @@ describe("AcpBackendProcess", () => {
         name: "obsidian-copilot",
         url: "http://127.0.0.1:4100/mcp",
         headers: { Authorization: "Bearer t0k3n" },
+        readOnlyToolNames: [],
       };
 
       it("passes Copilot's MCP servers to session/new as HTTP servers when the agent advertises HTTP MCP", async () => {
@@ -1221,7 +1222,14 @@ describe("AcpBackendProcess", () => {
         await backend.resumeSession({
           sessionId: "s1",
           cwd: "/vault",
-          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
+          mcpServers: [
+            {
+              name: "obsidian-copilot",
+              url: "http://127.0.0.1:1/mcp",
+              headers: {},
+              readOnlyToolNames: [],
+            },
+          ],
         });
         const req = mockResumeSession.mock.calls[0][0] as { mcpServers: unknown[] };
         expect(req.mcpServers).toEqual([
@@ -1273,7 +1281,14 @@ describe("AcpBackendProcess", () => {
         await backend.loadSession({
           sessionId: "s1",
           cwd: "/vault",
-          mcpServers: [{ name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: {} }],
+          mcpServers: [
+            {
+              name: "obsidian-copilot",
+              url: "http://127.0.0.1:1/mcp",
+              headers: {},
+              readOnlyToolNames: [],
+            },
+          ],
         });
         const req = mockLoadSession.mock.calls[0][0] as { mcpServers: unknown[] };
         expect(req.mcpServers).toEqual([

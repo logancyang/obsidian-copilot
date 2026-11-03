@@ -883,7 +883,12 @@ describe("AgentSession", () => {
       it("passes the plugin's MCP servers into the newSession payload", async () => {
         const mock = makeMockBackend();
         const mcpServers = [
-          { name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: { A: "b" } },
+          {
+            name: "obsidian-copilot",
+            url: "http://127.0.0.1:1/mcp",
+            headers: { A: "b" },
+            readOnlyToolNames: [],
+          },
         ];
         const session = startSession(mock, { mcpServers });
         await session.ready;
