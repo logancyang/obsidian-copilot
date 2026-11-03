@@ -531,17 +531,29 @@ describe("TurnDiffView", () => {
         });
       });
 
-      it(`reports nothing selected in the diff when the selection lies outside it (${ISSUE_824})`, async () => {
+      it(`reports the text selected when asked, even after the selection moves into chat before the debounce reads it (${ISSUE_824})`, async () => {
+        const { view, app } = await activeDiff();
+        const paragraph = view.containerEl.querySelector("del")!.parentElement!;
+        const chat = document.body.appendChild(document.createElement("p"));
+        chat.textContent = "Chat input";
+
+        select(paragraph.firstChild!, 4, paragraph.lastChild!, 4);
+        const read = TurnDiffView.activeSelection(app);
+        select(chat.firstChild!, 0, chat.firstChild!, 0);
+
+        expect(read?.()).toMatchObject({
+          context: { content: "quick <del>brown</del><ins>red</ins> fox" },
+        });
+      });
+
+      it(`returns no reader when the selection lies outside the diff, so a selection made in chat leaves the attached one in place (${ISSUE_824})`, async () => {
         const { app } = await activeDiff();
         const elsewhere = document.body.appendChild(document.createElement("p"));
         elsewhere.textContent = "Elsewhere";
 
         select(elsewhere.firstChild!, 0, elsewhere.firstChild!, 4);
 
-        expect(TurnDiffView.activeSelection(app)?.()).toEqual({
-          location: "turn-1\nnotes/diff-demo/alpha.md",
-          context: null,
-        });
+        expect(TurnDiffView.activeSelection(app)).toBeNull();
       });
 
       it(`returns no reader when no diff tab is active (${ISSUE_824})`, () => {

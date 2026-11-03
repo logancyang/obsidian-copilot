@@ -70,27 +70,30 @@ export class TurnDiffView extends ItemView {
     const view = app.workspace.getActiveViewOfType(TurnDiffView);
     const state = view?.state;
     if (!view || !state) return null;
+    // The selection is read now, before the debounce: moving into chat in the meantime moves the selection there,
+    // and a selection outside the diff leaves the attached one in place.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/824
+    const selection = view.containerEl.ownerDocument.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range || !view.containerEl.contains(range.commonAncestorContainer)) return null;
     const location = turnDiffKey(state.turnId, state.path);
-    return () => {
-      const selection = view.containerEl.ownerDocument.getSelection();
-      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-      const inView = range && view.containerEl.contains(range.commonAncestorContainer);
-      const content = inView ? markedSelectionText(range) : "";
-      if (!content) return { location, context: null };
-      return {
-        location,
-        key: `${location}\n${content}`,
-        context: {
-          id: uuidv4(),
-          content,
-          sourceType: "note",
-          noteTitle: basename(state.path).replace(/\.[^.]+$/, ""),
-          notePath: state.path,
-          startLine: 0,
-          endLine: 0,
-        },
-      };
-    };
+    const content = markedSelectionText(range);
+    const report: SelectionReport = content
+      ? {
+          location,
+          key: `${location}\n${content}`,
+          context: {
+            id: uuidv4(),
+            content,
+            sourceType: "note",
+            noteTitle: basename(state.path).replace(/\.[^.]+$/, ""),
+            notePath: state.path,
+            startLine: 0,
+            endLine: 0,
+          },
+        }
+      : { location, context: null };
+    return () => report;
   }
 
   getViewType(): string {
