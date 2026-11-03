@@ -1143,7 +1143,7 @@ export class AgentSession {
   private offerTurnErrorReport(errorText: string, error: unknown): void {
     if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
     // A missing sign-in is the user's account state, and the error already points at the Sign in button.
-    // https://github.com/logancyang/obsidian-copilot/issues/3985
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/831
     if (error instanceof AuthRequiredError || isProviderSideFailure(error, errorText)) return;
     this.feedbackOffer = this.openFeedbackOffer("turn_error", {
       title: `Agent Chat reply failed on ${this.backendId}`,
