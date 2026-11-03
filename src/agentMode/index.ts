@@ -139,6 +139,8 @@ function spawnModelConfigKey(
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/746
 // The Excalidraw tools follow the Excalidraw plugin rather than a setting, so they appear only where drawings can be made.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
+// obsidian_cli follows Obsidian's per-device CLI setting, since every call fails while that setting is off.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/833
 export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app: App): boolean {
   if (toolName === SEND_FEEDBACK_TOOL_NAME) {
     return settings.agentMode.offerFeedbackCards;

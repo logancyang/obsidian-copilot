@@ -94,9 +94,10 @@ export async function runInRunningObsidian(
 }
 
 // Agents copy shell syntax (name="My Note"), but args reach the CLI without a shell, so the quotes would become part of the value.
+// A value that repeats its outer quote inside (code='a' + 'b') is content, not shell quoting, and stays intact.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/833
 function unquoteValue(arg: string): string {
-  return arg.replace(/^([^=\s]+)=(["'])([\s\S]*)\2$/, "$1=$3");
+  return arg.replace(/^([^=\s]+)=(?:"([^"]*)"|'([^']*)')$/, "$1=$2$3");
 }
 
 // Reloading the app or turning off Copilot kills the agent mid-turn and can discard its work.

@@ -115,6 +115,18 @@ describe("obsidianCliTool", () => {
       ]);
     });
 
+    it(`keeps quotes that belong to a value, such as string literals in eval code (${ISSUE_833})`, async () => {
+      const { call, run } = setup();
+
+      await call({ args: ["eval", "code='a' + 'b'", 'content="say "hi""'] });
+      expect(run).toHaveBeenCalledWith("eval", [
+        "vault=My Vault",
+        "eval",
+        "code='a' + 'b'",
+        'content="say "hi""',
+      ]);
+    });
+
     it.each([
       [["reload"]],
       [["restart"]],
