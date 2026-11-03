@@ -262,7 +262,7 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                     if (itemDisabled) return;
                     pickDraft(key);
                   }}
-                  title={disabledReason ?? undefined}
+                  title={entry._disabledHint ?? disabledReason ?? undefined}
                 >
                   <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
                     <span

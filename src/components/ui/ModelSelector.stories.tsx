@@ -62,34 +62,3 @@ export const UnlicensedWithNoModelsOfTheirOwn: StoryObj<ModelSelectorProps> = {
 };
 
 export const CommandNeedsSelection: StoryObj<ModelSelectorProps> = { args: { value: "" } };
-
-const OPENCODE_BLOCKED_HINT =
-  "OpenCode reports no models for this provider. Check enabled_providers, disabled_providers, and policies in your OpenCode config.";
-
-export const BlockedByAgentConfig: StoryObj<ModelSelectorProps> = {
-  args: {
-    models: [
-      ...OWN_MODELS,
-      {
-        name: "openrouter/qwen/qwen3.7-max",
-        provider: "agent",
-        displayName: "Qwen3.7 Max",
-        enabled: true,
-        _group: "OpenCode",
-        _backendId: "opencode",
-        _disabledReason: "Blocked by your OpenCode settings",
-        _disabledHint: OPENCODE_BLOCKED_HINT,
-      },
-      {
-        name: "openrouter/moonshotai/kimi-k3",
-        provider: "agent",
-        displayName: "Kimi K3",
-        enabled: true,
-        _group: "OpenCode",
-        _backendId: "opencode",
-        _disabledReason: "Blocked by your OpenCode settings",
-        _disabledHint: OPENCODE_BLOCKED_HINT,
-      },
-    ],
-  },
-};

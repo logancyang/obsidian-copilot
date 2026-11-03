@@ -103,7 +103,7 @@ export function ModelSelector({
               )}
               <DropdownMenuItem
                 disabled={itemDisabled && !model._needsLicense}
-                title={model._disabledHint ?? disabledReason ?? undefined}
+                title={disabledReason ?? undefined}
                 onSelect={(event) => {
                   if (model._needsLicense) {
                     (event.currentTarget as HTMLElement).win.open(
