@@ -75,7 +75,15 @@ export function useChangeNavigation(): ChangeNavigation {
     const scroller = scrollerRef.current;
     const content = contentRef.current;
     if (!scroller || !content) return;
-    const measure = (): void => setLayout(measureChanges(scroller, content));
+    // A revoked change leaves the diff, so a position past the remaining changes moves to the last one.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
+    const measure = (): void => {
+      const next = measureChanges(scroller, content);
+      setLayout(next);
+      if (currentRef.current !== null && currentRef.current >= next.ticks.length) {
+        setCurrent(next.ticks.length > 0 ? next.ticks.length - 1 : null);
+      }
+    };
     measure();
     // Sections render and mark their changes asynchronously, images and embeds load after the first
     // layout and push changes down the note, and resizing the pane changes the scroll height that
@@ -91,7 +99,7 @@ export function useChangeNavigation(): ChangeNavigation {
       mutations?.disconnect();
       resizes?.disconnect();
     };
-  }, []);
+  }, [setCurrent]);
 
   const goTo = React.useCallback(
     (index: number) => {
