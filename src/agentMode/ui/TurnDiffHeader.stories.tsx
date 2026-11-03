@@ -40,17 +40,17 @@ export const SteppingThroughChanges: StoryObj<TurnDiffHeaderProps> = {
   },
 };
 
-export const RevokeAll: StoryObj<TurnDiffHeaderProps> = {
-  args: {
-    path: "Research/Onboarding interviews.md",
-    status: "modified",
-    additions: 9,
-    deletions: 7,
-    changes: { current: 0, total: 6, onStep: () => {} },
-    revokeAll: { changedAfterTurn: false, onRevokeAll: () => {} },
-    onOpenNote: () => {},
-  },
+const REVOKE_ALL_HEADER: TurnDiffHeaderProps = {
+  path: "Research/Onboarding interviews.md",
+  status: "modified",
+  additions: 9,
+  deletions: 7,
+  changes: { current: 0, total: 6, onStep: () => {} },
+  revokeAll: { changedAfterTurn: false, onRevokeAll: () => {} },
+  onOpenNote: () => {},
 };
+
+export const RevokeAll: StoryObj<TurnDiffHeaderProps> = { args: REVOKE_ALL_HEADER };
 
 function FocusedBlockedRevokeAll(): React.ReactElement {
   const root = React.useRef<HTMLDivElement>(null);
@@ -60,13 +60,8 @@ function FocusedBlockedRevokeAll(): React.ReactElement {
   return (
     <div ref={root}>
       <TurnDiffHeader
-        path="Research/Onboarding interviews.md"
-        status="modified"
-        additions={9}
-        deletions={7}
-        changes={{ current: 0, total: 6, onStep: () => {} }}
+        {...REVOKE_ALL_HEADER}
         revokeAll={{ changedAfterTurn: true, onRevokeAll: () => {} }}
-        onOpenNote={() => {}}
       />
     </div>
   );
