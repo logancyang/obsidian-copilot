@@ -145,7 +145,7 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).not.toHaveBeenCalled();
       expect(screen.queryByRole("link")).toBeNull();
     });
-    it("shows a disabled row's reason beside it and its hint as the tooltip, falling back to the reason as the tooltip (https://github.com/Brevilabs/obsidian-copilot-private/issues/835)", async () => {
+    it("shows a disabled row's reason beside it and only a hint as its tooltip, never repeating the reason (https://github.com/Brevilabs/obsidian-copilot-private/issues/835)", async () => {
       render(
         <ModelEffortPicker
           override={{
@@ -178,7 +178,8 @@ describe("ModelEffortPicker", () => {
       expect(blocked.getAttribute("title")).toBe("Check enabled_providers.");
       expect(blocked.getAttribute("aria-disabled")).toBe("true");
       const unavailable = screen.getByRole("option", { name: /unavailable/ });
-      expect(unavailable.getAttribute("title")).toBe("Agent unavailable");
+      expect(unavailable.textContent).toContain("Agent unavailable");
+      expect(unavailable.getAttribute("title")).toBeNull();
     });
     it.each([null, "removed"])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves effort %p to the lowest supported choice when committing the picker",
