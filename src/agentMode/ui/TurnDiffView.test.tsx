@@ -40,10 +40,17 @@ function change(path: string, overrides: Partial<TurnFileChange> = {}): TurnFile
   };
 }
 
+interface VaultListener {
+  name: string;
+  callback: (file: TFile) => void;
+}
+
 function fakeApp(
   files: TFile[] = [],
-  parse: RecordedParse | Promise<RecordedParse> = ALPHA_PARSE
+  parse: RecordedParse | Promise<RecordedParse> = ALPHA_PARSE,
+  contents = new Map<string, string>()
 ): App {
+  const listeners: VaultListener[] = [];
   return {
     ...appParsing(async () => parse),
     workspace: {
@@ -53,8 +60,34 @@ function fakeApp(
     },
     vault: {
       getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
+      cachedRead: async (file: TFile) => contents.get(file.path) ?? "",
+      process: jest.fn(async (file: TFile, edit: (data: string) => string) => {
+        const next = edit(contents.get(file.path) ?? "");
+        contents.set(file.path, next);
+        return next;
+      }),
+      on: (name: string, callback: VaultListener["callback"]) => {
+        const listener = { name, callback };
+        listeners.push(listener);
+        return listener;
+      },
+      offref: (listener: VaultListener) => listeners.splice(listeners.indexOf(listener), 1),
+      modify: (file: TFile, text: string) => {
+        contents.set(file.path, text);
+        for (const listener of listeners.filter(({ name }) => name === "modify")) {
+          listener.callback(file);
+        }
+      },
     },
   } as unknown as App;
+}
+
+function noteFile(path: string): TFile {
+  return Object.assign(new TFile(), { path });
+}
+
+async function revokeButtons(view: TurnDiffView): Promise<HTMLElement[]> {
+  return within(view.containerEl).findAllByRole("button", { name: "Revoke" });
 }
 
 async function openView(app: App = fakeApp()): Promise<TurnDiffView> {
@@ -276,6 +309,96 @@ describe("TurnDiffView", () => {
         expect(detachMigration).toHaveBeenCalledTimes(1);
         await hydrate(view, { ...change("notes/diff-demo/beta.md"), turnId: "turn-2" });
         expect(view.containerEl.children[1].childNodes).toHaveLength(0);
+      });
+    });
+
+    describe("Revoke", () => {
+      const BEFORE = "The quick brown fox.\n\nThe middle stays.\n\nIt jumps over the lazy dog.\n";
+      const AFTER = "The quick red fox.\n\nThe middle stays.\n\nIt leaps over the lazy dog.\n";
+      const THREE_PARAGRAPHS: RecordedParse = {
+        sections: [
+          ["paragraph", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
+        ],
+      };
+
+      async function revokableDiff(): Promise<{ app: App; view: TurnDiffView; file: TFile }> {
+        const file = noteFile("notes/diff-demo/alpha.md");
+        const app = fakeApp([file], THREE_PARAGRAPHS, new Map([[file.path, AFTER]]));
+        const view = await openView(app);
+        await hydrate(view, {
+          ...change(file.path, { before: BEFORE, after: AFTER, additions: 2, deletions: 2 }),
+          turnId: "turn-1",
+        });
+        return { app, view, file };
+      }
+
+      it("puts the run back in the note as it read before the turn, then shows that run unchanged and drops it from the header's counts (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+        const { app, view, file } = await revokableDiff();
+
+        await act(async () => {
+          fireEvent.click((await revokeButtons(view))[0]);
+        });
+
+        expect(await app.vault.cachedRead(file)).toBe(
+          "The quick brown fox.\n\nThe middle stays.\n\nIt leaps over the lazy dog.\n"
+        );
+        await waitFor(() => expect(textOf(view.containerEl, "del")).toEqual(["jumps"]));
+        expect(within(header(view)).getByText("+1")).toBeTruthy();
+        expect(within(header(view)).getByText("−1")).toBeTruthy();
+        expect(await revokeButtons(view)).toHaveLength(1);
+      });
+
+      it("disables a run's Revoke once its text changes in the note while the tab is open (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+        const { app, view, file } = await revokableDiff();
+        const [, second] = await revokeButtons(view);
+        expect(second.getAttribute("aria-disabled")).toBeNull();
+
+        act(() => {
+          (app.vault as unknown as { modify: (file: TFile, text: string) => void }).modify(
+            file,
+            AFTER.replace("leaps", "hops")
+          );
+        });
+
+        await waitFor(async () =>
+          expect(
+            (await revokeButtons(view)).map((button) => button.getAttribute("aria-disabled"))
+          ).toEqual([null, "true"])
+        );
+      });
+
+      it("leaves the note as it is and says so when the run's text changed just before the write (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+        const { app, view, file } = await revokableDiff();
+        const [first] = await revokeButtons(view);
+        const edited = AFTER.replace("red fox", "red cat");
+        jest.mocked(app.vault.process).mockImplementationOnce(async (_file, edit) => edit(edited));
+
+        await act(async () => {
+          fireEvent.click(first);
+        });
+
+        expect(await app.vault.cachedRead(file)).toBe(AFTER);
+        expect(Notice).toHaveBeenCalledWith(
+          "This text changed in the note after the turn, so it was not revoked."
+        );
+        expect(textOf(view.containerEl, "ins")).toEqual(["red", "leaps"]);
+      });
+
+      it("offers no Revoke for a note the turn created (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+        const file = noteFile("notes/diff-demo/epsilon.md");
+        const view = await openView(fakeApp([file], ALPHA_PARSE, new Map([[file.path, AFTER]])));
+
+        await hydrate(view, {
+          ...change(file.path, { status: "created", before: null }),
+          turnId: "turn-1",
+        });
+
+        await waitFor(() =>
+          expect(textOf(view.containerEl, "[data-change=inserted]")).not.toEqual([])
+        );
+        expect(within(view.containerEl).queryByRole("button", { name: "Revoke" })).toBeNull();
       });
     });
 
