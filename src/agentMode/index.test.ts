@@ -194,14 +194,43 @@ describe("agentMode", () => {
       expect(mockManager.preloadModels).toHaveBeenCalledWith("opencode");
     });
 
-    it("does not restart a backend for installation writes while its upgrade owns startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
+    it("links skills for an agent its startup upgrade makes ready, without restarting it while the upgrade owns startup (https://github.com/Brevilabs/obsidian-copilot-private/issues/530, https://github.com/Brevilabs/obsidian-copilot-private/issues/830)", async () => {
       const upgrade = deferred();
+      mockStates.opencode = {
+        kind: "incompatible",
+        source: "managed",
+        currentVersion: "1",
+        minVersion: "2",
+        message: "Upgrade required",
+      };
       mockDescriptors[1].onPluginLoad.mockReturnValueOnce(upgrade.promise);
       createAgentSessionManager({} as App, plugin);
+      expect(reconcile).toHaveBeenLastCalledWith(
+        expect.objectContaining({ availableAgents: ["claude"] })
+      );
+      mockStates.opencode = { kind: "ready", source: "managed" };
       mockInstallListeners.opencode();
+      expect(reconcile).toHaveBeenLastCalledWith(
+        expect.objectContaining({ availableAgents: ["claude", "opencode"] })
+      );
       upgrade.resolve();
       await mockManager.registerPreload.mock.calls.find(([id]) => id === "opencode")![1];
       expect(mockManager.onInstallStateChanged).not.toHaveBeenCalled();
+    });
+    it("preloads an agent its startup upgrade makes ready only after that agent's skills are linked, while other agents preload without waiting (https://github.com/Brevilabs/obsidian-copilot-private/issues/830)", async () => {
+      const linked = deferred();
+      mockDescriptors[1].onPluginLoad.mockImplementationOnce(async () => {
+        mockStates.opencode = { kind: "ready", source: "managed" };
+        reconcile.mockReturnValueOnce(linked.promise);
+        mockInstallListeners.opencode();
+      });
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls.find(([id]) => id === "claude")![1];
+      expect(mockManager.preloadModels).toHaveBeenCalledWith("claude");
+      expect(mockManager.preloadModels).not.toHaveBeenCalledWith("opencode");
+      linked.resolve();
+      await mockManager.registerPreload.mock.calls.find(([id]) => id === "opencode")![1];
+      expect(mockManager.preloadModels).toHaveBeenCalledWith("opencode");
     });
     it("preloads a repaired installation after the upgrade makes it ready (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
       mockStates.opencode = {
