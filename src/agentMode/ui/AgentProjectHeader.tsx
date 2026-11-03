@@ -6,8 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import React, { memo } from "react";
 
 interface AgentProjectHeaderProps {
-  projectName?: string;
-  title?: string;
+  projectName: string;
   onExit: () => void;
   menu?: React.ReactNode;
   orphaned?: boolean;
@@ -18,7 +17,6 @@ interface AgentProjectHeaderProps {
 export const AgentProjectHeader = memo(
   ({
     projectName,
-    title,
     onExit,
     menu,
     orphaned = false,
@@ -45,31 +43,13 @@ export const AgentProjectHeader = memo(
         </span>
       ) : (
         <>
-          {projectName !== undefined && (
-            <>
-              <ProjectFolderIcon />
-              <TruncatedText
-                className={cn(
-                  "tw-min-w-0 tw-text-ui-small tw-font-medium tw-text-normal",
-                  title ? "tw-max-w-[50%] tw-shrink-0" : "tw-flex-1"
-                )}
-                tooltipContent={projectName}
-              >
-                {projectName}
-              </TruncatedText>
-            </>
-          )}
-          {title && (
-            <>
-              {projectName !== undefined && <span className="tw-text-muted">/</span>}
-              <TruncatedText
-                className="tw-min-w-0 tw-flex-1 tw-text-ui-small tw-font-medium tw-text-normal"
-                tooltipContent={title}
-              >
-                {title}
-              </TruncatedText>
-            </>
-          )}
+          <ProjectFolderIcon />
+          <TruncatedText
+            className="tw-min-w-0 tw-flex-1 tw-text-ui-small tw-font-medium tw-text-normal"
+            tooltipContent={projectName}
+          >
+            {projectName}
+          </TruncatedText>
 
           {menu}
         </>

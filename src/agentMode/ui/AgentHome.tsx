@@ -38,7 +38,6 @@ import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel"
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
-import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
 import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
@@ -345,8 +344,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
-  const chatLabel = useSessionLabel(manager.getSession(sessionId));
-  const chatTitle = sidebarOpen && !isLanding ? (chatLabel ?? "New chat") : undefined;
 
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
     const active = manager.getActiveSession();
@@ -665,14 +662,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       return (await manager.saveActiveSession())?.path ?? "";
     });
 
-  const showHeader = isProjectScope || chatTitle !== undefined;
+  const showHeader = isProjectScope;
   const collapsibleHeaderRef = useRef<HTMLDivElement>(null);
   // The collapsed header stays mounted for its animation, so it is made inert to keep its buttons out of the tab order.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   useEffect(() => {
     if (collapsibleHeaderRef.current) collapsibleHeaderRef.current.inert = !showHeader;
   }, [showHeader]);
-  const headerIsProject = isProjectScope || chatTitle === undefined;
 
   const handleReportError = () => {
     const evidence = activeSession?.getReportEvidence();
@@ -697,10 +693,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       >
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
-            projectName={headerIsProject ? headerName : undefined}
-            title={chatTitle}
+            projectName={headerName}
             onExit={handleExitProject}
-            orphaned={headerIsProject && headerOrphaned}
+            orphaned={headerOrphaned}
             // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
             canLeaveProject={!sidebarOpen}
