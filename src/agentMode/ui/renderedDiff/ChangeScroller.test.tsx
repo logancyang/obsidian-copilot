@@ -274,6 +274,26 @@ describe("ChangeScroller", () => {
       expect([currentChange(), scroller().scrollTop]).toEqual(["2", 800 - ANCHOR]);
     });
 
+    it("makes the new last change current, and steps on from it, once the current last change leaves the diff (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
+      const marks = (count: number): React.ReactElement => (
+        <Harness>
+          {[200, 800, 1400].slice(0, count).map((top) => (
+            <Mark key={top} change="inserted" top={top} />
+          ))}
+        </Harness>
+      );
+      const { rerender } = render(marks(3));
+      press("Previous");
+      expect(currentChange()).toBe("3");
+
+      rerender(marks(2));
+
+      await waitFor(() => expect(currentChange()).toBe("2"));
+      expect(tick(2, 2).getAttribute("aria-current")).toBe("true");
+      press("Previous");
+      expect(currentChange()).toBe("1");
+    });
+
     it("wraps from the last change back to the first, and from the first back to the last", () => {
       render(<ThreeChanges />);
 

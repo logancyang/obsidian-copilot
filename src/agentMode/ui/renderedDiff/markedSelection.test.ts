@@ -97,6 +97,28 @@ describe("markedSelection", () => {
       expect(markedSelectionText(wholeOf(root))).toBe("if (ok)\n  return;");
     });
 
+    it(`keeps the blank lines and first-line indentation of code selected inside a code block (${ISSUE_824})`, () => {
+      const root = rendered(
+        '<p>Intro</p><pre><code>  text = """first\n\nsecond"""\n  done()\n</code></pre>'
+      );
+      const code = root.querySelector("code")!.firstChild!;
+
+      expect(markedSelectionText(rangeOver(code, 0, code, 28))).toBe(
+        '  text = """first\n\nsecond"""'
+      );
+      expect(markedSelectionText(wholeOf(root))).toBe(
+        'Intro\n  text = """first\n\nsecond"""\n  done()'
+      );
+    });
+
+    it(`keeps a blank line between the lines of a plain line diff (${ISSUE_824})`, () => {
+      const root = rendered(
+        '<pre><div>  a()</div><div data-change="inserted"> </div><div data-change="inserted">  b()</div></pre>'
+      );
+
+      expect(markedSelectionText(wholeOf(root))).toBe("  a()\n\n  <ins>b()</ins>");
+    });
+
     it(`joins neighbouring marks of one kind that only spaces separate, such as a changed link and its sentence (${ISSUE_824})`, () => {
       const root = rendered(
         '<p><del data-change="deleted">See </del><a><del data-change="deleted">fox</del></a><del data-change="deleted"> here.</del></p>'
