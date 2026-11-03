@@ -160,6 +160,9 @@ Make room before inserting by moving the shapes that follow. Keep every id you d
       operations: {
         type: "array",
         minItems: 1,
+        // The Excalidraw plugin rejects more than 100 operations per apply, and agents only learned the cap from that rejection.
+        // https://github.com/logancyang/obsidian-copilot/issues/4010
+        maxItems: 100,
         items: {
           type: "object",
           required: ["op"],
