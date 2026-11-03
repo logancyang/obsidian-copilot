@@ -6,12 +6,10 @@ import {
 import type { CodeDiffLine, DiffRun, DiffSegment } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { buildRenderedDiffPlan, isMarkdownPath } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { locateRun } from "@/agentMode/ui/renderedDiff/revokeRun";
+import { RevokeButton } from "@/agentMode/ui/RevokeButton";
 import { Markdown } from "@/components/Markdown";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
-import { Undo2 } from "lucide-react";
 import * as React from "react";
 
 export interface RunRevoke {
@@ -118,36 +116,21 @@ function RunFrame({ run, children }: RunFrameProps): React.ReactElement {
       : null;
   }, [after, current, run]);
   if (run === undefined || context === null) return <>{children}</>;
-  const button = (
-    <Button
-      variant="secondary"
-      size="sm"
-      aria-disabled={blocked !== null || undefined}
-      className={cn(
-        "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
-        blocked === null
-          ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
-          : "tw-cursor-not-allowed group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
-      )}
-      onClick={blocked === null ? () => context.revoke.onRevoke(run) : undefined}
-    >
-      <Undo2 className="tw-size-3" />
-      Revoke
-    </Button>
-  );
   return (
     <div className="tw-group tw-relative tw-rounded-sm focus-within:tw-ring-1 focus-within:tw-ring-ring hover:tw-ring-1 hover:tw-ring-ring">
       {children}
-      {blocked === null ? (
-        button
-      ) : (
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>{button}</TooltipTrigger>
-            <TooltipContent side="left">{blocked}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      <RevokeButton
+        label="Revoke"
+        blocked={blocked}
+        tooltipSide="left"
+        className={cn(
+          "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
+          blocked === null
+            ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
+            : "group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
+        )}
+        onRevoke={() => context.revoke.onRevoke(run)}
+      />
     </div>
   );
 }

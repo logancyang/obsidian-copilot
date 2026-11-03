@@ -1,11 +1,11 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
 import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
 import type { ChangeStep } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import { RevokeButton } from "@/agentMode/ui/RevokeButton";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
-import { ChevronDown, ChevronUp, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import React from "react";
 
 export interface ChangeStepperProps {
@@ -75,29 +75,12 @@ const ChangeStepper: React.FC<ChangeStepperProps> = ({ current, total, onStep })
   </span>
 );
 
-const RevokeAllButton: React.FC<RevokeAllProps> = ({ changedAfterTurn, onRevokeAll }) => {
-  const button = (
-    <Button
-      variant="secondary"
-      size="sm"
-      aria-disabled={changedAfterTurn || undefined}
-      className={cn(
-        "tw-ml-1 tw-shrink-0",
-        changedAfterTurn && "tw-cursor-not-allowed tw-opacity-50"
-      )}
-      onClick={changedAfterTurn ? undefined : onRevokeAll}
-    >
-      <Undo2 className="tw-size-3" />
-      Revoke all
-    </Button>
-  );
-  if (!changedAfterTurn) return button;
-  return (
-    <TooltipProvider delayDuration={0}>
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="bottom">This note changed after the turn.</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
-  );
-};
+const RevokeAllButton: React.FC<RevokeAllProps> = ({ changedAfterTurn, onRevokeAll }) => (
+  <RevokeButton
+    label="Revoke all"
+    blocked={changedAfterTurn ? "This note changed after the turn." : null}
+    tooltipSide="bottom"
+    className={cn("tw-ml-1 tw-shrink-0", changedAfterTurn && "tw-opacity-50")}
+    onRevoke={onRevokeAll}
+  />
+);
