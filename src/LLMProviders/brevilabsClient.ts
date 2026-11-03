@@ -1,4 +1,5 @@
 import { BREVILABS_API_BASE_URL, BREVILABS_MODELS_BASE_URL } from "@/constants";
+import type { EntitlementFeature } from "@/entitlement";
 import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
 import { applyEntitlement, markPaidPendingEntitlement, turnOffPaid } from "@/plusUtils";
@@ -128,9 +129,9 @@ export type LicenseCheckTrigger =
   | "manual"
   | "refresh"
   | "legacy_chat_turn"
-  | "multi_agent_per_turn"
   | "tool_call"
-  | "model_gate";
+  | "model_gate"
+  | EntitlementFeature;
 
 export interface LicenseCheckContext {
   trigger: LicenseCheckTrigger;

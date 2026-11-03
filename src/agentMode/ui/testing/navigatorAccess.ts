@@ -2,7 +2,7 @@ import { verifyEntitlement, type EntitlementFeature } from "@/entitlement";
 import { applyEntitlement, verifyCachedEntitlement } from "@/plusUtils";
 import { setSettings } from "@/settings/model";
 
-export type PreviewAccess = "supporter" | "plus-without-preview" | "free" | "unverified";
+export type NavigatorAccess = "supporter" | "plus-without-navigator" | "free" | "unverified";
 
 const STORED_TOKEN = "stored-entitlement-token";
 
@@ -17,24 +17,24 @@ function mockSignedClaims(features: EntitlementFeature[]): void {
   });
 }
 
-export async function setPreviewAccess(access: PreviewAccess): Promise<void> {
+export async function setNavigatorAccess(access: NavigatorAccess): Promise<void> {
   setSettings({ userId: "user-1", plusLicenseKey: "license-key", entitlementToken: "" });
   await verifyCachedEntitlement();
   if (access === "free") return;
   mockSignedClaims(
-    access === "plus-without-preview" ? ["multi_agent"] : ["multi_agent", "preview"]
+    access === "plus-without-navigator" ? ["multi_agent"] : ["multi_agent", "navigator"]
   );
   setSettings({ entitlementToken: STORED_TOKEN });
   if (access === "unverified") return;
   await verifyCachedEntitlement();
 }
 
-export async function verifyStoredToken(grantsPreview: boolean): Promise<void> {
-  mockSignedClaims(grantsPreview ? ["multi_agent", "preview"] : ["multi_agent"]);
+export async function verifyStoredToken(grantsNavigator: boolean): Promise<void> {
+  mockSignedClaims(grantsNavigator ? ["multi_agent", "navigator"] : ["multi_agent"]);
   await verifyCachedEntitlement();
 }
 
-export async function applyLicenseWithPreview(): Promise<void> {
-  mockSignedClaims(["multi_agent", "preview"]);
+export async function applyLicenseWithNavigator(): Promise<void> {
+  mockSignedClaims(["multi_agent", "navigator"]);
   await applyEntitlement("license-entitlement-token");
 }

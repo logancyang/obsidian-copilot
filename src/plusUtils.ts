@@ -25,12 +25,12 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
-export function isPreviewEnabled(): boolean | undefined {
+export function isNavigatorEnabled(): boolean | undefined {
   // A stored token still being verified is unknown, so a Supporter's restored Navigator never flashes its upsell at startup.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
   const { entitlementToken } = getSettings();
   if (entitlementToken && verified.token !== entitlementToken) return undefined;
-  return hasVerifiedFeature("preview");
+  return hasVerifiedFeature("navigator");
 }
 
 function isPlusModel(modelKey: string): boolean {
@@ -96,7 +96,7 @@ function setVerified(next: VerifiedEntitlement): void {
   verifiedListeners.forEach((listener) => listener());
 }
 
-export function subscribeToPreviewAccess(listener: () => void): () => void {
+export function subscribeToEntitlementChange(listener: () => void): () => void {
   verifiedListeners.add(listener);
   const unsubscribeSettings = subscribeToSettingsChange(listener);
   return () => {
@@ -138,14 +138,28 @@ function useIsPlusUser(): boolean | undefined {
   return settings.isPlusUser;
 }
 
-export async function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
-  if (isPlusEnabled()) {
-    return true;
-  }
-  await BrevilabsClient.getInstance().validateLicenseKey(app, {
-    trigger: "multi_agent_per_turn",
-  });
-  return isPlusEnabled();
+async function ensureFeatureEntitlement(
+  app: App | undefined,
+  feature: EntitlementFeature,
+  isGranted: () => boolean
+): Promise<boolean> {
+  const granted = isGranted();
+  const check = BrevilabsClient.getInstance()
+    .validateLicenseKey(app, { trigger: feature })
+    .catch((error) => logInfo(`License check for ${feature} unreachable:`, error));
+  // Every use checks the license so usage is counted and the token renewed; only a missing grant waits for the fresh token.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/834
+  if (granted) return true;
+  await check;
+  return isGranted();
+}
+
+export function ensureMultiAgentEntitlement(app?: App): Promise<boolean> {
+  return ensureFeatureEntitlement(app, "multi_agent", isPlusEnabled);
+}
+
+export function ensureNavigatorEntitlement(app?: App): Promise<boolean> {
+  return ensureFeatureEntitlement(app, "navigator", () => isNavigatorEnabled() !== false);
 }
 
 export function showMultiAgentUpgradePrompt(): void {
@@ -207,8 +221,8 @@ export function useLicenseState(): LicenseState {
     : INACTIVE_LICENSE;
 }
 
-export function useIsPreviewEnabled(): boolean | undefined {
-  return React.useSyncExternalStore(subscribeToPreviewAccess, isPreviewEnabled);
+export function useIsNavigatorEnabled(): boolean | undefined {
+  return React.useSyncExternalStore(subscribeToEntitlementChange, isNavigatorEnabled);
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {

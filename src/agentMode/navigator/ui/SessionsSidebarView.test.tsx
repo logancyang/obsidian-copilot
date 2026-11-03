@@ -3,10 +3,10 @@ import SessionsSidebarView from "@/agentMode/navigator/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
 import {
-  applyLicenseWithPreview,
-  setPreviewAccess,
+  applyLicenseWithNavigator,
+  setNavigatorAccess,
   verifyStoredToken,
-} from "@/agentMode/ui/testing/previewAccess";
+} from "@/agentMode/ui/testing/navigatorAccess";
 import { act, fireEvent, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
@@ -45,7 +45,7 @@ describe("SessionsSidebarView", () => {
     beforeEach(async () => {
       mockSidebarMounts.mockClear();
       jest.mocked(revealSessionsSidebar).mockClear();
-      await setPreviewAccess("supporter");
+      await setNavigatorAccess("supporter");
     });
 
     it("identifies itself with the sessions sidebar view type for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
@@ -76,8 +76,8 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("shows only the preview notice instead of the Navigator list for a Plus user without preview for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setPreviewAccess("plus-without-preview");
+    it("shows only the access-ended notice instead of the Navigator list for a Plus user without Navigator access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setNavigatorAccess("plus-without-navigator");
       const { view } = makeView({});
 
       await act(() => view.onOpen());
@@ -89,7 +89,7 @@ describe("SessionsSidebarView", () => {
     });
 
     it("closes its own leaf from the notice's Close button for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setPreviewAccess("free");
+      await setNavigatorAccess("free");
       const { view, leaf } = makeView({});
       await act(() => view.onOpen());
 
@@ -99,13 +99,13 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("reveals the Navigator when a license key with preview is applied after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setPreviewAccess("free");
+    it("reveals the Navigator when a license key with Navigator access is applied after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setNavigatorAccess("free");
       const { view, plugin } = makeView({});
       await act(() => view.onOpen());
       await screen.findByText("Your preview access ended");
 
-      await act(() => applyLicenseWithPreview());
+      await act(() => applyLicenseWithNavigator());
 
       expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
       expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin);
@@ -113,7 +113,7 @@ describe("SessionsSidebarView", () => {
     });
 
     it("keeps a Supporter's restored Navigator list mounted through startup verification, without flashing the notice or reopening it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setPreviewAccess("unverified");
+      await setNavigatorAccess("unverified");
       const { view } = makeView({});
       await act(() => view.onOpen());
       await screen.findByRole("button", { name: "Sidebar content" });
@@ -127,8 +127,8 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onClose());
     });
 
-    it("shows the notice once startup verification finds no preview access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setPreviewAccess("unverified");
+    it("shows the notice once startup verification finds no Navigator access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setNavigatorAccess("unverified");
       const { view } = makeView({});
       await act(() => view.onOpen());
       await screen.findByRole("button", { name: "Sidebar content" });
