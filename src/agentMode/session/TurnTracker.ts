@@ -42,7 +42,7 @@ export interface TurnTrackerDeps {
     turnDiff?: TurnDiff
   ) => Promise<boolean>;
   onTurnCompleted: () => void;
-  onTurnFailed: (errorText: string) => void;
+  onTurnFailed: (errorText: string, error: unknown) => void;
 }
 
 interface PendingPrompt {
@@ -365,7 +365,7 @@ export class TurnTracker {
     this.placeholderId = null;
     this.currentMessageIds = new Set();
     this.lastTurnFailed = true;
-    this.deps.onTurnFailed(errorText);
+    this.deps.onTurnFailed(errorText, err);
     this.deps.notifyMessages();
   }
 

@@ -6164,11 +6164,11 @@ describe("AgentSession", () => {
       describe("after a failed reply", () => {
         const failedSession = (
           offerFeedbackCards: boolean,
-          errorText = "model not supported: gemini-4"
+          error: Error = new Error("model not supported: gemini-4")
         ) => {
           jest.mocked(getSettings).mockReturnValue({ agentMode: { offerFeedbackCards } } as never);
           const mock = makeMockBackend();
-          mock.prompt.mockRejectedValue(new Error(errorText));
+          mock.prompt.mockRejectedValue(error);
           return makeSession(mock, { backendId: "opencode" });
         };
 
@@ -6198,8 +6198,14 @@ describe("AgentSession", () => {
           });
         });
 
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the provider's usage limit failed the reply", async () => {
-          const session = failedSession(true, "Internal error: Free usage limit reached.");
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the backend files the failure as a provider quota", async () => {
+          const session = failedSession(
+            true,
+            Object.assign(new Error("Internal error: Free usage limit reached."), {
+              code: -32603,
+              data: { service: "session", errorName: "provider.quota" },
+            })
+          );
 
           await expect(session.sendPrompt("hi").turn).rejects.toThrow("usage limit");
 

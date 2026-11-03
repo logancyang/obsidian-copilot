@@ -312,7 +312,7 @@ export class AgentSession {
       captureFileChanges: (files, messageId, turnDiff) =>
         this.finalizeFileChanges(files, this.store, messageId, turnDiff),
       onTurnCompleted: () => void this.pollSessionTitle(),
-      onTurnFailed: (errorText) => this.offerTurnErrorReport(errorText),
+      onTurnFailed: (errorText, error) => this.offerTurnErrorReport(errorText, error),
     });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
@@ -1140,9 +1140,9 @@ export class AgentSession {
 
   // A failed reply leaves no agent turn to raise the card, so the session raises it with the error.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
-  private offerTurnErrorReport(errorText: string): void {
+  private offerTurnErrorReport(errorText: string, error: unknown): void {
     if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
-    if (isProviderSideFailure(errorText)) return;
+    if (isProviderSideFailure(error, errorText)) return;
     this.feedbackOffer = this.openFeedbackOffer("turn_error", {
       title: `Agent Chat reply failed on ${this.backendId}`,
       whatHappened: errorText,
