@@ -7,7 +7,7 @@ import type { App } from "obsidian";
 import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
-import { isCatalogProviderDefaultEndpoint } from "@/utils/providerBaseUrl";
+import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/providerBaseUrl";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -257,7 +257,7 @@ export async function buildOpencodeConfig(
         rawBaseURL &&
         isCatalogProviderDefaultEndpoint(catalogProviderId, rawBaseURL)
           ? undefined
-          : rawBaseURL;
+          : opencodeSdkBaseUrl(catalogProviderId, rawBaseURL);
       models = {};
       modelsByProvider[mapping.id] = models;
       providers[mapping.id] = {

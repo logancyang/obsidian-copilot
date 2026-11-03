@@ -637,6 +637,23 @@ describe("OpencodeBackend", () => {
       });
     });
 
+    it("gives OpenCode an AIHubMix gateway URL without the /v1 its SDK adds itself, so requests reach /v1 once (https://github.com/logancyang/obsidian-copilot/issues/3641)", async () => {
+      const provider = makeProvider(
+        "p-aihubmix",
+        { kind: "byok", catalogProviderId: "aihubmix" },
+        { providerType: "openai-compatible", baseUrl: "https://api.inferera.com/v1" }
+      );
+      const deps = makeDeps({
+        resolved: [okEntry(provider, makeModel("p-aihubmix", "kimi-k3"))],
+        keys: { "p-aihubmix": "ahm-789" },
+      });
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+      expect(cfg.providers.aihubmix.settings).toEqual({
+        apiKey: "ahm-789",
+        baseURL: "https://api.inferera.com",
+      });
+    });
+
     it("omits the base URL when a catalog provider uses its own default endpoint", async () => {
       const provider = makeProvider(
         "p-google",
