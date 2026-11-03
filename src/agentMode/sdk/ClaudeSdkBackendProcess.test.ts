@@ -687,7 +687,7 @@ describe("ClaudeSdkBackendProcess", () => {
         ]);
       });
 
-      it("attaches Copilot's MCP servers over HTTP and pre-approves their tools on every turn", async () => {
+      it("attaches Copilot's MCP servers over HTTP and pre-approves only their read-only tools, so Claude asks before a tool that changes something (https://github.com/Brevilabs/obsidian-copilot-private/issues/807)", async () => {
         queryMock.mockImplementation(answering([resultMessage()]));
         const proc = makeProc();
         const { sessionId } = await proc.newSession({
@@ -697,6 +697,7 @@ describe("ClaudeSdkBackendProcess", () => {
               name: "obsidian-copilot",
               url: "http://127.0.0.1:4100/mcp",
               headers: { Authorization: "Bearer t0k3n" },
+              readOnlyToolNames: ["send_feedback", "excalidraw_read"],
             },
           ],
         });
@@ -716,7 +717,8 @@ describe("ClaudeSdkBackendProcess", () => {
           "Glob",
           "Grep",
           "LS",
-          "mcp__obsidian-copilot",
+          "mcp__obsidian-copilot__send_feedback",
+          "mcp__obsidian-copilot__excalidraw_read",
         ]);
       });
 
