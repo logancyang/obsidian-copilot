@@ -751,7 +751,10 @@ export class ContextProcessor {
           return await processYouTubeTab(tab, videoId, isActive);
         }
 
-        const leaf = service.findLeafByUrl(url, { title: tab.title });
+        const leaf = service.findAttachedTabLeaf(url, {
+          title: tab.title,
+          isActive: tagName === ACTIVE_WEB_TAB_CONTEXT_TAG,
+        });
         if (!leaf) {
           return buildWebTabBlock(tagName, {
             title: tab.title || "Unknown",
