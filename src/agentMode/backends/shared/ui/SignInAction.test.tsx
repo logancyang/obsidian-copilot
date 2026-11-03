@@ -2,6 +2,8 @@ import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { SignInAction } from "./SignInAction";
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/379";
+const openExternal = jest.fn<Promise<void>, [string]>();
+jest.mock("electron", () => ({ shell: { openExternal } }), { virtual: true });
 describe("SignInAction", () => {
   describe("SignInAction()", () => {
     it(`offers browser fallback and cancellation while waiting: ${ISSUE}`, () => {
@@ -20,6 +22,22 @@ describe("SignInAction", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Cancel sign-in" }));
       expect(onCancel).toHaveBeenCalled();
+    });
+    it("https://github.com/logancyang/obsidian-copilot/issues/3985 opens the sign-in page in the system browser, not an Obsidian tab", () => {
+      openExternal.mockResolvedValue(undefined);
+      render(
+        <SignInAction
+          status={{ signedIn: false }}
+          signingIn
+          url="https://auth.openai.com/authorize"
+          onSignIn={jest.fn()}
+        />
+      );
+
+      const notPrevented = fireEvent.click(screen.getByRole("link", { name: "Open sign-in page" }));
+
+      expect(openExternal).toHaveBeenCalledWith("https://auth.openai.com/authorize");
+      expect(notPrevented).toBe(false);
     });
     it("disables the button while a sign-in is running without a fallback link", () => {
       render(

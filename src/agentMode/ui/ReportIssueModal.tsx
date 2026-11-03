@@ -3,6 +3,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import { isDesktopRuntime, requireNodeModule } from "@/utils/desktopRuntime";
+import { getElectronShell, type ElectronShell } from "@/utils/electronShell";
 import { formatBytes } from "@/utils/formatBytes";
 import {
   buildLinkedReportIssueUrl,
@@ -66,22 +67,6 @@ export function openReportIssueModal(
   });
   modal.open();
   return modal;
-}
-
-interface ElectronShell {
-  openExternal?: (url: string) => Promise<void>;
-  showItemInFolder?: (path: string) => void;
-}
-function getElectronShell(): ElectronShell | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is optional and loaded lazily so reporting can degrade gracefully
-    const electron = require("electron") as
-      | { shell?: ElectronShell; remote?: { shell?: ElectronShell } }
-      | undefined;
-    return electron?.shell ?? electron?.remote?.shell ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export async function createReportDir(): Promise<string> {
