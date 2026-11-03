@@ -11,8 +11,10 @@ const meta = {
   args: {
     project: sidebarProject("garden", "Garden plans"),
     expanded: false,
+    active: false,
     hiddenStatus: "idle",
     onToggle: () => {},
+    onNewChat: () => {},
     onDeleted: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
@@ -23,6 +25,10 @@ export const Collapsed: StoryObj<SessionsSidebarFolderRowProps> = {};
 
 export const Expanded: StoryObj<SessionsSidebarFolderRowProps> = {
   args: { expanded: true },
+};
+
+export const ProjectLandingOpen: StoryObj<SessionsSidebarFolderRowProps> = {
+  args: { expanded: true, active: true },
 };
 
 export const HiddenRunning: StoryObj<SessionsSidebarFolderRowProps> = {

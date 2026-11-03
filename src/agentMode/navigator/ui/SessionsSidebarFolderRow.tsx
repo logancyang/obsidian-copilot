@@ -1,25 +1,30 @@
 import { AgentProjectRowMenu } from "@/agentMode/navigator/ui/AgentProjectRowMenu";
+import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionStatusIcon, type SessionStatus } from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Folder } from "lucide-react";
+import { ChevronRight, Folder, Plus } from "lucide-react";
 import React, { useState } from "react";
 
 interface SessionsSidebarFolderRowProps {
   project: ProjectConfig;
   expanded: boolean;
+  active: boolean;
   hiddenStatus: SessionStatus;
   onToggle: () => void;
+  onNewChat: () => void;
   onDeleted: (projectId: string) => void;
 }
 
 export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> = ({
   project,
   expanded,
+  active,
   hiddenStatus,
   onToggle,
+  onNewChat,
   onDeleted,
 }) => {
   const app = useApp();
@@ -32,7 +37,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
     <div
       className={cn(
         "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
-        keyboardFocused && "tw-bg-modifier-hover"
+        keyboardFocused && "tw-bg-modifier-hover",
+        active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
       {...focusWithinProps}
       onContextMenu={(event) => {
@@ -43,6 +49,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       <button
         type="button"
         aria-expanded={expanded}
+        aria-current={active ? "true" : undefined}
         onClick={onToggle}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
@@ -57,8 +64,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
             "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
             hiddenStatus === "unread" && "tw-font-semibold",
             revealed
-              ? "[mask-image:linear-gradient(to_left,transparent_1.5rem,black_2.5rem)]"
-              : "group-hover:[mask-image:linear-gradient(to_left,transparent_1.5rem,black_2.5rem)]"
+              ? "[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
+              : "group-hover:[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
           )}
         >
           {project.name}
@@ -87,10 +94,13 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       </button>
       <div
         className={cn(
-          "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center",
+          "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center tw-gap-1.5",
           revealed ? "tw-visible" : "tw-invisible group-hover:tw-visible"
         )}
       >
+        <RowActionButton label={`New chat in ${project.name}`} onClick={onNewChat}>
+          <Plus className="tw-size-4" />
+        </RowActionButton>
         <AgentProjectRowMenu
           app={app}
           project={project}

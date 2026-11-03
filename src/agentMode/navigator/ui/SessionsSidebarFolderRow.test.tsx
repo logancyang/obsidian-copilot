@@ -12,8 +12,10 @@ function renderFolderRow(
   const props = {
     project: sidebarProject("garden", "Garden plans"),
     expanded: false,
+    active: false,
     hiddenStatus: "idle" as const,
     onToggle: jest.fn(),
+    onNewChat: jest.fn(),
     onDeleted: jest.fn(),
     ...overrides,
   };
@@ -29,12 +31,13 @@ describe("SessionsSidebarFolderRow", () => {
   beforeAll(installRadixMenuPolyfills);
 
   describe("SessionsSidebarFolderRow()", () => {
-    it("shows the project name and toggles the folder on click for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const { onToggle } = renderFolderRow();
+    it("only folds or unfolds the folder when the project row is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const { onToggle, onNewChat } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
 
       expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(onNewChat).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -46,6 +49,27 @@ describe("SessionsSidebarFolderRow", () => {
       expect(
         screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-expanded")
       ).toBe(ariaExpanded);
+    });
+
+    it("starts a chat in the project from the hover plus without folding the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+      const { onNewChat, onToggle } = renderFolderRow();
+
+      fireEvent.click(screen.getByRole("button", { name: "New chat in Garden plans" }));
+
+      expect(onNewChat).toHaveBeenCalledTimes(1);
+      expect(onToggle).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [true, "true"],
+      [false, undefined],
+    ])("marks the row current when active=%s", (active, current) => {
+      renderFolderRow({ active });
+
+      expect(
+        screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-current") ??
+          undefined
+      ).toBe(current);
     });
 
     it.each([

@@ -54,7 +54,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { type ProjectConfig } from "@/aiParams";
-import { makeNewProjectConfig } from "@/agentMode/ui/AgentProjectCreateForm";
+import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
@@ -307,14 +307,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const persistCreateProject = useCallback(
     async ({ name }: { name: string }) => {
-      const project = makeNewProjectConfig(name);
-      try {
-        await ProjectFileManager.getInstance(app).createProject(project);
-        await manager.enterProject(project.id);
-      } catch (e) {
-        logError("[AgentMode] create project failed", e);
-        throw e;
-      }
+      await createProjectAndEnter(app, manager, name);
       setCreateAnchor(null);
     },
     [app, manager]

@@ -53,6 +53,9 @@ class FakeManager {
   openGlobalLanding = jest.fn(async () => {
     this.events.push("landing");
   });
+  openProjectLanding = jest.fn(async (projectId: string) => {
+    this.events.push(`landing:${projectId}`);
+  });
   getChatHistoryItems = jest.fn(async () => this.items);
   closeChatSession = jest.fn(async (_id: string) => {});
   getOpenChatIds = () => this.open;
@@ -72,8 +75,10 @@ class FakeManager {
   updateChatTitle = jest.fn(async () => {});
   getActiveProjectId = () => this.activeProjectId;
   exitProject = jest.fn(async () => {});
-  enterProject = jest.fn(async () => {
-    this.events.push("project");
+  enterProject = jest.fn(async (projectId: string) => {
+    this.events.push(`enter:${projectId}`);
+    this.activeProjectId = projectId;
+    this.emit();
   });
   historyRevision = 0;
   getHistoryRevision = () => this.historyRevision;
@@ -108,9 +113,17 @@ class FakeLocalStorage {
   saveLocalStorage = (key: string, value: unknown) => void this.store.set(key, value);
 }
 
+const createProject = jest.fn(async (project: { id: string; name: string }) => {
+  projectsState.updateCachedProjectRecords([
+    ...projectsState.getCachedProjectRecords(),
+    projectRecord(project.id, project.name),
+  ]);
+});
+
 function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage()) {
   jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
     deleteProject: jest.fn(async () => {}),
+    createProject,
   } as unknown as ProjectFileManager);
   const plugin = {
     app: {
@@ -145,7 +158,7 @@ function rowTitles(): string[] {
     )
     .filter(
       (button) =>
-        !/^(New chat|Search chats|Sidebar options|More actions|Show more|Pin chat|Unpin chat|Archive chat)/.test(
+        !/^(New chat|New project|Search chats|Sidebar options|More actions|Show more|Pin chat|Unpin chat|Archive chat)/.test(
           button.getAttribute("aria-label") ?? button.textContent ?? ""
         )
     )
@@ -174,7 +187,14 @@ function projectRecord(id: string, name: string, extra: Record<string, unknown> 
 }
 
 describe("SessionsSidebar", () => {
-  beforeAll(installRadixMenuPolyfills);
+  beforeAll(() => {
+    installRadixMenuPolyfills();
+    const cryptoObj = window.crypto as { randomUUID?: () => string };
+    if (typeof cryptoObj.randomUUID !== "function") {
+      let counter = 0;
+      cryptoObj.randomUUID = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0")}`;
+    }
+  });
 
   describe("SessionsSidebar()", () => {
     afterEach(() => {
@@ -291,7 +311,7 @@ describe("SessionsSidebar", () => {
       );
     });
 
-    it("lands on a new global chat in the Agent view after the view is revealed for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+    it("reveals the Agent view once the new global chat is open, so its composer takes the focus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
       renderSidebar(manager);
@@ -300,7 +320,7 @@ describe("SessionsSidebar", () => {
       fireEvent.click(screen.getByRole("button", { name: "New chat" }));
 
       await waitFor(() => expect(manager.openGlobalLanding).toHaveBeenCalledTimes(1));
-      expect(manager.events).toEqual(["view", "landing"]);
+      expect(manager.events).toEqual(["landing", "view"]);
     });
 
     it("reports a failed new chat without throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
@@ -512,7 +532,7 @@ describe("SessionsSidebar", () => {
       expect(projects.map((project) => project.id)).toEqual(["shelved"]);
     });
 
-    it("reveals the Agent view before entering a project opened from the Archived dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+    it("reveals the Agent view after entering a project opened from the Archived dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
       renderSidebar(manager);
@@ -526,7 +546,7 @@ describe("SessionsSidebar", () => {
       const [, , , actions] = jest.mocked(ArchivedChatsModal).mock.calls[0];
       await actions.onOpenProject("shelved");
 
-      expect(manager.events).toEqual(["view", "project"]);
+      expect(manager.events).toEqual(["enter:shelved", "view"]);
     });
 
     it("leaves the project when the open project is deleted from its folder menu, as the landing list does, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
@@ -541,6 +561,108 @@ describe("SessionsSidebar", () => {
       await mockDeleteConfirmations[0]();
 
       expect(manager.exitProject).toHaveBeenCalledTimes(1);
+    });
+
+    it("expands the folder from its row without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
+      const plugin = renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
+
+      expect(screen.getByRole("button", { name: "Seedling notes" })).toBeTruthy();
+      expect(manager.openProjectLanding).not.toHaveBeenCalled();
+      expect(plugin.activateAgentView).not.toHaveBeenCalled();
+    });
+
+    it("opens the project landing from the folder's plus without expanding the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "New chat in Garden plans" }));
+
+      await waitFor(() => expect(manager.events).toEqual(["landing:garden", "view"]));
+      expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
+    });
+
+    it("reports a project that cannot be opened without throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      const failure = new Error("spawn failed");
+      manager.openProjectLanding.mockRejectedValueOnce(failure);
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "New chat in Garden plans" }));
+
+      await waitFor(() =>
+        expect(logError).toHaveBeenCalledWith("[AgentMode] sidebar open project failed", failure)
+      );
+      expect(Notice).toHaveBeenCalledWith("Failed to open project. Please try again.");
+    });
+
+    it("highlights the folder of the open project landing for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      projectsState.updateCachedProjectRecords([
+        projectRecord("garden", "Garden plans"),
+        projectRecord("thesis", "Thesis"),
+      ]);
+      const manager = new FakeManager();
+      manager.activeProjectId = "garden";
+      renderSidebar(manager);
+
+      expect(
+        (await screen.findByRole("button", { name: "Garden plans" })).getAttribute("aria-current")
+      ).toBe("true");
+      expect(
+        screen.getByRole("button", { name: "Thesis" }).getAttribute("aria-current")
+      ).toBeNull();
+    });
+
+    it("creates a project from the new project dialog, opens its landing and selects its folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      const manager = new FakeManager();
+      const plugin = renderSidebar(manager);
+      await screen.findByRole("button", { name: "New project" });
+
+      fireEvent.click(screen.getByRole("button", { name: "New project" }));
+      const field = within(screen.getByRole("dialog", { name: "New project" })).getByRole(
+        "textbox"
+      );
+      fireEvent.change(field, { target: { value: "Garden plans" } });
+      await act(async () => {
+        fireEvent.keyDown(field, { key: "Enter" });
+      });
+
+      expect(createProject).toHaveBeenCalledWith(expect.objectContaining({ name: "Garden plans" }));
+      expect(manager.enterProject).toHaveBeenCalledWith(createProject.mock.calls[0][0].id);
+      expect(plugin.activateAgentView).toHaveBeenCalledTimes(1);
+      expect(manager.events[0]).toMatch(/^enter:/);
+      expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull();
+      expect(
+        (await screen.findByRole("button", { name: "Garden plans" })).getAttribute("aria-current")
+      ).toBe("true");
+    });
+
+    it("keeps the new project dialog open and reports createProject's error when the name is taken for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+      const manager = new FakeManager();
+      renderSidebar(manager);
+      createProject.mockRejectedValueOnce(
+        new Error('A project with the name "Garden plans" already exists')
+      );
+      fireEvent.click(await screen.findByRole("button", { name: "New project" }));
+      const field = within(screen.getByRole("dialog", { name: "New project" })).getByRole(
+        "textbox"
+      );
+      fireEvent.change(field, { target: { value: "Garden plans" } });
+
+      await act(async () => {
+        fireEvent.keyDown(field, { key: "Enter" });
+      });
+
+      expect(Notice).toHaveBeenCalledWith('A project with the name "Garden plans" already exists');
+      expect(screen.getByRole("dialog", { name: "New project" })).toBeTruthy();
+      expect(manager.enterProject).not.toHaveBeenCalled();
     });
 
     it("reloads the list when a project is archived so its chats drop out for https://github.com/Brevilabs/obsidian-copilot-private/issues/806", async () => {

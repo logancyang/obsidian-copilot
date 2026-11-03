@@ -8,7 +8,7 @@ import {
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 
 const NONE: ReadonlySet<string> = new Set();
@@ -20,6 +20,7 @@ function baseProps(
     items: [],
     projects: [],
     expandedProjectIds: NONE,
+    activeProjectId: "",
     activeChatIds: NONE,
     runningChatIds: NONE,
     waitingChatIds: NONE,
@@ -31,6 +32,8 @@ function baseProps(
     onNewChat: jest.fn(),
     onOpenChat: jest.fn(),
     onToggleProject: jest.fn(),
+    onOpenProject: jest.fn(),
+    onCreateProject: jest.fn().mockResolvedValue(undefined),
     onProjectDeleted: jest.fn(),
     onViewArchived: jest.fn(),
     ...overrides,
@@ -98,11 +101,13 @@ describe("SessionsSidebarPanel", () => {
         expect(within(section("Recents")).getByText("Recent chat")).toBeTruthy();
       });
 
-      it("omits the groups that have nothing to show", () => {
+      it("omits the Pinned and Recents groups that have nothing to show but keeps Projects for its New project button", () => {
         renderPanel({ items: [sidebarChat("chats/rec.md", "Recent chat", 2)] });
 
         expect(screen.queryByRole("region", { name: "Pinned" })).toBeNull();
-        expect(screen.queryByRole("region", { name: "Projects" })).toBeNull();
+        expect(
+          within(section("Projects")).getByRole("button", { name: "New project" })
+        ).toBeTruthy();
         expect(screen.getByRole("region", { name: "Recents" })).toBeTruthy();
       });
 
@@ -225,16 +230,68 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
       });
 
-      it("only toggles the folder when it is clicked, without opening a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-        const { onToggleProject, onOpenChat } = renderPanel({
+      it("only folds or unfolds a project on a click of its row, without opening the project or a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+        const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
           projects: projects(1),
           items: projectChats("p1", 2),
+          expandedProjectIds: new Set(["p1"]),
         });
 
         fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
 
         expect(onToggleProject).toHaveBeenCalledWith("p1");
+        expect(onOpenProject).not.toHaveBeenCalled();
         expect(onOpenChat).not.toHaveBeenCalled();
+      });
+
+      it("highlights a collapsed folder whose open chat is hidden inside it for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const items = projectChats("p1", 1);
+        renderPanel({
+          projects: projects(1),
+          items,
+          activeProjectId: "p1",
+          activeChatIds: new Set([items[0].id]),
+        });
+
+        expect(screen.getByRole("button", { name: "Project 1" }).getAttribute("aria-current")).toBe(
+          "true"
+        );
+      });
+
+      it("starts a chat in the project from the folder's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onOpenProject, onToggleProject } = renderPanel({ projects: projects(2) });
+
+        fireEvent.click(screen.getByRole("button", { name: "New chat in Project 2" }));
+
+        expect(onOpenProject).toHaveBeenCalledWith("p2");
+        expect(onToggleProject).not.toHaveBeenCalled();
+      });
+
+      it("highlights the folder of the open project landing but not a folder whose own chat is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const items = projectChats("p1", 1);
+        const { unmount } = render(
+          <AppContext.Provider value={new App()}>
+            <SessionsSidebarPanel
+              {...baseProps({ projects: projects(2), items, activeProjectId: "p2" })}
+            />
+          </AppContext.Provider>
+        );
+        const current = () =>
+          screen
+            .getAllByRole("button")
+            .filter((row) => row.getAttribute("aria-current") === "true")
+            .map((row) => row.textContent!.trim());
+        expect(current()).toEqual(["Project 2"]);
+        unmount();
+
+        renderPanel({
+          projects: projects(2),
+          items,
+          expandedProjectIds: new Set(["p1"]),
+          activeProjectId: "p1",
+          activeChatIds: new Set([items[0].id]),
+        });
+        expect(current()).toEqual(["Chat p1 1"]);
       });
 
       it("says an expanded project has no chats instead of leaving an empty gap for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
@@ -470,6 +527,125 @@ describe("SessionsSidebarPanel", () => {
 
         expect(actions.onCloseSession).toHaveBeenCalledWith("chats/b.md");
         expect(onOpenChat).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("new project", () => {
+      const plusButton = () =>
+        within(section("Projects")).getByRole("button", { name: "New project" });
+      const startProject = () => fireEvent.click(plusButton());
+      const dialog = () => screen.queryByRole("dialog", { name: "New project" });
+      const nameField = () => screen.getByPlaceholderText("Project name");
+      const typeName = (name: string) => fireEvent.change(nameField(), { target: { value: name } });
+
+      afterEach(() => jest.restoreAllMocks());
+
+      it("opens the project dialog from the Projects plus even when no project exists yet for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel();
+
+        expect(dialog()).toBeNull();
+
+        startProject();
+
+        expect(dialog()).toBeTruthy();
+        expect(nameField()).toBeTruthy();
+      });
+
+      it("anchors the dialog to the plus that opened it for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel();
+        jest.spyOn(plusButton(), "getBoundingClientRect").mockReturnValue({
+          top: 100,
+          bottom: 120,
+          left: 300,
+          right: 320,
+          width: 20,
+          height: 20,
+          x: 300,
+          y: 100,
+          toJSON: () => ({}),
+        });
+
+        startProject();
+
+        expect(dialog()!.style.left).toBe("180px");
+      });
+
+      it("keeps the plus visible while its dialog is open and hides it again after closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        renderPanel();
+        const wrapper = plusButton().parentElement!;
+
+        expect(wrapper.classList.contains("tw-visible")).toBe(false);
+
+        startProject();
+
+        expect(wrapper.classList.contains("tw-visible")).toBe(true);
+
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }));
+
+        expect(wrapper.classList.contains("tw-visible")).toBe(false);
+      });
+
+      it("creates the project with the trimmed name on Enter and closes the dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("  Garden plans ");
+
+        await act(async () => {
+          fireEvent.keyDown(nameField(), { key: "Enter" });
+        });
+
+        expect(onCreateProject).toHaveBeenCalledWith("Garden plans");
+        expect(dialog()).toBeNull();
+      });
+
+      it("creates nothing and closes the dialog on Cancel for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("Garden plans");
+
+        fireEvent.click(within(dialog()!).getByRole("button", { name: "Cancel" }));
+
+        expect(onCreateProject).not.toHaveBeenCalled();
+        expect(dialog()).toBeNull();
+      });
+
+      it("creates nothing and closes the dialog on Escape for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
+        const { onCreateProject } = renderPanel();
+        startProject();
+        typeName("Garden plans");
+
+        fireEvent.keyDown(window, { key: "Escape" });
+
+        expect(onCreateProject).not.toHaveBeenCalled();
+        expect(dialog()).toBeNull();
+      });
+
+      it("keeps the dialog open and reports the creation error when the project cannot be created for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
+        const onCreateProject = jest
+          .fn()
+          .mockRejectedValue(new Error('A project with the name "Garden" already exists'));
+        renderPanel({ onCreateProject });
+        startProject();
+        typeName("Garden");
+
+        await act(async () => {
+          fireEvent.keyDown(nameField(), { key: "Enter" });
+        });
+
+        expect(Notice).toHaveBeenCalledWith('A project with the name "Garden" already exists');
+        expect(dialog()).toBeTruthy();
+        expect((nameField() as HTMLInputElement).value).toBe("Garden");
+      });
+
+      it("hides the plus while the title filter is active", () => {
+        renderPanel({ items: [sidebarChat("chats/a.md", "Chat A", 1)] });
+
+        fireEvent.click(screen.getByRole("button", { name: "Search chats" }));
+        fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+          target: { value: "Chat" },
+        });
+
+        expect(screen.queryByRole("button", { name: "New project" })).toBeNull();
       });
     });
 

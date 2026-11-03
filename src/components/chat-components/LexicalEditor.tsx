@@ -123,6 +123,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
     }
   }, [focusFn, chatInputContext]);
 
+  const { registerFocusHandler } = chatInputContext;
+  useEffect(() => () => registerFocusHandler(null), [registerFocusHandler]);
+
   const initialConfig = React.useMemo(
     () => ({
       namespace: "ChatEditor",

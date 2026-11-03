@@ -767,6 +767,9 @@ export class AgentSessionManager {
     const keep = await Promise.all(
       entries.map(async (entry) => {
         if (!entry.backendId || !entry.sessionId) return true;
+        // A chat's first turn is still writing its backend transcript, so the probe would report it absent.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
+        if (this.findLiveSession(entry.backendId, entry.sessionId)) return true;
         const proc = procs.get(entry.backendId);
         if (!proc?.sessionExistsLocally) return true;
         let cwd: string;
@@ -1128,11 +1131,12 @@ export class AgentSessionManager {
 
   private pickReusableLandingSession(projectId: ProjectScopeId): AgentSession | null {
     const expected = this.currentLandingCaptureSignature(projectId);
-    if (!expected) return null;
+    if (projectId !== GLOBAL_SCOPE && !expected) return null;
     const isReusable = (session: AgentSession): boolean =>
       this.isReusableLandingShell(session, projectId) &&
       !this.detachedFromTabIds.has(session.internalId) &&
-      this.landingCaptureSignatures.get(session.internalId) === expected;
+      (projectId === GLOBAL_SCOPE ||
+        this.landingCaptureSignatures.get(session.internalId) === expected);
 
     const mruId = this.lastActiveByScope.get(projectId);
     const mru = mruId ? this.sessions.get(mruId) : undefined;
@@ -1186,10 +1190,22 @@ export class AgentSessionManager {
   }
 
   async openGlobalLanding(): Promise<void> {
-    await this.enterProject(GLOBAL_SCOPE);
+    await this.openProjectLanding(GLOBAL_SCOPE);
+  }
+
+  async openProjectLanding(projectId: ProjectScopeId): Promise<void> {
+    await this.enterProject(projectId);
+    if (this.activeProjectId !== projectId) return;
     const active = this.getActiveSession();
-    if (active?.projectId === GLOBAL_SCOPE && !active.hasUserVisibleMessages()) return;
-    await this.createSession(undefined, GLOBAL_SCOPE);
+    if (active?.projectId === projectId && !active.hasUserVisibleMessages()) return;
+    // Repeated New chat clicks reuse the empty chat left behind instead of stacking another.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
+    const reusable = this.pickReusableLandingSession(projectId);
+    if (reusable) {
+      this.setActiveSession(reusable.internalId);
+      return;
+    }
+    await this.createSession(undefined, projectId);
   }
 
   private parkActiveScope(): void {
@@ -2398,9 +2414,11 @@ export class AgentSessionManager {
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
       state.signature = signature;
-      // The first successful save changes relative-link resolution in the mounted chat.
+      // The first successful save changes relative-link resolution in the mounted chat
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/539
-      if (previousSourcePath !== result.path) this.notify();
+      // and adds the chat to the saved lists, which reload on the history revision.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
+      if (previousSourcePath !== result.path) this.markHistoryChanged();
     }
     return result;
   }

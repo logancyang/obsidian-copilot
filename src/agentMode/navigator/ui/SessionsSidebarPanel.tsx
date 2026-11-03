@@ -1,4 +1,6 @@
+import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
 import {
   SessionsSidebarRow,
@@ -26,13 +28,14 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
-import { Archive, ChevronRight, MoreHorizontal, Search, SquarePen } from "lucide-react";
+import { Archive, ChevronRight, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 
 interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
   projects: readonly ProjectConfig[];
   expandedProjectIds: ReadonlySet<string>;
+  activeProjectId: string;
   activeChatIds: ReadonlySet<string>;
   runningChatIds: ReadonlySet<string>;
   waitingChatIds: ReadonlySet<string>;
@@ -44,6 +47,8 @@ interface SessionsSidebarPanelProps {
   onNewChat: () => void;
   onOpenChat: (id: string) => void;
   onToggleProject: (projectId: string) => void;
+  onOpenProject: (projectId: string) => void;
+  onCreateProject: (name: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
   onViewArchived: () => void;
 }
@@ -52,39 +57,64 @@ interface GroupProps {
   title: string;
   collapsed: boolean;
   onToggle: () => void;
+  action?: React.ReactNode;
+  actionPinned?: boolean;
   children: React.ReactNode;
 }
 
-const Group: React.FC<GroupProps> = ({ title, collapsed, onToggle, children }) => {
+const Group: React.FC<GroupProps> = ({
+  title,
+  collapsed,
+  onToggle,
+  action,
+  actionPinned,
+  children,
+}) => {
   const headerId = useId();
   const { keyboardFocused, focusWithinProps } = useKeyboardFocusWithin();
   return (
     // Obsidian shows an aria-label as a hover tooltip, so the section takes its name from the header instead.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
     <section aria-labelledby={headerId} className="tw-flex tw-flex-col tw-gap-0.5">
-      <h3 className="tw-group tw-m-0" {...focusWithinProps}>
-        <button
-          id={headerId}
-          type="button"
-          aria-expanded={!collapsed}
-          onClick={onToggle}
-          className={cn(
-            "clickable-icon tw-flex tw-h-auto tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-bg-transparent",
-            "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
-          )}
-        >
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
-          {/* The fold chevron shows only on hover or keyboard focus, like the header's other actions, so the list reads
-              clean. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
-          <ChevronRight
+      <div className="tw-group tw-relative" {...focusWithinProps}>
+        <h3 className="tw-m-0">
+          <button
+            id={headerId}
+            type="button"
+            aria-expanded={!collapsed}
+            onClick={onToggle}
             className={cn(
-              "tw-size-4 tw-shrink-0",
-              keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible",
-              !collapsed && "tw-rotate-90"
+              "clickable-icon tw-flex tw-h-auto tw-w-full tw-items-center tw-gap-2 tw-rounded-md tw-bg-transparent",
+              "tw-px-2 tw-pb-1 tw-pt-2 tw-text-left tw-text-xs tw-font-medium tw-text-muted tw-shadow-none"
             )}
-          />
-        </button>
-      </h3>
+          >
+            <span className="tw-min-w-0 tw-flex-1 tw-truncate">{title}</span>
+            {action && <span aria-hidden="true" className="tw-w-5 tw-shrink-0" />}
+            {/* The fold chevron shows only on hover or keyboard focus, like the header's other actions, so the list
+                reads clean. https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+            <ChevronRight
+              className={cn(
+                "tw-size-4 tw-shrink-0",
+                keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible",
+                !collapsed && "tw-rotate-90"
+              )}
+            />
+          </button>
+        </h3>
+        {/* The header action fills a slot the header always reserves left of the chevron, so showing it on hover
+            never moves the title or the chevron.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        {action && (
+          <div
+            className={cn(
+              "tw-absolute tw-bottom-0.5 tw-right-8 tw-flex tw-items-center",
+              actionPinned || keyboardFocused ? "tw-visible" : "tw-invisible group-hover:tw-visible"
+            )}
+          >
+            {action}
+          </div>
+        )}
+      </div>
       {!collapsed && children}
     </section>
   );
@@ -106,6 +136,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   items,
   projects,
   expandedProjectIds,
+  activeProjectId,
   activeChatIds,
   runningChatIds,
   waitingChatIds,
@@ -117,6 +148,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   onNewChat,
   onOpenChat,
   onToggleProject,
+  onOpenProject,
+  onCreateProject,
   onProjectDeleted,
   onViewArchived,
 }) => {
@@ -126,6 +159,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   const [fullyShownProjectIds, setFullyShownProjectIds] = useState<ReadonlySet<string>>(
     () => new Set()
   );
+
+  const [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null);
 
   const groups = useMemo(() => groupSessionsSidebarChats(items, projects), [items, projects]);
   const projectNamesById = useMemo(
@@ -154,6 +189,15 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     setQuery("");
     searchButtonRef.current?.focus();
   }, []);
+
+  const closeCreateProject = useCallback(() => setCreateAnchor(null), []);
+  const saveNewProject = useCallback(
+    async ({ name }: { name: string }) => {
+      await onCreateProject(name);
+      setCreateAnchor(null);
+    },
+    [onCreateProject]
+  );
 
   const statusOf = (item: ChatHistoryItem) =>
     resolveSessionStatus({
@@ -257,10 +301,11 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               {matches.map((item) => renderChat(item, true))}
             </div>
           )
-        ) : items.length === 0 && projects.length === 0 ? (
-          <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No chats yet</div>
         ) : (
           <>
+            {items.length === 0 && projects.length === 0 && (
+              <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No chats yet</div>
+            )}
             {groups.pinned.length > 0 && (
               <Group
                 title="Pinned"
@@ -270,56 +315,68 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                 {groups.pinned.map((item) => renderChat(item, true))}
               </Group>
             )}
-            {visibleProjects.length > 0 && (
-              <Group
-                title="Projects"
-                collapsed={collapsedGroups.has("projects")}
-                onToggle={() => onToggleGroup("projects")}
-              >
-                {visibleProjects.map(({ project, chats }) => {
-                  const expanded = expandedProjectIds.has(project.id);
-                  const fullyShown = fullyShownProjectIds.has(project.id);
-                  const shownCount = !expanded
-                    ? 0
-                    : fullyShown
-                      ? chats.length
-                      : VISIBLE_CHATS_PER_PROJECT;
-                  return (
-                    <div key={project.id} className="tw-flex tw-flex-col tw-gap-0.5">
-                      <SessionsSidebarFolderRow
-                        project={project}
-                        expanded={expanded}
-                        hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
-                        onToggle={() => onToggleProject(project.id)}
-                        onDeleted={onProjectDeleted}
-                      />
-                      {/* An empty container would still add the column gap, so an empty project says so instead.
-                          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
-                      {expanded && chats.length === 0 && (
-                        <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
-                      )}
-                      {/* A project's chats indent by the folder icon and its gap, so their titles start under the project name.
-                          https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
-                      {expanded && chats.length > 0 && (
-                        <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
-                          {chats.slice(0, shownCount).map((item) => renderChat(item))}
-                          {shownCount < chats.length && (
-                            <ShowMoreButton
-                              onClick={() =>
-                                setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
-                              }
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {visibleProjects.length < groups.projects.length && (
-                  <ShowMoreButton onClick={() => setAllProjectsShown(true)} />
-                )}
-              </Group>
-            )}
+            <Group
+              title="Projects"
+              collapsed={collapsedGroups.has("projects")}
+              onToggle={() => onToggleGroup("projects")}
+              actionPinned={createAnchor !== null}
+              action={
+                <RowActionButton
+                  label="New project"
+                  onClick={(event) => setCreateAnchor(event.currentTarget)}
+                >
+                  <Plus className="tw-size-4" />
+                </RowActionButton>
+              }
+            >
+              {visibleProjects.map(({ project, chats }) => {
+                const expanded = expandedProjectIds.has(project.id);
+                const fullyShown = fullyShownProjectIds.has(project.id);
+                const shownCount = !expanded
+                  ? 0
+                  : fullyShown
+                    ? chats.length
+                    : VISIBLE_CHATS_PER_PROJECT;
+                return (
+                  <div key={project.id} className="tw-flex tw-flex-col tw-gap-0.5">
+                    <SessionsSidebarFolderRow
+                      project={project}
+                      expanded={expanded}
+                      active={
+                        activeProjectId === project.id &&
+                        !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
+                      }
+                      hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
+                      onToggle={() => onToggleProject(project.id)}
+                      onNewChat={() => onOpenProject(project.id)}
+                      onDeleted={onProjectDeleted}
+                    />
+                    {/* An empty container would still add the column gap, so an empty project says so instead.
+                        https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+                    {expanded && chats.length === 0 && (
+                      <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
+                    )}
+                    {/* A project's chats indent by the folder icon and its gap, so their titles start under the project name.
+                        https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+                    {expanded && chats.length > 0 && (
+                      <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
+                        {chats.slice(0, shownCount).map((item) => renderChat(item))}
+                        {shownCount < chats.length && (
+                          <ShowMoreButton
+                            onClick={() =>
+                              setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
+                            }
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {visibleProjects.length < groups.projects.length && (
+                <ShowMoreButton onClick={() => setAllProjectsShown(true)} />
+              )}
+            </Group>
             {groups.recents.length > 0 && (
               <Group
                 title="Recents"
@@ -335,6 +392,13 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
           </>
         )}
       </div>
+      {createAnchor && (
+        <CreateProjectPanel
+          anchorEl={createAnchor}
+          onClose={closeCreateProject}
+          onSave={saveNewProject}
+        />
+      )}
     </div>
   );
 };
