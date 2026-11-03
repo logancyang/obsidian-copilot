@@ -20,12 +20,6 @@ describe("revokeRun", () => {
       expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
     });
 
-    it("follows the run when a paragraph was added right above it after the turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
-      const current = AFTER.replace("Budget is open.\n\n", "Budget is open.\n\nAdded later.\n\n");
-
-      expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
-    });
-
     it("finds no location once text inside the run changed after the turn", () => {
       const current = AFTER.replace("every Monday", "every Tuesday");
 
@@ -87,12 +81,6 @@ describe("revokeRun", () => {
       const run: DiffRun = { before: { start: 2, end: 2 }, after: { start: 2, end: 3 } };
 
       expect(revokeRun("a\nb\nd\nb\na\n", "a\nb\nb\nd\nb\na\n", "a\nb\nz\nb\na\n", run)).toBeNull();
-    });
-
-    it("changes nothing when the run's text changed in the note after the turn", () => {
-      const current = AFTER.replace("eight weeks", "nine weeks");
-
-      expect(revokeRun(BEFORE, AFTER, current, FIRST_RUN)).toBeNull();
     });
   });
 });

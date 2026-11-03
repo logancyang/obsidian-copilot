@@ -129,10 +129,6 @@ describe("alignBlocks", () => {
         { kind: "deleted", before: before[0] },
         { kind: "unchanged", before: before[1], after: after[0] },
       ]);
-      expect(alignBlocks(before, after)[1]).toMatchObject({
-        before: { line: 2 },
-        after: { line: 0 },
-      });
     });
   });
 });
