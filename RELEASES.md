@@ -31,7 +31,6 @@ This release also lets you show the agent exactly what you mean. Select shapes i
 
 - Quick Ask and Quick Command fit on phone screens, and you can move and resize them by touch. ([#3913](https://github.com/logancyang/obsidian-copilot/pull/3913), [#3914](https://github.com/logancyang/obsidian-copilot/pull/3914), @zeroliu)
 - Agents group icons with their shapes when they create an Excalidraw drawing. ([#3973](https://github.com/logancyang/obsidian-copilot/pull/3973), @zeroliu)
-- A background task that a subagent starts shows its own task card inside the subagent. ([#3902](https://github.com/logancyang/obsidian-copilot/pull/3902), @zeroliu)
 
 ## 🧰 Troubleshoot
 
