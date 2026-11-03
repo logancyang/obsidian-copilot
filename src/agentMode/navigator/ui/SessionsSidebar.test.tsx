@@ -400,6 +400,27 @@ describe("SessionsSidebar", () => {
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(2);
     });
 
+    it("reloads once for a burst of agent chat note changes so a Sync download of many chats stays fast for https://github.com/Brevilabs/obsidian-copilot-private/issues/808", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+      jest.useFakeTimers();
+
+      try {
+        manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
+        act(() => {
+          for (let i = 0; i < 50; i++) metadataCache.change({ mode: "agent" });
+        });
+        await act(() => jest.advanceTimersByTimeAsync(1_000));
+      } finally {
+        jest.useRealTimers();
+      }
+
+      await screen.findByRole("button", { name: "Beta" });
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(3);
+    });
+
     it("ignores metadata changes of notes that are not agent chats for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];

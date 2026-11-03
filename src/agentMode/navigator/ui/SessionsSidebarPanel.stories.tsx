@@ -203,6 +203,16 @@ export const FilterWithMatches: StoryObj<SessionsSidebarPanelProps> = {
   render: FilteredPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
 };
 
+export const FilterWithManyMatches: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: Array.from({ length: 60 }, (_, index) =>
+      sidebarChat(`chats/chat-${index}.md`, `Research thread ${index + 1}`, index * 45)
+    ),
+    query: "thread",
+  } as Partial<SessionsSidebarPanelProps>,
+  render: FilteredPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
+};
+
 export const FilterWithNoMatches: StoryObj<SessionsSidebarPanelProps> = {
   args: { items: everyGroupItems, projects, query: "zebra" } as Partial<SessionsSidebarPanelProps>,
   render: FilteredPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,

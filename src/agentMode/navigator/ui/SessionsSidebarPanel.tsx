@@ -176,6 +176,11 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     "",
     RECENTS_PAGE_SIZE
   );
+  const { displayCount: matchDisplayCount, sentinelRef: matchSentinelRef } = useIncrementalPaging(
+    matches?.length ?? 0,
+    query,
+    RECENTS_PAGE_SIZE
+  );
 
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const toggleSearch = useCallback(() => {
@@ -298,7 +303,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
             <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No matching chats</div>
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-0.5">
-              {matches.map((item) => renderChat(item, true))}
+              {matches.slice(0, matchDisplayCount).map((item) => renderChat(item, true))}
+              {matchDisplayCount < matches.length && (
+                <div ref={matchSentinelRef} className="tw-h-1" aria-hidden="true" />
+              )}
             </div>
           )
         ) : (
