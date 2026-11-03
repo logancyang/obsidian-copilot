@@ -4,26 +4,39 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import * as projectsState from "@/projects/state";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
+import { ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
 import type { ProjectFileRecord } from "@/projects/type";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { Notice } from "obsidian";
+import { AppContext } from "@/context";
+import { type App, Notice } from "obsidian";
 import React from "react";
 
 jest.mock("@/logger");
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: { getInstance: jest.fn() },
+}));
+const mockDeleteConfirmations: (() => Promise<void> | void)[] = [];
+jest.mock("@/components/modals/ConfirmModal", () => ({
+  ConfirmModal: jest.fn().mockImplementation((_app, onConfirm) => {
+    mockDeleteConfirmations.push(onConfirm);
+    return { open: jest.fn() };
+  }),
+}));
+jest.mock("@/agentMode/ui/ArchivedChatsModal", () => ({
+  ...jest.requireActual("@/agentMode/ui/ArchivedChatsModal"),
+  ArchivedChatsModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
+}));
 
 const NONE: ReadonlySet<string> = new Set();
 
-function chat(
-  id: string,
-  title: string,
-  lastAccessedMs: number,
-  extra: Partial<ChatHistoryItem> = {}
-) {
+function chat(id: string, title: string, createdMs: number, extra: Partial<ChatHistoryItem> = {}) {
   return {
     id,
     title,
-    createdAt: new Date(1_000),
-    lastAccessedAt: new Date(lastAccessedMs),
+    createdAt: new Date(createdMs),
+    lastAccessedAt: new Date(createdMs),
     ...extra,
   } satisfies ChatHistoryItem;
 }
@@ -47,6 +60,21 @@ class FakeManager {
   getWaitingChatIds = () => this.waiting;
   getAttentionChatIds = () => this.attention;
   getActiveChatIds = () => this.active;
+  activeProjectId = "";
+  setChatPinned = jest.fn(async (id: string, pinned: boolean) => ({
+    id,
+    pinnedAt: pinned ? 9_000 : undefined,
+  }));
+  setChatArchived = jest.fn(async (id: string, archived: boolean) => ({
+    id,
+    archivedAt: archived ? 9_000 : undefined,
+  }));
+  updateChatTitle = jest.fn(async () => {});
+  getActiveProjectId = () => this.activeProjectId;
+  exitProject = jest.fn(async () => {});
+  enterProject = jest.fn(async () => {
+    this.events.push("project");
+  });
   historyRevision = 0;
   getHistoryRevision = () => this.historyRevision;
   subscribe = (listener: () => void) => {
@@ -74,9 +102,24 @@ class FakeMetadataCache {
 
 const metadataCache = new FakeMetadataCache();
 
-function renderSidebar(manager: FakeManager) {
+class FakeLocalStorage {
+  readonly store = new Map<string, unknown>();
+  loadLocalStorage = (key: string) => this.store.get(key) ?? null;
+  saveLocalStorage = (key: string, value: unknown) => void this.store.set(key, value);
+}
+
+function renderSidebar(manager: FakeManager, localStorage = new FakeLocalStorage()) {
+  jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
+    deleteProject: jest.fn(async () => {}),
+  } as unknown as ProjectFileManager);
   const plugin = {
-    app: { metadataCache, vault: { on: jest.fn(() => ({})), offref: jest.fn() } },
+    app: {
+      metadataCache,
+      vault: { on: jest.fn(() => ({})), offref: jest.fn() },
+      loadLocalStorage: localStorage.loadLocalStorage,
+      saveLocalStorage: localStorage.saveLocalStorage,
+    },
+    openChatSourceFile: jest.fn(async () => {}),
     loadChatById: jest.fn(async () => {}),
     activateAgentView: jest.fn(async () => {
       manager.events.push("view");
@@ -84,21 +127,55 @@ function renderSidebar(manager: FakeManager) {
     }),
   };
   render(
-    <SessionsSidebar
-      manager={manager as unknown as AgentSessionManager}
-      plugin={plugin as unknown as CopilotPlugin}
-    />
+    <AppContext.Provider value={plugin.app as unknown as App}>
+      <SessionsSidebar
+        manager={manager as unknown as AgentSessionManager}
+        plugin={plugin as unknown as CopilotPlugin}
+      />
+    </AppContext.Provider>
   );
   return plugin;
 }
 
 function rowTitles(): string[] {
-  return within(screen.getByRole("list"))
-    .getAllByRole("button")
+  return screen
+    .queryAllByRole("button")
+    .filter(
+      (button) => !button.hasAttribute("aria-expanded") && !button.hasAttribute("aria-pressed")
+    )
+    .filter(
+      (button) =>
+        !/^(New chat|Search chats|Sidebar options|More actions|Show more|Pin chat|Unpin chat|Archive chat)/.test(
+          button.getAttribute("aria-label") ?? button.textContent ?? ""
+        )
+    )
     .map((row) => row.textContent!.trim());
 }
 
+function preExpanded(...projectIds: string[]): FakeLocalStorage {
+  const storage = new FakeLocalStorage();
+  storage.saveLocalStorage("copilot:sessions-sidebar-expanded-projects:v1", projectIds);
+  return storage;
+}
+
+function openMenuIn(row: HTMLElement): void {
+  fireEvent.pointerDown(within(row).getByRole("button", { name: /^More actions/ }), {
+    button: 0,
+    ctrlKey: false,
+  });
+}
+
+function projectRecord(id: string, name: string, extra: Record<string, unknown> = {}) {
+  return {
+    project: { id, name, created: 1_000, UsageTimestamps: 0, ...extra },
+    filePath: `Projects/${id}/project.md`,
+    folderName: id,
+  } as unknown as ProjectFileRecord;
+}
+
 describe("SessionsSidebar", () => {
+  beforeAll(installRadixMenuPolyfills);
+
   describe("SessionsSidebar()", () => {
     afterEach(() => {
       cleanup();
@@ -187,13 +264,14 @@ describe("SessionsSidebar", () => {
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
     });
 
-    it("closes a chat's live session from its row through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+    it("closes a chat's live session from its row menu through the manager for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const manager = new FakeManager();
       manager.items = [chat("a.md", "Alpha", 1_000)];
       manager.open = new Set(["a.md"]);
       renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+      openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
 
       await waitFor(() => expect(manager.closeChatSession).toHaveBeenCalledWith("a.md"));
     });
@@ -205,7 +283,8 @@ describe("SessionsSidebar", () => {
       manager.closeChatSession.mockRejectedValueOnce(new Error("Agent is busy."));
       renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Close chat" }));
+      openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
 
       await waitFor(() =>
         expect(Notice).toHaveBeenCalledWith("Could not close chat: Agent is busy.")
@@ -311,6 +390,157 @@ describe("SessionsSidebar", () => {
       act(() => metadataCache.change({ tags: ["daily"] }));
 
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+    });
+
+    it("groups saved chats into Projects and Recents and keeps the open folders across a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.items = [
+        chat("a.md", "Loose chat", 1_000),
+        chat("b.md", "Seedling notes", 2_000, { projectId: "garden" }),
+      ];
+      const storage = new FakeLocalStorage();
+      renderSidebar(manager, storage);
+      await screen.findByRole("button", { name: "Loose chat" });
+      expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
+      expect(screen.getByRole("button", { name: "Seedling notes" })).toBeTruthy();
+
+      cleanup();
+      renderSidebar(manager, storage);
+      expect(await screen.findByRole("button", { name: "Seedling notes" })).toBeTruthy();
+    });
+
+    it("keeps a folded group folded after a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Loose chat", 1_000)];
+      const storage = new FakeLocalStorage();
+      renderSidebar(manager, storage);
+      await screen.findByRole("button", { name: "Loose chat" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Recents" }));
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+
+      cleanup();
+      renderSidebar(manager, storage);
+      const header = await screen.findByRole("button", { name: "Recents" });
+      expect(header.getAttribute("aria-expanded")).toBe("false");
+      expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull();
+    });
+
+    it("orders projects newest created first, ignoring recent use, and leaves archived projects out for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([
+        projectRecord("stale", "Stale project", { created: 1_000, UsageTimestamps: 9_000 }),
+        projectRecord("fresh", "Fresh project", { created: 5_000, UsageTimestamps: 1_000 }),
+        projectRecord("shelved", "Shelved project", { created: 9_000, archivedAt: 9_500 }),
+      ]);
+      renderSidebar(new FakeManager());
+
+      const folders = await screen.findAllByRole("button", {
+        expanded: false,
+        name: /^\w+ project$/,
+      });
+
+      expect(folders.map((folder) => folder.textContent)).toEqual([
+        "Fresh project",
+        "Stale project",
+      ]);
+    });
+
+    it("moves a chat pinned from its row menu into Pinned for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
+      renderSidebar(manager, preExpanded("garden"));
+      const row = (await screen.findByRole("button", { name: "Seedling notes" })).parentElement!;
+
+      openMenuIn(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Pin chat" }));
+
+      const pinned = await screen.findByRole("region", { name: "Pinned" });
+      expect(manager.setChatPinned).toHaveBeenCalledWith("b.md", true);
+      expect(within(pinned).getByText("Seedling notes")).toBeTruthy();
+      expect(screen.getAllByText("Seedling notes")).toHaveLength(1);
+    });
+
+    it("archives a chat from its row menu so the row disappears for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Loose chat", 1_000)];
+      renderSidebar(manager);
+      const row = (await screen.findByRole("button", { name: "Loose chat" })).parentElement!;
+
+      openMenuIn(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Archive chat" }));
+
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Loose chat" })).toBeNull());
+      expect(manager.setChatArchived).toHaveBeenCalledWith("a.md", true);
+    });
+
+    it("opens a note-backed chat's note from its row menu for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Loose chat", 1_000)];
+      const plugin = renderSidebar(manager);
+      const row = (await screen.findByRole("button", { name: "Loose chat" })).parentElement!;
+
+      openMenuIn(row);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open chat note" }));
+
+      await waitFor(() => expect(plugin.openChatSourceFile).toHaveBeenCalledWith("a.md"));
+    });
+
+    it("opens the Archived dialog with the archived chats and projects from the header menu for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([
+        projectRecord("shelved", "Shelved project", { archivedAt: 9_500 }),
+      ]);
+      const manager = new FakeManager();
+      manager.items = [
+        chat("live.md", "Live chat", 2_000),
+        chat("shelved.md", "Shelved chat", 3_000, { archivedAt: 4_000 }),
+      ];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Live chat" });
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Sidebar options" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByRole("menuitem", { name: "View archived" }));
+
+      const [, chats, projects] = jest.mocked(ArchivedChatsModal).mock.calls[0];
+      expect(chats.map((item) => item.id)).toEqual(["shelved.md"]);
+      expect(projects.map((project) => project.id)).toEqual(["shelved"]);
+    });
+
+    it("reveals the Agent view before entering a project opened from the Archived dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Sidebar options" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByRole("menuitem", { name: "View archived" }));
+
+      const [, , , actions] = jest.mocked(ArchivedChatsModal).mock.calls[0];
+      await actions.onOpenProject("shelved");
+
+      expect(manager.events).toEqual(["view", "project"]);
+    });
+
+    it("leaves the project when the open project is deleted from its folder menu, as the landing list does, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.activeProjectId = "garden";
+      renderSidebar(manager);
+      const folder = (await screen.findByRole("button", { name: "Garden plans" })).parentElement!;
+
+      openMenuIn(folder);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete project" }));
+      await mockDeleteConfirmations[0]();
+
+      expect(manager.exitProject).toHaveBeenCalledTimes(1);
     });
 
     it("reloads the list when a project is archived so its chats drop out for https://github.com/Brevilabs/obsidian-copilot-private/issues/806", async () => {

@@ -1,14 +1,18 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
-export function useIncrementalPaging(total: number, resetKey: string) {
-  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+export function useIncrementalPaging(
+  total: number,
+  resetKey: string,
+  pageSize = DEFAULT_PAGE_SIZE
+) {
+  const [displayCount, setDisplayCount] = useState(pageSize);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   useLayoutEffect(() => {
-    setDisplayCount(PAGE_SIZE);
-  }, [resetKey]);
+    setDisplayCount(pageSize);
+  }, [resetKey, pageSize]);
 
   const sentinelRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -21,14 +25,14 @@ export function useIncrementalPaging(total: number, resetKey: string) {
       const observer = new Observer(
         (entries) => {
           if (!entries[0]?.isIntersecting) return;
-          setDisplayCount((current) => Math.min(current + PAGE_SIZE, total));
+          setDisplayCount((current) => Math.min(current + pageSize, total));
         },
         { threshold: 0.1 }
       );
       observer.observe(node);
       observerRef.current = observer;
     },
-    [total]
+    [total, pageSize]
   );
 
   return { displayCount, sentinelRef };

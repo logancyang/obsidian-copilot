@@ -1,7 +1,16 @@
-import { RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
+import {
+  RecentChatMenu,
+  RowActionButton,
+  isPinned,
+  type RecentChatActions,
+} from "@/agentMode/ui/RecentChatMenu";
+import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
-import { CircleAlert, LoaderCircle, X } from "lucide-react";
-import React from "react";
+import { isNativeChatId } from "@/utils/nativeChatId";
+import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import { Archive, CircleAlert, LoaderCircle, Pin, PinOff } from "lucide-react";
+import React, { useState } from "react";
 
 export type SessionStatus = "idle" | "running" | "waiting" | "unread";
 
@@ -21,16 +30,27 @@ export function resolveSessionStatus({
   return unread ? "unread" : "idle";
 }
 
+const STATUS_URGENCY: readonly SessionStatus[] = ["idle", "running", "unread", "waiting"];
+
+export function mostUrgentStatus(statuses: Iterable<SessionStatus>): SessionStatus {
+  let urgent: SessionStatus = "idle";
+  for (const status of statuses) {
+    if (STATUS_URGENCY.indexOf(status) > STATUS_URGENCY.indexOf(urgent)) urgent = status;
+  }
+  return urgent;
+}
+
 interface SessionsSidebarRowProps {
-  title: string;
+  item: ChatHistoryItem;
   status: SessionStatus;
   active: boolean;
   isSessionOpen: boolean;
+  projectName?: string;
+  actions: RecentChatActions;
   onSelect: () => void;
-  onCloseSession: () => void;
 }
 
-const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?: boolean }> = ({
+export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?: boolean }> = ({
   status,
   isSessionOpen,
 }) => {
@@ -60,58 +80,99 @@ const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?: boole
 };
 
 export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
-  title,
+  item,
   status,
   active,
   isSessionOpen,
+  projectName,
+  actions,
   onSelect,
-  onCloseSession,
-}) => (
-  <div
-    className={cn(
-      "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md hover:tw-bg-modifier-hover",
-      active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
-    )}
-  >
-    <button
-      type="button"
-      aria-current={active ? "true" : undefined}
-      onClick={onSelect}
+}) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const pinned = isPinned(item);
+  return (
+    <div
       className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
-        "tw-rounded-md tw-bg-transparent tw-px-2 tw-py-1.5 tw-text-left tw-shadow-none",
-        "hover:tw-bg-transparent focus-visible:tw-bg-modifier-hover"
+        "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md",
+        "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
+        active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenuOpen(true);
+      }}
     >
-      {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      <RecentChatTitle title={title} className={cn(status === "unread" && "tw-font-semibold")} />
-      {status === "unread" && <span role="img" aria-label="Unread result" className="tw-sr-only" />}
-      {/* Titles start flush with the panel and the status sits at the right end, where hovering a live chat lays close
-          over it; the status keeps its space, so a long title's ellipsis stays put.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      <span
-        className={cn(
-          "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
-          isSessionOpen && "group-focus-within:tw-invisible group-hover:tw-invisible"
-        )}
-      >
-        <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
-      </span>
-    </button>
-    {isSessionOpen && (
       <button
         type="button"
-        aria-label="Close chat"
-        title="Close chat"
-        onClick={onCloseSession}
+        aria-current={active ? "true" : undefined}
+        onClick={onSelect}
         className={cn(
-          "clickable-icon tw-absolute tw-right-1.5 tw-hidden tw-size-5 tw-items-center tw-justify-center tw-rounded-sm tw-p-0",
-          "group-focus-within:tw-flex group-hover:tw-flex"
+          "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+          "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
-        <X className="tw-size-3.5" />
+        {/* Hovering lays Pin, Archive and More actions over the row's right end instead of reflowing it, so the title
+            fades out under them while its ellipsis, badge and the status's space stay put.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+        <span
+          className={cn(
+            "tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+            menuOpen
+              ? "[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
+              : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
+          )}
+        >
+          {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+          <RecentChatTitle
+            title={item.title}
+            className={cn(status === "unread" && "tw-font-semibold")}
+          />
+          {status === "unread" && (
+            <span role="img" aria-label="Unread result" className="tw-sr-only" />
+          )}
+          {projectName && <RecentChatProjectBadge name={projectName} />}
+        </span>
+        {/* Titles start flush with the panel and the status sits at the right end; a long title ellipsizes before it.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+        <span
+          className={cn(
+            "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+            menuOpen ? "tw-invisible" : "group-focus-within:tw-invisible group-hover:tw-invisible"
+          )}
+        >
+          <SessionStatusIcon status={status} isSessionOpen={isSessionOpen} />
+        </span>
       </button>
-    )}
-  </div>
-);
+      {/* The open menu is anchored to More actions, so the trigger stays shown after the pointer leaves the row.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/693 */}
+      <div
+        className={cn(
+          "tw-absolute tw-right-1 tw-items-center tw-gap-1.5",
+          menuOpen ? "tw-flex" : "tw-hidden group-focus-within:tw-flex group-hover:tw-flex"
+        )}
+      >
+        <RowActionButton
+          label={pinned ? "Unpin chat" : "Pin chat"}
+          onClick={() => safeAsyncHandler(actions.onSetChatPinned)(item.id, !pinned)}
+        >
+          {pinned ? <PinOff className="tw-size-4" /> : <Pin className="tw-size-4" />}
+        </RowActionButton>
+        <RowActionButton
+          label="Archive chat"
+          onClick={() => safeAsyncHandler(actions.onSetChatArchived)(item.id, true)}
+        >
+          <Archive className="tw-size-4" />
+        </RowActionButton>
+        <RecentChatMenu
+          item={item}
+          isNoteBacked={!isNativeChatId(item.id)}
+          isSessionOpen={isSessionOpen}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          actions={actions}
+        />
+      </div>
+    </div>
+  );
+};

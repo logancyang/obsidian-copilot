@@ -1,28 +1,50 @@
 import {
   SessionsSidebarRow,
+  mostUrgentStatus,
   resolveSessionStatus,
   type SessionStatus,
 } from "@/agentMode/navigator/ui/SessionsSidebarRow";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
+import {
+  inertChatActions,
+  sidebarChat,
+} from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
+import { AppContext } from "@/context";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { App } from "obsidian";
 import React from "react";
 
 function renderRow(overrides: Partial<React.ComponentProps<typeof SessionsSidebarRow>> = {}) {
   const props = {
-    title: "Plan the fall launch",
+    item: sidebarChat("chats/plan.md", "Plan the fall launch", 5),
     status: "idle" as SessionStatus,
     active: false,
     isSessionOpen: false,
+    actions: inertChatActions({ getChatBookmarkState: () => new Promise<never>(() => {}) }),
     onSelect: jest.fn(),
-    onCloseSession: jest.fn(),
     ...overrides,
   };
-  render(<SessionsSidebarRow {...props} />);
+  render(
+    <AppContext.Provider value={new App()}>
+      <SessionsSidebarRow {...props} />
+    </AppContext.Provider>
+  );
   return props;
 }
 
+function openRowMenu(): HTMLElement {
+  fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  return screen.getByRole("menu");
+}
+
 describe("SessionsSidebarRow", () => {
+  beforeAll(installRadixMenuPolyfills);
+
   describe("SessionsSidebarRow()", () => {
-    it("shows the chat title as the row's name and selects the chat on click for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows the chat title as the row's name and selects the chat on click", () => {
       const { onSelect } = renderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "Plan the fall launch" }));
@@ -30,32 +52,35 @@ describe("SessionsSidebarRow", () => {
       expect(onSelect).toHaveBeenCalledTimes(1);
     });
 
-    it("marks the row as the current chat only when it is active for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("marks the row as the current chat only when it is active", () => {
       renderRow({ active: true });
-      expect(screen.getByRole("button").getAttribute("aria-current")).toBe("true");
+      expect(
+        screen.getByRole("button", { name: "Plan the fall launch" }).getAttribute("aria-current")
+      ).toBe("true");
     });
 
-    it("leaves the row unmarked when it is not active for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("leaves the row unmarked when it is not active", () => {
       renderRow({ active: false });
-      expect(screen.getByRole("button").hasAttribute("aria-current")).toBe(false);
+      expect(
+        screen.getByRole("button", { name: "Plan the fall launch" }).hasAttribute("aria-current")
+      ).toBe(false);
     });
 
     it.each([
       ["running", "Running"],
       ["waiting", "Waiting for permission"],
-    ] as const)(
-      "labels a %s row with its status icon for https://github.com/Brevilabs/obsidian-copilot-private/issues/801",
-      (status, label) => {
-        renderRow({ status });
+    ] as const)("labels a %s row with its status icon", (status, label) => {
+      renderRow({ status });
 
-        expect(screen.getByLabelText(label)).toBeTruthy();
-      }
-    );
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    });
 
-    it("shows no status icon on an idle row for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows no status icon on an idle row", () => {
       renderRow({ status: "idle" });
 
-      expect(screen.getByRole("button").querySelector("[aria-label]")).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Plan the fall launch" }).querySelector("[aria-label]")
+      ).toBeNull();
     });
 
     it("marks an idle chat with a live session with a session-open dot for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
@@ -97,29 +122,119 @@ describe("SessionsSidebarRow", () => {
       expect(row.querySelector(".tw-order-first")).toBeNull();
     });
 
-    it("closes the live session from the row's right end without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
-      const { onSelect, onCloseSession } = renderRow({ isSessionOpen: true });
+    it("offers Pin chat, Archive chat and More actions, in that order, after the title for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderRow({ isSessionOpen: true });
 
-      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+      const names = screen
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"));
 
-      expect(onCloseSession).toHaveBeenCalledTimes(1);
-      expect(onSelect).not.toHaveBeenCalled();
+      expect(names).toEqual([null, "Pin chat", "Archive chat", "More actions"]);
     });
 
-    it("keeps the status's space and overlays close on it, so hovering a live chat moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("keeps the status's space and overlays the hover actions on the row's right end, so hovering moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       renderRow({ isSessionOpen: true });
 
       const statusSlot = screen.getByLabelText("Session open").parentElement!;
       expect(statusSlot.className).toContain("group-hover:tw-invisible");
       expect(statusSlot.className).not.toContain("group-hover:tw-hidden");
-      expect(screen.getByRole("button", { name: "Close chat" }).className).toContain("tw-absolute");
+      expect(screen.getByRole("button", { name: "Pin chat" }).parentElement!.className).toContain(
+        "tw-absolute"
+      );
     });
 
-    it("offers no close button when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
-      renderRow({ isSessionOpen: false, status: "unread" });
+    it("pins an unpinned chat from its Pin chat button without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatPinned: jest.fn(async () => {}) });
+      const { onSelect } = renderRow({ actions });
+
+      fireEvent.click(screen.getByRole("button", { name: "Pin chat" }));
+
+      expect(actions.onSetChatPinned).toHaveBeenCalledWith("chats/plan.md", true);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("unpins a pinned chat from its Unpin chat button for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatPinned: jest.fn(async () => {}) });
+      renderRow({
+        item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, { pinnedAt: 1 }),
+        actions,
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Unpin chat" }));
+
+      expect(actions.onSetChatPinned).toHaveBeenCalledWith("chats/plan.md", false);
+    });
+
+    it("archives the chat from its Archive chat button without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({ onSetChatArchived: jest.fn(async () => {}) });
+      const { onSelect } = renderRow({ actions });
+
+      fireEvent.click(screen.getByRole("button", { name: "Archive chat" }));
+
+      expect(actions.onSetChatArchived).toHaveBeenCalledWith("chats/plan.md", true);
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("closes a live session from the row menu's Close chat item without opening the chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      const actions = inertChatActions({
+        onCloseSession: jest.fn(async () => {}),
+        getChatBookmarkState: () => new Promise<never>(() => {}),
+      });
+      const { onSelect } = renderRow({ isSessionOpen: true, actions });
 
       expect(screen.queryByRole("button", { name: "Close chat" })).toBeNull();
+      fireEvent.click(within(openRowMenu()).getByRole("menuitem", { name: "Close chat" }));
+
+      expect(actions.onCloseSession).toHaveBeenCalledWith("chats/plan.md");
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("offers no Close chat when the chat has no live session for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({
+        isSessionOpen: false,
+        status: "unread",
+        actions: inertChatActions({
+          onCloseSession: jest.fn(async () => {}),
+          getChatBookmarkState: () => new Promise<never>(() => {}),
+        }),
+      });
+
+      expect(within(openRowMenu()).queryByRole("menuitem", { name: "Close chat" })).toBeNull();
       expect(screen.queryByLabelText("Session open")).toBeNull();
+    });
+
+    it("labels a pinned chat with the name of its project for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderRow({ projectName: "Garden plans" });
+
+      expect(screen.getByLabelText("Project: Garden plans")).toBeTruthy();
+    });
+
+    it("offers the landing shelf's chat actions from the row menu for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      renderRow();
+
+      const items = within(openRowMenu())
+        .getAllByRole("menuitem")
+        .map((entry) => entry.textContent);
+
+      expect(items).toEqual(
+        expect.arrayContaining(["Pin chat", "Open chat note", "Rename", "Archive chat", "Delete"])
+      );
+    });
+
+    it("does not select the chat when a menu item is chosen for https://github.com/Brevilabs/obsidian-copilot-private/issues/693", () => {
+      const { onSelect } = renderRow();
+
+      fireEvent.click(within(openRowMenu()).getByRole("menuitem", { name: "Open chat note" }));
+
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("opens the row menu from the context menu gesture", () => {
+      renderRow();
+
+      fireEvent.contextMenu(screen.getByRole("button", { name: "Plan the fall launch" }));
+
+      expect(screen.getByRole("menu")).toBeTruthy();
     });
   });
 
@@ -132,5 +247,20 @@ describe("SessionsSidebarRow", () => {
     ] as const)("resolves %j to %s so the most urgent status wins", (flags, expected) => {
       expect(resolveSessionStatus(flags)).toBe(expected);
     });
+  });
+
+  describe("mostUrgentStatus()", () => {
+    it.each([
+      [["running", "unread", "idle"], "unread"],
+      [["running", "waiting", "unread"], "waiting"],
+      [["idle", "running"], "running"],
+      [["idle", "idle"], "idle"],
+      [[], "idle"],
+    ] as const)(
+      "picks the most urgent of %j (waiting > unread > running) for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
+      (statuses, expected) => {
+        expect(mostUrgentStatus(statuses)).toBe(expected);
+      }
+    );
   });
 });

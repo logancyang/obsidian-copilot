@@ -1,15 +1,19 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
+import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
+import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
+import { useStoredIdSet } from "@/hooks/useStoredIdSet";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { SessionsSidebarPanel } from "@/agentMode/navigator/ui/SessionsSidebarPanel";
 import { AGENT_CHAT_MODE } from "@/constants";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { useArchivedProjects } from "@/projects/state";
+import { useActiveProjects, useArchivedProjects } from "@/projects/state";
 import { Notice } from "obsidian";
-import React, { useCallback, useEffect, useSyncExternalStore } from "react";
+import React, { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
 interface SessionsSidebarProps {
@@ -18,7 +22,21 @@ interface SessionsSidebarProps {
 }
 
 export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugin }) => {
-  const { chatHistoryItems, loadChatHistory, loadChat } = useAgentHistoryControls(manager, plugin);
+  const {
+    chatHistoryItems,
+    archivedChatItems,
+    loadChatHistory,
+    loadChat,
+    updateChatTitle,
+    deleteChat,
+    setChatPinned,
+    setChatArchived,
+    openSourceFile,
+    copyChatLink,
+    getChatBookmarkState,
+    setChatBookmarked,
+  } = useAgentHistoryControls(manager, plugin);
+  const { app } = plugin;
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());
@@ -27,9 +45,17 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
   const subscribeToManager = useCallback((l: () => void) => manager.subscribe(l), [manager]);
   const getHistoryRevision = useCallback(() => manager.getHistoryRevision(), [manager]);
   const historyRevision = useSyncExternalStore(subscribeToManager, getHistoryRevision);
-  const archivedProjectKey = useArchivedProjects()
-    .map((project) => project.id)
-    .join("\n");
+  const archivedProjects = useArchivedProjects();
+  const archivedProjectKey = archivedProjects.map((project) => project.id).join("\n");
+  const projects = useActiveProjects();
+  const { ids: expandedProjectIds, toggle: toggleProject } = useStoredIdSet(
+    app,
+    "copilot:sessions-sidebar-expanded-projects:v1"
+  );
+  const { ids: collapsedGroups, toggle: toggleGroup } = useStoredIdSet(
+    app,
+    "copilot:sessions-sidebar-collapsed-groups:v1"
+  );
 
   // The saved list changes when a chat starts, finishes, is renamed or deleted, or when a project's archive state changes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
@@ -71,17 +97,67 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     [manager]
   );
 
+  const actions = useMemo<RecentChatActions>(
+    () => ({
+      onUpdateTitle: updateChatTitle,
+      onCopyChatLink: copyChatLink,
+      getChatBookmarkState,
+      onSetChatBookmarked: setChatBookmarked,
+      onDeleteChat: deleteChat,
+      onOpenSourceFile: (id) => void openSourceFile(id),
+      onCloseSession: handleCloseSession,
+      onSetChatPinned: setChatPinned,
+      onSetChatArchived: setChatArchived,
+    }),
+    [
+      updateChatTitle,
+      copyChatLink,
+      getChatBookmarkState,
+      setChatBookmarked,
+      deleteChat,
+      openSourceFile,
+      handleCloseSession,
+      setChatPinned,
+      setChatArchived,
+    ]
+  );
+
+  const handleViewArchived = useCallback(() => {
+    const projectActions = createProjectArchiveActions(app, manager);
+    new ArchivedChatsModal(app, archivedChatItems, archivedProjects, {
+      onUnarchive: (id) => setChatArchived(id, false),
+      onOpen: loadChat,
+      ...projectActions,
+      onOpenProject: async (id) => {
+        await plugin.activateAgentView();
+        await projectActions.onOpenProject(id);
+      },
+    }).open();
+  }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
+
+  const handleProjectDeleted = useCallback(
+    (deletedId: string) => leaveDeletedProject(manager, deletedId),
+    [manager]
+  );
+
   return (
     <SessionsSidebarPanel
       items={chatHistoryItems}
+      projects={projects}
+      expandedProjectIds={expandedProjectIds}
+      openChatIds={openChatIds}
+      actions={actions}
+      onToggleProject={toggleProject}
+      collapsedGroups={collapsedGroups}
+      onToggleGroup={toggleGroup}
+      onProjectDeleted={handleProjectDeleted}
+      onViewArchived={handleViewArchived}
       activeChatIds={activeChatIds}
       runningChatIds={runningChatIds}
       waitingChatIds={waitingChatIds}
       attentionChatIds={attentionChatIds}
-      openChatIds={openChatIds}
       onNewChat={safeAsyncHandler(handleNewChat)}
       onOpenChat={safeAsyncHandler(loadChat)}
-      onCloseSession={safeAsyncHandler(handleCloseSession)}
     />
   );
 };

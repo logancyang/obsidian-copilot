@@ -9,6 +9,7 @@ interface SearchBarProps {
   onChange: (value: string) => void;
   placeholder?: string;
   inputClassName?: string;
+  autoFocus?: boolean;
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
@@ -16,12 +17,16 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   onChange,
   placeholder = "Search...",
   inputClassName,
+  autoFocus,
 }) => {
+  const inputRef = React.useRef<HTMLInputElement>(null);
   return (
     <div className="tw-relative">
       <Input
+        ref={inputRef}
         type="text"
         placeholder={placeholder}
+        autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={cn("tw-pr-10", inputClassName)}
@@ -29,7 +34,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       {value && (
         <Button
           variant={"secondary"}
-          onClick={() => onChange("")}
+          onClick={() => {
+            onChange("");
+            inputRef.current?.focus();
+          }}
           className="tw-absolute tw-right-8 tw-top-1/2 tw-size-4 -tw-translate-y-1/2 tw-transform tw-rounded-full tw-p-0 tw-transition-colors"
           aria-label="Clear search"
         >
