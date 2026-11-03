@@ -222,6 +222,8 @@ Select a row to open that note's before and after as a single tab. Removed text 
 
 To undo part of a turn, hover over a stretch of changes and select **Revoke**. That stretch goes back to what the note said before the turn, and the rest of the note stays as it is. Revoke is unavailable for a stretch that you or a later turn edited after this turn, and for notes the agent created or deleted. The agent is not told about a revoke.
 
+Select text in the tab to attach it to your next message. Removed and added words in the selection stay marked, so a question such as "why did you change this?" is about exactly that change.
+
 In a long note, a narrow strip along the left edge of the tab shows where the changes are. The strip stands for the whole note, with one mark for each change at its position in the note: green where text was added, red where it was removed, and blue where both happened. Select a mark to jump to that change.
 
 The header shows which change you are at, such as "1 of 6". Use the up and down arrows beside it to move to the previous or next change; moving past the last change returns to the first. The **Go to next change in file diff** and **Go to previous change in file diff** commands do the same, so you can assign them hotkeys in Obsidian's settings.

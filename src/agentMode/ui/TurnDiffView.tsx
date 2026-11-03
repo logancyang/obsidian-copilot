@@ -5,6 +5,7 @@ import {
   useChangeNavigation,
   type ChangeStep,
 } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import { markedSelectionText } from "@/agentMode/ui/renderedDiff/markedSelection";
 import type { DiffRun } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { revokeRun } from "@/agentMode/ui/renderedDiff/revokeRun";
@@ -12,6 +13,7 @@ import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
+import type { SelectionReport } from "@/selection/selectionStore";
 import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import {
@@ -25,6 +27,7 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import React, { type ReactNode } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 // A diff tab's capture lives only in memory, so tabs restored after a restart or plugin reload are empty.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
@@ -60,6 +63,36 @@ export class TurnDiffView extends ItemView {
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
+  }
+
+  static activeSelection(this: void, app: App): (() => SelectionReport) | null {
+    const view = app.workspace.getActiveViewOfType(TurnDiffView);
+    const state = view?.state;
+    if (!view || !state) return null;
+    // The selection is read now, before the debounce: moving into chat in the meantime moves the selection there,
+    // and a selection outside the diff leaves the attached one in place.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/824
+    const selection = view.containerEl.ownerDocument.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (!range || !view.containerEl.contains(range.commonAncestorContainer)) return null;
+    const location = turnDiffKey(state.turnId, state.path);
+    const content = markedSelectionText(range);
+    const report: SelectionReport = content
+      ? {
+          location,
+          key: `${location}\n${content}`,
+          context: {
+            id: uuidv4(),
+            content,
+            sourceType: "note",
+            noteTitle: basename(state.path).replace(/\.[^.]+$/, ""),
+            notePath: state.path,
+            startLine: 0,
+            endLine: 0,
+          },
+        }
+      : { location, context: null };
+    return () => report;
   }
 
   getViewType(): string {
