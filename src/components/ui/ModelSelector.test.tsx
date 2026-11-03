@@ -135,5 +135,21 @@ describe("ModelSelector", () => {
       expect(onChange).not.toHaveBeenCalled();
       expect(window.open).not.toHaveBeenCalled();
     });
+
+    it("uses a disabled row's hint as its tooltip and its reason as the right-side label, falling back to the reason as the tooltip", async () => {
+      const blocked = model({
+        name: "qwen",
+        _disabledReason: "Blocked by your OpenCode settings",
+        _disabledHint: "Check enabled_providers.",
+      });
+      const needsKey = model({ _disabledReason: "Add API key" });
+      render(<ModelSelector value="" onChange={jest.fn()} models={[blocked, needsKey]} />);
+      fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+
+      expect(await screen.findByText("Blocked by your OpenCode settings")).toBeTruthy();
+      const [blockedRow, needsKeyRow] = screen.getAllByRole("menuitem");
+      expect(blockedRow.getAttribute("title")).toBe("Check enabled_providers.");
+      expect(needsKeyRow.getAttribute("title")).toBe("Add API key");
+    });
   });
 });

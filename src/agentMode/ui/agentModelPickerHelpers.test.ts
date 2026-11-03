@@ -891,6 +891,35 @@ describe("agentModelPickerHelpers", () => {
       expect(byId["openrouter/c"].displayName).toBe("Reported C");
     });
 
+    it("labels a model the agent's own config blocks with the backend's reason and hint, while a missing key and an unblocked unreported model keep their own labels (https://github.com/Brevilabs/obsidian-copilot-private/issues/835)", () => {
+      const enabled: EnabledModelEntry[] = [
+        { baseModelId: "openrouter/a", name: "A", credentialState: "ok" },
+        { baseModelId: "openrouter/b", name: "B", credentialState: "missing_key" },
+        { baseModelId: "anthropic/c", name: "C", credentialState: "ok" },
+        { baseModelId: "anthropic/d", name: "D", credentialState: "ok" },
+      ];
+      const getBlockedModels = jest.fn(() => ({
+        baseModelIds: new Set(["openrouter/a", "openrouter/b"]),
+        reason: "Blocked by your OpenCode settings",
+        hint: "Check enabled_providers.",
+      }));
+      const backendModels = [makeModelEntry("anthropic/c")];
+      const entries: ModelSelectorEntry[] = [];
+      appendBackendSection(
+        entries,
+        { ...opencodeWithEntries(enabled), getBlockedModels },
+        { backendModels, settings: emptySettings }
+      );
+      const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+      expect(byId["openrouter/a"]._disabledReason).toBe("Blocked by your OpenCode settings");
+      expect(byId["openrouter/a"]._disabledHint).toBe("Check enabled_providers.");
+      expect(byId["openrouter/b"]._disabledReason).toBe("Add API key");
+      expect(byId["openrouter/b"]._disabledHint).toBeUndefined();
+      expect(byId["anthropic/d"]._disabledReason).toBe("Not offered by agent");
+      expect(byId["anthropic/d"]._disabledHint).toBeUndefined();
+      expect(getBlockedModels).toHaveBeenCalledWith(emptySettings, backendModels);
+    });
+
     it("shows an enabled model's host label over the agent-reported name, and the reported name when unlabeled (https://github.com/logancyang/obsidian-copilot/issues/3496)", () => {
       const enabled: EnabledModelEntry[] = [
         {

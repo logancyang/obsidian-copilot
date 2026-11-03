@@ -6,7 +6,12 @@ import {
   providerNeedsSelfHostWarning,
   providerRequiresApiKey,
 } from "@/modelManagement";
-import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
+import type {
+  BlockedModels,
+  EnabledModelCredentialState,
+  EnabledModelEntry,
+  ModelEntry,
+} from "@/agentMode/session/types";
 
 export interface OpencodeProviderMapping {
   id: string;
@@ -106,4 +111,30 @@ export function opencodeEnabledModelEntries(
     });
   }
   return out.length === 0 ? EMPTY_ENABLED_ENTRIES : out;
+}
+
+const OPENCODE_BLOCKED_REASON = "Blocked by your OpenCode settings";
+const OPENCODE_BLOCKED_HINT =
+  "OpenCode reports no models for this provider. Check enabled_providers, disabled_providers, and policies in your OpenCode config.";
+
+export function opencodeBlockedModels(
+  settings: CopilotSettings,
+  reportedModels: ReadonlyArray<ModelEntry>
+): BlockedModels | null {
+  // A user's own enabled_providers, disabled_providers, or policies outrank Copilot's injected config and drop its providers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/835
+  const reportedProviderIds = new Set(reportedModels.map((m) => m.baseModelId.split("/")[0]));
+  const baseModelIds = new Set<string>();
+  for (const configuredModelId of settings.backends.opencode?.enabledModels ?? []) {
+    const configuredModel = settings.configuredModels.find(
+      (model) => model.configuredModelId === configuredModelId
+    );
+    const provider = configuredModel && settings.providers[configuredModel.providerId];
+    const mapping = provider && mapProviderToOpencodeId(provider);
+    if (!configuredModel || !mapping || mapping.native) continue;
+    if (reportedProviderIds.has(mapping.id)) continue;
+    baseModelIds.add(`${mapping.id}/${configuredModel.info.id}`);
+  }
+  if (baseModelIds.size === 0) return null;
+  return { baseModelIds, reason: OPENCODE_BLOCKED_REASON, hint: OPENCODE_BLOCKED_HINT };
 }

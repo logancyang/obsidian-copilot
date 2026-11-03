@@ -21,7 +21,11 @@ import {
   OpencodeBinaryManager,
   toOpencodeInstallState,
 } from "./OpencodeBinaryManager";
-import { opencodeEnabledModelEntries, opencodeWireBaseIdFor } from "./opencodeModelResolve";
+import {
+  opencodeBlockedModels,
+  opencodeEnabledModelEntries,
+  opencodeWireBaseIdFor,
+} from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
@@ -90,6 +94,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     return [...opencodeEnabledModelEntries(settings)];
   },
+
+  getBlockedModels: opencodeBlockedModels,
 
   // OpenCode 2.0.32 stores an "always" reply as a saved rule for its project folder.
   // https://github.com/logancyang/obsidian-copilot/issues/2889

@@ -21,6 +21,7 @@ const PICKER_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model
 
 export type ModelSelectorEntry = CustomModel & {
   _disabledReason?: string;
+  _disabledHint?: string;
   _group?: string;
   _backendId?: string;
   _subtitle?: string;
@@ -102,7 +103,7 @@ export function ModelSelector({
               )}
               <DropdownMenuItem
                 disabled={itemDisabled && !model._needsLicense}
-                title={disabledReason ?? undefined}
+                title={model._disabledHint ?? disabledReason ?? undefined}
                 onSelect={(event) => {
                   if (model._needsLicense) {
                     (event.currentTarget as HTMLElement).win.open(
