@@ -26,10 +26,7 @@ export interface RenderedDiffProps {
   revoke?: RunRevoke;
 }
 
-interface ResolvedPlan {
-  before: string | null;
-  after: string | null;
-  path: string;
+interface ResolvedPlan extends Omit<RenderedDiffProps, "revoke"> {
   segments: readonly DiffSegment[];
 }
 
