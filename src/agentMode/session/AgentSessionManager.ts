@@ -128,12 +128,14 @@ const EMPTY_CHAT_INPUT_IDS: readonly string[] = Object.freeze([]);
 const EMPTY_MCP_SERVERS: ReadonlyArray<AgentMcpServer> = Object.freeze([]);
 
 const RESUMED_SESSION_BEHIND_EPOCH = -1;
-// Each hidden chat on a process-per-chat backend holds an agent process of a few hundred MB, so only a few idle ones stay open; a closed one resumes from its transcript. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-const MAX_HIDDEN_PROCESS_CHATS = 3;
 
 function hasUnsentInput(draft: AgentInputDraft | undefined): boolean {
   return (
-    !!draft && (draft.input.trim() !== "" || draft.images.length > 0 || draft.queue.length > 0)
+    !!draft &&
+    (draft.input.trim() !== "" ||
+      draft.images.length > 0 ||
+      draft.contextNotes.length > 0 ||
+      draft.queue.length > 0)
   );
 }
 
@@ -230,6 +232,11 @@ export class AgentSessionManager {
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/473
    */
   private readonly retainedChatInputIds = new Set<string>();
+  // Keyed by chat input so a chat worked in stays live after a backend restart or an in-place replacement rebuilds its session.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+  private readonly promptedChatInputIds = new Set<string>();
+  private readonly closingSessions = new Map<string, Promise<void>>();
+  private lastShownSessionId: string | null = null;
   /**
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -556,29 +563,33 @@ export class AgentSessionManager {
       this.activeSessionId = nextId;
       if (nextId) this.lastActiveByScope.set(session.projectId, nextId);
     }
-    this.closeIdleHiddenChatsOverCap();
+    this.closeSessionIfLeft(id);
     this.notify();
   }
 
-  private closeIdleHiddenChatsOverCap(): void {
-    const hidden = Array.from(this.detachedFromTabIds, (id) => this.sessions.get(id)).filter(
-      (session): session is AgentSession =>
-        !!session && this.opts.resolveDescriptor(session.backendId)?.processPerChat === true
+  // Leaving a chat closes its session unless the user sent a message in it or left unsent input that closing would discard; any number of worked-in chats stay live.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+  private keepsSessionWhenLeft(session: AgentSession): boolean {
+    return (
+      this.promptedChatInputIds.has(session.chatInputId) ||
+      this.retainedChatInputIds.has(session.chatInputId) ||
+      hasUnsentInput(this.drafts.get(session.chatInputId))
     );
-    let excess = hidden.length - MAX_HIDDEN_PROCESS_CHATS;
-    // The hidden set keeps hide order, so the least recently used chats come first. A chat that still works, waits on the user, has an unseen result, or holds unsent composer input (a reopened chat starts with an empty composer) keeps its process. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    for (const session of hidden) {
-      if (excess <= 0) return;
-      const status = session.getStatus();
-      if (status !== "idle" && status !== "error") continue;
-      if (hasRunningTask(session) || session.getPendingToolPermissions().length > 0) continue;
-      if (session.getQueuedPrompts().length > 0 || session.getNeedsAttention()) continue;
-      if (hasUnsentInput(this.drafts.get(session.chatInputId))) continue;
-      excess--;
-      void this.closeSession(session.internalId).catch((e) =>
-        logWarn(`[AgentMode] closing an idle hidden chat failed`, e)
-      );
+  }
+
+  private closeSessionIfLeft(id: string): void {
+    const session = this.sessions.get(id);
+    if (!session || id === this.activeSessionId || this.keepsSessionWhenLeft(session)) return;
+    // A starting chat has no agent session to release yet, so it closes once it has started.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    if (session.getStatus() === "starting") {
+      const retry = () => this.closeSessionIfLeft(id);
+      void session.ready.then(retry, retry);
+      return;
     }
+    void this.closeSession(id).catch((e) =>
+      logWarn(`[AgentMode] closing a chat left without a message failed`, e)
+    );
   }
 
   getRunningChatIds(): ReadonlySet<string> {
@@ -1113,7 +1124,6 @@ export class AgentSessionManager {
     if (projectId !== GLOBAL_SCOPE) {
       const reusable = this.pickReusableLandingSession(projectId);
       this.detachSessionsForProjectEntry(projectId, { includeEmpty: !reusable });
-      this.closeIdleHiddenChatsOverCap();
       if (reusable) {
         this.detachedFromTabIds.delete(reusable.internalId);
         this.activeSessionId = reusable.internalId;
@@ -1185,6 +1195,7 @@ export class AgentSessionManager {
   private isReusableLandingShell(session: AgentSession, projectId: ProjectScopeId): boolean {
     return (
       session.projectId === projectId &&
+      this.isOpenSession(session) &&
       (session.getStatus() === "idle" || session.getStatus() === "starting") &&
       !session.hasUserVisibleMessages()
     );
@@ -1252,9 +1263,9 @@ export class AgentSessionManager {
     const mruId = this.lastActiveByScope.get(projectId);
     if (mruId) {
       const mru = this.sessions.get(mruId);
-      if (mru && mru.getStatus() !== "closed") return mru;
+      if (mru && this.isOpenSession(mru)) return mru;
     }
-    const scoped = this.getSessionsForScope(projectId);
+    const scoped = this.getSessionsForScope(projectId).filter((s) => this.isOpenSession(s));
     return scoped.length > 0 ? scoped[scoped.length - 1] : null;
   }
 
@@ -1629,7 +1640,19 @@ export class AgentSessionManager {
     return this.preloadStatus.get(backendId) ?? "absent";
   }
 
-  async closeSession(id: string, options?: { releaseBackend: boolean }): Promise<void> {
+  // Leaving a chat and the user's own close can both close one session; the second call joins the first.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+  closeSession(id: string, options?: { releaseBackend: boolean }): Promise<void> {
+    const inFlight = this.closingSessions.get(id);
+    if (inFlight) return inFlight;
+    const closing = this.closeSessionOnce(id, options).finally(() => {
+      this.closingSessions.delete(id);
+    });
+    this.closingSessions.set(id, closing);
+    return closing;
+  }
+
+  private async closeSessionOnce(id: string, options?: { releaseBackend: boolean }): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
     const closedScope = session.projectId;
@@ -1665,6 +1688,9 @@ export class AgentSessionManager {
     this.detachAutoSave(id);
     this.opts.copilotMcpServer?.disconnect(id);
     this.sessions.delete(id);
+    if (!this.getLiveChatInputIds().includes(session.chatInputId)) {
+      this.promptedChatInputIds.delete(session.chatInputId);
+    }
     this.chatUIStates.delete(id);
     this.landingCaptureSignatures.delete(id);
     this.lastSeenProjectContentEpochBySession.delete(id);
@@ -1689,7 +1715,7 @@ export class AgentSessionManager {
 
   setActiveSession(id: string): void {
     const session = this.sessions.get(id);
-    if (!session) return;
+    if (!session || !this.isOpenSession(session)) return;
     if (this.activeSessionId === id) return;
     if (session.projectId !== this.activeProjectId) {
       this.setActiveScope(session.projectId);
@@ -1793,11 +1819,17 @@ export class AgentSessionManager {
     return null;
   }
 
+  // A chat left a moment ago may still be closing; reopening it must not revive the session that is going away.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+  private isOpenSession(session: AgentSession): boolean {
+    return session.getStatus() !== "closed" && !this.closingSessions.has(session.internalId);
+  }
+
   private findLiveSession(backendId: BackendId, sessionId: string): AgentSession | null {
     for (const session of this.sessions.values()) {
       if (session.backendId !== backendId) continue;
       if (session.getBackendSessionId() !== sessionId) continue;
-      if (session.getStatus() === "closed") continue;
+      if (!this.isOpenSession(session)) continue;
       return session;
     }
     return null;
@@ -1836,6 +1868,13 @@ export class AgentSessionManager {
   }
 
   private notify(): void {
+    // A chat is left once another one is shown; no chat shown while the next one starts, or a rollback to the same chat, leaves nothing.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    if (this.activeSessionId !== null) {
+      const left = this.lastShownSessionId;
+      this.lastShownSessionId = this.activeSessionId;
+      if (left && left !== this.activeSessionId) this.closeSessionIfLeft(left);
+    }
     this.drafts.prune();
     for (const l of this.listeners) {
       try {
@@ -1958,8 +1997,11 @@ export class AgentSessionManager {
 
     for (const [internalId, state] of this.sessionState.entries()) {
       if (this.getSessionSourcePath(internalId) !== file.path) continue;
+      // A chat left a moment ago still saves into its note while it closes, so reopening waits for that save.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+      await this.closingSessions.get(internalId)?.catch(() => undefined);
       const existing = this.sessions.get(internalId);
-      if (existing && existing.getStatus() !== "closed") {
+      if (existing && this.isOpenSession(existing)) {
         this.setActiveSession(internalId);
         return existing;
       }
@@ -2034,7 +2076,10 @@ export class AgentSessionManager {
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
     if (!previousActiveId || previousActiveId === loaded.internalId) return;
     const previous = this.sessions.get(previousActiveId);
-    if (!previous || previous.hasUserVisibleMessages()) return;
+    // An empty chat holding unsent text is kept like any chat left with a draft, so opening a saved chat cannot discard it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    if (!previous || previous.hasUserVisibleMessages() || this.keepsSessionWhenLeft(previous))
+      return;
     const oldIdx = Array.from(this.sessions.keys()).indexOf(previousActiveId);
     if (oldIdx >= 0) {
       this.moveMapEntry(this.sessions, loaded.internalId, oldIdx);
@@ -2115,6 +2160,9 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
+    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);
     if (existing) return existing;
 
@@ -2135,6 +2183,13 @@ export class AgentSessionManager {
     });
     this.resumedSessionPromiseById.set(key, resume);
     return resume;
+  }
+
+  private async untilChatClosed(backendId: BackendId, sessionId: SessionId): Promise<void> {
+    for (const session of Array.from(this.sessions.values())) {
+      if (session.backendId !== backendId || session.getBackendSessionId() !== sessionId) continue;
+      await this.closingSessions.get(session.internalId)?.catch(() => undefined);
+    }
   }
 
   private async resumeSessionFromHistory(
@@ -2521,6 +2576,9 @@ export class AgentSessionManager {
       },
       // A dropped connection ends an idle chat's subagents with no reply to wait for and no status change. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       onDisconnected: () => void this.flushDeferredBackendRestartIfReady(session.backendId),
+      onPromptSent: () => {
+        this.promptedChatInputIds.add(session.chatInputId);
+      },
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
         const isRunning = next === "running";
