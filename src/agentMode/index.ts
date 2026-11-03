@@ -408,10 +408,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e))
       .then(() => initialSkillsReady)
       .then(() => startupSkillLinks.get(descriptor.id))
-      .finally(() => {
-        initializing.delete(descriptor.id);
-        startupSkillLinks.delete(descriptor.id);
-      });
+      .finally(() => initializing.delete(descriptor.id));
     initializing.set(descriptor.id, ready);
     if (isAgentModeEnabled()) {
       manager.registerPreload(
