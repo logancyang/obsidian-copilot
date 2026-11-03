@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { BUILTIN_SKILLS, builtinSkillUnavailableReason } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -98,10 +98,10 @@ export const SkillsSettings: React.FC = () => {
         (rejected) =>
           toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
       );
-    const reason = collision
-      ? "A skill with this name already exists in Your skills. Your file is kept unchanged."
-      : builtinSkillUnavailableReason(skill.name);
-    if (reason) unavailableReasons[skill.name] = reason;
+    if (collision) {
+      unavailableReasons[skill.name] =
+        "A skill with this name already exists in Your skills. Your file is kept unchanged.";
+    }
   }
   const builtinRows = BUILTIN_ROWS.filter((skill) =>
     `${skill.name} ${skill.description}`.toLowerCase().includes(searchValue.trim().toLowerCase())

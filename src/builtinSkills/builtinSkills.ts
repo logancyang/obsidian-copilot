@@ -1,7 +1,6 @@
 import type { BuiltinPreferences } from "@/settings/builtinSkillPreferences";
 import type { CopilotSettings } from "@/settings/model";
 import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
-import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { OBSIDIAN_SKILLS } from "./obsidianSkills";
 import { howToRunSection } from "./howToRunSection";
 
@@ -26,6 +25,8 @@ export const RETIRED_BUILTIN_SKILLS: readonly Pick<BuiltinSkill, "name">[] = [
   { name: "miyo-parse" },
   // Publishing moved to the openartifacts_* tools, so turning a skill off can't leave them on. https://github.com/Brevilabs/obsidian-copilot-private/issues/746
   { name: "openartifacts-publish" },
+  // The CLI moved to the obsidian_cli tool, which runs outside agent sandboxes. https://github.com/Brevilabs/obsidian-copilot-private/issues/833
+  { name: "obsidian-cli" },
 ];
 
 export const PLUS_ENV = {
@@ -399,14 +400,6 @@ export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
     )
   )
 );
-
-// The CLI toggle is per device, so an unavailable skill keeps its synced files and loses only its
-// agent links and steering here. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-export function builtinSkillUnavailableReason(skillName: string): string | undefined {
-  return skillName === "obsidian-cli" && !isObsidianCliEnabled()
-    ? "Turn on Command line interface in Obsidian's Settings → General to use this skill."
-    : undefined;
-}
 
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,

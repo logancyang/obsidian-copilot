@@ -5,7 +5,6 @@ import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
-import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
@@ -67,9 +66,6 @@ jest.mock("./SkillLoadIssues", () => {
 });
 
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
-jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
-  isObsidianCliEnabled: jest.fn(),
-}));
 jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
 
 jest.mock("@/agentMode/backends/registry", () => ({
@@ -109,7 +105,6 @@ describe("SkillsSettings", () => {
       mockCapturedLoadIssues = [];
       mockCapturedFixAll = () => undefined;
       settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
-      jest.mocked(isObsidianCliEnabled).mockReturnValue(true);
     });
 
     it("shows a new install's Obsidian skills off for Claude and Codex, except Markdown and Bases for Codex, and an existing install's saved choices unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726 https://github.com/logancyang/obsidian-copilot/issues/3868", async () => {
@@ -144,31 +139,7 @@ describe("SkillsSettings", () => {
         });
       });
       expect(state("obsidian-markdown for Claude")).toEqual(["true", "false"]);
-      expect(state("obsidian-cli for Codex")).toEqual(["true", "false"]);
-    });
-
-    it("tells the user to turn on Obsidian's command line interface and locks the obsidian-cli agents while it is off https://github.com/Brevilabs/obsidian-copilot-private/issues/726", async () => {
-      mockAgents = [{ id: "opencode", displayName: "OpenCode", Icon: Bot }];
-      mockInstallStates = { opencode: { kind: "ready", source: "managed" } };
-      jest.mocked(isObsidianCliEnabled).mockReturnValue(false);
-      await act(async () => {
-        renderSettings();
-      });
-      expect(
-        screen.getByLabelText(
-          "Turn on Command line interface in Obsidian's Settings → General to use this skill."
-        )
-      ).toBeTruthy();
-      expect(
-        screen
-          .getByRole("button", { name: "obsidian-cli for OpenCode" })
-          .getAttribute("aria-disabled")
-      ).toBe("true");
-      expect(
-        screen
-          .getByRole("button", { name: "obsidian-markdown for OpenCode" })
-          .getAttribute("aria-disabled")
-      ).toBe("false");
+      expect(state("json-canvas for Codex")).toEqual(["true", "false"]);
     });
 
     it("renders only the changed built-in when preferences publish and discovery reruns https://github.com/logancyang/obsidian-copilot/issues/3022", async () => {

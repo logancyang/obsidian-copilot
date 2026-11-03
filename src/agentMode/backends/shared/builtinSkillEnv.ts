@@ -7,11 +7,6 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/builtinSkills/builtinSkills";
-import {
-  COPILOT_OBSIDIAN_CLI_ENV,
-  resolveObsidianCliPath,
-} from "@/agentMode/backends/shared/obsidianCliPath";
-import { requireNodeModule } from "@/utils/desktopRuntime";
 import type { BackendId } from "@/agentMode/session/types";
 
 const MIYO_URL_ENV = "MIYO_URL";
@@ -28,16 +23,8 @@ export async function buildBuiltinSkillEnv(
   clientVersion = "",
   selfHostSearchChannel?: Readonly<{ url: string; token: string }>
 ): Promise<Readonly<Record<string, string>>> {
-  const os = requireNodeModule<typeof import("node:os")>("os");
   const settings = getSettings();
   const env: Record<string, string> = {};
-
-  const obsidianCliPath = resolveObsidianCliPath({
-    platform: process.platform,
-    resourcesPath: (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath,
-    homeDir: os.homedir(),
-  });
-  if (obsidianCliPath) env[COPILOT_OBSIDIAN_CLI_ENV] = obsidianCliPath;
 
   // The channel values are protected from backend overrides so Self-Host mode
   // cannot silently fall back to a hosted or agent-native search path.

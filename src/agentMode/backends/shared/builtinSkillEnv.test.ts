@@ -12,30 +12,19 @@ import {
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
   SELF_HOST_WEB_SEARCH_URL_ENV,
 } from "@/builtinSkills/builtinSkills";
-import {
-  COPILOT_OBSIDIAN_CLI_ENV,
-  resolveObsidianCliPath,
-} from "@/agentMode/backends/shared/obsidianCliPath";
 
 jest.mock("@/settings/model", () => ({ getSettings: jest.fn() }));
 jest.mock("@/miyo/miyoUtils", () => ({ getMiyoCustomUrl: jest.fn() }));
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
-jest.mock("@/agentMode/backends/shared/obsidianCliPath", () => ({
-  COPILOT_OBSIDIAN_CLI_ENV: "COPILOT_OBSIDIAN_CLI",
-  resolveObsidianCliPath: jest.fn(),
-}));
 
 const mockGetSettings = getSettings as jest.Mock;
 const mockGetMiyoCustomUrl = getMiyoCustomUrl as jest.Mock;
-const mockResolveObsidianCliPath = resolveObsidianCliPath as jest.Mock;
 
 describe("builtinSkillEnv", () => {
   beforeEach(() => {
     mockGetSettings.mockReset();
     mockGetMiyoCustomUrl.mockReset();
-    mockResolveObsidianCliPath.mockReset();
     mockGetMiyoCustomUrl.mockReturnValue("");
-    mockResolveObsidianCliPath.mockReturnValue(null);
   });
 
   describe("buildBuiltinSkillEnv()", () => {
@@ -89,15 +78,6 @@ describe("builtinSkillEnv", () => {
         expect(Object.keys(env).filter((key) => key.startsWith("COPILOT_MIYO_SEARCH"))).toEqual([]);
       }
     );
-
-    it("injects the host Obsidian CLI independently of Plus and Miyo", async () => {
-      mockGetSettings.mockReturnValue({ isPaidUser: false });
-      mockResolveObsidianCliPath.mockReturnValue("C:/Users/Me/App Data/Obsidian/Obsidian.com");
-
-      expect(await buildBuiltinSkillEnv()).toEqual({
-        [COPILOT_OBSIDIAN_CLI_ENV]: "C:/Users/Me/App Data/Obsidian/Obsidian.com",
-      });
-    });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 injects protected Self-Host routing without provider credentials", async () => {
       mockGetSettings.mockReturnValue({

@@ -4,6 +4,7 @@ import {
   isDesktopRuntime,
   isObsidianCliEnabled,
   runRandomReadCommand,
+  runObsidianCliArgs,
   runObsidianCliCommand,
 } from "@/services/obsidianCli/ObsidianCliClient";
 
@@ -198,6 +199,30 @@ describe("ObsidianCliClient", () => {
       (Platform as unknown as { isDesktopApp: boolean }).isDesktopApp = false;
 
       await expect(runObsidianCliCommand({ command: "daily:read" })).rejects.toThrow(
+        "only supported in desktop Obsidian"
+      );
+    });
+  });
+
+  describe("runObsidianCliArgs()", () => {
+    it("passes the given args to the given binary unchanged", async () => {
+      const execFileMock = installExecFile((_binary, callback) => callback(null, "1 tab", ""));
+
+      const result = await runObsidianCliArgs("tabs", ["vault=My Vault", "tabs", "ids"], {
+        binary: "/Apps/Obsidian.app/Contents/MacOS/obsidian-cli",
+      });
+
+      expect(result).toMatchObject({ ok: true, command: "tabs", stdout: "1 tab" });
+      expect(execFileMock.mock.calls[0].slice(0, 2)).toEqual([
+        "/Apps/Obsidian.app/Contents/MacOS/obsidian-cli",
+        ["vault=My Vault", "tabs", "ids"],
+      ]);
+    });
+
+    it("rejects on a non-desktop runtime", async () => {
+      (Platform as unknown as { isDesktopApp: boolean }).isDesktopApp = false;
+
+      await expect(runObsidianCliArgs("tabs", ["tabs"])).rejects.toThrow(
         "only supported in desktop Obsidian"
       );
     });

@@ -8,6 +8,13 @@ import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { copilotAppDataDir, getVaultId } from "@/utils/appPaths";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import {
+  createObsidianCliCall,
+  OBSIDIAN_CLI_TOOL,
+  OBSIDIAN_CLI_TOOL_NAME,
+  OBSIDIAN_CLI_TURNED_OFF_TEXT,
+  runInRunningObsidian,
+} from "@/services/obsidianCli/obsidianCliTool";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
@@ -145,6 +152,9 @@ export function isCopilotToolOn(toolName: string, settings: CopilotSettings, app
   if (EXCALIDRAW_TOOL_NAMES.has(toolName)) {
     return getExcalidrawApi(app) !== null;
   }
+  if (toolName === OBSIDIAN_CLI_TOOL_NAME) {
+    return isObsidianCliEnabled();
+  }
   return true;
 }
 
@@ -152,7 +162,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   let lastAvailableSkillAgents: readonly string[] = [];
-  let seededWithCli = false;
   const availableSkillAgents = (): readonly string[] => {
     const states = Object.fromEntries(
       listBackendDescriptors()
@@ -183,11 +192,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // Obsidian announces no change to its CLI toggle or to a plugin being enabled, so each agent start re-checks both.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
-    if (isObsidianCliEnabled() !== seededWithCli) {
-      await seedManagedBuiltins().catch((error) =>
-        logError("[Skills] Refresh after an Obsidian CLI toggle change failed", error)
-      );
-    }
     refreshSystemPromptAffected();
   };
   const preloader = new AgentModelPreloader(
@@ -255,6 +259,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
         }),
         ...createExcalidrawTools(() => getExcalidrawApi(app)),
+        {
+          definition: OBSIDIAN_CLI_TOOL,
+          turnedOffText: OBSIDIAN_CLI_TURNED_OFF_TEXT,
+          call: createObsidianCliCall({
+            getVaultName: () => app.vault.getName(),
+            hostPluginId: plugin.manifest.id,
+            run: runInRunningObsidian,
+          }),
+        },
       ]
     ),
   });
@@ -344,7 +357,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   });
   const seedManagedBuiltins = async (): Promise<void> => {
-    seededWithCli = isObsidianCliEnabled();
     await skillManager.refresh(true);
   };
   subscribeToSettingsChange((prev, next) => {

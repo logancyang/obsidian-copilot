@@ -1,11 +1,9 @@
 import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
-import {
-  builtinSkillUnavailableReason,
-  isBuiltinSkillEnabledFor,
-} from "@/builtinSkills/builtinSkills";
+import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { getExcalidrawApi } from "@/excalidraw/excalidrawApi";
 import { isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
+import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { getSettings } from "@/settings/model";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 
@@ -40,9 +38,9 @@ export const COPILOT_MIYO_SEARCH_STEERING = `Miyo local semantic search is enabl
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
 export const COPILOT_EXCALIDRAW_STEERING = `Draw diagrams, flowcharts and charts as Excalidraw drawings with the obsidian-copilot excalidraw tools, and embed each one (![[name.excalidraw]]) in the note it belongs to, unless the user asks for Mermaid, a canvas or another format.`;
 
-// Without the CLI skill, OpenCode models assume live app state such as open tabs is out of reach.
+// Without this line, OpenCode models assume live app state such as open tabs is out of reach.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-cli skill reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
+export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
@@ -83,9 +81,7 @@ export function buildAgentSystemPrompt(
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
   const enabled = (skill: string) =>
-    builtinPrompt &&
-    !builtinSkillUnavailableReason(skill) &&
-    isBuiltinSkillEnabledFor(settings, skill, backendId);
+    builtinPrompt && isBuiltinSkillEnabledFor(settings, skill, backendId);
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
@@ -102,7 +98,7 @@ export function buildAgentSystemPrompt(
   if (relayJobs.length > 0) {
     parts.push(`${COPILOT_SKILL_FIRST_LEAD} ${relayJobs.join(", ")}. ${COPILOT_SKILL_FALLBACK}`);
   }
-  if (enabled("obsidian-cli")) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
+  if (builtinPrompt && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
 
   return parts.join("\n\n");
 }

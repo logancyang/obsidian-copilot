@@ -1,9 +1,5 @@
 import type { BuiltinPreferences } from "./builtin/reconcileBuiltinSkills";
-import {
-  BUILTIN_SKILLS,
-  builtinSkillUnavailableReason,
-  isBuiltinSkillEnabledFor,
-} from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { getEffectiveSkillsFolder } from "@/settings/copilotFolder";
@@ -261,11 +257,9 @@ export class SkillManager {
         if (!skill.builtin || !availableAgents) return skill;
         return {
           ...skill,
-          enabledAgents: builtinSkillUnavailableReason(skill.name)
-            ? []
-            : availableAgents.filter((agent) =>
-                isBuiltinSkillEnabledFor(settings, skill.name, agent)
-              ),
+          enabledAgents: availableAgents.filter((agent) =>
+            isBuiltinSkillEnabledFor(settings, skill.name, agent)
+          ),
         };
       });
       const rejectedSkills =
