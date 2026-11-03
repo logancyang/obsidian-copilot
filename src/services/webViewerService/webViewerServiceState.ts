@@ -85,6 +85,11 @@ export class WebViewerStateManager {
     return leaf;
   }
 
+  getActiveWebTabLeaf(): WebViewerLeaf | null {
+    const leaf = this.activeWebTabLeaf;
+    return leaf && this.getLeaves().includes(leaf) ? leaf : null;
+  }
+
   findLeafByUrl(url: string, options: { title?: string } = {}): WebViewerLeaf | null {
     const targetRaw = url.trim();
     if (!targetRaw) return null;
