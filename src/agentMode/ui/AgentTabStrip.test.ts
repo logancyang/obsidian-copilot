@@ -5,11 +5,57 @@ import {
 } from "@/agentMode/ui/AgentTabStrip";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
+import { AppContext } from "@/context";
+import {
+  makeFakeWorkspaceApp,
+  type FakeWorkspaceApp,
+} from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { setPreviewAccess } from "@/agentMode/ui/testing/previewAccess";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
+jest.mock("@/entitlement");
+
+function renderStrip(
+  manager: unknown,
+  { workspace = makeFakeWorkspaceApp(), onOpenSidebar = jest.fn() } = {}
+) {
+  return render(
+    React.createElement(
+      AppContext.Provider,
+      { value: workspace.app },
+      React.createElement(
+        TooltipProvider,
+        null,
+        React.createElement(AgentTabStrip, {
+          manager: manager as AgentSessionManager,
+          onOpenSidebar,
+        })
+      )
+    )
+  );
+}
+
+function makeManagerWithOneChat() {
+  const session = {
+    internalId: "existing",
+    backendId: "test",
+    subscribe: () => () => {},
+    getLabel: () => "Existing chat",
+    getStatus: () => "idle",
+    getNeedsAttention: () => false,
+  };
+  return {
+    subscribe: () => () => {},
+    getSessionsForScope: () => [session],
+    getActiveProjectId: () => null,
+    getActiveSession: () => session,
+    getIsStarting: () => false,
+  };
+}
 
 describe("AgentTabStrip", () => {
   describe("computeVisibleCount()", () => {
@@ -96,6 +142,8 @@ describe("AgentTabStrip", () => {
   });
 
   describe("AgentTabStrip()", () => {
+    beforeEach(() => setPreviewAccess("supporter"));
+
     it("detaches a closed tab without closing its backend session for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", () => {
       const session = {
         internalId: "existing",
@@ -114,13 +162,7 @@ describe("AgentTabStrip", () => {
         detachSessionFromTab: jest.fn(),
         closeSession: jest.fn(),
       };
-      render(
-        React.createElement(
-          TooltipProvider,
-          null,
-          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
-        )
-      );
+      renderStrip(manager);
 
       fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
 
@@ -145,13 +187,7 @@ describe("AgentTabStrip", () => {
         getIsStarting: () => false,
         detachSessionFromTab: jest.fn(),
       };
-      render(
-        React.createElement(
-          TooltipProvider,
-          null,
-          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
-        )
-      );
+      renderStrip(manager);
       const tab = screen.getByRole("tab");
 
       fireEvent(tab, new MouseEvent("auxclick", { bubbles: true, button: 2 }));
@@ -184,18 +220,61 @@ describe("AgentTabStrip", () => {
             })
         ),
       };
-      render(
-        React.createElement(
-          TooltipProvider,
-          null,
-          React.createElement(AgentTabStrip, { manager: manager as unknown as AgentSessionManager })
-        )
-      );
+      renderStrip(manager);
       fireEvent.click(screen.getByRole("button", { name: "New chat" }));
       expect(manager.createSession).toHaveBeenCalledTimes(1);
       expect(refreshLatestVersion).not.toHaveBeenCalled();
       finishCreation();
       await waitFor(() => expect(refreshLatestVersion).toHaveBeenCalledTimes(1));
+    });
+
+    it("opens the sessions sidebar from the icon at the left end of the strip for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const onOpenSidebar = jest.fn();
+      renderStrip(makeManagerWithOneChat(), { onOpenSidebar });
+
+      const [leftmost] = screen.getAllByRole("button");
+      expect(leftmost).toBe(screen.getByRole("button", { name: "Open Copilot Navigator" }));
+      fireEvent.click(leftmost);
+
+      expect(onOpenSidebar).toHaveBeenCalledTimes(1);
+    });
+
+    it("hides every tab while a sessions sidebar leaf exists and shows the same tabs once the last leaf closes for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const workspace = makeFakeWorkspaceApp();
+      renderStrip(makeManagerWithOneChat(), { workspace });
+      expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
+
+      act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
+      expect(screen.queryByRole("tab")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open Copilot Navigator" })).toBeNull();
+
+      act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 2 }));
+      act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
+      expect(screen.queryByRole("tab")).toBeNull();
+
+      act(() => workspace.setLeaves({}));
+      expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
+    });
+
+    it("starts hidden when a sessions sidebar leaf already exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      const workspace: FakeWorkspaceApp = makeFakeWorkspaceApp();
+      workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+
+      renderStrip(makeManagerWithOneChat(), { workspace });
+
+      expect(screen.queryByRole("tab")).toBeNull();
+    });
+
+    it("keeps the tabs and the Navigator icon beside a Navigator leaf blocked for a user without preview access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
+      const workspace: FakeWorkspaceApp = makeFakeWorkspaceApp();
+      workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
+
+      renderStrip(makeManagerWithOneChat(), { workspace });
+
+      expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
     });
   });
 });

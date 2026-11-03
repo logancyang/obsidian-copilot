@@ -23,6 +23,15 @@ if (typeof window.matchMedia !== "function") {
   });
 }
 
+// jsdom rejects `:focus-visible` and tracks no input modality, so tests treat every focus as keyboard focus.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/802
+if (typeof Element !== "undefined") {
+  const nativeMatches = Element.prototype.matches;
+  Element.prototype.matches = function (selectors) {
+    return nativeMatches.call(this, selectors.replaceAll(":focus-visible", ":focus"));
+  };
+}
+
 if (typeof Node !== "undefined" && !Object.prototype.hasOwnProperty.call(Node.prototype, "doc")) {
   Object.defineProperty(Node.prototype, "doc", {
     get() {

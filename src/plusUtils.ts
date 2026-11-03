@@ -25,7 +25,11 @@ export function isSelfHostModeValid(): boolean {
   return getSettings().enableSelfHostMode === true && hasVerifiedFeature("self_host");
 }
 
-export function isPreviewEnabled(): boolean {
+export function isPreviewEnabled(): boolean | undefined {
+  // A stored token still being verified is unknown, so a Supporter's restored Navigator never flashes its upsell at startup.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
+  const { entitlementToken } = getSettings();
+  if (entitlementToken && verified.token !== entitlementToken) return undefined;
   return hasVerifiedFeature("preview");
 }
 
@@ -92,15 +96,13 @@ function setVerified(next: VerifiedEntitlement): void {
   verifiedListeners.forEach((listener) => listener());
 }
 
-function subscribeToVerifiedEntitlement(listener: () => void): () => void {
+export function subscribeToPreviewAccess(listener: () => void): () => void {
   verifiedListeners.add(listener);
+  const unsubscribeSettings = subscribeToSettingsChange(listener);
   return () => {
     verifiedListeners.delete(listener);
+    unsubscribeSettings();
   };
-}
-
-function getVerifiedEntitlement(): VerifiedEntitlement {
-  return verified;
 }
 
 function hasLiveEntitlement(): boolean {
@@ -205,10 +207,8 @@ export function useLicenseState(): LicenseState {
     : INACTIVE_LICENSE;
 }
 
-export function useIsPreviewEnabled(): boolean {
-  useSettingsValue();
-  React.useSyncExternalStore(subscribeToVerifiedEntitlement, getVerifiedEntitlement);
-  return isPreviewEnabled();
+export function useIsPreviewEnabled(): boolean | undefined {
+  return React.useSyncExternalStore(subscribeToPreviewAccess, isPreviewEnabled);
 }
 
 export function useIsSelfHostEligible(): boolean | undefined {

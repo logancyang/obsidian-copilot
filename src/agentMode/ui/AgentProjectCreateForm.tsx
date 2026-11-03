@@ -1,9 +1,12 @@
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { ProjectConfig } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { logError } from "@/logger";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { err2String, randomUUID } from "@/utils";
-import { Notice } from "obsidian";
+import { Notice, type App } from "obsidian";
 import React, { useState } from "react";
 
 interface AgentProjectCreateFormProps {
@@ -91,4 +94,19 @@ export function makeNewProjectConfig(name: string): ProjectConfig {
     created: now,
     UsageTimestamps: now,
   };
+}
+
+export async function createProjectAndEnter(
+  app: App,
+  manager: AgentSessionManager,
+  name: string
+): Promise<void> {
+  const project = makeNewProjectConfig(name);
+  try {
+    await ProjectFileManager.getInstance(app).createProject(project);
+    await manager.enterProject(project.id);
+  } catch (e) {
+    logError("[AgentMode] create project failed", e);
+    throw e;
+  }
 }
