@@ -751,13 +751,10 @@ export class ContextProcessor {
           return await processYouTubeTab(tab, videoId, isActive);
         }
 
-        // Single-page apps like Outlook change the active tab's URL in place without an event Copilot tracks, so its URL can be stale here.
-        // https://github.com/logancyang/obsidian-copilot/issues/3693
-        const leaf =
-          service.findLeafByUrl(url, { title: tab.title }) ??
-          (tagName === ACTIVE_WEB_TAB_CONTEXT_TAG
-            ? (service.getActiveLeaf() ?? service.getLastActiveLeaf())
-            : null);
+        const leaf = service.findAttachedTabLeaf(url, {
+          title: tab.title,
+          isActive: tagName === ACTIVE_WEB_TAB_CONTEXT_TAG,
+        });
         if (!leaf) {
           return buildWebTabBlock(tagName, {
             title: tab.title || "Unknown",
