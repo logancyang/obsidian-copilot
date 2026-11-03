@@ -76,6 +76,7 @@ import {
   markPaidPendingEntitlement,
   navigateToPlusPage,
   turnOffPaid,
+  subscribeToPreviewAccess,
   useIsPreviewEnabled,
   useIsSelfHostEligible,
   useLicenseState,
@@ -506,8 +507,22 @@ describe("plusUtils", () => {
       expect(isPreviewEnabled()).toBe(false);
     });
 
-    it("is false when no token was verified this session", () => {
+    it("is unknown (undefined) while the stored token has not been verified yet this session for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings());
+
+      expect(isPreviewEnabled()).toBeUndefined();
+    });
+
+    it("is false when no entitlement token is stored for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ entitlementToken: "" }));
+
+      expect(isPreviewEnabled()).toBe(false);
+    });
+
+    it("is false once the stored token fails verification for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+      mockVerifyEntitlement.mockResolvedValue(null);
+      await verifyCachedEntitlement();
 
       expect(isPreviewEnabled()).toBe(false);
     });
@@ -531,7 +546,7 @@ describe("plusUtils", () => {
     it("unlocks when the cached token finishes verifying, without a settings change or restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", async () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings());
       const { result } = renderHook(() => useIsPreviewEnabled());
-      expect(result.current).toBe(false);
+      expect(result.current).toBeUndefined();
 
       mockVerifyEntitlement.mockResolvedValue({
         user_id: "user-123",
@@ -556,6 +571,23 @@ describe("plusUtils", () => {
       rerender();
 
       expect(result.current).toBe(false);
+    });
+  });
+
+  describe("subscribeToPreviewAccess()", () => {
+    it("notifies when a token is verified and when settings change, until unsubscribed, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToPreviewAccess(listener);
+
+      await verifySessionFeatures(["preview"]);
+      expect(listener).toHaveBeenCalledTimes(1);
+      emitSettings(tokenBackedSettings({ plusLicenseKey: "another-key" }));
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      unsubscribe();
+      await verifySessionFeatures(["preview"]);
+      emitSettings(tokenBackedSettings());
+      expect(listener).toHaveBeenCalledTimes(2);
     });
   });
 

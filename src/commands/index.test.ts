@@ -1,3 +1,4 @@
+import { openSessionsSidebar } from "@/agentMode";
 import { registerCommands } from "@/commands";
 import { COMMAND_ICONS, COMMAND_IDS, COMMAND_NAMES } from "@/constants";
 import type CopilotPlugin from "@/main";
@@ -9,6 +10,7 @@ import { Notice, TFile, type Command } from "obsidian";
 
 const mockRequestMiyoIndexRefresh = jest.fn();
 
+jest.mock("@/agentMode", () => ({ openSessionsSidebar: jest.fn() }));
 jest.mock("@/commands/CustomCommandChatModal", () => ({
   CustomCommandChatModal: jest.fn(),
 }));
@@ -69,6 +71,48 @@ describe("commands", () => {
       const command = commands.find(({ id }) => id === COMMAND_IDS.NEW_CHAT);
       expect(command?.name).toBe("New Copilot Quick Chat");
       expect(command?.name).not.toBe(COMMAND_NAMES[COMMAND_IDS.NEW_AGENT_CHAT]);
+    });
+
+    it("registers a command that opens the sessions sidebar on desktop only for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
+      const register = (): { commands: Command[]; plugin: CopilotPlugin } => {
+        const commands: Command[] = [];
+        const plugin = {
+          addCommand: jest.fn((command: Command) => commands.push(command)),
+          app: { workspace: { getActiveFile: jest.fn(() => null) } },
+        } as unknown as CopilotPlugin;
+        registerCommands(plugin, jest.fn());
+        return { commands, plugin };
+      };
+      const find = (commands: Command[]) =>
+        commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+
+      jest.mocked(isDesktopRuntime).mockReturnValue(false);
+      expect(find(register().commands)).toBeUndefined();
+
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      const { commands, plugin } = register();
+      const command = find(commands);
+      expect(command).toMatchObject({
+        name: "Open Copilot Navigator",
+        icon: COMMAND_ICONS[COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR],
+      });
+      await command?.callback?.();
+      expect(openSessionsSidebar).toHaveBeenCalledWith(plugin);
+    });
+
+    it("lists the Navigator command for every user so one without preview access reaches the upsell dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
+      jest.mocked(isDesktopRuntime).mockReturnValue(true);
+      const commands: Command[] = [];
+      const plugin = {
+        addCommand: jest.fn((command: Command) => commands.push(command)),
+        app: { workspace: { getActiveFile: jest.fn(() => null) } },
+      } as unknown as CopilotPlugin;
+
+      registerCommands(plugin, jest.fn());
+
+      const command = commands.find(({ id }) => id === COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR);
+      expect(command?.callback).toBeDefined();
+      expect(command?.checkCallback).toBeUndefined();
     });
 
     it("registers the OpenArtifacts palette command and publishes the active Markdown file", () => {

@@ -1,3 +1,4 @@
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
@@ -34,51 +35,66 @@ export function revealProjectFolder(app: App, project: ProjectConfig): void {
   new Notice(`Can't reveal "${project.name}" — its folder isn't visible in the file explorer.`);
 }
 
-interface AgentProjectRowActionsProps {
+export function leaveDeletedProject(
+  manager: Pick<AgentSessionManager, "getActiveProjectId" | "exitProject">,
+  deletedId: string
+): void {
+  if (manager.getActiveProjectId() !== deletedId) return;
+  manager.exitProject().catch((e) => logError("[AgentMode] exit after delete failed", e));
+}
+
+export interface AgentProjectRowActionsProps {
   app: App;
   project: ProjectConfig;
   onDeleted?: (projectId: string) => void;
 }
 
+export function projectRowActions({ app, project, onDeleted }: AgentProjectRowActionsProps) {
+  const edit = () => {
+    new AddProjectModal(
+      app,
+      async (next) => {
+        await ProjectFileManager.getInstance(app).updateProject(project.id, next);
+      },
+      project
+    ).open();
+  };
+
+  const archive = async () => {
+    try {
+      await ProjectFileManager.getInstance(app).setProjectArchived(project.id, true);
+    } catch (e) {
+      logError("[AgentProjectRowActions] archive project failed", e);
+      new Notice(`Failed to archive project "${project.name}".`);
+    }
+  };
+
+  const remove = () => {
+    new ConfirmModal(
+      app,
+      async () => {
+        try {
+          await ProjectFileManager.getInstance(app).deleteProject(project.id);
+          onDeleted?.(project.id);
+        } catch (e) {
+          logError("[AgentProjectRowActions] deleteProject failed", e);
+          new Notice(`Failed to delete project "${project.name}".`);
+        }
+      },
+      `Delete project "${project.name}"? This removes its configuration; your notes stay in the vault.`,
+      "Delete project",
+      "Delete",
+      "Cancel"
+    ).open();
+  };
+
+  return { edit, archive, remove, reveal: () => revealProjectFolder(app, project) };
+}
+
 export const AgentProjectRowActions = memo(
-  ({ app, project, onDeleted }: AgentProjectRowActionsProps): React.ReactElement => {
-    const handleEdit = () => {
-      new AddProjectModal(
-        app,
-        async (next) => {
-          await ProjectFileManager.getInstance(app).updateProject(project.id, next);
-        },
-        project
-      ).open();
-    };
-
-    const handleArchive = async () => {
-      try {
-        await ProjectFileManager.getInstance(app).setProjectArchived(project.id, true);
-      } catch (e) {
-        logError("[AgentProjectRowActions] archive project failed", e);
-        new Notice(`Failed to archive project "${project.name}".`);
-      }
-    };
-
-    const handleDelete = () => {
-      new ConfirmModal(
-        app,
-        async () => {
-          try {
-            await ProjectFileManager.getInstance(app).deleteProject(project.id);
-            onDeleted?.(project.id);
-          } catch (e) {
-            logError("[AgentProjectRowActions] deleteProject failed", e);
-            new Notice(`Failed to delete project "${project.name}".`);
-          }
-        },
-        `Delete project "${project.name}"? This removes its configuration; your notes stay in the vault.`,
-        "Delete project",
-        "Delete",
-        "Cancel"
-      ).open();
-    };
+  (props: AgentProjectRowActionsProps): React.ReactElement => {
+    const { project } = props;
+    const { edit, archive, remove, reveal } = projectRowActions(props);
 
     return (
       <div className="tw-flex tw-items-center tw-gap-1.5">
@@ -90,7 +106,7 @@ export const AgentProjectRowActions = memo(
           className="tw-size-5 tw-p-0"
           onClick={(e) => {
             e.stopPropagation();
-            revealProjectFolder(app, project);
+            reveal();
           }}
         >
           <FolderSearch className="tw-size-3.5" />
@@ -103,7 +119,7 @@ export const AgentProjectRowActions = memo(
           className="tw-size-5 tw-p-0"
           onClick={(e) => {
             e.stopPropagation();
-            handleEdit();
+            edit();
           }}
         >
           <Pencil className="tw-size-3.5" />
@@ -116,7 +132,7 @@ export const AgentProjectRowActions = memo(
           className="tw-size-5 tw-p-0"
           onClick={(e) => {
             e.stopPropagation();
-            void handleArchive();
+            void archive();
           }}
         >
           <Archive className="tw-size-3.5" />
@@ -129,7 +145,7 @@ export const AgentProjectRowActions = memo(
           className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
           onClick={(e) => {
             e.stopPropagation();
-            handleDelete();
+            remove();
           }}
         >
           <Trash2 className="tw-size-3.5" />

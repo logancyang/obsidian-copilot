@@ -1,9 +1,18 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import {
   AgentProjectCreateForm,
+  createProjectAndEnter,
   makeNewProjectConfig,
 } from "@/agentMode/ui/AgentProjectCreateForm";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import type { App } from "obsidian";
+
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: { getInstance: jest.fn() },
+}));
+jest.mock("@/logger", () => ({ logError: jest.fn(), logInfo: jest.fn(), logWarn: jest.fn() }));
 
 beforeAll(() => {
   const cryptoObj = window.crypto as { randomUUID?: () => string };
@@ -74,6 +83,37 @@ describe("AgentProjectCreateForm", () => {
 
     it("assigns a unique id per call", () => {
       expect(makeNewProjectConfig("A").id).not.toBe(makeNewProjectConfig("A").id);
+    });
+  });
+
+  describe("createProjectAndEnter()", () => {
+    const app = {} as App;
+    const buildManager = () => ({ enterProject: jest.fn().mockResolvedValue(undefined) });
+    const mockCreateProject = (createProject: jest.Mock) =>
+      jest.mocked(ProjectFileManager.getInstance).mockReturnValue({ createProject } as never);
+
+    it("creates the named project and then opens it in the chat view", async () => {
+      const createProject = jest.fn().mockResolvedValue(undefined);
+      mockCreateProject(createProject);
+      const manager = buildManager();
+
+      await createProjectAndEnter(app, manager as unknown as AgentSessionManager, "Research");
+
+      const created = createProject.mock.calls[0][0];
+      expect(created.name).toBe("Research");
+      expect(manager.enterProject).toHaveBeenCalledWith(created.id);
+    });
+
+    it("rethrows the creation error and does not open a project", async () => {
+      mockCreateProject(
+        jest.fn().mockRejectedValue(new Error('A project with the name "Research" already exists'))
+      );
+      const manager = buildManager();
+
+      await expect(
+        createProjectAndEnter(app, manager as unknown as AgentSessionManager, "Research")
+      ).rejects.toThrow('A project with the name "Research" already exists');
+      expect(manager.enterProject).not.toHaveBeenCalled();
     });
   });
 });

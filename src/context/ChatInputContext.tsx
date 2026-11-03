@@ -14,7 +14,7 @@ interface ChatInputContextType {
   insertTextWithPills: (text: string, enableURLPills?: boolean) => void;
   focusInput: () => void;
   registerEditor: (editor: LexicalEditor) => void;
-  registerFocusHandler: (handler: () => void) => void;
+  registerFocusHandler: (handler: (() => void) | null) => void;
 }
 
 const ChatInputContext = createContext<ChatInputContextType | undefined>(undefined);
@@ -33,7 +33,7 @@ interface ChatInputProviderProps {
 
 export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Element {
   const [editor, setEditor] = useState<LexicalEditor | null>(null);
-  const [focusHandler, setFocusHandler] = useState<(() => void) | null>(null);
+  const focusHandlerRef = useRef<(() => void) | null>(null);
   const pendingInsertRef = useRef<{ text: string; enableURLPills: boolean } | null>(null);
   const pendingFocusRef = useRef(false);
 
@@ -41,8 +41,14 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     setEditor(editorInstance);
   }, []);
 
-  const registerFocusHandler = useCallback((handler: () => void) => {
-    setFocusHandler(() => handler);
+  // The handler is read from a ref so a request made after its composer unmounted waits for the next one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
+  const registerFocusHandler = useCallback((handler: (() => void) | null) => {
+    focusHandlerRef.current = handler;
+    if (handler && pendingFocusRef.current) {
+      pendingFocusRef.current = false;
+      handler();
+    }
   }, []);
 
   const insertTextWithPills = useCallback(
@@ -70,19 +76,12 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
   }, [editor]);
 
   const focusInput = useCallback(() => {
-    if (focusHandler) {
-      focusHandler();
+    if (focusHandlerRef.current) {
+      focusHandlerRef.current();
     } else {
       pendingFocusRef.current = true;
     }
-  }, [focusHandler]);
-
-  useEffect(() => {
-    if (focusHandler && pendingFocusRef.current) {
-      pendingFocusRef.current = false;
-      focusHandler();
-    }
-  }, [focusHandler]);
+  }, []);
 
   const contextValue = useMemo<ChatInputContextType>(
     () => ({

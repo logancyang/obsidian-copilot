@@ -46,7 +46,7 @@ function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void |
     callback: () => {
       const result = callback();
       if (result instanceof Promise) {
-        result.catch((err) => logError(`Command ${id} failed`, err));
+        return result.catch((err) => logError(`Command ${id} failed`, err));
       }
     },
   });
@@ -138,6 +138,10 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
   if (isDesktopRuntime()) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
+    });
+    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR, async () => {
+      const { openSessionsSidebar } = await import("@/agentMode");
+      await openSessionsSidebar(plugin);
     });
     addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
       void plugin.toggleAgentView();
