@@ -11,7 +11,6 @@ import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
-import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
@@ -40,6 +39,7 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { useSessionLabel } from "@/agentMode/ui/hooks/useSessionLabel";
+import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
 import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
@@ -278,7 +278,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const attentionChatIds = useAttentionChatIds(manager);
 
   const handleOpenSessionsSidebar = useCallback(() => {
-    revealSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
+    openSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
   }, [plugin]);
 
   const handleExitProject = useCallback(() => {

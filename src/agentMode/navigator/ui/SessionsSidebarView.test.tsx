@@ -1,28 +1,53 @@
+import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import SessionsSidebarView from "@/agentMode/navigator/ui/SessionsSidebarView";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
-import { act, screen } from "@testing-library/react";
+import {
+  applyLicenseWithPreview,
+  setPreviewAccess,
+  verifyStoredToken,
+} from "@/agentMode/ui/testing/previewAccess";
+import { act, fireEvent, screen } from "@testing-library/react";
 import type { WorkspaceLeaf } from "obsidian";
 
-jest.mock("@/agentMode/navigator/ui/SessionsSidebar", () => ({
-  SessionsSidebar: () =>
-    jest
-      .requireActual<typeof import("react")>("react")
-      .createElement("button", { type: "button" }, "Sidebar content"),
+jest.mock("@/entitlement");
+jest.mock("@/agentMode/navigator/revealSessionsSidebar", () => ({
+  revealSessionsSidebar: jest.fn().mockResolvedValue(undefined),
 }));
 
+const mockSidebarMounts = jest.fn();
+jest.mock("@/agentMode/navigator/ui/SessionsSidebar", () => {
+  const React = jest.requireActual<typeof import("react")>("react");
+  return {
+    SessionsSidebar: () => {
+      React.useEffect(() => mockSidebarMounts(), []);
+      return React.createElement("button", { type: "button" }, "Sidebar content");
+    },
+  };
+});
+
 function makeView(agentSessionManager: object | undefined) {
-  const plugin = { app: {}, agentSessionManager } as unknown as CopilotPlugin;
-  const leaf = { app: plugin.app } as unknown as WorkspaceLeaf;
+  const plugin = {
+    app: {},
+    agentSessionManager,
+    register: jest.fn(),
+  } as unknown as CopilotPlugin;
+  const leaf = { app: plugin.app, detach: jest.fn() } as unknown as WorkspaceLeaf;
   const view = new SessionsSidebarView(leaf, plugin);
   const stopMigrationWatch = jest.fn();
   view.containerEl.onWindowMigrated = jest.fn(() => stopMigrationWatch);
   document.body.appendChild(view.containerEl);
-  return { view, stopMigrationWatch };
+  return { view, plugin, leaf, stopMigrationWatch };
 }
 
 describe("SessionsSidebarView", () => {
   describe("SessionsSidebarView", () => {
+    beforeEach(async () => {
+      mockSidebarMounts.mockClear();
+      jest.mocked(revealSessionsSidebar).mockClear();
+      await setPreviewAccess("supporter");
+    });
+
     it("identifies itself with the sessions sidebar view type for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const { view } = makeView({});
 
@@ -48,6 +73,69 @@ describe("SessionsSidebarView", () => {
       await act(() => view.onOpen());
 
       expect(screen.queryByRole("button")).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("shows only the preview notice instead of the Navigator list for a Plus user without preview for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("plus-without-preview");
+      const { view } = makeView({});
+
+      await act(() => view.onOpen());
+
+      expect(await screen.findByText("Your preview access ended")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /See plans/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Sidebar content" })).toBeNull();
+      await act(() => view.onClose());
+    });
+
+    it("closes its own leaf from the notice's Close button for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
+      const { view, leaf } = makeView({});
+      await act(() => view.onOpen());
+
+      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+
+      expect(leaf.detach).toHaveBeenCalledTimes(1);
+      await act(() => view.onClose());
+    });
+
+    it("reveals the Navigator when a license key with preview is applied after the notice was shown for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("free");
+      const { view, plugin } = makeView({});
+      await act(() => view.onOpen());
+      await screen.findByText("Your preview access ended");
+
+      await act(() => applyLicenseWithPreview());
+
+      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(revealSessionsSidebar).toHaveBeenCalledWith(plugin);
+      await act(() => view.onClose());
+    });
+
+    it("keeps a Supporter's restored Navigator list mounted through startup verification, without flashing the notice or reopening it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("unverified");
+      const { view } = makeView({});
+      await act(() => view.onOpen());
+      await screen.findByRole("button", { name: "Sidebar content" });
+
+      await act(() => verifyStoredToken(true));
+
+      expect(screen.getByRole("button", { name: "Sidebar content" })).toBeTruthy();
+      expect(screen.queryByText("Your preview access ended")).toBeNull();
+      expect(mockSidebarMounts).toHaveBeenCalledTimes(1);
+      expect(revealSessionsSidebar).not.toHaveBeenCalled();
+      await act(() => view.onClose());
+    });
+
+    it("shows the notice once startup verification finds no preview access for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
+      await setPreviewAccess("unverified");
+      const { view } = makeView({});
+      await act(() => view.onOpen());
+      await screen.findByRole("button", { name: "Sidebar content" });
+
+      await act(() => verifyStoredToken(false));
+
+      expect(screen.getByText("Your preview access ended")).toBeTruthy();
       await act(() => view.onClose());
     });
   });

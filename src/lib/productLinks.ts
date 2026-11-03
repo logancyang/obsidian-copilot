@@ -22,6 +22,8 @@ export type ProductUtmMedium =
   | "model_picker_lock"
   | "model_settings_lock"
   | "preview_hint"
+  | "navigator_dialog"
+  | "navigator_blocked_view"
   | "skill_no_license"
   | "skill_license_invalid"
   | "openartifacts_private_sharing"
