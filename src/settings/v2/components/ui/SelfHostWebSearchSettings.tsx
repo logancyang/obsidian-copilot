@@ -40,6 +40,13 @@ const SEARCH_PROVIDER_CONFIGS: Record<SelfHostSearchProvider, SearchProviderConf
     placeholder: "exa-…",
     signupUrl: "https://dashboard.exa.ai/api-keys",
   },
+  keenable: {
+    apiKeyTitle: "Keenable API Key (optional)",
+    description: "Web search via Keenable. Works without an API key; add one for higher limits.",
+    label: "Keenable",
+    placeholder: "Optional",
+    signupUrl: "https://keenable.ai/",
+  },
 };
 
 const SEARCH_PROVIDER_OPTIONS = Object.entries(SEARCH_PROVIDER_CONFIGS).map(([value, config]) => ({

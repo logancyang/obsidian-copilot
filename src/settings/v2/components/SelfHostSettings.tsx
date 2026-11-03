@@ -18,6 +18,7 @@ const SEARCH_PROVIDER_KEY_FIELDS = {
   perplexity: "perplexityApiKey",
   parallel: "parallelApiKey",
   exa: "exaApiKey",
+  keenable: "keenableApiKey",
 } as const satisfies Record<SelfHostSearchProvider, keyof ReturnType<typeof useSettingsValue>>;
 
 const SignUpLink: React.FC<{ href: string }> = ({ href }) => (
@@ -81,6 +82,7 @@ export const SelfHostSettings: React.FC = () => {
               perplexity: settings.perplexityApiKey,
               parallel: settings.parallelApiKey,
               exa: settings.exaApiKey,
+              keenable: settings.keenableApiKey,
             }}
             disabled={!selfHostOn}
             provider={settings.selfHostSearchProvider}

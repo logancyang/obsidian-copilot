@@ -9,6 +9,7 @@ const apiKeys = {
   perplexity: "pplx-example",
   parallel: "parallel-example",
   exa: "exa-example",
+  keenable: "",
 };
 
 const meta = {

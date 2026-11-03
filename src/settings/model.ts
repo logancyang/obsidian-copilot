@@ -105,6 +105,7 @@ export interface CopilotSettings {
   perplexityApiKey: string;
   parallelApiKey: string;
   exaApiKey: string;
+  keenableApiKey: string;
   supadataApiKey: string;
   enableMiyoDocumentProcessing: boolean;
   enableLexicalBoosts: boolean;
@@ -158,7 +159,7 @@ export interface CopilotSettings {
   copilotPlusCatalog: PersistedCopilotPlusCatalog;
 }
 
-export type SelfHostSearchProvider = "firecrawl" | "perplexity" | "parallel" | "exa";
+export type SelfHostSearchProvider = "firecrawl" | "perplexity" | "parallel" | "exa" | "keenable";
 
 export type ClaudeAutoModePermission = "acceptEdits" | "auto" | "bypassPermissions";
 
@@ -539,7 +540,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // Persisted Parallel and Exa choices must survive reload instead of silently
   // reverting to Firecrawl. https://github.com/Brevilabs/obsidian-copilot-private/issues/285
-  const validSearchProviders = ["firecrawl", "perplexity", "parallel", "exa"] as const;
+  const validSearchProviders = ["firecrawl", "perplexity", "parallel", "exa", "keenable"] as const;
   if (!validSearchProviders.includes(sanitizedSettings.selfHostSearchProvider)) {
     sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
   }

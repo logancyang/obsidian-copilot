@@ -512,6 +512,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   perplexityApiKey: "",
   parallelApiKey: "",
   exaApiKey: "",
+  keenableApiKey: "",
   supadataApiKey: "",
   enableMiyoDocumentProcessing: true,
   enableLexicalBoosts: true,

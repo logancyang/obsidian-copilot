@@ -18,6 +18,10 @@ const PARALLEL_SEARCH_URL = "https://api.parallel.ai/v1/search";
 const PARALLEL_SEARCH_QUERY_MAX_LENGTH = 200;
 const PARALLEL_OBJECTIVE_MAX_LENGTH = 5000;
 const EXA_SEARCH_URL = "https://api.exa.ai/search";
+// Keenable's public endpoint works without an API key; the keyed endpoint is used when one is set.
+const KEENABLE_PUBLIC_SEARCH_URL = "https://api.keenable.ai/v1/search/public";
+const KEENABLE_SEARCH_URL = "https://api.keenable.ai/v1/search";
+const KEENABLE_SNIPPET_MAX_LENGTH = 1000;
 const SUPADATA_TRANSCRIPT_URL = "https://api.supadata.ai/v1/transcript";
 /** Bounds agent-controlled input. https://github.com/Brevilabs/obsidian-copilot-private/issues/165 */
 const AGENT_SEARCH_REQUEST_MAX_BYTES = 64 * 1024;
@@ -173,6 +177,9 @@ export function hasSelfHostSearchKey(): boolean {
       return !!settings.parallelApiKey;
     case "exa":
       return !!settings.exaApiKey;
+    case "keenable":
+      // The API key is optional: Keenable's public endpoint works without one.
+      return true;
     case "perplexity":
       return !!settings.perplexityApiKey;
     case "firecrawl":
@@ -307,6 +314,59 @@ async function exaSearch(query: string, apiKey: string): Promise<SelfHostWebSear
   return normalizeProviderResults(json?.results, "highlights");
 }
 
+async function keenableSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
+  const key = apiKey.trim();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Keenable-Title": "obsidian-copilot",
+  };
+  if (key) {
+    headers["X-API-Key"] = key;
+  }
+
+  const response = await safeFetchNoThrow(key ? KEENABLE_SEARCH_URL : KEENABLE_PUBLIC_SEARCH_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ query, max_results: 5 }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Keenable search failed (${response.status}): ${text}`);
+  }
+
+  const json = (await response.json()) as { results?: unknown };
+  if (!Array.isArray(json?.results)) {
+    return { content: "", citations: [] };
+  }
+
+  const contentParts: string[] = [];
+  const citations: string[] = [];
+  for (const item of json.results) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      continue;
+    }
+    const record = item as Record<string, unknown>;
+    const url = typeof record.url === "string" ? record.url.trim() : "";
+    if (!url) {
+      continue;
+    }
+    const title =
+      typeof record.title === "string" && record.title.trim() ? record.title.trim() : "Untitled";
+    // Prefer the short description; the snippet can be a long page excerpt.
+    const description = typeof record.description === "string" ? record.description.trim() : "";
+    const snippet =
+      description ||
+      (typeof record.snippet === "string"
+        ? record.snippet.trim().slice(0, KEENABLE_SNIPPET_MAX_LENGTH)
+        : "");
+    contentParts.push([`### ${title}`, snippet, `Source: ${url}`].filter(Boolean).join("\n"));
+    citations.push(url);
+  }
+
+  return { content: contentParts.join("\n\n"), citations };
+}
+
 export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
@@ -314,6 +374,8 @@ export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearc
       return parallelSearch(query, settings.parallelApiKey);
     case "exa":
       return exaSearch(query, settings.exaApiKey);
+    case "keenable":
+      return keenableSearch(query, settings.keenableApiKey);
     case "perplexity":
       return perplexitySonarSearch(query, settings.perplexityApiKey);
     case "firecrawl":

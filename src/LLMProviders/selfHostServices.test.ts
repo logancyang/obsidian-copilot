@@ -34,6 +34,7 @@ function providerSettings(provider: string, overrides: Record<string, string> = 
     perplexityApiKey: "",
     parallelApiKey: "",
     exaApiKey: "",
+    keenableApiKey: "",
     supadataApiKey: "",
     ...overrides,
   };
@@ -128,6 +129,12 @@ describe("selfHostServices", () => {
         expect(hasSelfHostSearchKey()).toBe(false);
       }
     );
+
+    it("does not require a Keenable API key", () => {
+      mockGetSettings.mockReturnValue(providerSettings("keenable"));
+
+      expect(hasSelfHostSearchKey()).toBe(true);
+    });
 
     it("defaults to the Firecrawl credential for an unknown provider", () => {
       mockGetSettings.mockReturnValue(providerSettings("unknown", { firecrawlApiKey: "fc-key" }));
@@ -564,6 +571,59 @@ describe("selfHostServices", () => {
         await selfHostWebSearch(query);
 
         expect(parallelRequestBody().objective).toBe("q".repeat(5000));
+      });
+    });
+
+    describe("Keenable", () => {
+      it("uses the public endpoint without a key and normalizes results", async () => {
+        mockGetSettings.mockReturnValue(providerSettings("keenable"));
+        mockJsonResponse({
+          results: [
+            42,
+            {
+              title: "Keenable result",
+              url: "https://keenable.example/result",
+              description: "Short description",
+              snippet: "Long excerpt",
+            },
+            { title: "No URL", description: "dropped" },
+            {
+              title: "Snippet only",
+              url: "https://keenable.example/snippet",
+              snippet: "x".repeat(1500),
+            },
+          ],
+        });
+
+        const result = await selfHostWebSearch("test query");
+
+        const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe("https://api.keenable.ai/v1/search/public");
+        expect(options.headers).toEqual({
+          "Content-Type": "application/json",
+          "X-Keenable-Title": "obsidian-copilot",
+        });
+        expect(JSON.parse(options.body as string)).toEqual({ query: "test query", max_results: 5 });
+        expect(result.content).toContain(
+          "### Keenable result\nShort description\nSource: https://keenable.example/result"
+        );
+        expect(result.content).not.toContain("No URL");
+        expect(result.content).toContain(`### Snippet only\n${"x".repeat(1000)}\nSource:`);
+        expect(result.citations).toEqual([
+          "https://keenable.example/result",
+          "https://keenable.example/snippet",
+        ]);
+      });
+
+      it("uses the keyed endpoint when an API key is set", async () => {
+        mockGetSettings.mockReturnValue(providerSettings("keenable", { keenableApiKey: "kn-key" }));
+        mockJsonResponse({ results: [] });
+
+        await selfHostWebSearch("test query");
+
+        const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(url).toBe("https://api.keenable.ai/v1/search");
+        expect((options.headers as Record<string, string>)["X-API-Key"]).toBe("kn-key");
       });
     });
 
