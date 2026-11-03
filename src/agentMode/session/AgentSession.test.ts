@@ -6212,6 +6212,17 @@ describe("AgentSession", () => {
           expect(session.getFeedbackOffer()).toBeNull();
         });
 
+        it("https://github.com/logancyang/obsidian-copilot/issues/3985 shows no card when the reply fails because the user is not signed in", async () => {
+          const session = failedSession(
+            true,
+            new AuthRequiredError("You're not signed in to Claude.")
+          );
+
+          await expect(session.sendPrompt("hi").turn).rejects.toThrow("not signed in");
+
+          expect(session.getFeedbackOffer()).toBeNull();
+        });
+
         it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", async () => {
           const session = failedSession(false);
 

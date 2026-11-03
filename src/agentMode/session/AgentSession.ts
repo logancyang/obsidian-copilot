@@ -41,7 +41,7 @@ import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
 import type { App, DataAdapter } from "obsidian";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
   editTargetPaths,
@@ -1142,7 +1142,9 @@ export class AgentSession {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
   private offerTurnErrorReport(errorText: string, error: unknown): void {
     if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
-    if (isProviderSideFailure(error, errorText)) return;
+    // A missing sign-in is the user's account state, and the error already points at the Sign in button.
+    // https://github.com/logancyang/obsidian-copilot/issues/3985
+    if (error instanceof AuthRequiredError || isProviderSideFailure(error, errorText)) return;
     this.feedbackOffer = this.openFeedbackOffer("turn_error", {
       title: `Agent Chat reply failed on ${this.backendId}`,
       whatHappened: errorText,
