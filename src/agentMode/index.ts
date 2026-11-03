@@ -382,17 +382,21 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         .catch((e) => logError("[Skills] builtin skill re-seeding failed", e));
     }
   });
+  const startupSkillLinks = new Map<BackendId, Promise<void>>();
   for (const descriptor of listBackendDescriptors()) {
     descriptor.subscribeInstallState(plugin, () => {
       // Startup reads the final installation; reacting to intermediate writes would duplicate
       // probes. https://github.com/Brevilabs/obsidian-copilot-private/issues/530
-      if (initializing.has(descriptor.id)) return;
+      const duringStartup = initializing.has(descriptor.id);
+      // Skills still follow startup writes, or an agent its upgrade makes ready keeps no skill
+      // links until reload. https://github.com/Brevilabs/obsidian-copilot-private/issues/830
       // The first warm probe must see newly installed skills. https://github.com/logancyang/obsidian-copilot/issues/3022
-      void seedManagedBuiltins()
-        .then(() => manager.onInstallStateChanged(descriptor.id))
+      const refreshed = seedManagedBuiltins()
+        .then(() => (duringStartup ? undefined : manager.onInstallStateChanged(descriptor.id)))
         .catch((error) =>
           logError(`[AgentMode] install-state refresh failed: ${descriptor.id}`, error)
         );
+      if (duringStartup) startupSkillLinks.set(descriptor.id, refreshed);
     });
   }
   const initialSkillsReady = seedManagedBuiltins().catch((error) => {
@@ -403,7 +407,11 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       .then(() => descriptor.onPluginLoad?.(plugin))
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e))
       .then(() => initialSkillsReady)
-      .finally(() => initializing.delete(descriptor.id));
+      .then(() => startupSkillLinks.get(descriptor.id))
+      .finally(() => {
+        initializing.delete(descriptor.id);
+        startupSkillLinks.delete(descriptor.id);
+      });
     initializing.set(descriptor.id, ready);
     if (isAgentModeEnabled()) {
       manager.registerPreload(
