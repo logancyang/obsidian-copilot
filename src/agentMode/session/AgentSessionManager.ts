@@ -195,9 +195,6 @@ export class AgentSessionManager {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/808
   private historyLoadTail: Promise<unknown> = Promise.resolve();
   private readonly queuedHistoryLoads = new Map<ProjectScopeId, Promise<ChatHistoryItem[]>>();
-  // Only a present transcript is cached: an absent one can appear later, and a cached absence would hide that chat.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/808
-  private readonly presentTranscriptSessionIds = new Map<BackendId, Set<string>>();
   private readonly landingCaptureSignatures = new Map<string, string>();
   private readonly contentTracker: ProjectContentTracker;
   private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
@@ -467,9 +464,7 @@ export class AgentSessionManager {
           return projectId === scope ? markdownEntries[i] : null;
         })
       );
-      const scopedMarkdown = await this.dropNonLocalMarkdownEntries(
-        resolved.filter((entry): entry is MarkdownChatEntry => entry !== null)
-      );
+      const scopedMarkdown = resolved.filter((entry): entry is MarkdownChatEntry => entry !== null);
       if (!index) {
         const items = scopedMarkdown.map((e) => e.item);
         return items.length === 0 ? EMPTY_HISTORY_ITEMS : items;
@@ -480,7 +475,6 @@ export class AgentSessionManager {
       return merged.length === 0 ? EMPTY_HISTORY_ITEMS : merged;
     }
 
-    markdownEntries = await this.dropNonLocalMarkdownEntries(markdownEntries);
     if (!index) return this.hideArchivedProjectChats(markdownEntries.map((e) => e.item));
 
     await this.refreshNativeSessionsFromBackends();
@@ -790,59 +784,6 @@ export class AgentSessionManager {
       if (proc.isRunning()) procs.set(backendId, proc);
     }
     return procs;
-  }
-
-  private async dropNonLocalMarkdownEntries(
-    entries: MarkdownChatEntry[]
-  ): Promise<MarkdownChatEntry[]> {
-    const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof FileSystemAdapter)) return entries;
-    const vaultRoot = adapter.getBasePath();
-    const procs = this.getRunningProcsByBackend();
-    const keep = await Promise.all(
-      entries.map(async (entry) => {
-        if (!entry.backendId || !entry.sessionId) return true;
-        // A chat's first turn is still writing its backend transcript, so the probe would report it absent.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/803
-        if (this.findLiveSession(entry.backendId, entry.sessionId)) return true;
-        if (this.presentTranscriptSessionIds.get(entry.backendId)?.has(entry.sessionId))
-          return true;
-        const proc = procs.get(entry.backendId);
-        if (!proc?.sessionExistsLocally) return true;
-        let cwd: string;
-        try {
-          const projectId =
-            (await readChatPathProjectId(this.app, entry.item.id))?.trim() || GLOBAL_SCOPE;
-          cwd = resolveScopeCwd(vaultRoot, projectId);
-        } catch {
-          return true;
-        }
-        try {
-          const exists = await proc.sessionExistsLocally({ sessionId: entry.sessionId, cwd });
-          if (exists) this.rememberPresentTranscript(entry.backendId, entry.sessionId);
-          return exists;
-        } catch {
-          return true;
-        }
-      })
-    );
-    const index = this.opts.sessionIndex;
-    if (index) {
-      await Promise.all(
-        entries.map(async (entry, i) => {
-          if (keep[i] || !entry.backendId || !entry.sessionId) return;
-          this.cancelPendingIndexTouch(entry.backendId, entry.sessionId);
-          await index.deleteSession(entry.backendId, entry.sessionId);
-        })
-      );
-    }
-    return entries.filter((_, i) => keep[i]);
-  }
-
-  private rememberPresentTranscript(backendId: BackendId, sessionId: string): void {
-    const sessionIds = this.presentTranscriptSessionIds.get(backendId) ?? new Set<string>();
-    sessionIds.add(sessionId);
-    this.presentTranscriptSessionIds.set(backendId, sessionIds);
   }
 
   private async sweepNativeSessions(
@@ -1573,7 +1514,6 @@ export class AgentSessionManager {
     if (!this.isBackendInstalled(backendId)) return false;
     const probe = this.preloader.refresh(backendId);
     if (!probe) return false;
-    this.presentTranscriptSessionIds.delete(backendId);
     logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
     this.registerPreload(backendId, probe);
     return true;
@@ -2072,7 +2012,8 @@ export class AgentSessionManager {
     const state = this.getSessionState(session.internalId);
     state.source = file;
     state.savedLabel = loaded.label;
-    // A fresh session has no transcript until its first prompt, and a note pointing at a missing transcript drops out of the chat lists.
+    // A fresh session has no transcript until its first prompt; saving it earlier repoints the note away from the session
+    // another device can still resume, and each browse leaves a duplicate history row.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/814
     if (!resumed) state.withholdsSessionId = true;
   }
@@ -2701,7 +2642,6 @@ export class AgentSessionManager {
     descriptor: BackendDescriptor
   ): void {
     proc.onExit(() => {
-      this.presentTranscriptSessionIds.delete(backendId);
       if (this.backends.get(backendId) === proc) {
         this.backends.delete(backendId);
         // Retry spawns from current settings; a dead generation has no config left to apply.

@@ -1,6 +1,5 @@
 import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
-import { join } from "node:path";
 import { waitFor } from "@testing-library/react";
 import { AgentSession, type AgentTask } from "./AgentSession";
 import { buildNativeChatId } from "@/utils/nativeChatId";
@@ -775,7 +774,6 @@ function buildHistoryHarness(opts?: {
   hiddenFiles?: Record<string, string>;
   listSessions?: jest.Mock;
   warmListSessions?: jest.Mock;
-  warmSessionExistsLocally?: jest.Mock;
   indexStorage?: ReturnType<typeof makeIndexStorage>;
   probeSessionId?: string;
   summarizesSessionTitle?: boolean;
@@ -858,11 +856,9 @@ function buildHistoryHarness(opts?: {
     sessionIndex: index,
     preloader: {
       getWarmProcs: jest.fn(() => {
-        if (!opts?.warmListSessions && !opts?.warmSessionExistsLocally) return [];
+        if (!opts?.warmListSessions) return [];
         const proc: Record<string, unknown> = { ...makeMockBackendProcess() };
         if (opts.warmListSessions) proc.listSessions = opts.warmListSessions;
-        if (opts.warmSessionExistsLocally)
-          proc.sessionExistsLocally = opts.warmSessionExistsLocally;
         return [{ backendId, proc }];
       }),
       refresh: jest.fn(async () => undefined),
@@ -4717,123 +4713,6 @@ describe("AgentSessionManager", () => {
         expect(await manager.getChatHistoryItems()).toHaveLength(2);
       });
 
-      it("keeps markdown chats when no running backend can confirm the session is absent", async () => {
-        const { manager } = buildHistoryHarness({
-          files: {
-            "chats/agent__a.md": {
-              epoch: 1_000,
-              topic: "Unknowable",
-              backendId: "opencode",
-              sessionId: "s1",
-            },
-          },
-        });
-        const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
-        expect(titles).toContain("Unknowable");
-      });
-
-      it("hides a markdown chat whose backend session is absent on this device", async () => {
-        const sessionExistsLocally = jest.fn(
-          async ({ sessionId }: { sessionId: string }) => sessionId === "local"
-        );
-        const { manager } = buildHistoryHarness({
-          files: {
-            "chats/agent__local.md": {
-              epoch: 2_000,
-              topic: "Made here",
-              backendId: "opencode",
-              sessionId: "local",
-            },
-            "chats/agent__foreign.md": {
-              epoch: 1_000,
-              topic: "Made elsewhere",
-              backendId: "opencode",
-              sessionId: "foreign",
-            },
-          },
-          warmSessionExistsLocally: sessionExistsLocally,
-        });
-
-        const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
-        expect(titles).toContain("Made here");
-        expect(titles).not.toContain("Made elsewhere");
-        expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "foreign", cwd: "/vault" });
-      });
-
-      describe("transcript probe cache", () => {
-        const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/808";
-        const SAVED_NOTE = "chats/agent__saved.md";
-        const savedChat = (sessionId: string) => ({
-          [SAVED_NOTE]: { epoch: 1_000, topic: "Saved", backendId: "opencode", sessionId },
-        });
-
-        it(`${issue} probes each chat's transcript once, however many times the list loads`, async () => {
-          const sessionExistsLocally = jest.fn(async () => true);
-          const { manager } = buildHistoryHarness({
-            files: {
-              "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" },
-              "chats/agent__b.md": { epoch: 2_000, backendId: "opencode", sessionId: "s2" },
-            },
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-
-          const first = await manager.getChatHistoryItems();
-          const second = await manager.getChatHistoryItems();
-
-          expect(second.map((i) => i.id)).toEqual(first.map((i) => i.id));
-          expect(first).toHaveLength(2);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} keeps probing a chat whose transcript is absent, so a transcript that appears later is found`, async () => {
-          let present = false;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const { manager } = buildHistoryHarness({
-            files: savedChat("s1"),
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          present = true;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} probes a chat again after its backend process exits`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const { manager } = buildHistoryHarness({
-            files: savedChat("s1"),
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-          await manager.createSession("opencode");
-
-          for (const exit of mockBackendExitListeners) exit();
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-
-        it(`${issue} probes a chat again after a config change replaces the warm process`, async () => {
-          let present = true;
-          const sessionExistsLocally = jest.fn(async () => present);
-          const { manager } = buildHistoryHarness({
-            files: savedChat("s1"),
-            warmSessionExistsLocally: sessionExistsLocally,
-          });
-          expect(await manager.getChatHistoryItems()).toHaveLength(1);
-
-          await manager.restartBackend("opencode", "config dir changed");
-          present = false;
-
-          expect(await manager.getChatHistoryItems()).toHaveLength(0);
-          expect(sessionExistsLocally).toHaveBeenCalledTimes(2);
-        });
-      });
-
       describe("overlapping loads", () => {
         const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/808";
 
@@ -4910,157 +4789,11 @@ describe("AgentSessionManager", () => {
         });
       });
 
-      it("lists a live chat whose backend transcript is not written until its first turn ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
-        const note = "chats/agent__live.md";
-        const { manager, index } = buildHistoryHarness({
-          files: {
-            [note]: {
-              epoch: 1_000,
-              topic: "First message",
-              backendId: "opencode",
-              sessionId: "live-sess",
-            },
-          },
-          createBackendProcess: jest.fn(() => ({
-            ...makeMockBackendProcess(),
-            sessionExistsLocally: jest.fn(async () => false),
-          })),
-        });
-        sessionCreateSpy.mockImplementationOnce((opts) =>
-          makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-            backendSessionId: "live-sess",
-          })
-        );
-        await manager.createSession();
-
-        const items = await manager.getChatHistoryItems();
-
-        expect(items.map((i) => i.id)).toEqual([note]);
-        expect(await index.isTombstoned("opencode", "live-sess")).toBe(false);
-      });
-
-      it("lists a live project chat under its project while its backend transcript is still being written (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
-        seedProjects(HISTORY_PROJECT_ID);
-        const note = "chats/agent__project-live.md";
-        const { manager } = buildHistoryHarness({
-          files: {
-            [note]: {
-              epoch: 1_000,
-              topic: "Sent from the project landing",
-              backendId: "opencode",
-              sessionId: "project-live-sess",
-              projectId: HISTORY_PROJECT_ID,
-            },
-          },
-          createBackendProcess: jest.fn(() => ({
-            ...makeMockBackendProcess(),
-            sessionExistsLocally: jest.fn(async () => false),
-          })),
-        });
-        sessionCreateSpy.mockImplementationOnce((opts) =>
-          makeMockSession({
-            internalId: opts.internalId,
-            backendId: opts.backendId,
-            projectId: opts.projectId,
-            backendSessionId: "project-live-sess",
-          })
-        );
-        await manager.openProjectLanding(HISTORY_PROJECT_ID);
-
-        const items = await manager.getChatHistoryItems(HISTORY_PROJECT_ID);
-
-        expect(items.map((i) => i.id)).toEqual([note]);
-      });
-
       it("lists nothing for a new chat that has no message yet (https://github.com/Brevilabs/obsidian-copilot-private/issues/803)", async () => {
         const { manager } = buildHistoryHarness();
         await manager.openGlobalLanding();
 
         expect(await manager.getChatHistoryItems()).toHaveLength(0);
-      });
-
-      it("tombstones the native twin of a dropped non-local markdown chat", async () => {
-        const { manager, index } = buildHistoryHarness({
-          files: {
-            "chats/agent__foreign.md": {
-              epoch: 1_000,
-              topic: "Made elsewhere",
-              backendId: "opencode",
-              sessionId: "foreign",
-            },
-          },
-          warmSessionExistsLocally: jest.fn(async () => false),
-        });
-        await index.recordSession({
-          backendId: "opencode",
-          sessionId: "foreign",
-          title: "Made elsewhere",
-          createdAtMs: 1_000,
-          lastAccessedAtMs: 2_000,
-        });
-
-        const items = await manager.getChatHistoryItems();
-        expect(items).toHaveLength(0);
-        expect(await index.isTombstoned("opencode", "foreign")).toBe(true);
-      });
-
-      it("probes a project chat's resumability with its project cwd, not the vault root", async () => {
-        seedProjects(HISTORY_PROJECT_ID);
-        const sessionExistsLocally = jest.fn(
-          async ({ cwd }: { cwd: string }) => cwd === join("/vault", "Projects", "proj-1")
-        );
-        const { manager } = buildHistoryHarness({
-          files: {
-            "chats/agent__p.md": {
-              epoch: 2_000,
-              topic: "Project chat",
-              backendId: "opencode",
-              sessionId: "proj-sess",
-              projectId: HISTORY_PROJECT_ID,
-            },
-          },
-          warmSessionExistsLocally: sessionExistsLocally,
-        });
-
-        const titles = (await manager.getChatHistoryItems(HISTORY_PROJECT_ID)).map((i) => i.title);
-        expect(titles).toContain("Project chat");
-        expect(sessionExistsLocally).toHaveBeenCalledWith({
-          sessionId: "proj-sess",
-          cwd: join("/vault", "Projects", "proj-1"),
-        });
-      });
-
-      it("probes each chat with its own scope cwd in the global flat view", async () => {
-        seedProjects(HISTORY_PROJECT_ID);
-        const sessionExistsLocally = jest.fn(async () => true);
-        const { manager } = buildHistoryHarness({
-          files: {
-            "chats/agent__g.md": {
-              epoch: 2_000,
-              topic: "Global chat",
-              backendId: "opencode",
-              sessionId: "g-sess",
-            },
-            "chats/agent__p.md": {
-              epoch: 1_000,
-              topic: "Project chat",
-              backendId: "opencode",
-              sessionId: "p-sess",
-              projectId: HISTORY_PROJECT_ID,
-            },
-          },
-          warmSessionExistsLocally: sessionExistsLocally,
-        });
-
-        const titles = (await manager.getChatHistoryItems()).map((i) => i.title);
-        expect(titles).toEqual(expect.arrayContaining(["Global chat", "Project chat"]));
-        expect(sessionExistsLocally).toHaveBeenCalledWith({ sessionId: "g-sess", cwd: "/vault" });
-        expect(sessionExistsLocally).toHaveBeenCalledWith({
-          sessionId: "p-sess",
-          cwd: join("/vault", "Projects", "proj-1"),
-        });
       });
 
       it("sweeps the preloader's warm probe procs before any chat starts a backend", async () => {
@@ -5879,13 +5612,7 @@ describe("AgentSessionManager", () => {
           const files: Record<string, FakeFrontmatter> = {
             [NOTE]: { epoch: 1_000, topic: "Browsed", backendId: "opencode" },
           };
-          const harness = buildHistoryHarness({
-            files,
-            createBackendProcess: jest.fn(() => ({
-              ...makeMockBackendProcess(),
-              sessionExistsLocally: jest.fn(async () => false),
-            })),
-          });
+          const harness = buildHistoryHarness({ files });
           Object.assign(harness.persistence, {
             loadFile: jest.fn(async () => ({
               backendId: "opencode",
@@ -5908,8 +5635,8 @@ describe("AgentSessionManager", () => {
           await jest.advanceTimersByTimeAsync(2000);
         }
 
-        it(`${issue} stays listed with its note's session unchanged after it is opened and left before a message is sent`, async () => {
-          const { manager, files, session } = await openBrowsedChat();
+        it(`${issue} leaves its note's session and the session index untouched when it is opened and left before a message is sent`, async () => {
+          const { manager, index, files, session } = await openBrowsedChat();
           await autosave(session);
 
           const closed = untilClosed(manager, session);
@@ -5917,6 +5644,7 @@ describe("AgentSessionManager", () => {
           await closed;
 
           expect(files[NOTE].sessionId).toBeUndefined();
+          expect(await index.getEntries()).toEqual([]);
           expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
         });
 
