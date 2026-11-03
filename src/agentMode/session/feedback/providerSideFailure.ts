@@ -11,7 +11,7 @@ const PROVIDER_SIDE_PATTERNS: readonly RegExp[] = [
   /credit balance/i,
   /insufficient credits/i,
   /insufficient balance/i,
-  /requires more credits/i,
+  /add (?:more )?credits/i,
   /\b(?:HTTP|status(?: code)?)[\s:]*(?:402|429)\b/i,
   // A provider API that refuses or drops the connection is the user's network or endpoint state, equally out of the team's reach.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/826

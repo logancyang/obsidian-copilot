@@ -29,6 +29,10 @@ describe("providerSideFailure", () => {
         "Internal error: This request requires more credits, or fewer max_tokens. You requested up to 256000 tokens, but can only afford 32935. To increase, visit https://openrouter.ai/settings/credits and add more credits",
       ],
       [
+        "OpenRouter in-flight credit reservation",
+        "Internal error: This request would exceed your available credits given your current in-flight requests. Retry after in-flight requests settle, or add credits.",
+      ],
+      [
         "DeepSeek balance",
         "Internal error: Insufficient Balance (request_id: 69669aa1-63a2-4d12-8591-142347639ee6)",
       ],
