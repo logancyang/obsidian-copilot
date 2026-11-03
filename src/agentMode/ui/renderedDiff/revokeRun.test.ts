@@ -20,7 +20,7 @@ describe("revokeRun", () => {
       expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
     });
 
-    it("follows the run when a paragraph was added right above it after the turn, though the diff pairs the run's leading blank line with the added one (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+    it("follows the run when a paragraph was added right above it after the turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
       const current = AFTER.replace("Budget is open.\n\n", "Budget is open.\n\nAdded later.\n\n");
 
       expect(locateRun(AFTER, current, SECOND_RUN)).toEqual({ start: 7, end: 10 });
@@ -28,6 +28,18 @@ describe("revokeRun", () => {
 
     it("finds no location once text inside the run changed after the turn", () => {
       const current = AFTER.replace("every Monday", "every Tuesday");
+
+      expect(locateRun(AFTER, current, SECOND_RUN)).toBeNull();
+    });
+
+    it("finds no location when the run's text appears more than once in the turn's result, since the note cannot show which copy is the run's (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+      const run: DiffRun = { before: { start: 1, end: 1 }, after: { start: 1, end: 2 } };
+
+      expect(locateRun("p\nX\nq\nX\nr\n", "p\nX\nr\n", run)).toBeNull();
+    });
+
+    it("finds no location when the run's text appears more than once in the note, since either copy could be the run's (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+      const current = `${AFTER}\nWe report every Monday.\n`;
 
       expect(locateRun(AFTER, current, SECOND_RUN)).toBeNull();
     });
@@ -69,6 +81,12 @@ describe("revokeRun", () => {
         after: "a\nb",
         current: "a\nb",
       });
+    });
+
+    it("changes nothing when the run's line was edited and a repeat of it sits nearby, rather than deleting the repeat (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", () => {
+      const run: DiffRun = { before: { start: 2, end: 2 }, after: { start: 2, end: 3 } };
+
+      expect(revokeRun("a\nb\nd\nb\na\n", "a\nb\nb\nd\nb\na\n", "a\nb\nz\nb\na\n", run)).toBeNull();
     });
 
     it("changes nothing when the run's text changed in the note after the turn", () => {
