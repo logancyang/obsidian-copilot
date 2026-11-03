@@ -74,7 +74,6 @@ function fakeApp(
       adapter: { mkdir: jest.fn(async () => {}) },
       getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
       cachedRead: async (file: TFile) => contents.get(file.path) ?? "",
-      read: async (file: TFile) => contents.get(file.path) ?? "",
       create: jest.fn(async (path: string, text: string) => {
         const file = noteFile(path);
         files.push(file);

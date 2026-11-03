@@ -335,17 +335,14 @@ async function restoreBefore(
     return before;
   }
   if (!(file instanceof TFile)) return undefined;
-  if (before === null) {
-    if ((await app.vault.read(file)) !== after) return undefined;
-    await trashFile(app, file);
-    return null;
-  }
-  let restored = false;
+  let unchanged = false;
   await app.vault.process(file, (current) => {
-    restored = current === after;
-    return restored ? before : current;
+    unchanged = current === after;
+    return unchanged && before !== null ? before : current;
   });
-  return restored ? before : undefined;
+  if (!unchanged) return undefined;
+  if (before === null) await trashFile(app, file);
+  return before;
 }
 
 export async function openTurnDiff(
