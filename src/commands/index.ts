@@ -139,6 +139,10 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
     });
+    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_SESSIONS_SIDEBAR, async () => {
+      const { revealSessionsSidebar } = await import("@/agentMode");
+      await revealSessionsSidebar(plugin);
+    });
     addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
       void plugin.toggleAgentView();
     });

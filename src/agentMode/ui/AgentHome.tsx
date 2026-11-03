@@ -11,6 +11,7 @@ import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
+import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
@@ -282,6 +283,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const attentionChatIds = useAttentionChatIds(manager);
+
+  const handleOpenSessionsSidebar = useCallback(() => {
+    revealSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
+  }, [plugin]);
 
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
@@ -704,7 +709,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} />
+      <AgentTabStrip manager={manager} onOpenSidebar={handleOpenSessionsSidebar} />
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}

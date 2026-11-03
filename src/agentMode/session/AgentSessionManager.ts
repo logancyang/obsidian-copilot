@@ -188,6 +188,7 @@ export class AgentSessionManager {
   private scopeSeq = 0;
   private readonly lastActiveByScope = new Map<ProjectScopeId, string>();
   private readonly detachedFromTabIds = new Set<string>();
+  private historyRevision = 0;
   private readonly landingCaptureSignatures = new Map<string, string>();
   private readonly contentTracker: ProjectContentTracker;
   private readonly lastSeenProjectContentEpochBySession = new Map<string, number>();
@@ -560,18 +561,36 @@ export class AgentSessionManager {
   }
 
   getRunningChatIds(): ReadonlySet<string> {
-    const ids = new Set<string>();
-    for (const [internalId, session] of this.sessions) {
-      if (session.getStatus() !== "running" && !hasRunningTask(session)) continue;
-      for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
-    }
-    return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
+    return this.chatIdsWhere(
+      (session) => session.getStatus() === "running" || hasRunningTask(session)
+    );
+  }
+
+  getWaitingChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.getStatus() === "awaiting_permission");
   }
 
   getAttentionChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.getNeedsAttention());
+  }
+
+  getHistoryRevision(): number {
+    return this.historyRevision;
+  }
+
+  private markHistoryChanged(): void {
+    this.historyRevision++;
+    this.notify();
+  }
+
+  getActiveChatIds(): ReadonlySet<string> {
+    return this.chatIdsWhere((session) => session.internalId === this.activeSessionId);
+  }
+
+  private chatIdsWhere(include: (session: AgentSession) => boolean): ReadonlySet<string> {
     const ids = new Set<string>();
     for (const [internalId, session] of this.sessions) {
-      if (!session.getNeedsAttention()) continue;
+      if (!include(session)) continue;
       for (const id of this.recentChatIdsForSession(internalId, session)) ids.add(id);
     }
     return ids.size === 0 ? EMPTY_RECENT_CHAT_IDS : ids;
@@ -584,6 +603,7 @@ export class AgentSessionManager {
       if (!index) throw new Error("Agent session index is not configured.");
       await index.setTitle(native.backendId, native.sessionId, newTitle);
       this.findLiveSession(native.backendId, native.sessionId)?.setLabel(newTitle);
+      this.markHistoryChanged();
       return;
     }
     const persistence = this.opts.persistenceManager;
@@ -659,6 +679,7 @@ export class AgentSessionManager {
     if (persistence) {
       for (const path of notePaths) await persistence.deleteFile(path);
     }
+    this.markHistoryChanged();
   }
 
   // An open chat must be gone before its files are, or autosave writes the note again. Delete never
@@ -1162,6 +1183,13 @@ export class AgentSessionManager {
 
   async exitProject(): Promise<void> {
     await this.enterProject(GLOBAL_SCOPE);
+  }
+
+  async openGlobalLanding(): Promise<void> {
+    await this.enterProject(GLOBAL_SCOPE);
+    const active = this.getActiveSession();
+    if (active?.projectId === GLOBAL_SCOPE && !active.hasUserVisibleMessages()) return;
+    await this.createSession(undefined, GLOBAL_SCOPE);
   }
 
   private parkActiveScope(): void {
@@ -2282,6 +2310,9 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
     });
+    // A chat without a note has no metadata-cache event, so the chat lists only learn of it here.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
+    this.markHistoryChanged();
   }
 
   saveActiveSession(): Promise<{ path: string } | null> {

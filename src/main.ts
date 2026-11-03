@@ -43,6 +43,7 @@ import {
   EVENT_NAMES,
   PLAN_PREVIEW_VIEW_TYPE,
   RELEVANT_NOTES_VIEWTYPE,
+  SESSIONS_SIDEBAR_VIEWTYPE,
   SHARED_VIEW_TYPES,
   TURN_DIFF_VIEW_TYPE,
 } from "@/constants";
@@ -174,6 +175,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
   private PlanPreviewView?: typeof import("@/agentMode").PlanPreviewView;
   private TurnDiffView?: typeof import("@/agentMode").TurnDiffView;
+  private SessionsSidebarView?: typeof import("@/agentMode").SessionsSidebarView;
   private agentModelDiscoveryUnsubscriber?: () => void;
   modelManagement!: ModelManagementApi;
   selfHostWebSearchAgentBridge?: Readonly<SelfHostWebSearchAgentBridge>;
@@ -371,6 +373,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       const [
         {
           CopilotAgentView,
+          SessionsSidebarView,
           PlanPreviewView,
           TurnDiffView,
           closeRestoredTurnDiffs,
@@ -383,6 +386,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         { wireAgentModelDiscovery },
       ] = agentMode;
       this.CopilotAgentView = CopilotAgentView;
+      this.SessionsSidebarView = SessionsSidebarView;
       this.PlanPreviewView = PlanPreviewView;
       this.TurnDiffView = TurnDiffView;
       closeRestoredTurnDiffs(this.app.workspace);
@@ -448,11 +452,21 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       RELEVANT_NOTES_VIEWTYPE,
       (leaf) => new RelevantNotesView(leaf, this)
     );
-    if (this.CopilotAgentView && this.PlanPreviewView && this.TurnDiffView) {
+    if (
+      this.CopilotAgentView &&
+      this.SessionsSidebarView &&
+      this.PlanPreviewView &&
+      this.TurnDiffView
+    ) {
       const AgentView = this.CopilotAgentView;
+      const SidebarView = this.SessionsSidebarView;
       const PreviewView = this.PlanPreviewView;
       const DiffView = this.TurnDiffView;
       this.startedViewCreators.set(CHAT_AGENT_VIEWTYPE, (leaf) => new AgentView(leaf, this));
+      this.startedViewCreators.set(
+        SESSIONS_SIDEBAR_VIEWTYPE,
+        (leaf) => new SidebarView(leaf, this)
+      );
       this.startedViewCreators.set(PLAN_PREVIEW_VIEW_TYPE, (leaf) => new PreviewView(leaf));
       this.startedViewCreators.set(TURN_DIFF_VIEW_TYPE, (leaf) => new DiffView(leaf));
     }
