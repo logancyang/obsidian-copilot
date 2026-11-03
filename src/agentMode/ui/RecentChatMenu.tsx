@@ -40,7 +40,7 @@ export interface RecentChatActions {
   onDeleteChat: (id: string) => Promise<void>;
   onOpenSourceFile: (id: string) => void;
   onCloseSession?: (id: string) => Promise<void>;
-  onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
+  onSetChatPinned: (id: string, pinned: boolean, pinnedAt?: number) => Promise<void>;
   onSetChatArchived: (id: string, archived: boolean) => Promise<void>;
 }
 

@@ -80,6 +80,18 @@ describe("useStoredIdSet", () => {
       expect(store.get("copilot:other-fold-state:v1")).toEqual(["recents"]);
     });
 
+    it("stores the ids in the given order on replace and restores that order after a reload for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+      const { app, store } = createApp(["a", "b"]);
+      const first = renderHook(() => useStoredIdSet(app, STORAGE_KEY));
+
+      act(() => first.result.current.replace(["c", "a", "b"]));
+      first.unmount();
+      const reloaded = renderHook(() => useStoredIdSet(app, STORAGE_KEY));
+
+      expect(store.get(STORAGE_KEY)).toEqual(["c", "a", "b"]);
+      expect([...reloaded.result.current.ids]).toEqual(["c", "a", "b"]);
+    });
+
     it.each([["a"], [{ a: 1 }]])(
       "starts with no ids when the stored value %j is not a list",
       (stored) => {

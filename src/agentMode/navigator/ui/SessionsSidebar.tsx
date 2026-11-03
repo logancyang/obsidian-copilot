@@ -60,6 +60,10 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     app,
     "copilot:sessions-sidebar-collapsed-groups:v1"
   );
+  const { ids: projectOrder, replace: reorderProjects } = useStoredIdSet(
+    app,
+    "copilot:sessions-sidebar-project-order:v1"
+  );
 
   // The saved list changes when a chat starts, finishes, is renamed or deleted, or when a project's archive state changes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
@@ -176,10 +180,12 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       items={chatHistoryItems}
       projects={projects}
       expandedProjectIds={expandedProjectIds}
+      projectOrder={projectOrder}
       activeProjectId={activeProjectId}
       openChatIds={openChatIds}
       actions={actions}
       onToggleProject={toggleProject}
+      onReorderProjects={reorderProjects}
       onOpenProject={safeAsyncHandler(handleOpenProject)}
       onCreateProject={handleCreateProject}
       collapsedGroups={collapsedGroups}

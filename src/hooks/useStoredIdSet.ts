@@ -23,5 +23,14 @@ export function useStoredIdSet(app: App, storageKey: string) {
     [app, storageKey]
   );
 
-  return { ids, toggle };
+  const replace = useCallback(
+    (orderedIds: readonly string[]) => {
+      const next = new Set(orderedIds);
+      app.saveLocalStorage(storageKey, [...next]);
+      setIds(next);
+    },
+    [app, storageKey]
+  );
+
+  return { ids, toggle, replace };
 }

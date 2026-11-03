@@ -307,7 +307,7 @@ describe("useAgentHistoryControls", () => {
         await result.current.setChatPinned("a", true);
       });
 
-      expect(manager.setChatPinned).toHaveBeenCalledWith("a", true);
+      expect(manager.setChatPinned).toHaveBeenCalledWith("a", true, undefined);
       expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 5_000 }, item("b")]);
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
     });
@@ -362,6 +362,55 @@ describe("useAgentHistoryControls", () => {
       });
 
       expect(result.current.chatHistoryItems).toEqual([item("new")]);
+    });
+
+    it("re-pins a chat at the given pin time and moves its row before the note write finishes for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", async () => {
+      const manager = makeManager();
+      let finishWrite!: () => void;
+      manager.setChatPinned.mockImplementation(
+        (id: string, _pinned: boolean, pinnedAt: number) =>
+          new Promise((resolve) => (finishWrite = () => resolve({ id, pinnedAt })))
+      );
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      let write!: Promise<void>;
+      act(() => {
+        write = result.current.setChatPinned("a", true, 2_500);
+      });
+
+      expect(manager.setChatPinned).toHaveBeenCalledWith("a", true, 2_500);
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 2_500 }, item("b")]);
+      await act(async () => {
+        finishWrite();
+        await write;
+      });
+      expect(result.current.chatHistoryItems).toEqual([{ id: "a", pinnedAt: 2_500 }, item("b")]);
+    });
+
+    it("puts a dragged pin back where the notes say when saving its new pin time fails, for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", async () => {
+      const manager = makeManager();
+      manager.getChatHistoryItems.mockResolvedValue([
+        { id: "a", pinnedAt: 3_000 },
+        { id: "b", pinnedAt: 2_000 },
+      ]);
+      manager.setChatPinned.mockRejectedValue(new Error("vault is read-only"));
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.setChatPinned("a", true, 1_500);
+      });
+
+      expect(Notice).toHaveBeenCalledWith("Failed to pin chat.");
+      expect(result.current.chatHistoryItems).toEqual([
+        { id: "a", pinnedAt: 3_000 },
+        { id: "b", pinnedAt: 2_000 },
+      ]);
     });
 
     it("unpins a chat on its row right away", async () => {

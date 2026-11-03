@@ -1,6 +1,10 @@
 import { AgentProjectRowMenu } from "@/agentMode/navigator/ui/AgentProjectRowMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { SessionStatusIcon, type SessionStatus } from "@/agentMode/navigator/ui/SessionsSidebarRow";
+import {
+  SessionStatusIcon,
+  type SessionStatus,
+  type SortHandle,
+} from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import type { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
 import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
@@ -16,6 +20,7 @@ interface SessionsSidebarFolderRowProps {
   onToggle: () => void;
   onNewChat: () => void;
   onDeleted: (projectId: string) => void;
+  sortHandle?: SortHandle;
 }
 
 export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> = ({
@@ -26,6 +31,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   onToggle,
   onNewChat,
   onDeleted,
+  sortHandle,
 }) => {
   const app = useApp();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,6 +46,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         keyboardFocused && "tw-bg-modifier-hover",
         active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
       )}
+      {...sortHandle?.listeners}
       {...focusWithinProps}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -47,6 +54,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       }}
     >
       <button
+        ref={sortHandle?.ref}
+        {...sortHandle?.attributes}
         type="button"
         aria-expanded={expanded}
         aria-current={active ? "true" : undefined}

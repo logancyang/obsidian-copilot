@@ -18,6 +18,7 @@ const meta = {
     items: [],
     projects: [],
     expandedProjectIds: none,
+    projectOrder: none,
     activeProjectId: "",
     activeChatIds: none,
     runningChatIds: none,
@@ -30,6 +31,7 @@ const meta = {
     onNewChat: () => {},
     onOpenChat: () => {},
     onToggleProject: () => {},
+    onReorderProjects: () => {},
     onOpenProject: () => {},
     onCreateProject: async () => {},
     onProjectDeleted: () => {},
@@ -230,4 +232,66 @@ export const NoProjectsYet: StoryObj<SessionsSidebarPanelProps> = {
 export const CreateProjectDialogOpen: StoryObj<SessionsSidebarPanelProps> = {
   args: { items: everyGroupItems, projects, expandedProjectIds: new Set(["garden"]) },
   render: CreateProjectDialogPanel,
+};
+
+// A story cannot hold a real pointer down, so it starts a pointer drag on the named row and moves it down by the
+// given number of rows without releasing it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/811
+function MidDragPanel(
+  args: Partial<SessionsSidebarPanelProps> & { dragRow: string; rowsDown: number }
+) {
+  const { dragRow, rowsDown, ...panelArgs } = args;
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const doc = containerRef.current?.ownerDocument;
+    const row = Array.from(containerRef.current?.querySelectorAll("button") ?? []).find(
+      (button) => button.textContent === dragRow
+    );
+    if (!doc || !row) return;
+    const { left, top, height } = row.getBoundingClientRect();
+    const at = (dy: number) => ({ clientX: left + 40, clientY: top + height / 2 + dy });
+    row.dispatchEvent(
+      new PointerEvent("pointerdown", { ...at(0), bubbles: true, isPrimary: true, button: 0 })
+    );
+    doc.dispatchEvent(new PointerEvent("pointermove", { ...at(12), bubbles: true }));
+    doc.dispatchEvent(
+      new PointerEvent("pointermove", { ...at(rowsDown * (height + 2)), bubbles: true })
+    );
+    return () => {
+      doc.defaultView?.dispatchEvent(new KeyboardEvent("keydown", { code: "Escape" }));
+    };
+  }, [dragRow, rowsDown]);
+  return (
+    <div ref={containerRef} className="tw-size-full">
+      <WithToggleableFolders {...panelArgs} />
+    </div>
+  );
+}
+
+const pins = [
+  sidebarChat("chats/pin-1.md", "Weekly review template", 600, { pinnedAt: 4 }),
+  sidebarChat("chats/pin-2.md", "Pricing page copy", 90, { pinnedAt: 3, projectId: "launch" }),
+  sidebarChat("chats/pin-3.md", "Reading list triage", 300, { pinnedAt: 2 }),
+  sidebarChat("chats/pin-4.md", "Interview question bank", 45, { pinnedAt: 1 }),
+];
+
+export const DraggingPinnedChat: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: [...pins, ...everyGroupItems.slice(2)],
+    projects,
+    dragRow: "Weekly review template",
+    rowsDown: 1.5,
+  } as Partial<SessionsSidebarPanelProps>,
+  render: MidDragPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
+};
+
+export const DraggingExpandedProject: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: everyGroupItems,
+    projects,
+    expandedProjectIds: new Set(["garden"]),
+    dragRow: "Garden plans",
+    rowsDown: 4,
+  } as Partial<SessionsSidebarPanelProps>,
+  render: MidDragPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
 };

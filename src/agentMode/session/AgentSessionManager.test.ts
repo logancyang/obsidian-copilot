@@ -5373,6 +5373,18 @@ describe("AgentSessionManager", () => {
         expect(persistence.setPinnedAt).toHaveBeenCalledWith("chats/agent__a.md", PINNED_AT);
       });
 
+      it("pins a saved chat at the given time instead of now for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", async () => {
+        const { manager, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", pinnedAt: 4_000 } },
+        });
+        freezeNow();
+
+        const pinned = await manager.setChatPinned("chats/agent__a.md", true, 2_500);
+
+        expect(pinned).toEqual({ id: "chats/agent__a.md", pinnedAt: 2_500 });
+        expect(persistence.setPinnedAt).toHaveBeenCalledWith("chats/agent__a.md", 2_500);
+      });
+
       it("unpins a saved chat by clearing the pin from its note", async () => {
         const { manager, persistence } = buildHistoryHarness({
           files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", pinnedAt: 4_000 } },

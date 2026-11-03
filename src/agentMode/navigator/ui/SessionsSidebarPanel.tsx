@@ -6,6 +6,7 @@ import {
   SessionsSidebarRow,
   mostUrgentStatus,
   resolveSessionStatus,
+  type SortHandle,
 } from "@/agentMode/navigator/ui/SessionsSidebarRow";
 import {
   RECENTS_PAGE_SIZE,
@@ -13,6 +14,7 @@ import {
   VISIBLE_PROJECTS,
   filterChatsByTitle,
   groupSessionsSidebarChats,
+  pinnedAtAfterMove,
 } from "@/agentMode/navigator/ui/sessionsSidebarGroups";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -28,6 +30,24 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { useKeyboardFocusWithin } from "@/hooks/useKeyboardFocusWithin";
 import { cn } from "@/lib/utils";
+import {
+  DndContext,
+  KeyboardSensor,
+  type Announcements,
+  type UniqueIdentifier,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Archive, ChevronRight, MoreHorizontal, Plus, Search, SquarePen } from "lucide-react";
 import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 
@@ -35,6 +55,7 @@ interface SessionsSidebarPanelProps {
   items: readonly ChatHistoryItem[];
   projects: readonly ProjectConfig[];
   expandedProjectIds: ReadonlySet<string>;
+  projectOrder: ReadonlySet<string>;
   activeProjectId: string;
   activeChatIds: ReadonlySet<string>;
   runningChatIds: ReadonlySet<string>;
@@ -47,6 +68,7 @@ interface SessionsSidebarPanelProps {
   onNewChat: () => void;
   onOpenChat: (id: string) => void;
   onToggleProject: (projectId: string) => void;
+  onReorderProjects: (projectIds: string[]) => void;
   onOpenProject: (projectId: string) => void;
   onCreateProject: (name: string) => Promise<void>;
   onProjectDeleted: (projectId: string) => void;
@@ -120,6 +142,91 @@ const Group: React.FC<GroupProps> = ({
   );
 };
 
+// Space picks a row up so Enter keeps opening the chat or folding the project, and the pointer has to travel before a
+// drag starts so a click still opens or folds.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/811
+const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter"] };
+
+interface SortableListProps {
+  ids: string[];
+  labels: string[];
+  onMove: (from: number, to: number) => void;
+  children: React.ReactNode;
+}
+
+// Row ids are chat note paths, so dnd-kit's default announcements would read file paths aloud.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/811
+function dragAnnouncements(ids: string[], labels: string[]): Announcements {
+  const name = (id: UniqueIdentifier) => labels[ids.indexOf(String(id))];
+  const position = (id: UniqueIdentifier) =>
+    `position ${ids.indexOf(String(id)) + 1} of ${ids.length}`;
+  return {
+    onDragStart: ({ active }) => `Picked up ${name(active.id)}.`,
+    onDragOver: ({ active, over }) =>
+      over ? `${name(active.id)} is over ${position(over.id)}.` : undefined,
+    onDragEnd: ({ active, over }) =>
+      over
+        ? `${name(active.id)} was dropped at ${position(over.id)}.`
+        : `${name(active.id)} was dropped.`,
+    onDragCancel: ({ active }) => `Moving ${name(active.id)} was cancelled.`,
+  };
+}
+
+const SortableList: React.FC<SortableListProps> = ({ ids, labels, onMove, children }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: KEYBOARD_CODES,
+    })
+  );
+  return (
+    <DndContext
+      sensors={sensors}
+      accessibility={{ announcements: dragAnnouncements(ids, labels) }}
+      collisionDetection={closestCenter}
+      onDragEnd={({ active, over }) => {
+        if (over && active.id !== over.id) {
+          onMove(ids.indexOf(String(active.id)), ids.indexOf(String(over.id)));
+        }
+      }}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {children}
+      </SortableContext>
+    </DndContext>
+  );
+};
+
+interface SortableItemProps {
+  id: string;
+  children: (handle: SortHandle) => React.ReactNode;
+}
+
+const SortableItem: React.FC<SortableItemProps> = ({ id, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform && { ...transform, x: 0 }), transition }}
+      className={cn(
+        "tw-flex tw-flex-col tw-gap-0.5 tw-rounded-md",
+        isDragging && "tw-relative tw-z-[1] tw-bg-primary tw-ring-1 tw-ring-inset tw-ring-ring"
+      )}
+    >
+      {children({ ref: setActivatorNodeRef, attributes, listeners })}
+    </div>
+  );
+};
+
 const ShowMoreButton: React.FC<{ onClick: () => void }> = ({ onClick }) => (
   <Button
     type="button"
@@ -136,6 +243,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   items,
   projects,
   expandedProjectIds,
+  projectOrder,
   activeProjectId,
   activeChatIds,
   runningChatIds,
@@ -148,6 +256,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   onNewChat,
   onOpenChat,
   onToggleProject,
+  onReorderProjects,
   onOpenProject,
   onCreateProject,
   onProjectDeleted,
@@ -162,7 +271,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
 
   const [createAnchor, setCreateAnchor] = useState<HTMLElement | null>(null);
 
-  const groups = useMemo(() => groupSessionsSidebarChats(items, projects), [items, projects]);
+  const groups = useMemo(
+    () => groupSessionsSidebarChats(items, projects, projectOrder),
+    [items, projects, projectOrder]
+  );
   const projectNamesById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects]
@@ -211,9 +323,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       running: runningChatIds.has(item.id),
     });
 
-  const renderChat = (item: ChatHistoryItem, labelProject = false) => (
+  const renderChat = (item: ChatHistoryItem, labelProject = false, sortHandle?: SortHandle) => (
     <SessionsSidebarRow
       key={item.id}
+      sortHandle={sortHandle}
       item={item}
       status={statusOf(item)}
       active={activeChatIds.has(item.id)}
@@ -229,6 +342,8 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
   const visibleProjects = allProjectsShown
     ? groups.projects
     : groups.projects.slice(0, VISIBLE_PROJECTS);
+  const pinnedIds = groups.pinned.map((item) => item.id);
+  const projectIds = groups.projects.map(({ project }) => project.id);
 
   return (
     <div className="tw-flex tw-size-full tw-min-h-0 tw-flex-col tw-gap-2 tw-p-2">
@@ -320,7 +435,23 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                 collapsed={collapsedGroups.has("pinned")}
                 onToggle={() => onToggleGroup("pinned")}
               >
-                {groups.pinned.map((item) => renderChat(item, true))}
+                <SortableList
+                  ids={pinnedIds}
+                  labels={groups.pinned.map((item) => item.title)}
+                  onMove={(from, to) =>
+                    void actions.onSetChatPinned(
+                      pinnedIds[from],
+                      true,
+                      pinnedAtAfterMove(groups.pinned, from, to)
+                    )
+                  }
+                >
+                  {groups.pinned.map((item) => (
+                    <SortableItem key={item.id} id={item.id}>
+                      {(handle) => renderChat(item, true, handle)}
+                    </SortableItem>
+                  ))}
+                </SortableList>
               </Group>
             )}
             <Group
@@ -337,50 +468,61 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                 </RowActionButton>
               }
             >
-              {visibleProjects.map(({ project, chats }) => {
-                const expanded = expandedProjectIds.has(project.id);
-                const fullyShown = fullyShownProjectIds.has(project.id);
-                const shownCount = !expanded
-                  ? 0
-                  : fullyShown
-                    ? chats.length
-                    : VISIBLE_CHATS_PER_PROJECT;
-                return (
-                  <div key={project.id} className="tw-flex tw-flex-col tw-gap-0.5">
-                    <SessionsSidebarFolderRow
-                      project={project}
-                      expanded={expanded}
-                      active={
-                        activeProjectId === project.id &&
-                        !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
-                      }
-                      hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
-                      onToggle={() => onToggleProject(project.id)}
-                      onNewChat={() => onOpenProject(project.id)}
-                      onDeleted={onProjectDeleted}
-                    />
-                    {/* An empty container would still add the column gap, so an empty project says so instead.
-                        https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
-                    {expanded && chats.length === 0 && (
-                      <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
-                    )}
-                    {/* A project's chats indent by the folder icon and its gap, so their titles start under the project name.
-                        https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
-                    {expanded && chats.length > 0 && (
-                      <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
-                        {chats.slice(0, shownCount).map((item) => renderChat(item))}
-                        {shownCount < chats.length && (
-                          <ShowMoreButton
-                            onClick={() =>
-                              setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
+              <SortableList
+                ids={visibleProjects.map(({ project }) => project.id)}
+                labels={visibleProjects.map(({ project }) => project.name)}
+                onMove={(from, to) => onReorderProjects(arrayMove(projectIds, from, to))}
+              >
+                {visibleProjects.map(({ project, chats }) => {
+                  const expanded = expandedProjectIds.has(project.id);
+                  const fullyShown = fullyShownProjectIds.has(project.id);
+                  const shownCount = !expanded
+                    ? 0
+                    : fullyShown
+                      ? chats.length
+                      : VISIBLE_CHATS_PER_PROJECT;
+                  return (
+                    <SortableItem key={project.id} id={project.id}>
+                      {(handle) => (
+                        <>
+                          <SessionsSidebarFolderRow
+                            sortHandle={handle}
+                            project={project}
+                            expanded={expanded}
+                            active={
+                              activeProjectId === project.id &&
+                              !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
                             }
+                            hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
+                            onToggle={() => onToggleProject(project.id)}
+                            onNewChat={() => onOpenProject(project.id)}
+                            onDeleted={onProjectDeleted}
                           />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                          {/* An empty container would still add the column gap, so an empty project says so instead.
+                              https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+                          {expanded && chats.length === 0 && (
+                            <div className="tw-py-1 tw-pl-8 tw-text-xs tw-text-muted">No chats</div>
+                          )}
+                          {/* A project's chats indent by the folder icon and its gap, so their titles start under the project name.
+                              https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+                          {expanded && chats.length > 0 && (
+                            <div className="tw-ml-6 tw-flex tw-flex-col tw-gap-0.5">
+                              {chats.slice(0, shownCount).map((item) => renderChat(item))}
+                              {shownCount < chats.length && (
+                                <ShowMoreButton
+                                  onClick={() =>
+                                    setFullyShownProjectIds((ids) => new Set(ids).add(project.id))
+                                  }
+                                />
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </SortableItem>
+                  );
+                })}
+              </SortableList>
               {visibleProjects.length < groups.projects.length && (
                 <ShowMoreButton onClick={() => setAllProjectsShown(true)} />
               )}
