@@ -7,6 +7,7 @@ import { AI_SENDER, CHAT_AGENT_VIEWTYPE, USER_SENDER } from "@/constants";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
 import { formatDateTime } from "@/utils";
 import { playNotificationSound } from "@/utils/notificationSound";
+import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import { GLOBAL_SCOPE } from "./scope";
@@ -75,6 +76,8 @@ let mockNotificationSound = true;
 jest.mock("@/utils/notificationSound", () => ({
   playNotificationSound: jest.fn(),
 }));
+
+jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
 
 function mockDefaultSettings() {
   return {
@@ -714,6 +717,7 @@ beforeEach(() => {
   mockNotificationSound = true;
   mockAgentChatFocus = "none";
   (playNotificationSound as jest.Mock).mockClear();
+  jest.mocked(refreshLatestVersion).mockClear();
   mockBackendStart.mockClear();
   mockBackendShutdown.mockClear();
   mockSetPermissionPrompter.mockClear();
@@ -993,6 +997,15 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(session);
         expect(mgr.getActiveChatUIState()).not.toBeNull();
         expect(mgr.getChatUIState(session.internalId)).toBe(mgr.getActiveChatUIState());
+      });
+
+      it("asks for the hourly release check each time a session is created for https://github.com/Brevilabs/obsidian-copilot-private/issues/837", async () => {
+        const mgr = buildManager();
+
+        await mgr.createSession();
+        await mgr.createSession();
+
+        expect(refreshLatestVersion).toHaveBeenCalledTimes(2);
       });
 
       it("attaches the Copilot MCP server to a new session and routes its cards to that session", async () => {
@@ -2621,6 +2634,17 @@ describe("AgentSessionManager", () => {
         expect(landing.projectId).toBe(GLOBAL_SCOPE);
         expect(landing.hasUserVisibleMessages()).toBe(false);
         expect(mgr.getSessions()).toEqual([conversation, landing]);
+      });
+
+      it("asks for the hourly release check when the Navigator starts a fresh global chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/837", async () => {
+        const mgr = buildManager();
+        const conversation = await mgr.createSession();
+        getSessionTestHandle(conversation).setHasUserVisibleMessages(true);
+        jest.mocked(refreshLatestVersion).mockClear();
+
+        await mgr.openGlobalLanding();
+
+        expect(refreshLatestVersion).toHaveBeenCalledTimes(1);
       });
 
       it("leaves the project and lands on a global chat when a project chat is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {

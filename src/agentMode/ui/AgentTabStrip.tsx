@@ -11,7 +11,6 @@ import { Input } from "@/components/ui/input";
 import { useApp } from "@/context";
 import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/AgentSession";
@@ -145,10 +144,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
 
   const handleNew = React.useCallback(() => {
     if (manager.getIsStarting()) return;
-    manager
-      .createSession()
-      .then(() => refreshLatestVersion())
-      .catch((e) => logError("[AgentMode] createSession failed", e));
+    manager.createSession().catch((e) => logError("[AgentMode] createSession failed", e));
   }, [manager]);
 
   const handleClose = React.useCallback(

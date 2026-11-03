@@ -1,6 +1,7 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
 import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
+import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
@@ -942,6 +943,7 @@ export class AgentSessionManager {
     this.attachAutoSave(session);
     this.attachAttentionTracking(session);
     this.notify();
+    refreshLatestVersion();
 
     void session.ready
       .then(async () => {
