@@ -1,7 +1,9 @@
 import type { TurnFileChange } from "@/agentMode/session/types";
 import { FileChangeCounts, FileChangeStatusBadge } from "@/agentMode/ui/FileChangeSummary";
 import type { ChangeStep } from "@/agentMode/ui/renderedDiff/ChangeScroller";
+import { RevokeButton } from "@/agentMode/ui/RevokeButton";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import React from "react";
@@ -12,12 +14,18 @@ export interface ChangeStepperProps {
   onStep: (direction: ChangeStep) => void;
 }
 
+export interface RevokeAllProps {
+  changedAfterTurn: boolean;
+  onRevokeAll: () => void;
+}
+
 export interface TurnDiffHeaderProps {
   path: string;
   status: TurnFileChange["status"];
   additions: number;
   deletions: number;
   changes?: ChangeStepperProps;
+  revokeAll?: RevokeAllProps;
   onOpenNote?: (pane: OpenPane) => void;
 }
 
@@ -27,16 +35,18 @@ export const TurnDiffHeader: React.FC<TurnDiffHeaderProps> = ({
   additions,
   deletions,
   changes,
+  revokeAll,
   onOpenNote,
 }) => (
   <div className="copilot-divider-b tw-px-[var(--file-margins)] tw-py-2">
-    <div className="tw-mx-auto tw-flex tw-max-w-[var(--file-line-width)] tw-items-center tw-gap-2">
+    <div className="tw-mx-auto tw-flex tw-max-w-[var(--file-line-width)] tw-flex-wrap tw-items-center tw-gap-2">
       <span title={path} className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-sm tw-text-muted">
         {path}
       </span>
       <FileChangeStatusBadge status={status} />
       <FileChangeCounts additions={additions} deletions={deletions} />
       {changes && changes.total > 0 ? <ChangeStepper {...changes} /> : null}
+      {revokeAll ? <RevokeAllButton {...revokeAll} /> : null}
       {onOpenNote ? (
         <Button
           variant="link"
@@ -63,4 +73,14 @@ const ChangeStepper: React.FC<ChangeStepperProps> = ({ current, total, onStep })
       <ChevronDown className="tw-size-4" />
     </Button>
   </span>
+);
+
+const RevokeAllButton: React.FC<RevokeAllProps> = ({ changedAfterTurn, onRevokeAll }) => (
+  <RevokeButton
+    label="Revoke all"
+    blocked={changedAfterTurn ? "This note changed after the turn." : null}
+    tooltipSide="bottom"
+    className={cn("tw-ml-1 tw-shrink-0", changedAfterTurn && "tw-opacity-50")}
+    onRevoke={onRevokeAll}
+  />
 );

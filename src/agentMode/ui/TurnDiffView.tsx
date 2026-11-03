@@ -14,7 +14,10 @@ import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { SelectionReport } from "@/selection/selectionStore";
+import { ensureFolderExists } from "@/utils";
 import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
+import { parentDir } from "@/utils/pathUtils";
+import { trashFile } from "@/utils/vaultAdapterUtils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import {
   App,
@@ -150,36 +153,60 @@ export class TurnDiffView extends ItemView {
     this.stepper = stepper;
   };
 
-  // The tab keeps its own copy of the turn's result, so a revoked run reads as unchanged until the
+  private readonly revoke = (state: TurnDiffViewState, run: DiffRun): Promise<void> =>
+    this.rewrite(
+      state,
+      "This text changed in the note after the turn, so it was not revoked.",
+      async () => {
+        const file = this.app.vault.getAbstractFileByPath(state.path);
+        const { before, after } = state;
+        if (!(file instanceof TFile) || before === null || after === null) return undefined;
+        let revokedAfter: string | undefined;
+        await this.app.vault.process(file, (current) => {
+          const revoked = revokeRun(before, after, current, run);
+          revokedAfter = revoked?.after;
+          return revoked?.current ?? current;
+        });
+        return revokedAfter;
+      }
+    );
+
+  private readonly revokeAll = (state: TurnDiffViewState): Promise<void> =>
+    this.rewrite(state, "This note changed after the turn, so it was not revoked.", () =>
+      restoreBefore(this.app, state)
+    );
+
+  // The tab keeps its own copy of the turn's result, so a revoked change reads as unchanged until the
   // tab closes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
-  private readonly revoke = async (state: TurnDiffViewState, run: DiffRun): Promise<void> => {
-    const file = this.app.vault.getAbstractFileByPath(state.path);
-    const { before, after } = state;
-    if (!(file instanceof TFile) || before === null || after === null) return;
-    let revokedAfter: string | null = null;
-    await this.app.vault.process(file, (current) => {
-      const revoked = revokeRun(before, after, current, run);
-      revokedAfter = revoked?.after ?? null;
-      return revoked?.current ?? current;
-    });
-    if (revokedAfter === null) {
-      new Notice("This text changed in the note after the turn, so it was not revoked.");
+  private async rewrite(
+    state: TurnDiffViewState,
+    notice: string,
+    write: () => Promise<string | null | undefined>
+  ): Promise<void> {
+    const after = await write();
+    if (after === undefined) {
+      new Notice(notice);
       return;
     }
-    const counts = buildTurnFileChange(state.path, before, revokedAfter);
+    const counts = buildTurnFileChange(state.path, state.before, after);
     this.state = {
       ...state,
-      after: revokedAfter,
+      after,
       additions: counts?.additions ?? 0,
       deletions: counts?.deletions ?? 0,
     };
     this.viewRoot?.rerender();
-  };
+  }
 
   private renderTree(): ReactNode {
     return this.state ? (
-      <TurnDiffPane state={this.state} onStepperChange={this.setStepper} onRevoke={this.revoke} />
+      <TurnDiffPane
+        state={this.state}
+        onStepperChange={this.setStepper}
+        onRevoke={this.revoke}
+        onRevokeAll={this.revokeAll}
+      />
     ) : null;
   }
 }
@@ -188,9 +215,15 @@ interface TurnDiffPaneProps {
   state: TurnDiffViewState;
   onStepperChange: (stepper: ((direction: ChangeStep) => void) | null) => void;
   onRevoke: (state: TurnDiffViewState, run: DiffRun) => Promise<void>;
+  onRevokeAll: (state: TurnDiffViewState) => Promise<void>;
 }
 
-const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange, onRevoke }) => {
+const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({
+  state,
+  onStepperChange,
+  onRevoke,
+  onRevokeAll,
+}) => {
   const app = useApp();
   const navigation = useChangeNavigation();
   const current = useNoteText(app, state.path);
@@ -206,9 +239,21 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({ state, onStepperChange, onR
         additions={state.additions}
         deletions={state.deletions}
         changes={{ current: navigation.current, total, onStep: navigation.step }}
-        onOpenNote={
-          state.status === "deleted" ? undefined : (pane) => openNote(app, state.path, pane)
+        // Revoke all returns the note to before the turn only while it is exactly what the turn left,
+        // counting this tab's own revokes, and has nothing to offer once no change is left.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/825
+        revokeAll={
+          current === undefined || state.before === state.after
+            ? undefined
+            : {
+                changedAfterTurn: current !== state.after,
+                onRevokeAll: () =>
+                  void onRevokeAll(state).catch((error: unknown) =>
+                    logError("[TurnDiffView] failed to revoke the note's changes", error)
+                  ),
+              }
         }
+        onOpenNote={state.after === null ? undefined : (pane) => openNote(app, state.path, pane)}
       />
       <ChangeScroller navigation={navigation}>
         <RenderedDiff
@@ -265,6 +310,31 @@ function useNoteText(app: App, path: string): string | null | undefined {
     };
   }, [app, path]);
   return text;
+}
+
+// Each kind of note is compared with what the turn left at write time, so an edit made after the turn
+// is never undone; a deleted note's path must still be free.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/825
+async function restoreBefore(
+  app: App,
+  { path, before, after }: TurnFileChange
+): Promise<string | null | undefined> {
+  const file = app.vault.getAbstractFileByPath(path);
+  if (after === null) {
+    if (file !== null) return undefined;
+    await ensureFolderExists(app.vault, parentDir(path));
+    await app.vault.create(path, before ?? "");
+    return before;
+  }
+  if (!(file instanceof TFile)) return undefined;
+  let unchanged = false;
+  await app.vault.process(file, (current) => {
+    unchanged = current === after;
+    return unchanged && before !== null ? before : current;
+  });
+  if (!unchanged) return undefined;
+  if (before === null) await trashFile(app, file);
+  return before;
 }
 
 export async function openTurnDiff(

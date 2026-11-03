@@ -51,6 +51,11 @@ function fakeApp(
   contents = new Map<string, string>()
 ): App {
   const listeners: VaultListener[] = [];
+  const emit = (name: string, file: TFile): void => {
+    for (const listener of listeners.filter((listener) => listener.name === name)) {
+      listener.callback(file);
+    }
+  };
   return {
     ...appParsing(async () => parse),
     workspace: {
@@ -58,12 +63,28 @@ function fakeApp(
       iterateAllLeaves: jest.fn(),
       getLeaf: jest.fn(() => ({ openFile: jest.fn().mockResolvedValue(undefined) })),
     },
+    fileManager: {
+      trashFile: jest.fn(async (file: TFile) => {
+        files.splice(files.indexOf(file), 1);
+        contents.delete(file.path);
+        emit("delete", file);
+      }),
+    },
     vault: {
+      adapter: { mkdir: jest.fn(async () => {}) },
       getAbstractFileByPath: (path: string) => files.find((file) => file.path === path) ?? null,
       cachedRead: async (file: TFile) => contents.get(file.path) ?? "",
+      create: jest.fn(async (path: string, text: string) => {
+        const file = noteFile(path);
+        files.push(file);
+        contents.set(path, text);
+        emit("create", file);
+        return file;
+      }),
       process: jest.fn(async (file: TFile, edit: (data: string) => string) => {
         const next = edit(contents.get(file.path) ?? "");
         contents.set(file.path, next);
+        emit("modify", file);
         return next;
       }),
       on: (name: string, callback: VaultListener["callback"]) => {
@@ -74,9 +95,7 @@ function fakeApp(
       offref: (listener: VaultListener) => listeners.splice(listeners.indexOf(listener), 1),
       modify: (file: TFile, text: string) => {
         contents.set(file.path, text);
-        for (const listener of listeners.filter(({ name }) => name === "modify")) {
-          listener.callback(file);
-        }
+        emit("modify", file);
       },
     },
   } as unknown as App;
@@ -399,6 +418,184 @@ describe("TurnDiffView", () => {
           expect(textOf(view.containerEl, "[data-change=inserted]")).not.toEqual([])
         );
         expect(within(view.containerEl).queryByRole("button", { name: "Revoke" })).toBeNull();
+      });
+    });
+
+    describe("Revoke all", () => {
+      const ISSUE_825 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/825";
+      const BEFORE = "The quick brown fox.\n\nThe middle stays.\n\nIt jumps over the lazy dog.\n";
+      const AFTER = "The quick red fox.\n\nThe middle stays.\n\nIt leaps over the lazy dog.\n";
+      const THREE_PARAGRAPHS: RecordedParse = {
+        sections: [
+          ["paragraph", 0, 0],
+          ["paragraph", 2, 2],
+          ["paragraph", 4, 4],
+        ],
+      };
+
+      interface NoteDiff {
+        app: App;
+        view: TurnDiffView;
+        contents: Map<string, string>;
+      }
+
+      async function noteDiff(
+        overrides: Partial<TurnFileChange>,
+        files: Record<string, string>
+      ): Promise<NoteDiff> {
+        const contents = new Map(Object.entries(files));
+        const app = fakeApp(Object.keys(files).map(noteFile), THREE_PARAGRAPHS, contents);
+        const view = await openView(app);
+        await hydrate(view, {
+          ...change("notes/diff-demo/alpha.md", {
+            before: BEFORE,
+            after: AFTER,
+            additions: 2,
+            deletions: 2,
+            ...overrides,
+          }),
+          turnId: "turn-1",
+        });
+        return { app, view, contents };
+      }
+
+      const trashFileOf = (app: App): jest.Mock =>
+        (app.fileManager as unknown as { trashFile: jest.Mock }).trashFile;
+
+      const revokeAllButton = (view: TurnDiffView): Promise<HTMLElement> =>
+        within(header(view)).findByRole("button", { name: "Revoke all" });
+
+      async function clickRevokeAll(view: TurnDiffView): Promise<void> {
+        const button = await revokeAllButton(view);
+        await act(async () => {
+          fireEvent.click(button);
+        });
+      }
+
+      async function expectNoChangesLeft(view: TurnDiffView): Promise<void> {
+        await waitFor(() => expect(within(header(view)).getByText("+0")).toBeTruthy());
+        expect(within(header(view)).getByText("−0")).toBeTruthy();
+        expect(within(header(view)).queryByRole("button", { name: "Revoke all" })).toBeNull();
+      }
+
+      it(`returns a modified note to its text from before the turn and shows no changes left (${ISSUE_825})`, async () => {
+        const { view, contents } = await noteDiff({}, { "notes/diff-demo/alpha.md": AFTER });
+
+        await clickRevokeAll(view);
+
+        expect(contents.get("notes/diff-demo/alpha.md")).toBe(BEFORE);
+        await expectNoChangesLeft(view);
+        await waitFor(() => expect(textOf(view.containerEl, "del, ins")).toEqual([]));
+      });
+
+      it(`stays available after a run is revoked in the tab and then returns the rest of the note to before the turn (${ISSUE_825})`, async () => {
+        const { view, contents } = await noteDiff({}, { "notes/diff-demo/alpha.md": AFTER });
+        await act(async () => {
+          fireEvent.click((await revokeButtons(view))[0]);
+        });
+        await waitFor(() => expect(within(header(view)).getByText("+1")).toBeTruthy());
+
+        await waitFor(async () =>
+          expect((await revokeAllButton(view)).getAttribute("aria-disabled")).toBeNull()
+        );
+        await clickRevokeAll(view);
+
+        expect(contents.get("notes/diff-demo/alpha.md")).toBe(BEFORE);
+        await expectNoChangesLeft(view);
+      });
+
+      it(`disables Revoke all once the note is edited while the tab is open (${ISSUE_825})`, async () => {
+        const { app, view } = await noteDiff({}, { "notes/diff-demo/alpha.md": AFTER });
+        expect((await revokeAllButton(view)).getAttribute("aria-disabled")).toBeNull();
+
+        act(() => {
+          (app.vault as unknown as { modify: (file: TFile, text: string) => void }).modify(
+            noteFile("notes/diff-demo/alpha.md"),
+            `${AFTER}A line I added.\n`
+          );
+        });
+
+        await waitFor(async () =>
+          expect((await revokeAllButton(view)).getAttribute("aria-disabled")).toBe("true")
+        );
+      });
+
+      it(`leaves a modified note as it is and says so when it changed just before the write (${ISSUE_825})`, async () => {
+        const { app, view, contents } = await noteDiff({}, { "notes/diff-demo/alpha.md": AFTER });
+        const edited = `${AFTER}A line I added.\n`;
+        jest.mocked(app.vault.process).mockImplementationOnce(async (_file, edit) => edit(edited));
+
+        await clickRevokeAll(view);
+
+        expect(contents.get("notes/diff-demo/alpha.md")).toBe(AFTER);
+        expect(Notice).toHaveBeenCalledWith(
+          "This note changed after the turn, so it was not revoked."
+        );
+        expect(within(header(view)).getByText("+2")).toBeTruthy();
+      });
+
+      it(`moves a note the turn created to the trash through Obsidian's file manager and stops offering Open note (${ISSUE_825})`, async () => {
+        const { app, view, contents } = await noteDiff(
+          { status: "created", before: null, additions: 5, deletions: 0 },
+          { "notes/diff-demo/alpha.md": AFTER }
+        );
+
+        await clickRevokeAll(view);
+
+        expect(trashFileOf(app)).toHaveBeenCalledWith(
+          expect.objectContaining({ path: "notes/diff-demo/alpha.md" })
+        );
+        expect(contents.has("notes/diff-demo/alpha.md")).toBe(false);
+        await expectNoChangesLeft(view);
+        expect(within(header(view)).queryByText("Open note")).toBeNull();
+      });
+
+      it(`keeps a created note that changed just before the write and says so (${ISSUE_825})`, async () => {
+        const { app, view, contents } = await noteDiff(
+          { status: "created", before: null, additions: 5, deletions: 0 },
+          { "notes/diff-demo/alpha.md": AFTER }
+        );
+        const button = await revokeAllButton(view);
+        contents.set("notes/diff-demo/alpha.md", `${AFTER}A line I added.\n`);
+
+        await act(async () => {
+          fireEvent.click(button);
+        });
+
+        expect(trashFileOf(app)).not.toHaveBeenCalled();
+        expect(Notice).toHaveBeenCalledWith(
+          "This note changed after the turn, so it was not revoked."
+        );
+      });
+
+      it(`recreates a note the turn deleted with its text from before the turn, creating its missing folders, and offers Open note (${ISSUE_825})`, async () => {
+        const { app, view, contents } = await noteDiff(
+          { status: "deleted", after: null, additions: 0, deletions: 5 },
+          {}
+        );
+
+        await clickRevokeAll(view);
+
+        expect(jest.mocked(app.vault.adapter.mkdir).mock.calls).toEqual([
+          ["notes"],
+          ["notes/diff-demo"],
+        ]);
+        expect(contents.get("notes/diff-demo/alpha.md")).toBe(BEFORE);
+        await expectNoChangesLeft(view);
+        expect(within(header(view)).getByText("Open note")).toBeTruthy();
+      });
+
+      it(`disables Revoke all for a deleted note once another file takes its path (${ISSUE_825})`, async () => {
+        const { app, view } = await noteDiff(
+          { status: "deleted", after: null, additions: 0, deletions: 5 },
+          { "notes/diff-demo/alpha.md": "A different note.\n" }
+        );
+
+        const button = await revokeAllButton(view);
+        await waitFor(() => expect(button.getAttribute("aria-disabled")).toBe("true"));
+        fireEvent.click(button);
+
+        expect(app.vault.create).not.toHaveBeenCalled();
       });
     });
 

@@ -222,6 +222,8 @@ Select a row to open that note's before and after as a single tab. Removed text 
 
 To undo part of a turn, hover over a stretch of changes and select **Revoke**. That stretch goes back to what the note said before the turn, and the rest of the note stays as it is. Revoke is unavailable for a stretch that you or a later turn edited after this turn, and for notes the agent created or deleted. The agent is not told about a revoke.
 
+To undo everything the turn did to the note, select **Revoke all** in the tab's header. An edited note goes back to its text from before the turn, a note the agent created is deleted according to your **Files and links > Deleted files** setting, and a note the agent deleted is recreated. Revoke all is unavailable once you or a later turn edits the note, or, for a deleted note, once another file takes its place.
+
 Select text in the tab to attach it to your next message. Removed and added words in the selection stay marked, so a question such as "why did you change this?" is about exactly that change.
 
 In a long note, a narrow strip along the left edge of the tab shows where the changes are. The strip stands for the whole note, with one mark for each change at its position in the note: green where text was added, red where it was removed, and blue where both happened. Select a mark to jump to that change.

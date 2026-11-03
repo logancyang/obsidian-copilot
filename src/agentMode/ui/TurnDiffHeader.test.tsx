@@ -101,6 +101,54 @@ describe("TurnDiffHeader", () => {
       expect(screen.queryByRole("button", { name: "Next change" })).toBeNull();
     });
 
+    it("runs the caller's handler when Revoke all is chosen while the note is what the turn left (https://github.com/Brevilabs/obsidian-copilot-private/issues/825)", () => {
+      const onRevokeAll = jest.fn();
+      render(
+        <TurnDiffHeader
+          path="notes/a.md"
+          status="modified"
+          additions={1}
+          deletions={1}
+          revokeAll={{ changedAfterTurn: false, onRevokeAll }}
+        />
+      );
+
+      const button = screen.getByRole("button", { name: "Revoke all" });
+      fireEvent.click(button);
+
+      expect(button.getAttribute("aria-disabled")).toBeNull();
+      expect(onRevokeAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("disables Revoke all and says why on focus when the note changed after the turn (https://github.com/Brevilabs/obsidian-copilot-private/issues/825)", async () => {
+      const onRevokeAll = jest.fn();
+      render(
+        <TurnDiffHeader
+          path="notes/a.md"
+          status="modified"
+          additions={1}
+          deletions={1}
+          revokeAll={{ changedAfterTurn: true, onRevokeAll }}
+        />
+      );
+
+      const button = screen.getByRole("button", { name: "Revoke all" });
+      fireEvent.click(button);
+      fireEvent.focus(button);
+
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      expect(onRevokeAll).not.toHaveBeenCalled();
+      expect(
+        (await screen.findAllByText("This note changed after the turn.")).length
+      ).toBeGreaterThan(0);
+    });
+
+    it("offers no Revoke all when the caller gives none, as when no change is left", () => {
+      render(<TurnDiffHeader path="notes/a.md" status="modified" additions={0} deletions={0} />);
+
+      expect(screen.queryByRole("button", { name: "Revoke all" })).toBeNull();
+    });
+
     it("offers no Open note when the caller gives no handler, as for a deleted file", () => {
       render(<TurnDiffHeader path="notes/a.md" status="deleted" additions={0} deletions={9} />);
 
