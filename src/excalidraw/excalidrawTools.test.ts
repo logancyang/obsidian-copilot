@@ -97,6 +97,10 @@ describe("excalidrawTools", () => {
       );
     });
 
+    it("caps operations at the 100 the Excalidraw plugin applies per call, so agents split larger edits up front (https://github.com/logancyang/obsidian-copilot/issues/4010)", () => {
+      expect(EXCALIDRAW_WRITE_TOOL.inputSchema.properties.operations.maxItems).toBe(100);
+    });
+
     it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
       expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
         "Other operations can't take an icon's id or group id"
