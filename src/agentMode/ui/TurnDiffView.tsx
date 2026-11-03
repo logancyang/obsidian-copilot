@@ -63,7 +63,6 @@ export class TurnDiffView extends ItemView {
   private viewRoot: PluginViewRootHandle | null = null;
   private state: TurnDiffViewState | null = null;
   private stepper: ((direction: ChangeStep) => void) | null = null;
-  private revoking = false;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -178,21 +177,14 @@ export class TurnDiffView extends ItemView {
     );
 
   // The tab keeps its own copy of the turn's result, so a revoked change reads as unchanged until the
-  // tab closes. A click from a render older than the current state carries stale line ranges.
+  // tab closes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/823
   private async rewrite(
     state: TurnDiffViewState,
     notice: string,
     write: () => Promise<string | null | undefined>
   ): Promise<void> {
-    if (this.revoking || state !== this.state) return;
-    this.revoking = true;
-    let after: string | null | undefined;
-    try {
-      after = await write();
-    } finally {
-      this.revoking = false;
-    }
+    const after = await write();
     if (after === undefined) {
       new Notice(notice);
       return;
