@@ -21,11 +21,11 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("bumps the Markdown and CLI skill versions so existing vaults reseed their corrected guidance (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666)", () => {
+    it("bumps every skill whose guidance or description changed so existing vaults reseed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666, https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 3],
-        ["obsidian-bases", 2],
-        ["json-canvas", 2],
+        ["obsidian-markdown", 4],
+        ["obsidian-bases", 3],
+        ["json-canvas", 3],
         ["obsidian-cli", 4],
       ]);
     });
@@ -81,11 +81,19 @@ describe("obsidianSkills", () => {
       );
     });
 
-    it("names the Markdown syntax that should trigger the skill and puts a list's block ID between blank lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("names the Markdown syntax that should trigger the skill and puts a list's block ID between blank lines (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
       const md = skillMd("obsidian-markdown");
-      expect(md).toMatch(
-        /description:[^\n]*block IDs[^\n]*Load before adding or changing any of these in a note\./
-      );
+      const { description } = parseSkillFile(md, "obsidian-markdown").frontmatter;
+      for (const job of [
+        "wikilinks",
+        "block IDs (^id) with block and list embeds",
+        "heading embeds",
+        "callouts",
+        "properties and frontmatter",
+        "Load before adding or changing any of these in a note",
+      ]) {
+        expect(description).toContain(job);
+      }
       expect(md).not.toContain("ordinary Markdown is assumed knowledge");
       expect(md).toContain(
         "Put a block ID on its own line after a list or quote block, with a blank line\nbefore and after it; without the line before it marks only the last item."
@@ -132,8 +140,12 @@ describe("obsidianSkills", () => {
       }
     });
 
-    it("documents that Bases sorts only by properties listed in the view's order, and rounds day counts (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
+    it("documents that Bases sorts only by properties listed in the view's order, and rounds day counts (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
       const md = skillMd("obsidian-bases");
+      const { description } = parseSkillFile(md, "obsidian-bases").frontmatter;
+      expect(description).toContain("formulas");
+      expect(description).toContain("the columns a view shows (order) and its row sorting (sort)");
+      expect(description).toContain("Load before writing or changing any .base file");
       expect(md).toContain("    sort:\n      - property: due\n        direction: ASC");
       expect(md).toContain(
         "Obsidian sorts only by properties that are also listed in\n<code>order</code>, so include every sort property there."
@@ -170,6 +182,16 @@ describe("obsidianSkills", () => {
       expect(OBSIDIAN_SKILLS.find((skill) => skill.name === "json-canvas")?.files).toEqual(
         expect.arrayContaining([expect.objectContaining({ path: "references/EXAMPLES.md" })])
       );
+    });
+
+    it("triggers the Canvas skill for any .canvas file, including file cards that show one section or block of a note (https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
+      const md = skillMd("json-canvas");
+      const { description } = parseSkillFile(md, "json-canvas").frontmatter;
+      expect(description).toContain(
+        "file cards that show one section or block of a note (subpath)"
+      );
+      expect(description).toContain("Load before writing or changing any .canvas file");
+      expect(md).toContain("Vault file; optional <code>subpath</code>");
     });
 
     it("uses the CLI only for Obsidian runtime, index, and developer capabilities", () => {

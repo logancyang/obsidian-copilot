@@ -15,7 +15,6 @@ import {
   COPILOT_MIYO_SEARCH_STEERING,
   COPILOT_FEEDBACK_POINTER,
   COPILOT_OBSIDIAN_CLI_STEERING,
-  COPILOT_OBSIDIAN_FORMAT_LEAD,
   COPILOT_PROMPT_BASE,
   COPILOT_SKILL_FALLBACK,
   COPILOT_VAULT_HYGIENE,
@@ -54,8 +53,6 @@ const EXCALIDRAW_APP = {
       id === "obsidian-excalidraw-plugin" ? { ea: { executeCLI: jest.fn() } } : null,
   },
 } as unknown as App;
-const ALL_OBSIDIAN_FORMAT_SKILLS_LINE =
-  "Before writing Obsidian syntax, load its skill and follow it over memory: obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files, json-canvas for .canvas files.";
 const ALL_RELAY_SKILLS_LINE =
   "Run these Copilot skills before any built-in web tool: copilot-web-search for web search, copilot-web-fetch for pages/URLs, copilot-youtube-transcript for YouTube, copilot-fetch-x for X posts.";
 
@@ -120,9 +117,6 @@ describe("agentSystemPrompt", () => {
         "copilot-web-fetch": { disabled: true },
         "copilot-youtube-transcript": { disabled: true },
         "copilot-fetch-x": { disabled: true },
-        "obsidian-markdown": { disabled: true },
-        "obsidian-bases": { disabled: true },
-        "json-canvas": { disabled: true },
         "obsidian-cli": { disabled: true },
       });
       const alwaysOn = buildAgentSystemPrompt(AGENT, APP);
@@ -295,42 +289,20 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("claude", APP)).toContain(COPILOT_MIYO_DOCUMENT_STEERING);
     });
 
-    it(`tells every agent to load the matching Obsidian skill before writing Obsidian Markdown, .base or .canvas files (${ISSUE_726})`, () => {
+    it(`never names an Obsidian format skill, so an agent whose skill link is missing is not sent looking for it (https://github.com/logancyang/obsidian-copilot/issues/3980)`, () => {
       setBuiltinPreferences({});
       for (const agent of ["claude", "codex", "opencode"]) {
-        expect(buildAgentSystemPrompt(agent, APP)).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+        const prompt = buildAgentSystemPrompt(agent, APP);
+        for (const skill of ["obsidian-markdown", "obsidian-bases", "json-canvas"]) {
+          expect(prompt).not.toContain(skill);
+        }
       }
     });
 
-    it(`steers OpenCode to every Obsidian skill, Codex to Markdown and Bases and Claude to none under default settings (${ISSUE_726}, https://github.com/logancyang/obsidian-copilot/issues/3868)`, () => {
-      expect(buildAgentSystemPrompt("opencode", APP)).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
+    it(`steers only OpenCode to obsidian-cli under default settings (${ISSUE_726})`, () => {
       expect(buildAgentSystemPrompt("opencode", APP)).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(buildAgentSystemPrompt("codex", APP)).toContain(
-        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, obsidian-bases for .base files.`
-      );
       expect(buildAgentSystemPrompt("codex", APP)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-      expect(buildAgentSystemPrompt("claude", APP)).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
       expect(buildAgentSystemPrompt("claude", APP)).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
-    });
-
-    it(`names only the format skills enabled for the agent and drops the line when none is (${ISSUE_726})`, () => {
-      setBuiltinPreferences({
-        "obsidian-markdown": { disabledAgents: ["codex"] },
-        "obsidian-bases": { disabled: true },
-      });
-      expect(buildAgentSystemPrompt("codex", APP)).toContain(
-        `${COPILOT_OBSIDIAN_FORMAT_LEAD} json-canvas for .canvas files.`
-      );
-      expect(buildAgentSystemPrompt("claude", APP)).toContain(
-        `${COPILOT_OBSIDIAN_FORMAT_LEAD} obsidian-markdown for embeds, block IDs, callouts, comments and properties, json-canvas for .canvas files.`
-      );
-
-      setBuiltinPreferences({
-        "obsidian-markdown": { disabled: true },
-        "obsidian-bases": { disabled: true },
-        "json-canvas": { disabledAgents: ["codex"] },
-      });
-      expect(buildAgentSystemPrompt("codex", APP)).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
     });
 
     it(`tells the agent the running Obsidian app is reachable through obsidian-cli only while that skill is enabled for it (${ISSUE_726})`, () => {
@@ -344,14 +316,13 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("claude", APP)).toContain(COPILOT_OBSIDIAN_CLI_STEERING);
     });
 
-    it(`drops the obsidian-cli line while Obsidian's command line interface is off, keeping the format skills (${ISSUE_726})`, () => {
+    it(`drops the obsidian-cli line while Obsidian's command line interface is off (${ISSUE_726})`, () => {
       setBuiltinPreferences({});
       mockIsObsidianCliEnabled.mockReturnValue(false);
 
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
       expect(prompt).not.toContain("obsidian-cli");
-      expect(prompt).toContain(ALL_OBSIDIAN_FORMAT_SKILLS_LINE);
     });
 
     it("suppresses the skill and research steering when the builtin prompt is disabled", () => {
@@ -359,7 +330,6 @@ describe("agentSystemPrompt", () => {
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_SKILL_FALLBACK);
       expect(prompt).not.toContain(COPILOT_WEB_RESEARCH_STEERING);
-      expect(prompt).not.toContain(COPILOT_OBSIDIAN_FORMAT_LEAD);
       expect(prompt).not.toContain(COPILOT_OBSIDIAN_CLI_STEERING);
     });
 
