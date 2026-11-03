@@ -1,5 +1,6 @@
 import type { BackendAuthStatus } from "@/agentMode/session/types";
 import { Button } from "@/components/ui/button";
+import { openLinkInSystemBrowser } from "@/utils/electronShell";
 import React from "react";
 
 export interface SignInActionProps {
@@ -27,7 +28,12 @@ export const SignInAction: React.FC<SignInActionProps> = (auth) => (
         <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
           {auth.signingIn && auth.url ? (
             <Button asChild variant="default" size="sm">
-              <a href={auth.url} target="_blank" rel="noopener noreferrer">
+              <a
+                href={auth.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={openLinkInSystemBrowser}
+              >
                 Open sign-in page
               </a>
             </Button>

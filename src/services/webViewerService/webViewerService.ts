@@ -122,6 +122,17 @@ export class WebViewerService {
     return this.stateManager.findLeafByUrl(url, options);
   }
 
+  findAttachedTabLeaf(
+    url: string,
+    options: { title?: string; isActive: boolean }
+  ): WebViewerLeaf | null {
+    const leaf = this.findLeafByUrl(url, { title: options.title });
+    if (leaf || !options.isActive) return leaf;
+    // Single-page apps like Outlook change the active tab's URL in place without an event Copilot tracks, so its URL can be stale here.
+    // https://github.com/logancyang/obsidian-copilot/issues/3693
+    return this.getActiveLeaf() ?? this.getLastActiveLeaf();
+  }
+
   getActiveWebTabState(): ActiveWebTabStateSnapshot {
     return this.stateManager.getActiveWebTabState();
   }
