@@ -2,7 +2,7 @@
 
 # v4.0.18 - Copilot Navigator preview, selections from drawings, PDFs and diffs, revoke agent changes
 
-![Copilot Navigator lifting out of the Obsidian sidebar, listing Pinned, Projects and Recents chats with a running chat finishing and another pinned](https://images.brevilabs.com/newsletters/copilot-plugin/navigator/navigator-lift-67838ace.webp)
+![Copilot Navigator lifting out of the Obsidian sidebar, listing Pinned, Projects and Recents chats with a running chat finishing and another pinned](https://images.brevilabs.com/newsletters/copilot-releases/4.0.18/navigator-lift-d8d13b92.webp)
 
 Copilot Navigator puts all your agent chats in Obsidian's left sidebar, grouped into Pinned, Projects and Recents. Each chat shows whether it is running, waiting for your permission, or holding a result you have not read yet, so you can run several agents at once and see which one needs you. Navigator is a preview for Supporters on desktop.
 
