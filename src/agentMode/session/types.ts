@@ -510,7 +510,6 @@ export interface BackendProcess {
   listSessions(params: ListSessionsInput): Promise<ListSessionsOutput>;
   resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput>;
   loadSession(params: LoadSessionInput): Promise<LoadSessionOutput>;
-  sessionExistsLocally?(params: { sessionId: SessionId; cwd: string }): Promise<boolean>;
   shutdown(): Promise<void>;
 }
 
