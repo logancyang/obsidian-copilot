@@ -73,10 +73,11 @@ describe("markedSelection", () => {
       expect(markedSelectionText(wholeOf(root))).toBe("<del>Old paragraph</del>\nKept");
     });
 
-    it(`puts each paragraph, list item, code line and table row on its own line with cells tab-separated (${ISSUE_824})`, () => {
+    it(`puts each paragraph, soft line break, list item, code line and table row on its own line with cells tab-separated (${ISSUE_824})`, () => {
       const root = rendered(
         [
           "<h2>Plan</h2>",
+          "<p>first<br>\nsecond</p>",
           "<ul>\n<li>one</li>\n<li>two</li>\n</ul>",
           '<pre><div data-change="deleted">  old()</div><div data-change="inserted">  new()</div></pre>',
           "<table>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n",
@@ -85,7 +86,7 @@ describe("markedSelection", () => {
       );
 
       expect(markedSelectionText(wholeOf(root))).toBe(
-        "Plan\none\ntwo\n  <del>old()</del>\n  <ins>new()</ins>\n1\t2\n<ins>a\tb</ins>"
+        "Plan\nfirst\nsecond\none\ntwo\n  <del>old()</del>\n  <ins>new()</ins>\n1\t2\n<ins>a\tb</ins>"
       );
     });
 
@@ -111,12 +112,12 @@ describe("markedSelection", () => {
       );
     });
 
-    it(`keeps a blank line between the lines of a plain line diff (${ISSUE_824})`, () => {
+    it(`keeps a plain line diff's blank lines and adds none after a run of changed lines (${ISSUE_824})`, () => {
       const root = rendered(
-        '<pre><div>  a()</div><div data-change="inserted"> </div><div data-change="inserted">  b()</div></pre>'
+        '<pre><div>  a()</div><div><div data-change="inserted"> </div><div data-change="inserted">  b()</div><button>Revoke</button></div><div>  c()</div></pre>'
       );
 
-      expect(markedSelectionText(wholeOf(root))).toBe("  a()\n\n  <ins>b()</ins>");
+      expect(markedSelectionText(wholeOf(root))).toBe("  a()\n\n  <ins>b()</ins>\n  c()");
     });
 
     it(`joins neighbouring marks of one kind that only spaces separate, such as a changed link and its sentence (${ISSUE_824})`, () => {
