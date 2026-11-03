@@ -269,7 +269,13 @@ export class AgentModelPreloader {
     state: BackendState
   ): Promise<void> {
     if (!descriptor.prefetchEffortCatalog || !state.model) return;
-    const enabledModels = descriptor.getEnabledModelEntries?.(getSettings());
+    const settings = getSettings();
+    const blocked = descriptor.getBlockedModels?.(settings, state.model.availableModels);
+    // Probing a model the agent's own config dropped only logs a "model not found" warning per model.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/835
+    const enabledModels = descriptor
+      .getEnabledModelEntries?.(settings)
+      ?.filter((model) => !blocked?.baseModelIds.has(model.baseModelId));
     if (!enabledModels || enabledModels.length === 0) return;
     try {
       const catalog = await descriptor.prefetchEffortCatalog({

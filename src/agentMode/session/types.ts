@@ -74,6 +74,12 @@ export interface EnabledModelEntry {
   needsSelfHostWarning?: boolean;
 }
 
+export interface BlockedModels {
+  baseModelIds: ReadonlySet<string>;
+  reason: string;
+  hint: string;
+}
+
 export interface ModelSelection {
   baseModelId: string;
   effort: string | null;

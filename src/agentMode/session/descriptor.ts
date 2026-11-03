@@ -9,8 +9,10 @@ import type {
   BackendId,
   BackendProcess,
   BackendState,
+  BlockedModels,
   EffortOption,
   EnabledModelEntry,
+  ModelEntry,
   ModelSelection,
   ModelState,
   ModelWireCodec,
@@ -173,6 +175,11 @@ export interface BackendDescriptor {
   getProbeSessionId?(settings: CopilotSettings): string | undefined;
 
   getEnabledModelEntries?(settings: CopilotSettings): EnabledModelEntry[] | null;
+
+  getBlockedModels?(
+    settings: CopilotSettings,
+    reportedModels: ReadonlyArray<ModelEntry>
+  ): BlockedModels | null;
 
   getWireBaseId?(configuredModelId: string, settings: CopilotSettings): string | null;
 

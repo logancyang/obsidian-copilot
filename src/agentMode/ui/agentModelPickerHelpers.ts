@@ -14,6 +14,7 @@ import type { CopilotSettings } from "@/settings/model";
 import type {
   BackendDescriptor,
   BackendId,
+  BlockedModels,
   EffortOption,
   EnabledModelCredentialState,
   EnabledModelEntry,
@@ -54,7 +55,13 @@ export function appendBackendSection(
     appendEnabledFallbackEntries(entries, descriptor, enabledEntries);
     return;
   }
-  appendFromEnabledEntries(entries, descriptor, enabledEntries, ctx.backendModels);
+  appendFromEnabledEntries(
+    entries,
+    descriptor,
+    enabledEntries,
+    ctx.backendModels,
+    descriptor.getBlockedModels?.(ctx.settings, ctx.backendModels) ?? null
+  );
 }
 
 function appendEnabledFallbackEntries(
@@ -80,7 +87,8 @@ function appendFromEnabledEntries(
   entries: ModelSelectorEntry[],
   descriptor: BackendDescriptor,
   enabledEntries: ReadonlyArray<EnabledModelEntry>,
-  backendModels: ReadonlyArray<ModelEntry>
+  backendModels: ReadonlyArray<ModelEntry>,
+  blocked: BlockedModels | null
 ): void {
   const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
   for (const enabled of enabledEntries) {
@@ -97,7 +105,14 @@ function appendFromEnabledEntries(
       capabilities
     );
     const reason = credentialDisabledReason(enabled.credentialState, !!reported);
-    if (reason) entry._disabledReason = reason;
+    // An agent's own config can drop a provider Copilot added, which reads as a bug unless the picker names the cause.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/835
+    if (enabled.credentialState === "ok" && blocked?.baseModelIds.has(enabled.baseModelId)) {
+      entry._disabledReason = blocked.reason;
+      entry._disabledHint = blocked.hint;
+    } else if (reason) {
+      entry._disabledReason = reason;
+    }
     if (enabled.needsSelfHostWarning) entry._needsSelfHostWarning = true;
     entries.push(entry);
   }

@@ -1,10 +1,12 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
 import { ChatModelProviders } from "@/constants";
+import type { ModelEntry } from "@/agentMode/session/types";
 import {
   COPILOT_PLUS_OPENCODE_PROVIDER_ID,
   copilotPlusModelId,
   mapProviderToOpencodeId,
+  opencodeBlockedModels,
   opencodeEnabledModelEntries,
   opencodeWireBaseIdFor,
 } from "./opencodeModelResolve";
@@ -305,6 +307,68 @@ describe("opencodeModelResolve", () => {
         configuredModels: [makeModel("cm1", "p1", "some-google-model")],
       });
       expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
+    });
+  });
+
+  describe("opencodeBlockedModels()", () => {
+    const providers = {
+      openrouter: makeProvider("openrouter", { kind: "byok", catalogProviderId: "openrouter" }),
+      anthropic: makeProvider("anthropic", { kind: "byok", catalogProviderId: "anthropic" }),
+      native: makeProvider("opencode", { kind: "agent", agentType: "opencode" }),
+    };
+    const configuredModels = [
+      makeModel("m-qwen", "openrouter", "qwen/qwen3.7-max"),
+      makeModel("m-kimi", "openrouter", "moonshotai/kimi-k3"),
+      makeModel("m-sonnet", "anthropic", "claude-sonnet-4-6"),
+      makeModel("m-opus", "anthropic", "claude-opus-4-7"),
+      makeModel("m-grok", "native", "opencode/grok-code"),
+    ];
+    const settings = makeSettings({
+      enabledModels: ["m-qwen", "m-kimi", "m-sonnet", "m-opus", "m-grok"],
+      configuredModels,
+      providers,
+    });
+    const reported = (...baseModelIds: string[]): ModelEntry[] =>
+      baseModelIds.map((baseModelId) => ({
+        baseModelId,
+        name: baseModelId,
+        provider: null,
+        effortOptions: [],
+      }));
+
+    it("lists every enabled model of a Copilot-added provider that OpenCode reports no models for, with the settings reason and hint (https://github.com/Brevilabs/obsidian-copilot-private/issues/835)", () => {
+      const blocked = opencodeBlockedModels(
+        settings,
+        reported("anthropic/claude-sonnet-4-6", "opencode/grok-code")
+      );
+
+      expect(blocked).toEqual({
+        baseModelIds: new Set(["openrouter/qwen/qwen3.7-max", "openrouter/moonshotai/kimi-k3"]),
+        reason: "Blocked by your OpenCode settings",
+        hint: expect.stringContaining("enabled_providers, disabled_providers, and policies"),
+      });
+    });
+
+    it("leaves out a provider that has at least one reported model, even when some of its enabled models are missing", () => {
+      const blocked = opencodeBlockedModels(
+        settings,
+        reported("openrouter/qwen/qwen3.7-max", "anthropic/claude-sonnet-4-6", "opencode/grok-code")
+      );
+
+      expect(blocked).toBeNull();
+    });
+
+    it("leaves out OpenCode's own native models, which Copilot never adds", () => {
+      const blocked = opencodeBlockedModels(
+        settings,
+        reported("openrouter/qwen/qwen3.7-max", "anthropic/claude-sonnet-4-6")
+      );
+
+      expect(blocked).toBeNull();
+    });
+
+    it("returns null when no models are enabled for OpenCode", () => {
+      expect(opencodeBlockedModels(makeSettings({}), reported())).toBeNull();
     });
   });
 

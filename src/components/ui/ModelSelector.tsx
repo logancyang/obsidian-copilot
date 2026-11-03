@@ -21,6 +21,7 @@ const PICKER_PRICING_URL = createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "model
 
 export type ModelSelectorEntry = CustomModel & {
   _disabledReason?: string;
+  _disabledHint?: string;
   _group?: string;
   _backendId?: string;
   _subtitle?: string;

@@ -145,6 +145,42 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).not.toHaveBeenCalled();
       expect(screen.queryByRole("link")).toBeNull();
     });
+    it("shows a disabled row's reason beside it and only a hint as its tooltip, never repeating the reason (https://github.com/Brevilabs/obsidian-copilot-private/issues/835)", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [
+              ...models,
+              {
+                name: "openrouter/qwen",
+                displayName: "Qwen",
+                provider: "agent",
+                enabled: true,
+                _disabledReason: "Blocked by your OpenCode settings",
+                _disabledHint: "Check enabled_providers.",
+              },
+              {
+                name: "unavailable",
+                provider: "agent",
+                enabled: true,
+                _disabledReason: "Agent unavailable",
+              },
+            ],
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      const blocked = await screen.findByRole("option", { name: /Qwen/ });
+      expect(blocked.textContent).toContain("Blocked by your OpenCode settings");
+      expect(blocked.getAttribute("title")).toBe("Check enabled_providers.");
+      expect(blocked.getAttribute("aria-disabled")).toBe("true");
+      const unavailable = screen.getByRole("option", { name: /unavailable/ });
+      expect(unavailable.textContent).toContain("Agent unavailable");
+      expect(unavailable.getAttribute("title")).toBeNull();
+    });
     it.each([null, "removed"])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/219 resolves effort %p to the lowest supported choice when committing the picker",
       async (value) => {

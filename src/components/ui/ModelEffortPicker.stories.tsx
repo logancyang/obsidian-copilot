@@ -105,3 +105,45 @@ export const CustomEndpointLabels: StoryObj<Props> = {
     },
   },
 };
+
+const OPENCODE_BLOCKED_HINT =
+  "OpenCode reports no models for this provider. Check enabled_providers, disabled_providers, and policies in your OpenCode config.";
+
+export const BlockedByAgentConfig: StoryObj<Props> = {
+  args: {
+    override: {
+      ...ConcreteEffort.args.override,
+      models: [
+        {
+          name: "opencode/mimo-v2.6-flash-free",
+          displayName: "opencode/MiMo-V2.6-Flash Free",
+          provider: "agent",
+          enabled: true,
+          _group: "OpenCode",
+          _isFree: true,
+        },
+        {
+          name: "openrouter/qwen/qwen3.7-max",
+          displayName: "Qwen3.7 Max",
+          provider: "agent",
+          enabled: true,
+          _group: "OpenCode",
+          _disabledReason: "Blocked by your OpenCode settings",
+          _disabledHint: OPENCODE_BLOCKED_HINT,
+        },
+        {
+          name: "openrouter/moonshotai/kimi-k3",
+          displayName: "Kimi K3",
+          provider: "agent",
+          enabled: true,
+          _group: "OpenCode",
+          _disabledReason: "Blocked by your OpenCode settings",
+          _disabledHint: OPENCODE_BLOCKED_HINT,
+        },
+      ],
+      value: "opencode/mimo-v2.6-flash-free|agent",
+      effort: undefined,
+      effortOptionsByModelKey: {},
+    },
+  },
+};
