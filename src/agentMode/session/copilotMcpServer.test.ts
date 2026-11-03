@@ -84,6 +84,28 @@ describe("copilotMcpServer", () => {
       expect(second.headers.Authorization).not.toBe(first.headers.Authorization);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/807 names only the tools marked read-only, so an agent can run them without asking and asks before the rest", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          lookupTool(),
+          {
+            ...lookupTool(),
+            definition: { name: "peek", annotations: { readOnlyHint: true } },
+          },
+          {
+            ...lookupTool(),
+            definition: { name: "draw", annotations: { readOnlyHint: false } },
+          },
+        ]
+      );
+
+      const channel = await server.connect("session-a", jest.fn());
+
+      expect(channel.readOnlyToolNames).toEqual(["send_feedback", "peek"]);
+    });
+
     it("completes the MCP handshake by echoing a supported protocol version and advertising tools", async () => {
       const channel = await server.connect("session-a", jest.fn());
 

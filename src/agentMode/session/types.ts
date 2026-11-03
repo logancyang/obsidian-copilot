@@ -397,6 +397,7 @@ export interface AgentMcpServer {
   name: string;
   url: string;
   headers: Readonly<Record<string, string>>;
+  readOnlyToolNames: ReadonlyArray<string>;
 }
 
 export interface OpenSessionInput {
