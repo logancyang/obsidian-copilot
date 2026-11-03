@@ -304,7 +304,7 @@ describe("agentSystemPrompt", () => {
       mockIsObsidianCliEnabled.mockReturnValue(true);
       for (const agent of ["claude", "codex", "opencode"] as const) {
         expect(buildAgentSystemPrompt(agent, APP)).toContain(
-          "Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results."
+          "Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, typed properties, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results, and over hand-editing frontmatter to set a typed property."
         );
       }
     });

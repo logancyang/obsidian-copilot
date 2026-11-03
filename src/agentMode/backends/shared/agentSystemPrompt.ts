@@ -40,7 +40,7 @@ export const COPILOT_EXCALIDRAW_STEERING = `Draw diagrams, flowcharts and charts
 
 // Without this line, OpenCode models assume live app state such as open tabs is out of reach.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/726
-export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results.`;
+export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-copilot obsidian_cli tool reaches its live state and index (open tabs, daily notes, typed properties, backlinks, broken links, Bases results, templates) and link-aware renames. Prefer it over searching files for links and Bases results, and over hand-editing frontmatter to set a typed property.`;
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
