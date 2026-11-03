@@ -50,6 +50,19 @@ describe("sdkStreamStallGuard", () => {
         expect(onStall).not.toHaveBeenCalled();
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/3844 by default lets thinking go quiet for over a minute and reports a stall only after five minutes", () => {
+        const onStall = jest.fn();
+        const guard = new SdkStreamStallGuard(onStall);
+
+        guard.observe(streamEvent("content_block_start"));
+        guard.observe(streamEvent("content_block_delta"));
+        jest.advanceTimersByTime(90_000);
+        expect(onStall).not.toHaveBeenCalled();
+        jest.advanceTimersByTime(5 * 60_000 - 90_000);
+
+        expect(onStall).toHaveBeenCalledTimes(1);
+      });
+
       it("stays quiet through a long gap after a message completes, such as a running tool", () => {
         const onStall = jest.fn();
         const guard = new SdkStreamStallGuard(onStall, 1_000);

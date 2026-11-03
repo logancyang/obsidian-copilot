@@ -1,10 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
+// Healthy long thinking at high effort goes quiet for close to a minute, so a 60s guard ended working turns. https://github.com/logancyang/obsidian-copilot/issues/3844
+export const SDK_STREAM_STALL_TIMEOUT_MS = 5 * 60_000;
 
 export const SDK_STREAM_STALL_MESSAGE =
   `Claude stopped responding — the response stream stalled mid-reply (no output for ` +
-  `${SDK_STREAM_STALL_TIMEOUT_MS / 1000}s) and the turn was ended. Send your message again to continue.`;
+  `${SDK_STREAM_STALL_TIMEOUT_MS / 60_000} minutes) and the turn was ended. Send your message again to continue.`;
 
 function streamEventType(msg: SDKMessage): string | null {
   if (msg.type !== "stream_event") return null;
