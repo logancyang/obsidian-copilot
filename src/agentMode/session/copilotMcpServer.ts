@@ -87,7 +87,7 @@ export interface HostedToolResult {
 }
 
 export interface HostedTool {
-  definition: { readonly name: string };
+  definition: { readonly name: string; readonly annotations?: { readonly readOnlyHint?: boolean } };
   turnedOffText: string;
   call: (args: unknown) => Promise<HostedToolResult>;
 }
@@ -121,6 +121,11 @@ export function createCopilotMcpServer(
   tools: readonly HostedTool[]
 ): CopilotMcpServer {
   const hostedTools: readonly ServerTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
+  const readOnlyToolNames = Object.freeze(
+    hostedTools
+      .filter((tool) => tool.definition.annotations?.readOnlyHint === true)
+      .map((tool) => tool.definition.name)
+  );
   const handlersByToken = new Map<string, FeedbackOfferHandler>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
@@ -143,6 +148,7 @@ export function createCopilotMcpServer(
         name: COPILOT_MCP_SERVER_NAME,
         url,
         headers: Object.freeze({ Authorization: `Bearer ${token}` }),
+        readOnlyToolNames,
       });
     },
     disconnect(sessionKey: string): void {
