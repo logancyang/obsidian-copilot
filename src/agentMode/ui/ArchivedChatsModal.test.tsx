@@ -1,9 +1,19 @@
-import { ArchivedChatsList, ArchivedChatsModal } from "@/agentMode/ui/ArchivedChatsModal";
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: { getInstance: jest.fn() },
+}));
+
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import {
+  ArchivedChatsList,
+  ArchivedChatsModal,
+  createProjectArchiveActions,
+} from "@/agentMode/ui/ArchivedChatsModal";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { ReactModal } from "@/components/modals/ReactModal";
 import type { ProjectConfig } from "@/aiParams";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { App } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 
 const archivedChat = (id: string, title: string, archivedAt: number): ChatHistoryItem => ({
@@ -201,6 +211,40 @@ describe("ArchivedChatsModal", () => {
       fireEvent.keyDown(rowOf("Thesis"), { key });
 
       expect(onOpenProject).toHaveBeenCalledWith("proj-old");
+    });
+  });
+
+  describe("createProjectArchiveActions()", () => {
+    const manager = { enterProject: jest.fn(async () => {}) };
+    const actions = createProjectArchiveActions(
+      new App(),
+      manager as unknown as AgentSessionManager
+    );
+
+    it("unarchives a project through the project file manager", async () => {
+      const setProjectArchived = jest.fn(async () => {});
+      jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
+        setProjectArchived,
+      } as unknown as ProjectFileManager);
+
+      await actions.onUnarchiveProject("proj-old");
+
+      expect(setProjectArchived).toHaveBeenCalledWith("proj-old", false);
+    });
+
+    it("tells the user and rethrows when unarchiving a project fails", async () => {
+      jest.mocked(ProjectFileManager.getInstance).mockReturnValue({
+        setProjectArchived: jest.fn().mockRejectedValue(new Error("disk full")),
+      } as unknown as ProjectFileManager);
+
+      await expect(actions.onUnarchiveProject("proj-old")).rejects.toThrow("disk full");
+      expect(Notice).toHaveBeenCalledWith("Failed to unarchive project.");
+    });
+
+    it("opens a project by entering it in the session manager", async () => {
+      await actions.onOpenProject("proj-old");
+
+      expect(manager.enterProject).toHaveBeenCalledWith("proj-old");
     });
   });
 
