@@ -12,7 +12,10 @@ import {
   type AgentSessionStartOptions,
   type AgentSessionStateOptions,
 } from "./AgentSession";
-import { ensureMultiAgentEntitlement, showMultiAgentUpgradePrompt } from "@/plusUtils";
+import {
+  ensureMultiAgentEntitlement,
+  showMultiAgentUpgradePrompt,
+} from "@/agentMode/session/fanout/multiAgentEntitlement";
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
@@ -45,7 +48,7 @@ jest.mock("@/logger", () => ({
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ agentMode: {} }),
 }));
-jest.mock("@/plusUtils", () => ({
+jest.mock("@/agentMode/session/fanout/multiAgentEntitlement", () => ({
   ensureMultiAgentEntitlement: jest.fn(async () => true),
   showMultiAgentUpgradePrompt: jest.fn(),
 }));

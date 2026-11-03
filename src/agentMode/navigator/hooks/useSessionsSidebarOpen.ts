@@ -1,12 +1,12 @@
+import { useIsNavigatorEnabled } from "@/agentMode/navigator/navigatorEntitlement";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import { useIsPreviewEnabled } from "@/plusUtils";
 import type { App } from "obsidian";
 import { useCallback, useSyncExternalStore } from "react";
 
 export function useSessionsSidebarOpen(app: App): boolean {
   // A Navigator leaf blocked for a user without preview access must not hide the tab strip.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  const isPreviewLocked = useIsPreviewEnabled() === false;
+  const isNavigatorLocked = useIsNavigatorEnabled() === false;
   const subscribe = useCallback(
     (onChange: () => void) => {
       const ref = app.workspace.on("layout-change", onChange);
@@ -18,5 +18,5 @@ export function useSessionsSidebarOpen(app: App): boolean {
     () => app.workspace.getLeavesOfType(SESSIONS_SIDEBAR_VIEWTYPE).length > 0,
     [app]
   );
-  return useSyncExternalStore(subscribe, getSnapshot) && !isPreviewLocked;
+  return useSyncExternalStore(subscribe, getSnapshot) && !isNavigatorLocked;
 }

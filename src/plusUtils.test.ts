@@ -69,20 +69,20 @@ import {
   applyLicenseSettings,
   isUsingLicensedModels,
   checkIsPaidUser,
-  ensureMultiAgentEntitlement,
-  isPlusEnabled,
-  isPreviewEnabled,
+  ensureEntitlement,
+  hasVerifiedFeature,
+  isEntitlementExpired,
+  isEntitlementVerificationPending,
   isSelfHostModeValid,
   markPaidPendingEntitlement,
   navigateToPlusPage,
   turnOffPaid,
-  subscribeToPreviewAccess,
-  useIsPreviewEnabled,
+  subscribeToEntitlementChange,
   useIsSelfHostEligible,
   useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
@@ -492,100 +492,105 @@ describe("plusUtils", () => {
     });
   });
 
-  describe("isPreviewEnabled()", () => {
-    it("is true for a verified token for the stored license key that carries preview", async () => {
-      await verifySessionFeatures(["self_host", "preview"]);
+  describe("hasVerifiedFeature()", () => {
+    it("is true for a feature carried by the token verified this session for the stored license key", async () => {
+      await verifySessionFeatures(["navigator"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings());
 
-      expect(isPreviewEnabled()).toBe(true);
-    });
-
-    it("is false for a token without the preview feature", async () => {
-      await verifySessionFeatures(["multi_agent", "self_host"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings());
-
-      expect(isPreviewEnabled()).toBe(false);
-    });
-
-    it("is unknown (undefined) while the stored token has not been verified yet this session for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      mockGetSettings.mockReturnValue(tokenBackedSettings());
-
-      expect(isPreviewEnabled()).toBeUndefined();
-    });
-
-    it("is false when no entitlement token is stored for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ entitlementToken: "" }));
-
-      expect(isPreviewEnabled()).toBe(false);
-    });
-
-    it("is false once the stored token fails verification for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      mockGetSettings.mockReturnValue(tokenBackedSettings());
-      mockVerifyEntitlement.mockResolvedValue(null);
-      await verifyCachedEntitlement();
-
-      expect(isPreviewEnabled()).toBe(false);
+      expect(hasVerifiedFeature("navigator")).toBe(true);
+      expect(hasVerifiedFeature("multi_agent")).toBe(false);
     });
 
     it("is false once the signed exp has passed", async () => {
-      await verifySessionFeatures(["self_host", "preview"], PAST_EXP_SECONDS);
+      await verifySessionFeatures(["navigator"], PAST_EXP_SECONDS);
       mockGetSettings.mockReturnValue(tokenBackedSettings());
 
-      expect(isPreviewEnabled()).toBe(false);
+      expect(hasVerifiedFeature("navigator")).toBe(false);
     });
 
     it("is false once a different license key is stored", async () => {
-      await verifySessionFeatures(["self_host", "preview"]);
+      await verifySessionFeatures(["navigator"]);
       mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "another-key" }));
 
-      expect(isPreviewEnabled()).toBe(false);
+      expect(hasVerifiedFeature("navigator")).toBe(false);
     });
   });
 
-  describe("useIsPreviewEnabled()", () => {
-    it("unlocks when the cached token finishes verifying, without a settings change or restart (https://github.com/Brevilabs/obsidian-copilot-private/issues/626)", async () => {
+  describe("isEntitlementVerificationPending()", () => {
+    it("is true while the stored token has not been verified this session for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings());
-      const { result } = renderHook(() => useIsPreviewEnabled());
-      expect(result.current).toBeUndefined();
 
-      mockVerifyEntitlement.mockResolvedValue({
-        user_id: "user-123",
-        plan: "believer",
-        tier: "plus",
-        features: ["self_host", "preview"],
-        iat: 0,
-        exp: FUTURE_EXP_SECONDS,
+      expect(isEntitlementVerificationPending()).toBe(true);
+    });
+
+    it("is false once the stored token is verified, and when no token is stored", async () => {
+      await verifySessionFeatures(["navigator"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+      expect(isEntitlementVerificationPending()).toBe(false);
+
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ entitlementToken: "" }));
+      expect(isEntitlementVerificationPending()).toBe(false);
+    });
+  });
+
+  describe("isEntitlementExpired()", () => {
+    it("is true only for a stored expiry that has passed", () => {
+      expect(isEntitlementExpired(buildSettings({ entitlementExpiresAt: Date.now() - 1 }))).toBe(
+        true
+      );
+      expect(
+        isEntitlementExpired(buildSettings({ entitlementExpiresAt: Date.now() + 60_000 }))
+      ).toBe(false);
+      expect(isEntitlementExpired(buildSettings({ entitlementExpiresAt: 0 }))).toBe(false);
+    });
+  });
+
+  describe("ensureEntitlement()", () => {
+    beforeEach(() => mockValidateLicenseKey.mockResolvedValue({ isValid: undefined }));
+
+    it("resolves true for a granted feature without waiting for the license check it reports with the feature as trigger for https://github.com/Brevilabs/obsidian-copilot-private/issues/834", async () => {
+      mockValidateLicenseKey.mockReturnValue(new Promise(() => {}));
+      const app = {} as never;
+
+      await expect(ensureEntitlement(app, "navigator", () => true)).resolves.toBe(true);
+      expect(mockValidateLicenseKey).toHaveBeenCalledWith(app, { trigger: "navigator" });
+    });
+
+    it("waits for the license check and re-reads the grant when the feature was not granted for https://github.com/Brevilabs/obsidian-copilot-private/issues/834", async () => {
+      let granted = false;
+      mockValidateLicenseKey.mockImplementation(async () => {
+        granted = true;
+        return { isValid: true };
       });
-      await act(() => verifyCachedEntitlement());
 
-      expect(result.current).toBe(true);
+      await expect(ensureEntitlement(undefined, "multi_agent", () => granted)).resolves.toBe(true);
     });
 
-    it("locks again when the license key changes", async () => {
-      await verifySessionFeatures(["preview"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings());
-      const { result, rerender } = renderHook(() => useIsPreviewEnabled());
-      expect(result.current).toBe(true);
+    it("resolves false when the check leaves the feature ungranted", async () => {
+      await expect(ensureEntitlement(undefined, "multi_agent", () => false)).resolves.toBe(false);
+      expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
+    });
 
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ plusLicenseKey: "another-key" }));
-      rerender();
+    it("resolves without throwing when the license check cannot reach the server, keeping a granted feature for https://github.com/Brevilabs/obsidian-copilot-private/issues/834", async () => {
+      mockValidateLicenseKey.mockRejectedValue(new Error("offline"));
 
-      expect(result.current).toBe(false);
+      await expect(ensureEntitlement(undefined, "navigator", () => true)).resolves.toBe(true);
+      await expect(ensureEntitlement(undefined, "navigator", () => false)).resolves.toBe(false);
     });
   });
 
-  describe("subscribeToPreviewAccess()", () => {
+  describe("subscribeToEntitlementChange()", () => {
     it("notifies when a token is verified and when settings change, until unsubscribed, for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
       const listener = jest.fn();
-      const unsubscribe = subscribeToPreviewAccess(listener);
+      const unsubscribe = subscribeToEntitlementChange(listener);
 
-      await verifySessionFeatures(["preview"]);
+      await verifySessionFeatures(["navigator"]);
       expect(listener).toHaveBeenCalledTimes(1);
       emitSettings(tokenBackedSettings({ plusLicenseKey: "another-key" }));
       expect(listener).toHaveBeenCalledTimes(2);
 
       unsubscribe();
-      await verifySessionFeatures(["preview"]);
+      await verifySessionFeatures(["navigator"]);
       emitSettings(tokenBackedSettings());
       expect(listener).toHaveBeenCalledTimes(2);
     });
@@ -597,7 +602,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({ enableSelfHostMode: true, isPaidUser: true, isPlusUser: true })
       );
-      expect(isPlusEnabled()).toBe(true);
+      expect(hasVerifiedFeature("multi_agent")).toBe(true);
       expect(isSelfHostModeValid()).toBe(true);
 
       markPaidPendingEntitlement();
@@ -610,88 +615,8 @@ describe("plusUtils", () => {
       };
       expect(mockSetSettings).toHaveBeenCalledWith(pendingState);
       mockGetSettings.mockReturnValue(buildSettings({ enableSelfHostMode: true, ...pendingState }));
-      expect(isPlusEnabled()).toBe(false);
+      expect(hasVerifiedFeature("multi_agent")).toBe(false);
       expect(isSelfHostModeValid()).toBe(false);
-    });
-  });
-
-  describe("isPlusEnabled()", () => {
-    it("returns false for a free user", () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPlusUser: false }));
-      expect(isPlusEnabled()).toBe(false);
-    });
-
-    it("returns false for a Lite user (paid but below Plus)", () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: true, isPlusUser: false }));
-      expect(isPlusEnabled()).toBe(false);
-    });
-
-    it("returns false once the signed exp has passed (offline lock)", async () => {
-      await verifySessionFeatures(["multi_agent"], PAST_EXP_SECONDS);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
-      expect(isPlusEnabled()).toBe(false);
-    });
-
-    it("blocks token-derived Plus that was not verified this session (edited data.json)", () => {
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
-      expect(isPlusEnabled()).toBe(false);
-    });
-
-    it("allows token-derived Plus once the signed token is verified this session", async () => {
-      await verifySessionFeatures(["multi_agent"]);
-      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPlusUser: true }));
-
-      expect(isPlusEnabled()).toBe(true);
-    });
-
-    it("is not granted by self-host mode alone", async () => {
-      await verifySessionFeatures(["self_host"]);
-      mockGetSettings.mockReturnValue(
-        tokenBackedSettings({ enableSelfHostMode: true, isPlusUser: false })
-      );
-
-      expect(isPlusEnabled()).toBe(false);
-    });
-  });
-
-  describe("ensureMultiAgentEntitlement()", () => {
-    function revalidatesAs(flags: { isPaidUser: boolean; isPlusUser: boolean }): void {
-      mockValidateLicenseKey.mockImplementation(async () => {
-        mockGetSettings.mockReturnValue(buildSettings(flags));
-        return { isValid: flags.isPaidUser };
-      });
-    }
-
-    it("allows a cached Plus user without any network call", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: true, isPlusUser: true }));
-
-      await expect(ensureMultiAgentEntitlement()).resolves.toBe(true);
-      expect(mockValidateLicenseKey).not.toHaveBeenCalled();
-    });
-
-    it("allows a stale non-Plus cache that the backend confirms as Plus, revalidating with the given app", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
-      revalidatesAs({ isPaidUser: true, isPlusUser: true });
-      const app = {} as never;
-
-      await expect(ensureMultiAgentEntitlement(app)).resolves.toBe(true);
-      expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
-      expect(mockValidateLicenseKey).toHaveBeenCalledWith(app, { trigger: "multi_agent_per_turn" });
-    });
-
-    it("blocks a Lite user who is paid but below Plus", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
-      revalidatesAs({ isPaidUser: true, isPlusUser: false });
-
-      await expect(ensureMultiAgentEntitlement()).resolves.toBe(false);
-    });
-
-    it("blocks a free user whose license the backend rejects", async () => {
-      mockGetSettings.mockReturnValue(buildSettings({ isPaidUser: false, isPlusUser: false }));
-      mockValidateLicenseKey.mockResolvedValue({ isValid: false });
-
-      await expect(ensureMultiAgentEntitlement()).resolves.toBe(false);
-      expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -785,7 +710,7 @@ describe("plusUtils", () => {
         tokenBackedSettings({ plusLicenseKey: "a-different-key", enableSelfHostMode: true })
       );
       expect(isSelfHostModeValid()).toBe(false);
-      expect(isPlusEnabled()).toBe(false);
+      expect(hasVerifiedFeature("multi_agent")).toBe(false);
     });
 
     it("does NOT change settings when the token cannot be verified", async () => {
@@ -802,7 +727,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ enableSelfHostMode: true }));
 
       expect(isSelfHostModeValid()).toBe(true);
-      expect(isPlusEnabled()).toBe(true);
+      expect(hasVerifiedFeature("multi_agent")).toBe(true);
     });
 
     it("does not clobber a fresher token applied while its verification was in flight", async () => {
@@ -834,7 +759,7 @@ describe("plusUtils", () => {
       await verifyCachedEntitlement();
 
       expect(isSelfHostModeValid()).toBe(true);
-      expect(isPlusEnabled()).toBe(true);
+      expect(hasVerifiedFeature("multi_agent")).toBe(true);
     });
 
     it("closes every gate when the same cached token stops verifying", async () => {
@@ -847,7 +772,7 @@ describe("plusUtils", () => {
       await verifyCachedEntitlement();
 
       expect(isSelfHostModeValid()).toBe(false);
-      expect(isPlusEnabled()).toBe(false);
+      expect(hasVerifiedFeature("multi_agent")).toBe(false);
     });
   });
 

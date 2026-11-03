@@ -1,9 +1,9 @@
-import { openNavigatorWhenPreviewActivates } from "@/agentMode/navigator/openSessionsSidebar";
+import { useIsNavigatorEnabled } from "@/agentMode/navigator/navigatorEntitlement";
+import { openNavigatorWhenUnlocked } from "@/agentMode/navigator/openSessionsSidebar";
 import { NavigatorBlockedNotice } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { SessionsSidebar } from "@/agentMode/navigator/ui/SessionsSidebar";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
 import type CopilotPlugin from "@/main";
-import { useIsPreviewEnabled } from "@/plusUtils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
@@ -15,9 +15,9 @@ interface PreviewSessionsSidebarProps extends React.ComponentProps<typeof Sessio
 function PreviewSessionsSidebar({ onClose, ...props }: PreviewSessionsSidebarProps) {
   // Unknown preview access (undefined) keeps the list, so a Supporter's Navigator never flashes the notice at startup.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  const blocked = useIsPreviewEnabled() === false;
+  const blocked = useIsNavigatorEnabled() === false;
   React.useEffect(() => {
-    if (blocked) openNavigatorWhenPreviewActivates(props.plugin);
+    if (blocked) openNavigatorWhenUnlocked(props.plugin);
   }, [blocked, props.plugin]);
   return blocked ? <NavigatorBlockedNotice onClose={onClose} /> : <SessionsSidebar {...props} />;
 }

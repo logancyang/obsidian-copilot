@@ -1,19 +1,23 @@
 import { NavigatorUpsellModal } from "@/agentMode/navigator/ui/NavigatorUpsell";
 import { revealSessionsSidebar } from "@/agentMode/navigator/revealSessionsSidebar";
 import type CopilotPlugin from "@/main";
-import { isPreviewEnabled, subscribeToPreviewAccess } from "@/plusUtils";
+import {
+  ensureNavigatorEntitlement,
+  isNavigatorEnabled,
+} from "@/agentMode/navigator/navigatorEntitlement";
+import { subscribeToEntitlementChange } from "@/plusUtils";
 
-const pluginsAwaitingPreview = new WeakSet<CopilotPlugin>();
+const pluginsAwaitingUnlock = new WeakSet<CopilotPlugin>();
 
-export function openNavigatorWhenPreviewActivates(plugin: CopilotPlugin): void {
+export function openNavigatorWhenUnlocked(plugin: CopilotPlugin): void {
   // A Supporter who unlocks preview from a Navigator prompt lands in the Navigator without finding its icon again.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  if (pluginsAwaitingPreview.has(plugin)) return;
-  pluginsAwaitingPreview.add(plugin);
-  const unsubscribe = subscribeToPreviewAccess(() => {
-    if (isPreviewEnabled() !== true) return;
+  if (pluginsAwaitingUnlock.has(plugin)) return;
+  pluginsAwaitingUnlock.add(plugin);
+  const unsubscribe = subscribeToEntitlementChange(() => {
+    if (isNavigatorEnabled() !== true) return;
     unsubscribe();
-    pluginsAwaitingPreview.delete(plugin);
+    pluginsAwaitingUnlock.delete(plugin);
     void revealSessionsSidebar(plugin);
   });
   plugin.register(unsubscribe);
@@ -22,9 +26,9 @@ export function openNavigatorWhenPreviewActivates(plugin: CopilotPlugin): void {
 export async function openSessionsSidebar(plugin: CopilotPlugin): Promise<void> {
   // The Navigator is a Supporter preview; its entry points stay visible and explain it instead.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/819
-  if (isPreviewEnabled() === false) {
+  if (!(await ensureNavigatorEntitlement(plugin.app))) {
     new NavigatorUpsellModal(plugin.app).open();
-    openNavigatorWhenPreviewActivates(plugin);
+    openNavigatorWhenUnlocked(plugin);
     return;
   }
   await revealSessionsSidebar(plugin);

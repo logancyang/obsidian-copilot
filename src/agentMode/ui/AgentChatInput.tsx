@@ -1,5 +1,6 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
+import { useCanUseMultiAgent } from "@/agentMode/session/fanout/multiAgentEntitlement";
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type { QueuedAgentMessage } from "@/agentMode/session/AgentInputDraftStore";
 import type { PromptContent, QueuedPrompt } from "@/agentMode/session/types";
@@ -19,7 +20,6 @@ import ChatInput, {
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
-import { useCanUseMultiAgent } from "@/plusUtils";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
