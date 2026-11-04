@@ -82,7 +82,7 @@ import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import * as obsidianModule from "obsidian";
 import CopilotView from "@/components/CopilotView";
-import { getSelectedTextContexts } from "@/selection/selectionStore";
+import { getSelectedTextContexts, type SelectionReport } from "@/selection/selectionStore";
 import { DEFAULT_SETTINGS, EVENT_NAMES } from "@/constants";
 import {
   APPLY_VIEW_TYPE,
@@ -95,11 +95,19 @@ import {
 } from "@/constants";
 import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
+const mockWatchWebview = jest.fn();
+const mockWebSelectionReports = jest.fn();
 jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
   ...jest.requireActual<typeof import("@/services/webViewerService/webViewerServiceSelection")>(
     "@/services/webViewerService/webViewerServiceSelection"
   ),
-  readWebSelection: jest.fn(),
+  WebSelectionWatcher: class {
+    constructor(report: unknown) {
+      mockWebSelectionReports(report);
+    }
+    watch = mockWatchWebview;
+    stop = jest.fn();
+  },
 }));
 import { logError, logFatalError, logInfo, logWarn } from "@/logger";
 import { migrateCommands } from "@/commands/migrator";
@@ -108,10 +116,7 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import { startActiveWebTabTracking } from "@/services/webViewerService/webViewerServiceSingleton";
-import {
-  readWebSelection,
-  webSelectionReport,
-} from "@/services/webViewerService/webViewerServiceSelection";
+import { webSelectionReport } from "@/services/webViewerService/webViewerServiceSelection";
 import type { WebViewerLeaf } from "@/services/webViewerService/webViewerServiceTypes";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -626,11 +631,11 @@ describe("main", () => {
         await finishStartup();
         expect(startActiveWebTabTracking).toHaveBeenCalledWith(plugin.app, {
           preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
-          onWebTabLeave: expect.any(Function) as unknown,
+          onWebviewLoad: expect.any(Function) as unknown,
         });
       });
 
-      it("attaches a web tab's selection when the user leaves the tab, and clears it once they leave it with nothing selected https://github.com/Brevilabs/obsidian-copilot-private/issues/844", async () => {
+      it("watches every web tab's page for selection changes and reports them as the chat's selection https://github.com/Brevilabs/obsidian-copilot-private/issues/844", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
@@ -639,8 +644,11 @@ describe("main", () => {
         const { plugin, finishStartup } = createLoadingPlugin();
         plugin.onload();
         await finishStartup();
-        const onWebTabLeave = jest.mocked(startActiveWebTabTracking).mock.calls.at(-1)![1]!
-          .onWebTabLeave!;
+        const onWebviewLoad = jest.mocked(startActiveWebTabTracking).mock.calls.at(-1)![1]!
+          .onWebviewLoad!;
+        const report = mockWebSelectionReports.mock.calls.at(-1)![0] as (
+          report: SelectionReport
+        ) => void;
         const webTab = {} as WebViewerLeaf;
         const quote = {
           id: "web-1",
@@ -650,14 +658,11 @@ describe("main", () => {
           url: "https://example.com/",
         };
 
-        jest.mocked(readWebSelection).mockResolvedValueOnce(webSelectionReport(quote));
-        await onWebTabLeave(webTab);
-        expect(getSelectedTextContexts()).toEqual([quote]);
+        onWebviewLoad(webTab);
+        report(webSelectionReport(quote));
 
-        jest.mocked(readWebSelection).mockResolvedValueOnce({ location: quote.url, context: null });
-        await onWebTabLeave(webTab);
-        expect(getSelectedTextContexts()).toEqual([]);
-        expect(readWebSelection).toHaveBeenCalledWith(webTab);
+        expect(mockWatchWebview).toHaveBeenCalledWith(webTab);
+        expect(getSelectedTextContexts()).toEqual([quote]);
       });
 
       it.each([

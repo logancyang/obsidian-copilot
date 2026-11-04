@@ -112,7 +112,7 @@ export interface ActiveWebTabStateSnapshot {
 
 export interface StartActiveWebTabTrackingOptions {
   preserveOnViewTypes?: string[];
-  onWebTabLeave?: (leaf: WebViewerLeaf) => Promise<void>;
+  onWebviewLoad?: (leaf: WebViewerLeaf) => void;
 }
 
 export interface ActiveWebTabTrackingRefs {

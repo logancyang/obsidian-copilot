@@ -76,7 +76,7 @@ import {
   getWebViewerService,
   startActiveWebTabTracking,
 } from "@/services/webViewerService/webViewerServiceSingleton";
-import { readWebSelection } from "@/services/webViewerService/webViewerServiceSelection";
+import { WebSelectionWatcher } from "@/services/webViewerService/webViewerServiceSelection";
 import { runSettingsMigrations } from "@/settings/migrations";
 import {
   cleanupLegacyIndexArtifacts,
@@ -431,12 +431,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     );
 
     if (isDesktopRuntime()) {
+      const webSelectionWatcher = new WebSelectionWatcher(reportSelection);
+      this.register(() => webSelectionWatcher.stop());
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
         preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
-        onWebTabLeave: (leaf) =>
-          readWebSelection(leaf)
-            .then(reportSelection)
-            .catch((error) => logWarn("Could not read the selection of the web tab left", error)),
+        onWebviewLoad: (leaf) => webSelectionWatcher.watch(leaf),
       });
       this.registerEvent(activeLeafRef);
       this.registerEvent(layoutRef);
