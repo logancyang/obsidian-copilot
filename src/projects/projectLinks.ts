@@ -22,7 +22,21 @@ export function getDraggedVaultItems(app: App): TAbstractFile[] {
   return items.filter((item) => item instanceof TFile || item instanceof TFolder);
 }
 
-async function updateProjectInclusions(
+let pendingInclusionsUpdate: Promise<unknown> = Promise.resolve();
+
+function updateProjectInclusions(
+  app: App,
+  projectId: string,
+  update: (patterns: readonly string[]) => string[]
+): Promise<boolean> {
+  // The project cache changes only after a save lands, so overlapping link or unlink actions would each start from
+  // the same list and the later save would undo the earlier one. https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  const result = pendingInclusionsUpdate.then(() => writeInclusions(app, projectId, update));
+  pendingInclusionsUpdate = result.catch(() => undefined);
+  return result;
+}
+
+async function writeInclusions(
   app: App,
   projectId: string,
   update: (patterns: readonly string[]) => string[]
