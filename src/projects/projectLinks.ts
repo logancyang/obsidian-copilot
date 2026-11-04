@@ -15,8 +15,6 @@ interface ObsidianDraggable {
   files?: TAbstractFile[];
 }
 
-let pendingInclusionsUpdate: Promise<unknown> = Promise.resolve();
-
 export function getDraggedVaultItems(app: App): TAbstractFile[] {
   const draggable = (app as unknown as { dragManager?: { draggable?: ObsidianDraggable | null } })
     .dragManager?.draggable;
@@ -24,31 +22,24 @@ export function getDraggedVaultItems(app: App): TAbstractFile[] {
   return items.filter((item) => item instanceof TFile || item instanceof TFolder);
 }
 
-function updateProjectInclusions(
+async function updateProjectInclusions(
   app: App,
   projectId: string,
   update: (patterns: readonly string[]) => string[]
 ): Promise<boolean> {
-  const run = async (): Promise<boolean> => {
-    const project = getCachedProjectRecordById(projectId)?.project;
-    if (!project) throw new Error(`Project not found: ${projectId}`);
-    const patterns = [...new Set(getDecodedPatterns(project.contextSource?.inclusions ?? ""))];
-    const next = [...new Set(update(patterns))];
-    if (next.length === patterns.length && next.every((pattern, i) => pattern === patterns[i])) {
-      return false;
-    }
-    const inclusions = createPatternSettingsValue(categorizePatterns(next));
-    await ProjectFileManager.getInstance(app).updateProject(projectId, {
-      ...project,
-      contextSource: { ...project.contextSource, inclusions },
-    });
-    return true;
-  };
-  // Each write starts from the cached project, so a second link or unlink waits for the first to land instead of
-  // overwriting it with a stale list. https://github.com/Brevilabs/obsidian-copilot-private/issues/461
-  const result = pendingInclusionsUpdate.then(run);
-  pendingInclusionsUpdate = result.catch(() => undefined);
-  return result;
+  const project = getCachedProjectRecordById(projectId)?.project;
+  if (!project) throw new Error(`Project not found: ${projectId}`);
+  const patterns = [...new Set(getDecodedPatterns(project.contextSource?.inclusions ?? ""))];
+  const next = [...new Set(update(patterns))];
+  if (next.length === patterns.length && next.every((pattern, i) => pattern === patterns[i])) {
+    return false;
+  }
+  const inclusions = createPatternSettingsValue(categorizePatterns(next));
+  await ProjectFileManager.getInstance(app).updateProject(projectId, {
+    ...project,
+    contextSource: { ...project.contextSource, inclusions },
+  });
+  return true;
 }
 
 export function linkProjectItems(

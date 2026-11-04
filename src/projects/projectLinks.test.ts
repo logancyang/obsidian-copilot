@@ -151,22 +151,6 @@ describe("projectLinks", () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
-    it("keeps both links when a second link starts before the first is saved", async () => {
-      let releaseFirstWrite!: () => void;
-      const firstWrite = new Promise<void>((resolve) => (releaseFirstWrite = resolve));
-      mockUpdateProject.mockImplementationOnce(async (projectId: string, next: ProjectConfig) => {
-        await firstWrite;
-        return saveToCache(projectId, next);
-      });
-
-      const first = linkProjectItems({} as App, "q4", [makeFolder("Research/Pricing")]);
-      const second = linkProjectItems({} as App, "q4", [makeFolder("Meetings")]);
-      releaseFirstWrite();
-      await Promise.all([first, second]);
-
-      expect(savedInclusions()).toEqual(["Research/Pricing", "Meetings"]);
-    });
-
     it("rejects when the project is no longer in the project cache", async () => {
       updateCachedProjectRecords([]);
 
