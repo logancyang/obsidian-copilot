@@ -113,12 +113,13 @@ afterEach(() => updateCachedProjectRecords([]));
 
 describe("ProjectInfoPopover", () => {
   describe("ProjectInfoPanel()", () => {
-    it("lists each changed file by name with its folder, new or edited, and lines added and removed", () => {
+    it("lists each changed file by name with its folder, new, edited or deleted, and lines added and removed", () => {
       render(
         <ProjectInfoPanel
           changes={[
             change(`${PROJECT_FOLDER}/outputs/timeline.md`, null, "week 1\nweek 2\n"),
             change(`${PROJECT_FOLDER}/brief.md`, "one\ntwo\n", "one\nTWO\nthree\n"),
+            change(`${PROJECT_FOLDER}/draft.md`, "old\n", null),
           ]}
           onOpenFile={() => {}}
         >
@@ -129,6 +130,7 @@ describe("ProjectInfoPopover", () => {
       expect(changedRows()).toEqual([
         `timeline.md${PROJECT_FOLDER}/outputs/new+2−0`,
         `brief.md${PROJECT_FOLDER}/edited+2−1`,
+        `draft.md${PROJECT_FOLDER}/deleted+0−1`,
       ]);
     });
 
