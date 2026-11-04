@@ -3,10 +3,8 @@ import {
   type LinkedProjectRow,
   type LinkedTagRow,
   ProjectFolderSection,
-  RecentFilesSection,
   type ProjectFolderSectionProps,
   type ProjectTreeNode,
-  type RecentProjectFile,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { Meta, StoryObj } from "@/lib/story";
 import { createUrlItem, type UrlItem } from "@/lib/url-tag";
@@ -21,37 +19,6 @@ function file(path: string): ProjectTreeNode {
 function folder(path: string, children: ProjectTreeNode[] | null = null): ProjectTreeNode {
   return { kind: "folder", path: `${ROOT}/${path}`, name: path.split("/").pop() ?? path, children };
 }
-
-const NOW = Date.UTC(2026, 10, 4, 12);
-const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
-
-function recent(
-  path: string,
-  change: RecentProjectFile["change"],
-  ageMs: number
-): RecentProjectFile {
-  const name = path.split("/").pop() ?? path;
-  return {
-    path: `${ROOT}/${path}`,
-    name,
-    folder: path.slice(0, -name.length),
-    change,
-    mtime: NOW - ageMs,
-  };
-}
-
-const RECENT_FILES: RecentProjectFile[] = [
-  recent("outputs/launch-timeline.md", "new", 12 * MINUTE),
-  recent("brief.md", "edited", 2 * 60 * MINUTE),
-  recent(
-    "outputs/charts/2026/Signup funnel by region and acquisition channel.png",
-    "new",
-    1.5 * DAY
-  ),
-  recent("outputs/press-release-v2.md", "edited", 3 * DAY),
-  recent("outputs/pricing-comparison.csv", "new", 40 * DAY),
-];
 
 const meta = {
   title: "Agent Mode/Project Files View",
@@ -84,22 +51,6 @@ const POPULATED_NODES: ProjectTreeNode[] = [
 
 export const Populated: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-};
-
-export const Recent: StoryObj<ProjectFolderSectionProps> = {
-  args: { nodes: POPULATED_NODES },
-  render: (props) => (
-    <>
-      <RecentFilesSection
-        files={RECENT_FILES}
-        now={NOW}
-        onOpenFile={() => {}}
-        onShowFileMenu={() => {}}
-        onDragFile={() => {}}
-      />
-      <ProjectFolderSection {...(props as ProjectFolderSectionProps)} />
-    </>
-  ),
 };
 
 export const DeeplyNested: StoryObj<ProjectFolderSectionProps> = {
