@@ -20,6 +20,7 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
         onOpenSettings={onOpenSettings}
         onRevealFolder={onRevealFolder}
         menu={menu}
+        isProjectHome={props.isProjectHome}
         orphaned={props.orphaned}
         canLeaveProject={props.canLeaveProject}
       />
@@ -67,29 +68,20 @@ describe("AgentProjectHeader", () => {
       expect(onOpenSettings).not.toHaveBeenCalled();
     });
 
-    it("shows only settings and reveal without a menu, and the menu after them when given, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
-      const labels = () =>
-        screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"));
-      const { unmount } = render(
-        <TooltipProvider>
-          <AgentProjectHeader
-            projectName="Demo"
-            onExit={jest.fn()}
-            onOpenSettings={jest.fn()}
-            onRevealFolder={jest.fn()}
-            canLeaveProject={false}
-          />
-        </TooltipProvider>
-      );
-      expect(labels()).toEqual(["Project settings", "Reveal project folder in vault"]);
-      unmount();
+    it("shows settings and reveal but not the given menu on the project home, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      renderHeader({ canLeaveProject: false, isProjectHome: true });
 
-      renderHeader({ canLeaveProject: false });
-      expect(labels()).toEqual([
-        "Project settings",
-        "Reveal project folder in vault",
-        "Project options",
-      ]);
+      expect(
+        screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
+      ).toEqual(["Project settings", "Reveal project folder in vault"]);
+    });
+
+    it("shows the given menu after settings and reveal in a project chat, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      renderHeader({ canLeaveProject: false, isProjectHome: false });
+
+      expect(
+        screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
+      ).toEqual(["Project settings", "Reveal project folder in vault", "Project options"]);
     });
 
     it("renders the provided options menu in the trailing slot", () => {
