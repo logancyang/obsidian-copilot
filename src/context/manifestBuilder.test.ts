@@ -33,7 +33,6 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
   return {
     folders: [],
     notes: [],
-    extensions: [],
     tags: [],
     properties: [],
     propertyNotes: [],
@@ -167,28 +166,76 @@ describe("manifestBuilder", () => {
       );
     });
 
-    it("lists a note reached by both a title and a tag once, as a declaration, and leaves out tagged notes the project's exclusions match", () => {
-      getRecord.mockReturnValue(
-        record({ inclusions: "%23launch,[[brief]]", exclusions: "Private" })
-      );
-      indexFile.mockImplementation((_app: unknown, file: { path: string }) => !file.path.startsWith("Private/")); // prettier-ignore
-      const app = fakeApp(
-        [
-          { path: "Plans/brief.md", ext: "md" },
-          { path: "Private/salaries.md", ext: "md" },
-        ],
-        [],
-        {
-          "Plans/brief.md": { tags: [{ tag: "#launch" }] },
-          "Private/salaries.md": { tags: [{ tag: "#launch" }] },
-        }
-      );
+    it("lists a note reached by both a title and a tag once, as a declaration", () => {
+      getRecord.mockReturnValue(record({ inclusions: "%23launch,[[brief]]" }));
+      const app = fakeApp([{ path: "Plans/brief.md", ext: "md" }], [], {
+        "Plans/brief.md": { tags: [{ tag: "#launch" }] },
+      });
 
       const block = buildProjectContext(app, "p1");
 
       expect(block.match(/\/vault\/Plans\/brief\.md/g)).toHaveLength(1);
       expect(block).not.toContain("## Notes matching an included tag");
-      expect(block).not.toContain("salaries");
+    });
+
+    it("lists the folder, tag, link and property of a project that also saved file-type patterns and exclusions, and ignores those two kinds https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      getRecord.mockReturnValue(
+        record({
+          inclusions: "%23launch,*.pdf,%5Btopic%3Aphysics%5D,Research",
+          exclusions: "*.tmp,Research%2FPrivate",
+          webUrls: "https://example.com/spec",
+        })
+      );
+      indexFile.mockImplementation(jest.requireActual<typeof import("@/search/searchUtils")>("@/search/searchUtils").shouldIndexFile); // prettier-ignore
+      const app = fakeApp(
+        [
+          { path: "Plans/brief.md", ext: "md" },
+          { path: "Research/Private/secret.md", ext: "md" },
+          { path: "Topics/relativity.md", ext: "md" },
+          { path: "Docs/manual.pdf", ext: "pdf" },
+        ],
+        ["Research"],
+        {
+          "Plans/brief.md": { frontmatter: { tags: ["launch"] } },
+          "Research/Private/secret.md": { tags: [{ tag: "#launch" }] },
+          "Topics/relativity.md": { frontmatter: { topic: "physics" } },
+        }
+      );
+
+      const block = buildProjectContext(app, "p1");
+
+      expect(block).toContain(
+        [
+          "## Included folders",
+          "- `/vault/Research`",
+          "",
+          "## Included properties",
+          "- [topic:physics]",
+          "",
+          "## Included tags",
+          "- #launch",
+          "",
+          "## Included URLs",
+          "- https://example.com/spec",
+          "",
+          "## Notes matching an included property",
+          "- `/vault/Topics/relativity.md`",
+          "",
+          "## Notes matching an included tag",
+          "- `/vault/Plans/brief.md`",
+          "- `/vault/Research/Private/secret.md`",
+          "</project_context>",
+        ].join("\n")
+      );
+      expect(block).not.toContain("pdf");
+      expect(block).not.toContain("tmp");
+    });
+
+    it("treats a project whose only saved patterns are file types and exclusions as having no context sources https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      getRecord.mockReturnValue(record({ inclusions: "*.pdf", exclusions: "Archive" }));
+      const app = fakeApp([{ path: "Docs/manual.pdf", ext: "pdf" }]);
+
+      expect(buildProjectContext(app, "p1")).toContain("No context sources are configured");
     });
 
     it("lists in-vault document files by their original absolute path", () => {
@@ -223,20 +270,6 @@ describe("manifestBuilder", () => {
         "## Document files\n- `/vault/Proj/a.pdf`\n- `/vault/Proj/b.DOCX`\n- `/vault/Proj/book.epub`\n- `/vault/Proj/z.png`"
       );
       expect(block).not.toContain("data.csv");
-    });
-
-    it("leaves out document files the project's exclusions match", () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj", exclusions: "Proj/secret.pdf" }));
-      indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path !== "Proj/secret.pdf"); // prettier-ignore
-      const app = fakeApp([
-        { path: "Proj/a.pdf", ext: "pdf" },
-        { path: "Proj/secret.pdf", ext: "pdf" },
-      ]);
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).toContain("`/vault/Proj/a.pdf`");
-      expect(block).not.toContain("secret.pdf");
     });
 
     it("lists a document picked as a file once, under Included notes, so it does not spend a second manifest entry https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
@@ -323,7 +356,6 @@ describe("manifestBuilder", () => {
         sources({
           folders: [abs("Papers", "/vault/Papers")],
           tags: ["#research"],
-          extensions: ["*.pdf"],
           notes: [abs("Notes/Spec.md", "/vault/Notes/Spec.md")],
         })
       );
@@ -334,7 +366,6 @@ describe("manifestBuilder", () => {
       expect(md).toContain("`/vault/Notes/Spec.md`");
       expect(md).toContain("## Included tags");
       expect(md).toContain("#research");
-      expect(md).toContain("`*.pdf`");
       expect(md).not.toMatch(/Papers\/\S+\.md/);
     });
 
@@ -421,7 +452,6 @@ describe("manifestBuilder", () => {
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
           notes: [abs("Spec.md", "/vault/Spec.md")],
-          extensions: ["*.pdf"],
           tags: ["#physics"],
           webUrls: ["https://a.com"],
           youtubeUrls: ["https://youtu.be/abc"],
@@ -431,7 +461,6 @@ describe("manifestBuilder", () => {
       expect(md).toContain("[Subject:]");
       expect(md).toContain("`/vault/Papers`");
       expect(md).toContain("`/vault/Spec.md`");
-      expect(md).toContain("`*.pdf`");
       expect(md).toContain("#physics");
       expect(md).toContain("https://a.com");
       expect(md).toContain("https://youtu.be/abc");
@@ -483,15 +512,14 @@ describe("manifestBuilder", () => {
           propertyNotes: many,
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
-          extensions: ["*.pdf"],
           tags: ["#physics"],
           webUrls: ["https://a.com"],
         })
       );
 
       const listed = many.filter((note) => md.includes(`\`${note.vaultPath}\``));
-      expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
-      expect(md).toContain("25 more sources are not listed");
+      expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 4);
+      expect(md).toContain("24 more sources are not listed");
     });
   });
 });

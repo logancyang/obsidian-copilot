@@ -9,6 +9,7 @@ import {
   getDecodedPatterns,
   getMatchingPatterns,
   getNotesWithTag,
+  getProjectContextPatterns,
   getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
@@ -521,6 +522,33 @@ describe("searchUtils", () => {
         notePatterns: [],
         propertyPatterns: [],
       });
+    });
+  });
+
+  describe("getProjectContextPatterns()", () => {
+    it("categorizes a project's saved folders, notes, tags and properties", () => {
+      expect(
+        getProjectContextPatterns("Research,%5B%5BSpec%5D%5D,%23launch,%5Btopic%3Aphysics%5D")
+      ).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: ["[[Spec]]"],
+        tagPatterns: ["#launch"],
+        propertyPatterns: ["[topic:physics]"],
+      });
+    });
+
+    it("drops saved file-type patterns, which no longer count as project context https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      expect(getProjectContextPatterns("*.pdf,Research")).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: [],
+        tagPatterns: [],
+        propertyPatterns: [],
+      });
+    });
+
+    it("returns null when nothing but file-type patterns is saved https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      expect(getProjectContextPatterns("*.pdf,*.docx")).toBeNull();
+      expect(getProjectContextPatterns(undefined)).toBeNull();
     });
   });
 

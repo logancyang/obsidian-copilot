@@ -94,6 +94,15 @@ export function getMatchingPatterns(options?: {
   };
 }
 
+export function getProjectContextPatterns(inclusions: string | undefined): PatternCategory | null {
+  // File-type patterns and exclusions no longer shape project context; saved values stay in project.md untouched. https://github.com/Brevilabs/obsidian-copilot-private/issues/841
+  const { folderPatterns, notePatterns, tagPatterns, propertyPatterns } = categorizePatterns(
+    getDecodedPatterns(inclusions ?? "")
+  );
+  const kept = { folderPatterns, notePatterns, tagPatterns, propertyPatterns };
+  return Object.values(kept).some((patterns) => patterns.length > 0) ? kept : null;
+}
+
 export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
   const history = Array.isArray(settings.copilotRootHistory) ? settings.copilotRootHistory : [];
   return normalizeRootFolders([COPILOT_FOLDER_ROOT, settings.copilotFolder, ...history]);

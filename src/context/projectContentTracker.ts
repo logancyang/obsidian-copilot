@@ -2,7 +2,7 @@ import { logWarn } from "@/logger";
 import { getCachedProjectRecords } from "@/projects/state";
 import type { ProjectFileRecord } from "@/projects/type";
 import {
-  getMatchingPatterns,
+  getProjectContextPatterns,
   isInternalExcludedPath,
   isSystemExcludedPath,
   type PatternCategory,
@@ -105,11 +105,7 @@ export class ProjectContentTracker {
 }
 
 function changeAffectsProject(change: PendingChange, record: ProjectFileRecord): boolean {
-  const { inclusions, exclusions } = getMatchingPatterns({
-    inclusions: record.project.contextSource?.inclusions,
-    exclusions: record.project.contextSource?.exclusions,
-    isProject: true,
-  });
+  const inclusions = getProjectContextPatterns(record.project.contextSource?.inclusions);
   if (!inclusions) return false;
 
   if (change.kind === "metadata") {
@@ -125,9 +121,9 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
     change.isFolder && (change.kind === "rename" || change.kind === "delete");
 
   const tagReaches =
-    declaresTagPattern(inclusions, exclusions) && paths.some((p) => !isInternalExcludedPath(p));
+    (inclusions.tagPatterns?.length ?? 0) > 0 && paths.some((p) => !isInternalExcludedPath(p));
   const propertyReaches =
-    declaresPropertyPattern(inclusions, exclusions) && paths.some(isPropertyCandidatePath);
+    (inclusions.propertyPatterns?.length ?? 0) > 0 && paths.some(isPropertyCandidatePath);
   if (tagReaches || propertyReaches) {
     const touchesMarkdown = change.isMarkdown || paths.some((p) => p.toLowerCase().endsWith(".md"));
     if (touchesMarkdown || folderMembershipEvent) return true;
@@ -143,29 +139,10 @@ function changeAffectsProject(change: PendingChange, record: ProjectFileRecord):
     ) {
       return true;
     }
-    return (
-      (inclusions.notePatterns?.length ?? 0) > 0 || (inclusions.extensionPatterns?.length ?? 0) > 0
-    );
+    return (inclusions.notePatterns?.length ?? 0) > 0;
   }
 
   return paths.some((path) => fileMatchesInclusions(path, inclusions));
-}
-
-function declaresTagPattern(
-  inclusions: PatternCategory,
-  exclusions: PatternCategory | null
-): boolean {
-  return (inclusions.tagPatterns?.length ?? 0) > 0 || (exclusions?.tagPatterns?.length ?? 0) > 0;
-}
-
-function declaresPropertyPattern(
-  inclusions: PatternCategory,
-  exclusions: PatternCategory | null
-): boolean {
-  return (
-    (inclusions.propertyPatterns?.length ?? 0) > 0 ||
-    (exclusions?.propertyPatterns?.length ?? 0) > 0
-  );
 }
 
 function isPropertyCandidatePath(path: string): boolean {
@@ -175,10 +152,6 @@ function isPropertyCandidatePath(path: string): boolean {
 function fileMatchesInclusions(path: string, inclusions: PatternCategory): boolean {
   if (isInternalExcludedPath(path)) return false;
 
-  const lower = path.toLowerCase();
-  if ((inclusions.extensionPatterns ?? []).some((p) => lower.endsWith(p.slice(1).toLowerCase()))) {
-    return true;
-  }
   if ((inclusions.folderPatterns ?? []).some((p) => isSameOrUnder(path, normalizeVaultPath(p)))) {
     return true;
   }
