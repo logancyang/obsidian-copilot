@@ -1,9 +1,7 @@
-import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { VaultItemSearchModal } from "@/components/modals/VaultItemSearchModal";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
-import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
 import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -17,7 +15,6 @@ import {
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
 import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
-import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import { ChevronRight, File, Folder, Plus, X } from "lucide-react";
 import { App, Menu, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
@@ -38,14 +35,6 @@ interface ProjectFolderNode {
 
 export type ProjectTreeNode = ProjectFileNode | ProjectFolderNode;
 
-export interface RecentProjectFile {
-  path: string;
-  name: string;
-  folder: string;
-  change: "new" | "edited";
-  mtime: number;
-}
-
 export interface LinkedProjectRow {
   pattern: string;
   node: ProjectTreeNode;
@@ -54,12 +43,8 @@ export interface LinkedProjectRow {
 }
 
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
-const EMPTY_RECENT: readonly RecentProjectFile[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
-const RECENT_FILE_LIMIT = 5;
-const NEW_FILE_WINDOW_MS = 60_000;
-const AGE_REFRESH_MS = 60_000;
-const NO_PATHS: ReadonlySet<string> = new Set();
+const NO_EXPANDED_FOLDERS: ReadonlySet<string> = new Set();
 const FILE_MENU_SOURCE = "copilot-project-files";
 
 export function buildProjectTree(
@@ -85,42 +70,6 @@ export function buildProjectTree(
         ? buildProjectTree(child, expandedPaths, configPath)
         : null;
       return { kind: "folder", path: child.path, name: child.name, children };
-    });
-}
-
-export function buildRecentFiles(
-  folder: TFolder,
-  configPath: string,
-  linkedPaths: ReadonlySet<string> = NO_PATHS
-): readonly RecentProjectFile[] {
-  const hidden = new Set([
-    ...linkedPaths,
-    configPath,
-    `${folder.path}/${AGENTS_FILE_NAME}`,
-    `${folder.path}/${PROJECT_SOURCES_FOLDER_NAME}`,
-  ]);
-  const files: TFile[] = [];
-  const collect = (parent: TFolder): void => {
-    for (const child of parent.children) {
-      if (child.name.startsWith(".") || hidden.has(child.path)) continue;
-      if (child instanceof TFolder) collect(child);
-      else if (child instanceof TFile) files.push(child);
-    }
-  };
-  collect(folder);
-  if (files.length === 0) return EMPTY_RECENT;
-  return files
-    .sort((a, b) => b.stat.mtime - a.stat.mtime)
-    .slice(0, RECENT_FILE_LIMIT)
-    .map((file) => {
-      const { ctime, mtime } = file.stat;
-      return {
-        path: file.path,
-        name: file.name,
-        folder: file.path.slice(folder.path.length + 1, -file.name.length),
-        change: Math.abs(mtime - ctime) < NEW_FILE_WINDOW_MS ? "new" : "edited",
-        mtime,
-      };
     });
 }
 
@@ -343,57 +292,6 @@ export function ProjectFolderSection({
   );
 }
 
-function formatRecentAge(mtime: number, now: number): string {
-  const age = formatCompactRelativeTime(mtime, now);
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  // Returning users read a day-old change as "yesterday", but only when it was made on yesterday's date.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/463
-  const onYesterday = new Date(mtime).toDateString() === yesterday.toDateString();
-  return age === "1d" && onYesterday ? "yesterday" : age;
-}
-
-export interface RecentFilesSectionProps extends Pick<
-  ProjectTreeHandlers,
-  "onOpenFile" | "onShowFileMenu" | "onDragFile"
-> {
-  files: readonly RecentProjectFile[];
-  now: number;
-}
-
-export function RecentFilesSection({
-  files,
-  now,
-  onOpenFile,
-  ...rowHandlers
-}: RecentFilesSectionProps): React.ReactElement | null {
-  if (files.length === 0) return null;
-  return (
-    <ProjectFilesSection title="Recent">
-      {files.map((file) => (
-        <ProjectRow
-          key={file.path}
-          path={file.path}
-          onActivate={(pane) => onOpenFile(file.path, pane)}
-          {...rowHandlers}
-        >
-          <File aria-hidden="true" className="tw-ml-5 tw-size-3.5 tw-shrink-0 tw-text-faint" />
-          <span className="tw-min-w-0 tw-shrink tw-truncate" title={file.name}>
-            {file.name}
-          </span>
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
-            {file.folder || "/"}
-          </span>
-          <FileStatusLabel>{file.change}</FileStatusLabel>
-          <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
-            {formatRecentAge(file.mtime, now)}
-          </span>
-        </ProjectRow>
-      ))}
-    </ProjectFilesSection>
-  );
-}
-
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
   isDragOver: boolean;
@@ -465,7 +363,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
   const inclusions = useProjects().find((project) => project.id === projectId)?.contextSource
     ?.inclusions;
-  const [expandedPaths, setExpandedPaths] = useState(NO_PATHS);
+  const [expandedPaths, setExpandedPaths] = useState(NO_EXPANDED_FOLDERS);
   const [isDragOver, setIsDragOver] = useState(false);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
 
@@ -474,11 +372,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       app.vault.on("create", refresh),
       app.vault.on("delete", refresh),
       app.vault.on("rename", refresh),
-      app.vault.on("modify", refresh),
     ];
-    const ageClock = window.setInterval(refresh, AGE_REFRESH_MS);
     return () => {
-      window.clearInterval(ageClock);
       for (const ref of refs) app.vault.offref(ref);
     };
   }, [app]);
@@ -490,9 +385,6 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
   const linkedRows = buildLinkedRows(app, inclusions, expandedPaths, configPath);
-  const linkedPaths = new Set(linkedRows.filter((row) => !row.missing).map((row) => row.node.path));
-  const recentFiles =
-    folder instanceof TFolder ? buildRecentFiles(folder, configPath, linkedPaths) : EMPTY_RECENT;
 
   const toggleFolder = (path: string): void => {
     setExpandedPaths((previous) => {
@@ -557,7 +449,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   };
 
   const linkItems = (items: readonly TAbstractFile[]): void => {
-    // The project folder is already the agent's workspace, so linking its own files would only hide them from Recent.
+    // The project folder is already the agent's workspace, so linking its own files would only list them twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
     const outside = items.filter(
       (item) => item.path !== folderPath && !item.path.startsWith(`${folderPath}/`)
@@ -621,7 +513,6 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       }}
       onDrop={dropOnFiles}
     >
-      <RecentFilesSection files={recentFiles} now={Date.now()} {...rowHandlers} />
       <ProjectFolderSection
         folderPath={folderPath}
         nodes={nodes}
