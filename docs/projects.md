@@ -43,7 +43,7 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 ### Link notes and folders
 
 - Drag a note or folder from the file explorer onto the **Files** tab to link it. Folders at any depth link by their full location.
-- Select **+** beside **Linked** to search for a note or folder to link.
+- Select **Link context** beside **Linked**, then **Files** or **Folders**, to pick a note or folder to link.
 - Select **Unlink** on a linked item to remove it from the Project. The note or folder stays in your vault.
 - Drag a file from your computer onto the **Files** tab to copy it into the Project's `sources/` folder. If a file with that name is already there, the copy gets a number added to its name.
 

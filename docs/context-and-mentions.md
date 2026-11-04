@@ -61,7 +61,7 @@ Agent mentions select OpenCode, Claude, or Codex. They are different from note, 
 
 ## Reuse context with Projects
 
-For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab, or select **+** beside **Linked**, to link them. Dropping on the message box attaches the item to that message only. Add other saved context under **Context sources** in **Project settings**:
+For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab, or select **Link context** beside **Linked**, to link them. Dropping on the message box attaches the item to that message only. Add other saved context under **Context sources** in **Project settings**:
 
 - select **URL** to add a web page or YouTube video; or
 - select **Manage context** to add links, tags, properties, folders, files, and ignored files.

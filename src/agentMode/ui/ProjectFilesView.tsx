@@ -1,5 +1,13 @@
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { VaultItemSearchModal } from "@/components/modals/VaultItemSearchModal";
+import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
+import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
 import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
@@ -16,7 +24,7 @@ import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
 import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
-import { ChevronRight, File, Folder, Plus, X } from "lucide-react";
+import { ChevronRight, File, Folder, type LucideIcon, Plus, X } from "lucide-react";
 import { App, Menu, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import React, { useEffect, useId, useReducer, useState } from "react";
 
@@ -41,6 +49,16 @@ export interface LinkedProjectRow {
   parent: string;
   missing: boolean;
 }
+
+export type LinkKind = "files" | "folders";
+
+const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[] = [
+  { kind: "files", label: "Files", icon: File },
+  { kind: "folders", label: "Folders", icon: Folder },
+];
+
+export const FILES_DROP_HIGHLIGHT =
+  "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring";
 
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
@@ -294,27 +312,42 @@ export function ProjectFolderSection({
 
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
-  isDragOver: boolean;
-  onAdd: () => void;
+  onLink: (kind: LinkKind) => void;
   onUnlink: (pattern: string) => void;
+}
+
+function LinkContextMenu({ onLink }: Pick<LinkedSectionProps, "onLink">): React.ReactElement {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost2" size="fit" className="tw-text-ui-smaller">
+          <Plus className="tw-size-3.5" />
+          Link context
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {LINK_KINDS.map(({ kind, label, icon: Icon }) => (
+          <DropdownMenuItem key={kind} onSelect={() => onLink(kind)}>
+            <Icon />
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function LinkedSection({
   rows,
-  isDragOver,
-  onAdd,
+  onLink,
   onUnlink,
   ...handlers
 }: LinkedSectionProps): React.ReactElement {
   return (
-    <ProjectFilesSection
-      title="Linked"
-      action={
-        <RowActionButton label="Link a note or folder" onClick={onAdd}>
-          <Plus className="tw-size-3.5" />
-        </RowActionButton>
-      }
-    >
+    <ProjectFilesSection title="Linked" action={<LinkContextMenu onLink={onLink} />}>
+      {rows.length === 0 && (
+        <div className="tw-px-1.5 tw-py-1 tw-text-ui-small tw-text-faint">Nothing linked yet.</div>
+      )}
       {rows.map((row) => (
         <div
           key={`${row.pattern}\n${row.node.path}`}
@@ -337,18 +370,6 @@ export function LinkedSection({
           </div>
         </div>
       ))}
-      <div
-        className={cn(
-          "tw-mx-1.5 tw-mt-1 tw-rounded tw-border tw-border-dashed tw-px-2 tw-py-1.5 tw-text-ui-smaller",
-          isDragOver
-            ? "tw-border-interactive-accent tw-text-accent"
-            : "tw-border-border tw-text-faint"
-        )}
-      >
-        {isDragOver
-          ? "Drop to link it to this project."
-          : `Drop notes or folders here to link them. Files from your computer are copied to ${PROJECT_SOURCES_FOLDER_NAME}/.`}
-      </div>
     </ProjectFilesSection>
   );
 }
@@ -464,6 +485,20 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       .catch(reportFailure("link to the project"));
   };
 
+  const pickToLink: Record<LinkKind, () => void> = {
+    files: () =>
+      new ProjectFileSelectModal({
+        app,
+        onFileSelect: (file) => linkItems([file]),
+        excludeFilePaths: [],
+      }).open(),
+    folders: () =>
+      new FolderSearchModal(app, (path) => {
+        const folder = app.vault.getAbstractFileByPath(path);
+        if (folder instanceof TFolder) linkItems([folder]);
+      }).open(),
+  };
+
   const unlink = (pattern: string): void => {
     unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
   };
@@ -494,7 +529,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       data-copilot-drop-zone
       className={cn(
         "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
-        isDragOver && "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring"
+        isDragOver && FILES_DROP_HIGHLIGHT
       )}
       onDragOver={(event) => {
         if (!acceptsDrag(event)) return;
@@ -521,8 +556,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       />
       <LinkedSection
         rows={linkedRows}
-        isDragOver={isDragOver}
-        onAdd={() => new VaultItemSearchModal(app, (item) => linkItems([item])).open()}
+        onLink={(kind) => pickToLink[kind]()}
         onUnlink={unlink}
         onToggleFolder={toggleFolder}
         {...rowHandlers}
