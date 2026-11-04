@@ -44,9 +44,8 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 
 Select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
 
-- drag a vault file or folder into **Context sources**;
 - select **URL** to add a web page or YouTube video; or
-- select **Manage** or **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
+- select **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
 
 Tags match tags stored in note properties. Properties can target notes by a frontmatter field, such as `Topics: Physics`.
 
