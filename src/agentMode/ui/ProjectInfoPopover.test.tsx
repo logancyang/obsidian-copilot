@@ -1,6 +1,13 @@
+const mockOpenFilePicker = jest.fn();
+
+jest.mock("@/components/modals/ProjectFileSelectModal", () => ({
+  ProjectFileSelectModal: jest.fn().mockImplementation(() => ({ open: mockOpenFilePicker })),
+}));
+
 import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
 import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
 import { ProjectInfoPanel, ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import type { ProjectConfig } from "@/aiParams";
 import { AppContext } from "@/context";
 import { updateCachedProjectRecords } from "@/projects/state";
@@ -101,9 +108,7 @@ function sectionTitles(): string[] {
     .map((id) => document.getElementById(id)?.textContent ?? "");
 }
 
-beforeAll(() => {
-  window.activeDocument = window.document;
-});
+beforeAll(installRadixMenuPolyfills);
 
 beforeEach(() => setProjectFolder(PROJECT_FOLDER));
 
@@ -189,6 +194,26 @@ describe("ProjectInfoPopover", () => {
 
       expect(screen.getByText("No files changed in this chat yet.")).toBeTruthy();
       expect(sectionTitles()).toEqual(["Changed in this chat", "Project folder", "Linked"]);
+    });
+
+    it("offers the same Link context menu on the popover's Linked header, opening its pickers from the popover", () => {
+      const { app } = makeApp([projectFolderFixture()]);
+      renderPopover(app, [turn("reply")]);
+
+      const linked = screen.getByRole("region", { name: "Linked" });
+      fireEvent.pointerDown(within(linked).getByRole("button", { name: "Link context" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const menu = screen.getByRole("menu");
+      expect(
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent)
+      ).toEqual(["Files", "Folders", "Tags", "Properties", "Link"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Files" }));
+
+      expect(mockOpenFilePicker).toHaveBeenCalled();
     });
 
     it("opens a changed file in a tab and closes the popover", () => {
