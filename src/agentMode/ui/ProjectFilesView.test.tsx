@@ -811,15 +811,40 @@ describe("ProjectFilesView", () => {
       });
     });
 
-    it("stops listening to the vault once unmounted", () => {
-      const { root } = makeProjectFolder();
-      const vault = makeFakeVault(root);
-      const { unmount } = renderView(vault);
-      expect(vault.listenerCount()).toBe(4);
+    it("advances each Recent age every minute while the tab stays open with no file changes", () => {
+      jest.useFakeTimers({ now: NOW });
+      try {
+        const root = makeFolder(PROJECT_FOLDER, [
+          makeFile(CONFIG_PATH),
+          makeFile(`${PROJECT_FOLDER}/brief.md`, { ctime: NOW, mtime: NOW }),
+        ]);
+        renderView(makeFakeVault(root));
+        expect(recentRows()[0].lastElementChild?.textContent).toBe("now");
 
-      unmount();
+        act(() => jest.advanceTimersByTime(12 * MINUTE));
 
-      expect(vault.listenerCount()).toBe(0);
+        expect(recentRows()[0].lastElementChild?.textContent).toBe("12m");
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it("stops listening to the vault and stops the age clock once unmounted", () => {
+      jest.useFakeTimers();
+      try {
+        const { root } = makeProjectFolder();
+        const vault = makeFakeVault(root);
+        const { unmount } = renderView(vault);
+        expect(vault.listenerCount()).toBe(4);
+        expect(jest.getTimerCount()).toBe(1);
+
+        unmount();
+
+        expect(vault.listenerCount()).toBe(0);
+        expect(jest.getTimerCount()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 });

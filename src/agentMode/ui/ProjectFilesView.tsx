@@ -40,6 +40,7 @@ const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_RECENT: readonly RecentProjectFile[] = Object.freeze([]);
 const RECENT_FILE_LIMIT = 5;
 const NEW_FILE_WINDOW_MS = 60_000;
+const AGE_REFRESH_MS = 60_000;
 const NO_EXPANDED_FOLDERS: ReadonlySet<string> = new Set();
 const FILE_MENU_SOURCE = "copilot-project-files";
 
@@ -334,7 +335,9 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       app.vault.on("rename", refresh),
       app.vault.on("modify", refresh),
     ];
+    const ageClock = window.setInterval(refresh, AGE_REFRESH_MS);
     return () => {
+      window.clearInterval(ageClock);
       for (const ref of refs) app.vault.offref(ref);
     };
   }, [app]);
