@@ -4,16 +4,12 @@ import {
   type LinkedProjectRow,
   ProjectFolderSection,
   type ProjectTreeNode,
-  RecentFilesSection,
-  type RecentProjectFile,
 } from "@/agentMode/ui/ProjectFilesView";
 import { ProjectInfoPanel, type ProjectInfoPanelProps } from "@/agentMode/ui/ProjectInfoPopover";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
 const ROOT = "copilot/projects/Q4 Launch";
-const NOW = Date.UTC(2026, 10, 4, 12);
-const MINUTE = 60_000;
 
 function file(path: string): ProjectTreeNode {
   return { kind: "file", path: `${ROOT}/${path}`, name: path.split("/").pop() ?? path };
@@ -32,21 +28,6 @@ function change(
   return { path, status, before: null, after: null, additions, deletions };
 }
 
-function recent(
-  path: string,
-  change: RecentProjectFile["change"],
-  ageMs: number
-): RecentProjectFile {
-  const name = path.split("/").pop() ?? path;
-  return {
-    path: `${ROOT}/${path}`,
-    name,
-    folder: path.slice(0, -name.length),
-    change,
-    mtime: NOW - ageMs,
-  };
-}
-
 const CHAT_CHANGES: TurnFileChange[] = [
   change(`${ROOT}/outputs/launch-timeline.md`, "created", 84, 0),
   change(`${ROOT}/brief.md`, "modified", 3, 1),
@@ -56,12 +37,6 @@ const CHAT_CHANGES: TurnFileChange[] = [
     0,
     9
   ),
-];
-
-const RECENT_FILES: RecentProjectFile[] = [
-  recent("outputs/launch-timeline.md", "new", 4 * MINUTE),
-  recent("brief.md", "edited", 4 * MINUTE),
-  recent("outputs/press-release-v2.md", "edited", 3 * 24 * 60 * MINUTE),
 ];
 
 const SHORT_TREE: ProjectTreeNode[] = [
@@ -114,7 +89,6 @@ function FilesView({ nodes }: { nodes: ProjectTreeNode[] }): React.ReactElement 
   const handlers = { onOpenFile: noop, onShowFileMenu: noop, onDragFile: noop };
   return (
     <div className="tw-flex tw-flex-col">
-      <RecentFilesSection files={RECENT_FILES} now={NOW} {...handlers} />
       <ProjectFolderSection folderPath={ROOT} nodes={nodes} onToggleFolder={noop} {...handlers} />
       <LinkedSection
         rows={LINKED_ROWS}

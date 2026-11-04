@@ -34,9 +34,7 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 
 ## Browse Project files
 
-A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box.
-
-**Recent** lists the five most recently changed files in the Project folder, newest first, with each file's folder, **new** or **edited**, and how long ago it changed. `AGENTS.md`, files in `sources/`, and linked items aren't listed. Below it, **Project folder** shows the folder as a tree, folders first. **Linked** lists the notes, folders, tags, and web and YouTube links linked to the Project.
+A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box. It shows the Project folder as a tree, folders first. **Linked** lists the notes, folders, tags, and web and YouTube links linked to the Project.
 
 - Select a file to open it, or a folder to expand it.
 - Drag a note, PDF, or image into the message box to add it to your message.
@@ -53,13 +51,11 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 
 Linking never moves a vault file. Dropping on the message box adds the item to that message only.
 
-A file that a sync tool or copy brings into the vault can show as **new** even if it was only edited.
-
 ### See what a chat changed
 
 In a Project chat, open the Project info menu beside the name. **Changed in this chat** lists each file the chat created, edited, or deleted, newest first, with **new**, **edited**, or **deleted** and the number of lines added and removed. A file changed in several turns appears once, counted from before the chat first changed it. Select a file to open it.
 
-Below it are the same **Recent**, **Project folder**, and **Linked** sections as the **Files** tab. To link a note or folder from here, select **+** on **Linked**.
+Below it are the same **Project folder** and **Linked** sections as the **Files** tab. To link a note or folder from here, select **+** on **Linked**.
 
 **Changed in this chat** covers the current session only. After you reload Obsidian or reopen the chat, it stays empty until the chat changes another file.
 

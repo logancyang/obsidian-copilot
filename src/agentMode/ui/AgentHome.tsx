@@ -512,8 +512,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
-  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and shows the
-  // project context inline instead of a shelf.
+  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and the project
+  // home keeps only its Files tab.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   const globalShelfSections = useMemo(
     () =>
@@ -580,6 +580,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       settings.chatHistorySortStrategy,
     ]
   );
+
+  const projectShelfSections = useMemo(
+    () =>
+      isProjectContextInline
+        ? projectLandingSections.filter((section) => section.id === "project-files")
+        : projectLandingSections,
+    [isProjectContextInline, projectLandingSections]
+  );
+  const showProjectShelf = isProjectContextInline ? !isOrphanedProject : projectPlacement !== null;
 
   const composerNode = (
     <AgentChatInput
@@ -760,17 +769,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         )}
                       </>
                     }
-                    context={
-                      isProjectLanding && !isOrphanedProject && isProjectContextInline ? (
-                        <div className="tw-px-2 tw-pb-1 tw-pt-3">
-                          <ProjectFilesView projectId={activeProjectId} />
-                        </div>
-                      ) : undefined
-                    }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement && !isProjectContextInline ? (
-                          <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
+                        showProjectShelf ? (
+                          <AgentHomeShelf key={activeProjectId} sections={projectShelfSections} />
                         ) : null
                       ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf
