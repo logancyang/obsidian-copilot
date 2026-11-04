@@ -27,13 +27,16 @@ jest.mock("obsidian", () => {
 
 import {
   buildProjectTree,
+  buildRecentFiles,
   ProjectFilesView,
   ProjectFolderSection,
+  RecentFilesSection,
+  type RecentProjectFile,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { ProjectConfig } from "@/aiParams";
 import { AppContext } from "@/context";
 import { updateCachedProjectRecords } from "@/projects/state";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { App, EventRef, Menu, TAbstractFile, TFile, TFolder } from "obsidian";
 import React from "react";
 
@@ -63,8 +66,18 @@ function makeFolder(path: string, children: TAbstractFile[] = []): TFolder {
   return folder;
 }
 
-function makeFile(path: string): TFile {
-  return new (TFile as unknown as new (path: string) => TFile)(path);
+const MINUTE = 60_000;
+const DAY = 24 * 60 * MINUTE;
+const NOW = Date.UTC(2026, 10, 4, 12);
+
+function makeFile(path: string, stat: { ctime: number; mtime: number } = { ctime: 0, mtime: 0 }) {
+  const file = new (TFile as unknown as new (path: string) => TFile)(path);
+  file.stat = { ...stat, size: 1 };
+  return file;
+}
+
+function touch(file: TFile, mtime: number): void {
+  file.stat = { ...file.stat, mtime };
 }
 
 function setChildren(folder: TFolder, children: TAbstractFile[]): void {
@@ -89,7 +102,11 @@ function makeProject(): ProjectConfig {
 
 interface FakeVault {
   app: App;
-  emit: (event: "create" | "delete" | "rename", file: TAbstractFile, oldPath?: string) => void;
+  emit: (
+    event: "create" | "delete" | "rename" | "modify",
+    file: TAbstractFile,
+    oldPath?: string
+  ) => void;
   listenerCount: () => number;
   openFile: jest.Mock;
   trigger: jest.Mock;
@@ -163,7 +180,17 @@ function renderView(vault: FakeVault) {
 }
 
 function rowNames(): string[] {
-  return screen.getAllByRole("button").map((row) => row.textContent ?? "");
+  return within(screen.getByRole("region", { name: "Project folder" }))
+    .getAllByRole("button")
+    .map((row) => row.textContent ?? "");
+}
+
+function recentRows(): HTMLElement[] {
+  return within(screen.getByRole("region", { name: "Recent" })).getAllByRole("button");
+}
+
+function recentNames(): string[] {
+  return recentRows().map((row) => row.querySelector("[title]")?.textContent ?? "");
 }
 
 beforeAll(() => {
@@ -265,6 +292,111 @@ describe("ProjectFilesView", () => {
     });
   });
 
+  describe("buildRecentFiles()", () => {
+    function recentFixture(path: string, ageMs: number): TFile {
+      return makeFile(`${PROJECT_FOLDER}/${path}`, { ctime: NOW - ageMs, mtime: NOW - ageMs });
+    }
+
+    it("lists the five most recently modified files at any depth and any age, newest first, with their folder in the project", () => {
+      const charts = makeFolder(`${PROJECT_FOLDER}/outputs/charts`, [
+        recentFixture("outputs/charts/funnel.png", 3 * DAY),
+      ]);
+      const outputs = makeFolder(`${PROJECT_FOLDER}/outputs`, [
+        charts,
+        recentFixture("outputs/timeline.md", MINUTE),
+        recentFixture("outputs/press-release.md", DAY),
+        recentFixture("outputs/archive.md", 400 * DAY),
+        recentFixture("outputs/pricing.csv", 2 * 60 * MINUTE),
+      ]);
+      const folder = makeFolder(PROJECT_FOLDER, [
+        recentFixture("brief.md", 5 * MINUTE),
+        outputs,
+        recentFixture("roadmap.md", 90 * DAY),
+      ]);
+
+      const recent = buildRecentFiles(folder, CONFIG_PATH);
+
+      expect(recent.map((file) => `${file.folder}${file.name}`)).toEqual([
+        "outputs/timeline.md",
+        "brief.md",
+        "outputs/pricing.csv",
+        "outputs/press-release.md",
+        "outputs/charts/funnel.png",
+      ]);
+      expect(recent[0]).toEqual({
+        path: `${PROJECT_FOLDER}/outputs/timeline.md`,
+        name: "timeline.md",
+        folder: "outputs/",
+        change: "new",
+        mtime: NOW - MINUTE,
+      });
+    });
+
+    it("leaves out AGENTS.md, everything under sources/, the project's config note and dotfiles even when they changed last", () => {
+      const sources = makeFolder(`${PROJECT_FOLDER}/sources`, [
+        recentFixture("sources/deck.pdf", 0),
+        makeFolder(`${PROJECT_FOLDER}/sources/interviews`, [
+          recentFixture("sources/interviews/acme.md", 0),
+        ]),
+      ]);
+      const folder = makeFolder(PROJECT_FOLDER, [
+        recentFixture("project.md", 0),
+        recentFixture("AGENTS.md", 0),
+        recentFixture(".draft.md", 0),
+        makeFolder(`${PROJECT_FOLDER}/.cache`, [recentFixture(".cache/index.md", 0)]),
+        sources,
+        recentFixture("brief.md", DAY),
+      ]);
+
+      const recent = buildRecentFiles(folder, CONFIG_PATH);
+
+      expect(recent.map((file) => file.name)).toEqual(["brief.md"]);
+    });
+
+    it("labels a file new when its last change came within a minute of its creation and edited after that", () => {
+      const folder = makeFolder(PROJECT_FOLDER, [
+        makeFile(`${PROJECT_FOLDER}/written-once.md`, { ctime: NOW - DAY, mtime: NOW - DAY }),
+        makeFile(`${PROJECT_FOLDER}/rewritten-in-turn.md`, {
+          ctime: NOW - 2 * DAY,
+          mtime: NOW - 2 * DAY + 59_000,
+        }),
+        makeFile(`${PROJECT_FOLDER}/revised.md`, {
+          ctime: NOW - 3 * DAY,
+          mtime: NOW - 3 * DAY + MINUTE,
+        }),
+      ]);
+
+      const recent = buildRecentFiles(folder, CONFIG_PATH);
+
+      expect(recent.map((file) => `${file.name}:${file.change}`)).toEqual([
+        "written-once.md:new",
+        "rewritten-in-turn.md:new",
+        "revised.md:edited",
+      ]);
+    });
+
+    it("labels a file edited when its creation time is later than its last change, because a sync tool or copy rewrote the creation time — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
+      const folder = makeFolder(PROJECT_FOLDER, [
+        makeFile(`${PROJECT_FOLDER}/synced.md`, { ctime: NOW, mtime: NOW - 3 * DAY }),
+      ]);
+
+      const [synced] = buildRecentFiles(folder, CONFIG_PATH);
+
+      expect(synced.change).toBe("edited");
+    });
+
+    it("returns the same empty list for every folder with nothing to show", () => {
+      const first = buildRecentFiles(makeFolder(PROJECT_FOLDER), CONFIG_PATH);
+      const second = buildRecentFiles(
+        makeFolder(PROJECT_FOLDER, [recentFixture("AGENTS.md", 0)]),
+        CONFIG_PATH
+      );
+
+      expect(first).toEqual([]);
+      expect(first).toBe(second);
+    });
+  });
+
   describe("ProjectFolderSection()", () => {
     const handlers = {
       onToggleFolder: jest.fn(),
@@ -313,11 +445,80 @@ describe("ProjectFilesView", () => {
     });
   });
 
+  describe("RecentFilesSection()", () => {
+    const handlers = { onOpenFile: jest.fn(), onShowFileMenu: jest.fn(), onDragFile: jest.fn() };
+
+    function recentFile(overrides: Partial<RecentProjectFile>): RecentProjectFile {
+      return {
+        path: `${PROJECT_FOLDER}/outputs/launch-timeline.md`,
+        name: "launch-timeline.md",
+        folder: "outputs/",
+        change: "new",
+        mtime: NOW - 12 * MINUTE,
+        ...overrides,
+      };
+    }
+
+    function ageLabel(mtime: number): string {
+      render(<RecentFilesSection files={[recentFile({ mtime })]} now={NOW} {...handlers} />);
+      const label = recentRows()[0].lastElementChild?.textContent ?? "";
+      cleanup();
+      return label;
+    }
+
+    it("titles the block Recent and shows each file's name, folder, new or edited, and age", () => {
+      render(
+        <RecentFilesSection
+          files={[
+            recentFile({}),
+            recentFile({
+              path: `${PROJECT_FOLDER}/brief.md`,
+              name: "brief.md",
+              folder: "",
+              change: "edited",
+              mtime: NOW - 3 * 60 * MINUTE,
+            }),
+          ]}
+          now={NOW}
+          {...handlers}
+        />
+      );
+
+      const [timeline, brief] = recentRows().map((row) =>
+        Array.from(row.querySelectorAll("span, div"), (part) => part.textContent).filter(Boolean)
+      );
+      expect(timeline).toEqual(["launch-timeline.md", "outputs/", "new", "12m"]);
+      expect(brief).toEqual(["brief.md", "/", "edited", "3h"]);
+    });
+
+    it("reads a change from one to two days ago as yesterday, and older changes in days — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
+      expect(ageLabel(NOW - 30_000)).toBe("now");
+      expect(ageLabel(NOW - 23 * 60 * MINUTE)).toBe("23h");
+      expect(ageLabel(NOW - 1.5 * DAY)).toBe("yesterday");
+      expect(ageLabel(NOW - 3 * DAY)).toBe("3d");
+      expect(ageLabel(NOW - 10 * DAY)).toBe("1w");
+    });
+
+    it("renders nothing when there are no recent files", () => {
+      const { container } = render(<RecentFilesSection files={[]} now={NOW} {...handlers} />);
+
+      expect(container.innerHTML).toBe("");
+    });
+  });
+
   describe("ProjectFilesView()", () => {
     function makeProjectFolder() {
-      const funnel = makeFile(`${PROJECT_FOLDER}/outputs/charts/funnel.png`);
+      const hourAgo = Date.now() - 60 * MINUTE;
+      const dayAgo = Date.now() - DAY;
+      const funnel = makeFile(`${PROJECT_FOLDER}/outputs/charts/funnel.png`, {
+        ctime: dayAgo,
+        mtime: dayAgo,
+      });
       const charts = makeFolder(`${PROJECT_FOLDER}/outputs/charts`, [funnel]);
-      const timeline = makeFile(`${PROJECT_FOLDER}/outputs/timeline.md`);
+      const timeline = makeFile(`${PROJECT_FOLDER}/outputs/timeline.md`, {
+        ctime: hourAgo,
+        mtime: hourAgo,
+      });
       const outputs = makeFolder(`${PROJECT_FOLDER}/outputs`, [charts, timeline]);
       const agents = makeFile(`${PROJECT_FOLDER}/AGENTS.md`);
       const root = makeFolder(PROJECT_FOLDER, [makeFile(CONFIG_PATH), agents, outputs]);
@@ -487,11 +688,102 @@ describe("ProjectFilesView", () => {
       expect(rowNames()).toEqual(["outputs"]);
     });
 
+    it("shows Recent above the Project folder tree", () => {
+      const { root } = makeProjectFolder();
+
+      renderView(makeFakeVault(root));
+
+      const recent = screen.getByRole("region", { name: "Recent" });
+      const tree = screen.getByRole("region", { name: "Project folder" });
+      expect(recent.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(recentNames()).toEqual(["timeline.md", "funnel.png"]);
+    });
+
+    it("hides Recent when the project folder holds only files Recent leaves out", () => {
+      const root = makeFolder(PROJECT_FOLDER, [
+        makeFile(CONFIG_PATH),
+        makeFile(`${PROJECT_FOLDER}/AGENTS.md`),
+      ]);
+
+      renderView(makeFakeVault(root));
+
+      expect(screen.queryByRole("region", { name: "Recent" })).toBeNull();
+      expect(rowNames()).toEqual(["AGENTS.md"]);
+    });
+
+    it("moves a modified file to the top of Recent and labels it edited without a restart", () => {
+      const { root, funnel } = makeProjectFolder();
+      const vault = makeFakeVault(root);
+      renderView(vault);
+
+      touch(funnel, Date.now());
+      vault.emit("modify", funnel);
+
+      expect(recentNames()).toEqual(["funnel.png", "timeline.md"]);
+      expect(recentRows()[0].textContent).toContain("edited");
+    });
+
+    it("adds a newly created file to the top of Recent as new", () => {
+      const { root, outputs } = makeProjectFolder();
+      const vault = makeFakeVault(root);
+      renderView(vault);
+
+      const created = makeFile(`${PROJECT_FOLDER}/outputs/press-release.md`, {
+        ctime: Date.now(),
+        mtime: Date.now(),
+      });
+      setChildren(outputs, [...outputs.children, created]);
+      vault.emit("create", created);
+
+      expect(recentNames()).toEqual(["press-release.md", "timeline.md", "funnel.png"]);
+      expect(recentRows()[0].textContent).toContain("new");
+    });
+
+    it("opens a clicked Recent row in a tab, like a tree row", () => {
+      const { root, funnel } = makeProjectFolder();
+      const vault = makeFakeVault(root);
+      renderView(vault);
+
+      fireEvent.click(recentRows()[1]);
+
+      expect(vault.openFile).toHaveBeenCalledWith(funnel);
+    });
+
+    it("shows the file menu with Rename and Delete for a right-clicked Recent row, like a tree row", () => {
+      const { root, timeline } = makeProjectFolder();
+      const vault = makeFakeVault(root);
+      renderView(vault);
+
+      fireEvent.contextMenu(recentRows()[0]);
+
+      const menu = (Menu as unknown as jest.Mock).mock.instances.at(-1) as FakeMenu;
+      expect(vault.trigger).toHaveBeenCalledWith(
+        "file-menu",
+        menu,
+        timeline,
+        "copilot-project-files"
+      );
+      expect(menu.items.map((item) => item.title)).toEqual(["---", "Rename...", "Delete"]);
+    });
+
+    it("starts Obsidian's link drag for a dragged Recent row so the composer @-mentions it", () => {
+      const { root } = makeProjectFolder();
+      const vault = makeFakeVault(root);
+      renderView(vault);
+
+      fireEvent.dragStart(recentRows()[0], { dataTransfer: { setData: jest.fn() } });
+
+      expect(vault.onDragStart).toHaveBeenCalledWith(expect.anything(), {
+        type: "link",
+        linktext: `${PROJECT_FOLDER}/outputs/timeline`,
+      });
+    });
+
     it("stops listening to the vault once unmounted", () => {
       const { root } = makeProjectFolder();
       const vault = makeFakeVault(root);
       const { unmount } = renderView(vault);
-      expect(vault.listenerCount()).toBe(3);
+      expect(vault.listenerCount()).toBe(4);
 
       unmount();
 
