@@ -5,11 +5,6 @@ beforeAll(() => {
   (window as unknown as { activeDocument: Document }).activeDocument = window.document;
 });
 
-const updateProject = jest.fn().mockResolvedValue({ project: {} });
-jest.mock("@/projects/ProjectFileManager", () => ({
-  ProjectFileManager: { getInstance: () => ({ updateProject }) },
-}));
-
 const getCachedProjectRecordById = jest.fn();
 jest.mock("@/projects/state", () => ({
   getCachedProjectRecordById: (...args: unknown[]) => getCachedProjectRecordById(...args),
@@ -20,9 +15,6 @@ jest.mock("@/projects/projectPaths", () => ({
     projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
     projectsRoot: configPath.split("/").slice(0, -2).join("/"),
   }),
-}));
-jest.mock("@/components/modals/project/AddProjectModal", () => ({
-  AddProjectModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
 }));
 const revealProjectFolder = jest.fn();
 jest.mock("@/agentMode/ui/AgentProjectRowActions", () => ({
@@ -144,10 +136,10 @@ describe("ProjectInfoPopover", () => {
     expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "copilot/projects/proj-1");
   });
 
-  it("reveals the project folder from the header button", async () => {
+  it("reveals the project folder from the project files button", async () => {
     renderPopover(null);
     await screen.findByText("AGENTS.md");
-    fireEvent.click(screen.getByLabelText("Reveal project folder in vault"));
+    fireEvent.click(screen.getByLabelText("Reveal project files in vault"));
     expect(revealProjectFolder).toHaveBeenCalledWith(expect.anything(), PROJECT);
   });
 });

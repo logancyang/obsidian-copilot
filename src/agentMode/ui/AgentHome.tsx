@@ -32,7 +32,7 @@ import {
   setHomeShelfTab,
   HOME_SHELF_TAB_STORAGE_KEY,
 } from "@/agentMode/ui/homeShelfPrefs";
-import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
+import { leaveDeletedProject, projectRowActions } from "@/agentMode/ui/AgentProjectRowActions";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
@@ -655,6 +655,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     });
 
   const showHeader = isProjectScope;
+  const headerProjectActions = activeProject
+    ? projectRowActions({ app, project: activeProject })
+    : undefined;
   const collapsibleHeaderRef = useRef<HTMLDivElement>(null);
   // The collapsed header stays mounted for its animation, so it is made inert to keep its buttons out of the tab order.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
@@ -691,8 +694,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
             canLeaveProject={!sidebarOpen}
+            onOpenSettings={headerProjectActions?.edit}
+            onRevealFolder={headerProjectActions?.reveal}
+            // The project home already shows the project's files, so only a chat gets the popover.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/840
             menu={
-              activeProject ? (
+              activeProject && !isProjectLanding ? (
                 <ProjectInfoPopover
                   app={app}
                   project={activeProject}

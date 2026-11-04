@@ -13,6 +13,7 @@ const meta = {
     expanded: false,
     active: false,
     hiddenStatus: "idle",
+    onOpen: () => {},
     onToggle: () => {},
     onNewChat: () => {},
     onDeleted: () => {},
