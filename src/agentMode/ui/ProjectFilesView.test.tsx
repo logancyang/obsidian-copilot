@@ -353,6 +353,24 @@ describe("ProjectFilesView", () => {
       expect(recent.map((file) => file.name)).toEqual(["brief.md"]);
     });
 
+    it("leaves out only the project's own AGENTS.md and sources/, so same-named files and folders deeper in the project still appear", () => {
+      const folder = makeFolder(PROJECT_FOLDER, [
+        makeFolder(`${PROJECT_FOLDER}/outputs`, [
+          recentFixture("outputs/AGENTS.md", MINUTE),
+          makeFolder(`${PROJECT_FOLDER}/outputs/sources`, [
+            recentFixture("outputs/sources/citations.md", 2 * MINUTE),
+          ]),
+        ]),
+      ]);
+
+      const recent = buildRecentFiles(folder, CONFIG_PATH);
+
+      expect(recent.map((file) => file.path)).toEqual([
+        `${PROJECT_FOLDER}/outputs/AGENTS.md`,
+        `${PROJECT_FOLDER}/outputs/sources/citations.md`,
+      ]);
+    });
+
     it("labels a file new when its last change came within a minute of its creation and edited after that", () => {
       const folder = makeFolder(PROJECT_FOLDER, [
         makeFile(`${PROJECT_FOLDER}/written-once.md`, { ctime: NOW - DAY, mtime: NOW - DAY }),
@@ -375,14 +393,21 @@ describe("ProjectFilesView", () => {
       ]);
     });
 
-    it("labels a file edited when its creation time is later than its last change, because a sync tool or copy rewrote the creation time — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
+    it("compares creation and last change in either order, so a creation time a few seconds late still reads new and one a sync tool or copy set days later reads edited", () => {
       const folder = makeFolder(PROJECT_FOLDER, [
+        makeFile(`${PROJECT_FOLDER}/coarse-clock.md`, {
+          ctime: NOW - DAY + 2_000,
+          mtime: NOW - DAY,
+        }),
         makeFile(`${PROJECT_FOLDER}/synced.md`, { ctime: NOW, mtime: NOW - 3 * DAY }),
       ]);
 
-      const [synced] = buildRecentFiles(folder, CONFIG_PATH);
+      const recent = buildRecentFiles(folder, CONFIG_PATH);
 
-      expect(synced.change).toBe("edited");
+      expect(recent.map((file) => `${file.name}:${file.change}`)).toEqual([
+        "coarse-clock.md:new",
+        "synced.md:edited",
+      ]);
     });
 
     it("returns the same empty list for every folder with nothing to show", () => {

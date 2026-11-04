@@ -93,14 +93,11 @@ export function buildRecentFiles(
     .slice(0, RECENT_FILE_LIMIT)
     .map((file) => {
       const { ctime, mtime } = file.stat;
-      // A creation time later than the last change means a sync tool or copy rewrote it, so the file is not new.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/463
-      const isNew = mtime >= ctime && mtime - ctime < NEW_FILE_WINDOW_MS;
       return {
         path: file.path,
         name: file.name,
         folder: file.path.slice(folder.path.length + 1, -file.name.length),
-        change: isNew ? "new" : "edited",
+        change: Math.abs(mtime - ctime) < NEW_FILE_WINDOW_MS ? "new" : "edited",
         mtime,
       };
     });
