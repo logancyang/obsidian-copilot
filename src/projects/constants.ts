@@ -22,6 +22,5 @@ export const COPILOT_PROJECT_WEB_URLS = "copilot-project-web-urls";
 export const COPILOT_PROJECT_YOUTUBE_URLS = "copilot-project-youtube-urls";
 
 export const PROJECT_CONFIG_FILE_NAME = "project.md";
-export const PROJECT_SOURCES_FOLDER_NAME = "sources";
 
 export const PROJECTS_UNSUPPORTED_FOLDER_NAME = "unsupported";

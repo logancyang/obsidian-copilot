@@ -2,8 +2,6 @@ import { useCallback } from "react";
 import { TFile } from "obsidian";
 import { useApp } from "@/context";
 
-export const INTERNAL_DRAG_TYPE = "copilot/internal-drag";
-
 export function useNoteDrag() {
   const app = useApp();
   const handleDragStart = useCallback(
@@ -18,7 +16,7 @@ export function useNoteDrag() {
       ).dragManager;
       if (!dragManager) return;
 
-      e.dataTransfer.setData(INTERNAL_DRAG_TYPE, "true");
+      e.dataTransfer.setData("copilot/internal-drag", "true");
 
       const linkText = app.metadataCache.fileToLinktext(file, "");
       const dragData = dragManager.dragLink(e.nativeEvent, linkText);
