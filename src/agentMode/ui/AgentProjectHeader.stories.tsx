@@ -28,6 +28,7 @@ const renderHeader: StoryObj<AgentProjectHeaderProps>["render"] = (args) => (
       onOpenSettings={args.onOpenSettings}
       onRevealFolder={args.onRevealFolder}
       menu={args.menu}
+      isProjectHome={args.isProjectHome}
       orphaned={args.orphaned}
       canLeaveProject={args.canLeaveProject}
       className={args.className}
@@ -46,7 +47,10 @@ const popoverTrigger = (
   </Button>
 );
 
-export const ProjectHome: StoryObj<AgentProjectHeaderProps> = { render: renderHeader };
+export const ProjectHome: StoryObj<AgentProjectHeaderProps> = {
+  args: { menu: popoverTrigger, isProjectHome: true },
+  render: renderHeader,
+};
 
 export const InChat: StoryObj<AgentProjectHeaderProps> = {
   args: { menu: popoverTrigger },

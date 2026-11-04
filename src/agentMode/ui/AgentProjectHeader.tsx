@@ -11,6 +11,7 @@ interface AgentProjectHeaderProps {
   onOpenSettings?: () => void;
   onRevealFolder?: () => void;
   menu?: React.ReactNode;
+  isProjectHome?: boolean;
   orphaned?: boolean;
   canLeaveProject?: boolean;
   className?: string;
@@ -23,6 +24,7 @@ export const AgentProjectHeader = memo(
     onOpenSettings,
     onRevealFolder,
     menu,
+    isProjectHome = false,
     orphaned = false,
     canLeaveProject = true,
     className,
@@ -77,7 +79,9 @@ export const AgentProjectHeader = memo(
               <FolderSearch className="tw-size-4" />
             </Button>
           )}
-          {menu}
+          {/* The project home already shows the project's files, so only a chat gets the popover.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/840 */}
+          {!isProjectHome && menu}
         </>
       )}
     </div>
