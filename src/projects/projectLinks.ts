@@ -26,7 +26,21 @@ export function getDraggedVaultItems(app: App): TAbstractFile[] {
 
 type ContextSource = ProjectConfig["contextSource"];
 
-async function updateContextSource(
+let pendingContextSourceUpdate: Promise<unknown> = Promise.resolve();
+
+function updateContextSource(
+  app: App,
+  projectId: string,
+  update: (contextSource: ContextSource) => Partial<ContextSource> | null
+): Promise<boolean> {
+  // The project cache changes only after a save lands, so overlapping link or unlink actions would each start from
+  // the same list and the later save would undo the earlier one. https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  const result = pendingContextSourceUpdate.then(() => writeContextSource(app, projectId, update));
+  pendingContextSourceUpdate = result.catch(() => undefined);
+  return result;
+}
+
+async function writeContextSource(
   app: App,
   projectId: string,
   update: (contextSource: ContextSource) => Partial<ContextSource> | null

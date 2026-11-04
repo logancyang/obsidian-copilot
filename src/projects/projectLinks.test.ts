@@ -234,6 +234,27 @@ describe("projectLinks", () => {
       });
     });
 
+    it("keeps both a link unlink and a tag unlink when the second starts before the first is saved, so neither comes back — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief",
+      });
+      let releaseFirstSave!: () => void;
+      const firstSave = new Promise<void>((resolve) => (releaseFirstSave = resolve));
+      mockUpdateProject.mockImplementationOnce(async (projectId: string, next: ProjectConfig) => {
+        await firstSave;
+        return saveToCache(projectId, next);
+      });
+
+      const first = unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"));
+      const second = unlinkProjectPattern({} as App, "q4", "#launch");
+      releaseFirstSave();
+      await Promise.all([first, second]);
+
+      expect(savedInclusions()).toEqual([]);
+      expect(savedContextSource()?.webUrls).toBe("");
+    });
+
     it("returns false and writes nothing for a link that is not saved", async () => {
       await expect(
         unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"))
@@ -259,6 +280,25 @@ describe("projectLinks", () => {
       expect(savedInclusions()).toEqual(["#launch", "[[Q3 retro]]"]);
       expect(vault.delete).not.toHaveBeenCalled();
       expect(vault.trash).not.toHaveBeenCalled();
+    });
+
+    it("keeps both unlinks when the second starts before the first is saved, so neither link comes back — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {
+      seedProject({
+        inclusions: ["Research/Pricing", "Meetings"].map(encodeURIComponent).join(","),
+      });
+      let releaseFirstSave!: () => void;
+      const firstSave = new Promise<void>((resolve) => (releaseFirstSave = resolve));
+      mockUpdateProject.mockImplementationOnce(async (projectId: string, next: ProjectConfig) => {
+        await firstSave;
+        return saveToCache(projectId, next);
+      });
+
+      const first = unlinkProjectPattern({} as App, "q4", "Research/Pricing");
+      const second = unlinkProjectPattern({} as App, "q4", "Meetings");
+      releaseFirstSave();
+      await Promise.all([first, second]);
+
+      expect(savedInclusions()).toEqual([]);
     });
 
     it("returns false and writes nothing for an item that is not linked", async () => {
