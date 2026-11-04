@@ -32,13 +32,19 @@ Useful Project instructions include:
 
 Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new Project chat after changing the file so every backend reads the latest instructions. See [Instructions for Agent Chat and Quick Chat](system-prompts.md).
 
+## Browse Project files
+
+A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box. It shows the Project folder as a tree, folders first.
+
+- Select a file to open it, or a folder to expand it.
+- Drag a file into the message box to @-mention it.
+- Right-click a file or folder for its file menu.
+
 ## Add reusable context
 
-For a new Project, **Context** appears below the composer. After the Project has chats, it appears as a **Context** tab beside **Recent chats**.
+Select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
 
-You can:
-
-- drag a vault file or folder into **Context**;
+- drag a vault file or folder into **Context sources**;
 - select **URL** to add a web page or YouTube video; or
 - select **Manage** or **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
 

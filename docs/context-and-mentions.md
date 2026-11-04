@@ -61,7 +61,7 @@ Agent mentions select OpenCode, Claude, or Codex. They are different from note, 
 
 ## Reuse context with Projects
 
-For material that should be prepared for more than one chat, create a [Project](projects.md). Add saved context from the **Context** section or tab:
+For material that should be prepared for more than one chat, create a [Project](projects.md). Add saved context under **Context sources** in **Project settings**:
 
 - drag in a vault file or folder;
 - add a web page or YouTube URL; or
