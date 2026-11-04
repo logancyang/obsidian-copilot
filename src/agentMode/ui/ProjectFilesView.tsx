@@ -1,4 +1,4 @@
-import { Badge } from "@/components/ui/badge";
+import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { useApp } from "@/context";
 import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
@@ -270,9 +270,12 @@ export function ProjectFolderSection({
 
 function formatRecentAge(mtime: number, now: number): string {
   const age = formatCompactRelativeTime(mtime, now);
-  // Returning users read a day-old change as "yesterday" rather than "1d".
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  // Returning users read a day-old change as "yesterday", but only when it was made on yesterday's date.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/463
-  return age === "1d" ? "yesterday" : age;
+  const onYesterday = new Date(mtime).toDateString() === yesterday.toDateString();
+  return age === "1d" && onYesterday ? "yesterday" : age;
 }
 
 export interface RecentFilesSectionProps extends Pick<
@@ -306,16 +309,7 @@ export function RecentFilesSection({
           <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
             {file.folder || "/"}
           </span>
-          <Badge
-            className={cn(
-              "tw-shrink-0 tw-rounded tw-px-1.5 tw-py-0 tw-text-smallest tw-font-semibold",
-              file.change === "new"
-                ? "tw-bg-success tw-text-success"
-                : "tw-bg-callout-warning/20 tw-text-warning"
-            )}
-          >
-            {file.change}
-          </Badge>
+          <FileStatusLabel>{file.change}</FileStatusLabel>
           <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
             {formatRecentAge(file.mtime, now)}
           </span>

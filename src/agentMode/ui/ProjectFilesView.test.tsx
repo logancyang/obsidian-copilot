@@ -68,7 +68,7 @@ function makeFolder(path: string, children: TAbstractFile[] = []): TFolder {
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
-const NOW = Date.UTC(2026, 10, 4, 12);
+const NOW = new Date(2026, 10, 4, 12).getTime();
 
 function makeFile(path: string, stat: { ctime: number; mtime: number } = { ctime: 0, mtime: 0 }) {
   const file = new (TFile as unknown as new (path: string) => TFile)(path);
@@ -459,8 +459,8 @@ describe("ProjectFilesView", () => {
       };
     }
 
-    function ageLabel(mtime: number): string {
-      render(<RecentFilesSection files={[recentFile({ mtime })]} now={NOW} {...handlers} />);
+    function ageLabel(mtime: number, now = NOW): string {
+      render(<RecentFilesSection files={[recentFile({ mtime })]} now={now} {...handlers} />);
       const label = recentRows()[0].lastElementChild?.textContent ?? "";
       cleanup();
       return label;
@@ -491,12 +491,19 @@ describe("ProjectFilesView", () => {
       expect(brief).toEqual(["brief.md", "/", "edited", "3h"]);
     });
 
-    it("reads a change from one to two days ago as yesterday, and older changes in days — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
+    it("reads ages in minutes, hours, days and weeks, and a day-old change made on yesterday's date as yesterday — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
       expect(ageLabel(NOW - 30_000)).toBe("now");
+      expect(ageLabel(NOW - 12 * MINUTE)).toBe("12m");
       expect(ageLabel(NOW - 23 * 60 * MINUTE)).toBe("23h");
-      expect(ageLabel(NOW - 1.5 * DAY)).toBe("yesterday");
+      expect(ageLabel(NOW - 30 * 60 * MINUTE)).toBe("yesterday");
       expect(ageLabel(NOW - 3 * DAY)).toBe("3d");
       expect(ageLabel(NOW - 10 * DAY)).toBe("1w");
+    });
+
+    it("reads a day-old change made two dates ago as 1d rather than yesterday — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
+      const justAfterMidnight = new Date(2026, 10, 4, 0, 30).getTime();
+
+      expect(ageLabel(justAfterMidnight - 30 * 60 * MINUTE, justAfterMidnight)).toBe("1d");
     });
 
     it("renders nothing when there are no recent files", () => {
