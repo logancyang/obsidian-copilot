@@ -1,6 +1,6 @@
-import { useChatFileDrop } from "@/hooks/useChatFileDrop";
+import { canAttachFileToChat, useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
-import type { App } from "obsidian";
+import { TFile, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
 interface FakeItem {
@@ -50,6 +50,22 @@ function Harness({ app }: { app: App }) {
 }
 
 describe("useChatFileDrop", () => {
+  describe("canAttachFileToChat()", () => {
+    const fileAt = (path: string) => new (TFile as unknown as new (path: string) => TFile)(path);
+
+    it("accepts notes, canvases, bases, PDFs and images that a composer drop attaches", () => {
+      const paths = ["a.md", "b.canvas", "c.base", "d.pdf", "e.png", "f.jpg", "g.webp"];
+
+      expect(paths.filter((path) => canAttachFileToChat(fileAt(path)))).toEqual(paths);
+    });
+
+    it("rejects CSV, text and source files that a composer drop reports as unsupported", () => {
+      expect(
+        ["data.csv", "notes.txt", "script.py"].some((path) => canAttachFileToChat(fileAt(path)))
+      ).toBe(false);
+    });
+  });
+
   describe("useChatFileDrop()", () => {
     it("clears the overlay when a drop lands in an inner zone that stops bubbling", () => {
       const { getByTestId } = render(<Harness app={{} as App} />);

@@ -63,8 +63,7 @@ Agent mentions select OpenCode, Claude, or Codex. They are different from note, 
 
 For material that should be prepared for more than one chat, create a [Project](projects.md). Add saved context under **Context sources** in **Project settings**:
 
-- drag in a vault file or folder;
-- add a web page or YouTube URL; or
+- select **URL** to add a web page or YouTube video; or
 - select **Manage context** to add links, tags, properties, folders, files, and ignored files.
 
 Project context is prepared for every new chat in that Project. If preparation is still running when you send a message, Copilot queues the message and starts it when the context is ready.

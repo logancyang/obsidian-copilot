@@ -39,7 +39,6 @@ Remaining behavioral gaps include the complete Settings navigation/save/reopen j
 - `src/agentMode/ui/ActionCard.tsx`
 - `src/agentMode/ui/AgentChatControls.tsx`
 - `src/agentMode/ui/AgentChatInput.tsx`
-- `src/agentMode/ui/AgentContextSection.tsx`
 - `src/agentMode/ui/AgentDefaultModelSetting.tsx`
 - `src/agentMode/ui/AgentHome.tsx`
 - `src/agentMode/ui/AgentHomeSection.tsx`

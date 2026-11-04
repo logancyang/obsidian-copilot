@@ -696,10 +696,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             canLeaveProject={!sidebarOpen}
             onOpenSettings={headerProjectActions?.edit}
             onRevealFolder={headerProjectActions?.reveal}
-            // The project home already shows the project's files, so only a chat gets the popover.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/840
+            isProjectHome={isProjectLanding}
             menu={
-              activeProject && !isProjectLanding ? (
+              activeProject ? (
                 <ProjectInfoPopover
                   app={app}
                   project={activeProject}

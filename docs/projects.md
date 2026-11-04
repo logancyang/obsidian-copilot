@@ -39,7 +39,7 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 **Recent** lists the five most recently changed files in the Project folder, newest first, with each file's folder, **new** or **edited**, and how long ago it changed. `AGENTS.md` and files in `sources/` aren't listed. Below it, **Project folder** shows the folder as a tree, folders first.
 
 - Select a file to open it, or a folder to expand it.
-- Drag a file into the message box to @-mention it.
+- Drag a note, PDF, or image into the message box to add it to your message.
 - Right-click a file or folder for its file menu.
 
 A file that a sync tool or copy brings into the vault can show as **new** even if it was only edited.
@@ -48,9 +48,8 @@ A file that a sync tool or copy brings into the vault can show as **new** even i
 
 Select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
 
-- drag a vault file or folder into **Context sources**;
 - select **URL** to add a web page or YouTube video; or
-- select **Manage** or **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
+- select **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
 
 Tags match tags stored in note properties. Properties can target notes by a frontmatter field, such as `Topics: Physics`.
 
