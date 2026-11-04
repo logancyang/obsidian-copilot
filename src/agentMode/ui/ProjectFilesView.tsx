@@ -1,6 +1,10 @@
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
+import { LinkUrlModal } from "@/components/modals/LinkUrlModal";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
+import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
+import { TagSearchModal } from "@/components/modals/TagSearchModal";
+import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,20 +23,30 @@ import {
   copyIntoProjectSources,
   getDraggedVaultItems,
   linkProjectItems,
+  linkProjectPattern,
+  linkProjectUrl,
   unlinkProjectPattern,
   unlinkProjectUrl,
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { categorizePatterns, getDecodedPatterns, getNotesWithTag } from "@/search/searchUtils";
+import {
+  categorizePatterns,
+  getDecodedPatterns,
+  getNotesWithProperty,
+  getNotesWithTag,
+  getTagPattern,
+} from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import {
   ChevronRight,
   File,
   Folder,
   Globe,
+  Link,
   type LucideIcon,
   Plus,
+  SlidersHorizontal,
   SquarePlay,
   Tag,
   X,
@@ -62,22 +76,27 @@ export interface LinkedProjectRow {
   missing: boolean;
 }
 
-interface LinkedTagNote {
+interface LinkedMatchNote {
   node: ProjectTreeNode;
   parent: string;
 }
 
-export interface LinkedTagRow {
-  tag: string;
+export interface LinkedMatchRow {
+  kind: "tag" | "property";
+  pattern: string;
+  label: string;
   count: number;
-  notes: readonly LinkedTagNote[] | null;
+  notes: readonly LinkedMatchNote[] | null;
 }
 
-export type LinkKind = "files" | "folders";
+export type LinkKind = "files" | "folders" | "tags" | "properties" | "link";
 
 const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[] = [
   { kind: "files", label: "Files", icon: File },
   { kind: "folders", label: "Folders", icon: Folder },
+  { kind: "tags", label: "Tags", icon: Tag },
+  { kind: "properties", label: "Properties", icon: SlidersHorizontal },
+  { kind: "link", label: "Link", icon: Link },
 ];
 
 export const FILES_DROP_HIGHLIGHT =
@@ -85,7 +104,7 @@ export const FILES_DROP_HIGHLIGHT =
 
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
-const EMPTY_TAGS: readonly LinkedTagRow[] = Object.freeze([]);
+const EMPTY_MATCHES: readonly LinkedMatchRow[] = Object.freeze([]);
 const NO_EXPANDED_FOLDERS: ReadonlySet<string> = new Set();
 const FILE_MENU_SOURCE = "copilot-project-files";
 
@@ -163,25 +182,43 @@ export function buildLinkedRows(
   return [...folderRows, ...noteRows];
 }
 
-export function buildLinkedTagRows(
+export function buildLinkedMatchRows(
   app: App,
   inclusions: string | undefined,
   expandedPaths: ReadonlySet<string>
-): readonly LinkedTagRow[] {
-  const { tagPatterns } = categorizePatterns([...new Set(getDecodedPatterns(inclusions ?? ""))]);
-  if (tagPatterns.length === 0) return EMPTY_TAGS;
-  return tagPatterns.map((tag) => {
-    const files = getNotesWithTag(app, tag);
-    const notes = expandedPaths.has(tag)
-      ? files.map(
-          (file): LinkedTagNote => ({
-            node: { kind: "file", path: file.path, name: file.name },
-            parent: parentPath(file.path),
-          })
-        )
-      : null;
-    return { tag, count: files.length, notes };
+): readonly LinkedMatchRow[] {
+  const { tagPatterns, propertyPatterns } = categorizePatterns([
+    ...new Set(getDecodedPatterns(inclusions ?? "")),
+  ]);
+  if (tagPatterns.length + propertyPatterns.length === 0) return EMPTY_MATCHES;
+  const row = (
+    kind: LinkedMatchRow["kind"],
+    pattern: string,
+    label: string,
+    files: TFile[]
+  ): LinkedMatchRow => ({
+    kind,
+    pattern,
+    label,
+    count: files.length,
+    notes: expandedPaths.has(pattern)
+      ? files.map((file) => ({
+          node: { kind: "file", path: file.path, name: file.name },
+          parent: parentPath(file.path),
+        }))
+      : null,
   });
+  return [
+    ...tagPatterns.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
+    ...propertyPatterns.map((pattern) =>
+      row(
+        "property",
+        pattern,
+        getBadgeLabel({ pattern, type: "property" }),
+        getNotesWithProperty(app, pattern)
+      )
+    ),
+  ];
 }
 
 interface FileManagerPrompts {
@@ -394,7 +431,7 @@ export function ProjectFolderSection({
 
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
-  tags: readonly LinkedTagRow[];
+  matches: readonly LinkedMatchRow[];
   urls: readonly UrlItem[];
   onLink: (kind: LinkKind) => void;
   onUnlink: (pattern: string) => void;
@@ -444,7 +481,7 @@ function LinkContextMenu({ onLink }: Pick<LinkedSectionProps, "onLink">): React.
 
 export function LinkedSection({
   rows,
-  tags,
+  matches,
   urls,
   onLink,
   onUnlink,
@@ -454,7 +491,7 @@ export function LinkedSection({
 }: LinkedSectionProps): React.ReactElement {
   return (
     <ProjectFilesSection title="Linked" action={<LinkContextMenu onLink={onLink} />}>
-      {rows.length + tags.length + urls.length === 0 && (
+      {rows.length + matches.length + urls.length === 0 && (
         <div className="tw-px-1.5 tw-py-1 tw-text-ui-small tw-text-faint">Nothing linked yet.</div>
       )}
       {rows.map((row) => (
@@ -470,22 +507,22 @@ export function LinkedSection({
           />
         </UnlinkableRow>
       ))}
-      {tags.map((row) => (
-        <UnlinkableRow key={row.tag} name={row.tag} onUnlink={() => onUnlink(row.tag)}>
+      {matches.map((row) => (
+        <UnlinkableRow key={row.pattern} name={row.label} onUnlink={() => onUnlink(row.pattern)}>
           <ProjectRow
-            path={row.tag}
+            path={row.pattern}
             expanded={row.notes !== null}
-            onActivate={() => handlers.onToggleFolder(row.tag)}
+            onActivate={() => handlers.onToggleFolder(row.pattern)}
           >
             <RowLabel
-              icon={Tag}
-              name={row.tag}
+              icon={row.kind === "tag" ? Tag : SlidersHorizontal}
+              name={row.label}
               detail={`${row.count} ${row.count === 1 ? "note" : "notes"}`}
               expanded={row.notes !== null}
             />
           </ProjectRow>
           {row.notes !== null && row.notes.length > 0 && (
-            <RowGroup label={row.tag}>
+            <RowGroup label={row.label}>
               {row.notes.map((note) => (
                 <ProjectTreeRow
                   key={note.node.path}
@@ -555,7 +592,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
   const linkedRows = buildLinkedRows(app, inclusions, expandedPaths, configPath);
-  const tagRows = buildLinkedTagRows(app, inclusions, expandedPaths);
+  const matchRows = buildLinkedMatchRows(app, inclusions, expandedPaths);
   const urls = parseProjectUrls(contextSource?.webUrls ?? "", contextSource?.youtubeUrls ?? "");
 
   const toggleFolder = (path: string): void => {
@@ -640,6 +677,9 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     );
   };
 
+  const linkPattern = (pattern: string, name = pattern): void =>
+    announceLink(linkProjectPattern(app, projectId, pattern), name);
+
   const pickToLink: Record<LinkKind, () => void> = {
     files: () =>
       new ProjectFileSelectModal({
@@ -652,6 +692,15 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         const folder = app.vault.getAbstractFileByPath(path);
         if (folder instanceof TFolder) linkItems([folder]);
       }).open(),
+    tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
+    properties: () =>
+      new PropertySearchModal(app, (pattern) =>
+        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
+      ).open(),
+    link: () =>
+      new LinkUrlModal(app, (item) =>
+        announceLink(linkProjectUrl(app, projectId, item), item.url)
+      ).open(),
   };
 
   const unlink = (pattern: string): void => {
@@ -715,7 +764,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       />
       <LinkedSection
         rows={linkedRows}
-        tags={tagRows}
+        matches={matchRows}
         urls={urls}
         onLink={(kind) => pickToLink[kind]()}
         onUnlink={unlink}

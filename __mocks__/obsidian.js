@@ -101,11 +101,13 @@ module.exports = {
       this.close = jest.fn();
       this.setPlaceholder = jest.fn();
     }
-    getSuggestions(query) {
-      const needle = query.toLowerCase();
-      return this.getItems()
-        .filter((item) => this.getItemText(item).toLowerCase().includes(needle))
-        .map((item) => ({ item, match: { score: 0, matches: [] } }));
+  },
+  SuggestModal: class SuggestModal {
+    constructor(app) {
+      this.app = app;
+      this.open = jest.fn();
+      this.close = jest.fn();
+      this.setPlaceholder = jest.fn();
     }
   },
   getAllTags: (cache) => {

@@ -2,7 +2,7 @@ import {
   FILES_DROP_HIGHLIGHT,
   LinkedSection,
   type LinkedProjectRow,
-  type LinkedTagRow,
+  type LinkedMatchRow,
   ProjectFolderSection,
   type ProjectFolderSectionProps,
   type ProjectTreeNode,
@@ -139,23 +139,41 @@ const LINKED_ROWS: LinkedProjectRow[] = [
   ),
 ];
 
-function tagNote(path: string) {
+function matchedNote(path: string) {
   const name = path.split("/").pop() ?? path;
   return { node: { kind: "file", path, name } as const, parent: path.slice(0, -name.length) };
 }
 
-const LINKED_TAGS: LinkedTagRow[] = [
+function tag(pattern: string, count: number, notes: string[] | null = null): LinkedMatchRow {
+  return { kind: "tag", pattern, label: pattern, count, notes: notes?.map(matchedNote) ?? null };
+}
+
+const LINKED_TAGS: LinkedMatchRow[] = [
+  tag("#launch", 3, [
+    "Meetings/Launch syncs/2026-10-21 sync.md",
+    "Plans/Q4 launch brief.md",
+    "Work/Clients/Northwind Traders/Research/Regional launch readiness checklist.md",
+  ]),
+  tag("#research/pricing", 1),
+  tag("#archived", 0),
+];
+
+const LINKED_PROPERTIES: LinkedMatchRow[] = [
   {
-    tag: "#launch",
-    count: 3,
-    notes: [
-      tagNote("Meetings/Launch syncs/2026-10-21 sync.md"),
-      tagNote("Plans/Q4 launch brief.md"),
-      tagNote("Work/Clients/Northwind Traders/Research/Regional launch readiness checklist.md"),
-    ],
+    kind: "property",
+    pattern: "[status:active]",
+    label: "status: active",
+    count: 2,
+    notes: ["Plans/Q4 launch brief.md", "Research/Personas.md"].map(matchedNote),
   },
-  { tag: "#research/pricing", count: 1, notes: null },
-  { tag: "#archived", count: 0, notes: null },
+  {
+    kind: "property",
+    pattern: "[client:Northwind Traders regional expansion program]",
+    label: "client: Northwind Traders regional expansion program",
+    count: 14,
+    notes: null,
+  },
+  { kind: "property", pattern: "[reviewer:]", label: "reviewer: (any)", count: 0, notes: null },
 ];
 
 const LINKED_URLS: UrlItem[] = [
@@ -169,7 +187,7 @@ const LINKED_URLS: UrlItem[] = [
 function renderWithLinked(
   rows: LinkedProjectRow[],
   isDragOver: boolean,
-  tags: LinkedTagRow[] = [],
+  matches: LinkedMatchRow[] = [],
   urls: UrlItem[] = []
 ) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
@@ -178,7 +196,7 @@ function renderWithLinked(
         <ProjectFolderSection {...props} />
         <LinkedSection
           rows={rows}
-          tags={tags}
+          matches={matches}
           urls={urls}
           onLink={() => {}}
           onUnlink={() => {}}
@@ -213,4 +231,9 @@ export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
 export const LinkedTagsAndLinks: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
   render: renderWithLinked(LINKED_ROWS.slice(0, 2), false, LINKED_TAGS, LINKED_URLS),
+};
+
+export const LinkedProperties: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS.slice(3, 4), false, LINKED_PROPERTIES),
 };
