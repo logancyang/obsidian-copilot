@@ -36,17 +36,26 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 
 A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box.
 
-**Recent** lists the five most recently changed files in the Project folder, newest first, with each file's folder, **new** or **edited**, and how long ago it changed. `AGENTS.md` and files in `sources/` aren't listed. Below it, **Project folder** shows the folder as a tree, folders first.
+**Recent** lists the five most recently changed files in the Project folder, newest first, with each file's folder, **new** or **edited**, and how long ago it changed. `AGENTS.md`, files in `sources/`, and linked items aren't listed. Below it, **Project folder** shows the folder as a tree, folders first. **Linked** lists the notes and folders linked to the Project from elsewhere in the vault.
 
 - Select a file to open it, or a folder to expand it.
 - Drag a note, PDF, or image into the message box to add it to your message.
 - Right-click a file or folder for its file menu.
 
+### Link notes and folders
+
+- Drag a note or folder from the file explorer onto the **Files** tab to link it. Folders at any depth link by their full location.
+- Select **+** beside **Linked** to search for a note or folder to link.
+- Select **Unlink** on a linked item to remove it from the Project. The note or folder stays in your vault.
+- Drag a file from your computer onto the **Files** tab to copy it into the Project's `sources/` folder. If a file with that name is already there, the copy gets a number added to its name.
+
+Linking never moves a vault file. Dropping on the message box adds the item to that message only.
+
 A file that a sync tool or copy brings into the vault can show as **new** even if it was only edited.
 
 ## Add reusable context
 
-Select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
+Link notes and folders from the **Files** tab (see [Link notes and folders](#link-notes-and-folders)). For other kinds of context, select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
 
 - select **URL** to add a web page or YouTube video; or
 - select **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.

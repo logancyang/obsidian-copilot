@@ -1,17 +1,26 @@
 import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
+import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
+import { VaultItemSearchModal } from "@/components/modals/VaultItemSearchModal";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
 import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
-import { useNoteDrag } from "@/hooks/useNoteDrag";
+import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { PROJECT_SOURCES_FOLDER_NAME } from "@/projects/constants";
+import {
+  copyIntoProjectSources,
+  getDraggedVaultItems,
+  linkProjectItems,
+  unlinkProjectPattern,
+} from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
-import { getCachedProjectRecordById } from "@/projects/state";
+import { getCachedProjectRecordById, useProjects } from "@/projects/state";
+import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
-import { ChevronRight, File, Folder } from "lucide-react";
-import { Menu, TAbstractFile, TFile, TFolder } from "obsidian";
+import { ChevronRight, File, Folder, Plus, X } from "lucide-react";
+import { App, Menu, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import React, { useEffect, useId, useReducer, useState } from "react";
 
 interface ProjectFileNode {
@@ -37,12 +46,20 @@ export interface RecentProjectFile {
   mtime: number;
 }
 
+export interface LinkedProjectRow {
+  pattern: string;
+  node: ProjectTreeNode;
+  parent: string;
+  missing: boolean;
+}
+
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_RECENT: readonly RecentProjectFile[] = Object.freeze([]);
+const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
 const RECENT_FILE_LIMIT = 5;
 const NEW_FILE_WINDOW_MS = 60_000;
 const AGE_REFRESH_MS = 60_000;
-const NO_EXPANDED_FOLDERS: ReadonlySet<string> = new Set();
+const NO_PATHS: ReadonlySet<string> = new Set();
 const FILE_MENU_SOURCE = "copilot-project-files";
 
 export function buildProjectTree(
@@ -73,9 +90,11 @@ export function buildProjectTree(
 
 export function buildRecentFiles(
   folder: TFolder,
-  configPath: string
+  configPath: string,
+  linkedPaths: ReadonlySet<string> = NO_PATHS
 ): readonly RecentProjectFile[] {
   const hidden = new Set([
+    ...linkedPaths,
     configPath,
     `${folder.path}/${AGENTS_FILE_NAME}`,
     `${folder.path}/${PROJECT_SOURCES_FOLDER_NAME}`,
@@ -103,6 +122,54 @@ export function buildRecentFiles(
         mtime,
       };
     });
+}
+
+function parentPath(path: string): string {
+  return path.slice(0, path.lastIndexOf("/") + 1);
+}
+
+export function buildLinkedRows(
+  app: App,
+  inclusions: string | undefined,
+  expandedPaths: ReadonlySet<string>,
+  configPath: string
+): readonly LinkedProjectRow[] {
+  const { folderPatterns, notePatterns } = categorizePatterns([
+    ...new Set(getDecodedPatterns(inclusions ?? "")),
+  ]);
+  if (folderPatterns.length + notePatterns.length === 0) return EMPTY_LINKED;
+  const folderRows = folderPatterns.map((pattern): LinkedProjectRow => {
+    const path = pattern.replace(/\/+$/, "");
+    const folder = app.vault.getAbstractFileByPath(path);
+    const children =
+      folder instanceof TFolder && expandedPaths.has(path)
+        ? buildProjectTree(folder, expandedPaths, configPath)
+        : null;
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    return {
+      pattern,
+      node: { kind: "folder", path, name, children },
+      parent: parentPath(path),
+      missing: !(folder instanceof TFolder),
+    };
+  });
+  const files = notePatterns.length > 0 ? app.vault.getFiles() : [];
+  const noteRows = notePatterns.flatMap((pattern): LinkedProjectRow[] => {
+    const title = pattern.slice(2, -2);
+    const matches = files.filter((file) => file.basename === title);
+    if (matches.length === 0) {
+      return [
+        { pattern, node: { kind: "file", path: pattern, name: title }, parent: "", missing: true },
+      ];
+    }
+    return matches.map((file) => ({
+      pattern,
+      node: { kind: "file", path: file.path, name: file.name },
+      parent: parentPath(file.path),
+      missing: false,
+    }));
+  });
+  return [...folderRows, ...noteRows];
 }
 
 interface FileManagerPrompts {
@@ -133,6 +200,7 @@ function ProjectTreeRows({ nodes, ...handlers }: ProjectTreeRowsProps): React.Re
 
 interface ProjectTreeRowProps extends ProjectTreeHandlers {
   node: ProjectTreeNode;
+  detail?: string;
 }
 
 interface ProjectRowProps extends Pick<ProjectTreeHandlers, "onShowFileMenu" | "onDragFile"> {
@@ -172,7 +240,7 @@ function ProjectRow({
   );
 }
 
-function ProjectTreeRow({ node, ...handlers }: ProjectTreeRowProps): React.ReactElement {
+function ProjectTreeRow({ node, detail, ...handlers }: ProjectTreeRowProps): React.ReactElement {
   const isFolder = node.kind === "folder";
   const expanded = isFolder && node.children !== null;
   const Icon = isFolder ? Folder : File;
@@ -200,6 +268,11 @@ function ProjectTreeRow({ node, ...handlers }: ProjectTreeRowProps): React.React
         <span className="tw-min-w-0 tw-truncate" title={node.name}>
           {node.name}
         </span>
+        {detail && (
+          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
+            {detail}
+          </span>
+        )}
       </ProjectRow>
       {isFolder && node.children !== null && node.children.length > 0 && (
         <div
@@ -222,12 +295,14 @@ export interface ProjectFolderSectionProps extends ProjectTreeHandlers {
 interface ProjectFilesSectionProps {
   title: string;
   detail?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }
 
 function ProjectFilesSection({
   title,
   detail,
+  action,
   children,
 }: ProjectFilesSectionProps): React.ReactElement {
   const headingId = useId();
@@ -245,6 +320,7 @@ function ProjectFilesSection({
             {detail}
           </span>
         )}
+        {action && <div className="tw-ml-auto tw-self-center">{action}</div>}
       </div>
       {children}
     </section>
@@ -318,6 +394,67 @@ export function RecentFilesSection({
   );
 }
 
+export interface LinkedSectionProps extends ProjectTreeHandlers {
+  rows: readonly LinkedProjectRow[];
+  isDragOver: boolean;
+  onAdd: () => void;
+  onUnlink: (pattern: string) => void;
+}
+
+export function LinkedSection({
+  rows,
+  isDragOver,
+  onAdd,
+  onUnlink,
+  ...handlers
+}: LinkedSectionProps): React.ReactElement {
+  return (
+    <ProjectFilesSection
+      title="Linked"
+      action={
+        <RowActionButton label="Link a note or folder" onClick={onAdd}>
+          <Plus className="tw-size-3.5" />
+        </RowActionButton>
+      }
+    >
+      {rows.map((row) => (
+        <div
+          key={`${row.pattern}\n${row.node.path}`}
+          className="tw-group tw-flex tw-min-w-0 tw-items-start"
+        >
+          <div className="tw-min-w-0 tw-flex-1">
+            <ProjectTreeRow
+              node={row.node}
+              detail={row.missing ? "Not found" : row.parent}
+              {...handlers}
+            />
+          </div>
+          <div className="tw-flex tw-shrink-0 tw-py-1 tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100">
+            <RowActionButton
+              label={`Unlink ${row.node.name}`}
+              onClick={() => onUnlink(row.pattern)}
+            >
+              <X className="tw-size-3.5" />
+            </RowActionButton>
+          </div>
+        </div>
+      ))}
+      <div
+        className={cn(
+          "tw-mx-1.5 tw-mt-1 tw-rounded tw-border tw-border-dashed tw-px-2 tw-py-1.5 tw-text-ui-smaller",
+          isDragOver
+            ? "tw-border-interactive-accent tw-text-accent"
+            : "tw-border-border tw-text-faint"
+        )}
+      >
+        {isDragOver
+          ? "Drop to link it to this project."
+          : `Drop notes or folders here to link them. Files from your computer are copied to ${PROJECT_SOURCES_FOLDER_NAME}/.`}
+      </div>
+    </ProjectFilesSection>
+  );
+}
+
 interface ProjectFilesViewProps {
   projectId: string;
 }
@@ -326,7 +463,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const app = useApp();
   const startNoteDrag = useNoteDrag();
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
-  const [expandedPaths, setExpandedPaths] = useState(NO_EXPANDED_FOLDERS);
+  const inclusions = useProjects().find((project) => project.id === projectId)?.contextSource
+    ?.inclusions;
+  const [expandedPaths, setExpandedPaths] = useState(NO_PATHS);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
 
   useEffect(() => {
@@ -349,8 +489,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const folder = app.vault.getAbstractFileByPath(folderPath);
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
+  const linkedRows = buildLinkedRows(app, inclusions, expandedPaths, configPath);
+  const linkedPaths = new Set(linkedRows.filter((row) => !row.missing).map((row) => row.node.path));
   const recentFiles =
-    folder instanceof TFolder ? buildRecentFiles(folder, configPath) : EMPTY_RECENT;
+    folder instanceof TFolder ? buildRecentFiles(folder, configPath, linkedPaths) : EMPTY_RECENT;
 
   const toggleFolder = (path: string): void => {
     setExpandedPaths((previous) => {
@@ -409,9 +551,70 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     startNoteDrag(event, file);
   };
 
+  const reportFailure = (message: string) => (error: unknown) => {
+    logError(`[ProjectFilesView] ${message}`, error);
+    new Notice(`Could not ${message}.`);
+  };
+
+  const linkItems = (items: readonly TAbstractFile[]): void => {
+    // The project folder is already the agent's workspace, so linking its own files would only hide them from Recent.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+    const outside = items.filter(
+      (item) => item.path !== folderPath && !item.path.startsWith(`${folderPath}/`)
+    );
+    const linking =
+      outside.length > 0 ? linkProjectItems(app, projectId, outside) : Promise.resolve(false);
+    linking
+      .then((linked) => {
+        const names = outside.map((item) => item.name).join(", ");
+        new Notice(linked ? `Linked ${names} to the project` : "Already in this project");
+      })
+      .catch(reportFailure("link to the project"));
+  };
+
+  const unlink = (pattern: string): void => {
+    unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
+  };
+
+  const acceptsDrag = (event: React.DragEvent): boolean =>
+    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+
+  const dropOnFiles = (event: React.DragEvent): void => {
+    if (!acceptsDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+    const items = getDraggedVaultItems(app);
+    if (items.length > 0) return linkItems(items);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+    copyIntoProjectSources(app, folderPath, files)
+      .then((copies) => {
+        const names = copies.map((copy) => copy.name).join(", ");
+        new Notice(`Copied ${names} into ${PROJECT_SOURCES_FOLDER_NAME}/`);
+      })
+      .catch(reportFailure(`copy into ${PROJECT_SOURCES_FOLDER_NAME}/`));
+  };
+
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
-    <>
+    <div
+      data-copilot-drop-zone
+      className={cn(
+        "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
+        isDragOver && "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring"
+      )}
+      onDragOver={(event) => {
+        if (!acceptsDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setIsDragOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragOver(false);
+      }}
+      onDrop={dropOnFiles}
+    >
       <RecentFilesSection files={recentFiles} now={Date.now()} {...rowHandlers} />
       <ProjectFolderSection
         folderPath={folderPath}
@@ -419,6 +622,14 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         onToggleFolder={toggleFolder}
         {...rowHandlers}
       />
-    </>
+      <LinkedSection
+        rows={linkedRows}
+        isDragOver={isDragOver}
+        onAdd={() => new VaultItemSearchModal(app, (item) => linkItems([item])).open()}
+        onUnlink={unlink}
+        onToggleFolder={toggleFolder}
+        {...rowHandlers}
+      />
+    </div>
   );
 }

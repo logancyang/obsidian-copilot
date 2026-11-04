@@ -1,4 +1,6 @@
 import {
+  LinkedSection,
+  type LinkedProjectRow,
   ProjectFolderSection,
   RecentFilesSection,
   type ProjectFolderSectionProps,
@@ -121,4 +123,99 @@ export const DeeplyNested: StoryObj<ProjectFolderSectionProps> = {
       file("AGENTS.md"),
     ],
   },
+};
+
+function linked(
+  pattern: string,
+  node: ProjectTreeNode,
+  parent: string,
+  missing = false
+): LinkedProjectRow {
+  return { pattern, node, parent, missing };
+}
+
+const LINKED_ROWS: LinkedProjectRow[] = [
+  linked(
+    "Meetings/Launch syncs",
+    {
+      kind: "folder",
+      path: "Meetings/Launch syncs",
+      name: "Launch syncs",
+      children: [
+        {
+          kind: "file",
+          path: "Meetings/Launch syncs/2026-10-14 sync.md",
+          name: "2026-10-14 sync.md",
+        },
+        {
+          kind: "file",
+          path: "Meetings/Launch syncs/2026-10-21 sync.md",
+          name: "2026-10-21 sync.md",
+        },
+      ],
+    },
+    "Meetings/"
+  ),
+  linked(
+    "Work/Clients/Northwind Traders/Research/Pricing",
+    {
+      kind: "folder",
+      path: "Work/Clients/Northwind Traders/Research/Pricing",
+      name: "Pricing",
+      children: null,
+    },
+    "Work/Clients/Northwind Traders/Research/"
+  ),
+  linked(
+    "Personal/Pricing",
+    { kind: "folder", path: "Personal/Pricing", name: "Pricing", children: null },
+    "Personal/"
+  ),
+  linked(
+    "[[Personas]]",
+    { kind: "file", path: "Research/Personas.md", name: "Personas.md" },
+    "Research/"
+  ),
+  linked(
+    "[[Old launch plan]]",
+    { kind: "file", path: "[[Old launch plan]]", name: "Old launch plan" },
+    "",
+    true
+  ),
+];
+
+function renderWithLinked(rows: LinkedProjectRow[], isDragOver: boolean) {
+  function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
+    return (
+      <>
+        <ProjectFolderSection {...props} />
+        <LinkedSection
+          rows={rows}
+          isDragOver={isDragOver}
+          onAdd={() => {}}
+          onUnlink={() => {}}
+          onToggleFolder={() => {}}
+          onOpenFile={() => {}}
+          onShowFileMenu={() => {}}
+          onDragFile={() => {}}
+        />
+      </>
+    );
+  }
+  return FilesWithLinked;
+}
+
+export const LinkedEmpty: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked([], false),
+};
+
+export const LinkedPopulated: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS, false),
+};
+
+export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS, true),
 };
