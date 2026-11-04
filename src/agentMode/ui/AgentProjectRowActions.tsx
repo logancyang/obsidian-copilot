@@ -1,6 +1,6 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { ProjectConfig } from "@/aiParams";
-import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
+import { EditProjectModal } from "@/agentMode/ui/EditProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { logError } from "@/logger";
@@ -51,7 +51,7 @@ export interface AgentProjectRowActionsProps {
 
 export function projectRowActions({ app, project, onDeleted }: AgentProjectRowActionsProps) {
   const edit = () => {
-    new AddProjectModal(
+    new EditProjectModal(
       app,
       async (next) => {
         await ProjectFileManager.getInstance(app).updateProject(project.id, next);

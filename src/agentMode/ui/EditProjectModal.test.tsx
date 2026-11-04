@@ -39,9 +39,9 @@ jest.mock("@/utils", () => ({
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 import {
-  AddProjectModalContent,
-  type AddProjectModalContentProps,
-} from "@/components/modals/project/AddProjectModal";
+  EditProjectModalContent,
+  type EditProjectModalContentProps,
+} from "@/agentMode/ui/EditProjectModal";
 import type { ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
 import type { InstructionFilesSnapshot } from "@/instructions/agentsFile";
@@ -56,10 +56,10 @@ const PROJECT = {
 
 const PROJECT_FOLDER = "copilot/projects/proj-1";
 
-function renderModal(overrides: Partial<AddProjectModalContentProps> = {}) {
+function renderModal(overrides: Partial<EditProjectModalContentProps> = {}) {
   const onSave = overrides.onSave ?? jest.fn().mockResolvedValue(undefined);
   render(
-    <AddProjectModalContent
+    <EditProjectModalContent
       initialProject={PROJECT}
       onSave={onSave}
       onCancel={jest.fn()}
@@ -73,7 +73,7 @@ function findInstructionsBox(): Promise<HTMLTextAreaElement> {
   return screen.findByLabelText<HTMLTextAreaElement>("Project instructions");
 }
 
-describe("AddProjectModal", () => {
+describe("EditProjectModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     readAgentsFile.mockResolvedValue("");
@@ -87,7 +87,7 @@ describe("AddProjectModal", () => {
     });
   });
 
-  describe("AddProjectModalContent", () => {
+  describe("EditProjectModalContent", () => {
     it("shows legacy project.md instructions, so an upgraded project is not edited blank", async () => {
       renderModal();
 
