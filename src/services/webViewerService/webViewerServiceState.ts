@@ -49,6 +49,8 @@ export class WebViewerStateManager {
   private readonly getPageInfo: (leaf: WebViewerLeaf) => WebViewerPageInfo;
 
   private lastActiveLeaf: WebViewerLeaf | null = null;
+  private focusedWebLeaf: WebViewerLeaf | null = null;
+  private onWebTabLeave: StartActiveWebTabTrackingOptions["onWebTabLeave"];
 
   private activeWebTabState: ActiveWebTabStateSnapshot = {
     activeWebTabForMentions: null,
@@ -212,6 +214,8 @@ export class WebViewerStateManager {
     }
 
     this.activeWebTabTrackingPreserveViewTypes = [...(options.preserveOnViewTypes ?? [])];
+    this.onWebTabLeave = options.onWebTabLeave;
+    this.focusedWebLeaf = this.getActiveLeaf();
 
     const activeLeafRef = this.app.workspace.on(
       "active-leaf-change",
@@ -220,6 +224,16 @@ export class WebViewerStateManager {
           if (isWebViewerLeaf(leaf)) this.lastActiveLeaf = leaf;
         } catch (err) {
           logWarn("WebViewerStateManager failed to track active leaf:", err);
+        }
+
+        // Selecting inside a web page never reaches Obsidian's document, so a web tab's
+        // selection is read when the user moves from that tab to another leaf. A closed tab
+        // has no page left to read, so its attached selection stays until the next change.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/844
+        const leftWebLeaf = this.focusedWebLeaf;
+        this.focusedWebLeaf = isWebViewerLeaf(leaf) ? leaf : null;
+        if (leftWebLeaf !== leaf && isWebViewerLeaf(leftWebLeaf)) {
+          void this.onWebTabLeave?.(leftWebLeaf);
         }
 
         this.recomputeActiveWebTabState({ trigger: "active-leaf-change", activeLeaf: leaf });
@@ -378,6 +392,8 @@ export class WebViewerStateManager {
     };
     this.activeWebTabLeaf = null;
     this.lastActiveLeaf = null;
+    this.focusedWebLeaf = null;
+    this.onWebTabLeave = undefined;
     this.activeWebTabTrackingPreserveViewTypes = [];
   }
 

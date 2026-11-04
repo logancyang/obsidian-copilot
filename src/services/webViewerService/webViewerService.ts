@@ -185,9 +185,6 @@ export class WebViewerService {
   ): Promise<string> {
     return actions.getReaderModeMarkdown(leaf, options);
   }
-  async getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> {
-    return actions.getSelectedMarkdown(leaf);
-  }
 
   getYouTubeVideoId(url: string): string | null {
     return actions.getYouTubeVideoId(url);

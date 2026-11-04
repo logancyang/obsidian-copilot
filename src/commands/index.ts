@@ -26,15 +26,13 @@ import { requestMiyoIndexRefresh } from "@/miyo/miyoIndex";
 import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
-import { WebSelectedTextContext } from "@/types/message";
 import { isSourceModeOn } from "@/utils";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
-import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { attachSelection } from "@/selection/selectionStore";
 import { editorSelectionReport } from "@/selection/selectionWatcher";
-import { webSelectionReport } from "@/services/webViewerService/webViewerServiceSelection";
+import { readWebSelection } from "@/services/webViewerService/webViewerServiceSelection";
 
 type PublishFile = (file: TFile) => void;
 
@@ -309,24 +307,13 @@ export function registerCommands(plugin: CopilotPlugin, publish: PublishFile) {
         return;
       }
 
-      const selectedMarkdown = await service.getSelectedMarkdown(leaf);
-      if (!selectedMarkdown.trim()) {
+      const selection = await readWebSelection(leaf);
+      if (!selection.context) {
         new Notice("No text selected in the web tab");
         return;
       }
 
-      const pageInfo = service.getPageInfo(leaf);
-
-      const webSelectedTextContext: WebSelectedTextContext = {
-        id: uuidv4(),
-        content: selectedMarkdown,
-        sourceType: "web",
-        title: pageInfo.title || "Untitled",
-        url: pageInfo.url,
-        faviconUrl: pageInfo.faviconUrl || undefined,
-      };
-
-      attachSelection(webSelectionReport(webSelectedTextContext));
+      attachSelection(selection);
 
       await plugin.activateChatViewForContext();
     } catch (error) {

@@ -95,20 +95,11 @@ import {
 } from "@/constants";
 import { StartupLoadingView } from "@/components/StartupLoadingView";
 import { settingsAtom, settingsStore } from "@/settings/model";
-import type { WebSelectionTrackingOptions } from "@/services/webViewerService/webViewerServiceSelection";
-
-const mockStartSelectionTracker = jest.fn();
-const mockSelectionTrackerOptions = jest.fn();
 jest.mock("@/services/webViewerService/webViewerServiceSelection", () => ({
   ...jest.requireActual<typeof import("@/services/webViewerService/webViewerServiceSelection")>(
     "@/services/webViewerService/webViewerServiceSelection"
   ),
-  WebSelectionTracker: class {
-    constructor(options: WebSelectionTrackingOptions) {
-      mockSelectionTrackerOptions(options);
-    }
-    start = mockStartSelectionTracker;
-  },
+  readWebSelection: jest.fn(),
 }));
 import { logError, logFatalError, logInfo, logWarn } from "@/logger";
 import { migrateCommands } from "@/commands/migrator";
@@ -117,6 +108,11 @@ import { logFileManager } from "@/logFileManager";
 import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
 import { startActiveWebTabTracking } from "@/services/webViewerService/webViewerServiceSingleton";
+import {
+  readWebSelection,
+  webSelectionReport,
+} from "@/services/webViewerService/webViewerServiceSelection";
+import type { WebViewerLeaf } from "@/services/webViewerService/webViewerServiceTypes";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
@@ -139,7 +135,6 @@ function createPluginUnderTest(calls: string[]) {
     projectRegister: { cleanup: jest.fn(() => calls.push("projects")) },
     settingsUnsubscriber: jest.fn(() => calls.push("settings")),
     modelManagement: { dispose: jest.fn(() => calls.push("modelManagement")) },
-    cleanupWebSelectionWatcher: jest.fn(),
   });
 
   return plugin;
@@ -241,51 +236,6 @@ describe("main", () => {
         await plugin.openChatDeepLink({ id: "Copilot/conversations/private.md" });
 
         expect(load).not.toHaveBeenCalled();
-      });
-    });
-
-    describe("initWebSelectionWatcher()", () => {
-      it("enables desktop web selection tracking even when the retired preference was saved as false", () => {
-        settingsStore.set(settingsAtom, {
-          ...DEFAULT_SETTINGS,
-          ...{ autoAddSelectionToContext: false, autoIncludeTextSelection: false },
-        });
-        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, { app: {} });
-
-        plugin.initWebSelectionWatcher();
-
-        const options = mockSelectionTrackerOptions.mock.calls.at(
-          -1
-        )![0] as WebSelectionTrackingOptions;
-        expect(options.isEnabled()).toBe(true);
-        expect(mockStartSelectionTracker).toHaveBeenCalled();
-        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
-      });
-
-      it("attaches a web tab's selection and clears it once the tab deselects it", () => {
-        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
-        const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
-        Object.assign(plugin, { app: {} });
-        plugin.initWebSelectionWatcher();
-        const options = mockSelectionTrackerOptions.mock.calls.at(
-          -1
-        )![0] as WebSelectionTrackingOptions;
-        const quote = {
-          id: "web-1",
-          content: "Quote",
-          sourceType: "web" as const,
-          title: "Page",
-          url: "https://example.com/",
-        };
-
-        options.onSelectionChange(quote);
-        expect(getSelectedTextContexts()).toEqual([quote]);
-
-        options.onSelectionClear({ url: quote.url, reason: "selection-cleared" });
-        expect(getSelectedTextContexts()).toEqual([]);
-        (isDesktopRuntime as jest.Mock).mockReturnValue(false);
       });
     });
 
@@ -676,7 +626,38 @@ describe("main", () => {
         await finishStartup();
         expect(startActiveWebTabTracking).toHaveBeenCalledWith(plugin.app, {
           preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
+          onWebTabLeave: expect.any(Function) as unknown,
         });
+      });
+
+      it("attaches a web tab's selection when the user leaves the tab, and clears it once they leave it with nothing selected https://github.com/Brevilabs/obsidian-copilot-private/issues/844", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, finishStartup } = createLoadingPlugin();
+        plugin.onload();
+        await finishStartup();
+        const onWebTabLeave = jest.mocked(startActiveWebTabTracking).mock.calls.at(-1)![1]!
+          .onWebTabLeave!;
+        const webTab = {} as WebViewerLeaf;
+        const quote = {
+          id: "web-1",
+          content: "Quote",
+          sourceType: "web" as const,
+          title: "Page",
+          url: "https://example.com/",
+        };
+
+        jest.mocked(readWebSelection).mockResolvedValueOnce(webSelectionReport(quote));
+        await onWebTabLeave(webTab);
+        expect(getSelectedTextContexts()).toEqual([quote]);
+
+        jest.mocked(readWebSelection).mockResolvedValueOnce({ location: quote.url, context: null });
+        await onWebTabLeave(webTab);
+        expect(getSelectedTextContexts()).toEqual([]);
+        expect(readWebSelection).toHaveBeenCalledWith(webTab);
       });
 
       it.each([

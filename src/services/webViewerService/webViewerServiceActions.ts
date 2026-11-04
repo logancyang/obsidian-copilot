@@ -63,20 +63,6 @@ export async function getReaderModeMarkdown(
   }
 }
 
-export async function getSelectedText(leaf: WebViewerLeaf, trim = true): Promise<string> {
-  const webview = requireWebview(leaf);
-  const code = `(() => { try { return window.getSelection?.()?.toString?.() ?? ""; } catch { return ""; } })()`;
-
-  try {
-    const raw = await webview.executeJavaScript(code);
-    const text = toStringSafe(raw);
-    return trim ? text.trim() : text;
-  } catch (err) {
-    logError("Failed to get selected text:", err);
-    throw err;
-  }
-}
-
 export async function getSelectedMarkdown(leaf: WebViewerLeaf): Promise<string> {
   const webview = requireWebview(leaf);
 
