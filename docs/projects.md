@@ -59,7 +59,7 @@ A file that a sync tool or copy brings into the vault can show as **new** even i
 
 In a Project chat, open the Project info menu beside the name. **Changed in this chat** lists each file the chat created, edited, or deleted, newest first, with **new**, **edited**, or **deleted** and the number of lines added and removed. A file changed in several turns appears once, counted from before the chat first changed it. Select a file to open it.
 
-Below it are the same **Recent**, **Project folder**, and **Linked** sections as the **Files** tab, and they work the same way.
+Below it are the same **Recent**, **Project folder**, and **Linked** sections as the **Files** tab. To link a note or folder from here, select **+** on **Linked**.
 
 **Changed in this chat** covers the current session only. After you reload Obsidian or reopen the chat, it stays empty until the chat changes another file.
 
