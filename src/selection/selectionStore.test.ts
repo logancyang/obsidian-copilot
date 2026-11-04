@@ -2,7 +2,6 @@ import {
   attachSelection,
   clearSelection,
   dismissSelection,
-  forgetSelection,
   getSelectedTextContexts,
   reportSelection,
   subscribeSelection,
@@ -92,17 +91,6 @@ describe("selectionStore", () => {
 
       expect(getSelectedTextContexts()).toEqual([again]);
     });
-
-    it(`keeps a removed selection removed when another page reports nothing selected in between (${ISSUE_797})`, () => {
-      const excerpt = noteExcerpt("Research.md", "Excerpt");
-      select(excerpt, "elsewhere:select");
-      dismissSelection(excerpt.id);
-
-      reportSelection({ location: "https://example.com/", context: null });
-      select(noteExcerpt("Research.md", "Excerpt"), "elsewhere:select");
-
-      expect(getSelectedTextContexts()).toEqual([]);
-    });
   });
 
   describe("attachSelection()", () => {
@@ -115,30 +103,19 @@ describe("selectionStore", () => {
       reportSelection({ location: "Research.md", context: null });
       expect(getSelectedTextContexts()).toEqual([]);
     });
-
-    it(`keeps a removed command selection removed when the source then reports the same selection (${ISSUE_797})`, () => {
-      const excerpt = webExcerpt("https://example.com/", "Quote");
-      attachSelection({ location: excerpt.url, key: "command:quote", context: excerpt });
-
-      dismissSelection(excerpt.id);
-      select(webExcerpt("https://example.com/", "Quote"), "command:quote");
-
-      expect(getSelectedTextContexts()).toEqual([]);
-    });
   });
 
   describe("dismissSelection()", () => {
-    it(`keeps a removed selection removed while the same selection is reported, until it changes (${ISSUE_797})`, () => {
+    it(`removes the attached selection, which its next report attaches again (${ISSUE_842})`, () => {
       const excerpt = webExcerpt("https://example.com/", "Quote");
       select(excerpt, "dismiss:quote");
 
       dismissSelection(excerpt.id);
-      select(webExcerpt("https://example.com/", "Quote"), "dismiss:quote");
       expect(getSelectedTextContexts()).toEqual([]);
 
-      const changed = webExcerpt("https://example.com/", "Longer quote");
-      select(changed, "dismiss:longer");
-      expect(getSelectedTextContexts()).toEqual([changed]);
+      const again = webExcerpt("https://example.com/", "Quote");
+      select(again, "dismiss:quote");
+      expect(getSelectedTextContexts()).toEqual([again]);
     });
 
     it("leaves the attached selection when the id belongs to no attached selection", () => {
@@ -152,25 +129,14 @@ describe("selectionStore", () => {
   });
 
   describe("clearSelection()", () => {
-    it(`removes the selection for a new message without bringing it back on the next identical report (${ISSUE_797})`, () => {
-      select(noteExcerpt("Research.md", "Excerpt"), "sent:select");
+    it(`removes the selection for a sent message or a new chat, and its next report attaches it again (${ISSUE_842})`, () => {
+      select(noteExcerpt("Drawing.excalidraw.md", "Shape"), "sent:select");
 
       clearSelection();
-      select(noteExcerpt("Research.md", "Excerpt"), "sent:select");
-
-      expect(getSelectedTextContexts()).toEqual([]);
-    });
-  });
-
-  describe("forgetSelection()", () => {
-    it(`removes the selection for a new chat input and attaches the same still-live selection on its next report (${ISSUE_842})`, () => {
-      select(noteExcerpt("Drawing.excalidraw.md", "Shape"), "switch:select");
-
-      forgetSelection();
       expect(getSelectedTextContexts()).toEqual([]);
 
       const again = noteExcerpt("Drawing.excalidraw.md", "Shape");
-      select(again, "switch:select");
+      select(again, "sent:select");
       expect(getSelectedTextContexts()).toEqual([again]);
     });
   });

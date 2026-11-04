@@ -82,7 +82,6 @@ let mockSelectedTextContexts: SelectedTextContext[] = [];
 jest.mock("@/selection/selectionStore", () => ({
   clearSelection: jest.fn(),
   dismissSelection: jest.fn(),
-  forgetSelection: jest.fn(),
   useSelectedTextContexts: () => mockSelectedTextContexts,
 }));
 jest.mock("@/settings/model", () => ({
@@ -812,10 +811,10 @@ describe("AgentChatInput", () => {
       expect(capturedAgentBrands).toBe(FAKE_BRANDS);
     });
 
-    it("forgets the selection only when the logical chat input changes, so a still-live one can attach to the new input (https://github.com/Brevilabs/obsidian-copilot-private/issues/842)", () => {
-      const forgetSelection = jest.requireMock("@/selection/selectionStore")
-        .forgetSelection as jest.Mock;
-      forgetSelection.mockClear();
+    it("clears input-scoped context only when the logical chat input changes", () => {
+      const clearSelection = jest.requireMock("@/selection/selectionStore")
+        .clearSelection as jest.Mock;
+      clearSelection.mockClear();
       const backend = {
         sendMessage: jest.fn(),
         cancel: jest.fn(),
@@ -825,9 +824,9 @@ describe("AgentChatInput", () => {
       const view = renderInput(backend, draft);
 
       view.rerender(inputNode(backend, draft, { chatInputId: "input-1" }));
-      expect(forgetSelection).not.toHaveBeenCalled();
+      expect(clearSelection).not.toHaveBeenCalled();
       view.rerender(inputNode(backend, draft, { chatInputId: "input-2" }));
-      expect(forgetSelection).toHaveBeenCalledTimes(1);
+      expect(clearSelection).toHaveBeenCalledTimes(1);
     });
 
     it("passes the frozen empty list (not a fresh []) when not entitled", () => {
