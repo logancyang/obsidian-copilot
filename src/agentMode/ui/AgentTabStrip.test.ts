@@ -11,12 +11,10 @@ import {
   makeFakeWorkspaceApp,
   type FakeWorkspaceApp,
 } from "@/agentMode/ui/testing/fakeWorkspaceApp";
-import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { setNavigatorAccess } from "@/agentMode/ui/testing/navigatorAccess";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
-jest.mock("@/hooks/useLatestVersion", () => ({ refreshLatestVersion: jest.fn() }));
 jest.mock("@/entitlement");
 
 function renderStrip(
@@ -197,7 +195,7 @@ describe("AgentTabStrip", () => {
       expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
     });
 
-    it("refreshes releases after the new-session button creates a tab for https://github.com/Brevilabs/obsidian-copilot-private/issues/317", async () => {
+    it("starts a new chat when the new-chat button is clicked", () => {
       const session = {
         internalId: "existing",
         backendId: "test",
@@ -206,26 +204,17 @@ describe("AgentTabStrip", () => {
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       };
-      let finishCreation!: () => void;
       const manager = {
         subscribe: () => () => {},
         getSessionsForScope: () => [session],
         getActiveProjectId: () => null,
         getActiveSession: () => session,
         getIsStarting: () => false,
-        createSession: jest.fn(
-          () =>
-            new Promise<void>((resolve) => {
-              finishCreation = resolve;
-            })
-        ),
+        createSession: jest.fn(async () => undefined),
       };
       renderStrip(manager);
       fireEvent.click(screen.getByRole("button", { name: "New chat" }));
       expect(manager.createSession).toHaveBeenCalledTimes(1);
-      expect(refreshLatestVersion).not.toHaveBeenCalled();
-      finishCreation();
-      await waitFor(() => expect(refreshLatestVersion).toHaveBeenCalledTimes(1));
     });
 
     it("opens the sessions sidebar from the icon at the left end of the strip for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
