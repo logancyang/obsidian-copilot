@@ -1,5 +1,10 @@
 import { getCachedProjectRecordById } from "@/projects/state";
-import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
+import {
+  getMatchingPatterns,
+  getNotesWithTag,
+  shouldIndexFile,
+  type PatternCategory,
+} from "@/search/searchUtils";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
 
 export const MAX_MANIFEST_ENTRIES = 100;
@@ -35,6 +40,7 @@ export interface ManifestSources {
   tags: string[];
   properties: string[];
   propertyNotes: ManifestPathEntry[];
+  tagNotes: ManifestPathEntry[];
   documents: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
@@ -111,6 +117,9 @@ export function buildProjectContext(app: App, projectId: string): string {
     tags,
     properties,
     propertyNotes: propertyNoteEntries,
+    tagNotes: resolveTagNotePaths(app, tags, exclusions, adapter).filter(
+      (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
+    ),
     documents: documentEntries,
     webUrls,
     youtubeUrls,
@@ -132,6 +141,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   const expanded: ManifestLine[] = [
     ...sources.documents.map((e) => line("Document files", pathText(e))),
     ...sources.propertyNotes.map((e) => line("Notes matching an included property", pathText(e))),
+    ...sources.tagNotes.map((e) => line("Notes matching an included tag", pathText(e))),
   ];
   const lines: ManifestLine[] = [...declared, ...expanded];
 
@@ -228,6 +238,20 @@ function resolvePropertyNotePaths(
   return app.vault
     .getMarkdownFiles()
     .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map((file) => toManifestEntry(file, adapter));
+}
+
+function resolveTagNotePaths(
+  app: App,
+  tagPatterns: string[],
+  exclusions: PatternCategory | null,
+  adapter: FileSystemAdapter | null
+): ManifestPathEntry[] {
+  if (tagPatterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
+  const files = new Set(tagPatterns.flatMap((tag) => getNotesWithTag(app, tag)));
+  return [...files]
+    .filter((file) => shouldIndexFile(app, file, null, exclusions))
     .sort((a, b) => a.path.localeCompare(b.path))
     .map((file) => toManifestEntry(file, adapter));
 }

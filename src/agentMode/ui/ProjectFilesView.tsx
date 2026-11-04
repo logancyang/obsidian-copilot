@@ -1,10 +1,14 @@
 import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
-import { VaultItemSearchModal } from "@/components/modals/VaultItemSearchModal";
+import {
+  VaultItemSearchModal,
+  type VaultLinkTarget,
+} from "@/components/modals/VaultItemSearchModal";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
 import { AGENTS_FILE_NAME } from "@/instructions/agentsFile";
 import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
+import { parseProjectUrls, type UrlItem } from "@/lib/url-tag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { PROJECT_SOURCES_FOLDER_NAME } from "@/projects/constants";
@@ -12,14 +16,27 @@ import {
   copyIntoProjectSources,
   getDraggedVaultItems,
   linkProjectItems,
+  linkProjectPattern,
+  linkProjectUrl,
   unlinkProjectPattern,
+  unlinkProjectUrl,
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
+import { categorizePatterns, getDecodedPatterns, getNotesWithTag } from "@/search/searchUtils";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
-import { ChevronRight, File, Folder, Plus, X } from "lucide-react";
+import {
+  ChevronRight,
+  File,
+  Folder,
+  Globe,
+  type LucideIcon,
+  Plus,
+  SquarePlay,
+  Tag,
+  X,
+} from "lucide-react";
 import { App, Menu, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import React, { useEffect, useId, useReducer, useState } from "react";
 
@@ -53,9 +70,21 @@ export interface LinkedProjectRow {
   missing: boolean;
 }
 
+interface LinkedTagNote {
+  node: ProjectTreeNode;
+  parent: string;
+}
+
+export interface LinkedTagRow {
+  tag: string;
+  count: number;
+  notes: readonly LinkedTagNote[] | null;
+}
+
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_RECENT: readonly RecentProjectFile[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
+const EMPTY_TAGS: readonly LinkedTagRow[] = Object.freeze([]);
 const RECENT_FILE_LIMIT = 5;
 const NEW_FILE_WINDOW_MS = 60_000;
 const AGE_REFRESH_MS = 60_000;
@@ -172,6 +201,27 @@ export function buildLinkedRows(
   return [...folderRows, ...noteRows];
 }
 
+export function buildLinkedTagRows(
+  app: App,
+  inclusions: string | undefined,
+  expandedPaths: ReadonlySet<string>
+): readonly LinkedTagRow[] {
+  const { tagPatterns } = categorizePatterns([...new Set(getDecodedPatterns(inclusions ?? ""))]);
+  if (tagPatterns.length === 0) return EMPTY_TAGS;
+  return tagPatterns.map((tag) => {
+    const files = getNotesWithTag(app, tag);
+    const notes = expandedPaths.has(tag)
+      ? files.map(
+          (file): LinkedTagNote => ({
+            node: { kind: "file", path: file.path, name: file.name },
+            parent: parentPath(file.path),
+          })
+        )
+      : null;
+    return { tag, count: files.length, notes };
+  });
+}
+
 interface FileManagerPrompts {
   promptForFileRename(file: TFile): Promise<void>;
   promptForDeletion(file: TAbstractFile): Promise<boolean>;
@@ -203,7 +253,9 @@ interface ProjectTreeRowProps extends ProjectTreeHandlers {
   detail?: string;
 }
 
-interface ProjectRowProps extends Pick<ProjectTreeHandlers, "onShowFileMenu" | "onDragFile"> {
+interface ProjectRowProps extends Partial<
+  Pick<ProjectTreeHandlers, "onShowFileMenu" | "onDragFile">
+> {
   path: string;
   expanded?: boolean;
   onActivate: (pane: OpenPane) => void;
@@ -219,12 +271,13 @@ function ProjectRow({
   children,
 }: ProjectRowProps): React.ReactElement {
   const isFolder = expanded !== undefined;
+  const startDrag = isFolder ? undefined : onDragFile;
   return (
     <div
       role="button"
       tabIndex={0}
       aria-expanded={expanded}
-      draggable={!isFolder}
+      draggable={startDrag !== undefined}
       className="tw-flex tw-min-w-0 tw-cursor-pointer tw-items-center tw-gap-1.5 tw-rounded tw-px-1.5 tw-py-1 tw-text-ui-small tw-text-normal hover:tw-bg-modifier-hover"
       {...(isFolder ? { onClick: () => onActivate(false) } : openLinkClickProps(onActivate))}
       onKeyDown={(event) => {
@@ -232,8 +285,58 @@ function ProjectRow({
         event.preventDefault();
         onActivate(false);
       }}
-      onContextMenu={(event) => onShowFileMenu(path, event)}
-      onDragStart={isFolder ? undefined : (event) => onDragFile(path, event)}
+      onContextMenu={onShowFileMenu && ((event) => onShowFileMenu(path, event))}
+      onDragStart={startDrag && ((event) => startDrag(path, event))}
+    >
+      {children}
+    </div>
+  );
+}
+
+interface RowLabelProps {
+  icon: LucideIcon;
+  name: string;
+  title?: string;
+  detail?: string;
+  expanded?: boolean;
+}
+
+function RowLabel({
+  icon: Icon,
+  name,
+  title = name,
+  detail,
+  expanded,
+}: RowLabelProps): React.ReactElement {
+  return (
+    <>
+      <ChevronRight
+        aria-hidden="true"
+        className={cn(
+          "tw-size-3.5 tw-shrink-0 tw-text-faint",
+          expanded === undefined && "tw-invisible",
+          expanded && "tw-rotate-90"
+        )}
+      />
+      <Icon aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
+      <span className="tw-min-w-0 tw-truncate" title={title}>
+        {name}
+      </span>
+      {detail && (
+        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
+          {detail}
+        </span>
+      )}
+    </>
+  );
+}
+
+function RowGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="tw-ml-3 tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-1"
     >
       {children}
     </div>
@@ -242,46 +345,30 @@ function ProjectRow({
 
 function ProjectTreeRow({ node, detail, ...handlers }: ProjectTreeRowProps): React.ReactElement {
   const isFolder = node.kind === "folder";
-  const expanded = isFolder && node.children !== null;
-  const Icon = isFolder ? Folder : File;
+  const expanded = isFolder ? node.children !== null : undefined;
 
   return (
     <>
       <ProjectRow
         path={node.path}
-        expanded={isFolder ? expanded : undefined}
+        expanded={expanded}
         onActivate={(pane) =>
           isFolder ? handlers.onToggleFolder(node.path) : handlers.onOpenFile(node.path, pane)
         }
         onShowFileMenu={handlers.onShowFileMenu}
         onDragFile={handlers.onDragFile}
       >
-        <ChevronRight
-          aria-hidden="true"
-          className={cn(
-            "tw-size-3.5 tw-shrink-0 tw-text-faint",
-            !isFolder && "tw-invisible",
-            expanded && "tw-rotate-90"
-          )}
+        <RowLabel
+          icon={isFolder ? Folder : File}
+          name={node.name}
+          detail={detail}
+          expanded={expanded}
         />
-        <Icon aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
-        <span className="tw-min-w-0 tw-truncate" title={node.name}>
-          {node.name}
-        </span>
-        {detail && (
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
-            {detail}
-          </span>
-        )}
       </ProjectRow>
       {isFolder && node.children !== null && node.children.length > 0 && (
-        <div
-          role="group"
-          aria-label={node.name}
-          className="tw-ml-3 tw-border-0 tw-border-l tw-border-solid tw-border-border tw-pl-1"
-        >
+        <RowGroup label={node.name}>
           <ProjectTreeRows nodes={node.children} {...handlers} />
-        </div>
+        </RowGroup>
       )}
     </>
   );
@@ -396,49 +483,109 @@ export function RecentFilesSection({
 
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
+  tags: readonly LinkedTagRow[];
+  urls: readonly UrlItem[];
   isDragOver: boolean;
   onAdd: () => void;
   onUnlink: (pattern: string) => void;
+  onOpenUrl: (url: string) => void;
+  onUnlinkUrl: (item: UrlItem) => void;
+}
+
+interface UnlinkableRowProps {
+  name: string;
+  onUnlink: () => void;
+  children: React.ReactNode;
+}
+
+function UnlinkableRow({ name, onUnlink, children }: UnlinkableRowProps): React.ReactElement {
+  return (
+    <div className="tw-group tw-flex tw-min-w-0 tw-items-start">
+      <div className="tw-min-w-0 tw-flex-1">{children}</div>
+      <div className="tw-flex tw-shrink-0 tw-py-1 tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100">
+        <RowActionButton label={`Unlink ${name}`} onClick={onUnlink}>
+          <X className="tw-size-3.5" />
+        </RowActionButton>
+      </div>
+    </div>
+  );
 }
 
 export function LinkedSection({
   rows,
+  tags,
+  urls,
   isDragOver,
   onAdd,
   onUnlink,
+  onOpenUrl,
+  onUnlinkUrl,
   ...handlers
 }: LinkedSectionProps): React.ReactElement {
   return (
     <ProjectFilesSection
       title="Linked"
       action={
-        <RowActionButton label="Link a note or folder" onClick={onAdd}>
+        <RowActionButton label="Link a note, folder, tag or web link" onClick={onAdd}>
           <Plus className="tw-size-3.5" />
         </RowActionButton>
       }
     >
       {rows.map((row) => (
-        <div
+        <UnlinkableRow
           key={`${row.pattern}\n${row.node.path}`}
-          className="tw-group tw-flex tw-min-w-0 tw-items-start"
+          name={row.node.name}
+          onUnlink={() => onUnlink(row.pattern)}
         >
-          <div className="tw-min-w-0 tw-flex-1">
-            <ProjectTreeRow
-              node={row.node}
-              detail={row.missing ? "Not found" : row.parent}
-              {...handlers}
-            />
-          </div>
-          <div className="tw-flex tw-shrink-0 tw-py-1 tw-opacity-0 focus-within:tw-opacity-100 group-hover:tw-opacity-100">
-            <RowActionButton
-              label={`Unlink ${row.node.name}`}
-              onClick={() => onUnlink(row.pattern)}
-            >
-              <X className="tw-size-3.5" />
-            </RowActionButton>
-          </div>
-        </div>
+          <ProjectTreeRow
+            node={row.node}
+            detail={row.missing ? "Not found" : row.parent}
+            {...handlers}
+          />
+        </UnlinkableRow>
       ))}
+      {tags.map((row) => (
+        <UnlinkableRow key={row.tag} name={row.tag} onUnlink={() => onUnlink(row.tag)}>
+          <ProjectRow
+            path={row.tag}
+            expanded={row.notes !== null}
+            onActivate={() => handlers.onToggleFolder(row.tag)}
+          >
+            <RowLabel
+              icon={Tag}
+              name={row.tag}
+              detail={`${row.count} ${row.count === 1 ? "note" : "notes"}`}
+              expanded={row.notes !== null}
+            />
+          </ProjectRow>
+          {row.notes !== null && row.notes.length > 0 && (
+            <RowGroup label={row.tag}>
+              {row.notes.map((note) => (
+                <ProjectTreeRow
+                  key={note.node.path}
+                  node={note.node}
+                  detail={note.parent}
+                  {...handlers}
+                />
+              ))}
+            </RowGroup>
+          )}
+        </UnlinkableRow>
+      ))}
+      {urls.map((item) => {
+        const address = item.url.replace(/^https?:\/\//, "");
+        return (
+          <UnlinkableRow key={item.id} name={address} onUnlink={() => onUnlinkUrl(item)}>
+            <ProjectRow path={item.url} onActivate={() => onOpenUrl(item.url)}>
+              <RowLabel
+                icon={item.type === "youtube" ? SquarePlay : Globe}
+                name={address}
+                title={item.url}
+              />
+            </ProjectRow>
+          </UnlinkableRow>
+        );
+      })}
       <div
         className={cn(
           "tw-mx-1.5 tw-mt-1 tw-rounded tw-border tw-border-dashed tw-px-2 tw-py-1.5 tw-text-ui-smaller",
@@ -463,8 +610,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const app = useApp();
   const startNoteDrag = useNoteDrag();
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
-  const inclusions = useProjects().find((project) => project.id === projectId)?.contextSource
-    ?.inclusions;
+  const contextSource = useProjects().find((project) => project.id === projectId)?.contextSource;
+  const inclusions = contextSource?.inclusions;
   const [expandedPaths, setExpandedPaths] = useState(NO_PATHS);
   const [isDragOver, setIsDragOver] = useState(false);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
@@ -476,10 +623,17 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       app.vault.on("rename", refresh),
       app.vault.on("modify", refresh),
     ];
+    // A note's tags change only once Obsidian re-reads it, after the vault's modify event, so tag rows follow the metadata cache.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+    const metadataRefs = [
+      app.metadataCache.on("changed", refresh),
+      app.metadataCache.on("resolved", refresh),
+    ];
     const ageClock = window.setInterval(refresh, AGE_REFRESH_MS);
     return () => {
       window.clearInterval(ageClock);
       for (const ref of refs) app.vault.offref(ref);
+      for (const ref of metadataRefs) app.metadataCache.offref(ref);
     };
   }, [app]);
 
@@ -490,6 +644,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
   const linkedRows = buildLinkedRows(app, inclusions, expandedPaths, configPath);
+  const tagRows = buildLinkedTagRows(app, inclusions, expandedPaths);
+  const urls = parseProjectUrls(contextSource?.webUrls ?? "", contextSource?.youtubeUrls ?? "");
   const linkedPaths = new Set(linkedRows.filter((row) => !row.missing).map((row) => row.node.path));
   const recentFiles =
     folder instanceof TFolder ? buildRecentFiles(folder, configPath, linkedPaths) : EMPTY_RECENT;
@@ -556,24 +712,42 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     new Notice(`Could not ${message}.`);
   };
 
+  const announceLink = (linking: Promise<boolean>, names: string): void => {
+    linking
+      .then((linked) => {
+        new Notice(linked ? `Linked ${names} to the project` : "Already in this project");
+      })
+      .catch(reportFailure("link to the project"));
+  };
+
   const linkItems = (items: readonly TAbstractFile[]): void => {
     // The project folder is already the agent's workspace, so linking its own files would only hide them from Recent.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
     const outside = items.filter(
       (item) => item.path !== folderPath && !item.path.startsWith(`${folderPath}/`)
     );
-    const linking =
-      outside.length > 0 ? linkProjectItems(app, projectId, outside) : Promise.resolve(false);
-    linking
-      .then((linked) => {
-        const names = outside.map((item) => item.name).join(", ");
-        new Notice(linked ? `Linked ${names} to the project` : "Already in this project");
-      })
-      .catch(reportFailure("link to the project"));
+    announceLink(
+      outside.length > 0 ? linkProjectItems(app, projectId, outside) : Promise.resolve(false),
+      outside.map((item) => item.name).join(", ")
+    );
+  };
+
+  const linkTarget = (target: VaultLinkTarget): void => {
+    if (typeof target === "string") {
+      announceLink(linkProjectPattern(app, projectId, target), target);
+    } else if ("url" in target) {
+      announceLink(linkProjectUrl(app, projectId, target), target.url);
+    } else {
+      linkItems([target]);
+    }
   };
 
   const unlink = (pattern: string): void => {
     unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
+  };
+
+  const unlinkUrl = (item: UrlItem): void => {
+    unlinkProjectUrl(app, projectId, item).catch(reportFailure("unlink from the project"));
   };
 
   const acceptsDrag = (event: React.DragEvent): boolean =>
@@ -630,9 +804,13 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       />
       <LinkedSection
         rows={linkedRows}
+        tags={tagRows}
+        urls={urls}
         isDragOver={isDragOver}
-        onAdd={() => new VaultItemSearchModal(app, (item) => linkItems([item])).open()}
+        onAdd={() => new VaultItemSearchModal(app, linkTarget).open()}
         onUnlink={unlink}
+        onOpenUrl={(url) => window.open(url, "_blank")}
+        onUnlinkUrl={unlinkUrl}
         onToggleFolder={toggleFolder}
         {...rowHandlers}
       />

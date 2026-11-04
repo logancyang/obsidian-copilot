@@ -3,8 +3,12 @@ import {
   copyIntoProjectSources,
   getDraggedVaultItems,
   linkProjectItems,
+  linkProjectPattern,
+  linkProjectUrl,
   unlinkProjectPattern,
+  unlinkProjectUrl,
 } from "@/projects/projectLinks";
+import { createUrlItem } from "@/lib/url-tag";
 import { getCachedProjectRecordById, updateCachedProjectRecords } from "@/projects/state";
 import { App, TAbstractFile, TFile, TFolder } from "obsidian";
 
@@ -157,6 +161,85 @@ describe("projectLinks", () => {
       await expect(linkProjectItems({} as App, "q4", [makeFolder("Meetings")])).rejects.toThrow(
         "Project not found"
       );
+    });
+  });
+
+  describe("linkProjectPattern()", () => {
+    it("adds a tag beside the saved notes and folders in the shape the project editor saves it", async () => {
+      seedProject({
+        inclusions: ["[[Q3 retro]]", "Research/Pricing"].map(encodeURIComponent).join(","),
+      });
+
+      await expect(linkProjectPattern({} as App, "q4", "#launch")).resolves.toBe(true);
+
+      expect(savedContextSource()?.inclusions).toBe(
+        "%23launch,%5B%5BQ3%20retro%5D%5D,Research%2FPricing"
+      );
+    });
+
+    it("returns false and writes nothing for a tag that is already linked", async () => {
+      seedProject({ inclusions: encodeURIComponent("#launch") });
+
+      await expect(linkProjectPattern({} as App, "q4", "#launch")).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("linkProjectUrl()", () => {
+    it("saves a web page under web URLs and a YouTube video under YouTube URLs, keeping the other saved sources", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief",
+      });
+
+      await linkProjectUrl({} as App, "q4", createUrlItem("https://example.com/pricing"));
+      await linkProjectUrl({} as App, "q4", createUrlItem("https://youtu.be/dQw4w9WgXcQ"));
+
+      expect(savedContextSource()).toEqual({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief\nhttps://example.com/pricing",
+        youtubeUrls: "https://youtu.be/dQw4w9WgXcQ",
+      });
+    });
+
+    it("returns false and writes nothing for a link that is already saved", async () => {
+      seedProject({ webUrls: "https://example.com/brief" });
+
+      await expect(
+        linkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"))
+      ).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("unlinkProjectUrl()", () => {
+    it("removes only that link and leaves the other links and sources as saved", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief\nhttps://example.com/pricing",
+        youtubeUrls: "https://youtu.be/dQw4w9WgXcQ",
+      });
+
+      await expect(
+        unlinkProjectUrl({} as App, "q4", createUrlItem("https://youtu.be/dQw4w9WgXcQ"))
+      ).resolves.toBe(true);
+      await unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"));
+
+      expect(savedContextSource()).toEqual({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/pricing",
+        youtubeUrls: "",
+      });
+    });
+
+    it("returns false and writes nothing for a link that is not saved", async () => {
+      await expect(
+        unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"))
+      ).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
     });
   });
 

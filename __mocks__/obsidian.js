@@ -101,6 +101,25 @@ module.exports = {
       this.close = jest.fn();
       this.setPlaceholder = jest.fn();
     }
+    getSuggestions(query) {
+      const needle = query.toLowerCase();
+      return this.getItems()
+        .filter((item) => this.getItemText(item).toLowerCase().includes(needle))
+        .map((item) => ({ item, match: { score: 0, matches: [] } }));
+    }
+  },
+  getAllTags: (cache) => {
+    const raw = cache?.frontmatter?.tags ?? cache?.frontmatter?.tag;
+    const frontmatterTags = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(/[,\s]+/)
+        : [];
+    const tags = frontmatterTags
+      .filter((tag) => typeof tag === "string" && tag.trim())
+      .map((tag) => (tag.startsWith("#") ? tag.trim() : `#${tag.trim()}`));
+    for (const { tag } of cache?.tags ?? []) tags.push(tag);
+    return tags;
   },
   App: jest.fn().mockImplementation(() => ({
     workspace: {
