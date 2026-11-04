@@ -37,7 +37,7 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box. It shows the Project folder as a tree, folders first.
 
 - Select a file to open it, or a folder to expand it.
-- Drag a file into the message box to @-mention it.
+- Drag a note, PDF, or image into the message box to add it to your message.
 - Right-click a file or folder for its file menu.
 
 ## Add reusable context

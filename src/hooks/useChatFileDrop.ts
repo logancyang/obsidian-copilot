@@ -44,6 +44,12 @@ function parseObsidianUris(app: App, uriString: string): TFile[] {
   return files;
 }
 
+const CHAT_IMAGE_EXTENSIONS = ["png", "gif", "jpeg", "jpg", "webp"];
+
+export function canAttachFileToChat(file: TFile): boolean {
+  return CHAT_IMAGE_EXTENSIONS.includes(file.extension) || isAllowedFileForNoteContext(file);
+}
+
 function getImageMimeType(extension: string): string {
   const normalized = extension.toLowerCase();
   if (normalized === "jpg") return "image/jpeg";
@@ -135,7 +141,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         }
 
         for (const file of fileMap.values()) {
-          const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
+          const isImage = CHAT_IMAGE_EXTENSIONS.includes(file.extension);
 
           if (isImage) {
             const isDuplicate = selectedImages.some((img) => img.name === file.name);
