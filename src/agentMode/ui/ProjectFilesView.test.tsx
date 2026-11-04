@@ -932,6 +932,19 @@ describe("ProjectFilesView", () => {
       expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
     });
 
+    it("drops the highlight when a drag over it ends without a drop or dragleave, as when Escape cancels it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
+      const { vault, workNotes } = linkedFixture();
+      renderView(vault);
+      vault.setDraggable({ type: "folder", file: workNotes });
+      fireEvent.dragOver(dropZone(), { dataTransfer: { types: ["text/plain"] } });
+      expect(screen.getByText("Drop to link it to this project.")).toBeTruthy();
+
+      fireEvent.dragEnd(document);
+
+      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
+      expect(dropZone().className).not.toContain("tw-ring-2");
+    });
+
     it("ignores a drag of its own rows, so moving a row toward the message box neither highlights nor links", () => {
       const { vault, timeline } = linkedFixture();
       renderView(vault);

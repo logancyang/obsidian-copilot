@@ -608,6 +608,12 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         if (!acceptsDrag(event)) return;
         event.preventDefault();
         event.dataTransfer.dropEffect = "copy";
+        if (!isDragOver) {
+          // A drag cancelled with Escape fires no dragleave, so the highlight would stay on until the next drag.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+          const endDrag = () => setIsDragOver(false);
+          event.currentTarget.ownerDocument.addEventListener("dragend", endDrag, { once: true });
+        }
         setIsDragOver(true);
       }}
       onDragLeave={(event) => {
