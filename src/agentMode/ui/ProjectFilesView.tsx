@@ -1,9 +1,18 @@
 import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
+import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
+import { LinkUrlModal } from "@/components/modals/LinkUrlModal";
+import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
+import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
+import { TagSearchModal } from "@/components/modals/TagSearchModal";
+import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
+import { Button } from "@/components/ui/button";
 import {
-  VaultItemSearchModal,
-  type VaultLinkTarget,
-} from "@/components/modals/VaultItemSearchModal";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
 import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
@@ -22,15 +31,23 @@ import {
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { categorizePatterns, getDecodedPatterns, getNotesWithTag } from "@/search/searchUtils";
+import {
+  categorizePatterns,
+  getDecodedPatterns,
+  getNotesWithProperty,
+  getNotesWithTag,
+  getTagPattern,
+} from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import {
   ChevronRight,
   File,
   Folder,
   Globe,
+  Link,
   type LucideIcon,
   Plus,
+  SlidersHorizontal,
   SquarePlay,
   Tag,
   X,
@@ -60,20 +77,35 @@ export interface LinkedProjectRow {
   missing: boolean;
 }
 
-interface LinkedTagNote {
+interface LinkedMatchNote {
   node: ProjectTreeNode;
   parent: string;
 }
 
-export interface LinkedTagRow {
-  tag: string;
+export interface LinkedMatchRow {
+  kind: "tag" | "property";
+  pattern: string;
+  label: string;
   count: number;
-  notes: readonly LinkedTagNote[] | null;
+  notes: readonly LinkedMatchNote[] | null;
 }
+
+export type LinkKind = "files" | "folders" | "tags" | "properties" | "link";
+
+const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[] = [
+  { kind: "files", label: "Files", icon: File },
+  { kind: "folders", label: "Folders", icon: Folder },
+  { kind: "tags", label: "Tags", icon: Tag },
+  { kind: "properties", label: "Properties", icon: SlidersHorizontal },
+  { kind: "link", label: "Link", icon: Link },
+];
+
+export const FILES_DROP_HIGHLIGHT =
+  "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring";
 
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
-const EMPTY_TAGS: readonly LinkedTagRow[] = Object.freeze([]);
+const EMPTY_MATCHES: readonly LinkedMatchRow[] = Object.freeze([]);
 const NO_EXPANDED_FOLDERS: ReadonlySet<string> = new Set();
 const FILE_MENU_SOURCE = "copilot-project-files";
 
@@ -151,25 +183,43 @@ export function buildLinkedRows(
   return [...folderRows, ...noteRows];
 }
 
-export function buildLinkedTagRows(
+export function buildLinkedMatchRows(
   app: App,
   inclusions: string | undefined,
   expandedPaths: ReadonlySet<string>
-): readonly LinkedTagRow[] {
-  const { tagPatterns } = categorizePatterns([...new Set(getDecodedPatterns(inclusions ?? ""))]);
-  if (tagPatterns.length === 0) return EMPTY_TAGS;
-  return tagPatterns.map((tag) => {
-    const files = getNotesWithTag(app, tag);
-    const notes = expandedPaths.has(tag)
-      ? files.map(
-          (file): LinkedTagNote => ({
-            node: { kind: "file", path: file.path, name: file.name },
-            parent: parentPath(file.path),
-          })
-        )
-      : null;
-    return { tag, count: files.length, notes };
+): readonly LinkedMatchRow[] {
+  const { tagPatterns, propertyPatterns } = categorizePatterns([
+    ...new Set(getDecodedPatterns(inclusions ?? "")),
+  ]);
+  if (tagPatterns.length + propertyPatterns.length === 0) return EMPTY_MATCHES;
+  const row = (
+    kind: LinkedMatchRow["kind"],
+    pattern: string,
+    label: string,
+    files: TFile[]
+  ): LinkedMatchRow => ({
+    kind,
+    pattern,
+    label,
+    count: files.length,
+    notes: expandedPaths.has(pattern)
+      ? files.map((file) => ({
+          node: { kind: "file", path: file.path, name: file.name },
+          parent: parentPath(file.path),
+        }))
+      : null,
   });
+  return [
+    ...tagPatterns.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
+    ...propertyPatterns.map((pattern) =>
+      row(
+        "property",
+        pattern,
+        getBadgeLabel({ pattern, type: "property" }),
+        getNotesWithProperty(app, pattern)
+      )
+    ),
+  ];
 }
 
 interface FileManagerPrompts {
@@ -410,10 +460,9 @@ export function FileDetailRow({
 
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
-  tags: readonly LinkedTagRow[];
+  matches: readonly LinkedMatchRow[];
   urls: readonly UrlItem[];
-  isDragOver: boolean;
-  onAdd: () => void;
+  onLink: (kind: LinkKind) => void;
   onUnlink: (pattern: string) => void;
   onOpenUrl: (url: string) => void;
   onUnlinkUrl: (item: UrlItem) => void;
@@ -438,26 +487,42 @@ function UnlinkableRow({ name, onUnlink, children }: UnlinkableRowProps): React.
   );
 }
 
+function LinkContextMenu({ onLink }: Pick<LinkedSectionProps, "onLink">): React.ReactElement {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost2" size="fit" className="tw-text-ui-smaller">
+          <Plus className="tw-size-3.5" />
+          Link context
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {LINK_KINDS.map(({ kind, label, icon: Icon }) => (
+          <DropdownMenuItem key={kind} onSelect={() => onLink(kind)}>
+            <Icon />
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function LinkedSection({
   rows,
-  tags,
+  matches,
   urls,
-  isDragOver,
-  onAdd,
+  onLink,
   onUnlink,
   onOpenUrl,
   onUnlinkUrl,
   ...handlers
 }: LinkedSectionProps): React.ReactElement {
   return (
-    <ProjectFilesSection
-      title="Linked"
-      action={
-        <RowActionButton label="Link a note, folder, tag or web link" onClick={onAdd}>
-          <Plus className="tw-size-3.5" />
-        </RowActionButton>
-      }
-    >
+    <ProjectFilesSection title="Linked" action={<LinkContextMenu onLink={onLink} />}>
+      {rows.length + matches.length + urls.length === 0 && (
+        <div className="tw-px-1.5 tw-py-1 tw-text-ui-small tw-text-faint">Nothing linked yet.</div>
+      )}
       {rows.map((row) => (
         <UnlinkableRow
           key={`${row.pattern}\n${row.node.path}`}
@@ -471,22 +536,22 @@ export function LinkedSection({
           />
         </UnlinkableRow>
       ))}
-      {tags.map((row) => (
-        <UnlinkableRow key={row.tag} name={row.tag} onUnlink={() => onUnlink(row.tag)}>
+      {matches.map((row) => (
+        <UnlinkableRow key={row.pattern} name={row.label} onUnlink={() => onUnlink(row.pattern)}>
           <ProjectRow
-            path={row.tag}
+            path={row.pattern}
             expanded={row.notes !== null}
-            onActivate={() => handlers.onToggleFolder(row.tag)}
+            onActivate={() => handlers.onToggleFolder(row.pattern)}
           >
             <RowLabel
-              icon={Tag}
-              name={row.tag}
+              icon={row.kind === "tag" ? Tag : SlidersHorizontal}
+              name={row.label}
               detail={`${row.count} ${row.count === 1 ? "note" : "notes"}`}
               expanded={row.notes !== null}
             />
           </ProjectRow>
           {row.notes !== null && row.notes.length > 0 && (
-            <RowGroup label={row.tag}>
+            <RowGroup label={row.label}>
               {row.notes.map((note) => (
                 <ProjectTreeRow
                   key={note.node.path}
@@ -513,18 +578,6 @@ export function LinkedSection({
           </UnlinkableRow>
         );
       })}
-      <div
-        className={cn(
-          "tw-mx-1.5 tw-mt-1 tw-rounded tw-border tw-border-dashed tw-px-2 tw-py-1.5 tw-text-ui-smaller",
-          isDragOver
-            ? "tw-border-interactive-accent tw-text-accent"
-            : "tw-border-border tw-text-faint"
-        )}
-      >
-        {isDragOver
-          ? "Drop to link it to this project."
-          : `Drop notes or folders here to link them. Files from your computer are copied to ${PROJECT_SOURCES_FOLDER_NAME}/.`}
-      </div>
     </ProjectFilesSection>
   );
 }
@@ -568,7 +621,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
   const linkedRows = buildLinkedRows(app, inclusions, expandedPaths, configPath);
-  const tagRows = buildLinkedTagRows(app, inclusions, expandedPaths);
+  const matchRows = buildLinkedMatchRows(app, inclusions, expandedPaths);
   const urls = parseProjectUrls(contextSource?.webUrls ?? "", contextSource?.youtubeUrls ?? "");
 
   const toggleFolder = (path: string): void => {
@@ -653,14 +706,30 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     );
   };
 
-  const linkTarget = (target: VaultLinkTarget): void => {
-    if (typeof target === "string") {
-      announceLink(linkProjectPattern(app, projectId, target), target);
-    } else if ("url" in target) {
-      announceLink(linkProjectUrl(app, projectId, target), target.url);
-    } else {
-      linkItems([target]);
-    }
+  const linkPattern = (pattern: string, name = pattern): void =>
+    announceLink(linkProjectPattern(app, projectId, pattern), name);
+
+  const pickToLink: Record<LinkKind, () => void> = {
+    files: () =>
+      new ProjectFileSelectModal({
+        app,
+        onFileSelect: (file) => linkItems([file]),
+        excludeFilePaths: [],
+      }).open(),
+    folders: () =>
+      new FolderSearchModal(app, (path) => {
+        const folder = app.vault.getAbstractFileByPath(path);
+        if (folder instanceof TFolder) linkItems([folder]);
+      }).open(),
+    tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
+    properties: () =>
+      new PropertySearchModal(app, (pattern) =>
+        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
+      ).open(),
+    link: () =>
+      new LinkUrlModal(app, (item) =>
+        announceLink(linkProjectUrl(app, projectId, item), item.url)
+      ).open(),
   };
 
   const unlink = (pattern: string): void => {
@@ -697,7 +766,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       data-copilot-drop-zone
       className={cn(
         "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
-        isDragOver && "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring"
+        isDragOver && FILES_DROP_HIGHLIGHT
       )}
       onDragOver={(event) => {
         if (!acceptsDrag(event)) return;
@@ -724,10 +793,9 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       />
       <LinkedSection
         rows={linkedRows}
-        tags={tagRows}
+        matches={matchRows}
         urls={urls}
-        isDragOver={isDragOver}
-        onAdd={() => new VaultItemSearchModal(app, linkTarget).open()}
+        onLink={(kind) => pickToLink[kind]()}
         onUnlink={unlink}
         onOpenUrl={(url) => window.open(url, "_blank")}
         onUnlinkUrl={unlinkUrl}

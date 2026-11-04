@@ -92,10 +92,9 @@ function FilesView({ nodes }: { nodes: ProjectTreeNode[] }): React.ReactElement 
       <ProjectFolderSection folderPath={ROOT} nodes={nodes} onToggleFolder={noop} {...handlers} />
       <LinkedSection
         rows={LINKED_ROWS}
-        tags={[]}
+        matches={[]}
         urls={[]}
-        isDragOver={false}
-        onAdd={noop}
+        onLink={noop}
         onUnlink={noop}
         onOpenUrl={noop}
         onUnlinkUrl={noop}

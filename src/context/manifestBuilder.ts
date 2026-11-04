@@ -1,6 +1,7 @@
 import { getCachedProjectRecordById } from "@/projects/state";
 import {
   getMatchingPatterns,
+  getNotesWithProperty,
   getNotesWithTag,
   shouldIndexFile,
   type PatternCategory,
@@ -101,9 +102,13 @@ export function buildProjectContext(app: App, projectId: string): string {
   const adapter = vaultAdapter(app);
   const noteEntries = resolveNotePaths(app, notes, adapter);
   const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
-  const propertyNoteEntries = resolvePropertyNotePaths(app, properties, exclusions, adapter).filter(
-    (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
-  );
+  const propertyNoteEntries = resolveMatchingNotePaths(
+    app,
+    properties,
+    getNotesWithProperty,
+    exclusions,
+    adapter
+  ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
   // A document picked in the Files picker is already listed under Included notes, and a duplicate would spend the manifest cap. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
   const documentEntries = resolveDocumentPaths(app, inclusions, exclusions, adapter).filter(
@@ -117,7 +122,7 @@ export function buildProjectContext(app: App, projectId: string): string {
     tags,
     properties,
     propertyNotes: propertyNoteEntries,
-    tagNotes: resolveTagNotePaths(app, tags, exclusions, adapter).filter(
+    tagNotes: resolveMatchingNotePaths(app, tags, getNotesWithTag, exclusions, adapter).filter(
       (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
     ),
     documents: documentEntries,
@@ -227,29 +232,15 @@ function resolveNotePaths(
   });
 }
 
-function resolvePropertyNotePaths(
+function resolveMatchingNotePaths(
   app: App,
-  propertyPatterns: string[],
+  patterns: string[],
+  getNotes: (app: App, pattern: string) => TFile[],
   exclusions: PatternCategory | null,
   adapter: FileSystemAdapter | null
 ): ManifestPathEntry[] {
-  if (propertyPatterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
-  const inclusions: PatternCategory = { propertyPatterns };
-  return app.vault
-    .getMarkdownFiles()
-    .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => toManifestEntry(file, adapter));
-}
-
-function resolveTagNotePaths(
-  app: App,
-  tagPatterns: string[],
-  exclusions: PatternCategory | null,
-  adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  if (tagPatterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
-  const files = new Set(tagPatterns.flatMap((tag) => getNotesWithTag(app, tag)));
+  if (patterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
+  const files = new Set(patterns.flatMap((pattern) => getNotes(app, pattern)));
   return [...files]
     .filter((file) => shouldIndexFile(app, file, null, exclusions))
     .sort((a, b) => a.path.localeCompare(b.path))
