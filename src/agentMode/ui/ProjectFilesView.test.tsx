@@ -811,17 +811,25 @@ describe("ProjectFilesView", () => {
       expect(menu.items.map((item) => item.title)).toEqual(["---", "Rename...", "Delete"]);
     });
 
-    it("starts Obsidian's link drag for a dragged Recent row so the composer @-mentions it", () => {
+    it("starts Obsidian's link drag for a dragged Recent note and no drag for a Recent CSV, like tree rows", () => {
       const { root } = makeProjectFolder();
+      const csv = makeFile(`${PROJECT_FOLDER}/metrics.csv`, { ctime: 0, mtime: 0 });
+      setChildren(root, [...root.children, csv]);
       const vault = makeFakeVault(root);
       renderView(vault);
+      const [timeline, , metrics] = recentRows();
 
-      fireEvent.dragStart(recentRows()[0], { dataTransfer: { setData: jest.fn() } });
+      fireEvent.dragStart(timeline, { dataTransfer: { setData: jest.fn() } });
+      const csvDragStarted = fireEvent.dragStart(metrics, {
+        dataTransfer: { setData: jest.fn() },
+      });
 
+      expect(vault.onDragStart).toHaveBeenCalledTimes(1);
       expect(vault.onDragStart).toHaveBeenCalledWith(expect.anything(), {
         type: "link",
         linktext: `${PROJECT_FOLDER}/outputs/timeline`,
       });
+      expect(csvDragStarted).toBe(false);
     });
 
     it("advances each Recent age every minute while the tab stays open with no file changes", () => {
