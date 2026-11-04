@@ -144,6 +144,8 @@ interface FakeVault {
   onDragStart: jest.Mock;
   promptForFileRename: jest.Mock;
   promptForDeletion: jest.Mock;
+  createBinary: jest.Mock;
+  setDraggable: (draggable: unknown) => void;
 }
 
 function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault {
@@ -158,6 +160,12 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
     if (root) index(root);
     outside.forEach(index);
   };
+  const createBinary = jest.fn(async (path: string) => {
+    const created = makeFile(path);
+    filesByPath.set(path, created);
+    return created;
+  });
+  const dragManager: Record<string, unknown> = { draggable: null };
   const openFile = jest.fn().mockResolvedValue(undefined);
   const trigger = jest.fn();
   const onDragStart = jest.fn();
@@ -174,6 +182,11 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
         reindex();
         return [...filesByPath.values()].filter((entry) => entry instanceof TFile);
       },
+      adapter: {
+        exists: async (path: string) => createBinary.mock.calls.some(([p]) => p === path),
+        mkdir: jest.fn(async () => {}),
+      },
+      createBinary,
       on: (event: string, listener: VaultListener) => {
         const ref = {} as EventRef;
         listeners.set(ref, { event, listener });
@@ -187,10 +200,10 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
       trigger,
     },
     metadataCache: { fileToLinktext: (file: TFile) => file.path.replace(/\.md$/, "") },
-    dragManager: {
+    dragManager: Object.assign(dragManager, {
       dragLink: (_event: DragEvent, linkText: string) => ({ type: "link", linktext: linkText }),
       onDragStart,
-    },
+    }),
   } as unknown as App;
   return {
     app,
@@ -207,6 +220,8 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
     onDragStart,
     promptForFileRename,
     promptForDeletion,
+    createBinary,
+    setDraggable: (draggable) => (dragManager.draggable = draggable),
   };
 }
 
@@ -590,6 +605,10 @@ describe("ProjectFilesView", () => {
         .map((row) => row.querySelector("span[title]")?.textContent ?? "");
     }
 
+    function dropZone(): HTMLElement {
+      return screen.getByRole("region", { name: "Linked" }).closest("[data-copilot-drop-zone]")!;
+    }
+
     function noticeMessages(): string[] {
       return (Notice as unknown as jest.Mock).mock.calls.map(([message]) => message);
     }
@@ -653,15 +672,98 @@ describe("ProjectFilesView", () => {
       expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
     });
 
+    it("links exactly the nested folder dragged from the file explorer, so same-named folders under different parents stay apart — https://github.com/logancyang/obsidian-copilot/issues/3089", async () => {
+      const { vault, workNotes, personalNotes } = linkedFixture();
+      renderView(vault);
+
+      vault.setDraggable({ type: "folder", file: workNotes });
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["text/plain"], files: [] } });
+      await waitFor(() => expect(savedPatterns()).toEqual(["Work/Notes"]));
+      vault.setDraggable({ type: "folder", file: personalNotes });
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["text/plain"], files: [] } });
+
+      await waitFor(() => expect(savedPatterns()).toEqual(["Work/Notes", "Personal/Notes"]));
+      expect(
+        within(screen.getByRole("region", { name: "Linked" })).getAllByText(/^(Work|Personal)\/$/)
+      ).toHaveLength(2);
+    });
+
+    it("links a note dropped from the file explorer by its existing [[name]] link", async () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault);
+
+      vault.setDraggable({ type: "file", file: retro });
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["text/plain"], files: [] } });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Q3 retro.md"]));
+      expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
+    });
+
+    it("is its own drop zone, so the composer's overlay and attachment skip it, and highlights while a vault item is dragged over", () => {
+      const { vault, workNotes } = linkedFixture();
+      renderView(vault);
+      vault.setDraggable({ type: "folder", file: workNotes });
+
+      const dragOver = fireEvent.dragOver(dropZone(), {
+        dataTransfer: { types: ["text/plain"], dropEffect: "none" },
+      });
+      expect(dragOver).toBe(false);
+      expect(dropZone().className).toContain("tw-ring-2");
+      expect(dropZone().textContent).not.toMatch(/drop/i);
+
+      fireEvent.dragLeave(dropZone(), { relatedTarget: null });
+      expect(dropZone().className).not.toContain("tw-ring-2");
+    });
+
+    it("drops the highlight when a drag over it ends without a drop or dragleave, as when Escape cancels it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
+      const { vault, workNotes } = linkedFixture();
+      renderView(vault);
+      vault.setDraggable({ type: "folder", file: workNotes });
+      fireEvent.dragOver(dropZone(), { dataTransfer: { types: ["text/plain"] } });
+      expect(dropZone().className).toContain("tw-ring-2");
+
+      fireEvent.dragEnd(document);
+
+      expect(dropZone().className).not.toContain("tw-ring-2");
+    });
+
+    it("ignores a drag of its own rows, so moving a row toward the message box neither highlights nor links", () => {
+      const { vault, timeline } = linkedFixture();
+      renderView(vault);
+      vault.setDraggable({ type: "link", file: timeline });
+      const dataTransfer = { types: ["copilot/internal-drag", "text/plain"], files: [] };
+
+      const dragOver = fireEvent.dragOver(dropZone(), { dataTransfer });
+      fireEvent.drop(dropZone(), { dataTransfer });
+
+      expect(dragOver).toBe(true);
+      expect(dropZone().className).not.toContain("tw-ring-2");
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+
+    it("copies a file dropped from the computer into sources/ and links nothing", async () => {
+      const { vault } = linkedFixture();
+      renderView(vault);
+      const pdf = { name: "board-notes.pdf", arrayBuffer: async () => new ArrayBuffer(4) };
+
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["Files"], files: [pdf] } });
+
+      await waitFor(() =>
+        expect(noticeMessages()).toContain("Copied board-notes.pdf into sources/")
+      );
+      expect(vault.createBinary).toHaveBeenCalledWith(
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+        expect.any(ArrayBuffer)
+      );
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+
     it("says an item from the project folder is already in this project instead of linking it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {
       const { vault, timeline } = linkedFixture();
       renderView(vault);
 
-      chooseLinkKind("Files");
-      const [, chooseFile] = mockOpenPicker.mock.calls[0];
-      act(() => {
-        chooseFile(timeline);
-      });
+      vault.setDraggable({ type: "file", file: timeline });
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["text/plain"], files: [] } });
 
       await waitFor(() => expect(noticeMessages()).toContain("Already in this project"));
       expect(mockUpdateProject).not.toHaveBeenCalled();

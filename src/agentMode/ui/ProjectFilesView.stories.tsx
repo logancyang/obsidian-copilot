@@ -1,4 +1,5 @@
 import {
+  FILES_DROP_HIGHLIGHT,
   LinkedSection,
   type LinkedProjectRow,
   ProjectFolderSection,
@@ -6,6 +7,7 @@ import {
   type ProjectTreeNode,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { Meta, StoryObj } from "@/lib/story";
+import { cn } from "@/lib/utils";
 import React from "react";
 
 const ROOT = "copilot/projects/q4-launch";
@@ -135,10 +137,10 @@ const LINKED_ROWS: LinkedProjectRow[] = [
   ),
 ];
 
-function renderWithLinked(rows: LinkedProjectRow[]) {
+function renderWithLinked(rows: LinkedProjectRow[], isDragOver: boolean) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
     return (
-      <div className="tw-flex tw-flex-col">
+      <div className={cn("tw-flex tw-flex-col tw-rounded-md", isDragOver && FILES_DROP_HIGHLIGHT)}>
         <ProjectFolderSection {...props} />
         <LinkedSection
           rows={rows}
@@ -157,10 +159,15 @@ function renderWithLinked(rows: LinkedProjectRow[]) {
 
 export const LinkedEmpty: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-  render: renderWithLinked([]),
+  render: renderWithLinked([], false),
 };
 
 export const LinkedPopulated: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-  render: renderWithLinked(LINKED_ROWS),
+  render: renderWithLinked(LINKED_ROWS, false),
+};
+
+export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS, true),
 };
