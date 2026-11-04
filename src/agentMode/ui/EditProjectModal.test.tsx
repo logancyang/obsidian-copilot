@@ -88,6 +88,13 @@ describe("EditProjectModal", () => {
   });
 
   describe("EditProjectModalContent", () => {
+    it("focuses the project name when the dialog opens, so typing edits it right away", async () => {
+      renderModal();
+      await findInstructionsBox();
+
+      expect(document.activeElement).toBe(screen.getByDisplayValue("My Research"));
+    });
+
     it("shows legacy project.md instructions, so an upgraded project is not edited blank", async () => {
       renderModal();
 

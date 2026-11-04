@@ -64,6 +64,7 @@ export function EditProjectForm({
         <Input
           type="text"
           value={name}
+          autoFocus
           onChange={(e) => onNameChange(e.target.value)}
           onBlur={onNameBlur}
           className="tw-w-full"
