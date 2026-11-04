@@ -9,6 +9,7 @@ import { isCompactCommand } from "@/commands/compactCommand";
 import {
   clearSelection,
   dismissSelection,
+  forgetSelection,
   useSelectedTextContexts,
 } from "@/selection/selectionStore";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -215,7 +216,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   useEffect(() => {
     if (previousChatInputIdRef.current === chatInputId) return;
     previousChatInputIdRef.current = chatInputId;
-    clearSelection();
+    forgetSelection();
     mentionedAgentIdsRef.current = [];
   }, [chatInputId]);
 

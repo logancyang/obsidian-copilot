@@ -2,6 +2,7 @@ import {
   attachSelection,
   clearSelection,
   dismissSelection,
+  forgetSelection,
   getSelectedTextContexts,
   reportSelection,
   subscribeSelection,
@@ -11,6 +12,7 @@ import type { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/me
 import { act, renderHook } from "@testing-library/react";
 
 const ISSUE_797 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/797";
+const ISSUE_842 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/842";
 
 let nextId = 0;
 const noteExcerpt = (notePath: string, content: string): NoteSelectedTextContext => ({
@@ -157,6 +159,19 @@ describe("selectionStore", () => {
       select(noteExcerpt("Research.md", "Excerpt"), "sent:select");
 
       expect(getSelectedTextContexts()).toEqual([]);
+    });
+  });
+
+  describe("forgetSelection()", () => {
+    it(`removes the selection for a new chat input and attaches the same still-live selection on its next report (${ISSUE_842})`, () => {
+      select(noteExcerpt("Drawing.excalidraw.md", "Shape"), "switch:select");
+
+      forgetSelection();
+      expect(getSelectedTextContexts()).toEqual([]);
+
+      const again = noteExcerpt("Drawing.excalidraw.md", "Shape");
+      select(again, "switch:select");
+      expect(getSelectedTextContexts()).toEqual([again]);
     });
   });
 
