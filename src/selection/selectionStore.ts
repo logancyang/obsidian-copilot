@@ -12,39 +12,36 @@ export type SelectionReport = KeyedSelection | { location: string; context: null
 
 const NO_CONTEXTS = Object.freeze([]) as unknown as SelectedTextContext[];
 
-const contextAtom = atom<SelectedTextContext | null>(null);
-const lastSelectionAtom = atom<KeyedSelection | null>(null);
+const attachedAtom = atom<KeyedSelection | null>(null);
 const contextsAtom = atom((get) => {
-  const context = get(contextAtom);
-  return context ? [context] : NO_CONTEXTS;
+  const attached = get(attachedAtom);
+  return attached ? [attached.context] : NO_CONTEXTS;
 });
 
-// Sources re-report an unchanged selection on every click and keystroke, and the store remembers the last one
-// across a removed badge or a sent message, so neither brings back a selection the user has not changed. Only
-// deselecting where it was made forgets it; nothing selected in another note or page says nothing about it.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/797
+// Click-read sources re-report an unchanged selection on every click, so only a different one replaces the
+// attached badge; once the badge is sent or removed, the next report of the same selection attaches it again.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/842
 export function reportSelection(report: SelectionReport): void {
-  const last = settingsStore.get(lastSelectionAtom);
+  const attached = settingsStore.get(attachedAtom);
   if (!report.context) {
-    if (report.location !== last?.location) return;
-    settingsStore.set(lastSelectionAtom, null);
-    settingsStore.set(contextAtom, null);
-  } else if (report.key !== last?.key) {
+    // Nothing selected in another note or page says nothing about the attached selection.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/797
+    if (report.location === attached?.location) clearSelection();
+  } else if (report.key !== attached?.key) {
     attachSelection(report);
   }
 }
 
 export function attachSelection(selection: KeyedSelection): void {
-  settingsStore.set(lastSelectionAtom, selection);
-  settingsStore.set(contextAtom, selection.context);
+  settingsStore.set(attachedAtom, selection);
 }
 
 export function dismissSelection(id: string): void {
-  if (settingsStore.get(contextAtom)?.id === id) settingsStore.set(contextAtom, null);
+  if (settingsStore.get(attachedAtom)?.context.id === id) clearSelection();
 }
 
 export function clearSelection(): void {
-  settingsStore.set(contextAtom, null);
+  settingsStore.set(attachedAtom, null);
 }
 
 export function getSelectedTextContexts(): SelectedTextContext[] {
