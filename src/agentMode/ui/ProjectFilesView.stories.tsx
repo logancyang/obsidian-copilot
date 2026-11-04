@@ -1,4 +1,5 @@
 import {
+  FILES_DROP_HIGHLIGHT,
   LinkedSection,
   type LinkedProjectRow,
   type LinkedTagRow,
@@ -8,6 +9,7 @@ import {
 } from "@/agentMode/ui/ProjectFilesView";
 import type { Meta, StoryObj } from "@/lib/story";
 import { createUrlItem, type UrlItem } from "@/lib/url-tag";
+import { cn } from "@/lib/utils";
 import React from "react";
 
 const ROOT = "copilot/projects/q4-launch";
@@ -172,14 +174,13 @@ function renderWithLinked(
 ) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
     return (
-      <>
+      <div className={cn("tw-flex tw-flex-col tw-rounded-md", isDragOver && FILES_DROP_HIGHLIGHT)}>
         <ProjectFolderSection {...props} />
         <LinkedSection
           rows={rows}
           tags={tags}
           urls={urls}
-          isDragOver={isDragOver}
-          onAdd={() => {}}
+          onLink={() => {}}
           onUnlink={() => {}}
           onOpenUrl={() => {}}
           onUnlinkUrl={() => {}}
@@ -188,7 +189,7 @@ function renderWithLinked(
           onShowFileMenu={() => {}}
           onDragFile={() => {}}
         />
-      </>
+      </div>
     );
   }
   return FilesWithLinked;

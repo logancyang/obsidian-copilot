@@ -26,15 +26,21 @@ jest.mock("obsidian", () => {
 });
 
 const mockUpdateProject = jest.fn();
-const mockOpenSearch = jest.fn();
+const mockOpenPicker = jest.fn();
 
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: () => ({ updateProject: mockUpdateProject }) },
 }));
 
-jest.mock("@/components/modals/VaultItemSearchModal", () => ({
-  VaultItemSearchModal: jest.fn().mockImplementation((_app, onChoose) => ({
-    open: () => mockOpenSearch(onChoose),
+jest.mock("@/components/modals/ProjectFileSelectModal", () => ({
+  ProjectFileSelectModal: jest.fn().mockImplementation(({ onFileSelect }) => ({
+    open: () => mockOpenPicker("files", onFileSelect),
+  })),
+}));
+
+jest.mock("@/components/modals/FolderSearchModal", () => ({
+  FolderSearchModal: jest.fn().mockImplementation((_app, onChooseFolder) => ({
+    open: () => mockOpenPicker("folders", onChooseFolder),
   })),
 }));
 
@@ -51,6 +57,7 @@ import {
 import type { ProjectConfig } from "@/aiParams";
 import { createUrlItem } from "@/lib/url-tag";
 import { AppContext } from "@/context";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import {
   getCachedProjectRecordById,
   updateCachedProjectRecords,
@@ -273,9 +280,15 @@ function rowNames(): string[] {
     .map((row) => row.textContent ?? "");
 }
 
-beforeAll(() => {
-  window.activeDocument = window.document;
-});
+function chooseLinkKind(label: string): void {
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: label }));
+}
+
+beforeAll(installRadixMenuPolyfills);
 
 beforeEach(() => {
   mockUpdateProject.mockReset().mockImplementation(async (_id: string, next: ProjectConfig) => {
@@ -283,7 +296,7 @@ beforeEach(() => {
     act(() => upsertCachedProjectRecord({ ...record, project: next }));
     return record;
   });
-  mockOpenSearch.mockReset();
+  mockOpenPicker.mockReset();
   (Notice as unknown as jest.Mock).mockClear();
   updateCachedProjectRecords([
     { folderName: "q4-launch", filePath: CONFIG_PATH, project: makeProject() },
@@ -574,7 +587,7 @@ describe("ProjectFilesView", () => {
       onOpenFile: jest.fn(),
       onShowFileMenu: jest.fn(),
       onDragFile: jest.fn(),
-      onAdd: jest.fn(),
+      onLink: jest.fn(),
       onUnlink: jest.fn(),
       onOpenUrl: jest.fn(),
       onUnlinkUrl: jest.fn(),
@@ -617,9 +630,7 @@ describe("ProjectFilesView", () => {
     }
 
     it("titles the section Linked and shows each item with the folder it sits in", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} {...handlers} />);
 
       const pricing = within(linkedRegion()).getByRole("button", { name: /^Pricing/ });
       expect(pricing.textContent).toBe("PricingResearch/");
@@ -634,7 +645,6 @@ describe("ProjectFilesView", () => {
           rows={[{ ...ROWS[1], node: { ...ROWS[1].node, path: "[[Q3 retro]]" }, missing: true }]}
           tags={NO_TAGS}
           urls={NO_URLS}
-          isDragOver={false}
           {...handlers}
         />
       );
@@ -642,38 +652,32 @@ describe("ProjectFilesView", () => {
       expect(within(linkedRegion()).getByText("Not found")).toBeTruthy();
     });
 
-    it("asks for a drop and says files from the computer go to sources/", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+    it("says nothing is linked yet, with no drop hint, when the section is empty", () => {
+      render(<LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} {...handlers} />);
 
+      expect(linkedRegion().textContent).toBe("LinkedLink contextNothing linked yet.");
+    });
+
+    it("offers Files and Folders from Link context and reports the kind chosen", () => {
+      render(<LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} {...handlers} />);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const menu = screen.getByRole("menu");
       expect(
-        within(linkedRegion()).getByText(
-          "Drop notes or folders here to link them. Files from your computer are copied to sources/."
-        )
-      ).toBeTruthy();
-    });
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent)
+      ).toEqual(["Files", "Folders"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Folders" }));
 
-    it("says a drop links the item while something is dragged over the Files tab", () => {
-      render(<LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver {...handlers} />);
-
-      expect(within(linkedRegion()).getByText("Drop to link it to this project.")).toBeTruthy();
-    });
-
-    it("searches for a note, folder or tag, or takes a pasted link, from +, so linking works without dragging", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
-
-      expect(handlers.onAdd).toHaveBeenCalled();
+      expect(handlers.onLink).toHaveBeenCalledWith("folders");
     });
 
     it("unlinks an item by its saved link from its Unlink button without opening it", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Unlink Q3 retro.md" }));
 
@@ -682,9 +686,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("lists linked tags after notes and folders, then links, each tag with its note count and each link by its address — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={ROWS} tags={TAGS} urls={URLS} {...handlers} />);
 
       const rows = within(linkedRegion())
         .getAllByRole("button")
@@ -709,9 +711,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("expands or collapses a tag from its row, like a folder", () => {
-      render(
-        <LinkedSection rows={[]} tags={TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={[]} tags={TAGS} urls={NO_URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: /^#q4/ }));
 
@@ -719,9 +719,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("opens a clicked link by its full address", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={[]} tags={NO_TAGS} urls={URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: "youtu.be/dQw4w9WgXcQ" }));
 
@@ -729,7 +727,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("unlinks a tag by its saved pattern and a link by its saved address, without opening either", () => {
-      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />);
+      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Unlink #q4" }));
       fireEvent.click(screen.getByRole("button", { name: "Unlink example.com/pricing" }));
@@ -741,7 +739,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("offers no file menu and no drag on tag and link rows, which are not files, but keeps both on the notes under a tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />);
+      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} {...handlers} />);
       const tag = screen.getByRole("button", { name: /^#launch/ });
       const link = screen.getByRole("button", { name: "example.com/pricing" });
       const note = screen.getByRole("button", { name: /^brief\.md/ });
@@ -826,18 +824,35 @@ describe("ProjectFilesView", () => {
       expect(vault.app.vault.getAbstractFileByPath("Research/Pricing")).toBeTruthy();
     });
 
-    it("links the nested folder chosen from + by its full vault path", async () => {
-      const { vault, workNotes } = linkedFixture();
+    it("links the nested folder chosen from Link context's Folders picker by its full vault path", async () => {
+      const { vault } = linkedFixture();
       renderView(vault);
 
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
+      chooseLinkKind("Folders");
+      const [kind, chooseFolder] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("folders");
       act(() => {
-        mockOpenSearch.mock.calls[0][0](workNotes);
+        chooseFolder("Work/Notes");
       });
 
       await waitFor(() => expect(linkedNames()).toEqual(["Notes"]));
       expect(savedPatterns()).toEqual(["Work/Notes"]);
       expect(noticeMessages()).toContain("Linked Notes to the project");
+    });
+
+    it("links the note chosen from Link context's Files picker by its [[name]] link", async () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault);
+
+      chooseLinkKind("Files");
+      const [kind, chooseFile] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("files");
+      act(() => {
+        chooseFile(retro);
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Q3 retro.md"]));
+      expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
     });
 
     it("links exactly the nested folder dragged from the file explorer, so same-named folders under different parents stay apart — https://github.com/logancyang/obsidian-copilot/issues/3089", async () => {
@@ -876,10 +891,11 @@ describe("ProjectFilesView", () => {
         dataTransfer: { types: ["text/plain"], dropEffect: "none" },
       });
       expect(dragOver).toBe(false);
-      expect(screen.getByText("Drop to link it to this project.")).toBeTruthy();
+      expect(dropZone().className).toContain("tw-ring-2");
+      expect(dropZone().textContent).not.toMatch(/drop/i);
 
       fireEvent.dragLeave(dropZone(), { relatedTarget: null });
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
+      expect(dropZone().className).not.toContain("tw-ring-2");
     });
 
     it("drops the highlight when a drag over it ends without a drop or dragleave, as when Escape cancels it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
@@ -887,11 +903,10 @@ describe("ProjectFilesView", () => {
       renderView(vault);
       vault.setDraggable({ type: "folder", file: workNotes });
       fireEvent.dragOver(dropZone(), { dataTransfer: { types: ["text/plain"] } });
-      expect(screen.getByText("Drop to link it to this project.")).toBeTruthy();
+      expect(dropZone().className).toContain("tw-ring-2");
 
       fireEvent.dragEnd(document);
 
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
       expect(dropZone().className).not.toContain("tw-ring-2");
     });
 
@@ -905,7 +920,7 @@ describe("ProjectFilesView", () => {
       fireEvent.drop(dropZone(), { dataTransfer });
 
       expect(dragOver).toBe(true);
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
+      expect(dropZone().className).not.toContain("tw-ring-2");
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
@@ -1034,30 +1049,6 @@ describe("ProjectFilesView", () => {
         webUrls: "",
         youtubeUrls: "https://youtu.be/dQw4w9WgXcQ",
       });
-    });
-
-    it("links a tag chosen from + and a link pasted into +, saving the link by its kind", async () => {
-      renderView(taggedFixture().vault);
-
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
-      act(() => {
-        mockOpenSearch.mock.calls[0][0]("#launch");
-      });
-      await waitFor(() => expect(linkedNames()).toEqual(["#launch"]));
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
-      act(() => {
-        mockOpenSearch.mock.calls[1][0](createUrlItem("https://youtu.be/dQw4w9WgXcQ"));
-      });
-
-      await waitFor(() => expect(linkedNames()).toEqual(["#launch", "youtu.be/dQw4w9WgXcQ"]));
-      expect(savedPatterns()).toEqual(["#launch"]);
-      expect(getCachedProjectRecordById("q4")?.project.contextSource.youtubeUrls).toBe(
-        "https://youtu.be/dQw4w9WgXcQ"
-      );
-      expect(noticeMessages()).toEqual([
-        "Linked #launch to the project",
-        "Linked https://youtu.be/dQw4w9WgXcQ to the project",
-      ]);
     });
 
     it("lists the project folder's top level with folders first and the config note hidden", () => {

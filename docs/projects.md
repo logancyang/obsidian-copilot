@@ -43,7 +43,7 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 ### Link notes, folders, tags, and web pages
 
 - Drag a note or folder from the file explorer onto the **Files** tab to link it. Folders at any depth link by their full location.
-- Select **+** beside **Linked** to search for a note, folder, or tag to link, or paste a web or YouTube link.
+- Select **Link context** beside **Linked**, then **Files** or **Folders**, to pick a note or folder to link.
 - A linked tag shows how many notes have it. Select it to list those notes. A note counts when the tag is in its properties or its text, and a tag also covers the tags nested under it, so `#project` includes `#project/alpha`. The list updates as you tag and untag notes.
 - Select a linked web page or YouTube video to open it in your browser.
 - Select **Unlink** on a linked item to remove it from the Project. The note, folder, or tag stays in your vault.
