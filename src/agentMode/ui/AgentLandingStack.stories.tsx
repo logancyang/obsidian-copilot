@@ -104,21 +104,20 @@ const projectSections: AgentHomeShelfSection[] = [
 
 const allSections = [...sections, ...relevantNotesSections, ...projectSections];
 
-const projectContextBody = (
+const projectFilesBody = (
   <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-normal">
-    Context: 3 notes, 1 folder
+    Project folder: outputs, sources, AGENTS.md
   </div>
 );
 
 const projectLandingSections: AgentHomeShelfSection[] = [
-  { ...sections[0], id: "project-chats", title: "Recent chats" },
   {
-    id: "project-context",
+    id: "project-files",
     icon: <Files className="tw-size-4" />,
-    title: "Context",
-    count: 4,
-    renderBody: () => projectContextBody,
+    title: "Files",
+    renderBody: () => projectFilesBody,
   },
+  { ...sections[0], id: "project-chats", title: "Recent chats" },
 ];
 
 function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProps) {
@@ -177,7 +176,7 @@ function LandingCanvas({
       <AgentLandingStack
         hero={args.hero ?? null}
         composer={args.composer ?? null}
-        context={contextInline ? <div className="tw-pt-3">{projectContextBody}</div> : undefined}
+        context={contextInline ? <div className="tw-pt-3">{projectFilesBody}</div> : undefined}
         shelf={shelf}
       />
     </div>

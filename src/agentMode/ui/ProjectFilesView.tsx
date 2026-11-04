@@ -181,10 +181,7 @@ interface ProjectFilesViewProps {
 export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.ReactElement | null {
   const app = useApp();
   const startNoteDrag = useNoteDrag();
-  const configPath = getCachedProjectRecordById(projectId)?.filePath ?? null;
-  const folderPath = configPath
-    ? getProjectAnchorFromConfigPath(configPath).projectFolderPath
-    : null;
+  const configPath = getCachedProjectRecordById(projectId)?.filePath;
   const [expandedPaths, setExpandedPaths] = useState(NO_EXPANDED_FOLDERS);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
 
@@ -199,8 +196,9 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     };
   }, [app]);
 
-  if (!configPath || !folderPath) return null;
+  if (!configPath) return null;
 
+  const folderPath = getProjectAnchorFromConfigPath(configPath).projectFolderPath;
   const folder = app.vault.getAbstractFileByPath(folderPath);
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
