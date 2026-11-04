@@ -6,9 +6,7 @@ import {
 } from "@/agentMode/session/messageParts";
 import {
   AgentMessagePart,
-  AgentPlanEntry,
   AgentQuestionAnswers,
-  AgentTodoListEntry,
   AskUserQuestionPrompt,
   CurrentPlan,
   PERMISSION_ALLOW_KINDS,
@@ -42,7 +40,6 @@ export interface InteractiveRequestsDeps {
   recomputeStatus(): void;
   notifyMessages(): void;
   notifyPlanChanged(): void;
-  notifyTodoListChanged(): void;
 }
 
 export class InteractiveRequests {
@@ -50,8 +47,6 @@ export class InteractiveRequests {
   private pendingToolResolvers = new Map<string, PendingPermission>();
   private pendingQuestionResolvers = new Map<string, PendingQuestion>();
   private currentPlan: CurrentPlan | null = null;
-  private currentTodoList: AgentTodoListEntry[] | null = null;
-  private currentTodoListSignature: string | null = null;
   private planSeq = 0;
   private decidedPlanToolCallIds = new Set<string>();
 
@@ -90,10 +85,6 @@ export class InteractiveRequests {
 
   getCurrentPlan(): CurrentPlan | null {
     return this.currentPlan;
-  }
-
-  getCurrentTodoList(): AgentTodoListEntry[] | null {
-    return this.currentTodoList;
   }
 
   hasPending(): boolean {
@@ -308,26 +299,12 @@ export class InteractiveRequests {
     });
   }
 
-  applyTodoList(entries: AgentPlanEntry[]): void {
-    const next: AgentTodoListEntry[] = entries.map((e) => ({
-      content: e.content,
-      status: e.status,
-    }));
-    const signature = next.length > 0 ? JSON.stringify(next) : null;
-    if (signature === this.currentTodoListSignature) return;
-    this.currentTodoList = next.length > 0 ? next : null;
-    this.currentTodoListSignature = signature;
-    this.deps.notifyTodoListChanged();
-  }
-
   dispose(): void {
     this.flushResolvers(this.pendingPlanResolvers);
     this.flushResolvers(this.pendingToolResolvers);
     this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
-    this.currentTodoList = null;
-    this.currentTodoListSignature = null;
   }
 }
 

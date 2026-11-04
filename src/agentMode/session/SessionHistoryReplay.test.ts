@@ -14,14 +14,12 @@ function startReplay(): {
   store: AgentMessageStore;
   replay: SessionHistoryReplay;
   scheduleNotifyMessages: jest.Mock;
-  applyTodoList: jest.Mock;
 } {
   const store = new AgentMessageStore();
   const scheduleNotifyMessages = jest.fn();
-  const applyTodoList = jest.fn();
-  const replay = new SessionHistoryReplay({ store, scheduleNotifyMessages, applyTodoList });
+  const replay = new SessionHistoryReplay({ store, scheduleNotifyMessages });
   replay.start();
-  return { store, replay, scheduleNotifyMessages, applyTodoList };
+  return { store, replay, scheduleNotifyMessages };
 }
 
 const replayText = (
@@ -46,7 +44,6 @@ describe("SessionHistoryReplay", () => {
         const replay = new SessionHistoryReplay({
           store,
           scheduleNotifyMessages: jest.fn(),
-          applyTodoList: jest.fn(),
         });
 
         replay.start();
@@ -63,7 +60,6 @@ describe("SessionHistoryReplay", () => {
         const replay = new SessionHistoryReplay({
           store: new AgentMessageStore(),
           scheduleNotifyMessages: jest.fn(),
-          applyTodoList: jest.fn(),
         });
         expect(replay.isOpen()).toBe(false);
 
@@ -201,17 +197,6 @@ describe("SessionHistoryReplay", () => {
         expect(tool).toMatchObject({ id: "t1", status: "completed" });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 hands each replayed task list to the todo list so the last one stays current", () => {
-        const { replay, applyTodoList } = startReplay();
-        const entries = [
-          { content: "step", status: "completed" as const, priority: "medium" as const },
-        ];
-
-        replay.append({ sessionUpdate: "plan", entries }, undefined);
-
-        expect(applyTodoList).toHaveBeenCalledWith(entries);
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/638 opens a reply bubble for a replayed compaction that no reply precedes", () => {
         const { store, replay } = startReplay();
 
@@ -340,7 +325,6 @@ describe("SessionHistoryReplay", () => {
         const replay = new SessionHistoryReplay({
           store,
           scheduleNotifyMessages: jest.fn(),
-          applyTodoList: jest.fn(),
         });
 
         expect(replay.append(replayText("agent_message_chunk", "live", "a1"), undefined)).toBe(

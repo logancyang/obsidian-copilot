@@ -386,7 +386,7 @@ interface ProjectFilesSectionProps {
   children: React.ReactNode;
 }
 
-function ProjectFilesSection({
+export function ProjectFilesSection({
   title,
   detail,
   action,
@@ -440,6 +440,34 @@ function formatRecentAge(mtime: number, now: number): string {
   return age === "1d" && onYesterday ? "yesterday" : age;
 }
 
+export interface FileDetailRowProps extends Omit<ProjectRowProps, "expanded"> {
+  name: string;
+  folder: string;
+  status: string;
+}
+
+export function FileDetailRow({
+  name,
+  folder,
+  status,
+  children,
+  ...rowProps
+}: FileDetailRowProps): React.ReactElement {
+  return (
+    <ProjectRow {...rowProps}>
+      <File aria-hidden="true" className="tw-ml-5 tw-size-3.5 tw-shrink-0 tw-text-faint" />
+      <span className="tw-min-w-0 tw-shrink tw-truncate" title={name}>
+        {name}
+      </span>
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
+        {folder || "/"}
+      </span>
+      <FileStatusLabel>{status}</FileStatusLabel>
+      {children}
+    </ProjectRow>
+  );
+}
+
 export interface RecentFilesSectionProps extends Pick<
   ProjectTreeHandlers,
   "onOpenFile" | "onShowFileMenu" | "onDragFile"
@@ -458,24 +486,19 @@ export function RecentFilesSection({
   return (
     <ProjectFilesSection title="Recent">
       {files.map((file) => (
-        <ProjectRow
+        <FileDetailRow
           key={file.path}
           path={file.path}
+          name={file.name}
+          folder={file.folder}
+          status={file.change}
           onActivate={(pane) => onOpenFile(file.path, pane)}
           {...rowHandlers}
         >
-          <File aria-hidden="true" className="tw-ml-5 tw-size-3.5 tw-shrink-0 tw-text-faint" />
-          <span className="tw-min-w-0 tw-shrink tw-truncate" title={file.name}>
-            {file.name}
-          </span>
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
-            {file.folder || "/"}
-          </span>
-          <FileStatusLabel>{file.change}</FileStatusLabel>
           <span className="tw-shrink-0 tw-text-ui-smaller tw-text-faint">
             {formatRecentAge(file.mtime, now)}
           </span>
-        </ProjectRow>
+        </FileDetailRow>
       ))}
     </ProjectFilesSection>
   );

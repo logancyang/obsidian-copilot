@@ -18,7 +18,7 @@ Each Project has a folder under `<Copilot folder>/projects/`. The default root i
 
 ## Add Project instructions
 
-In a Project chat, open the Project info menu beside the name and select **AGENTS.md**. You can also select **Project settings** beside the name, or **Edit project** from the Projects list, and edit **Project instructions**. Each opens the same Project file.
+In a Project chat, open the Project info menu beside the name and select **AGENTS.md** under **Project folder**. You can also select **Project settings** beside the name, or **Edit project** from the Projects list, and edit **Project instructions**. Each opens the same Project file.
 
 Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with OpenCode, Claude, and Codex.
 
@@ -54,6 +54,14 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 Linking never moves a vault file. Dropping on the message box adds the item to that message only.
 
 A file that a sync tool or copy brings into the vault can show as **new** even if it was only edited.
+
+### See what a chat changed
+
+In a Project chat, open the Project info menu beside the name. **Changed in this chat** lists each file the chat created, edited, or deleted, newest first, with **new**, **edited**, or **deleted** and the number of lines added and removed. A file changed in several turns appears once, counted from before the chat first changed it. Select a file to open it.
+
+Below it are the same **Recent**, **Project folder**, and **Linked** sections as the **Files** tab, and they work the same way.
+
+**Changed in this chat** covers the current session only. After you reload Obsidian or reopen the chat, it stays empty until the chat changes another file.
 
 ## Add reusable context
 

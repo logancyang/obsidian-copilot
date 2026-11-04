@@ -1,145 +1,237 @@
-import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-
-beforeAll(() => {
-  (window as unknown as { activeDocument: Document }).activeDocument = window.document;
-});
-
-const getCachedProjectRecordById = jest.fn();
-jest.mock("@/projects/state", () => ({
-  getCachedProjectRecordById: (...args: unknown[]) => getCachedProjectRecordById(...args),
-}));
-
-jest.mock("@/projects/projectPaths", () => ({
-  getProjectAnchorFromConfigPath: (configPath: string) => ({
-    projectFolderPath: configPath.split("/").slice(0, -1).join("/"),
-    projectsRoot: configPath.split("/").slice(0, -2).join("/"),
-  }),
-}));
-const revealProjectFolder = jest.fn();
-jest.mock("@/agentMode/ui/AgentProjectRowActions", () => ({
-  revealProjectFolder: (...args: unknown[]) => revealProjectFolder(...args),
-}));
-const openAgentsFile = jest.fn().mockResolvedValue(undefined);
-jest.mock("@/instructions/agentsFile", () => ({
-  openAgentsFile: (...args: unknown[]) => openAgentsFile(...args),
-  isClaudeImportOnly: jest.requireActual("@/instructions/agentsFile").isClaudeImportOnly,
-}));
-const moveProjectPromptToAgentsFile = jest.fn().mockResolvedValue(undefined);
-jest.mock("@/projects/moveProjectPrompt", () => ({
-  moveProjectPromptToAgentsFile: (...args: unknown[]) => moveProjectPromptToAgentsFile(...args),
-}));
-
-import { TFile, TFolder } from "obsidian";
-import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
-import type { AgentTodoListEntry } from "@/agentMode/session/types";
+import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
+import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
+import { ProjectInfoPanel, ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import type { ProjectConfig } from "@/aiParams";
+import { AppContext } from "@/context";
+import { updateCachedProjectRecords } from "@/projects/state";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { App, EventRef, TAbstractFile, TFile, TFolder } from "obsidian";
+import React from "react";
 
-const PROJECT = {
-  id: "proj-1",
-  name: "My Research",
-  systemPrompt: "be helpful",
+const PROJECT_FOLDER = "copilot/projects/Q4 Launch";
+
+const PROJECT: ProjectConfig = {
+  id: "q4",
+  name: "Q4 Launch",
+  systemPrompt: "",
   contextSource: {},
-} as unknown as ProjectConfig;
+  created: 0,
+  UsageTimestamps: 0,
+};
 
-function makeFolder(names: string[]) {
-  const folder = new (TFolder as unknown as new (path: string) => TFolder)(
-    "copilot/projects/proj-1"
-  );
-  (folder as unknown as { children: unknown[] }).children = names.map(
-    (n) => new (TFile as unknown as new (path: string) => TFile)(`copilot/projects/proj-1/${n}`)
-  );
+function change(path: string, before: string | null, after: string | null): TurnFileChange {
+  const built = buildTurnFileChange(path, before, after);
+  if (!built) throw new Error(`no change for ${path}`);
+  return built;
+}
+
+function turn(id: string, fileChanges?: TurnFileChange[]): AgentChatMessage {
+  return { id, sender: "ai", timestamp: null, isVisible: true, message: "", fileChanges };
+}
+
+function makeFile(path: string): TFile {
+  const file = new (TFile as unknown as new (path: string) => TFile)(path);
+  file.stat = { ctime: Date.now(), mtime: Date.now(), size: 1 };
+  return file;
+}
+
+function makeFolder(path: string, children: TAbstractFile[]): TFolder {
+  const folder = new (TFolder as unknown as new (path: string) => TFolder)(path);
+  (folder as unknown as { children: TAbstractFile[] }).children = children;
   return folder;
 }
 
-function renderPopover(
-  todoList: AgentTodoListEntry[] | null,
-  folderNames: string[] = [],
-  fileContents: Record<string, string> = {}
-) {
-  getCachedProjectRecordById.mockReturnValue({
-    folderName: "proj-1",
-    filePath: "copilot/projects/proj-1/project.md",
-    project: PROJECT,
-  });
-  const openFile = jest.fn().mockResolvedValue(undefined);
-  const app = {
-    vault: {
-      getAbstractFileByPath: jest.fn().mockReturnValue(makeFolder(folderNames)),
-      read: jest.fn(async (file: TFile) => fileContents[file.path.split("/").pop() ?? ""] ?? ""),
+function setProjectFolder(folderPath: string): void {
+  updateCachedProjectRecords([
+    {
+      folderName: folderPath.split("/").pop()!,
+      filePath: `${folderPath}/project.md`,
+      project: PROJECT,
     },
-    workspace: { getLeaf: jest.fn().mockReturnValue({ openFile }) },
-  } as unknown as Parameters<typeof ProjectInfoPopover>[0]["app"];
-  render(<ProjectInfoPopover app={app} project={PROJECT} todoList={todoList} />);
-  fireEvent.click(screen.getByLabelText("Project info for My Research"));
-  return { openFile };
+  ]);
 }
 
+function makeApp(entries: TAbstractFile[]) {
+  const byPath = new Map<string, TAbstractFile>();
+  const index = (entry: TAbstractFile): void => {
+    byPath.set(entry.path, entry);
+    if (entry instanceof TFolder) entry.children.forEach(index);
+  };
+  entries.forEach(index);
+  const openFile = jest.fn().mockResolvedValue(undefined);
+  const events = { on: () => ({}) as EventRef, offref: () => {} };
+  const app = {
+    vault: {
+      ...events,
+      getAbstractFileByPath: (path: string) => byPath.get(path) ?? null,
+      getFiles: () => [...byPath.values()].filter((entry) => entry instanceof TFile),
+    },
+    metadataCache: events,
+    workspace: { iterateAllLeaves: () => {}, getLeaf: () => ({ openFile }) },
+  } as unknown as App;
+  return { app, openFile, add: index };
+}
+
+function projectFolderFixture(folderPath = PROJECT_FOLDER) {
+  return makeFolder(folderPath, [
+    makeFile(`${folderPath}/project.md`),
+    makeFolder(`${folderPath}/outputs`, [makeFile(`${folderPath}/outputs/timeline.md`)]),
+    makeFile(`${folderPath}/brief.md`),
+  ]);
+}
+
+function renderPopover(app: App, messages: AgentChatMessage[]) {
+  const view = render(
+    <AppContext.Provider value={app}>
+      <ProjectInfoPopover app={app} project={PROJECT} messages={messages} />
+    </AppContext.Provider>
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Project info for Q4 Launch" }));
+  return view;
+}
+
+function changedRows(): string[] {
+  return within(screen.getByRole("region", { name: "Changed in this chat" }))
+    .queryAllByRole("button")
+    .map((row) => row.textContent ?? "");
+}
+
+function sectionTitles(): string[] {
+  return screen
+    .getAllByRole("region")
+    .map((region) => region.getAttribute("aria-labelledby") ?? "")
+    .map((id) => document.getElementById(id)?.textContent ?? "");
+}
+
+beforeAll(() => {
+  window.activeDocument = window.document;
+});
+
+beforeEach(() => setProjectFolder(PROJECT_FOLDER));
+
+afterEach(() => updateCachedProjectRecords([]));
+
 describe("ProjectInfoPopover", () => {
-  beforeEach(() => jest.clearAllMocks());
+  describe("ProjectInfoPanel()", () => {
+    it("lists each changed file by name with its folder, new or edited, and lines added and removed", () => {
+      render(
+        <ProjectInfoPanel
+          changes={[
+            change(`${PROJECT_FOLDER}/outputs/timeline.md`, null, "week 1\nweek 2\n"),
+            change(`${PROJECT_FOLDER}/brief.md`, "one\ntwo\n", "one\nTWO\nthree\n"),
+          ]}
+          onOpenFile={() => {}}
+        >
+          {null}
+        </ProjectInfoPanel>
+      );
 
-  it("renders the project name and canonical AGENTS.md row", async () => {
-    renderPopover(null, ["project.md", "AGENTS.md", "notes.md"]);
-    expect(screen.getAllByText("My Research").length).toBeGreaterThan(0);
-    expect(await screen.findByText("AGENTS.md")).toBeTruthy();
-  });
-
-  it("omits the Progress section when there is no todo list", async () => {
-    renderPopover(null);
-    expect(await screen.findByText("AGENTS.md")).toBeTruthy();
-    expect(screen.queryByText("Progress")).toBeNull();
-  });
-
-  it("renders the todo list with a completed/total count when present", async () => {
-    renderPopover([
-      { content: "step A", status: "completed" },
-      { content: "step B", status: "in_progress" },
-      { content: "step C", status: "pending" },
-    ]);
-    await screen.findByText("AGENTS.md");
-    expect(screen.getByText("Progress")).toBeTruthy();
-    expect(screen.getByText("1/3")).toBeTruthy();
-    expect(screen.getByText("step A")).toBeTruthy();
-    expect(screen.getByText("step C")).toBeTruthy();
-  });
-
-  it("hides a CLAUDE.md that is only Copilot's @AGENTS.md wiring", async () => {
-    renderPopover(null, ["CLAUDE.md", "draft.md"], { "CLAUDE.md": "@AGENTS.md\n" });
-    expect(await screen.findByText("draft.md")).toBeTruthy();
-    expect(screen.queryByText("CLAUDE.md")).toBeNull();
-  });
-
-  it("lists a CLAUDE.md that carries the user's own rules", async () => {
-    renderPopover(null, ["CLAUDE.md", "draft.md"], {
-      "CLAUDE.md": "# My rules\nAlways answer in French.\n\n@AGENTS.md\n",
+      expect(changedRows()).toEqual([
+        `timeline.md${PROJECT_FOLDER}/outputs/new+2−0`,
+        `brief.md${PROJECT_FOLDER}/edited+2−1`,
+      ]);
     });
-    expect(await screen.findByText("CLAUDE.md")).toBeTruthy();
+
+    it("says nothing has changed yet when the chat has changed no file — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+      render(
+        <ProjectInfoPanel changes={[]} onOpenFile={() => {}}>
+          {null}
+        </ProjectInfoPanel>
+      );
+
+      expect(changedRows()).toEqual([]);
+      expect(screen.getByText("No files changed in this chat yet.")).toBeTruthy();
+    });
+
+    it("opens a clicked file by its vault path, in a new tab when the click asks for one", () => {
+      const onOpenFile = jest.fn();
+      render(
+        <ProjectInfoPanel
+          changes={[change(`${PROJECT_FOLDER}/brief.md`, "a\n", "b\n")]}
+          onOpenFile={onOpenFile}
+        >
+          {null}
+        </ProjectInfoPanel>
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /brief\.md/ }));
+      fireEvent.click(screen.getByRole("button", { name: /brief\.md/ }), { metaKey: true });
+
+      expect(onOpenFile.mock.calls).toEqual([
+        [`${PROJECT_FOLDER}/brief.md`, false],
+        [`${PROJECT_FOLDER}/brief.md`, "tab"],
+      ]);
+    });
   });
 
-  it("lists folder files but excludes project.md and a duplicate AGENTS.md row", async () => {
-    renderPopover(null, ["project.md", "AGENTS.md", "guide.pdf", "draft.md"]);
-    expect(await screen.findByText("guide.pdf")).toBeTruthy();
-    expect(screen.getByText("draft.md")).toBeTruthy();
-    expect(screen.queryByText("project.md")).toBeNull();
-    expect(screen.getAllByText("AGENTS.md")).toHaveLength(1);
-  });
+  describe("ProjectInfoPopover()", () => {
+    it("opens with the files this chat changed, latest first, then the project's Recent, Project folder and Linked, with no Progress or Outputs", () => {
+      const { app } = makeApp([projectFolderFixture()]);
 
-  it("moves any legacy project.md text in before opening the file", async () => {
-    renderPopover(null);
-    fireEvent.click(await screen.findByText("AGENTS.md"));
+      renderPopover(app, [
+        turn("first", [change(`${PROJECT_FOLDER}/outputs/timeline.md`, null, "week 1\n")]),
+        turn("second", [change(`${PROJECT_FOLDER}/brief.md`, "a\n", "b\n")]),
+      ]);
 
-    await waitFor(() => expect(openAgentsFile).toHaveBeenCalled());
-    expect(moveProjectPromptToAgentsFile).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ folderName: "proj-1" })
-    );
-    expect(openAgentsFile).toHaveBeenCalledWith(expect.anything(), "copilot/projects/proj-1");
-  });
+      expect(sectionTitles()).toEqual([
+        "Changed in this chat",
+        "Recent",
+        "Project folder",
+        "Linked",
+      ]);
+      expect(changedRows().map((row) => row.split(PROJECT_FOLDER)[0])).toEqual([
+        "brief.md",
+        "timeline.md",
+      ]);
+      expect(screen.queryByText("Progress")).toBeNull();
+      expect(screen.queryByText("Outputs")).toBeNull();
+    });
 
-  it("reveals the project folder from the project files button", async () => {
-    renderPopover(null);
-    await screen.findByText("AGENTS.md");
-    fireEvent.click(screen.getByLabelText("Reveal project files in vault"));
-    expect(revealProjectFolder).toHaveBeenCalledWith(expect.anything(), PROJECT);
+    it("shows the empty Changed in this chat above the Files view in a chat that has changed nothing", () => {
+      const { app } = makeApp([projectFolderFixture()]);
+
+      renderPopover(app, [turn("reply")]);
+
+      expect(screen.getByText("No files changed in this chat yet.")).toBeTruthy();
+      expect(sectionTitles()).toEqual([
+        "Changed in this chat",
+        "Recent",
+        "Project folder",
+        "Linked",
+      ]);
+    });
+
+    it("opens a changed file in a tab and closes the popover", () => {
+      const { app, openFile } = makeApp([projectFolderFixture()]);
+      renderPopover(app, [turn("first", [change(`${PROJECT_FOLDER}/brief.md`, "a\n", "b\n")])]);
+
+      fireEvent.click(
+        within(screen.getByRole("region", { name: "Changed in this chat" })).getByRole("button", {
+          name: /brief\.md/,
+        })
+      );
+
+      expect(openFile).toHaveBeenCalledWith(
+        expect.objectContaining({ path: `${PROJECT_FOLDER}/brief.md` })
+      );
+      expect(screen.queryByRole("region", { name: "Changed in this chat" })).toBeNull();
+    });
+
+    it("shows the new folder path and its files when the project folder is renamed while the popover is open", () => {
+      const renamed = "copilot/projects/Q4 Renamed";
+      const { app, add } = makeApp([projectFolderFixture()]);
+      renderPopover(app, []);
+
+      add(projectFolderFixture(renamed));
+      act(() => setProjectFolder(renamed));
+
+      const tree = screen.getByRole("region", { name: "Project folder" });
+      expect(within(tree).getByText(renamed)).toBeTruthy();
+      expect(
+        within(tree)
+          .getAllByRole("button")
+          .map((row) => row.textContent)
+      ).toEqual(["outputs", "brief.md"]);
+    });
   });
 });

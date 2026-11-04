@@ -113,7 +113,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     isTurnInFlight,
     hasPendingPlanPermission,
     currentPlan,
-    currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
     feedbackOffer,
@@ -707,7 +706,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 <ProjectInfoPopover
                   app={app}
                   project={activeProject}
-                  todoList={currentTodoList}
+                  messages={messages}
                   container={rootEl}
                 />
               ) : undefined

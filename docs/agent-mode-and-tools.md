@@ -232,6 +232,8 @@ The header shows which change you are at, such as "1 of 6". Use the up and down 
 
 Selecting the same row again returns you to the tab that is already open. This review is part of the current session only: closing Obsidian or reloading the plugin drops the cards and the diff tabs, and earlier turns show no card when you reopen a saved conversation.
 
+In a Project chat, the Project info menu beside the Project name lists every file the chat has changed so far. See [See what a chat changed](projects.md#see-what-a-chat-changed).
+
 The card covers the notes an agent changed with its editing tools. Changes an agent makes by running a shell command, such as deleting a note with `rm`, are not listed. Treat the card as a review aid rather than a complete audit of the turn.
 
 ## Multi-agent answers
