@@ -1,11 +1,9 @@
 import { ProjectConfig } from "@/aiParams";
 import { useApp } from "@/context";
-import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ProjectContextSourceEditor } from "@/components/project/ProjectContextSourceEditor";
 import {
   agentsFileIsUninitialized,
   captureInstructionFiles,
@@ -28,21 +26,16 @@ export interface AddProjectModalContentProps {
   initialProject: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
-  popoverContainer?: HTMLElement | null;
 }
 
 export function AddProjectModalContent({
   initialProject,
   onSave,
   onCancel,
-  popoverContainer,
 }: AddProjectModalContentProps) {
   const app = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [touched, setTouched] = useState({
-    name: false,
-    inclusions: false,
-  });
+  const [touched, setTouched] = useState({ name: false });
 
   const [formData, setFormData] = useState<ProjectConfig>(() => ({ ...initialProject }));
 
@@ -75,26 +68,6 @@ export function AddProjectModalContent({
     };
   }, [app, instructionsFolder, legacyPrompt]);
 
-  const handleEditProjectContext = (projectDraft: ProjectConfig) => {
-    const modal = new ContextManageModal(
-      app,
-      (updatedProject: ProjectConfig) => {
-        setFormData((prev) => ({
-          ...prev,
-          contextSource: {
-            ...prev.contextSource,
-            inclusions: updatedProject.contextSource?.inclusions,
-            exclusions: updatedProject.contextSource?.exclusions,
-            webUrls: updatedProject.contextSource?.webUrls,
-            youtubeUrls: updatedProject.contextSource?.youtubeUrls,
-          },
-        }));
-      },
-      projectDraft
-    );
-    modal.open();
-  };
-
   const isFormValid = () => Boolean(formData.name);
 
   const handleInputChange = (
@@ -126,13 +99,6 @@ export function AddProjectModalContent({
         [field]: value,
       };
     });
-  };
-
-  const handleContextChange = (patch: Partial<NonNullable<ProjectConfig["contextSource"]>>) => {
-    setFormData((prev) => ({
-      ...prev,
-      contextSource: { ...prev.contextSource, ...patch },
-    }));
   };
 
   const handleSave = async () => {
@@ -185,9 +151,6 @@ export function AddProjectModalContent({
     <div className="tw-flex tw-h-full tw-flex-col">
       <div className="tw-shrink-0 tw-px-4 tw-pb-2 tw-pt-4">
         <div className="tw-text-xl tw-font-bold tw-text-normal">Edit project</div>
-        <p className="tw-mt-1 tw-text-sm tw-text-muted">
-          Configure your project settings and context sources
-        </p>
       </div>
 
       <ScrollArea className="tw-min-h-0 tw-flex-1">
@@ -226,16 +189,6 @@ export function AddProjectModalContent({
                 <ProjectInstructionsField value={instructions} onChange={setInstructions} />
               )}
             </div>
-          </div>
-
-          <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
-            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Context sources</h3>
-            <ProjectContextSourceEditor
-              contextSource={formData.contextSource}
-              onChange={handleContextChange}
-              onManage={() => handleEditProjectContext(formData)}
-              popoverContainer={popoverContainer}
-            />
           </div>
         </div>
       </ScrollArea>
@@ -286,7 +239,6 @@ export class AddProjectModal extends Modal {
         initialProject={this.initialProject}
         onSave={handleSave}
         onCancel={handleCancel}
-        popoverContainer={contentEl}
       />
     );
   }

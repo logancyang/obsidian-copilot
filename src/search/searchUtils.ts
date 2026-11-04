@@ -68,25 +68,12 @@ function getInclusionPatterns(): string[] {
   return getDecodedPatterns(getSettings().qaInclusions);
 }
 
-export function getMatchingPatterns(options?: {
-  inclusions?: string;
-  exclusions?: string;
-  isProject?: boolean;
-}): {
+export function getMatchingPatterns(): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusionPatterns = options?.inclusions
-    ? getDecodedPatterns(options.inclusions)
-    : options?.isProject
-      ? []
-      : getInclusionPatterns();
-
-  const exclusionPatterns = options?.exclusions
-    ? getDecodedPatterns(options.exclusions)
-    : options?.isProject
-      ? []
-      : getExclusionPatterns();
+  const inclusionPatterns = getInclusionPatterns();
+  const exclusionPatterns = getExclusionPatterns();
 
   return {
     inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,

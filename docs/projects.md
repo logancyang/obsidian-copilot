@@ -12,7 +12,7 @@ On the Agent Chat home screen, open **Projects** to browse your most recently us
 2. From the Agent Chat home screen, open **Projects** and select **New project**.
 3. Enter a name and select **Create**.
 
-Copilot opens the new Project immediately. Creation asks only for a name. Use **Edit project** to add a description, instructions, and saved context.
+Copilot opens the new Project immediately. Creation asks only for a name. Use **Edit project** to add a description and instructions, and the **Files** tab to add saved context.
 
 Each Project has a folder under `<Copilot folder>/projects/`. The default root is `copilot/projects/`. Its `project.md` file stores Project details and the context list. Its `AGENTS.md` file contains the instructions you own and edit.
 
@@ -65,14 +65,9 @@ Below it are the same **Recent**, **Project folder**, and **Linked** sections as
 
 ## Add reusable context
 
-Link notes, folders, tags, and web pages from the **Files** tab (see [Link notes, folders, tags, and web pages](#link-notes-folders-tags-and-web-pages)). For other kinds of context, select **Project settings** beside the Project name, or **Edit project** from the Projects list. Under **Context sources**, you can:
+Add context, including properties, with **Link context** on the **Files** tab (see [Link notes, folders, tags, and web pages](#link-notes-folders-tags-and-web-pages)). A property targets notes by a frontmatter field, such as `Topics: Physics`.
 
-- select **URL** to add a web page or YouTube video; or
-- select **Manage context** to add **Links**, **Tags**, **Properties**, **Folders**, and **Files**, or to manage **Ignore files**.
-
-Properties can target notes by a frontmatter field, such as `Topics: Physics`.
-
-When a new Project chat starts, Copilot gives the agent a list of the saved context: folders, notes, files, and the notes that have each linked tag by their location, and web pages and YouTube videos as links. Nothing is downloaded or converted in advance. The agent reads each source when a question needs it.
+When a new Project chat starts, Copilot gives the agent a list of the saved context: folders, notes, files, and the notes that have each linked tag or property by their location, and web pages and YouTube videos as links. Nothing is downloaded or converted in advance. The agent reads each source when a question needs it.
 
 An existing Project chat keeps the instructions and context captured when that chat started. Start a new chat after changing either one when you need the updated version.
 
@@ -84,7 +79,7 @@ The agent opens a saved web page with its own web tool or Copilot's web fetch Sk
 
 > **Private Projects:** When a chat starts, Copilot does not upload a Project's files or fetch its links. The list of file paths and links goes to the selected model as part of the first message. A link's address goes to Brevilabs only when the agent fetches it through a Copilot-hosted Skill. If a Project must not send task content to Brevilabs, use Markdown and document files with local tools or local [Miyo](vault-search-and-indexing.md), use a local model if prompts must also stay on the device, and disable cloud-backed Copilot Skills for every agent you use.
 
-**Ignore files** controls which files are listed in the Project's context. It is not a file permission setting. An agent can still find an ignored file through its own tools when the file is inside a location that agent can access.
+To keep the agent away from a folder, say so in the Project's instructions (`AGENTS.md`).
 
 ## Work with Project chats
 

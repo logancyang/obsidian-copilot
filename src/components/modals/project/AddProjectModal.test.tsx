@@ -166,9 +166,40 @@ describe("AddProjectModal", () => {
       getCachedProjectRecordById.mockReturnValue(undefined);
       renderModal();
 
-      await waitFor(() => expect(screen.getByText("Edit project")).toBeTruthy());
+      await waitFor(() => expect(screen.getByText("Project name")).toBeTruthy());
       expect(screen.queryByLabelText("Project instructions")).toBeNull();
       expect(readAgentsFile).not.toHaveBeenCalled();
+    });
+
+    it("offers no context controls, only the name, description and instructions with Cancel and Save, since context is added from the Files tab https://github.com/Brevilabs/obsidian-copilot-private/issues/841", async () => {
+      renderModal();
+      await findInstructionsBox();
+
+      expect(screen.queryByText(/context/i)).toBeNull();
+      expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+        "Cancel",
+        "Save",
+      ]);
+    });
+
+    it("saves a renamed project with its saved context, file-type patterns and exclusions included, unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/841", async () => {
+      const contextSource = {
+        inclusions: "%23launch,*.pdf,%5Btopic%3Aphysics%5D,Research",
+        exclusions: "*.tmp,Research%2FPrivate",
+        webUrls: "https://example.com/spec",
+        youtubeUrls: "",
+      };
+      const { onSave } = renderModal({ initialProject: { ...PROJECT, contextSource } });
+      await findInstructionsBox();
+
+      fireEvent.change(screen.getByDisplayValue("My Research"), { target: { value: "Launch" } });
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() =>
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({ name: "Launch", contextSource })
+        )
+      );
     });
   });
 });
