@@ -350,7 +350,7 @@ describe("projectLinks", () => {
       ]).toEqual([37, 80, 68, 70]);
     });
 
-    it("adds a number to the name instead of overwriting a file already in sources", async () => {
+    it("adds a number to the name instead of overwriting a file already in sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/461)", async () => {
       const { app, written } = makeVault([
         `${PROJECT_FOLDER}/sources`,
         `${PROJECT_FOLDER}/sources/board-notes.pdf`,
@@ -369,6 +369,20 @@ describe("projectLinks", () => {
         `${PROJECT_FOLDER}/sources/README 1`,
       ]);
       expect(written.has(`${PROJECT_FOLDER}/sources/board-notes.pdf`)).toBe(false);
+    });
+
+    it("gives each of two overlapping drops of the same file name its own copy (https://github.com/Brevilabs/obsidian-copilot-private/issues/461)", async () => {
+      const { app } = makeVault([`${PROJECT_FOLDER}/sources`]);
+
+      const [first, second] = await Promise.all([
+        copyIntoProjectSources(app, PROJECT_FOLDER, [droppedFile("board-notes.pdf", [1])]),
+        copyIntoProjectSources(app, PROJECT_FOLDER, [droppedFile("board-notes.pdf", [2])]),
+      ]);
+
+      expect([...first, ...second].map((file) => file.path)).toEqual([
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+        `${PROJECT_FOLDER}/sources/board-notes 1.pdf`,
+      ]);
     });
   });
 });
