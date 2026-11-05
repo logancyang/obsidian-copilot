@@ -98,6 +98,8 @@ async function openLoginPage(loginLink, redirectUrl) {
     const response = await timedFetch(url, {
       redirect: "manual",
       headers: { "user-agent": "Mozilla/5.0" },
+    }).catch((error) => {
+      throw new Error(`${url.origin} unreachable: ${error.cause?.message ?? error.message}`);
     });
     const location = response.headers.get("location");
     if (location) {
