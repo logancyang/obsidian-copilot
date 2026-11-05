@@ -54,6 +54,26 @@ describe("findChatRelevantNotes", () => {
       expect(result.notes[0].metadata.score).toBe(0.6);
       expect(result.details?.skippedAttachments).toBe(2);
     });
+    it("shows project-folder notes but not the project's instruction and config files — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
+      search.mockResolvedValue({
+        status: "ok",
+        results: [
+          { path: "Vault/copilot/projects/Falcon/AGENTS.md", score: 0.9 },
+          { path: "Vault/copilot/projects/Falcon/CLAUDE.md", score: 0.85 },
+          { path: "Vault/copilot/projects/Falcon/outputs/plan.md", score: 0.8 },
+          { path: "Vault/copilot/projects/Falcon/project.md", score: 0.7 },
+        ],
+        skipped_files: [],
+      });
+      const result = await findChatRelevantNotes(app, {
+        id: "a",
+        request: { folder_name: "Vault", draft: "launch plan" },
+        skippedAttachments: 0,
+      });
+      expect(result.notes.map((entry) => entry.note.path)).toEqual([
+        "copilot/projects/Falcon/outputs/plan.md",
+      ]);
+    });
     it("keeps unsupported-only context unavailable without a request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const result = await findChatRelevantNotes(app, {
         id: "a",
