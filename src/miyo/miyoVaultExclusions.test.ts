@@ -51,6 +51,7 @@ const DEFAULT_ROOT_SYSTEM_FOLDERS = [
   "copilot/system-prompts",
   "copilot/skills",
   "copilot/memory",
+  "copilot/projects/unsupported",
   "copilot/copilot-log.md",
 ];
 
@@ -74,7 +75,7 @@ describe("miyoVaultExclusions", () => {
   });
 
   describe("getMiyoSystemExcludedFolders()", () => {
-    it("excludes each Copilot system sub-folder and the Copilot log instead of the whole Copilot folder", () => {
+    it("excludes each Copilot system sub-folder, the failed project-migration records, and the Copilot log instead of the whole Copilot folder", () => {
       expect(getMiyoSystemExcludedFolders(settingsWith({ copilotFolder: "copilot" }))).toEqual(
         DEFAULT_ROOT_SYSTEM_FOLDERS
       );
@@ -98,6 +99,7 @@ describe("miyoVaultExclusions", () => {
         "team/ai/system-prompts",
         "team/ai/skills",
         "team/ai/memory",
+        "team/ai/projects/unsupported",
         "team/ai/copilot-log.md",
         "copilot",
         "old-ai",
@@ -139,6 +141,7 @@ describe("miyoVaultExclusions", () => {
         "team-ai/system-prompts",
         "team-ai/skills",
         "team-ai/memory",
+        "team-ai/projects/unsupported",
         "team-ai/copilot-log.md",
       ]);
     });
