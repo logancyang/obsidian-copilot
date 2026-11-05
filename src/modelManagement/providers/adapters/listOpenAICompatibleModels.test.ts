@@ -29,6 +29,39 @@ describe("listOpenAICompatibleModels", () => {
       });
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3840 returns the context window each model reports under a known context field, skipping models that report none", async () => {
+      mockSafeFetch.mockResolvedValue(
+        fakeResponse(200, {
+          data: [
+            { id: "vllm-model", max_model_len: 262144 },
+            { id: "router-model", context_length: 131072 },
+            { id: "groq-model", context_window: 32768 },
+            { id: "mistral-model", max_context_length: 128000 },
+            { id: "plain-model" },
+            { id: "bad-model", context_length: "big" },
+          ],
+        })
+      );
+      const result = await listOpenAICompatibleModels("http://localhost:8000/v1");
+      expect(result).toEqual({
+        ok: true,
+        modelIds: [
+          "vllm-model",
+          "router-model",
+          "groq-model",
+          "mistral-model",
+          "plain-model",
+          "bad-model",
+        ],
+        contextWindows: {
+          "vllm-model": 262144,
+          "router-model": 131072,
+          "groq-model": 32768,
+          "mistral-model": 128000,
+        },
+      });
+    });
+
     it("requests /models from the base URL without its trailing slash", async () => {
       mockSafeFetch.mockResolvedValue(fakeResponse(200, { data: [] }));
       await listOpenAICompatibleModels("http://localhost:1234/v1/");

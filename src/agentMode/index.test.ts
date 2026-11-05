@@ -433,6 +433,17 @@ describe("agentMode", () => {
       );
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3840 offers an OpenCode reload when an enabled model's context window changes", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      emitSettingsChange(settingsWith({}), settingsWith({ limits: { context: 262144 } }));
+
+      expect(mockManager.noteSpawnConfigChanged).toHaveBeenCalledWith(
+        "opencode",
+        "model config changed"
+      );
+    });
+
     it(`leaves a running agent alone when only a model's display metadata changes ${LINEUP_ISSUE}`, () => {
       createAgentSessionManager({} as App, plugin);
 

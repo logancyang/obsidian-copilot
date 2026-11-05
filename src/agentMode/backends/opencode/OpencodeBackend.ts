@@ -289,12 +289,12 @@ export async function buildOpencodeConfig(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     const levels = info.reasoning ? (info.reasoningEfforts ?? []) : [];
     models[info.id] = {
-      // An injected Plus model falls back to OpenCode's 200k default without its published context.
+      // A model OpenCode's catalog does not know falls back to its 200k default without the
+      // context Copilot Plus publishes or the user's endpoint reports.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/644
+      // https://github.com/logancyang/obsidian-copilot/issues/3840
       limit:
-        origin.kind === "copilot-plus" && info.limits?.context
-          ? { context: info.limits.context }
-          : undefined,
+        !hasCatalogIdentity && info.limits?.context ? { context: info.limits.context } : undefined,
       capabilities: declaresCapabilities
         ? {
             tools: info.toolCall ?? true,
