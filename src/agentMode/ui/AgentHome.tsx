@@ -19,7 +19,6 @@ import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
-import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
   nextProjectLandingPlacement,
@@ -35,8 +34,7 @@ import {
 } from "@/agentMode/ui/homeShelfPrefs";
 import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
-import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
-import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
+import { useRelevantNotesShelfSection } from "@/agentMode/ui/hooks/useRelevantNotesShelfSection";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
@@ -73,7 +71,7 @@ import {
   useProjects,
 } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
-import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
+import { Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -102,7 +100,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
-  const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
+  const relevantNotesSection = useRelevantNotesShelfSection(app, plugin);
   const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
@@ -444,23 +442,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      ...(isRelevantNotesPaneOpen
-        ? []
-        : [
-            {
-              id: "relevant-notes",
-              icon: <FileSearch className="tw-size-4" />,
-              title: "Relevant Notes",
-              renderBody: () => (
-                <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
-                  <RelevantNotes
-                    className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
-                    onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
-                  />
-                </RelevantNotesShelfPanel>
-              ),
-            },
-          ]),
+      ...(relevantNotesSection ? [relevantNotesSection] : []),
       {
         id: "projects",
         icon: <Folder className="tw-size-4" />,
@@ -502,8 +484,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
-      isRelevantNotesPaneOpen,
-      plugin,
+      relevantNotesSection,
       settings.chatHistorySortStrategy,
     ]
   );
@@ -550,6 +531,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
+      ...(relevantNotesSection ? [relevantNotesSection] : []),
       {
         id: "project-context",
         icon: <Files className="tw-size-4" />,
@@ -581,8 +563,19 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
+      relevantNotesSection,
       settings.chatHistorySortStrategy,
     ]
+  );
+
+  // An inline project context still leaves Relevant Notes below it, as on the global landing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
+  const projectShelfSections = useMemo(
+    () =>
+      isProjectContextInline
+        ? projectLandingSections.filter((section) => section.id === "relevant-notes")
+        : projectLandingSections,
+    [isProjectContextInline, projectLandingSections]
   );
 
   const composerNode = (
@@ -767,8 +760,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement && !isProjectContextInline ? (
-                          <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
+                        projectPlacement && projectShelfSections.length > 0 ? (
+                          <AgentHomeShelf key={activeProjectId} sections={projectShelfSections} />
                         ) : null
                       ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf

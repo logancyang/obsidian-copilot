@@ -112,6 +112,7 @@ const projectContextBody = (
 
 const projectLandingSections: AgentHomeShelfSection[] = [
   { ...sections[0], id: "project-chats", title: "Recent chats" },
+  ...relevantNotesSections,
   {
     id: "project-context",
     icon: <Files className="tw-size-4" />,
@@ -161,17 +162,11 @@ function LandingCanvas({
   project: boolean;
   relevantNotesInSidePanel?: boolean;
 }) {
-  const globalSections = allSections.filter((section) =>
+  const contextInline = project && sidebarOpen;
+  const shelfSections = (project ? projectLandingSections : allSections).filter((section) =>
     section.id === "relevant-notes" ? !relevantNotesInSidePanel : !sidebarOpen
   );
-  const contextInline = project && sidebarOpen;
-  const shelf = project ? (
-    contextInline ? undefined : (
-      <AgentHomeShelf sections={projectLandingSections} />
-    )
-  ) : globalSections.length > 0 ? (
-    <AgentHomeShelf sections={globalSections} />
-  ) : undefined;
+  const shelf = shelfSections.length > 0 ? <AgentHomeShelf sections={shelfSections} /> : undefined;
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
       <AgentLandingStack
@@ -227,6 +222,10 @@ export const ProjectLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
 
 export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} sidebarOpen project />,
+};
+
+export const ProjectLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} sidebarOpen project relevantNotesInSidePanel />,
 };
 
 export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
