@@ -17,7 +17,7 @@ Gotchas:
 
 - Unsent text left in a chat counts as working in it.
 - A past chat reopened from history counts as untouched until the user sends a message.
-- While the Navigator is open, `New chat` and `Chat history` above the message box follow tab rules, so the chat left behind keeps its agent. A new Navigator action that switches chats must stop it, or agents pile up.
+- While the Navigator is open, `New chat` and `Chat history` above the chat input follow tab rules, so the chat left behind keeps its agent. A new Navigator action that switches chats must stop it, or agents pile up.
 - Every running agent costs memory, a few hundred MB each for Claude.
 
 ## Chats inside projects

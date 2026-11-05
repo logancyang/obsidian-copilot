@@ -30,5 +30,5 @@ Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` com
 
 - The start screen's Recent chats / Relevant Notes / Projects shelf also uses tabs. Look only within the tab strip.
 - A tab's `Close chat` appears only on hover. A chat row's `Close chat` is a different control ([chat-rows](chat-rows.md)).
-- `New chat` above the message box replaces the current tab's chat instead of adding a tab.
+- `New chat` above the chat input replaces the current tab's chat instead of adding a tab.
 - Tabs do not come back after Obsidian restarts.

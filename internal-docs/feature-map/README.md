@@ -27,11 +27,11 @@ The feature file a change touches defines its coverage set. When a change spans 
 - [chat-tabs](chat-tabs.md): tabs across the top of Agent Chat, one per open chat.
 - [copilot-navigator](copilot-navigator.md): the sidebar listing chats and projects.
 - [chat-rows](chat-rows.md): one chat in a list, wherever chats are listed.
-- `chat-controls` (not mapped yet): the bar above the message box, with New chat and the history button.
+- `chat-controls` (not mapped yet): the bar above the chat input, with New chat and the history button.
 
 ## Conversation
 
-- `message-box` (not mapped yet): model, mode, and effort pickers, mentions, note context, images, send, stop, context meter.
+- `chat-input` (not mapped yet): model, mode, and effort pickers, mentions, note context, images, send, stop, context meter.
 - `queued-messages` (not mapped yet): messages queued while the agent works.
 - `agent-replies` (not mapped yet): streaming text, reasoning, tool and activity cards, subagents, tasks.
 - `agent-prompts` (not mapped yet): permission cards, questions from the agent, plan proposals, status and error cards.

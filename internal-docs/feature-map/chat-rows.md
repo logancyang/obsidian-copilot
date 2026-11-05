@@ -16,7 +16,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## How to get to it (user POV)
 
 - Recent chats on the Agent Chat start screen.
-- `Chat history` above the message box.
+- `Chat history` above the chat input.
 - The [Copilot Navigator](copilot-navigator.md).
 
 ## Driving it with the Obsidian CLI
