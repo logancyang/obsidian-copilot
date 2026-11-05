@@ -45,6 +45,7 @@ import {
 } from "@/agentMode/session/fanout/multiAgentEntitlement";
 import type { App, DataAdapter } from "obsidian";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { TemplaterCreateHold } from "@/agentMode/session/templaterCreateHold";
 import {
   diffTargetPaths,
   editTargetPaths,
@@ -262,6 +263,7 @@ export class AgentSession {
   private resendSavedHistory = false;
   private readonly turns: TurnTracker;
   private readonly taskFiles = new Map<string, FileCaptures>();
+  private readonly templaterHold = new TemplaterCreateHold();
   private readonly tasks = new Map<string, AgentTask>();
   private taskList: readonly AgentTask[] = EMPTY_TASKS;
   private readonly taskContent = new Map<string, AgentMessageStore>();
@@ -1723,6 +1725,7 @@ export class AgentSession {
       }
       if (!changes) continue;
       capture.edited = true;
+      this.templaterHold.hold(app, path);
       // Later results report text this turn already changed; the first is the turn's starting file.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
       if (capture.writeTimeBefore === undefined) capture.writeTimeBefore = originals.get(path);
@@ -1775,6 +1778,7 @@ export class AgentSession {
     const replyRunning = this.isReplyRunning();
     // A reply can end while subagents keep the chat running; the composer must still swap Stop for Send. https://github.com/Brevilabs/obsidian-copilot-private/issues/788
     if (next === this.cachedStatus && replyRunning === this.cachedReplyRunning) return;
+    if (next !== "running" && next !== "awaiting_permission") this.templaterHold.releaseAll();
     this.cachedStatus = next;
     this.cachedReplyRunning = replyRunning;
     for (const l of this.listeners) {

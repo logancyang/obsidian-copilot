@@ -3204,6 +3204,32 @@ describe("AgentSession", () => {
           ]);
         });
 
+        it("https://github.com/logancyang/obsidian-copilot/issues/3704 keeps Templater from running a note the agent writes until the turn ends, then hands the note back", async () => {
+          const vault = makeVault({});
+          const pending = new Set<string>();
+          const templater = { templater: { files_with_pending_templates: pending } };
+          const app = {
+            ...vault.app,
+            plugins: {
+              getPlugin: (id: string) => (id === "templater-obsidian" ? templater : null),
+            },
+          } as unknown as App;
+          const mock = makeMockBackend();
+          let skippedAtWrite = false;
+          mock.prompt.mockImplementation(async () => {
+            mock.emit(editCall("t1", "/vault/notes/sync.md"));
+            vault.files.set("notes/sync.md", "<%* tR += 'ran' %>\n");
+            skippedAtWrite = pending.has("notes/sync.md");
+            return { stopReason: "end_turn" as const };
+          });
+          const session = makeSession(mock, app);
+
+          await session.sendPrompt("write a Templater command note").turn;
+
+          expect(skippedAtWrite).toBe(true);
+          expect(pending.size).toBe(0);
+        });
+
         it("reports nothing for a file the turn edited and then restored", async () => {
           const vault = makeVault({ "notes/a.md": "original\n" });
           const mock = makeMockBackend();
