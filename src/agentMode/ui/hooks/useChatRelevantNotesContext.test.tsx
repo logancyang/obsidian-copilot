@@ -35,10 +35,8 @@ jest.mock("@/miyo/miyoUtils", () => ({
     };
   },
 }));
-function vaultFile(path: string, mtime = 0): TFile {
-  return Object.assign(new (TFile as unknown as new (path: string) => TFile)(path), {
-    stat: { mtime },
-  });
+function vaultFile(path: string): TFile {
+  return new (TFile as unknown as new (path: string) => TFile)(path);
 }
 function projectLinking(inclusions?: string): ProjectConfig {
   return {
@@ -64,7 +62,7 @@ describe("useChatRelevantNotesContext", () => {
       timestamp: null,
     };
     beforeEach(() => {
-      vaultFiles = [vaultFile("Research/project.md")];
+      vaultFiles = [];
       app = {
         workspace: { on: jest.fn(), offref: jest.fn() },
         vault: {
@@ -103,8 +101,7 @@ describe("useChatRelevantNotesContext", () => {
             root,
             "embeddings-chat",
             { ...draft, input: "How do embeddings work?" },
-            [],
-            undefined
+            []
           )
         );
         const store = getChatRelevantNotesStore(app);
@@ -136,8 +133,7 @@ describe("useChatRelevantNotesContext", () => {
             ...draft,
             contextNotes: [new (TFile as unknown as new (path: string) => TFile)("notes/a.md")],
           },
-          [],
-          undefined
+          []
         )
       );
       act(() => {
@@ -157,14 +153,7 @@ describe("useChatRelevantNotesContext", () => {
     it("updates the selected chat's retrieval draft when the composer text changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ input }) =>
-          useChatRelevantNotesContext(
-            app,
-            root,
-            "embeddings-chat",
-            { ...draft, input },
-            [],
-            undefined
-          ),
+          useChatRelevantNotesContext(app, root, "embeddings-chat", { ...draft, input }, []),
         { initialProps: { input: "How do embeddings work?" } }
       );
       act(() => {
@@ -182,14 +171,10 @@ describe("useChatRelevantNotesContext", () => {
     it("preserves the selected context without notifying subscribers when only streaming text changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ text }) =>
-          useChatRelevantNotesContext(
-            app,
-            root,
-            "embeddings-chat",
-            { ...draft, loading: true },
-            [user, { ...user, id: "answer", sender: "AI", message: text }],
-            undefined
-          ),
+          useChatRelevantNotesContext(app, root, "embeddings-chat", { ...draft, loading: true }, [
+            user,
+            { ...user, id: "answer", sender: "AI", message: text },
+          ]),
         { initialProps: { text: "partial" } }
       );
       act(() => {
@@ -212,7 +197,7 @@ describe("useChatRelevantNotesContext", () => {
 
     it("clears the selected chat when its surface unmounts (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { unmount } = renderHook(() =>
-        useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [], undefined)
+        useChatRelevantNotesContext(app, root, "embeddings-chat", draft, [])
       );
       act(() => {
         root.dispatchEvent(new Event("pointerdown"));
@@ -235,25 +220,18 @@ describe("useChatRelevantNotesContext", () => {
         ],
       };
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          draft,
-          [
-            user,
-            assistant,
-            { ...user, id: "hidden", isVisible: false, message: "hidden instructions" },
-            {
-              ...assistant,
-              id: "error",
-              isErrorMessage: true,
-              parts: undefined,
-              message: "provider failed",
-            },
-          ],
-          undefined
-        )
+        useChatRelevantNotesContext(app, root, "one", draft, [
+          user,
+          assistant,
+          { ...user, id: "hidden", isVisible: false, message: "hidden instructions" },
+          {
+            ...assistant,
+            id: "error",
+            isErrorMessage: true,
+            parts: undefined,
+            message: "provider failed",
+          },
+        ])
       );
       void act(() => root.dispatchEvent(new Event("pointerdown", { bubbles: true })));
       const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
@@ -263,10 +241,8 @@ describe("useChatRelevantNotesContext", () => {
       ]);
     });
 
-    it("includes selected excerpts and project file references without implicitly attaching the active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      renderHook(() =>
-        useChatRelevantNotesContext(app, root, "one", draft, [], projectLinking("Research"))
-      );
+    it("includes selected excerpts without implicitly attaching the active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, []));
 
       act(() => {
         root.dispatchEvent(new Event("pointerdown"));
@@ -274,20 +250,17 @@ describe("useChatRelevantNotesContext", () => {
 
       const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
       expect(request.excerpts).toEqual(["literal excerpt"]);
-      expect(request.file_paths).toEqual(["Vault/Research/project.md"]);
+      expect(request.file_paths).toEqual([]);
     });
-    it("sends the chat's own notes first, then the project's linked notes, then its other files and project-folder files newest first (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+    it("sends a project chat's own notes but none of the project's linked notes, linked folders, or project-folder files (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
       const project = projectLinking("Research,[[Packing list]]");
       updateCachedProjectRecords([
         { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
       ]);
       vaultFiles = [
-        vaultFile("copilot/projects/Trip/itinerary.md", 4),
-        vaultFile("Research/old.md", 1),
-        vaultFile("Research/new.md", 3),
-        vaultFile("Archive/Packing list.md", 0),
-        vaultFile("Research/mid.md", 2),
-        vaultFile("Unrelated.md", 9),
+        vaultFile("copilot/projects/Trip/itinerary.md"),
+        vaultFile("Research/notes.md"),
+        vaultFile("Archive/Packing list.md"),
       ];
       const sent: AgentChatMessage = {
         ...user,
@@ -299,8 +272,7 @@ describe("useChatRelevantNotesContext", () => {
           root,
           "one",
           { ...draft, contextNotes: [vaultFile("attached.md")], includeActiveNote: true },
-          [sent],
-          project
+          [sent]
         )
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
@@ -308,74 +280,21 @@ describe("useChatRelevantNotesContext", () => {
         "Vault/sent.md",
         "Vault/attached.md",
         "Vault/active.md",
-        "Vault/Archive/Packing list.md",
-        "Vault/copilot/projects/Trip/itinerary.md",
-        "Vault/Research/new.md",
-        "Vault/Research/mid.md",
-        "Vault/Research/old.md",
       ]);
     });
-    it("caps file references at Miyo's 100-path limit by dropping the oldest project files (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
-      vaultFiles = Array.from({ length: 500 }, (_, i) => vaultFile(`Research/note-${i}.md`, i));
+    it("caps file references at Miyo's 100-path limit, keeping the chat's first notes in order (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      const attached = Array.from({ length: 150 }, (_, i) => vaultFile(`attached-${i}.md`));
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          { ...draft, contextNotes: [vaultFile("attached.md")] },
-          [],
-          projectLinking("Research")
-        )
+        useChatRelevantNotesContext(app, root, "one", { ...draft, contextNotes: attached }, [])
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       const paths = getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths!;
-      expect(paths).toHaveLength(100);
-      expect(paths.slice(0, 2)).toEqual(["Vault/attached.md", "Vault/Research/note-499.md"]);
-      expect(paths.at(-1)).toBe("Vault/Research/note-401.md");
-    });
-    it("keeps the project's linked notes within the 100-path cap however many newer project-folder files exist (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
-      const project = projectLinking("[[Packing list]]");
-      updateCachedProjectRecords([
-        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
-      ]);
-      vaultFiles = [
-        ...Array.from({ length: 500 }, (_, i) =>
-          vaultFile(`copilot/projects/Trip/note-${i}.md`, i + 1)
-        ),
-        vaultFile("Archive/Packing list.md", 0),
-      ];
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      const paths = getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths!;
-      expect(paths).toHaveLength(100);
-      expect(paths.slice(0, 2)).toEqual([
-        "Vault/Archive/Packing list.md",
-        "Vault/copilot/projects/Trip/note-499.md",
-      ]);
-    });
-    it("includes the project folder's own files, newest first, without its config or instructions file (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
-      const project = projectLinking();
-      updateCachedProjectRecords([
-        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
-      ]);
-      vaultFiles = [
-        vaultFile("copilot/projects/Trip/project.md", 5),
-        vaultFile("copilot/projects/Trip/AGENTS.md", 5),
-        vaultFile("copilot/projects/Trip/itinerary.md", 1),
-        vaultFile("copilot/projects/Trip/drafts/budget.md", 2),
-        vaultFile("copilot/projects/Other/notes.md", 3),
-      ];
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths).toEqual([
-        "Vault/copilot/projects/Trip/drafts/budget.md",
-        "Vault/copilot/projects/Trip/itinerary.md",
-      ]);
+      expect(paths).toEqual(attached.slice(0, 100).map((file) => `Vault/${file.path}`));
     });
     it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
         ({ messages, loading }) =>
-          useChatRelevantNotesContext(app, root, "one", { ...draft, loading }, messages, undefined),
+          useChatRelevantNotesContext(app, root, "one", { ...draft, loading }, messages),
         { initialProps: { messages: [] as AgentChatMessage[], loading: false } }
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
@@ -414,14 +333,7 @@ describe("useChatRelevantNotesContext", () => {
         const streamingMessages = [prior, user, partial];
         const { rerender } = renderHook(
           ({ id, messages }) =>
-            useChatRelevantNotesContext(
-              app,
-              root,
-              id,
-              { ...draft, loading: true },
-              messages,
-              undefined
-            ),
+            useChatRelevantNotesContext(app, root, id, { ...draft, loading: true }, messages),
           {
             initialProps: {
               id: "first-chat",
@@ -455,14 +367,7 @@ describe("useChatRelevantNotesContext", () => {
         turnStopReason: "end_turn" as const,
       };
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          { ...draft, loading: true },
-          [prior, user],
-          undefined
-        )
+        useChatRelevantNotesContext(app, root, "one", { ...draft, loading: true }, [prior, user])
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       expect(getChatRelevantNotesStore(app).getSnapshot()!.request.messages).toEqual([
@@ -497,14 +402,7 @@ describe("useChatRelevantNotesContext", () => {
         },
       ];
       renderHook(() =>
-        useChatRelevantNotesContext(
-          app,
-          root,
-          "one",
-          { ...draft, input: "", queue },
-          [user],
-          undefined
-        )
+        useChatRelevantNotesContext(app, root, "one", { ...draft, input: "", queue }, [user])
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       const snapshot = getChatRelevantNotesStore(app).getSnapshot()!;
@@ -524,14 +422,7 @@ describe("useChatRelevantNotesContext", () => {
       };
       const { rerender } = renderHook(
         ({ messages }) =>
-          useChatRelevantNotesContext(
-            app,
-            root,
-            "one",
-            { ...draft, input: "" },
-            messages,
-            undefined
-          ),
+          useChatRelevantNotesContext(app, root, "one", { ...draft, input: "" }, messages),
         { initialProps: { messages: [sent] } }
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
@@ -553,21 +444,14 @@ describe("useChatRelevantNotesContext", () => {
       (_case, activeWebTab, expected) => {
         mockActiveWebTab = activeWebTab;
         renderHook(() =>
-          useChatRelevantNotesContext(
-            app,
-            root,
-            "one",
-            { ...draft, includeActiveWebTab: true },
-            [],
-            undefined
-          )
+          useChatRelevantNotesContext(app, root, "one", { ...draft, includeActiveWebTab: true }, [])
         );
         void act(() => root.dispatchEvent(new Event("pointerdown")));
         expect(getChatRelevantNotesStore(app).getSnapshot()!.skippedAttachments).toBe(expected);
       }
     );
     it("clears the selected chat when a Markdown editor becomes active even without a Relevant Notes pane (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, []));
       void act(() => root.dispatchEvent(new Event("pointerdown")));
       expect(getChatRelevantNotesStore(app).getSnapshot()?.id).toBe("one");
       const listener = (app.workspace.on as jest.Mock).mock.calls.find(
@@ -591,7 +475,7 @@ describe("useChatRelevantNotesContext", () => {
         />,
         { container: root }
       );
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, []));
       const other = {
         id: "other",
         request: { folder_name: "Vault", draft: "other topic" },
@@ -620,8 +504,7 @@ describe("useChatRelevantNotesContext", () => {
       };
       store.select(popout);
       const { rerender } = renderHook(
-        ({ text }) =>
-          useChatRelevantNotesContext(app, root, "main", { ...draft, input: text }, [], undefined),
+        ({ text }) => useChatRelevantNotesContext(app, root, "main", { ...draft, input: text }, []),
         { initialProps: { text: "main draft" } }
       );
       rerender({ text: "main update" });
@@ -631,8 +514,7 @@ describe("useChatRelevantNotesContext", () => {
     });
     it("selects the new session's draft when the focused chat switches sessions (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
-        ({ id, input }) =>
-          useChatRelevantNotesContext(app, root, id, { ...draft, input }, [], undefined),
+        ({ id, input }) => useChatRelevantNotesContext(app, root, id, { ...draft, input }, []),
         { initialProps: { id: "first-chat", input: "How do embeddings work?" } }
       );
       act(() => {
@@ -655,7 +537,7 @@ describe("useChatRelevantNotesContext", () => {
         { container: root }
       );
       const shelf = getByRole("button", { name: "Open in separate pane" });
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, []));
       void act(() => shelf.dispatchEvent(new Event("pointerdown", { bubbles: true })));
       expect(getChatRelevantNotesStore(app).getSnapshot()).toBeNull();
     });
