@@ -1,6 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoConnectionMode, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
+import { PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSystemExcludedFolders } from "@/search/searchUtils";
 import {
   deriveCopilotFolder,
@@ -20,6 +21,7 @@ export function getMiyoSystemExcludedFolders(settings: CopilotSettings): string[
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/847
   return [
     ...deriveCopilotSubfolders(settings).filter((folder) => folder !== projects),
+    `${projects}/${PROJECTS_UNSUPPORTED_FOLDER_NAME}`,
     deriveLogFile(settings),
     ...getSystemExcludedFolders(settings).filter((folder) => folder !== root),
   ];
