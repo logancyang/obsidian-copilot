@@ -1,6 +1,6 @@
 # Feature map
 
-What Copilot does for its users, described the way a product manager would: one file per task a user comes to do. It tells an agent which feature a change or bug report touches, what that feature promises the user, and where changes tend to go wrong.
+What Copilot does for its users, described the way a product manager would: one file per feature a user can see in the app. It tells an agent which feature a change or bug report touches, what that feature promises the user, and where changes tend to go wrong.
 
 Entries describe behavior only. No file paths, function names, selectors, or other implementation detail: the code changes, and this map should not need to change with it. Update an entry only when what the user can do or see changes.
 
@@ -19,21 +19,22 @@ Before shipping a change, find every feature whose behavior the change can affec
 
 ## Each file
 
-- **Sub-features:** what the user can do or will see within the task, as product rules.
+- **Sub-features:** what the user can do or will see there, as product rules.
 - **How to get to it:** the user's path in the app.
 - **Driving it:** user steps and the outcome that proves the feature works.
 - **Gotchas:** traps for anyone changing or verifying the feature.
 
 ## Features
 
-| File                                   | User task                     | Aliases                                       |
-| -------------------------------------- | ----------------------------- | --------------------------------------------- |
-| [`several-chats.md`](several-chats.md) | Work on several chats at once | chat tabs, multiple chats                     |
-| [`past-chats.md`](past-chats.md)       | Go back to a past chat        | chat history, Recent chats, Copilot Navigator |
+| File                                           | Feature           | What the user sees                                   |
+| ---------------------------------------------- | ----------------- | ---------------------------------------------------- |
+| [`chat-tabs.md`](chat-tabs.md)                 | Chat tabs         | Tabs across the top of Agent Chat, one per open chat |
+| [`copilot-navigator.md`](copilot-navigator.md) | Copilot Navigator | A sidebar listing chats and projects                 |
 
 ## Unmapped
 
-- **Write and send a message** (drafts, attached notes and context, images, stop, queue).
-- **Follow what the agent did** (tool activity, plans, file changes and undoing them).
-- **Work inside a project** (project context, project files); only its effect on open chats is mapped.
-- **Set up an agent** (install, sign in, models, modes): settings territory.
+- **Message box** (drafts, attached notes, images, send, stop, queue).
+- **Agent activity in a chat** (tool cards, plans, file changes, Revoke).
+- **Projects** (create, enter, project context); only their effect on tabs is mapped.
+- **Chat history** (Recent chats, the history list); only opening a chat and Close chat are mapped, under Chat tabs.
+- **Agent settings** (setup, sign-in, model, mode).
