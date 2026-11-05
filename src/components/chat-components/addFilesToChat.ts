@@ -22,11 +22,8 @@ function getOsPath(file: File): string | null {
 
 function findVaultFile(app: App, file: File): TFile | null {
   const osPath = getOsPath(file);
-  const vaultBase = getVaultBase(app);
-  if (!osPath || !vaultBase) return null;
-  const vaultPath = toVaultRelative(osPath, vaultBase);
-  if (vaultPath === osPath) return null;
-  const vaultFile = app.vault.getAbstractFileByPath(vaultPath);
+  if (!osPath) return null;
+  const vaultFile = app.vault.getAbstractFileByPath(toVaultRelative(osPath, getVaultBase(app)));
   return vaultFile instanceof TFile ? vaultFile : null;
 }
 
