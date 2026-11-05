@@ -47,6 +47,7 @@ Read the matching guide when your task touches that area — they aren't loaded 
 | running a multi-step dev session                                      | [`internal-docs/PROCESS_GUIDE.md`](./internal-docs/PROCESS_GUIDE.md)                         |
 | changing user-facing behavior                                         | [`internal-docs/DOCS_GUIDE.md`](./internal-docs/DOCS_GUIDE.md)                               |
 | reviewing code or preparing an Obsidian submission                    | [`internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md`](./internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md) |
+| changing a user-facing feature listed in the feature map              | [`internal-docs/feature-map/`](./internal-docs/feature-map/README.md)                        |
 
 ## Important notes
 
