@@ -1941,7 +1941,7 @@ describe("AgentSessionManager", () => {
         const c = await createWorkedSession(mgr);
         const replacement = await mgr.replaceSessionInPlace(b.internalId);
         await flushBackgroundClose();
-        expect(mgr.getSessions()).toEqual([a, replacement, c]);
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([a, replacement, c]);
         expect(mgr.getActiveSession()).toBe(replacement);
       });
 
@@ -1952,7 +1952,7 @@ describe("AgentSessionManager", () => {
         mgr.setActiveSession(a.internalId);
         const replacement = await mgr.replaceSessionInPlace(a.internalId);
         await flushBackgroundClose();
-        expect(mgr.getSessions()).toEqual([replacement, b]);
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([replacement, b]);
         expect(mgr.getActiveSession()).toBe(replacement);
       });
 
@@ -2076,6 +2076,39 @@ describe("AgentSessionManager", () => {
           expect.objectContaining({ existingPath: "chats/saved.md" })
         );
         await mgr.shutdown();
+      });
+
+      it.each([
+        ["is idle", (_s: AgentSession) => {}],
+        ["is responding", (s: AgentSession) => getSessionTestHandle(s).setStatus("running")],
+      ])(
+        "keeps a chat the user sent a message in running out of its tab when New chat replaces it while it %s for https://github.com/Brevilabs/obsidian-copilot-private/issues/849",
+        async (_label, background) => {
+          const mgr = buildManager();
+          mgr.holdChatsInTabs();
+          const worked = await createWorkedSession(mgr);
+          background(worked);
+
+          const created = await mgr.replaceSessionInPlace(worked.internalId);
+
+          expect(closedSessions()).toEqual([]);
+          expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([created]);
+          expect(mgr.getOpenChatIds()).toContain(nativeIdOf(worked));
+        }
+      );
+
+      it("releases a chat reopened from history and only read when New chat replaces it, though the tab strip holds its chats, for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+        const mgr = buildManager();
+        mgr.holdChatsInTabs();
+        const read = await mgr.createSession();
+        getSessionTestHandle(read).setHasUserVisibleMessages(true);
+        const closed = untilClosed(mgr, read);
+
+        const created = await mgr.replaceSessionInPlace(read.internalId);
+        await closed;
+
+        expect(closedSessions()).toEqual([read]);
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([created]);
       });
 
       it("keeps the replacement of a chat the user sent a message in open once it is left for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {

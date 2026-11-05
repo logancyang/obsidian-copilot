@@ -1728,6 +1728,12 @@ export class AgentSessionManager {
       this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
       this.notify();
     }
+    // A new chat leaves the replaced conversation as closing its tab would: a chat the user worked in keeps running, reachable from Recent chats.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+    if (!chatInputId) {
+      this.detachSessionFromTab(oldId);
+      return created;
+    }
     void this.closeSession(oldId).catch((e) =>
       logWarn(`[AgentMode] closeSession during replaceSessionInPlace failed`, e)
     );
