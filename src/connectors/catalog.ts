@@ -229,7 +229,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     name: "PayPal",
     description: "Invoices, orders and payments",
     category: "Business",
-    serverUrl: "https://mcp.paypal.com/http",
+    serverUrl: "https://mcp.paypal.com/mcp",
     Logo: PayPalLogo,
   },
   {
