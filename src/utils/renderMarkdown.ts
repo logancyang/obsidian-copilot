@@ -9,6 +9,13 @@ type ModernRender = (
   component: Component
 ) => Promise<void>;
 
+// Dataview evaluates fenced code that starts with `=` as an inline query, appending parse errors to
+// chat replies; its `?no-dataview` sourcePath marker keeps rendered model output literal.
+// https://github.com/logancyang/obsidian-copilot/issues/3988
+export function withoutDataview(sourcePath: string): string {
+  return `${sourcePath}?no-dataview`;
+}
+
 export async function renderMarkdown(
   app: App,
   markdown: string,
@@ -17,7 +24,7 @@ export async function renderMarkdown(
   component: Component
 ): Promise<void> {
   const render = (MarkdownRenderer as unknown as { render: ModernRender }).render;
-  await render(app, markdown, el, sourcePath, component);
+  await render(app, markdown, el, withoutDataview(sourcePath), component);
   wireInternalLinks(el, app, sourcePath, component);
 }
 
