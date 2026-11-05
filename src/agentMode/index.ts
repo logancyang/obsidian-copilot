@@ -25,7 +25,6 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
-import { isSessionsSidebarOpen } from "./navigator/hooks/useSessionsSidebarOpen";
 import {
   createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
@@ -228,7 +227,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    isSessionsSidebarOpen: () => isSessionsSidebarOpen(app),
     copilotMcpServer: createCopilotMcpServer(
       (toolName) => isCopilotToolOn(toolName, getSettings(), app),
       [

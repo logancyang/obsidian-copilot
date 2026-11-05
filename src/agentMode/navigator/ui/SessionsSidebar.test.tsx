@@ -59,6 +59,11 @@ class FakeManager {
   });
   getChatHistoryItems = jest.fn(async () => this.items);
   closeChatSession = jest.fn(async (_id: string) => {});
+  shownChatId: string | null = null;
+  getActiveSession = () => (this.shownChatId ? { internalId: this.shownChatId } : null);
+  closeSessionIfLeft = jest.fn((id: string) => {
+    this.events.push(`release:${id}`);
+  });
   getOpenChatIds = () => this.open;
   getRunningChatIds = () => this.running;
   getWaitingChatIds = () => this.waiting;
@@ -235,6 +240,31 @@ describe("SessionsSidebar", () => {
       await waitFor(() => expect(plugin.loadChatById).toHaveBeenCalledWith("chats/a.md"));
     });
 
+    it("releases the chat shown before once the clicked chat opens, so browsing leaves no session behind, for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("chats/a.md", "Alpha", 1_000)];
+      manager.shownChatId = "left";
+      const plugin = renderSidebar(manager);
+      plugin.loadChatById.mockImplementation(async () => {
+        manager.events.push("load");
+      });
+
+      fireEvent.click(await screen.findByRole("button", { name: "Alpha" }));
+
+      await waitFor(() => expect(manager.events).toEqual(["load", "release:left"]));
+    });
+
+    it("releases nothing when no chat was shown before the clicked chat opens for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("chats/a.md", "Alpha", 1_000)];
+      const plugin = renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Alpha" }));
+
+      await waitFor(() => expect(plugin.loadChatById).toHaveBeenCalledWith("chats/a.md"));
+      expect(manager.closeSessionIfLeft).not.toHaveBeenCalled();
+    });
+
     it("tells the user when the chat cannot be opened for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
       const manager = new FakeManager();
       manager.items = [chat("chats/a.md", "Alpha", 1_000)];
@@ -322,6 +352,18 @@ describe("SessionsSidebar", () => {
 
       await waitFor(() => expect(manager.openGlobalLanding).toHaveBeenCalledTimes(1));
       expect(manager.events).toEqual(["landing", "view"]);
+    });
+
+    it("releases the chat shown before once the new global chat is open for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.shownChatId = "left";
+      renderSidebar(manager);
+      await screen.findByRole("button", { name: "Alpha" });
+
+      fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+
+      await waitFor(() => expect(manager.events).toEqual(["landing", "view", "release:left"]));
     });
 
     it("reports a failed new chat without throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", async () => {
@@ -603,6 +645,34 @@ describe("SessionsSidebar", () => {
       expect(manager.events).toEqual(["enter:shelved", "view"]);
     });
 
+    it("releases the chat shown before once a chat or project opens from the Archived dialog for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      const manager = new FakeManager();
+      manager.items = [chat("a.md", "Alpha", 1_000)];
+      manager.shownChatId = "left";
+      const plugin = renderSidebar(manager);
+      plugin.loadChatById.mockImplementation(async () => {
+        manager.events.push("load");
+      });
+      await screen.findByRole("button", { name: "Alpha" });
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Sidebar options" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(screen.getByRole("menuitem", { name: "View archived" }));
+      const [, , , actions] = jest.mocked(ArchivedChatsModal).mock.calls[0];
+
+      await actions.onOpen("shelved.md");
+      await actions.onOpenProject("shelved");
+
+      expect(manager.events).toEqual([
+        "load",
+        "release:left",
+        "enter:shelved",
+        "view",
+        "release:left",
+      ]);
+    });
+
     it("leaves the project when the open project is deleted from its folder menu, as the landing list does, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
       projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
       const manager = new FakeManager();
@@ -640,6 +710,19 @@ describe("SessionsSidebar", () => {
 
       await waitFor(() => expect(manager.events).toEqual(["landing:garden", "view"]));
       expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
+    });
+
+    it("releases the chat shown before once the project landing opens from the folder's plus for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.shownChatId = "left";
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "New chat in Garden plans" }));
+
+      await waitFor(() =>
+        expect(manager.events).toEqual(["landing:garden", "view", "release:left"])
+      );
     });
 
     it("reports a project that cannot be opened without throwing for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {
@@ -696,6 +779,23 @@ describe("SessionsSidebar", () => {
       expect(
         (await screen.findByRole("button", { name: "Garden plans" })).getAttribute("aria-current")
       ).toBe("true");
+    });
+
+    it("releases the chat shown before once a project created from the new project dialog opens for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      const manager = new FakeManager();
+      manager.shownChatId = "left";
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "New project" }));
+      const field = within(screen.getByRole("dialog", { name: "New project" })).getByRole(
+        "textbox"
+      );
+      fireEvent.change(field, { target: { value: "Garden plans" } });
+      await act(async () => {
+        fireEvent.keyDown(field, { key: "Enter" });
+      });
+
+      expect(manager.events.slice(1)).toEqual(["view", "release:left"]);
     });
 
     it("keeps the new project dialog open and reports createProject's error when the name is taken for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", async () => {

@@ -23,12 +23,25 @@ interface SessionsSidebarProps {
   plugin: CopilotPlugin;
 }
 
+// Browsing chats in the Navigator never leaves a session behind, so each move away releases a chat with no message sent; tabs only release on close.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+function releasingLeftChat<A extends unknown[]>(
+  manager: AgentSessionManager,
+  navigate: (...args: A) => Promise<void>
+): (...args: A) => Promise<void> {
+  return async (...args) => {
+    const left = manager.getActiveSession()?.internalId;
+    await navigate(...args);
+    if (left) manager.closeSessionIfLeft(left);
+  };
+}
+
 export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugin }) => {
   const {
     chatHistoryItems,
     archivedChatItems,
     loadChatHistory,
-    loadChat,
+    loadChat: loadChatInView,
     updateChatTitle,
     deleteChat,
     setChatPinned,
@@ -39,6 +52,10 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     setChatBookmarked,
   } = useAgentHistoryControls(manager, plugin);
   const { app } = plugin;
+  const loadChat = useMemo(
+    () => releasingLeftChat(manager, loadChatInView),
+    [manager, loadChatInView]
+  );
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());
@@ -87,34 +104,40 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     };
   }, [plugin, loadChatHistory]);
 
-  const handleNewChat = useCallback(async () => {
-    try {
-      await manager.openGlobalLanding();
-      await plugin.activateAgentView();
-    } catch (e) {
-      logError("[AgentMode] sidebar new chat failed", e);
-      new Notice("Failed to start a new chat. Please try again.");
-    }
-  }, [manager, plugin]);
-
-  const handleOpenProject = useCallback(
-    async (projectId: string) => {
-      try {
-        await manager.openProjectLanding(projectId);
-        await plugin.activateAgentView();
-      } catch (e) {
-        logError("[AgentMode] sidebar open project failed", e);
-        new Notice("Failed to open project. Please try again.");
-      }
-    },
+  const handleNewChat = useMemo(
+    () =>
+      releasingLeftChat(manager, async () => {
+        try {
+          await manager.openGlobalLanding();
+          await plugin.activateAgentView();
+        } catch (e) {
+          logError("[AgentMode] sidebar new chat failed", e);
+          new Notice("Failed to start a new chat. Please try again.");
+        }
+      }),
     [manager, plugin]
   );
 
-  const handleCreateProject = useCallback(
-    async (name: string) => {
-      await createProjectAndEnter(app, manager, name);
-      await plugin.activateAgentView();
-    },
+  const handleOpenProject = useMemo(
+    () =>
+      releasingLeftChat(manager, async (projectId: string) => {
+        try {
+          await manager.openProjectLanding(projectId);
+          await plugin.activateAgentView();
+        } catch (e) {
+          logError("[AgentMode] sidebar open project failed", e);
+          new Notice("Failed to open project. Please try again.");
+        }
+      }),
+    [manager, plugin]
+  );
+
+  const handleCreateProject = useMemo(
+    () =>
+      releasingLeftChat(manager, async (name: string) => {
+        await createProjectAndEnter(app, manager, name);
+        await plugin.activateAgentView();
+      }),
     [app, manager, plugin]
   );
 
@@ -163,10 +186,10 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       onUnarchive: (id) => setChatArchived(id, false),
       onOpen: loadChat,
       ...projectActions,
-      onOpenProject: async (id) => {
+      onOpenProject: releasingLeftChat(manager, async (id: string) => {
         await projectActions.onOpenProject(id);
         await plugin.activateAgentView();
-      },
+      }),
     }).open();
   }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
 

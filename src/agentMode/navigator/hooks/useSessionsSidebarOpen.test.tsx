@@ -1,9 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { CHAT_AGENT_VIEWTYPE, SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
-import {
-  isSessionsSidebarOpen,
-  useSessionsSidebarOpen,
-} from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
+import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { makeFakeWorkspaceApp } from "@/agentMode/ui/testing/fakeWorkspaceApp";
 import {
   applyLicenseWithNavigator,
@@ -14,32 +11,6 @@ import {
 jest.mock("@/entitlement");
 
 describe("useSessionsSidebarOpen", () => {
-  describe("isSessionsSidebarOpen()", () => {
-    beforeEach(() => setNavigatorAccess("supporter"));
-
-    it("is true while a sessions sidebar leaf is open, so the session manager can tell the Navigator from the tab strip, for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
-      const fake = makeFakeWorkspaceApp();
-      fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
-
-      expect(isSessionsSidebarOpen(fake.app)).toBe(true);
-    });
-
-    it("is false while only the tab strip shows for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
-      const fake = makeFakeWorkspaceApp();
-      fake.setLeaves({ [CHAT_AGENT_VIEWTYPE]: 1 });
-
-      expect(isSessionsSidebarOpen(fake.app)).toBe(false);
-    });
-
-    it("is false for a user without Navigator access whose blocked Navigator leaf leaves the tab strip showing for https://github.com/Brevilabs/obsidian-copilot-private/issues/819", async () => {
-      await setNavigatorAccess("plus-without-navigator");
-      const fake = makeFakeWorkspaceApp();
-      fake.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
-
-      expect(isSessionsSidebarOpen(fake.app)).toBe(false);
-    });
-  });
-
   describe("useSessionsSidebarOpen()", () => {
     beforeEach(() => setNavigatorAccess("supporter"));
     it("is false while the workspace has no sessions sidebar leaf for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
