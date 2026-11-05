@@ -1984,20 +1984,13 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(replacement);
       });
 
-      it("preserves the logical chat input only when explicitly requested", async () => {
+      it("keeps the replaced chat's chat input, so its unsent draft carries over", async () => {
         const mgr = buildManager();
-        const freshSource = await mgr.createSession();
-        expect(freshSource.chatInputId).not.toBe(freshSource.internalId);
-        const freshReplacement = await mgr.replaceSessionInPlace(freshSource.internalId);
-        expect(freshReplacement.chatInputId).not.toBe(freshSource.chatInputId);
+        const source = await mgr.createSession();
 
-        const preservedSource = freshReplacement;
-        const preservedReplacement = await mgr.replaceSessionInPlace(
-          preservedSource.internalId,
-          undefined,
-          { preserveChatInput: true }
-        );
-        expect(preservedReplacement.chatInputId).toBe(preservedSource.chatInputId);
+        const replacement = await mgr.replaceSessionInPlace(source.internalId);
+
+        expect(replacement.chatInputId).toBe(source.chatInputId);
       });
 
       it("keeps the last successful replacement when a queued replacement fails", async () => {
@@ -2018,17 +2011,14 @@ describe("AgentSessionManager", () => {
         });
 
         const first = mgr.replaceSessionInPlace(source.internalId, "opencode", {
-          preserveChatInput: true,
           seedSelection: { baseModelId: "first-model", effort: null },
         });
         const second = mgr.replaceSessionInPlace(source.internalId, "opencode", {
-          preserveChatInput: true,
           seedSelection: { baseModelId: "latest-model", effort: "high" },
         });
         const firstReplacement = await first;
         await secondStarted.promise;
         const third = mgr.replaceSessionInPlace(firstReplacement.internalId, "opencode", {
-          preserveChatInput: true,
           seedSelection: { baseModelId: "final-model", effort: "low" },
         });
         secondGate.resolve();
@@ -2044,6 +2034,36 @@ describe("AgentSessionManager", () => {
           })
         );
         expect(mgr.getSessions()).toEqual([thirdReplacement]);
+      });
+
+      it("keeps the replacement of a chat the user sent a message in open once it is left for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager();
+        const other = await createWorkedSession(mgr);
+        const worked = await createWorkedSession(mgr);
+        const replaced = untilClosed(mgr, worked);
+        const replacement = await mgr.replaceSessionInPlace(worked.internalId);
+        await replaced;
+
+        mgr.setActiveSession(other.internalId);
+
+        expect(closedSessions()).toEqual([worked]);
+        expect(mgr.getSessions()).toContain(replacement);
+      });
+    });
+    describe("startNewChatInPlace()", () => {
+      it("puts the new chat in the replaced chat's tab slot, gives it its own chat input, and shows it", async () => {
+        const mgr = buildManager();
+        mgr.holdChatsInTabs();
+        const a = await mgr.createSession();
+        const b = await mgr.createSession();
+        const c = await mgr.createSession();
+        mgr.setActiveSession(b.internalId);
+
+        const created = await mgr.startNewChatInPlace(b.internalId);
+
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([a, created, c]);
+        expect(created.chatInputId).not.toBe(b.chatInputId);
+        expect(mgr.getActiveSession()).toBe(created);
       });
 
       it("updates the manually saved file and drains later turns on New chat with autosave off for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
@@ -2067,7 +2087,7 @@ describe("AgentSessionManager", () => {
         );
         const final = [...later, { message: "Final question" }, { message: "Final answer" }];
         handle.setMessages(final, true);
-        await mgr.replaceSessionInPlace(session.internalId);
+        await mgr.startNewChatInPlace(session.internalId);
         await jest.advanceTimersByTimeAsync(0);
         expect(saveSession).toHaveBeenCalledTimes(3);
         expect(saveSession).toHaveBeenLastCalledWith(
@@ -2089,7 +2109,7 @@ describe("AgentSessionManager", () => {
           const worked = await createWorkedSession(mgr);
           background(worked);
 
-          const created = await mgr.replaceSessionInPlace(worked.internalId);
+          const created = await mgr.startNewChatInPlace(worked.internalId);
 
           expect(closedSessions()).toEqual([]);
           expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([created]);
@@ -2104,27 +2124,11 @@ describe("AgentSessionManager", () => {
         getSessionTestHandle(read).setHasUserVisibleMessages(true);
         const closed = untilClosed(mgr, read);
 
-        const created = await mgr.replaceSessionInPlace(read.internalId);
+        const created = await mgr.startNewChatInPlace(read.internalId);
         await closed;
 
         expect(closedSessions()).toEqual([read]);
         expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([created]);
-      });
-
-      it("keeps the replacement of a chat the user sent a message in open once it is left for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
-        const mgr = buildManager();
-        const other = await createWorkedSession(mgr);
-        const worked = await createWorkedSession(mgr);
-        const replaced = untilClosed(mgr, worked);
-        const replacement = await mgr.replaceSessionInPlace(worked.internalId, undefined, {
-          preserveChatInput: true,
-        });
-        await replaced;
-
-        mgr.setActiveSession(other.internalId);
-
-        expect(closedSessions()).toEqual([worked]);
-        expect(mgr.getSessions()).toContain(replacement);
       });
     });
 
