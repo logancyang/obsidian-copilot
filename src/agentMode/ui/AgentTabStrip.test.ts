@@ -266,6 +266,17 @@ describe("AgentTabStrip", () => {
       expect(releases[1]).not.toHaveBeenCalled();
     });
 
+    it("lets go of its chats when Agent Chat closes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
+      const release = jest.fn();
+      const manager = makeManagerWithOneChat();
+      manager.holdChatsInTabs.mockReturnValueOnce(release);
+      const { unmount } = renderStrip(manager);
+
+      unmount();
+
+      expect(release).toHaveBeenCalledTimes(1);
+    });
+
     it("starts hidden when a sessions sidebar leaf already exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       const workspace: FakeWorkspaceApp = makeFakeWorkspaceApp();
       workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 });
