@@ -1,7 +1,6 @@
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import {
   ABORT_REASON,
-  COMPOSER_OUTPUT_INSTRUCTIONS,
   LOADING_MESSAGES,
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
   ModelCapability,
@@ -20,7 +19,6 @@ import {
   getEffectiveUserPrompt,
   getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
-import { createWriteFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -32,7 +30,6 @@ import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { getApiErrorMessage, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseChainRunner } from "./BaseChainRunner";
-import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import {
   addFallbackSources,
@@ -483,16 +480,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     return this.hasCapability(model, ModelCapability.VISION);
   }
 
-  private appendComposerInstructionsIfNeeded(content: string, userMessage: ChatMessage): string {
-    if (!userMessage.message || !userMessage.message.includes("@composer")) {
-      return content;
-    }
-    const composerPrompt = `<OUTPUT_FORMAT>\n${COMPOSER_OUTPUT_INSTRUCTIONS}\n</OUTPUT_FORMAT>`;
-    return `${content}\n\n${composerPrompt}`;
-  }
-
   private async streamMultimodalResponse(
-    textContent: string,
     userMessage: ChatMessage,
     allToolOutputs: { tool: string; output: unknown }[],
     abortController: AbortController,
@@ -570,16 +558,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         finalUserContent = ensureUserQueryLabel(userMessageContent.content);
       }
 
-      if (
-        textContent.includes("<OUTPUT_FORMAT>") &&
-        !finalUserContent.includes("<OUTPUT_FORMAT>")
-      ) {
-        const composerMatch = textContent.match(/<OUTPUT_FORMAT>[\s\S]*?<\/OUTPUT_FORMAT>/);
-        if (composerMatch) {
-          finalUserContent += "\n\n" + composerMatch[0];
-        }
-      }
-
       const content: string | MessageContent[] = isMultimodalCurrent
         ? await this.buildMessageContent(finalUserContent, userMessage)
         : finalUserContent;
@@ -599,11 +577,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       contextEnvelope: userMessage.contextEnvelope,
     });
 
-    const actionStreamer = new ActionBlockStreamer(
-      ToolManager,
-      createWriteFileTool(this.chainManager.app)
-    );
-
     const chatStream = await withSuppressedTokenWarnings(() =>
       this.chainManager.chatModelManager.getChatModel().stream(messages, {
         signal: abortController.signal,
@@ -617,11 +590,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         });
         break;
       }
-      for await (const processedChunk of actionStreamer.processChunk(
-        chunk as unknown as Record<string, unknown>
-      )) {
-        thinkStreamer.processChunk(processedChunk);
-      }
+      thinkStreamer.processChunk(chunk as Parameters<typeof thinkStreamer.processChunk>[0]);
     }
   }
 
@@ -772,14 +741,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
       const allToolOutputs = toolOutputs.filter((output) => output.output != null);
 
-      const textContentWithComposer = this.appendComposerInstructionsIfNeeded(
-        cleanedUserMessage,
-        userMessage
-      );
-
       logInfo("Invoking LLM with envelope-based context construction");
       await this.streamMultimodalResponse(
-        textContentWithComposer,
         userMessage,
         allToolOutputs,
         abortController,

@@ -24,28 +24,6 @@ More content here.`;
       expect(cleanMessageForCopy(input)).toBe("Start\n\nEnd");
     });
 
-    it("removes writeFile blocks wrapped in an xml code fence", () => {
-      const input = `Some text before
-\`\`\`xml
-<writeFile>
-<path>test.md</path>
-<content>File content here</content>
-</writeFile>
-\`\`\`
-Some text after`;
-      expect(cleanMessageForCopy(input)).toBe("Some text before\n\nSome text after");
-    });
-
-    it("removes standalone writeFile blocks", () => {
-      const input = `Text before
-<writeFile>
-<path>test.md</path>
-<content>File content</content>
-</writeFile>
-Text after`;
-      expect(cleanMessageForCopy(input)).toBe("Text before\n\nText after");
-    });
-
     it("removes tool call markers together with the text they wrap", () => {
       const input =
         "Before\n<!--TOOL_CALL_START:123:localSearch:Local Search:🔍::true-->Searching...<!--TOOL_CALL_END:123:Found 5 results-->\nAfter";
@@ -68,7 +46,6 @@ Here is the actual response.`;
       const input = `Start of message
 <think>First thought</think>
 Middle part
-<writeFile><path>file.md</path><content>content</content></writeFile>
 <!--TOOL_CALL_START:456:webSearch:Web Search:🌐::false-->Searching web<!--TOOL_CALL_END:456:Results-->
 End of message`;
       expect(cleanMessageForCopy(input)).toBe("Start of message\n\nMiddle part\n\nEnd of message");

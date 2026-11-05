@@ -1,5 +1,5 @@
 import React from "react";
-import { Database, Globe, Pen, Sparkles, Brain, Wrench, Check } from "lucide-react";
+import { Database, Globe, Brain, Wrench, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -18,14 +18,11 @@ interface ChatToolControlsProps {
   setVaultToggle: (value: boolean) => void;
   webToggle: boolean;
   setWebToggle: (value: boolean) => void;
-  composerToggle: boolean;
-  setComposerToggle: (value: boolean) => void;
   autonomousAgentToggle: boolean;
   setAutonomousAgentToggle: (value: boolean) => void;
 
   onVaultToggleOff?: () => void;
   onWebToggleOff?: () => void;
-  onComposerToggleOff?: () => void;
 
   currentChain: ChainType;
 }
@@ -35,13 +32,10 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   setVaultToggle,
   webToggle,
   setWebToggle,
-  composerToggle,
-  setComposerToggle,
   autonomousAgentToggle,
   setAutonomousAgentToggle,
   onVaultToggleOff,
   onWebToggleOff,
-  onComposerToggleOff,
   currentChain,
 }) => {
   const isCopilotPlus = isPlusChain(currentChain);
@@ -66,14 +60,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
     setWebToggle(newValue);
     if (!newValue && onWebToggleOff) {
       onWebToggleOff();
-    }
-  };
-
-  const handleComposerToggle = () => {
-    const newValue = !composerToggle;
-    setComposerToggle(newValue);
-    if (!newValue && onComposerToggleOff) {
-      onComposerToggleOff();
     }
   };
 
@@ -139,27 +125,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
               </TooltipTrigger>
               <TooltipContent className="tw-px-1 tw-py-0.5">Toggle web search</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost2"
-                  size="fit"
-                  onClick={handleComposerToggle}
-                  className={cn(
-                    "tw-text-muted hover:tw-text-accent",
-                    composerToggle && "tw-text-accent tw-bg-accent/10"
-                  )}
-                >
-                  <span className="tw-flex tw-items-center tw-gap-0.5">
-                    <Sparkles className="tw-size-2" />
-                    <Pen className="tw-size-3" />
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent className="tw-px-1 tw-py-0.5">
-                Toggle composer (note editing)
-              </TooltipContent>
-            </Tooltip>
           </>
         )}
       </div>
@@ -207,19 +172,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   </div>
                   {webToggle && <Check className="tw-size-4" />}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleComposerToggle}
-                  className="tw-flex tw-items-center tw-justify-between"
-                >
-                  <div className="tw-flex tw-items-center tw-gap-2">
-                    <span className="tw-flex tw-items-center tw-gap-0.5">
-                      <Sparkles className="tw-size-2" />
-                      <Pen className="tw-size-3" />
-                    </span>
-                    <span>Composer</span>
-                  </div>
-                  {composerToggle && <Check className="tw-size-4" />}
-                </DropdownMenuItem>
               </>
             )}
 
@@ -241,18 +193,6 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   <div className="tw-flex tw-items-center tw-gap-2">
                     <Globe className="tw-size-4" />
                     <span>Web Search</span>
-                  </div>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled
-                  className="tw-flex tw-items-center tw-justify-between tw-opacity-50"
-                >
-                  <div className="tw-flex tw-items-center tw-gap-2">
-                    <span className="tw-flex tw-items-center tw-gap-0.5">
-                      <Sparkles className="tw-size-2" />
-                      <Pen className="tw-size-3" />
-                    </span>
-                    <span>Composer</span>
                   </div>
                 </DropdownMenuItem>
               </>

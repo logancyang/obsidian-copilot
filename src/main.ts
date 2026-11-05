@@ -18,7 +18,6 @@ import { activePdfSelection } from "@/pdf/pdfSelection";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import RelevantNotesView from "@/components/RelevantNotesView";
-import { ApplyView } from "@/components/composer/ApplyView";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { CopilotFolderMigration } from "@/components/modals/CopilotFolderMigration";
 import React from "react";
@@ -36,7 +35,6 @@ import {
   CHAT_AGENT_VIEWTYPE,
   CHAT_VIEWTYPE,
   COPILOT_AGENT_ICON_ID,
-  APPLY_VIEW_TYPE,
   COPILOT_AGENT_ICON_SVG,
   DEFAULT_OPEN_AREA,
   DESKTOP_VIEW_TYPES,
@@ -447,7 +445,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     if (isDesktopRuntime()) registerNoteHeaderAction(this);
 
     this.startedViewCreators.set(CHAT_VIEWTYPE, (leaf) => new CopilotView(leaf, this));
-    this.startedViewCreators.set(APPLY_VIEW_TYPE, (leaf) => new ApplyView(leaf));
     this.startedViewCreators.set(
       RELEVANT_NOTES_VIEWTYPE,
       (leaf) => new RelevantNotesView(leaf, this)

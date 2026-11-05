@@ -9,7 +9,6 @@ jest.mock("@/tools/SearchTools", () => ({
   createLocalSearchTool: jest.fn(),
   webSearchTool: {},
 }));
-jest.mock("@/tools/ComposerTools", () => ({ createWriteFileTool: jest.fn() }));
 jest.mock("@/tools/memoryTools", () => ({ createUpdateMemoryTool: jest.fn() }));
 jest.mock("@/tools/toolManager", () => ({ ToolManager: { callTool: jest.fn() } }));
 jest.mock("@/settings/model", () => ({

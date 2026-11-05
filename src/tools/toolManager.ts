@@ -6,8 +6,6 @@ export const getToolDescription = (tool: string): string => {
       return "Search through your vault for relevant information";
     case "@websearch":
       return "Search the web for information";
-    case "@composer":
-      return "Edit existing notes or create new notes.";
     case "@memory":
       return "Save information to user memory";
     default:

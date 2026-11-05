@@ -1,6 +1,6 @@
 import { ChatControls } from "@/components/chat-components/ChatControls";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 
 /* eslint-disable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
@@ -12,8 +12,7 @@ jest.mock("@/plusUtils", () => ({
   useIsPaidUser: () => true,
 }));
 jest.mock("@/settings/model", () => ({
-  updateSetting: jest.fn(),
-  useSettingsValue: () => ({ autoAcceptEdits: false, autosaveChat: true }),
+  useSettingsValue: () => ({ autosaveChat: true }),
 }));
 jest.mock("@/components/chat-components/ChatHistoryPopover", () => ({
   ChatHistoryPopover: ({ children }: { children: React.ReactNode }) => children,
@@ -27,18 +26,8 @@ jest.mock("@/components/chat-components/TokenCounter", () => ({
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
 
 describe("ChatControls", () => {
-  beforeAll(() => {
-    (window as unknown as { activeDocument: Document }).activeDocument = window.document;
-    if (!("PointerEvent" in window)) {
-      (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = MouseEvent;
-    }
-    Element.prototype.hasPointerCapture = () => false;
-    Element.prototype.releasePointerCapture = () => {};
-    Element.prototype.scrollIntoView = () => {};
-  });
-
   describe("ChatControls()", () => {
-    it("omits the retired index actions from the advanced menu (https://github.com/Brevilabs/obsidian-copilot-private/issues/282)", async () => {
+    it("offers no advanced menu, so Quick Chat has no auto-accept edits toggle (https://github.com/Brevilabs/obsidian-copilot-private/issues/850)", () => {
       render(
         <TooltipProvider>
           <ChatControls
@@ -53,14 +42,9 @@ describe("ChatControls", () => {
         </TooltipProvider>
       );
 
-      fireEvent.pointerDown(screen.getByTitle("Advanced settings"), {
-        button: 0,
-        ctrlKey: false,
-      });
-
-      await waitFor(() => expect(screen.getByText("Auto-accept edits")).toBeTruthy());
-      expect(screen.queryByText("Refresh Vault Index")).toBeNull();
-      expect(screen.queryByText("Force Reindex Vault")).toBeNull();
+      expect(screen.getByTitle("New chat")).toBeTruthy();
+      expect(screen.queryByTitle("Advanced settings")).toBeNull();
+      expect(screen.queryByText("Auto-accept edits")).toBeNull();
     });
   });
 });

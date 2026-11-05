@@ -88,7 +88,7 @@ describe("model", () => {
         isPaidUser: true,
         plusLicenseKey: "lic-12345",
         entitlementToken: "test-stale-entitlement-token",
-        autoAcceptEdits: true,
+        suggestedDefaultCommands: true,
         activeModels: [customRow],
         providers: {
           byok_openai: makeProvider({ apiKeyKeychainId: BYOK_POINTER }),
@@ -137,7 +137,7 @@ describe("model", () => {
 
       expect(reloaded.openAIApiKey).toBe("sk-top-level");
       expect(reloaded.openAIOrgId).toBe("org-123");
-      expect(reloaded.autoAcceptEdits).toBe(DEFAULT_SETTINGS.autoAcceptEdits);
+      expect(reloaded.suggestedDefaultCommands).toBe(DEFAULT_SETTINGS.suggestedDefaultCommands);
 
       const reloadedCustom = reloaded.activeModels.find((m) => m.name === "custom-gpt");
       expect(reloadedCustom?.apiKey).toBe("sk-model-key");

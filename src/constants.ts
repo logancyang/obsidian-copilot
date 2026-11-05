@@ -15,8 +15,7 @@ export const AGENT_CHAT_MODE = "agent";
 export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
 export const PLAN_PREVIEW_VIEW_TYPE = "copilot-plan-preview-view";
 export const TURN_DIFF_VIEW_TYPE = "copilot-turn-diff-view";
-export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
-export const SHARED_VIEW_TYPES = [CHAT_VIEWTYPE, APPLY_VIEW_TYPE, RELEVANT_NOTES_VIEWTYPE] as const;
+export const SHARED_VIEW_TYPES = [CHAT_VIEWTYPE, RELEVANT_NOTES_VIEWTYPE] as const;
 export const DESKTOP_VIEW_TYPES = [
   ...SHARED_VIEW_TYPES,
   CHAT_AGENT_VIEWTYPE,
@@ -62,72 +61,6 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.
   13. If the user mentions "tags", it most likely means tags in Obsidian note properties.
   14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.`;
-
-export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeFile> tags.
-
-  # Steps to find the the target notes
-  1. Extract the target note information from user message and find out the note path from the context below.
-  2. If target note is not specified, use the <active_note> as the target note.
-  3. If still failed to find the target note or the note path, ask the user to specify the target note.
-
-  # Examples
-
-  Input: Add a new section to note A
-  Output:
-  <writeFile>
-  <path>path/to/file.md</path>
-  <content>The FULL CONTENT of the note A with added section goes here</content>
-  </writeFile>
-
-  Input: Create a new canvas with "Hello, world!"
-  Output:
-  <writeFile>
-  <path>path/to/file.canvas</path>
-  <content>
-  {
-    "nodes": [
-      {
-        "id": "1",
-        "type": "text",
-        "text": "Hello, world!",
-        "x": 0,
-        "y": 0,
-        "width": 200,
-        "height": 50
-      }
-    ],
-    "edges": []
-  }
-  </content>
-  </writeFile>
-
-  Input: Create a canvas with a file node and a group
-  Output:
-  <writeFile>
-  <path>path/to/file.canvas</path>
-  <content>
-  {
-    "nodes": [
-      {"id": "1", "type": "file", "file": "note.md", "subpath": "#heading", "x": 100, "y": 100, "width": 300, "height": 200, "color": "2"},
-      {"id": "2", "type": "group", "label": "My Group", "x": 50, "y": 50, "width": 400, "height": 300, "color": "1"},
-      {"id": "3", "type": "link", "url": "https://example.com", "x": 500, "y": 100, "width": 200, "height": 100, "color": "#FF5733"}
-    ],
-    "edges": [
-      {"id": "e1-2", "fromNode": "1", "toNode": "3", "fromSide": "right", "toSide": "left", "fromEnd": "arrow", "toEnd": "none", "color": "3", "label": "references"}
-    ]
-  }
-  </content>
-  </writeFile>
-
-  # Canvas JSON Format (JSON Canvas spec 1.0)
-  Required node fields: id, type, x, y, width, height
-  Node types: "text" (needs text), "file" (needs file), "link" (needs url), "group" (optional label)
-  Optional node fields: color (hex #FF0000 or preset "1"-"6"), subpath (file nodes, starts with #)
-  Required edge fields: id, fromNode, toNode
-  Optional edge fields: fromSide/toSide ("top"/"right"/"bottom"/"left"), fromEnd/toEnd ("none"/"arrow"), color, label
-  All IDs must be unique. Edge nodes must reference existing node IDs.
-  Position nodes with reasonable spacing and logical visual flow.
-  `;
 
 export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
 export const SELECTED_TEXT_TAG = "selected_text";
@@ -522,8 +455,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "webSearch",
     "pomodoro",
     "youtubeTranscription",
-    "writeFile",
-    "editFile",
     "updateMemory",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
@@ -534,8 +465,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
-  autoAcceptEdits: false,
-  diffViewMode: "split",
   userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
