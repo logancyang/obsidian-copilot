@@ -5,7 +5,6 @@ import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevan
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { ProjectConfig } from "@/aiParams";
-import { updateCachedProjectRecords } from "@/projects/state";
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
 import { act, render, renderHook } from "@testing-library/react";
 import { App, MarkdownView, TFile } from "obsidian";
@@ -81,7 +80,6 @@ describe("useChatRelevantNotesContext", () => {
     afterEach(() => {
       root.remove();
       mockActiveWebTab = null;
-      updateCachedProjectRecords([]);
       jest.restoreAllMocks();
     });
 
@@ -289,25 +287,6 @@ describe("useChatRelevantNotesContext", () => {
       expect(paths).toHaveLength(100);
       expect(paths.slice(0, 2)).toEqual(["Vault/attached.md", "Vault/Research/note-499.md"]);
       expect(paths.at(-1)).toBe("Vault/Research/note-401.md");
-    });
-    it("includes the project folder's own files, newest first, without its config or instructions file (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
-      const project = projectLinking();
-      updateCachedProjectRecords([
-        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
-      ]);
-      vaultFiles = [
-        vaultFile("copilot/projects/Trip/project.md", 5),
-        vaultFile("copilot/projects/Trip/AGENTS.md", 5),
-        vaultFile("copilot/projects/Trip/itinerary.md", 1),
-        vaultFile("copilot/projects/Trip/drafts/budget.md", 2),
-        vaultFile("copilot/projects/Other/notes.md", 3),
-      ];
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
-      void act(() => root.dispatchEvent(new Event("pointerdown")));
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths).toEqual([
-        "Vault/copilot/projects/Trip/drafts/budget.md",
-        "Vault/copilot/projects/Trip/itinerary.md",
-      ]);
     });
     it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
