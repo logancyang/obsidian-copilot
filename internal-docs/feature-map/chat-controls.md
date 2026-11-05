@@ -4,7 +4,7 @@ The bar above the [chat input](chat-input.md) in a conversation, with `New chat`
 
 ## Sub-features
 
-- controls-new-chat: `New chat` replaces the current tab's chat with a new one.
+- controls-new-chat: `New chat` replaces the current tab's chat with a new one. The replaced chat leaves the tab strip; it keeps running if the user sent a message in it, reachable from Recent chats, and otherwise stops.
 - controls-history: `Chat history` lists past chats as [chat rows](chat-rows.md), with a search box.
 - controls-usage: `Usage` shows how full the context window is, and the agent plan's usage when it reports one.
 - controls-tasks: `N tasks running` lists the agent's background tasks; choose one to open it, or `Stop task`.
