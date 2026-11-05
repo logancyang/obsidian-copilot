@@ -32,6 +32,7 @@ import {
 } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
+import { addFilesToChat } from "./addFilesToChat";
 import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
@@ -424,7 +425,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         const doc = containerRef.current?.doc;
         if (!doc) break;
         openImagePicker(doc, {
-          onFiles: onAddImage,
+          onFiles: (files) => void addFilesToChat(app, files, { onAddImage, setContextNotes }),
           // Cancelling the dialog leaves the pane unresponsive unless focus returns to the composer.
           // https://github.com/logancyang/obsidian-copilot-preview/issues/119
           onSettle: () => lexicalEditorRef.current?.focus(),

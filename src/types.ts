@@ -12,6 +12,10 @@ declare module "obsidian" {
     cm?: EditorView;
   }
 
+  interface FileManager {
+    getAvailablePathForAttachment(filename: string, sourcePath?: string): Promise<string>;
+  }
+
   interface MenuItem {
     setSubmenu(): this;
     setWarning(isWarning: boolean): this;
