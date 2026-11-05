@@ -1,3 +1,4 @@
+import { Notice } from "obsidian";
 import { openImagePicker } from "./openImagePicker";
 
 describe("openImagePicker", () => {
@@ -9,6 +10,7 @@ describe("openImagePicker", () => {
     });
     afterEach(() => {
       clickSpy.mockRestore();
+      (Notice as unknown as jest.Mock).mockClear();
       activeDocument.body.innerHTML = "";
     });
 
@@ -51,6 +53,34 @@ describe("openImagePicker", () => {
       expect(Array.isArray(onFiles.mock.calls[0][0])).toBe(true);
       expect(onSettle).toHaveBeenCalledTimes(1);
       expect(activeDocument.body.contains(input)).toBe(false);
+    });
+
+    it("on change with a PDF beside an image: forwards only the image and names the skipped PDF in a notice (https://github.com/logancyang/obsidian-copilot/issues/4043)", () => {
+      const onFiles = jest.fn();
+      openImagePicker(activeDocument, { onFiles });
+      const input = pickerInput();
+      const photo = new File(["png"], "photo.png", { type: "image/png" });
+      const report = new File(["pdf"], "report.pdf", { type: "application/pdf" });
+      Object.defineProperty(input, "files", { value: [photo, report] });
+
+      input.dispatchEvent(new Event("change"));
+
+      expect(onFiles).toHaveBeenCalledWith([photo]);
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect((Notice as unknown as jest.Mock).mock.calls[0][0]).toContain("report.pdf");
+    });
+
+    it("on change with only images: forwards them all without a notice", () => {
+      const onFiles = jest.fn();
+      openImagePicker(activeDocument, { onFiles });
+      const input = pickerInput();
+      const photo = new File(["png"], "photo.png", { type: "image/png" });
+      Object.defineProperty(input, "files", { value: [photo] });
+
+      input.dispatchEvent(new Event("change"));
+
+      expect(onFiles).toHaveBeenCalledWith([photo]);
+      expect(Notice).not.toHaveBeenCalled();
     });
 
     it("works without an onSettle handler", () => {
