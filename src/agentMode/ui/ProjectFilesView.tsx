@@ -2,9 +2,7 @@ import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { LinkUrlModal } from "@/components/modals/LinkUrlModal";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
-import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
-import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,7 +31,6 @@ import { getCachedProjectRecordById, useProjects } from "@/projects/state";
 import {
   categorizePatterns,
   getDecodedPatterns,
-  getNotesWithProperty,
   getNotesWithTag,
   getTagPattern,
 } from "@/search/searchUtils";
@@ -46,7 +43,6 @@ import {
   Link,
   type LucideIcon,
   Plus,
-  SlidersHorizontal,
   SquarePlay,
   Tag,
   X,
@@ -82,20 +78,18 @@ interface LinkedMatchNote {
 }
 
 export interface LinkedMatchRow {
-  kind: "tag" | "property";
   pattern: string;
   label: string;
   count: number;
   notes: readonly LinkedMatchNote[] | null;
 }
 
-export type LinkKind = "files" | "folders" | "tags" | "properties" | "link";
+export type LinkKind = "files" | "folders" | "tags" | "link";
 
 const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[] = [
   { kind: "files", label: "Files", icon: File },
   { kind: "folders", label: "Folders", icon: Folder },
   { kind: "tags", label: "Tags", icon: Tag },
-  { kind: "properties", label: "Properties", icon: SlidersHorizontal },
   { kind: "link", label: "Link", icon: Link },
 ];
 
@@ -187,38 +181,22 @@ export function buildLinkedMatchRows(
   inclusions: string | undefined,
   expandedPaths: ReadonlySet<string>
 ): readonly LinkedMatchRow[] {
-  const { tagPatterns, propertyPatterns } = categorizePatterns([
-    ...new Set(getDecodedPatterns(inclusions ?? "")),
-  ]);
-  if (tagPatterns.length + propertyPatterns.length === 0) return EMPTY_MATCHES;
-  const row = (
-    kind: LinkedMatchRow["kind"],
-    pattern: string,
-    label: string,
-    files: TFile[]
-  ): LinkedMatchRow => ({
-    kind,
-    pattern,
-    label,
-    count: files.length,
-    notes: expandedPaths.has(pattern)
-      ? files.map((file) => ({
-          node: { kind: "file", path: file.path, name: file.name },
-          parent: parentPath(file.path),
-        }))
-      : null,
+  const { tagPatterns } = categorizePatterns([...new Set(getDecodedPatterns(inclusions ?? ""))]);
+  if (tagPatterns.length === 0) return EMPTY_MATCHES;
+  return tagPatterns.map((tag) => {
+    const files = getNotesWithTag(app, tag);
+    return {
+      pattern: tag,
+      label: tag,
+      count: files.length,
+      notes: expandedPaths.has(tag)
+        ? files.map((file) => ({
+            node: { kind: "file", path: file.path, name: file.name },
+            parent: parentPath(file.path),
+          }))
+        : null,
+    };
   });
-  return [
-    ...tagPatterns.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
-    ...propertyPatterns.map((pattern) =>
-      row(
-        "property",
-        pattern,
-        getBadgeLabel({ pattern, type: "property" }),
-        getNotesWithProperty(app, pattern)
-      )
-    ),
-  ];
 }
 
 interface FileManagerPrompts {
@@ -515,7 +493,7 @@ export function LinkedSection({
             onActivate={() => handlers.onToggleFolder(row.pattern)}
           >
             <RowLabel
-              icon={row.kind === "tag" ? Tag : SlidersHorizontal}
+              icon={Tag}
               name={row.label}
               detail={`${row.count} ${row.count === 1 ? "note" : "notes"}`}
               expanded={row.notes !== null}
@@ -677,8 +655,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     );
   };
 
-  const linkPattern = (pattern: string, name = pattern): void =>
-    announceLink(linkProjectPattern(app, projectId, pattern), name);
+  const linkPattern = (pattern: string): void =>
+    announceLink(linkProjectPattern(app, projectId, pattern), pattern);
 
   const pickToLink: Record<LinkKind, () => void> = {
     files: () =>
@@ -693,10 +671,6 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         if (folder instanceof TFolder) linkItems([folder]);
       }).open(),
     tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
-    properties: () =>
-      new PropertySearchModal(app, (pattern) =>
-        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
-      ).open(),
     link: () =>
       new LinkUrlModal(app, (item) =>
         announceLink(linkProjectUrl(app, projectId, item), item.url)
