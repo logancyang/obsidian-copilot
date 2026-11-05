@@ -41,7 +41,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     chatHistoryItems,
     archivedChatItems,
     loadChatHistory,
-    loadChat: loadChatInView,
+    loadChat,
     updateChatTitle,
     deleteChat,
     setChatPinned,
@@ -52,10 +52,6 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     setChatBookmarked,
   } = useAgentHistoryControls(manager, plugin);
   const { app } = plugin;
-  const loadChat = useMemo(
-    () => releasingLeftChat(manager, loadChatInView),
-    [manager, loadChatInView]
-  );
   const openChatIds = useManagerSetSnapshot(manager, (m) => m.getOpenChatIds());
   const runningChatIds = useRunningChatIds(manager);
   const waitingChatIds = useManagerSetSnapshot(manager, (m) => m.getWaitingChatIds());
@@ -104,40 +100,34 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     };
   }, [plugin, loadChatHistory]);
 
-  const handleNewChat = useMemo(
-    () =>
-      releasingLeftChat(manager, async () => {
-        try {
-          await manager.openGlobalLanding();
-          await plugin.activateAgentView();
-        } catch (e) {
-          logError("[AgentMode] sidebar new chat failed", e);
-          new Notice("Failed to start a new chat. Please try again.");
-        }
-      }),
-    [manager, plugin]
-  );
+  const handleNewChat = useCallback(async () => {
+    try {
+      await manager.openGlobalLanding();
+      await plugin.activateAgentView();
+    } catch (e) {
+      logError("[AgentMode] sidebar new chat failed", e);
+      new Notice("Failed to start a new chat. Please try again.");
+    }
+  }, [manager, plugin]);
 
-  const handleOpenProject = useMemo(
-    () =>
-      releasingLeftChat(manager, async (projectId: string) => {
-        try {
-          await manager.openProjectLanding(projectId);
-          await plugin.activateAgentView();
-        } catch (e) {
-          logError("[AgentMode] sidebar open project failed", e);
-          new Notice("Failed to open project. Please try again.");
-        }
-      }),
-    [manager, plugin]
-  );
-
-  const handleCreateProject = useMemo(
-    () =>
-      releasingLeftChat(manager, async (name: string) => {
-        await createProjectAndEnter(app, manager, name);
+  const handleOpenProject = useCallback(
+    async (projectId: string) => {
+      try {
+        await manager.openProjectLanding(projectId);
         await plugin.activateAgentView();
-      }),
+      } catch (e) {
+        logError("[AgentMode] sidebar open project failed", e);
+        new Notice("Failed to open project. Please try again.");
+      }
+    },
+    [manager, plugin]
+  );
+
+  const handleCreateProject = useCallback(
+    async (name: string) => {
+      await createProjectAndEnter(app, manager, name);
+      await plugin.activateAgentView();
+    },
     [app, manager, plugin]
   );
 
@@ -184,7 +174,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     const projectActions = createProjectArchiveActions(app, manager);
     new ArchivedChatsModal(app, archivedChatItems, archivedProjects, {
       onUnarchive: (id) => setChatArchived(id, false),
-      onOpen: loadChat,
+      onOpen: releasingLeftChat(manager, loadChat),
       ...projectActions,
       onOpenProject: releasingLeftChat(manager, async (id: string) => {
         await projectActions.onOpenProject(id);
@@ -209,8 +199,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       actions={actions}
       onToggleProject={toggleProject}
       onReorderProjects={reorderProjects}
-      onOpenProject={safeAsyncHandler(handleOpenProject)}
-      onCreateProject={handleCreateProject}
+      onOpenProject={safeAsyncHandler(releasingLeftChat(manager, handleOpenProject))}
+      onCreateProject={releasingLeftChat(manager, handleCreateProject)}
       collapsedGroups={collapsedGroups}
       onToggleGroup={toggleGroup}
       onProjectDeleted={handleProjectDeleted}
@@ -219,8 +209,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       runningChatIds={runningChatIds}
       waitingChatIds={waitingChatIds}
       attentionChatIds={attentionChatIds}
-      onNewChat={safeAsyncHandler(handleNewChat)}
-      onOpenChat={safeAsyncHandler(loadChat)}
+      onNewChat={safeAsyncHandler(releasingLeftChat(manager, handleNewChat))}
+      onOpenChat={safeAsyncHandler(releasingLeftChat(manager, loadChat))}
     />
   );
 };
