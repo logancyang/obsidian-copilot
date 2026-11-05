@@ -38,13 +38,14 @@ export async function migrateMiyoVaultExclusions(app: App): Promise<void> {
     const baseUrl = await client.resolveBaseUrl();
     const { exclude_folders: excluded = [] } = await client.getFolder(baseUrl, vaultBase);
     const root = deriveCopilotFolder(settings);
-    // Registrations made before project folders were indexed exclude the whole Copilot folder.
-    // An exclusion inside it means the list was already updated, so a whole-folder exclusion
-    // the user adds back afterwards stays. https://github.com/Brevilabs/obsidian-copilot-private/issues/847
-    if (!excluded.includes(root) || excluded.some((folder) => folder.startsWith(`${root}/`))) {
+    const systemFolders = getMiyoSystemExcludedFolders(settings);
+    // Registrations made before project folders were indexed exclude the whole Copilot folder,
+    // sometimes beside Obsidian-ignored paths inside it. Only the full system set marks an
+    // updated list, so a whole-folder exclusion the user adds back afterwards stays.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/847
+    if (!excluded.includes(root) || systemFolders.every((folder) => excluded.includes(folder))) {
       return;
     }
-    const systemFolders = getMiyoSystemExcludedFolders(settings);
     const exclude_folders = [
       ...new Set(excluded.flatMap((folder) => (folder === root ? systemFolders : [folder]))),
     ];
