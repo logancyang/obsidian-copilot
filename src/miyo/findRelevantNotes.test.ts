@@ -86,6 +86,9 @@ describe("findRelevantNotes", () => {
         "linked-only.md",
         "attachment.pdf",
         "private/secret.md",
+        "copilot/projects/Falcon/AGENTS.md",
+        "copilot/projects/Falcon/project.md",
+        "copilot/projects/Falcon/outputs/plan.md",
         ...Array.from({ length: 25 }, (_, index) => `note-${index}.md`),
       ];
       const filesByPath = new Map(paths.map((path) => [path, createMarkdownFile(path)]));
@@ -116,6 +119,22 @@ describe("findRelevantNotes", () => {
         folderName: "vault",
         limit: 20,
       });
+    });
+
+    it("shows project-folder notes but not the project's instruction and config files — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
+      mockSearchRelated.mockResolvedValue({
+        results: [
+          { path: "vault/copilot/projects/Falcon/AGENTS.md", score: 0.9 },
+          { path: "vault/copilot/projects/Falcon/outputs/plan.md", score: 0.8 },
+          { path: "vault/copilot/projects/Falcon/project.md", score: 0.7 },
+        ],
+      });
+
+      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
+
+      expect(result.notes.map((entry) => entry.note.path)).toEqual([
+        "copilot/projects/Falcon/outputs/plan.md",
+      ]);
     });
 
     it("uses the first finite score and ignores malformed Miyo results (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {

@@ -2,6 +2,7 @@ import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
 import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
+import { isInternalExcludedFile } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
@@ -39,9 +40,12 @@ export async function findChatRelevantNotes(
     const notes = response.results.flatMap(({ path, score }) => {
       const relativePath = getVaultRelativeMiyoPath(app, path);
       const file = app.vault.getAbstractFileByPath(relativePath);
+      // Miyo indexes project folders, whose instruction and config files are Copilot's, not notes.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/847
       if (
         !(file instanceof TFile) ||
         file.extension !== "md" ||
+        isInternalExcludedFile(file) ||
         !Number.isFinite(score) ||
         request.file_paths?.includes(path)
       )
