@@ -76,10 +76,7 @@ import {
   getWebViewerService,
   startActiveWebTabTracking,
 } from "@/services/webViewerService/webViewerServiceSingleton";
-import {
-  WebSelectionTracker,
-  webSelectionReport,
-} from "@/services/webViewerService/webViewerServiceSelection";
+import { WebSelectionWatcher } from "@/services/webViewerService/webViewerServiceSelection";
 import { runSettingsMigrations } from "@/settings/migrations";
 import {
   cleanupLegacyIndexArtifacts,
@@ -184,7 +181,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
   private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
-  private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
   private startupMigrationItems: StartupMigrationItem[] = [];
   private loadedCopilotFolder: unknown;
@@ -435,8 +431,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     );
 
     if (isDesktopRuntime()) {
+      const webSelectionWatcher = new WebSelectionWatcher(reportSelection);
+      this.register(() => webSelectionWatcher.stop());
       const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
         preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
+        onWebviewLoad: (leaf) => webSelectionWatcher.watch(leaf),
       });
       this.registerEvent(activeLeafRef);
       this.registerEvent(layoutRef);
@@ -516,8 +515,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     });
 
     this.initSelectionHandler();
-
-    this.initWebSelectionWatcher();
   }
 
   // A disabled or updated copy may still be writing data.json or stopping Agent Mode backends;
@@ -722,7 +719,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       }
     }
 
-    this.cleanupWebSelectionWatcher();
     clearSelection();
 
     try {
@@ -833,35 +829,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       activePdfSelection,
       ...(this.TurnDiffView ? [this.TurnDiffView.activeSelection] : []),
     ]);
-  }
-
-  initWebSelectionWatcher() {
-    if (!isDesktopRuntime()) {
-      return;
-    }
-
-    const webViewerService = getWebViewerService(this.app);
-
-    this.webSelectionTracker = new WebSelectionTracker({
-      intervalMs: 500,
-      emptySelectionDebounceCount: 2,
-      isEnabled: () => true,
-      getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
-      getActiveLeaf: () => webViewerService.getActiveLeaf(),
-      onSelectionChange: (context) => {
-        reportSelection(webSelectionReport(context));
-      },
-      onSelectionClear: ({ url }) => {
-        reportSelection({ location: url, context: null });
-      },
-    });
-
-    this.webSelectionTracker.start();
-  }
-
-  cleanupWebSelectionWatcher() {
-    this.webSelectionTracker?.stop();
-    this.webSelectionTracker = undefined;
   }
 
   private getCurrentEditorOrDummy(): Editor {

@@ -24,7 +24,7 @@ type WebviewMetadataEventName = (typeof WEBVIEW_METADATA_EVENTS)[number];
 
 interface WebviewLoadListenerEntry {
   leaf: WebViewerLeaf;
-  handler: () => void;
+  handler: (event: Event) => void;
   events: ReadonlyArray<WebviewMetadataEventName>;
 }
 
@@ -49,6 +49,7 @@ export class WebViewerStateManager {
   private readonly getPageInfo: (leaf: WebViewerLeaf) => WebViewerPageInfo;
 
   private lastActiveLeaf: WebViewerLeaf | null = null;
+  private onWebviewLoad: StartActiveWebTabTrackingOptions["onWebviewLoad"];
 
   private activeWebTabState: ActiveWebTabStateSnapshot = {
     activeWebTabForMentions: null,
@@ -212,6 +213,7 @@ export class WebViewerStateManager {
     }
 
     this.activeWebTabTrackingPreserveViewTypes = [...(options.preserveOnViewTypes ?? [])];
+    this.onWebviewLoad = options.onWebviewLoad;
 
     const activeLeafRef = this.app.workspace.on(
       "active-leaf-change",
@@ -274,7 +276,8 @@ export class WebViewerStateManager {
             this.webviewLoadListeners.delete(webview);
           }
 
-          const handler = () => {
+          const handler = (event: Event) => {
+            if (event.type === "did-finish-load") this.onWebviewLoad?.(leaf);
             this.recomputeActiveWebTabState({ trigger: "webview-metadata", loadedLeaf: leaf });
             this.scheduleWebviewLoadCallbackNotification();
           };
@@ -290,6 +293,7 @@ export class WebViewerStateManager {
           }
 
           this.webviewLoadListeners.set(webview, entry);
+          this.onWebviewLoad?.(leaf);
         }
       }
 
@@ -378,6 +382,7 @@ export class WebViewerStateManager {
     };
     this.activeWebTabLeaf = null;
     this.lastActiveLeaf = null;
+    this.onWebviewLoad = undefined;
     this.activeWebTabTrackingPreserveViewTypes = [];
   }
 

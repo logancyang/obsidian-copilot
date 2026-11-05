@@ -40,5 +40,26 @@ describe("webViewerServiceState", () => {
         expect(manager.getActiveWebTabLeaf()).toBeNull();
       });
     });
+
+    describe("startActiveWebTabTracking()", () => {
+      it("passes each open web tab to onWebviewLoad when tracking starts and each time its page finishes loading https://github.com/Brevilabs/obsidian-copilot-private/issues/844", () => {
+        const webview = new EventTarget();
+        const docs = {
+          view: {
+            url: "https://docs.example.com/",
+            webview,
+            getViewType: () => WEB_VIEWER_VIEW_TYPE,
+          },
+        } as unknown as WebViewerLeaf;
+        const onWebviewLoad = jest.fn();
+        const { manager } = createManager([docs]);
+
+        manager.startActiveWebTabTracking({ onWebviewLoad });
+        webview.dispatchEvent(new Event("page-title-updated"));
+        webview.dispatchEvent(new Event("did-finish-load"));
+
+        expect(onWebviewLoad.mock.calls).toEqual([[docs], [docs]]);
+      });
+    });
   });
 });
