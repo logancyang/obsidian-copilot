@@ -584,9 +584,13 @@ export function LinkedSection({
 
 interface ProjectFilesViewProps {
   projectId: string;
+  acceptsDrops?: boolean;
 }
 
-export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.ReactElement | null {
+export function ProjectFilesView({
+  projectId,
+  acceptsDrops = false,
+}: ProjectFilesViewProps): React.ReactElement | null {
   const app = useApp();
   const startNoteDrag = useNoteDrag();
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
@@ -740,8 +744,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     unlinkProjectUrl(app, projectId, item).catch(reportFailure("unlink from the project"));
   };
 
+  // Drops link or copy only on the project home; in a chat's popover they looked too busy and aren't needed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/839
   const acceptsDrag = (event: React.DragEvent): boolean =>
-    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+    acceptsDrops && !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
 
   const dropOnFiles = (event: React.DragEvent): void => {
     if (!acceptsDrag(event)) return;
@@ -763,7 +769,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
     <div
-      data-copilot-drop-zone
+      data-copilot-drop-zone={acceptsDrops || undefined}
       className={cn(
         "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
         isDragOver && FILES_DROP_HIGHLIGHT

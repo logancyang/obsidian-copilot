@@ -216,6 +216,18 @@ describe("ProjectInfoPopover", () => {
       expect(mockOpenFilePicker).toHaveBeenCalled();
     });
 
+    it("takes no drops on its Files view, so dragging a computer file over it neither highlights nor is claimed from the chat — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+      const { app } = makeApp([projectFolderFixture()]);
+      renderPopover(app, [turn("reply")]);
+      const filesView = screen.getByRole("region", { name: "Linked" }).parentElement!;
+
+      const dragOver = fireEvent.dragOver(filesView, { dataTransfer: { types: ["Files"] } });
+
+      expect(dragOver).toBe(true);
+      expect(document.querySelector("[data-copilot-drop-zone]")).toBeNull();
+      expect(filesView.className).not.toContain("tw-ring-2");
+    });
+
     it("opens a changed file in a tab and closes the popover", () => {
       const { app, openFile } = makeApp([projectFolderFixture()]);
       renderPopover(app, [turn("first", [change(`${PROJECT_FOLDER}/brief.md`, "a\n", "b\n")])]);

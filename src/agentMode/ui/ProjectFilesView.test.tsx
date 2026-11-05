@@ -284,10 +284,10 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
   };
 }
 
-function renderView(vault: FakeVault) {
+function renderView(vault: FakeVault, { acceptsDrops = true } = {}) {
   return render(
     <AppContext.Provider value={vault.app}>
-      <ProjectFilesView projectId="q4" />
+      <ProjectFilesView projectId="q4" acceptsDrops={acceptsDrops} />
     </AppContext.Provider>
   );
 }
@@ -995,6 +995,27 @@ describe("ProjectFilesView", () => {
         expect.any(ArrayBuffer)
       );
       expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+
+    it("takes no drops without acceptsDrops, as in a chat's project popover, so a dragged vault note or computer file neither highlights, links nor copies — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault, { acceptsDrops: false });
+      const view = screen.getByRole("region", { name: "Linked" }).parentElement!;
+      const pdf = { name: "board-notes.pdf", arrayBuffer: async () => new ArrayBuffer(4) };
+      vault.setDraggable({ type: "file", file: retro });
+
+      const noteDragOver = fireEvent.dragOver(view, { dataTransfer: { types: ["text/plain"] } });
+      fireEvent.drop(view, { dataTransfer: { types: ["text/plain"], files: [] } });
+      vault.setDraggable(null);
+      const fileDragOver = fireEvent.dragOver(view, { dataTransfer: { types: ["Files"] } });
+      fireEvent.drop(view, { dataTransfer: { types: ["Files"], files: [pdf] } });
+
+      expect([noteDragOver, fileDragOver]).toEqual([true, true]);
+      expect(view.hasAttribute("data-copilot-drop-zone")).toBe(false);
+      expect(view.className).not.toContain("tw-ring-2");
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+      expect(vault.createBinary).not.toHaveBeenCalled();
+      expect(noticeMessages()).toEqual([]);
     });
 
     it("says an item from the project folder is already in this project instead of linking it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {

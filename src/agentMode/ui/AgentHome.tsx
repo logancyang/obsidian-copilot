@@ -531,7 +531,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "project-files",
         icon: <Files className="tw-size-4" />,
         title: "Files",
-        renderBody: () => <ProjectFilesView projectId={activeProjectId} />,
+        renderBody: () => <ProjectFilesView projectId={activeProjectId} acceptsDrops />,
       },
       {
         id: "project-chats",
