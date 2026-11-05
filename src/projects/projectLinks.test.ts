@@ -246,7 +246,7 @@ describe("projectLinks", () => {
       ]).toEqual([37, 80, 68, 70]);
     });
 
-    it("adds a number to the name instead of overwriting a file already in sources", async () => {
+    it("adds a number to the name instead of overwriting a file already in sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/461)", async () => {
       const { app, written } = makeVault([
         `${PROJECT_FOLDER}/sources`,
         `${PROJECT_FOLDER}/sources/board-notes.pdf`,

@@ -80,6 +80,8 @@ async function getAvailablePath(app: App, folderPath: string, fileName: string):
   const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
   const extension = dot > 0 ? fileName.slice(dot) : "";
   let path = `${folderPath}/${fileName}`;
+  // A file dropped from the computer must never replace one already in sources/, so a taken name gets a number.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
   for (let n = 1; await app.vault.adapter.exists(path); n++) {
     path = `${folderPath}/${stem} ${n}${extension}`;
   }
