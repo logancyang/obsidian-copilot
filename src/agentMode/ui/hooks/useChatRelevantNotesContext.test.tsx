@@ -276,8 +276,13 @@ describe("useChatRelevantNotesContext", () => {
       expect(request.excerpts).toEqual(["literal excerpt"]);
       expect(request.file_paths).toEqual(["Vault/Research/project.md"]);
     });
-    it("sends the chat's own notes first, then the project's linked notes, then its other files newest first (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+    it("sends the chat's own notes first, then the project's linked notes, then its other files and project-folder files newest first (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      const project = projectLinking("Research,[[Packing list]]");
+      updateCachedProjectRecords([
+        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
+      ]);
       vaultFiles = [
+        vaultFile("copilot/projects/Trip/itinerary.md", 4),
         vaultFile("Research/old.md", 1),
         vaultFile("Research/new.md", 3),
         vaultFile("Archive/Packing list.md", 0),
@@ -295,7 +300,7 @@ describe("useChatRelevantNotesContext", () => {
           "one",
           { ...draft, contextNotes: [vaultFile("attached.md")], includeActiveNote: true },
           [sent],
-          projectLinking("Research,[[Packing list]]")
+          project
         )
       );
       void act(() => root.dispatchEvent(new Event("pointerdown")));
@@ -304,6 +309,7 @@ describe("useChatRelevantNotesContext", () => {
         "Vault/attached.md",
         "Vault/active.md",
         "Vault/Archive/Packing list.md",
+        "Vault/copilot/projects/Trip/itinerary.md",
         "Vault/Research/new.md",
         "Vault/Research/mid.md",
         "Vault/Research/old.md",
@@ -326,6 +332,26 @@ describe("useChatRelevantNotesContext", () => {
       expect(paths).toHaveLength(100);
       expect(paths.slice(0, 2)).toEqual(["Vault/attached.md", "Vault/Research/note-499.md"]);
       expect(paths.at(-1)).toBe("Vault/Research/note-401.md");
+    });
+    it("keeps the project's linked notes within the 100-path cap however many newer project-folder files exist (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      const project = projectLinking("[[Packing list]]");
+      updateCachedProjectRecords([
+        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
+      ]);
+      vaultFiles = [
+        ...Array.from({ length: 500 }, (_, i) =>
+          vaultFile(`copilot/projects/Trip/note-${i}.md`, i + 1)
+        ),
+        vaultFile("Archive/Packing list.md", 0),
+      ];
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      const paths = getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths!;
+      expect(paths).toHaveLength(100);
+      expect(paths.slice(0, 2)).toEqual([
+        "Vault/Archive/Packing list.md",
+        "Vault/copilot/projects/Trip/note-499.md",
+      ]);
     });
     it("includes the project folder's own files, newest first, without its config or instructions file (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
       const project = projectLinking();
