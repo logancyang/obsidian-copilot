@@ -24,6 +24,7 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({
         sourcePath={sourcePath}
         text={text}
         onRendered={markFoundLinks}
+        runDataviewQueries
       />
       {badges}
     </>
