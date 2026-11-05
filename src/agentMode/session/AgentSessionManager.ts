@@ -179,6 +179,7 @@ export interface AgentSessionManagerOptions {
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
+  isSessionsSidebarOpen?: () => boolean;
 }
 
 export class AgentSessionManager {
@@ -1813,10 +1814,14 @@ export class AgentSessionManager {
   private notify(): void {
     // A chat is left once another one is shown; no chat shown while the next one starts, or a rollback to the same chat, leaves nothing.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    // A tab stays open until the user closes it, so only the Navigator closes a chat for being left.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
     if (this.activeSessionId !== null) {
       const left = this.lastShownSessionId;
       this.lastShownSessionId = this.activeSessionId;
-      if (left && left !== this.activeSessionId) this.closeSessionIfLeft(left);
+      if (left && left !== this.activeSessionId && this.opts.isSessionsSidebarOpen?.()) {
+        this.closeSessionIfLeft(left);
+      }
     }
     this.drafts.prune();
     for (const l of this.listeners) {

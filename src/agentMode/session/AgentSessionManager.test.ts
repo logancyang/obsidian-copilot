@@ -430,6 +430,7 @@ interface ManagerOptions {
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
+  sessionsSidebarOpen?: boolean;
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -460,6 +461,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
       copilotMcpServer: options.copilotMcpServer,
+      isSessionsSidebarOpen: () => options.sessionsSidebarOpen ?? false,
     }
   );
   builtManagers.push(manager);
@@ -785,6 +787,7 @@ function buildHistoryHarness(opts?: {
   installState?: InstallState;
   createBackendProcess?: jest.Mock;
   applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
+  sessionsSidebarOpen?: boolean;
 }) {
   const frontmatterByPath = opts?.files ?? {};
   const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -858,6 +861,7 @@ function buildHistoryHarness(opts?: {
     descriptor,
     persistence,
     sessionIndex: index,
+    sessionsSidebarOpen: opts?.sessionsSidebarOpen,
     preloader: {
       getWarmProcs: jest.fn(() => {
         if (!opts?.warmListSessions) return [];
@@ -1464,8 +1468,8 @@ describe("AgentSessionManager", () => {
         await mgr.shutdown();
       });
 
-      it("keeps every chat the user sent a message in open and closes each chat left without one, sparing the shown chat, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
-        const mgr = buildManager();
+      it("keeps every chat the user sent a message in open and closes each chat left without one in the Navigator, sparing the shown chat, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager({ sessionsSidebarOpen: true });
         const worked: AgentSession[] = [];
         for (let i = 0; i < 5; i++) worked.push(await createWorkedSession(mgr));
         const browsed: AgentSession[] = [];
@@ -1646,9 +1650,9 @@ describe("AgentSessionManager", () => {
           (s: AgentSession) => getSessionTestHandle(s).setHasUserVisibleMessages(true),
         ],
       ])(
-        "closes %s once another chat is shown before a message was sent in it for https://github.com/Brevilabs/obsidian-copilot-private/issues/812",
+        "closes %s once the Navigator shows another chat before a message was sent in it for https://github.com/Brevilabs/obsidian-copilot-private/issues/812",
         async (_label, prepare) => {
-          const mgr = buildManager();
+          const mgr = buildManager({ sessionsSidebarOpen: true });
           const next = await createWorkedSession(mgr);
           const left = await mgr.createSession();
           prepare(left);
@@ -1658,6 +1662,28 @@ describe("AgentSessionManager", () => {
           await closed;
 
           expect(closedSessions()).toEqual([left]);
+          expect(mgr.getActiveSession()).toBe(next);
+        }
+      );
+
+      it.each([
+        ["a new chat", (_s: AgentSession) => {}],
+        [
+          "a chat reopened from history and only read",
+          (s: AgentSession) => getSessionTestHandle(s).setHasUserVisibleMessages(true),
+        ],
+      ])(
+        "keeps %s open in its tab when another tab is shown before a message was sent in it for https://github.com/Brevilabs/obsidian-copilot-private/issues/849",
+        async (_label, prepare) => {
+          const mgr = buildManager();
+          const next = await mgr.createSession();
+          const left = await mgr.createSession();
+          prepare(left);
+
+          mgr.setActiveSession(next.internalId);
+
+          expect(closedSessions()).toEqual([]);
+          expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([next, left]);
           expect(mgr.getActiveSession()).toBe(next);
         }
       );
@@ -1710,8 +1736,8 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(shown);
       });
 
-      it("ignores a chat whose session is still closing after it was left without a sent message for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
-        const mgr = buildManager();
+      it("ignores a chat whose session is still closing after it was left in the Navigator without a sent message for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager({ sessionsSidebarOpen: true });
         const worked = await createWorkedSession(mgr);
         const left = await mgr.createSession();
         const closed = untilClosed(mgr, left);
@@ -5524,13 +5550,25 @@ describe("AgentSessionManager", () => {
           descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
         }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
 
-      it("saves a chat left without a sent message into its own note when it is reopened while still closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+      it("keeps a saved chat opened and only read in its tab beside the new chat created from the tab strip for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+        const mgr = buildManager({ persistence: { loadFile: savedChat(savedTurn) } });
+        const opened = await mgr.loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        const created = await mgr.createSession();
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([opened, created]);
+        expect(mgr.getActiveSession()).toBe(created);
+      });
+
+      it("saves a chat left in the Navigator without a sent message into its own note when it is reopened while still closing for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         jest.useFakeTimers();
         getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
         const file = mockTFile({ path: "chat/Saved.md" });
         const saveSession = jest.fn(async () => ({ path: file.path }));
         const mgr = buildManager({
           persistence: { loadFile: savedChat(savedTurn), saveSession },
+          sessionsSidebarOpen: true,
         });
         const left = await mgr.loadSessionFromHistory(file);
         getSessionTestHandle(left).setMessages([{ message: "Renamed while open" }], true);
@@ -5659,12 +5697,12 @@ describe("AgentSessionManager", () => {
           await jest.advanceTimersByTimeAsync(2000);
         }
 
-        it(`${issue} leaves its note's session and the session index untouched when it is opened and left before a message is sent`, async () => {
+        it(`${issue} leaves its note's session and the session index untouched when it is opened and its tab closed before a message is sent`, async () => {
           const { manager, index, files, session } = await openBrowsedChat();
           await autosave(session);
 
           const closed = untilClosed(manager, session);
-          await manager.createSession();
+          manager.detachSessionFromTab(session.internalId);
           await closed;
 
           expect(files[NOTE].sessionId).toBeUndefined();
@@ -6145,7 +6183,7 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).toBe(projectSession);
       });
 
-      it("reopens a chat left a moment ago in a new session once its old session has closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+      it("reopens a chat left in the Navigator a moment ago in a new session once its old session has closed for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const liveSessionsAtLoad: AgentSession[][] = [];
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => {
@@ -6159,6 +6197,7 @@ describe("AgentSessionManager", () => {
         );
         const { manager } = buildHistoryHarness({
           createBackendProcess: jest.fn(() => replay.backend),
+          sessionsSidebarOpen: true,
         });
         const left = await manager.loadNativeSessionFromHistory("opencode", "saved-chat");
         jest.useFakeTimers();
@@ -6226,8 +6265,8 @@ describe("AgentSessionManager", () => {
 
       beforeEach(() => seedProjects(PROJECT_ID));
 
-      it("closes the chat left without a sent message when entering a project and keeps one the user sent a message in for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
-        const mgr = buildManager();
+      it("closes the chat left without a sent message when the Navigator enters a project and keeps one the user sent a message in for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager({ sessionsSidebarOpen: true });
         const worked = await createWorkedSession(mgr);
         getSessionTestHandle(worked).setHasUserVisibleMessages(true);
         await mgr.openGlobalLanding();
@@ -6241,8 +6280,8 @@ describe("AgentSessionManager", () => {
         expect(mgr.getSessions()).toContain(worked);
       });
 
-      it("shows a new global chat, not the one left without a sent message, when the project is left before that chat finishes closing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
-        const mgr = buildManager();
+      it("shows a new global chat, not the one left without a sent message, when the Navigator leaves the project before that chat finishes closing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+        const mgr = buildManager({ sessionsSidebarOpen: true });
         const left = await mgr.createSession();
         const cancelled = deferred<undefined>();
         mockSessionCancel.mockImplementationOnce(() => cancelled.promise);
