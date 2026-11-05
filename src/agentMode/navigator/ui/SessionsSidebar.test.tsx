@@ -446,7 +446,7 @@ describe("SessionsSidebar", () => {
       await screen.findByRole("button", { name: "Loose chat" });
       expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
 
-      fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
+      fireEvent.click(screen.getByRole("button", { name: "Show chats in Garden plans" }));
       expect(screen.getByRole("button", { name: "Seedling notes" })).toBeTruthy();
 
       cleanup();
@@ -480,8 +480,7 @@ describe("SessionsSidebar", () => {
       renderSidebar(new FakeManager());
 
       const folders = await screen.findAllByRole("button", {
-        expanded: false,
-        name: /^\w+ project$/,
+        name: /^(?!New project$)\w+ project$/,
       });
 
       expect(folders.map((folder) => folder.textContent)).toEqual([
@@ -498,8 +497,7 @@ describe("SessionsSidebar", () => {
       const storage = new FakeLocalStorage();
       renderSidebar(new FakeManager(), storage);
       const [newer] = await screen.findAllByRole("button", {
-        expanded: false,
-        name: /^\w+ project$/,
+        name: /^(?!New project$)\w+ project$/,
       });
       jest.useFakeTimers();
       const layout = stackRowsVertically();
@@ -513,8 +511,7 @@ describe("SessionsSidebar", () => {
       renderSidebar(new FakeManager(), storage);
 
       const folders = await screen.findAllByRole("button", {
-        expanded: false,
-        name: /^\w+ project$/,
+        name: /^(?!New project$)\w+ project$/,
       });
       expect(folders.map((folder) => folder.textContent)).toEqual([
         "Older project",
@@ -617,13 +614,25 @@ describe("SessionsSidebar", () => {
       expect(manager.exitProject).toHaveBeenCalledTimes(1);
     });
 
-    it("expands the folder from its row without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", async () => {
+    it("opens the project's home from its row and leaves the folder folded for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", async () => {
+      projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
+      const manager = new FakeManager();
+      manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
+      renderSidebar(manager);
+
+      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
+
+      await waitFor(() => expect(manager.events).toEqual(["landing:garden", "view"]));
+      expect(screen.queryByRole("button", { name: "Seedling notes" })).toBeNull();
+    });
+
+    it("expands the folder from its chevron without opening its project, so the current chat stays for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", async () => {
       projectsState.updateCachedProjectRecords([projectRecord("garden", "Garden plans")]);
       const manager = new FakeManager();
       manager.items = [chat("b.md", "Seedling notes", 2_000, { projectId: "garden" })];
       const plugin = renderSidebar(manager);
 
-      fireEvent.click(await screen.findByRole("button", { name: "Garden plans" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Show chats in Garden plans" }));
 
       expect(screen.getByRole("button", { name: "Seedling notes" })).toBeTruthy();
       expect(manager.openProjectLanding).not.toHaveBeenCalled();

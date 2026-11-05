@@ -1,7 +1,6 @@
 import { revealProjectFolder } from "@/agentMode/ui/AgentProjectRowActions";
 import type { AgentTodoListEntry } from "@/agentMode/session/types";
 import { ProjectConfig } from "@/aiParams";
-import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isClaudeImportOnly, openAgentsFile } from "@/instructions/agentsFile";
@@ -9,17 +8,8 @@ import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
-import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  FolderSearch,
-  List,
-  Settings,
-} from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ChevronRight, FolderSearch, List } from "lucide-react";
 import { App, Notice, TFile, TFolder } from "obsidian";
 import React, { memo, useEffect, useState } from "react";
 
@@ -277,22 +267,6 @@ export const ProjectInfoPopover = memo(
   ({ app, project, todoList, container }: ProjectInfoPopoverProps) => {
     const [open, setOpen] = useState(false);
 
-    const handleEdit = () => {
-      setOpen(false);
-      new AddProjectModal(
-        app,
-        async (next) => {
-          try {
-            await ProjectFileManager.getInstance(app).updateProject(project.id, next);
-          } catch (e) {
-            logError("[ProjectInfoPopover] updateProject failed", e);
-            throw e;
-          }
-        },
-        project
-      ).open();
-    };
-
     return (
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -311,34 +285,13 @@ export const ProjectInfoPopover = memo(
           className="tw-w-72 tw-p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="tw-flex tw-items-center tw-gap-1 tw-px-3 tw-py-2.5">
+          <div className="tw-px-3 tw-py-2.5">
             <span
-              className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-font-semibold"
+              className="tw-block tw-truncate tw-text-ui-small tw-font-semibold"
               title={project.name}
             >
               {project.name}
             </span>
-            <Button
-              variant="ghost2"
-              size="icon"
-              aria-label={`Edit project ${project.name}`}
-              className="tw-size-6 tw-text-muted hover:tw-text-normal"
-              onClick={handleEdit}
-            >
-              <Settings className="tw-size-3.5" />
-            </Button>
-            <Button
-              variant="ghost2"
-              size="icon"
-              aria-label="Reveal project folder in vault"
-              className="tw-size-6 tw-text-muted hover:tw-text-normal"
-              onClick={() => {
-                setOpen(false);
-                revealProjectFolder(app, project);
-              }}
-            >
-              <FolderSearch className="tw-size-3.5" />
-            </Button>
           </div>
           <ProgressSection todoList={todoList} />
           <ProjectFilesSection app={app} project={project} onClose={() => setOpen(false)} />

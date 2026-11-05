@@ -17,6 +17,7 @@ interface SessionsSidebarFolderRowProps {
   expanded: boolean;
   active: boolean;
   hiddenStatus: SessionStatus;
+  onOpen: () => void;
   onToggle: () => void;
   onNewChat: () => void;
   onDeleted: (projectId: string) => void;
@@ -28,6 +29,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   expanded,
   active,
   hiddenStatus,
+  onOpen,
   onToggle,
   onNewChat,
   onDeleted,
@@ -38,7 +40,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   const { keyboardFocused, focusWithinProps } = useKeyboardFocusWithin();
   const revealed = menuOpen || keyboardFocused;
   const hoverHidden = revealed ? "tw-invisible" : "group-hover:tw-invisible";
-  const hoverShown = revealed ? "tw-block" : "tw-hidden group-hover:tw-block";
+  const hoverShown = revealed ? "tw-visible" : "tw-invisible group-hover:tw-visible";
   return (
     <div
       className={cn(
@@ -57,9 +59,8 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         ref={sortHandle?.ref}
         {...sortHandle?.attributes}
         type="button"
-        aria-expanded={expanded}
         aria-current={active ? "true" : undefined}
-        onClick={onToggle}
+        onClick={onOpen}
         className={cn(
           "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
           "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
@@ -93,18 +94,11 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         >
           {hiddenStatus !== "unread" && <SessionStatusIcon status={hiddenStatus} />}
         </span>
-        <ChevronRight
-          className={cn(
-            "tw-absolute tw-right-2 tw-size-4 tw-text-muted",
-            hoverShown,
-            expanded && "tw-rotate-90"
-          )}
-        />
       </button>
       <div
         className={cn(
           "tw-absolute tw-right-8 tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-items-center tw-gap-1.5",
-          revealed ? "tw-visible" : "tw-invisible group-hover:tw-visible"
+          hoverShown
         )}
       >
         <RowActionButton label={`New chat in ${project.name}`} onClick={onNewChat}>
@@ -118,6 +112,19 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
           onOpenChange={setMenuOpen}
         />
       </div>
+      {/* Clicking the row opens the project's home, so folding gets its own control.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/840 */}
+      <RowActionButton
+        label={`${expanded ? "Hide" : "Show"} chats in ${project.name}`}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        className={cn(
+          "tw-absolute tw-right-1.5 tw-top-1/2 tw-size-5 -tw-translate-y-1/2 tw-p-0 tw-text-muted",
+          hoverShown
+        )}
+      >
+        <ChevronRight className={cn("tw-size-4", expanded && "tw-rotate-90")} />
+      </RowActionButton>
     </div>
   );
 };

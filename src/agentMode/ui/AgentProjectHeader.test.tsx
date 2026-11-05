@@ -9,19 +9,24 @@ beforeAll(() => {
 
 function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHeader>> = {}) {
   const onExit = props.onExit ?? jest.fn();
+  const onOpenSettings = jest.fn();
+  const onRevealFolder = jest.fn();
   const menu = "menu" in props ? props.menu : <button type="button" aria-label="Project options" />;
   render(
     <TooltipProvider>
       <AgentProjectHeader
         projectName={props.projectName ?? "Demo"}
         onExit={onExit}
+        onOpenSettings={onOpenSettings}
+        onRevealFolder={onRevealFolder}
         menu={menu}
+        isProjectHome={props.isProjectHome}
         orphaned={props.orphaned}
         canLeaveProject={props.canLeaveProject}
       />
     </TooltipProvider>
   );
-  return { onExit };
+  return { onExit, onOpenSettings, onRevealFolder };
 }
 
 describe("AgentProjectHeader", () => {
@@ -45,6 +50,40 @@ describe("AgentProjectHeader", () => {
       expect(screen.getByLabelText("Project options")).toBeTruthy();
     });
 
+    it("opens project settings from the settings button for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      const { onOpenSettings, onRevealFolder } = renderHeader({ menu: undefined });
+
+      fireEvent.click(screen.getByRole("button", { name: "Project settings" }));
+
+      expect(onOpenSettings).toHaveBeenCalledTimes(1);
+      expect(onRevealFolder).not.toHaveBeenCalled();
+    });
+
+    it("reveals the project folder from the reveal button for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      const { onOpenSettings, onRevealFolder } = renderHeader({ menu: undefined });
+
+      fireEvent.click(screen.getByRole("button", { name: "Reveal project folder in vault" }));
+
+      expect(onRevealFolder).toHaveBeenCalledTimes(1);
+      expect(onOpenSettings).not.toHaveBeenCalled();
+    });
+
+    it("shows settings and reveal but not the given menu on the project home, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      renderHeader({ canLeaveProject: false, isProjectHome: true });
+
+      expect(
+        screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
+      ).toEqual(["Project settings", "Reveal project folder in vault"]);
+    });
+
+    it("shows the given menu after settings and reveal in a project chat, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      renderHeader({ canLeaveProject: false, isProjectHome: false });
+
+      expect(
+        screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
+      ).toEqual(["Project settings", "Reveal project folder in vault", "Project options"]);
+    });
+
     it("renders the provided options menu in the trailing slot", () => {
       renderHeader({ menu: <button type="button" aria-label="Project options" /> });
       expect(screen.getByLabelText("Project options")).toBeTruthy();
@@ -54,6 +93,8 @@ describe("AgentProjectHeader", () => {
       const { onExit } = renderHeader({ projectName: "Gone", orphaned: true });
       expect(screen.queryByText("Gone")).toBeNull();
       expect(screen.queryByLabelText("Project options")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Project settings" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reveal project folder in vault" })).toBeNull();
       expect(screen.getByText("This project no longer exists")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
       expect(onExit).toHaveBeenCalledTimes(1);

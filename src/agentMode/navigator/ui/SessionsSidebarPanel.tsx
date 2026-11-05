@@ -142,8 +142,8 @@ const Group: React.FC<GroupProps> = ({
   );
 };
 
-// Space picks a row up so Enter keeps opening the chat or folding the project, and the pointer has to travel before a
-// drag starts so a click still opens or folds.
+// Space picks a row up so Enter keeps opening the chat or the project, and the pointer has to travel before a drag
+// starts so a click still opens.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/811
 const KEYBOARD_CODES = { start: ["Space"], cancel: ["Escape"], end: ["Space", "Enter"] };
 
@@ -494,6 +494,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                               !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
                             }
                             hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
+                            onOpen={() => onOpenProject(project.id)}
                             onToggle={() => onToggleProject(project.id)}
                             onNewChat={() => onOpenProject(project.id)}
                             onDeleted={onProjectDeleted}

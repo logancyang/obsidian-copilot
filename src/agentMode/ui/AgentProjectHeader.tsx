@@ -2,13 +2,16 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { Button } from "@/components/ui/button";
 import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { cn } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, FolderSearch, Settings } from "lucide-react";
 import React, { memo } from "react";
 
 interface AgentProjectHeaderProps {
   projectName: string;
   onExit: () => void;
+  onOpenSettings?: () => void;
+  onRevealFolder?: () => void;
   menu?: React.ReactNode;
+  isProjectHome?: boolean;
   orphaned?: boolean;
   canLeaveProject?: boolean;
   className?: string;
@@ -18,7 +21,10 @@ export const AgentProjectHeader = memo(
   ({
     projectName,
     onExit,
+    onOpenSettings,
+    onRevealFolder,
     menu,
+    isProjectHome = false,
     orphaned = false,
     canLeaveProject = true,
     className,
@@ -51,7 +57,31 @@ export const AgentProjectHeader = memo(
             {projectName}
           </TruncatedText>
 
-          {menu}
+          {onOpenSettings && (
+            <Button
+              variant="ghost2"
+              size="icon"
+              aria-label="Project settings"
+              className="tw-size-7 tw-text-muted hover:tw-text-normal"
+              onClick={onOpenSettings}
+            >
+              <Settings className="tw-size-4" />
+            </Button>
+          )}
+          {onRevealFolder && (
+            <Button
+              variant="ghost2"
+              size="icon"
+              aria-label="Reveal project folder in vault"
+              className="tw-size-7 tw-text-muted hover:tw-text-normal"
+              onClick={onRevealFolder}
+            >
+              <FolderSearch className="tw-size-4" />
+            </Button>
+          )}
+          {/* The project home already shows the project's files, so only a chat gets the popover.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/840 */}
+          {!isProjectHome && menu}
         </>
       )}
     </div>

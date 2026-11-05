@@ -14,6 +14,7 @@ function renderFolderRow(
     expanded: false,
     active: false,
     hiddenStatus: "idle" as const,
+    onOpen: jest.fn(),
     onToggle: jest.fn(),
     onNewChat: jest.fn(),
     onDeleted: jest.fn(),
@@ -31,33 +32,58 @@ describe("SessionsSidebarFolderRow", () => {
   beforeAll(installRadixMenuPolyfills);
 
   describe("SessionsSidebarFolderRow()", () => {
-    it("only folds or unfolds the folder when the project row is clicked for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
-      const { onToggle, onNewChat } = renderFolderRow();
+    it("opens the project's home on a click of the project row without folding or unfolding it for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      const { onOpen, onToggle, onNewChat } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "Garden plans" }));
 
-      expect(onToggle).toHaveBeenCalledTimes(1);
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onToggle).not.toHaveBeenCalled();
       expect(onNewChat).not.toHaveBeenCalled();
     });
 
     it.each([
+      [false, "Show chats in Garden plans"],
+      [true, "Hide chats in Garden plans"],
+    ])(
+      "folds or unfolds the project from its chevron (expanded=%s) without opening the project for https://github.com/Brevilabs/obsidian-copilot-private/issues/840",
+      (expanded, label) => {
+        const { onOpen, onToggle } = renderFolderRow({ expanded });
+
+        fireEvent.click(screen.getByRole("button", { name: label }));
+
+        expect(onToggle).toHaveBeenCalledTimes(1);
+        expect(onOpen).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([
       [true, "true"],
       [false, "false"],
-    ])("reports expanded=%s to assistive tech", (expanded, ariaExpanded) => {
-      renderFolderRow({ expanded });
+    ])(
+      "reports expanded=%s to assistive tech on the chevron, not on the row",
+      (expanded, ariaExpanded) => {
+        renderFolderRow({ expanded });
 
-      expect(
-        screen.getByRole("button", { name: "Garden plans" }).getAttribute("aria-expanded")
-      ).toBe(ariaExpanded);
-    });
+        expect(
+          screen
+            .getByRole("button", { name: /chats in Garden plans$/ })
+            .getAttribute("aria-expanded")
+        ).toBe(ariaExpanded);
+        expect(
+          screen.getByRole("button", { name: "Garden plans" }).hasAttribute("aria-expanded")
+        ).toBe(false);
+      }
+    );
 
     it("starts a chat in the project from the hover plus without folding the folder for https://github.com/Brevilabs/obsidian-copilot-private/issues/803", () => {
-      const { onNewChat, onToggle } = renderFolderRow();
+      const { onNewChat, onToggle, onOpen } = renderFolderRow();
 
       fireEvent.click(screen.getByRole("button", { name: "New chat in Garden plans" }));
 
       expect(onNewChat).toHaveBeenCalledTimes(1);
       expect(onToggle).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -94,13 +120,12 @@ describe("SessionsSidebarFolderRow", () => {
     it("keeps the bubbled status's space and overlays the chevron on it, so hovering moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       renderFolderRow({ hiddenStatus: "waiting" });
 
-      const row = screen.getByText("Garden plans").closest("button")!;
       const statusSlot = screen.getByLabelText("Waiting for permission").parentElement!;
       expect(statusSlot.className).toContain("group-hover:tw-invisible");
       expect(statusSlot.className).not.toContain("group-hover:tw-hidden");
-      expect(row.querySelector(".lucide-chevron-right")!.getAttribute("class")).toContain(
-        "tw-absolute"
-      );
+      expect(
+        screen.getByRole("button", { name: "Show chats in Garden plans" }).className
+      ).toContain("tw-absolute");
     });
 
     it.each([
@@ -114,21 +139,32 @@ describe("SessionsSidebarFolderRow", () => {
       (_title, keyboardFocus) => {
         const revealed = keyboardFocus;
         renderFolderRow({ hiddenStatus: "waiting" });
-        const toggle = screen.getByText("Garden plans").closest("button")!;
-        jest.spyOn(toggle, "matches").mockReturnValue(keyboardFocus);
+        const row = screen.getByText("Garden plans").closest("button")!;
+        jest.spyOn(row, "matches").mockReturnValue(keyboardFocus);
 
-        act(() => toggle.focus());
+        act(() => row.focus());
 
         const statusSlot = screen.getByLabelText("Waiting for permission").parentElement!;
-        const chevron = toggle.querySelector(".lucide-chevron-right")!;
+        const chevron = screen.getByRole("button", { name: "Show chats in Garden plans" });
         const actions = screen.getByRole("button", {
           name: "More actions for Garden plans",
         }).parentElement!;
         expect(statusSlot.classList.contains("tw-invisible")).toBe(revealed);
-        expect(chevron.classList.contains("tw-hidden")).toBe(!revealed);
+        expect(chevron.classList.contains("tw-visible")).toBe(revealed);
         expect(actions.classList.contains("tw-visible")).toBe(revealed);
       }
     );
+
+    it("keeps the chevron shown while the keyboard focuses the chevron itself for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+      renderFolderRow();
+      const chevron = screen.getByRole("button", { name: "Show chats in Garden plans" });
+      jest.spyOn(chevron, "matches").mockReturnValue(true);
+
+      act(() => chevron.focus());
+
+      expect(document.activeElement).toBe(chevron);
+      expect(chevron.classList.contains("tw-visible")).toBe(true);
+    });
 
     it("shows no status when nothing hidden needs the user", () => {
       renderFolderRow({ hiddenStatus: "idle" });
@@ -138,13 +174,14 @@ describe("SessionsSidebarFolderRow", () => {
       ).toBeNull();
     });
 
-    it("opens the project menu from the context menu gesture without toggling the folder", () => {
-      const { onToggle } = renderFolderRow();
+    it("opens the project menu from the context menu gesture without toggling or opening the project", () => {
+      const { onToggle, onOpen } = renderFolderRow();
 
       fireEvent.contextMenu(screen.getByRole("button", { name: "Garden plans" }));
 
       expect(screen.getByRole("menu")).toBeTruthy();
       expect(onToggle).not.toHaveBeenCalled();
+      expect(onOpen).not.toHaveBeenCalled();
     });
   });
 });
