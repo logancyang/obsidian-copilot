@@ -6,7 +6,6 @@ import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInput
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
 import { act, render, renderHook } from "@testing-library/react";
-import type { ProjectConfig } from "@/aiParams";
 import { App, MarkdownView, TFile } from "obsidian";
 jest.mock("obsidian", () => ({
   ...jest.requireActual("obsidian"),
@@ -26,15 +25,10 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: () => "Vault",
   getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,
 }));
-jest.mock("@/search/searchUtils", () => {
-  const actual = jest.requireActual("@/search/searchUtils");
-  return {
-    ...actual,
-    getMatchingPatterns: (options: { inclusions?: string }) =>
-      options.inclusions ? actual.getMatchingPatterns(options) : { inclusions: {}, exclusions: {} },
-    shouldIndexFile: (_app: unknown, file: { path: string }) => file.path === "project.md",
-  };
-});
+jest.mock("@/search/searchUtils", () => ({
+  getMatchingPatterns: () => ({ inclusions: {}, exclusions: {} }),
+  shouldIndexFile: () => true,
+}));
 describe("useChatRelevantNotesContext", () => {
   describe("useChatRelevantNotesContext()", () => {
     let app: App;
@@ -226,32 +220,6 @@ describe("useChatRelevantNotesContext", () => {
       const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
       expect(request.excerpts).toEqual(["literal excerpt"]);
       expect(request.file_paths).toEqual(["Vault/project.md"]);
-    });
-    it("includes notes that carry a linked tag only inline in their text, as the Files tab's tag row lists them (https://github.com/Brevilabs/obsidian-copilot-private/issues/838)", () => {
-      const standup = { path: "Work/standup.md" };
-      app = {
-        ...app,
-        vault: {
-          ...app.vault,
-          getFiles: () => [{ path: "project.md" }, standup],
-          getMarkdownFiles: () => [standup],
-        },
-        metadataCache: {
-          getFileCache: (file: { path: string }) =>
-            file === standup ? { tags: [{ tag: "#launch" }] } : null,
-        },
-      } as unknown as App;
-      const project = { id: "p", contextSource: { inclusions: "#launch" } } as ProjectConfig;
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
-
-      act(() => {
-        root.dispatchEvent(new Event("pointerdown"));
-      });
-
-      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths).toEqual([
-        "Vault/project.md",
-        "Vault/Work/standup.md",
-      ]);
     });
     it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
