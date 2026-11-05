@@ -24,7 +24,7 @@ Follow the README's entry contract: an H1, one line on what the user sees, then 
 
 - **Sub-features:** `kebab-id: one line` per capability the user can see. Each should be small enough to verify on its own and could grow into its own file. Keep IDs stable; rename one only when the capability changes.
 - **How to get to it (user POV):** every entry point, by its visible name: commands, buttons, menus.
-- **Driving it with the Obsidian CLI:** one bullet per sub-feature at least, as `Label: user action. Observable result.` Shared setup lives in the README's Baseline; name extra state only when the feature needs it, such as a license. Edge cases belong in unit tests, not here.
+- **Driving it:** one bullet per sub-feature at least, as `Label: user action. Observable result.` Describe only what the user does and sees in the app; how to drive it belongs to whoever runs the map. Shared setup lives in the README's Baseline; name extra state only when the feature needs it, such as a license. Edge cases belong in unit tests, not here.
 - **Gotchas:** traps that waste or invalidate a run, or that changes tend to break.
 
 Behavior that spans features goes in `multi-surface-journeys.md`; the surface files link to it instead of repeating it.

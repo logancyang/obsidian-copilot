@@ -19,7 +19,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - `Chat history` above the chat input.
 - The [Copilot Navigator](copilot-navigator.md).
 
-## Driving it with the Obsidian CLI
+## Driving it
 
 - Open: choose a row in Recent chats. Its conversation shows in Agent Chat.
 - Pin: hover the row and choose `Pin chat`. The chat moves under Pinned and offers `Unpin chat`.

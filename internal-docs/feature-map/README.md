@@ -6,7 +6,7 @@ A behavior-level inventory of Agent Mode, one file per part of the screen a user
 
 - This working tree's build is deployed into your own scratch vault, per [`TESTING_GUIDE.md`](../TESTING_GUIDE.md), "End-to-end testing". Never drive a vault you did not create for this run.
 - Agent Chat is open, its agent has finished starting, and Recent chats lists at least two past chats.
-- Drive through the Obsidian CLI. Find controls by their visible name or tooltip, within the pane under test.
+- Find controls by their visible name or tooltip, within the pane under test.
 - Replies stream. Wait for the reply to finish, not for a fixed time.
 - "Sent a message" means a message sent since Obsidian started.
 
@@ -53,5 +53,5 @@ Every feature file uses the same four H2s:
 
 1. `Sub-features`
 2. `How to get to it (user POV)`
-3. `Driving it with the Obsidian CLI`
+3. `Driving it`
 4. `Gotchas`

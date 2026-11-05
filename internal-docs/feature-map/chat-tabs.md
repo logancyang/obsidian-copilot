@@ -16,7 +16,7 @@ The tabs across the top of Agent Chat, one per open chat. A tab stays open until
 
 Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` command. The tabs run across the top. They are hidden while the [Copilot Navigator](copilot-navigator.md) is open.
 
-## Driving it with the Obsidian CLI
+## Driving it
 
 - New tab: open a chat from Recent chats, then choose `New chat` (**+**). Two tabs show: the past chat and an empty new chat.
 - Switch: choose the past chat's tab. Its conversation shows and both tabs remain.

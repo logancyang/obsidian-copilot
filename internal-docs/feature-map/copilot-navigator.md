@@ -20,7 +20,7 @@ Each chat in the list is a [chat row](chat-rows.md).
 
 Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at the left of the chat tabs. Needs a license with Navigator access.
 
-## Driving it with the Obsidian CLI
+## Driving it
 
 - Open: run `Open Copilot Navigator`. The sidebar shows Pinned and Recents, and the chat tabs hide.
 - Search: type part of a chat title into `Search chats`. Only matching chats remain.
