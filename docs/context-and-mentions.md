@@ -61,7 +61,7 @@ Agent mentions select OpenCode, Claude, or Codex. They are different from note, 
 
 ## Reuse context with Projects
 
-For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab to link them, or select **+** beside **Linked** to link a note, folder, or tag, or to paste a web or YouTube link. Dropping on the message box attaches the item to that message only. Add other saved context, including properties, with **Link context** on the **Files** tab.
+For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab to link them, or select **Link context** beside **Linked** to link files, folders, tags, properties, or a web or YouTube link. Dropping on the message box attaches the item to that message only.
 
 Project context is prepared for every new chat in that Project. If preparation is still running when you send a message, Copilot queues the message and starts it when the context is ready.
 

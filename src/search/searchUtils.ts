@@ -347,6 +347,12 @@ export function getPropertyPattern(key: string, value?: string): string {
   return value ? `[${key}:${value}]` : `[${key}:]`;
 }
 
+export function getPropertyLabel(propertyPattern: string): string {
+  const parsed = parsePropertyPattern(propertyPattern);
+  if (!parsed) return propertyPattern;
+  return parsed.value ? `${parsed.key}: ${parsed.value}` : `${parsed.key}: (any)`;
+}
+
 export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
   const tag = tagPattern.toLowerCase();
   // A linked tag lists what Obsidian's own tag search finds: any case, plus every tag nested under it.
@@ -361,6 +367,14 @@ export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
       const cache = app.metadataCache.getFileCache(file);
       return cache !== null && (getAllTags(cache) ?? []).some(matches);
     })
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export function getNotesWithProperty(app: App, propertyPattern: string): TFile[] {
+  const inclusions: PatternCategory = { propertyPatterns: [propertyPattern] };
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => shouldIndexFile(app, file, inclusions, null, true))
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 

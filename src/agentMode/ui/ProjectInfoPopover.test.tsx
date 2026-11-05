@@ -1,6 +1,13 @@
+const mockOpenFilePicker = jest.fn();
+
+jest.mock("@/components/modals/ProjectFileSelectModal", () => ({
+  ProjectFileSelectModal: jest.fn().mockImplementation(() => ({ open: mockOpenFilePicker })),
+}));
+
 import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
 import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
 import { ProjectInfoPanel, ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import type { ProjectConfig } from "@/aiParams";
 import { AppContext } from "@/context";
 import { updateCachedProjectRecords } from "@/projects/state";
@@ -30,9 +37,7 @@ function turn(id: string, fileChanges?: TurnFileChange[]): AgentChatMessage {
 }
 
 function makeFile(path: string): TFile {
-  const file = new (TFile as unknown as new (path: string) => TFile)(path);
-  file.stat = { ctime: Date.now(), mtime: Date.now(), size: 1 };
-  return file;
+  return new (TFile as unknown as new (path: string) => TFile)(path);
 }
 
 function makeFolder(path: string, children: TAbstractFile[]): TFolder {
@@ -103,9 +108,7 @@ function sectionTitles(): string[] {
     .map((id) => document.getElementById(id)?.textContent ?? "");
 }
 
-beforeAll(() => {
-  window.activeDocument = window.document;
-});
+beforeAll(installRadixMenuPolyfills);
 
 beforeEach(() => setProjectFolder(PROJECT_FOLDER));
 
@@ -167,7 +170,7 @@ describe("ProjectInfoPopover", () => {
   });
 
   describe("ProjectInfoPopover()", () => {
-    it("opens with the files this chat changed, latest first, then the project's Recent, Project folder and Linked, with no Progress or Outputs", () => {
+    it("opens with the files this chat changed, latest first, then the project's Project folder and Linked, with no Progress or Outputs", () => {
       const { app } = makeApp([projectFolderFixture()]);
 
       renderPopover(app, [
@@ -175,12 +178,7 @@ describe("ProjectInfoPopover", () => {
         turn("second", [change(`${PROJECT_FOLDER}/brief.md`, "a\n", "b\n")]),
       ]);
 
-      expect(sectionTitles()).toEqual([
-        "Changed in this chat",
-        "Recent",
-        "Project folder",
-        "Linked",
-      ]);
+      expect(sectionTitles()).toEqual(["Changed in this chat", "Project folder", "Linked"]);
       expect(changedRows().map((row) => row.split(PROJECT_FOLDER)[0])).toEqual([
         "brief.md",
         "timeline.md",
@@ -195,12 +193,27 @@ describe("ProjectInfoPopover", () => {
       renderPopover(app, [turn("reply")]);
 
       expect(screen.getByText("No files changed in this chat yet.")).toBeTruthy();
-      expect(sectionTitles()).toEqual([
-        "Changed in this chat",
-        "Recent",
-        "Project folder",
-        "Linked",
-      ]);
+      expect(sectionTitles()).toEqual(["Changed in this chat", "Project folder", "Linked"]);
+    });
+
+    it("offers the same Link context menu on the popover's Linked header, opening its pickers from the popover", () => {
+      const { app } = makeApp([projectFolderFixture()]);
+      renderPopover(app, [turn("reply")]);
+
+      const linked = screen.getByRole("region", { name: "Linked" });
+      fireEvent.pointerDown(within(linked).getByRole("button", { name: "Link context" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const menu = screen.getByRole("menu");
+      expect(
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent)
+      ).toEqual(["Files", "Folders", "Tags", "Properties", "Link"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Files" }));
+
+      expect(mockOpenFilePicker).toHaveBeenCalled();
     });
 
     it("opens a changed file in a tab and closes the popover", () => {

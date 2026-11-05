@@ -119,11 +119,17 @@ describe("manifestBuilder", () => {
 
     it("counts a property-only inclusion as a source and enumerates matching notes by absolute path", () => {
       getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
-      const app = fakeApp([
-        { path: "Notes/Relativity.md", ext: "md" },
-        { path: "Notes/Cooking.md", ext: "md" },
-      ]);
-      indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path === "Notes/Relativity.md"); // prettier-ignore
+      const app = fakeApp(
+        [
+          { path: "Notes/Relativity.md", ext: "md" },
+          { path: "Notes/Cooking.md", ext: "md" },
+        ],
+        [],
+        {
+          "Notes/Relativity.md": { frontmatter: { Topics: "Physics" } },
+          "Notes/Cooking.md": { frontmatter: { Topics: "Food" } },
+        }
+      );
 
       const block = buildProjectContext(app, "p1");
 
@@ -134,7 +140,9 @@ describe("manifestBuilder", () => {
 
     it("lists a note reached by both a title and a property once, as a declaration", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
-      const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }]);
+      const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }], [], {
+        "Notes/Relativity.md": { frontmatter: { Topics: "Physics" } },
+      });
 
       const block = buildProjectContext(app, "p1");
 

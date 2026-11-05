@@ -1,15 +1,15 @@
 import {
+  FILES_DROP_HIGHLIGHT,
   LinkedSection,
   type LinkedProjectRow,
-  type LinkedTagRow,
+  type LinkedMatchRow,
   ProjectFolderSection,
-  RecentFilesSection,
   type ProjectFolderSectionProps,
   type ProjectTreeNode,
-  type RecentProjectFile,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { Meta, StoryObj } from "@/lib/story";
 import { createUrlItem, type UrlItem } from "@/lib/url-tag";
+import { cn } from "@/lib/utils";
 import React from "react";
 
 const ROOT = "copilot/projects/q4-launch";
@@ -21,37 +21,6 @@ function file(path: string): ProjectTreeNode {
 function folder(path: string, children: ProjectTreeNode[] | null = null): ProjectTreeNode {
   return { kind: "folder", path: `${ROOT}/${path}`, name: path.split("/").pop() ?? path, children };
 }
-
-const NOW = Date.UTC(2026, 10, 4, 12);
-const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
-
-function recent(
-  path: string,
-  change: RecentProjectFile["change"],
-  ageMs: number
-): RecentProjectFile {
-  const name = path.split("/").pop() ?? path;
-  return {
-    path: `${ROOT}/${path}`,
-    name,
-    folder: path.slice(0, -name.length),
-    change,
-    mtime: NOW - ageMs,
-  };
-}
-
-const RECENT_FILES: RecentProjectFile[] = [
-  recent("outputs/launch-timeline.md", "new", 12 * MINUTE),
-  recent("brief.md", "edited", 2 * 60 * MINUTE),
-  recent(
-    "outputs/charts/2026/Signup funnel by region and acquisition channel.png",
-    "new",
-    1.5 * DAY
-  ),
-  recent("outputs/press-release-v2.md", "edited", 3 * DAY),
-  recent("outputs/pricing-comparison.csv", "new", 40 * DAY),
-];
 
 const meta = {
   title: "Agent Mode/Project Files View",
@@ -84,22 +53,6 @@ const POPULATED_NODES: ProjectTreeNode[] = [
 
 export const Populated: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-};
-
-export const Recent: StoryObj<ProjectFolderSectionProps> = {
-  args: { nodes: POPULATED_NODES },
-  render: (props) => (
-    <>
-      <RecentFilesSection
-        files={RECENT_FILES}
-        now={NOW}
-        onOpenFile={() => {}}
-        onShowFileMenu={() => {}}
-        onDragFile={() => {}}
-      />
-      <ProjectFolderSection {...(props as ProjectFolderSectionProps)} />
-    </>
-  ),
 };
 
 export const DeeplyNested: StoryObj<ProjectFolderSectionProps> = {
@@ -186,23 +139,41 @@ const LINKED_ROWS: LinkedProjectRow[] = [
   ),
 ];
 
-function tagNote(path: string) {
+function matchedNote(path: string) {
   const name = path.split("/").pop() ?? path;
   return { node: { kind: "file", path, name } as const, parent: path.slice(0, -name.length) };
 }
 
-const LINKED_TAGS: LinkedTagRow[] = [
+function tag(pattern: string, count: number, notes: string[] | null = null): LinkedMatchRow {
+  return { kind: "tag", pattern, label: pattern, count, notes: notes?.map(matchedNote) ?? null };
+}
+
+const LINKED_TAGS: LinkedMatchRow[] = [
+  tag("#launch", 3, [
+    "Meetings/Launch syncs/2026-10-21 sync.md",
+    "Plans/Q4 launch brief.md",
+    "Work/Clients/Northwind Traders/Research/Regional launch readiness checklist.md",
+  ]),
+  tag("#research/pricing", 1),
+  tag("#archived", 0),
+];
+
+const LINKED_PROPERTIES: LinkedMatchRow[] = [
   {
-    tag: "#launch",
-    count: 3,
-    notes: [
-      tagNote("Meetings/Launch syncs/2026-10-21 sync.md"),
-      tagNote("Plans/Q4 launch brief.md"),
-      tagNote("Work/Clients/Northwind Traders/Research/Regional launch readiness checklist.md"),
-    ],
+    kind: "property",
+    pattern: "[status:active]",
+    label: "status: active",
+    count: 2,
+    notes: ["Plans/Q4 launch brief.md", "Research/Personas.md"].map(matchedNote),
   },
-  { tag: "#research/pricing", count: 1, notes: null },
-  { tag: "#archived", count: 0, notes: null },
+  {
+    kind: "property",
+    pattern: "[client:Northwind Traders regional expansion program]",
+    label: "client: Northwind Traders regional expansion program",
+    count: 14,
+    notes: null,
+  },
+  { kind: "property", pattern: "[reviewer:]", label: "reviewer: (any)", count: 0, notes: null },
 ];
 
 const LINKED_URLS: UrlItem[] = [
@@ -216,19 +187,18 @@ const LINKED_URLS: UrlItem[] = [
 function renderWithLinked(
   rows: LinkedProjectRow[],
   isDragOver: boolean,
-  tags: LinkedTagRow[] = [],
+  matches: LinkedMatchRow[] = [],
   urls: UrlItem[] = []
 ) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
     return (
-      <>
+      <div className={cn("tw-flex tw-flex-col tw-rounded-md", isDragOver && FILES_DROP_HIGHLIGHT)}>
         <ProjectFolderSection {...props} />
         <LinkedSection
           rows={rows}
-          tags={tags}
+          matches={matches}
           urls={urls}
-          isDragOver={isDragOver}
-          onAdd={() => {}}
+          onLink={() => {}}
           onUnlink={() => {}}
           onOpenUrl={() => {}}
           onUnlinkUrl={() => {}}
@@ -237,7 +207,7 @@ function renderWithLinked(
           onShowFileMenu={() => {}}
           onDragFile={() => {}}
         />
-      </>
+      </div>
     );
   }
   return FilesWithLinked;
@@ -261,4 +231,9 @@ export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
 export const LinkedTagsAndLinks: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
   render: renderWithLinked(LINKED_ROWS.slice(0, 2), false, LINKED_TAGS, LINKED_URLS),
+};
+
+export const LinkedProperties: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS.slice(3, 4), false, LINKED_PROPERTIES),
 };

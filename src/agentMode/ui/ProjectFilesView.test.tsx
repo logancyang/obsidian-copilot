@@ -26,40 +26,62 @@ jest.mock("obsidian", () => {
 });
 
 const mockUpdateProject = jest.fn();
-const mockOpenSearch = jest.fn();
+const mockOpenPicker = jest.fn();
 
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: () => ({ updateProject: mockUpdateProject }) },
 }));
 
-jest.mock("@/components/modals/VaultItemSearchModal", () => ({
-  VaultItemSearchModal: jest.fn().mockImplementation((_app, onChoose) => ({
-    open: () => mockOpenSearch(onChoose),
+jest.mock("@/components/modals/ProjectFileSelectModal", () => ({
+  ProjectFileSelectModal: jest.fn().mockImplementation(({ onFileSelect }) => ({
+    open: () => mockOpenPicker("files", onFileSelect),
+  })),
+}));
+
+jest.mock("@/components/modals/FolderSearchModal", () => ({
+  FolderSearchModal: jest.fn().mockImplementation((_app, onChooseFolder) => ({
+    open: () => mockOpenPicker("folders", onChooseFolder),
+  })),
+}));
+
+jest.mock("@/components/modals/TagSearchModal", () => ({
+  TagSearchModal: jest.fn().mockImplementation((_app, onChooseTag) => ({
+    open: () => mockOpenPicker("tags", onChooseTag),
+  })),
+}));
+
+jest.mock("@/components/modals/PropertySearchModal", () => ({
+  PropertySearchModal: jest.fn().mockImplementation((_app, onChoose) => ({
+    open: () => mockOpenPicker("properties", onChoose),
+  })),
+}));
+
+jest.mock("@/components/modals/LinkUrlModal", () => ({
+  LinkUrlModal: jest.fn().mockImplementation((_app, onChoose) => ({
+    open: () => mockOpenPicker("link", onChoose),
   })),
 }));
 
 import {
   buildLinkedRows,
-  buildLinkedTagRows,
+  buildLinkedMatchRows,
   buildProjectTree,
-  buildRecentFiles,
   LinkedSection,
   type LinkedProjectRow,
-  type LinkedTagRow,
+  type LinkedMatchRow,
   ProjectFilesView,
   ProjectFolderSection,
-  RecentFilesSection,
-  type RecentProjectFile,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { ProjectConfig } from "@/aiParams";
 import { createUrlItem } from "@/lib/url-tag";
 import { AppContext } from "@/context";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
 import {
   getCachedProjectRecordById,
   updateCachedProjectRecords,
   upsertCachedProjectRecord,
 } from "@/projects/state";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import {
   App,
   CachedMetadata,
@@ -98,18 +120,8 @@ function makeFolder(path: string, children: TAbstractFile[] = []): TFolder {
   return folder;
 }
 
-const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
-const NOW = new Date(2026, 10, 4, 12).getTime();
-
-function makeFile(path: string, stat: { ctime: number; mtime: number } = { ctime: 0, mtime: 0 }) {
-  const file = new (TFile as unknown as new (path: string) => TFile)(path);
-  file.stat = { ...stat, size: 1 };
-  return file;
-}
-
-function touch(file: TFile, mtime: number): void {
-  file.stat = { ...file.stat, mtime };
+function makeFile(path: string): TFile {
+  return new (TFile as unknown as new (path: string) => TFile)(path);
 }
 
 function setChildren(folder: TFolder, children: TAbstractFile[]): void {
@@ -155,14 +167,10 @@ function savedPatterns(): string[] {
 
 interface FakeVault {
   app: App;
-  emit: (
-    event: "create" | "delete" | "rename" | "modify",
-    file: TAbstractFile,
-    oldPath?: string
-  ) => void;
+  emit: (event: "create" | "delete" | "rename", file: TAbstractFile, oldPath?: string) => void;
   setTags: (
     file: TFile,
-    cache: { frontmatter?: { tags: string[] }; inlineTags?: string[] }
+    cache: { frontmatter?: Record<string, unknown>; inlineTags?: string[] }
   ) => void;
   listenerCount: () => number;
   openFile: jest.Mock;
@@ -290,17 +298,15 @@ function rowNames(): string[] {
     .map((row) => row.textContent ?? "");
 }
 
-function recentRows(): HTMLElement[] {
-  return within(screen.getByRole("region", { name: "Recent" })).getAllByRole("button");
+function chooseLinkKind(label: string): void {
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: label }));
 }
 
-function recentNames(): string[] {
-  return recentRows().map((row) => row.querySelector("[title]")?.textContent ?? "");
-}
-
-beforeAll(() => {
-  window.activeDocument = window.document;
-});
+beforeAll(installRadixMenuPolyfills);
 
 beforeEach(() => {
   mockUpdateProject.mockReset().mockImplementation(async (_id: string, next: ProjectConfig) => {
@@ -308,7 +314,7 @@ beforeEach(() => {
     act(() => upsertCachedProjectRecord({ ...record, project: next }));
     return record;
   });
-  mockOpenSearch.mockReset();
+  mockOpenPicker.mockReset();
   (Notice as unknown as jest.Mock).mockClear();
   updateCachedProjectRecords([
     { folderName: "q4-launch", filePath: CONFIG_PATH, project: makeProject() },
@@ -398,152 +404,6 @@ describe("ProjectFilesView", () => {
     it("returns the same empty list for every empty folder", () => {
       const first = buildProjectTree(makeFolder(PROJECT_FOLDER), new Set(), CONFIG_PATH);
       const second = buildProjectTree(makeFolder("elsewhere"), new Set(), CONFIG_PATH);
-
-      expect(first).toEqual([]);
-      expect(first).toBe(second);
-    });
-  });
-
-  describe("buildRecentFiles()", () => {
-    function recentFixture(path: string, ageMs: number): TFile {
-      return makeFile(`${PROJECT_FOLDER}/${path}`, { ctime: NOW - ageMs, mtime: NOW - ageMs });
-    }
-
-    it("lists the five most recently modified files at any depth and any age, newest first, with their folder in the project", () => {
-      const charts = makeFolder(`${PROJECT_FOLDER}/outputs/charts`, [
-        recentFixture("outputs/charts/funnel.png", 3 * DAY),
-      ]);
-      const outputs = makeFolder(`${PROJECT_FOLDER}/outputs`, [
-        charts,
-        recentFixture("outputs/timeline.md", MINUTE),
-        recentFixture("outputs/press-release.md", DAY),
-        recentFixture("outputs/archive.md", 400 * DAY),
-        recentFixture("outputs/pricing.csv", 2 * 60 * MINUTE),
-      ]);
-      const folder = makeFolder(PROJECT_FOLDER, [
-        recentFixture("brief.md", 5 * MINUTE),
-        outputs,
-        recentFixture("roadmap.md", 90 * DAY),
-      ]);
-
-      const recent = buildRecentFiles(folder, CONFIG_PATH);
-
-      expect(recent.map((file) => `${file.folder}${file.name}`)).toEqual([
-        "outputs/timeline.md",
-        "brief.md",
-        "outputs/pricing.csv",
-        "outputs/press-release.md",
-        "outputs/charts/funnel.png",
-      ]);
-      expect(recent[0]).toEqual({
-        path: `${PROJECT_FOLDER}/outputs/timeline.md`,
-        name: "timeline.md",
-        folder: "outputs/",
-        change: "new",
-        mtime: NOW - MINUTE,
-      });
-    });
-
-    it("leaves out AGENTS.md, everything under sources/, the project's config note and dotfiles even when they changed last", () => {
-      const sources = makeFolder(`${PROJECT_FOLDER}/sources`, [
-        recentFixture("sources/deck.pdf", 0),
-        makeFolder(`${PROJECT_FOLDER}/sources/interviews`, [
-          recentFixture("sources/interviews/acme.md", 0),
-        ]),
-      ]);
-      const folder = makeFolder(PROJECT_FOLDER, [
-        recentFixture("project.md", 0),
-        recentFixture("AGENTS.md", 0),
-        recentFixture(".draft.md", 0),
-        makeFolder(`${PROJECT_FOLDER}/.cache`, [recentFixture(".cache/index.md", 0)]),
-        sources,
-        recentFixture("brief.md", DAY),
-      ]);
-
-      const recent = buildRecentFiles(folder, CONFIG_PATH);
-
-      expect(recent.map((file) => file.name)).toEqual(["brief.md"]);
-    });
-
-    it("leaves out only the project's own AGENTS.md and sources/, so same-named files and folders deeper in the project still appear", () => {
-      const folder = makeFolder(PROJECT_FOLDER, [
-        makeFolder(`${PROJECT_FOLDER}/outputs`, [
-          recentFixture("outputs/AGENTS.md", MINUTE),
-          makeFolder(`${PROJECT_FOLDER}/outputs/sources`, [
-            recentFixture("outputs/sources/citations.md", 2 * MINUTE),
-          ]),
-        ]),
-      ]);
-
-      const recent = buildRecentFiles(folder, CONFIG_PATH);
-
-      expect(recent.map((file) => file.path)).toEqual([
-        `${PROJECT_FOLDER}/outputs/AGENTS.md`,
-        `${PROJECT_FOLDER}/outputs/sources/citations.md`,
-      ]);
-    });
-
-    it("labels a file new when its last change came within a minute of its creation and edited after that", () => {
-      const folder = makeFolder(PROJECT_FOLDER, [
-        makeFile(`${PROJECT_FOLDER}/written-once.md`, { ctime: NOW - DAY, mtime: NOW - DAY }),
-        makeFile(`${PROJECT_FOLDER}/rewritten-in-turn.md`, {
-          ctime: NOW - 2 * DAY,
-          mtime: NOW - 2 * DAY + 59_000,
-        }),
-        makeFile(`${PROJECT_FOLDER}/revised.md`, {
-          ctime: NOW - 3 * DAY,
-          mtime: NOW - 3 * DAY + MINUTE,
-        }),
-      ]);
-
-      const recent = buildRecentFiles(folder, CONFIG_PATH);
-
-      expect(recent.map((file) => `${file.name}:${file.change}`)).toEqual([
-        "written-once.md:new",
-        "rewritten-in-turn.md:new",
-        "revised.md:edited",
-      ]);
-    });
-
-    it("compares creation and last change in either order, so a creation time a few seconds late still reads new and one a sync tool or copy set days later reads edited", () => {
-      const folder = makeFolder(PROJECT_FOLDER, [
-        makeFile(`${PROJECT_FOLDER}/coarse-clock.md`, {
-          ctime: NOW - DAY + 2_000,
-          mtime: NOW - DAY,
-        }),
-        makeFile(`${PROJECT_FOLDER}/synced.md`, { ctime: NOW, mtime: NOW - 3 * DAY }),
-      ]);
-
-      const recent = buildRecentFiles(folder, CONFIG_PATH);
-
-      expect(recent.map((file) => `${file.name}:${file.change}`)).toEqual([
-        "coarse-clock.md:new",
-        "synced.md:edited",
-      ]);
-    });
-
-    it("leaves out linked notes and folders even when they sit in the project folder and changed last — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
-      const folder = makeFolder(PROJECT_FOLDER, [
-        recentFixture("brief.md", 3 * MINUTE),
-        recentFixture("pinned.md", MINUTE),
-        makeFolder(`${PROJECT_FOLDER}/research`, [recentFixture("research/acme.md", 0)]),
-      ]);
-
-      const recent = buildRecentFiles(
-        folder,
-        CONFIG_PATH,
-        new Set([`${PROJECT_FOLDER}/pinned.md`, `${PROJECT_FOLDER}/research`])
-      );
-
-      expect(recent.map((file) => file.name)).toEqual(["brief.md"]);
-    });
-
-    it("returns the same empty list for every folder with nothing to show", () => {
-      const first = buildRecentFiles(makeFolder(PROJECT_FOLDER), CONFIG_PATH);
-      const second = buildRecentFiles(
-        makeFolder(PROJECT_FOLDER, [recentFixture("AGENTS.md", 0)]),
-        CONFIG_PATH
-      );
 
       expect(first).toEqual([]);
       expect(first).toBe(second);
@@ -640,7 +500,7 @@ describe("ProjectFilesView", () => {
     });
   });
 
-  describe("buildLinkedTagRows()", () => {
+  describe("buildLinkedMatchRows()", () => {
     function taggedVault() {
       const standup = makeFile("Work/standup.md");
       const brief = makeFile("Plans/brief.md");
@@ -649,42 +509,64 @@ describe("ProjectFilesView", () => {
         makeFolder("Work", [standup]),
         makeFolder("Plans", [brief, budget]),
       ]);
-      vault.setTags(standup, { inlineTags: ["#launch"] });
-      vault.setTags(brief, { frontmatter: { tags: ["launch", "q4"] } });
-      vault.setTags(budget, { frontmatter: { tags: ["q4"] } });
+      vault.setTags(standup, { inlineTags: ["#launch"], frontmatter: { status: "Active" } });
+      vault.setTags(brief, {
+        frontmatter: { tags: ["launch", "q4"], status: ["active", "draft"] },
+      });
+      vault.setTags(budget, { frontmatter: { tags: ["q4"], status: "done" } });
       return vault.app;
     }
 
     it("lists each linked tag with how many notes carry it in properties or inline, leaving its notes unread until it is expanded — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      const rows = buildLinkedTagRows(
+      const rows = buildLinkedMatchRows(
         taggedVault(),
         inclusionsOf(["Research", "#launch", "#q4", "#archived"]),
         new Set()
       );
 
       expect(rows).toEqual([
-        { tag: "#launch", count: 2, notes: null },
-        { tag: "#q4", count: 2, notes: null },
-        { tag: "#archived", count: 0, notes: null },
+        { kind: "tag", pattern: "#launch", label: "#launch", count: 2, notes: null },
+        { kind: "tag", pattern: "#q4", label: "#q4", count: 2, notes: null },
+        { kind: "tag", pattern: "#archived", label: "#archived", count: 0, notes: null },
       ]);
     });
 
-    it("lists an expanded tag's notes by name with the folder each sits in, sorted by path", () => {
-      const [row] = buildLinkedTagRows(
+    it("lists each linked property after the tags, labeled key: value, counting the notes the manifest includes for it — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const rows = buildLinkedMatchRows(
         taggedVault(),
-        inclusionsOf(["#launch"]),
-        new Set(["#launch"])
+        inclusionsOf(["#q4", "[status:active]", "[status:]", "[owner:]"]),
+        new Set()
       );
 
-      expect(row.notes?.map((note) => [note.node.name, note.parent])).toEqual([
+      expect(rows.map(({ kind, label, count }) => [kind, label, count])).toEqual([
+        ["tag", "#q4", 2],
+        ["property", "status: active", 2],
+        ["property", "status: (any)", 3],
+        ["property", "owner: (any)", 0],
+      ]);
+      expect(rows[1].pattern).toBe("[status:active]");
+    });
+
+    it("lists an expanded tag's or property's notes by name with the folder each sits in, sorted by path", () => {
+      const [tag, property] = buildLinkedMatchRows(
+        taggedVault(),
+        inclusionsOf(["#launch", "[status:active]"]),
+        new Set(["#launch", "[status:active]"])
+      );
+
+      expect(tag.notes?.map((note) => [note.node.name, note.parent])).toEqual([
         ["brief.md", "Plans/"],
         ["standup.md", "Work/"],
       ]);
+      expect(property.notes?.map((note) => note.node.path)).toEqual([
+        "Plans/brief.md",
+        "Work/standup.md",
+      ]);
     });
 
-    it("returns the same empty list when no tag is linked", () => {
-      const first = buildLinkedTagRows(taggedVault(), undefined, new Set());
-      const second = buildLinkedTagRows(taggedVault(), inclusionsOf(["Research"]), new Set());
+    it("returns the same empty list when no tag or property is linked", () => {
+      const first = buildLinkedMatchRows(taggedVault(), undefined, new Set());
+      const second = buildLinkedMatchRows(taggedVault(), inclusionsOf(["Research"]), new Set());
 
       expect(first).toEqual([]);
       expect(first).toBe(second);
@@ -739,98 +621,41 @@ describe("ProjectFilesView", () => {
     });
   });
 
-  describe("RecentFilesSection()", () => {
-    const handlers = { onOpenFile: jest.fn(), onShowFileMenu: jest.fn(), onDragFile: jest.fn() };
-
-    function recentFile(overrides: Partial<RecentProjectFile>): RecentProjectFile {
-      return {
-        path: `${PROJECT_FOLDER}/outputs/launch-timeline.md`,
-        name: "launch-timeline.md",
-        folder: "outputs/",
-        change: "new",
-        mtime: NOW - 12 * MINUTE,
-        ...overrides,
-      };
-    }
-
-    function ageLabel(mtime: number, now = NOW): string {
-      render(<RecentFilesSection files={[recentFile({ mtime })]} now={now} {...handlers} />);
-      const label = recentRows()[0].lastElementChild?.textContent ?? "";
-      cleanup();
-      return label;
-    }
-
-    it("titles the block Recent and shows each file's name, folder, new or edited, and age", () => {
-      render(
-        <RecentFilesSection
-          files={[
-            recentFile({}),
-            recentFile({
-              path: `${PROJECT_FOLDER}/brief.md`,
-              name: "brief.md",
-              folder: "",
-              change: "edited",
-              mtime: NOW - 3 * 60 * MINUTE,
-            }),
-          ]}
-          now={NOW}
-          {...handlers}
-        />
-      );
-
-      const [timeline, brief] = recentRows().map((row) =>
-        Array.from(row.querySelectorAll("span, div"), (part) => part.textContent).filter(Boolean)
-      );
-      expect(timeline).toEqual(["launch-timeline.md", "outputs/", "new", "12m"]);
-      expect(brief).toEqual(["brief.md", "/", "edited", "3h"]);
-    });
-
-    it("reads ages in minutes, hours, days and weeks, and a day-old change made on yesterday's date as yesterday — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
-      expect(ageLabel(NOW - 30_000)).toBe("now");
-      expect(ageLabel(NOW - 12 * MINUTE)).toBe("12m");
-      expect(ageLabel(NOW - 23 * 60 * MINUTE)).toBe("23h");
-      expect(ageLabel(NOW - 30 * 60 * MINUTE)).toBe("yesterday");
-      expect(ageLabel(NOW - 3 * DAY)).toBe("3d");
-      expect(ageLabel(NOW - 10 * DAY)).toBe("1w");
-    });
-
-    it("reads a day-old change made two dates ago as 1d rather than yesterday — https://github.com/Brevilabs/obsidian-copilot-private/issues/463", () => {
-      const justAfterMidnight = new Date(2026, 10, 4, 0, 30).getTime();
-
-      expect(ageLabel(justAfterMidnight - 30 * 60 * MINUTE, justAfterMidnight)).toBe("1d");
-    });
-
-    it("renders nothing when there are no recent files", () => {
-      const { container } = render(<RecentFilesSection files={[]} now={NOW} {...handlers} />);
-
-      expect(container.innerHTML).toBe("");
-    });
-  });
-
   describe("LinkedSection()", () => {
     const handlers = {
       onToggleFolder: jest.fn(),
       onOpenFile: jest.fn(),
       onShowFileMenu: jest.fn(),
       onDragFile: jest.fn(),
-      onAdd: jest.fn(),
+      onLink: jest.fn(),
       onUnlink: jest.fn(),
       onOpenUrl: jest.fn(),
       onUnlinkUrl: jest.fn(),
     };
     beforeEach(() => Object.values(handlers).forEach((handler) => handler.mockClear()));
-    const NO_TAGS: LinkedTagRow[] = [];
+    const NO_MATCHES: LinkedMatchRow[] = [];
     const NO_URLS: ReturnType<typeof createUrlItem>[] = [];
-    const TAGS: LinkedTagRow[] = [
+    const MATCHES: LinkedMatchRow[] = [
       {
-        tag: "#launch",
+        kind: "tag",
+        pattern: "#launch",
+        label: "#launch",
         count: 2,
         notes: [
           { node: { kind: "file", path: "Plans/brief.md", name: "brief.md" }, parent: "Plans/" },
           { node: { kind: "file", path: "Work/standup.md", name: "standup.md" }, parent: "Work/" },
         ],
       },
-      { tag: "#q4", count: 1, notes: null },
+      { kind: "tag", pattern: "#q4", label: "#q4", count: 1, notes: null },
+      {
+        kind: "property",
+        pattern: "[status:active]",
+        label: "status: active",
+        count: 1,
+        notes: [
+          { node: { kind: "file", path: "Work/standup.md", name: "standup.md" }, parent: "Work/" },
+        ],
+      },
     ];
     const URLS = [
       createUrlItem("https://example.com/pricing"),
@@ -856,9 +681,7 @@ describe("ProjectFilesView", () => {
     }
 
     it("titles the section Linked and shows each item with the folder it sits in", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={ROWS} matches={NO_MATCHES} urls={NO_URLS} {...handlers} />);
 
       const pricing = within(linkedRegion()).getByRole("button", { name: /^Pricing/ });
       expect(pricing.textContent).toBe("PricingResearch/");
@@ -871,9 +694,8 @@ describe("ProjectFilesView", () => {
       render(
         <LinkedSection
           rows={[{ ...ROWS[1], node: { ...ROWS[1].node, path: "[[Q3 retro]]" }, missing: true }]}
-          tags={NO_TAGS}
+          matches={NO_MATCHES}
           urls={NO_URLS}
-          isDragOver={false}
           {...handlers}
         />
       );
@@ -881,38 +703,32 @@ describe("ProjectFilesView", () => {
       expect(within(linkedRegion()).getByText("Not found")).toBeTruthy();
     });
 
-    it("asks for a drop and says files from the computer go to sources/", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+    it("says nothing is linked yet, with no drop hint, when the section is empty", () => {
+      render(<LinkedSection rows={[]} matches={NO_MATCHES} urls={NO_URLS} {...handlers} />);
 
+      expect(linkedRegion().textContent).toBe("LinkedLink contextNothing linked yet.");
+    });
+
+    it("offers Files, Folders, Tags, Properties and Link from Link context and reports the kind chosen", () => {
+      render(<LinkedSection rows={[]} matches={NO_MATCHES} urls={NO_URLS} {...handlers} />);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const menu = screen.getByRole("menu");
       expect(
-        within(linkedRegion()).getByText(
-          "Drop notes or folders here to link them. Files from your computer are copied to sources/."
-        )
-      ).toBeTruthy();
-    });
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent)
+      ).toEqual(["Files", "Folders", "Tags", "Properties", "Link"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Folders" }));
 
-    it("says a drop links the item while something is dragged over the Files tab", () => {
-      render(<LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver {...handlers} />);
-
-      expect(within(linkedRegion()).getByText("Drop to link it to this project.")).toBeTruthy();
-    });
-
-    it("searches for a note, folder or tag, or takes a pasted link, from +, so linking works without dragging", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
-
-      expect(handlers.onAdd).toHaveBeenCalled();
+      expect(handlers.onLink).toHaveBeenCalledWith("folders");
     });
 
     it("unlinks an item by its saved link from its Unlink button without opening it", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={NO_TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={ROWS} matches={NO_MATCHES} urls={NO_URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Unlink Q3 retro.md" }));
 
@@ -920,10 +736,8 @@ describe("ProjectFilesView", () => {
       expect(handlers.onOpenFile).not.toHaveBeenCalled();
     });
 
-    it("lists linked tags after notes and folders, then links, each tag with its note count and each link by its address — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      render(
-        <LinkedSection rows={ROWS} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />
-      );
+    it("lists linked tags and then properties after notes and folders, then links, each tag and property with its note count and each link by its address — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      render(<LinkedSection rows={ROWS} matches={MATCHES} urls={URLS} {...handlers} />);
 
       const rows = within(linkedRegion())
         .getAllByRole("button")
@@ -936,6 +750,8 @@ describe("ProjectFilesView", () => {
         "brief.mdPlans/",
         "standup.mdWork/",
         "#q41 note",
+        "status: active1 note",
+        "standup.mdWork/",
         "example.com/pricing",
         "youtu.be/dQw4w9WgXcQ",
       ]);
@@ -948,9 +764,7 @@ describe("ProjectFilesView", () => {
     });
 
     it("expands or collapses a tag from its row, like a folder", () => {
-      render(
-        <LinkedSection rows={[]} tags={TAGS} urls={NO_URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={[]} matches={MATCHES} urls={NO_URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: /^#q4/ }));
 
@@ -958,18 +772,18 @@ describe("ProjectFilesView", () => {
     });
 
     it("opens a clicked link by its full address", () => {
-      render(
-        <LinkedSection rows={[]} tags={NO_TAGS} urls={URLS} isDragOver={false} {...handlers} />
-      );
+      render(<LinkedSection rows={[]} matches={NO_MATCHES} urls={URLS} {...handlers} />);
 
       fireEvent.click(screen.getByRole("button", { name: "youtu.be/dQw4w9WgXcQ" }));
 
       expect(handlers.onOpenUrl).toHaveBeenCalledWith("https://youtu.be/dQw4w9WgXcQ");
     });
 
-    it("unlinks a tag by its saved pattern and a link by its saved address, without opening either", () => {
-      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />);
+    it("unlinks a tag or property by its saved pattern and a link by its saved address, without opening any", () => {
+      render(<LinkedSection rows={[]} matches={MATCHES} urls={URLS} {...handlers} />);
 
+      fireEvent.click(screen.getByRole("button", { name: "Unlink status: active" }));
+      expect(handlers.onUnlink).toHaveBeenCalledWith("[status:active]");
       fireEvent.click(screen.getByRole("button", { name: "Unlink #q4" }));
       fireEvent.click(screen.getByRole("button", { name: "Unlink example.com/pricing" }));
 
@@ -979,13 +793,14 @@ describe("ProjectFilesView", () => {
       expect(handlers.onOpenUrl).not.toHaveBeenCalled();
     });
 
-    it("offers no file menu and no drag on tag and link rows, which are not files, but keeps both on the notes under a tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      render(<LinkedSection rows={[]} tags={TAGS} urls={URLS} isDragOver={false} {...handlers} />);
+    it("offers no file menu and no drag on tag, property and link rows, which are not files, but keeps both on the notes under them — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      render(<LinkedSection rows={[]} matches={MATCHES} urls={URLS} {...handlers} />);
       const tag = screen.getByRole("button", { name: /^#launch/ });
+      const property = screen.getByRole("button", { name: /^status: active/ });
       const link = screen.getByRole("button", { name: "example.com/pricing" });
       const note = screen.getByRole("button", { name: /^brief\.md/ });
 
-      for (const row of [tag, link]) {
+      for (const row of [tag, property, link]) {
         fireEvent.contextMenu(row);
         expect(row.getAttribute("draggable")).toBe("false");
       }
@@ -998,17 +813,9 @@ describe("ProjectFilesView", () => {
 
   describe("ProjectFilesView()", () => {
     function makeProjectFolder() {
-      const hourAgo = Date.now() - 60 * MINUTE;
-      const dayAgo = Date.now() - DAY;
-      const funnel = makeFile(`${PROJECT_FOLDER}/outputs/charts/funnel.png`, {
-        ctime: dayAgo,
-        mtime: dayAgo,
-      });
+      const funnel = makeFile(`${PROJECT_FOLDER}/outputs/charts/funnel.png`);
       const charts = makeFolder(`${PROJECT_FOLDER}/outputs/charts`, [funnel]);
-      const timeline = makeFile(`${PROJECT_FOLDER}/outputs/timeline.md`, {
-        ctime: hourAgo,
-        mtime: hourAgo,
-      });
+      const timeline = makeFile(`${PROJECT_FOLDER}/outputs/timeline.md`);
       const outputs = makeFolder(`${PROJECT_FOLDER}/outputs`, [charts, timeline]);
       const agents = makeFile(`${PROJECT_FOLDER}/AGENTS.md`);
       const root = makeFolder(PROJECT_FOLDER, [makeFile(CONFIG_PATH), agents, outputs]);
@@ -1073,18 +880,35 @@ describe("ProjectFilesView", () => {
       expect(vault.app.vault.getAbstractFileByPath("Research/Pricing")).toBeTruthy();
     });
 
-    it("links the nested folder chosen from + by its full vault path", async () => {
-      const { vault, workNotes } = linkedFixture();
+    it("links the nested folder chosen from Link context's Folders picker by its full vault path", async () => {
+      const { vault } = linkedFixture();
       renderView(vault);
 
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
+      chooseLinkKind("Folders");
+      const [kind, chooseFolder] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("folders");
       act(() => {
-        mockOpenSearch.mock.calls[0][0](workNotes);
+        chooseFolder("Work/Notes");
       });
 
       await waitFor(() => expect(linkedNames()).toEqual(["Notes"]));
       expect(savedPatterns()).toEqual(["Work/Notes"]);
       expect(noticeMessages()).toContain("Linked Notes to the project");
+    });
+
+    it("links the note chosen from Link context's Files picker by its [[name]] link", async () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault);
+
+      chooseLinkKind("Files");
+      const [kind, chooseFile] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("files");
+      act(() => {
+        chooseFile(retro);
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Q3 retro.md"]));
+      expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
     });
 
     it("links exactly the nested folder dragged from the file explorer, so same-named folders under different parents stay apart — https://github.com/logancyang/obsidian-copilot/issues/3089", async () => {
@@ -1123,10 +947,11 @@ describe("ProjectFilesView", () => {
         dataTransfer: { types: ["text/plain"], dropEffect: "none" },
       });
       expect(dragOver).toBe(false);
-      expect(screen.getByText("Drop to link it to this project.")).toBeTruthy();
+      expect(dropZone().className).toContain("tw-ring-2");
+      expect(dropZone().textContent).not.toMatch(/drop/i);
 
       fireEvent.dragLeave(dropZone(), { relatedTarget: null });
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
+      expect(dropZone().className).not.toContain("tw-ring-2");
     });
 
     it("drops the highlight when a drag over it ends without a drop or dragleave, as when Escape cancels it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
@@ -1134,11 +959,10 @@ describe("ProjectFilesView", () => {
       renderView(vault);
       vault.setDraggable({ type: "folder", file: workNotes });
       fireEvent.dragOver(dropZone(), { dataTransfer: { types: ["text/plain"] } });
-      expect(screen.getByText("Drop to link it to this project.")).toBeTruthy();
+      expect(dropZone().className).toContain("tw-ring-2");
 
       fireEvent.dragEnd(document);
 
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
       expect(dropZone().className).not.toContain("tw-ring-2");
     });
 
@@ -1152,7 +976,7 @@ describe("ProjectFilesView", () => {
       fireEvent.drop(dropZone(), { dataTransfer });
 
       expect(dragOver).toBe(true);
-      expect(screen.queryByText("Drop to link it to this project.")).toBeNull();
+      expect(dropZone().className).not.toContain("tw-ring-2");
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
@@ -1182,16 +1006,6 @@ describe("ProjectFilesView", () => {
 
       await waitFor(() => expect(noticeMessages()).toContain("Already in this project"));
       expect(mockUpdateProject).not.toHaveBeenCalled();
-    });
-
-    it("never lists a linked item in Recent — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
-      linkPatterns([`${PROJECT_FOLDER}/outputs`]);
-      const { vault } = linkedFixture();
-
-      renderView(vault);
-
-      expect(screen.queryByRole("region", { name: "Recent" })).toBeNull();
-      expect(linkedNames()).toEqual(["outputs"]);
     });
 
     function taggedFixture() {
@@ -1293,28 +1107,85 @@ describe("ProjectFilesView", () => {
       });
     });
 
-    it("links a tag chosen from + and a link pasted into +, saving the link by its kind", async () => {
+    it("links a tag chosen from Link context's Tags picker by its #tag pattern", async () => {
       renderView(taggedFixture().vault);
 
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
+      chooseLinkKind("Tags");
+      const [kind, chooseTag] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("tags");
       act(() => {
-        mockOpenSearch.mock.calls[0][0]("#launch");
-      });
-      await waitFor(() => expect(linkedNames()).toEqual(["#launch"]));
-      fireEvent.click(screen.getByRole("button", { name: "Link a note, folder, tag or web link" }));
-      act(() => {
-        mockOpenSearch.mock.calls[1][0](createUrlItem("https://youtu.be/dQw4w9WgXcQ"));
+        chooseTag("launch");
       });
 
-      await waitFor(() => expect(linkedNames()).toEqual(["#launch", "youtu.be/dQw4w9WgXcQ"]));
+      await waitFor(() => expect(linkedNames()).toEqual(["#launch"]));
       expect(savedPatterns()).toEqual(["#launch"]);
+      expect(noticeMessages()).toEqual(["Linked #launch to the project"]);
+    });
+
+    it("links the property pattern chosen from Link context's Properties picker and lists it as a property row", async () => {
+      const { vault, brief } = taggedFixture();
+      vault.setTags(brief, { frontmatter: { status: "active" } });
+      renderView(vault);
+
+      chooseLinkKind("Properties");
+      const [kind, choosePattern] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("properties");
+      act(() => {
+        choosePattern("[status:active]");
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["status: active"]));
+      expect(savedPatterns()).toEqual(["[status:active]"]);
+      expect(screen.getByRole("button", { name: /^status: active/ }).textContent).toBe(
+        "status: active1 note"
+      );
+    });
+
+    it("links a web or YouTube link from Link context's Link picker, saving it by its kind", async () => {
+      renderView(taggedFixture().vault);
+
+      chooseLinkKind("Link");
+      const [kind, chooseUrl] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("link");
+      act(() => {
+        chooseUrl(createUrlItem("https://youtu.be/dQw4w9WgXcQ"));
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["youtu.be/dQw4w9WgXcQ"]));
       expect(getCachedProjectRecordById("q4")?.project.contextSource.youtubeUrls).toBe(
         "https://youtu.be/dQw4w9WgXcQ"
       );
-      expect(noticeMessages()).toEqual([
-        "Linked #launch to the project",
-        "Linked https://youtu.be/dQw4w9WgXcQ to the project",
-      ]);
+      expect(noticeMessages()).toEqual(["Linked https://youtu.be/dQw4w9WgXcQ to the project"]);
+    });
+
+    it("expands a linked property to the notes that match it and updates them when a note's property changes, without a reload", () => {
+      linkPatterns(["[status:active]"]);
+      const { vault, brief, standup } = taggedFixture();
+      vault.setTags(brief, { frontmatter: { status: "active" } });
+      renderView(vault);
+      fireEvent.click(screen.getByRole("button", { name: /^status: active/ }));
+      expect(linkedNames()).toEqual(["status: active", "brief.md"]);
+
+      vault.setTags(standup, { frontmatter: { status: ["Active", "q4"] } });
+      expect(linkedNames()).toEqual(["status: active", "brief.md", "standup.md"]);
+
+      vault.setTags(brief, { frontmatter: { status: "done" } });
+      expect(linkedNames()).toEqual(["status: active", "standup.md"]);
+      expect(screen.getByRole("button", { name: /^status: active/ }).textContent).toBe(
+        "status: active1 note"
+      );
+    });
+
+    it("unlinks only the chosen property pattern and leaves the notes and other links alone", async () => {
+      linkPatterns(["#launch", "[status:active]", "[status:]"]);
+      const { vault } = taggedFixture();
+      renderView(vault);
+
+      fireEvent.click(screen.getByRole("button", { name: "Unlink status: active" }));
+
+      await waitFor(() => expect(savedPatterns()).toEqual(["#launch", "[status:]"]));
+      expect(linkedNames()).toEqual(["#launch", "status: (any)"]);
+      expect(vault.promptForDeletion).not.toHaveBeenCalled();
     });
 
     it("lists the project folder's top level with folders first and the config note hidden", () => {
@@ -1493,139 +1364,15 @@ describe("ProjectFilesView", () => {
       expect(rowNames()).toEqual(["outputs"]);
     });
 
-    it("shows Recent above the Project folder tree", () => {
+    it("stops listening to the vault and the metadata cache once unmounted", () => {
       const { root } = makeProjectFolder();
-
-      renderView(makeFakeVault(root));
-
-      const recent = screen.getByRole("region", { name: "Recent" });
-      const tree = screen.getByRole("region", { name: "Project folder" });
-      expect(recent.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(recentNames()).toEqual(["timeline.md", "funnel.png"]);
-    });
-
-    it("hides Recent when the project folder holds only files Recent leaves out", () => {
-      const root = makeFolder(PROJECT_FOLDER, [
-        makeFile(CONFIG_PATH),
-        makeFile(`${PROJECT_FOLDER}/AGENTS.md`),
-      ]);
-
-      renderView(makeFakeVault(root));
-
-      expect(screen.queryByRole("region", { name: "Recent" })).toBeNull();
-      expect(rowNames()).toEqual(["AGENTS.md"]);
-    });
-
-    it("moves a modified file to the top of Recent and labels it edited without a restart", () => {
-      const { root, funnel } = makeProjectFolder();
       const vault = makeFakeVault(root);
-      renderView(vault);
+      const { unmount } = renderView(vault);
+      expect(vault.listenerCount()).toBe(5);
 
-      touch(funnel, Date.now());
-      vault.emit("modify", funnel);
+      unmount();
 
-      expect(recentNames()).toEqual(["funnel.png", "timeline.md"]);
-      expect(recentRows()[0].textContent).toContain("edited");
-    });
-
-    it("adds a newly created file to the top of Recent as new", () => {
-      const { root, outputs } = makeProjectFolder();
-      const vault = makeFakeVault(root);
-      renderView(vault);
-
-      const created = makeFile(`${PROJECT_FOLDER}/outputs/press-release.md`, {
-        ctime: Date.now(),
-        mtime: Date.now(),
-      });
-      setChildren(outputs, [...outputs.children, created]);
-      vault.emit("create", created);
-
-      expect(recentNames()).toEqual(["press-release.md", "timeline.md", "funnel.png"]);
-      expect(recentRows()[0].textContent).toContain("new");
-    });
-
-    it("opens a clicked Recent row in a tab, like a tree row", () => {
-      const { root, funnel } = makeProjectFolder();
-      const vault = makeFakeVault(root);
-      renderView(vault);
-
-      fireEvent.click(recentRows()[1]);
-
-      expect(vault.openFile).toHaveBeenCalledWith(funnel);
-    });
-
-    it("shows the file menu with Rename and Delete for a right-clicked Recent row, like a tree row", () => {
-      const { root, timeline } = makeProjectFolder();
-      const vault = makeFakeVault(root);
-      renderView(vault);
-
-      fireEvent.contextMenu(recentRows()[0]);
-
-      const menu = (Menu as unknown as jest.Mock).mock.instances.at(-1) as FakeMenu;
-      expect(vault.trigger).toHaveBeenCalledWith(
-        "file-menu",
-        menu,
-        timeline,
-        "copilot-project-files"
-      );
-      expect(menu.items.map((item) => item.title)).toEqual(["---", "Rename...", "Delete"]);
-    });
-
-    it("starts Obsidian's link drag for a dragged Recent note and no drag for a Recent CSV, like tree rows", () => {
-      const { root } = makeProjectFolder();
-      const csv = makeFile(`${PROJECT_FOLDER}/metrics.csv`, { ctime: 0, mtime: 0 });
-      setChildren(root, [...root.children, csv]);
-      const vault = makeFakeVault(root);
-      renderView(vault);
-      const [timeline, , metrics] = recentRows();
-
-      fireEvent.dragStart(timeline, { dataTransfer: { setData: jest.fn() } });
-      const csvDragStarted = fireEvent.dragStart(metrics, {
-        dataTransfer: { setData: jest.fn() },
-      });
-
-      expect(vault.onDragStart).toHaveBeenCalledTimes(1);
-      expect(vault.onDragStart).toHaveBeenCalledWith(expect.anything(), {
-        type: "link",
-        linktext: `${PROJECT_FOLDER}/outputs/timeline`,
-      });
-      expect(csvDragStarted).toBe(false);
-    });
-
-    it("advances each Recent age every minute while the tab stays open with no file changes", () => {
-      jest.useFakeTimers({ now: NOW });
-      try {
-        const root = makeFolder(PROJECT_FOLDER, [
-          makeFile(CONFIG_PATH),
-          makeFile(`${PROJECT_FOLDER}/brief.md`, { ctime: NOW, mtime: NOW }),
-        ]);
-        renderView(makeFakeVault(root));
-        expect(recentRows()[0].lastElementChild?.textContent).toBe("now");
-
-        act(() => jest.advanceTimersByTime(12 * MINUTE));
-
-        expect(recentRows()[0].lastElementChild?.textContent).toBe("12m");
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
-    it("stops listening to the vault and the metadata cache and stops the age clock once unmounted", () => {
-      jest.useFakeTimers();
-      try {
-        const { root } = makeProjectFolder();
-        const vault = makeFakeVault(root);
-        const { unmount } = renderView(vault);
-        expect(vault.listenerCount()).toBe(6);
-        expect(jest.getTimerCount()).toBe(1);
-
-        unmount();
-
-        expect(vault.listenerCount()).toBe(0);
-        expect(jest.getTimerCount()).toBe(0);
-      } finally {
-        jest.useRealTimers();
-      }
+      expect(vault.listenerCount()).toBe(0);
     });
   });
 });

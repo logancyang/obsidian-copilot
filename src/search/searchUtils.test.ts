@@ -8,8 +8,10 @@ import {
   createPatternSettingsValue,
   getDecodedPatterns,
   getMatchingPatterns,
+  getNotesWithProperty,
   getNotesWithTag,
   getProjectContextPatterns,
+  getPropertyLabel,
   getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
@@ -747,6 +749,20 @@ describe("searchUtils", () => {
     });
   });
 
+  describe("getPropertyLabel()", () => {
+    it("labels a property pattern as `key: value`", () => {
+      expect(getPropertyLabel("[Topics:Physics]")).toBe("Topics: Physics");
+    });
+
+    it("labels a key-only property pattern as `key: (any)`", () => {
+      expect(getPropertyLabel("[Topics:]")).toBe("Topics: (any)");
+    });
+
+    it("returns the raw pattern when it is not a property pattern", () => {
+      expect(getPropertyLabel("not-a-property")).toBe("not-a-property");
+    });
+  });
+
   describe("getNotesWithTag()", () => {
     function taggedVault(caches: Record<string, unknown>) {
       const files = Object.keys(caches).map(createTestFile);
@@ -779,6 +795,56 @@ describe("searchUtils", () => {
 
       expect(getNotesWithTag(app, "#launch").map((file) => file.path)).toEqual(["a.md", "b.md"]);
       expect(getNotesWithTag(app, "#launch/press").map((file) => file.path)).toEqual(["b.md"]);
+    });
+  });
+
+  describe("getNotesWithProperty()", () => {
+    beforeEach(() => {
+      const actual = jest.requireActual<typeof utils>("@/utils");
+      jest
+        .mocked(utils.getPropertyValuesFromNote)
+        .mockImplementation(actual.getPropertyValuesFromNote);
+      jest.mocked(utils.noteHasProperty).mockImplementation(actual.noteHasProperty);
+    });
+
+    function propertyVault(frontmatters: Record<string, Record<string, unknown> | null>) {
+      const files = Object.keys(frontmatters).map(createTestFile);
+      return {
+        vault: { getMarkdownFiles: () => files },
+        metadataCache: {
+          getFileCache: (file: TFile) => {
+            const frontmatter = frontmatters[file.path];
+            return frontmatter ? { frontmatter } : null;
+          },
+        },
+      } as unknown as typeof window.app;
+    }
+
+    it("lists the notes whose property has the saved value in any case, by path", () => {
+      const app = propertyVault({
+        "Work/standup.md": { status: "Active" },
+        "Plans/brief.md": { status: ["draft", "active"] },
+        "Plans/budget.md": { status: "done" },
+        "Inbox/unindexed.md": null,
+      });
+
+      expect(getNotesWithProperty(app, "[status:active]").map((file) => file.path)).toEqual([
+        "Plans/brief.md",
+        "Work/standup.md",
+      ]);
+    });
+
+    it("lists every note that declares the property when the saved pattern has no value", () => {
+      const app = propertyVault({
+        "b.md": { status: "done" },
+        "a.md": { status: "active" },
+        "c.md": { owner: "Ada" },
+      });
+
+      expect(getNotesWithProperty(app, "[status:]").map((file) => file.path)).toEqual([
+        "a.md",
+        "b.md",
+      ]);
     });
   });
 });
