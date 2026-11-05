@@ -12,7 +12,7 @@ A behavior-level inventory of Agent Mode, one file per part of the screen a user
 
 ## Proof and skip reporting
 
-The feature file a change touches defines its coverage set.
+The feature file a change touches defines its coverage set. Also drive every journey in [`multi-surface-journeys.md`](multi-surface-journeys.md) whose `Touches:` line names a feature the change affects.
 
 - Exercise every entry point and every path the change can affect.
 - Record the action and the resulting screen, not only the final one.
@@ -43,6 +43,10 @@ The feature file a change touches defines its coverage set.
 - `projects` (not mapped yet): create, enter, project header and info, project files.
 - `agent-setup` (not mapped yet): choose and install an agent, sign in, default model and effort.
 - `report-issue` (not mapped yet): the Report an issue flow.
+
+## Multi-surface journeys
+
+- [multi-surface-journeys](multi-surface-journeys.md): two chats replying at once; a permission request from a chat in the background.
 
 ## Entry contract
 

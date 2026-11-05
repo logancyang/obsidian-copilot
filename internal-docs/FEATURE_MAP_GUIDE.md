@@ -27,7 +27,13 @@ Follow the README's entry contract: an H1, one line on what the user sees, then 
 - **Driving it:** one bullet per sub-feature at least, as `Label: user action. Observable result.` Describe only what the user does and sees in the app; how to drive it belongs to whoever runs the map. Shared setup lives in the README's Baseline; name extra state only when the feature needs it, such as a license. Edge cases belong in unit tests, not here.
 - **Gotchas:** traps that waste or invalidate a run, or that changes tend to break.
 
-Write each behavior on the surface where the user acts, and its result wherever the user sees it, even on another surface ("its row no longer offers `Close chat`"). There is no separate file for cross-feature behavior.
+## Multi-surface journeys
+
+Most behavior belongs to one surface: the one where the user acts. When its result shows somewhere else, say where to look ("its row no longer offers `Close chat`"), but keep it on the acting surface.
+
+A behavior goes in `multi-surface-journeys.md` only when no single surface can state it: the outcome depends on what happens on several surfaces at once or in sequence, and a break would not show in any one surface's steps. Two chats replying at once must stay separate, and a permission request from a chat in the background must reach the user wherever they are.
+
+Each journey gets an H2, one line on what must hold, a few steps, and a `Touches:` line naming the features involved, mapped or not. Name controls as the surface files do, and do not restate their rules. When a single surface can state a journey, move it there.
 
 ## Keep out
 
