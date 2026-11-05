@@ -4,6 +4,11 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
   refreshMiyoStatus: jest.fn(),
 }));
 
+const mockGetVaultBase = jest.fn();
+jest.mock("@/utils/vaultPath", () => ({
+  getVaultBase: (...args: unknown[]): unknown => mockGetVaultBase(...args),
+}));
+
 import { Platform, type App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import {
@@ -17,6 +22,7 @@ import {
   isLocalMiyoUrl,
   isMiyoParseActive,
   isMiyoSearchActive,
+  resolveMiyoFolderName,
 } from "@/miyo/miyoUtils";
 import {
   getMiyoStatusSnapshot,
@@ -36,7 +42,7 @@ const buildApp = (vaultName: string): App =>
 
 describe("miyoUtils", () => {
   describe("getMiyoFolderName()", () => {
-    it("uses the vault folder name even when an adapter exposes an absolute path", () => {
+    it("uses the vault folder name before Miyo has resolved one, even when an adapter exposes an absolute path", () => {
       const folderName = getMiyoFolderName({
         vault: {
           getName: () => "graham-essays-main",
@@ -47,6 +53,53 @@ describe("miyoUtils", () => {
       } as unknown as App);
 
       expect(folderName).toBe("graham-essays-main");
+    });
+  });
+
+  describe("resolveMiyoFolderName()", () => {
+    const BASE_URL = "http://127.0.0.1:8742";
+    const app = buildApp("Vedas");
+    const folderAt = (name: string | null) => ({
+      getFolder: jest.fn().mockResolvedValue(name === null ? null : { path: name }),
+    });
+
+    beforeEach(() => {
+      mockGetVaultBase.mockReturnValue("/Users/me/Vedas");
+    });
+
+    afterEach(async () => {
+      await resolveMiyoFolderName(app, folderAt(null), BASE_URL);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 looks the vault up by its absolute path and makes Miyo's name for it the vault's Miyo folder name", async () => {
+      const client = folderAt("Notes");
+
+      expect(await resolveMiyoFolderName(app, client, BASE_URL)).toBe("Notes");
+      expect(client.getFolder).toHaveBeenCalledWith(BASE_URL, "/Users/me/Vedas");
+      expect(getMiyoFolderName(app)).toBe("Notes");
+      expect(getMiyoFilePath(app, "daily/today.md")).toBe("Notes/daily/today.md");
+      expect(getVaultRelativeMiyoPath(app, "Notes/daily/today.md")).toBe("daily/today.md");
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 falls back to the vault's name when Miyo has no folder at the vault's path, as on another computer", async () => {
+      await resolveMiyoFolderName(app, folderAt("Notes"), BASE_URL);
+
+      expect(await resolveMiyoFolderName(app, folderAt(null), BASE_URL)).toBe("Vedas");
+      expect(getMiyoFolderName(app)).toBe("Vedas");
+    });
+
+    it("uses the vault's name without asking Miyo when the vault has no absolute path", async () => {
+      mockGetVaultBase.mockReturnValue(null);
+      const client = folderAt("Notes");
+
+      expect(await resolveMiyoFolderName(app, client, BASE_URL)).toBe("Vedas");
+      expect(client.getFolder).not.toHaveBeenCalled();
+    });
+
+    it("rejects with the lookup's error when Miyo cannot answer, so the caller reports Miyo as unavailable", async () => {
+      const failing = { getFolder: jest.fn().mockRejectedValue(new Error("offline")) };
+
+      await expect(resolveMiyoFolderName(app, failing, BASE_URL)).rejects.toThrow("offline");
     });
   });
 

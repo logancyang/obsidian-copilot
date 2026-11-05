@@ -56,7 +56,7 @@ export interface MiyoSearchToolResult {
 export interface MiyoSearchDeps {
   client: Pick<MiyoClient, "resolveBaseUrl" | "search">;
   getSettings: () => CopilotSettings;
-  getVaultName: () => string;
+  getVaultName: (baseUrl: string) => Promise<string>;
 }
 
 interface FileResult {
@@ -81,15 +81,15 @@ export async function runMiyoSearch(
   const paths = strings(input.paths);
 
   const unrestricted = settings.miyoSearchAll === true;
-  const vaultName = getVaultName();
-  // Ticked folders widen only Current vault scope.
-  // https://github.com/logancyang/obsidian-copilot/issues/3508
-  const extraFolders = unrestricted
-    ? []
-    : settings.miyoExtraSearchFolders.filter((name) => name !== vaultName);
 
   try {
     const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
+    const vaultName = await getVaultName(baseUrl);
+    // Ticked folders widen only Current vault scope.
+    // https://github.com/logancyang/obsidian-copilot/issues/3508
+    const extraFolders = unrestricted
+      ? []
+      : settings.miyoExtraSearchFolders.filter((name) => name !== vaultName);
     const folderName = unrestricted ? undefined : vaultName;
     const searched = await searchWithoutMissingFolders(
       (folderNames) =>

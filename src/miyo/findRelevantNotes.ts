@@ -8,8 +8,8 @@ import {
 import {
   getMiyoCustomUrl,
   getMiyoFilePath,
-  getMiyoFolderName,
   getVaultRelativeMiyoPath,
+  resolveMiyoFolderName,
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
@@ -30,14 +30,18 @@ async function searchRelatedNotesWithMiyo(
   // changed. Both requests must keep the credential paired with this endpoint.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/280
   const miyoClient = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
-  const folderName = getMiyoFolderName(app);
-  const miyoFilePath = getMiyoFilePath(app, filePath);
   let baseUrl: string;
+  let folderName: string;
   try {
     baseUrl = await withTimeout(
       () => miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings)),
       MIYO_RELATED_SEARCH_TIMEOUT_MS,
       "Relevant Notes Miyo endpoint resolution"
+    );
+    folderName = await withTimeout(
+      () => resolveMiyoFolderName(app, miyoClient, baseUrl),
+      MIYO_RELATED_SEARCH_TIMEOUT_MS,
+      "Relevant Notes Miyo folder lookup"
     );
   } catch (error) {
     // An unresolved endpoint cannot produce a trustworthy result. Settle as
@@ -46,6 +50,7 @@ async function searchRelatedNotesWithMiyo(
     logError(`RelevantNotes(Miyo): could not resolve Miyo: ${(error as Error).message}`);
     return { scoreByPath: new Map(), status: "unavailable" };
   }
+  const miyoFilePath = getMiyoFilePath(app, filePath);
 
   const requestRelated = () =>
     withTimeout(

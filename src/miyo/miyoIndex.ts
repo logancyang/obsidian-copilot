@@ -1,5 +1,5 @@
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoFolderName } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, resolveMiyoFolderName } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import type { App } from "obsidian";
 
@@ -11,7 +11,7 @@ export async function requestMiyoIndexRefresh(app: App): Promise<void> {
   const settings = getSettings();
   const client = new MiyoClient({ plusLicenseKey: settings.plusLicenseKey });
   const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
-  await client.scanFolder(baseUrl, getMiyoFolderName(app), false);
+  await client.scanFolder(baseUrl, await resolveMiyoFolderName(app, client, baseUrl), false);
 
   notifyMiyoIndexChanged();
 }
