@@ -101,6 +101,11 @@ describe("excalidrawTools", () => {
       expect(EXCALIDRAW_WRITE_TOOL.inputSchema.properties.operations.maxItems).toBe(100);
     });
 
+    it("bounds a line or arrow at the 2–100 points Excalidraw accepts, so agents split long traces up front (https://github.com/logancyang/obsidian-copilot/issues/4070)", () => {
+      const { points } = EXCALIDRAW_WRITE_TOOL.inputSchema.properties.elements.items.properties;
+      expect(points).toMatchObject({ minItems: 2, maxItems: 100 });
+    });
+
     it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
       expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
         "Other operations can't take an icon's id or group id"

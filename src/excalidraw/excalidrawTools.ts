@@ -79,7 +79,14 @@ const ELEMENT = {
     fontSize: { type: "number" },
     start: { type: "object", properties: { id: { type: "string" } } },
     end: { type: "object", properties: { id: { type: "string" } } },
-    points: { type: "array", items: { type: "array", items: { type: "number" } } },
+    points: {
+      type: "array",
+      // Excalidraw rejects a line or arrow outside 2–100 points, and agents only learned the cap from that rejection.
+      // https://github.com/logancyang/obsidian-copilot/issues/4070
+      minItems: 2,
+      maxItems: 100,
+      items: { type: "array", items: { type: "number" } },
+    },
     ...STYLE,
     roundness: {
       type: ["object", "null"],
