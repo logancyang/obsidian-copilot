@@ -440,6 +440,20 @@ export class MiyoClient {
     });
   }
 
+  public async getFolder(baseUrl: string, path: string): Promise<MiyoFolderEntry | null> {
+    try {
+      return await this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+        method: "GET",
+        query: { path },
+      });
+    } catch (error) {
+      // A Miyo on another computer has no folder at this computer's vault path, which is an answer rather than a failure.
+      // https://github.com/logancyang/obsidian-copilot/issues/3690
+      if (error instanceof MiyoRequestError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   public async fileStatus(baseUrl: string, filePath: string): Promise<MiyoFileStatusResponse> {
     return this.requestJson<MiyoFileStatusResponse>(baseUrl, "/v0/folder/file-status", {
       method: "GET",

@@ -298,6 +298,51 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("getFolder()", () => {
+    it("returns the folder Miyo registered at a path, whose path field is the folder's name", async () => {
+      const folder = { path: "Notes", absolute_path: "/Users/me/Vedas", origin: "user" };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: folder,
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas");
+
+      expect(response).toEqual(folder);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder?path=%2FUsers%2Fme%2FVedas",
+          method: "GET",
+        })
+      );
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 returns null when Miyo has no folder at the path", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail: "Folder not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas")
+      ).resolves.toBeNull();
+    });
+
+    it("throws any other Miyo failure", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 503,
+        json: { detail: "Service unavailable" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas")
+      ).rejects.toMatchObject({ status: 503 });
+    });
+  });
+
   describe("scanFolder()", () => {
     it("posts the folder path and force flag to /v0/scan and returns the scan status", async () => {
       mockedRequestUrl.mockResolvedValue({

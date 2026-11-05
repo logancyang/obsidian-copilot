@@ -165,16 +165,17 @@ describe("miyoParseTool", () => {
         client,
         getSettings: () =>
           ({ miyoConnectionMode: "local", miyoServerUrl: "", ...settings }) as CopilotSettings,
-        getVaultName: () => "Research Vault",
+        getVaultName: jest.fn().mockResolvedValue("Research Vault"),
         getVaultBase: () => "/Users/me/Research Vault",
       };
       return { client, deps };
     }
 
-    it("asks the connected Miyo to parse a vault path in this vault and returns its text", async () => {
+    it("asks the connected Miyo to parse a vault path in the folder it resolves for this vault and returns its text", async () => {
       const { client, deps } = setup();
 
       expect(await parseWithMiyo("notes/report.pdf", deps)).toBe("# Report");
+      expect(deps.getVaultName).toHaveBeenCalledWith("http://127.0.0.1:8742");
       expect(client.parseDoc).toHaveBeenCalledWith(
         "http://127.0.0.1:8742",
         "Research Vault",
