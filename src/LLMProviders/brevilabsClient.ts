@@ -130,6 +130,7 @@ export type LicenseCheckTrigger =
   | "refresh"
   | "legacy_chat_turn"
   | "tool_call"
+  | "quick_chat_edit"
   | "model_gate"
   | EntitlementFeature;
 
