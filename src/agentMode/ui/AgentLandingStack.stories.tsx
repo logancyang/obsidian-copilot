@@ -166,7 +166,10 @@ function LandingCanvas({
   const shelfSections = (project ? projectLandingSections : allSections).filter((section) =>
     section.id === "relevant-notes" ? !relevantNotesInSidePanel : !sidebarOpen
   );
-  const shelf = shelfSections.length > 0 ? <AgentHomeShelf sections={shelfSections} /> : undefined;
+  const shelf =
+    !contextInline && shelfSections.length > 0 ? (
+      <AgentHomeShelf sections={shelfSections} />
+    ) : undefined;
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
       <AgentLandingStack
@@ -224,8 +227,10 @@ export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} sidebarOpen project />,
 };
 
-export const ProjectLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen project relevantNotesInSidePanel />,
+export const ProjectLandingRelevantNotesInSidePanel: StoryObj<AgentLandingStackProps> = {
+  render: (args) => (
+    <LandingCanvas args={args} sidebarOpen={false} project relevantNotesInSidePanel />
+  ),
 };
 
 export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
