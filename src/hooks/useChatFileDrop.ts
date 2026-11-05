@@ -1,3 +1,4 @@
+import { addFilesToChat } from "@/components/chat-components/addFilesToChat";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { App, Notice, TFile } from "obsidian";
 import { RefObject, useEffect, useState } from "react";
@@ -165,18 +166,10 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
           }
         }
       } else if (fileItems.length > 0) {
-        const files: File[] = [];
-
-        for (const item of fileItems) {
-          const file = item.getAsFile();
-          if (file && file.type.startsWith("image/")) {
-            files.push(file);
-          }
-        }
-
-        if (files.length > 0) {
-          onAddImage(files);
-        }
+        const files = fileItems
+          .map((item) => item.getAsFile())
+          .filter((file): file is File => file !== null);
+        await addFilesToChat(app, files, { onAddImage, setContextNotes });
       }
     };
 

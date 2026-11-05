@@ -1,17 +1,18 @@
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
-import type { App } from "obsidian";
+import { TFile, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
 interface FakeItem {
   kind: "string" | "file";
+  file?: File;
 }
 
 function makeDataTransfer(items: FakeItem[]) {
   return {
     types: [] as string[],
     dropEffect: "",
-    items: items.map((item) => ({ kind: item.kind })),
+    items: items.map((item) => ({ kind: item.kind, getAsFile: () => item.file ?? null })),
   };
 }
 
@@ -21,13 +22,20 @@ function dispatchDrag(type: "dragOver" | "drop", target: HTMLElement, items: Fak
   fireEvent(target, event);
 }
 
-function Harness({ app }: { app: App }) {
+interface HarnessProps {
+  app: App;
+  setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
+}
+
+const ignoreContextNotes = jest.fn();
+
+function Harness({ app, setContextNotes = ignoreContextNotes }: HarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
     app,
     contextNotes: [],
-    setContextNotes: jest.fn(),
+    setContextNotes,
     selectedImages: [],
     onAddImage: jest.fn(),
     containerRef,
@@ -60,6 +68,30 @@ describe("useChatFileDrop", () => {
 
       dispatchDrag("drop", getByTestId("inner-zone"), [{ kind: "file" }]);
       expect(overlay.textContent).toBe("idle");
+    });
+
+    it("attaches a PDF dropped from outside the vault as context once it is copied into the vault (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
+      const copied = new (TFile as unknown as new (path: string) => TFile)(
+        "attachments/report.pdf"
+      );
+      const app = {
+        vault: { adapter: {}, createBinary: jest.fn().mockResolvedValue(copied) },
+        fileManager: {
+          getAvailablePathForAttachment: jest.fn().mockResolvedValue("attachments/report.pdf"),
+        },
+        workspace: { getActiveFile: () => null },
+      } as unknown as App;
+      let setContextNotes: HarnessProps["setContextNotes"];
+      const attached = new Promise<TFile[]>((resolve) => {
+        setContextNotes = (update) => resolve(typeof update === "function" ? update([]) : update);
+      });
+      const report = new File(["%PDF"], "report.pdf", { type: "application/pdf" });
+      report.arrayBuffer = () => Promise.resolve(new ArrayBuffer(4));
+      const { getByTestId } = render(<Harness app={app} setContextNotes={setContextNotes} />);
+
+      dispatchDrag("drop", getByTestId("overlay"), [{ kind: "file", file: report }]);
+
+      await expect(attached).resolves.toEqual([copied]);
     });
   });
 });
