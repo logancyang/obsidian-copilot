@@ -58,6 +58,7 @@ import {
   type BuiltinPreferencesUpdate,
 } from "@/settings/builtinSkillPreferences";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
+import { trackTabStripShown } from "@/agentMode/ui/trackTabStripShown";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -274,6 +275,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     ),
   });
   managerRef = manager;
+  trackTabStripShown(plugin, manager);
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
   // file an agent just wrote must not close the conversation that asked for it. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
   skillManager.subscribeToSkillSetChange((backendId) => {

@@ -1724,7 +1724,7 @@ describe("AgentSessionManager", () => {
       });
     });
 
-    describe("holdChatsInTabs()", () => {
+    describe("setTabStripShown()", () => {
       it.each([
         ["a new chat", (_s: AgentSession) => {}],
         [
@@ -1735,7 +1735,7 @@ describe("AgentSessionManager", () => {
         "keeps %s open in its tab while the user switches tabs and starts a new chat before a message was sent in it for https://github.com/Brevilabs/obsidian-copilot-private/issues/849",
         async (_label, prepare) => {
           const mgr = buildManager();
-          mgr.holdChatsInTabs();
+          mgr.setTabStripShown(true);
           const left = await mgr.createSession();
           prepare(left);
           const other = await mgr.createSession();
@@ -1751,7 +1751,7 @@ describe("AgentSessionManager", () => {
 
       it("releases a tab the user closes before a message was sent in it for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
         const mgr = buildManager();
-        mgr.holdChatsInTabs();
+        mgr.setTabStripShown(true);
         const closedTab = await mgr.createSession();
         await mgr.createSession();
         const closed = untilClosed(mgr, closedTab);
@@ -1762,32 +1762,20 @@ describe("AgentSessionManager", () => {
         expect(closedSessions()).toEqual([closedTab]);
       });
 
-      it("releases every chat left behind without a sent message once the tab strip lets go, keeping worked-in chats and the shown chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
+      it("releases every chat left behind without a sent message once the tab strip is no longer shown, keeping worked-in chats and the shown chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
         const mgr = buildManager();
-        const release = mgr.holdChatsInTabs();
+        mgr.setTabStripShown(true);
         const worked = await createWorkedSession(mgr);
         const left = await mgr.createSession();
         const shown = await mgr.createSession();
         const closed = untilClosed(mgr, left);
 
-        release();
+        mgr.setTabStripShown(false);
         await closed;
 
         expect(closedSessions()).toEqual([left]);
         expect(mgr.getSessions()).toEqual([worked, shown]);
         expect(mgr.getActiveSession()).toBe(shown);
-      });
-
-      it("keeps chats held while another tab strip still shows for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
-        const mgr = buildManager();
-        const releaseOne = mgr.holdChatsInTabs();
-        mgr.holdChatsInTabs();
-        await mgr.createSession();
-        await mgr.createSession();
-
-        releaseOne();
-
-        expect(closedSessions()).toEqual([]);
       });
     });
 
@@ -2053,7 +2041,7 @@ describe("AgentSessionManager", () => {
     describe("startNewChatInPlace()", () => {
       it("puts the new chat in the replaced chat's tab slot, gives it its own chat input, and shows it", async () => {
         const mgr = buildManager();
-        mgr.holdChatsInTabs();
+        mgr.setTabStripShown(true);
         const a = await mgr.createSession();
         const b = await mgr.createSession();
         const c = await mgr.createSession();
@@ -2105,7 +2093,7 @@ describe("AgentSessionManager", () => {
         "keeps a chat the user sent a message in running out of its tab when New chat replaces it while it %s for https://github.com/Brevilabs/obsidian-copilot-private/issues/849",
         async (_label, background) => {
           const mgr = buildManager();
-          mgr.holdChatsInTabs();
+          mgr.setTabStripShown(true);
           const worked = await createWorkedSession(mgr);
           background(worked);
 
@@ -2119,7 +2107,7 @@ describe("AgentSessionManager", () => {
 
       it("releases a chat reopened from history and only read when New chat replaces it, though the tab strip holds its chats, for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", async () => {
         const mgr = buildManager();
-        mgr.holdChatsInTabs();
+        mgr.setTabStripShown(true);
         const read = await mgr.createSession();
         getSessionTestHandle(read).setHasUserVisibleMessages(true);
         const closed = untilClosed(mgr, read);

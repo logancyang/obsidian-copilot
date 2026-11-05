@@ -236,7 +236,7 @@ export class AgentSessionManager {
   private lastShownSessionId: string | null = null;
   // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
-  private tabStripHolds = 0;
+  private tabStripShown = false;
   /**
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -575,19 +575,17 @@ export class AgentSessionManager {
     );
   }
 
-  holdChatsInTabs(): () => void {
-    this.tabStripHolds++;
-    return () => {
-      this.tabStripHolds--;
-      if (this.tabStripHolds > 0 || this.disposed) return;
-      for (const id of Array.from(this.sessions.keys())) this.closeSessionIfLeft(id);
-    };
+  setTabStripShown(shown: boolean): void {
+    if (shown === this.tabStripShown) return;
+    this.tabStripShown = shown;
+    if (shown || this.disposed) return;
+    for (const id of Array.from(this.sessions.keys())) this.closeSessionIfLeft(id);
   }
 
   private closeSessionIfLeft(id: string): void {
     const session = this.sessions.get(id);
     if (!session || id === this.activeSessionId || this.keepsSessionWhenLeft(session)) return;
-    if (this.tabStripHolds > 0 && !this.detachedFromTabIds.has(id)) return;
+    if (this.tabStripShown && !this.detachedFromTabIds.has(id)) return;
     // A starting chat has no agent session to release yet, so it closes once it has started.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     if (session.getStatus() === "starting") {
