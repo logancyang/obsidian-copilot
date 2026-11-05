@@ -23,19 +23,6 @@ interface SessionsSidebarProps {
   plugin: CopilotPlugin;
 }
 
-// Browsing chats in the Navigator never leaves a session behind, so each move away releases a chat with no message sent; tabs only release on close.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/849
-function releasingLeftChat<A extends unknown[]>(
-  manager: AgentSessionManager,
-  navigate: (...args: A) => Promise<void>
-): (...args: A) => Promise<void> {
-  return async (...args) => {
-    const left = manager.getActiveSession()?.internalId;
-    await navigate(...args);
-    if (left) manager.closeSessionIfLeft(left);
-  };
-}
-
 export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugin }) => {
   const {
     chatHistoryItems,
@@ -174,12 +161,12 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     const projectActions = createProjectArchiveActions(app, manager);
     new ArchivedChatsModal(app, archivedChatItems, archivedProjects, {
       onUnarchive: (id) => setChatArchived(id, false),
-      onOpen: releasingLeftChat(manager, loadChat),
+      onOpen: loadChat,
       ...projectActions,
-      onOpenProject: releasingLeftChat(manager, async (id: string) => {
+      onOpenProject: async (id) => {
         await projectActions.onOpenProject(id);
         await plugin.activateAgentView();
-      }),
+      },
     }).open();
   }, [app, plugin, manager, archivedChatItems, archivedProjects, setChatArchived, loadChat]);
 
@@ -199,8 +186,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       actions={actions}
       onToggleProject={toggleProject}
       onReorderProjects={reorderProjects}
-      onOpenProject={safeAsyncHandler(releasingLeftChat(manager, handleOpenProject))}
-      onCreateProject={releasingLeftChat(manager, handleCreateProject)}
+      onOpenProject={safeAsyncHandler(handleOpenProject)}
+      onCreateProject={handleCreateProject}
       collapsedGroups={collapsedGroups}
       onToggleGroup={toggleGroup}
       onProjectDeleted={handleProjectDeleted}
@@ -209,8 +196,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       runningChatIds={runningChatIds}
       waitingChatIds={waitingChatIds}
       attentionChatIds={attentionChatIds}
-      onNewChat={safeAsyncHandler(releasingLeftChat(manager, handleNewChat))}
-      onOpenChat={safeAsyncHandler(releasingLeftChat(manager, loadChat))}
+      onNewChat={safeAsyncHandler(handleNewChat)}
+      onOpenChat={safeAsyncHandler(loadChat)}
     />
   );
 };

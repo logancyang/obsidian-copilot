@@ -52,6 +52,7 @@ function makeManagerWithOneChat() {
     getActiveProjectId: () => null,
     getActiveSession: () => session,
     getIsStarting: () => false,
+    holdChatsInTabs: jest.fn(() => jest.fn()),
   };
 }
 
@@ -157,6 +158,7 @@ describe("AgentTabStrip", () => {
         getActiveProjectId: () => null,
         getActiveSession: () => session,
         getIsStarting: () => false,
+        holdChatsInTabs: () => () => {},
         detachSessionFromTab: jest.fn(),
         closeSession: jest.fn(),
       };
@@ -183,6 +185,7 @@ describe("AgentTabStrip", () => {
         getActiveProjectId: () => null,
         getActiveSession: () => session,
         getIsStarting: () => false,
+        holdChatsInTabs: () => () => {},
         detachSessionFromTab: jest.fn(),
       };
       renderStrip(manager);
@@ -210,6 +213,7 @@ describe("AgentTabStrip", () => {
         getActiveProjectId: () => null,
         getActiveSession: () => session,
         getIsStarting: () => false,
+        holdChatsInTabs: () => () => {},
         createSession: jest.fn(async () => undefined),
       };
       renderStrip(manager);
@@ -244,6 +248,22 @@ describe("AgentTabStrip", () => {
       act(() => workspace.setLeaves({}));
       expect(screen.getByRole("tab", { name: /Existing chat/ })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Open Copilot Navigator" })).toBeTruthy();
+    });
+
+    it("holds its chats open only while it shows, letting go when the Navigator opens and holding again once it closes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
+      const workspace = makeFakeWorkspaceApp();
+      const releases = [jest.fn(), jest.fn()];
+      const manager = makeManagerWithOneChat();
+      manager.holdChatsInTabs.mockReturnValueOnce(releases[0]).mockReturnValueOnce(releases[1]);
+      renderStrip(manager, { workspace });
+      expect(manager.holdChatsInTabs).toHaveBeenCalledTimes(1);
+
+      act(() => workspace.setLeaves({ [SESSIONS_SIDEBAR_VIEWTYPE]: 1 }));
+      expect(releases[0]).toHaveBeenCalledTimes(1);
+
+      act(() => workspace.setLeaves({}));
+      expect(manager.holdChatsInTabs).toHaveBeenCalledTimes(2);
+      expect(releases[1]).not.toHaveBeenCalled();
     });
 
     it("starts hidden when a sessions sidebar leaf already exists for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {

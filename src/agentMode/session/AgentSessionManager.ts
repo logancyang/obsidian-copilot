@@ -234,6 +234,10 @@ export class AgentSessionManager {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
   private readonly promptedChatInputIds = new Set<string>();
   private readonly closingSessions = new Map<string, Promise<void>>();
+  private lastShownSessionId: string | null = null;
+  // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+  private tabStripHolds = 0;
   /**
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -572,9 +576,19 @@ export class AgentSessionManager {
     );
   }
 
-  closeSessionIfLeft(id: string): void {
+  holdChatsInTabs(): () => void {
+    this.tabStripHolds++;
+    return () => {
+      this.tabStripHolds--;
+      if (this.tabStripHolds > 0 || this.disposed) return;
+      for (const id of Array.from(this.sessions.keys())) this.closeSessionIfLeft(id);
+    };
+  }
+
+  private closeSessionIfLeft(id: string): void {
     const session = this.sessions.get(id);
     if (!session || id === this.activeSessionId || this.keepsSessionWhenLeft(session)) return;
+    if (this.tabStripHolds > 0 && !this.detachedFromTabIds.has(id)) return;
     // A starting chat has no agent session to release yet, so it closes once it has started.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     if (session.getStatus() === "starting") {
@@ -1810,6 +1824,13 @@ export class AgentSessionManager {
   }
 
   private notify(): void {
+    // A chat is left once another one is shown; no chat shown while the next one starts, or a rollback to the same chat, leaves nothing.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
+    if (this.activeSessionId !== null) {
+      const left = this.lastShownSessionId;
+      this.lastShownSessionId = this.activeSessionId;
+      if (left && left !== this.activeSessionId) this.closeSessionIfLeft(left);
+    }
     this.drafts.prune();
     for (const l of this.listeners) {
       try {

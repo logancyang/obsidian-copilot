@@ -104,6 +104,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
   const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
+  React.useEffect(() => (isHidden ? undefined : manager.holdChatsInTabs()), [manager, isHidden]);
 
   const sessions = manager.getSessionsForScope(manager.getActiveProjectId());
   const sessionCount = sessions.length;
