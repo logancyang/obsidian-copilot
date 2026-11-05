@@ -16,11 +16,13 @@ Refactors, moved files, internal renames, and bug fixes that restore the documen
 
 A part of the screen a user can point at, named by its UI noun: [chat tabs](feature-map/chat-tabs.md), [Copilot Navigator](feature-map/copilot-navigator.md). Give a part its own file when it has its own actions: one chat row has pin, rename, and close, so [chat rows](feature-map/chat-rows.md) are separate from the Navigator that lists them. Goals ("go back to a past chat") and internal concepts (sessions, managers) are not features.
 
-New features go in the README under their area. An unmapped feature still gets a placeholder file, a title, one line on what the user sees, and `Not mapped yet`, so every feature can be linked. Link another feature to its file wherever a section first mentions it; never name a feature in code formatting.
+New features go in the README under their area. Every feature gets a file so it can be linked. A file can start light: the title, one line on what the user sees, a short Sub-features list, and a closing line that only the sub-features are mapped. Mark it `(sub-features only)` in the README index, and write the other sections when a change first needs them. Link another feature to its file wherever a section first mentions it; never name a feature in code formatting.
+
+The map does not claim full coverage. A sub-feature list holds what someone has mapped, not every capability. When you find one it misses, add it.
 
 ## Writing an entry
 
-Follow the README's entry contract: an H1, one line on what the user sees, then the four H2s.
+Follow the README's entry contract: an H1, one line on what the user sees, then the four H2s, or only Sub-features for a light file.
 
 - **Sub-features:** `kebab-id: one line` per capability the user can see. Each should be small enough to verify on its own and could grow into its own file. Keep IDs stable; rename one only when the capability changes.
 - **How to get to it (user POV):** every entry point, by its visible name: commands, buttons, menus.
