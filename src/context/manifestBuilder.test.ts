@@ -16,6 +16,7 @@ import { shouldIndexFile } from "@/search/searchUtils";
 import {
   buildProjectContext,
   buildProjectContextBlock,
+  LINKED_QUERY_INSTRUCTION,
   MAX_MANIFEST_ENTRIES,
   PROJECT_WORKSPACE_POLICY,
   type ManifestPathEntry,
@@ -35,8 +36,6 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
     notes: [],
     tags: [],
     properties: [],
-    propertyNotes: [],
-    tagNotes: [],
     documents: [],
     webUrls: [],
     youtubeUrls: [],
@@ -117,73 +116,54 @@ describe("manifestBuilder", () => {
       expect(block).toContain("`/vault/B/Spec.md`");
     });
 
-    it("counts a property-only inclusion as a source and enumerates matching notes by absolute path", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
-      const app = fakeApp(
-        [
-          { path: "Notes/Relativity.md", ext: "md" },
-          { path: "Notes/Cooking.md", ext: "md" },
-        ],
-        [],
-        {
-          "Notes/Relativity.md": { frontmatter: { Topics: "Physics" } },
-          "Notes/Cooking.md": { frontmatter: { Topics: "Food" } },
-        }
+    it("lists exactly the linked folder, note, tag, property and URL plus the instruction to resolve tags and properties, without the notes they match — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      getRecord.mockReturnValue(
+        record({
+          inclusions: "Plans,[[brief]],%23launch,[status:active]",
+          webUrls: "https://example.com",
+        })
       );
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).toContain("## Notes matching an included property");
-      expect(block).toContain("`/vault/Notes/Relativity.md`");
-      expect(block).not.toContain("Cooking");
-    });
-
-    it("lists a note reached by both a title and a property once, as a declaration", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
-      const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }], [], {
-        "Notes/Relativity.md": { frontmatter: { Topics: "Physics" } },
-      });
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block.match(/\/vault\/Notes\/Relativity\.md/g)).toHaveLength(1);
-      expect(block).toContain("## Included notes");
-      expect(block).not.toContain("## Notes matching an included property");
-    });
-
-    it("keeps the tag itself and lists the notes carrying it in properties or inline, sorted by absolute path, under Notes matching an included tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      getRecord.mockReturnValue(record({ inclusions: "%23launch" }));
       const app = fakeApp(
         [
-          { path: "Work/standup.md", ext: "md" },
           { path: "Plans/brief.md", ext: "md" },
-          { path: "Plans/budget.md", ext: "md" },
+          { path: "Work/standup.md", ext: "md" },
+          { path: "Work/roadmap.md", ext: "md" },
         ],
-        [],
+        ["Plans"],
         {
-          "Work/standup.md": { tags: [{ tag: "#launch/press" }] },
-          "Plans/brief.md": { frontmatter: { tags: ["launch"] } },
-          "Plans/budget.md": { frontmatter: { tags: ["q4"] } },
+          "Plans/brief.md": { frontmatter: { tags: ["launch"], status: "active" } },
+          "Work/standup.md": { tags: [{ tag: "#launch" }] },
+          "Work/roadmap.md": { frontmatter: { status: "active" } },
         }
       );
 
       const block = buildProjectContext(app, "p1");
 
-      expect(block).toContain(
-        "## Included tags\n- #launch\n\n## Notes matching an included tag\n- `/vault/Plans/brief.md`\n- `/vault/Work/standup.md`\n</project_context>"
+      expect(block).toBe(
+        [
+          "<project_context>",
+          PROJECT_WORKSPACE_POLICY,
+          "Context sources for this project.",
+          "",
+          "## Included folders",
+          "- `/vault/Plans`",
+          "",
+          "## Included properties",
+          "- [status:active]",
+          "",
+          "## Included notes",
+          "- `/vault/Plans/brief.md`",
+          "",
+          "## Included tags",
+          "- #launch",
+          "",
+          "## Included URLs",
+          "- https://example.com",
+          "",
+          LINKED_QUERY_INSTRUCTION,
+          "</project_context>",
+        ].join("\n")
       );
-    });
-
-    it("lists a note reached by both a title and a tag once, as a declaration", () => {
-      getRecord.mockReturnValue(record({ inclusions: "%23launch,[[brief]]" }));
-      const app = fakeApp([{ path: "Plans/brief.md", ext: "md" }], [], {
-        "Plans/brief.md": { tags: [{ tag: "#launch" }] },
-      });
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block.match(/\/vault\/Plans\/brief\.md/g)).toHaveLength(1);
-      expect(block).not.toContain("## Notes matching an included tag");
     });
 
     it("lists the folder, tag, link and property of a project that also saved file-type patterns and exclusions, and ignores those two kinds https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
@@ -197,23 +177,18 @@ describe("manifestBuilder", () => {
       indexFile.mockImplementation(jest.requireActual<typeof import("@/search/searchUtils")>("@/search/searchUtils").shouldIndexFile); // prettier-ignore
       const app = fakeApp(
         [
-          { path: "Plans/brief.md", ext: "md" },
           { path: "Research/Private/secret.md", ext: "md" },
-          { path: "Topics/relativity.md", ext: "md" },
           { path: "Docs/manual.pdf", ext: "pdf" },
         ],
-        ["Research"],
-        {
-          "Plans/brief.md": { frontmatter: { tags: ["launch"] } },
-          "Research/Private/secret.md": { tags: [{ tag: "#launch" }] },
-          "Topics/relativity.md": { frontmatter: { topic: "physics" } },
-        }
+        ["Research"]
       );
 
       const block = buildProjectContext(app, "p1");
 
       expect(block).toContain(
         [
+          "Context sources for this project.",
+          "",
           "## Included folders",
           "- `/vault/Research`",
           "",
@@ -226,17 +201,13 @@ describe("manifestBuilder", () => {
           "## Included URLs",
           "- https://example.com/spec",
           "",
-          "## Notes matching an included property",
-          "- `/vault/Topics/relativity.md`",
-          "",
-          "## Notes matching an included tag",
-          "- `/vault/Plans/brief.md`",
-          "- `/vault/Research/Private/secret.md`",
+          LINKED_QUERY_INSTRUCTION,
           "</project_context>",
         ].join("\n")
       );
       expect(block).not.toContain("pdf");
       expect(block).not.toContain("tmp");
+      expect(block).not.toContain("Private");
     });
 
     it("treats a project whose only saved patterns are file types and exclusions as having no context sources https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
@@ -303,12 +274,11 @@ describe("manifestBuilder", () => {
 
     it("still emits <project_context> for a property-only project when no note currently matches", () => {
       getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
-      indexFile.mockReturnValue(false);
 
       const block = buildProjectContext(fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]), "p1"); // prettier-ignore
 
       expect(block).toContain("<project_context>");
-      expect(block).toContain("## Included properties");
+      expect(block).toContain("## Included properties\n- [Topics:Physics]");
       expect(block).not.toContain("## Included notes");
     });
 
@@ -350,6 +320,34 @@ describe("manifestBuilder", () => {
       const md = buildProjectContextBlock(sources({ tags: ["#research"] }));
       expect(md.startsWith("<project_context>")).toBe(true);
       expect(md.endsWith("</project_context>")).toBe(true);
+    });
+
+    it("tells the agent once how to find the notes of linked tags and properties, after the listing and ahead of the overflow note, without spending an entry of the cap — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const folders = Array.from({ length: MAX_MANIFEST_ENTRIES + 5 }, (_, i) => abs(`F${i}`));
+      const md = buildProjectContextBlock(
+        sources({ folders, tags: ["#launch"], properties: ["[status:active]"] })
+      );
+
+      expect(md.split(LINKED_QUERY_INSTRUCTION)).toHaveLength(2);
+      expect(md).toContain(
+        `\n\n${LINKED_QUERY_INSTRUCTION}\n\n> 7 more sources are not listed; search the sources above for them.\n</project_context>`
+      );
+    });
+
+    it("gives the instruction for a property even when the project links no tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const md = buildProjectContextBlock(sources({ properties: ["[status:active]"] }));
+
+      expect(md).toContain(
+        `## Included properties\n- [status:active]\n\n${LINKED_QUERY_INSTRUCTION}\n</project_context>`
+      );
+    });
+
+    it("leaves out the instruction when the project links no tag or property", () => {
+      const md = buildProjectContextBlock(
+        sources({ folders: [abs("Papers", "/vault/Papers")], webUrls: ["https://a.com"] })
+      );
+
+      expect(md).not.toContain(LINKED_QUERY_INSTRUCTION);
     });
 
     it("states the outputs/ workspace policy ahead of the source listing, so the entry cap never drops it https://github.com/logancyang/obsidian-copilot/issues/3801", () => {
@@ -400,29 +398,6 @@ describe("manifestBuilder", () => {
       expect(md).toContain("[Topics:Physics]");
     });
 
-    it("lists property-matched notes under their own heading", () => {
-      const md = buildProjectContextBlock(
-        sources({ properties: ["[Topics:Physics]"], propertyNotes: [abs("p.md", "/vault/p.md")] })
-      );
-      expect(md).toContain("## Notes matching an included property");
-      expect(md).toContain("`/vault/p.md`");
-    });
-
-    it("lists tag-matched notes under their own heading after property-matched notes — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      const md = buildProjectContextBlock(
-        sources({
-          tags: ["#launch"],
-          properties: ["[Topics:Physics]"],
-          propertyNotes: [abs("p.md", "/vault/p.md")],
-          tagNotes: [abs("t.md", "/vault/t.md")],
-        })
-      );
-
-      expect(md).toContain(
-        "## Notes matching an included property\n- `/vault/p.md`\n\n## Notes matching an included tag\n- `/vault/t.md`"
-      );
-    });
-
     it("lists document files by the absolute path of the original file under their own section", () => {
       const md = buildProjectContextBlock(
         sources({
@@ -452,11 +427,11 @@ describe("manifestBuilder", () => {
       expect(md).toContain("> 25 more sources are not listed; search the sources above for them.");
     });
 
-    it("keeps every declared source when property-matched notes overflow the entry cap", () => {
-      const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
+    it("keeps every declared source when document file rows overflow the entry cap", () => {
+      const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`p${i}.pdf`));
       const md = buildProjectContextBlock(
         sources({
-          propertyNotes: many,
+          documents: many,
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
           notes: [abs("Spec.md", "/vault/Spec.md")],
@@ -474,50 +449,11 @@ describe("manifestBuilder", () => {
       expect(md).toContain("https://youtu.be/abc");
     });
 
-    it("keeps every declared source when tag-matched notes overflow the entry cap and counts the trimmed notes as omitted — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      const tagNotes = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`t${i}.md`));
-      const md = buildProjectContextBlock(
-        sources({
-          tagNotes,
-          tags: ["#launch"],
-          folders: [abs("Papers", "/vault/Papers")],
-          webUrls: ["https://a.com"],
-          youtubeUrls: ["https://youtu.be/abc"],
-        })
-      );
-
-      const listed = tagNotes.filter((note) => md.includes(`\`${note.vaultPath}\``));
-      expect(md).toContain("- #launch");
-      expect(md).toContain("`/vault/Papers`");
-      expect(md).toContain("- https://a.com");
-      expect(md).toContain("- https://youtu.be/abc");
-      expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 4);
-      expect(md).toContain("> 24 more sources are not listed; search the sources above for them.");
-    });
-
-    it("keeps a declared note when document file rows overflow the entry cap", () => {
-      const documents = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) =>
-        abs(`Papers/p${i}.pdf`, `/vault/Papers/p${i}.pdf`)
-      );
-      const md = buildProjectContextBlock(
-        sources({
-          documents,
-          folders: [abs("Papers", "/vault/Papers")],
-          notes: [abs("Outside/Spec.md", "/elsewhere/Outside/Spec.md")],
-          tags: ["#physics"],
-        })
-      );
-
-      expect(md).toContain("`/elsewhere/Outside/Spec.md`");
-      expect(md).toContain("#physics");
-      expect(md).toContain("`/vault/Papers`");
-    });
-
     it("spends the leftover budget on expansions and counts the trimmed ones as omitted", () => {
-      const many = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
+      const many = Array.from({ length: 120 }, (_, i) => abs(`p${i}.pdf`));
       const md = buildProjectContextBlock(
         sources({
-          propertyNotes: many,
+          documents: many,
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
           tags: ["#physics"],
