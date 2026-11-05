@@ -131,6 +131,9 @@ export class ConnectorAuth {
   }
 
   async disconnect(connectionId: string): Promise<void> {
+    // A refresh in flight would spend the stored refresh token and write a new login after this deletes it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+    await this.refreshes.get(connectionId);
     const stored = this.read(connectionId);
     if (!stored) return;
     try {

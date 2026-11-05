@@ -422,6 +422,20 @@ describe("connectorAuth", () => {
         expect(keychain.secrets.size).toBe(0);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 waits for a refresh in flight, then revokes the refreshed token and leaves no keychain entry", async () => {
+        const { service, keychain, connectorAuth, connect } = setUp({ publishesRevocation: true });
+        await connect();
+        const writes = jest.spyOn(keychain, "setSecretById");
+        const refreshing = connectorAuth.accessToken(CONNECTION_ID, { forceRefresh: true });
+
+        await connectorAuth.disconnect(CONNECTION_ID);
+        await refreshing;
+
+        const refreshed = JSON.parse(writes.mock.calls[0][1]) as StoredLoginView;
+        expect(service.revokedTokens).toEqual([refreshed.tokens.refresh_token]);
+        expect(keychain.secrets.size).toBe(0);
+      });
+
       it("deletes the keychain entry even when the service cannot be reached to revoke", async () => {
         const { service, keychain, connectorAuth, connect } = setUp({ publishesRevocation: true });
         await connect();
