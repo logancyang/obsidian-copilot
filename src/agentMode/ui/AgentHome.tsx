@@ -589,16 +589,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
-  // An inline project context still leaves Relevant Notes below it, as on the global landing.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
-  const projectShelfSections = useMemo(
-    () =>
-      isProjectContextInline
-        ? projectLandingSections.filter((section) => section.id === "relevant-notes")
-        : projectLandingSections,
-    [isProjectContextInline, projectLandingSections]
-  );
-
   const composerNode = (
     <AgentChatInput
       backend={backend}
@@ -781,8 +771,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement && projectShelfSections.length > 0 ? (
-                          <AgentHomeShelf key={activeProjectId} sections={projectShelfSections} />
+                        projectPlacement && !isProjectContextInline ? (
+                          <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
                         ) : null
                       ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf
