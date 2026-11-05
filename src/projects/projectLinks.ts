@@ -88,7 +88,21 @@ async function getAvailablePath(app: App, folderPath: string, fileName: string):
   return path;
 }
 
-export async function copyIntoProjectSources(
+let pendingSourcesCopy: Promise<unknown> = Promise.resolve();
+
+export function copyIntoProjectSources(
+  app: App,
+  projectFolderPath: string,
+  files: readonly File[]
+): Promise<TFile[]> {
+  // Overlapping drops of same-named files would each pick the same free name, and the later write would fail.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  const result = pendingSourcesCopy.then(() => copyFiles(app, projectFolderPath, files));
+  pendingSourcesCopy = result.catch(() => undefined);
+  return result;
+}
+
+async function copyFiles(
   app: App,
   projectFolderPath: string,
   files: readonly File[]
