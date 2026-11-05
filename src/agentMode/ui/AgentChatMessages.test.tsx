@@ -462,6 +462,25 @@ describe("AgentChatMessages", () => {
       expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
     });
 
+    it("lets the browser skip painting every turn that is scrolled out of view https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
+      renderMessages(
+        [
+          assistantMessage("user-1", 1_000, { sender: "user", message: "Summarize this note" }),
+          assistantMessage("answer-1", 2_000, {
+            parts: [{ kind: "text", text: "The note has three points." }],
+          }),
+        ],
+        false
+      );
+
+      const rows = Array.from(screen.getByTestId("chat-messages").firstElementChild!.children);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.className).toContain("[content-visibility:auto]");
+        expect(row.className).toContain("[contain-intrinsic-size:auto_500px]");
+      }
+    });
+
     it("opens the clicked file's diff against the turn that changed it", () => {
       const app = {} as never;
       renderMessages(
