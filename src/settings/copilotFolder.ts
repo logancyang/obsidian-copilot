@@ -13,6 +13,8 @@ export const COPILOT_SUBFOLDER = Object.freeze({
   projects: "projects",
 } as const);
 
+export const COPILOT_LOG_FILE_NAME = "copilot-log.md";
+
 type FolderSettings = Pick<CopilotSettings, "copilotFolder">;
 
 function copilotRoot(settings: FolderSettings): string {
@@ -21,6 +23,18 @@ function copilotRoot(settings: FolderSettings): string {
 
 function deriveSubfolder(settings: FolderSettings, subfolder: string): string {
   return normalizePath(`${copilotRoot(settings)}/${subfolder}`);
+}
+
+export function deriveCopilotFolder(settings: FolderSettings): string {
+  return normalizePath(copilotRoot(settings));
+}
+
+export function deriveCopilotSubfolders(settings: FolderSettings): string[] {
+  return Object.values(COPILOT_SUBFOLDER).map((subfolder) => deriveSubfolder(settings, subfolder));
+}
+
+export function deriveLogFile(settings: FolderSettings): string {
+  return deriveSubfolder(settings, COPILOT_LOG_FILE_NAME);
 }
 
 export function deriveConversationsFolder(settings: FolderSettings): string {
@@ -52,7 +66,7 @@ export function deriveProjectsFolder(settings: FolderSettings): string {
 }
 
 export function getEffectiveCopilotFolder(): string {
-  return normalizePath(copilotRoot(getSettings()));
+  return deriveCopilotFolder(getSettings());
 }
 
 export function getEffectiveConversationsFolder(): string {
@@ -83,16 +97,7 @@ export async function ensureCopilotSubfolders(
   vault: Vault,
   settings: FolderSettings
 ): Promise<void> {
-  const derivers = [
-    deriveConversationsFolder,
-    deriveCustomPromptsFolder,
-    deriveSystemPromptsFolder,
-    deriveSkillsFolder,
-    deriveMemoryFolder,
-    deriveProjectsFolder,
-  ];
-  for (const derive of derivers) {
-    const folder = derive(settings);
+  for (const folder of deriveCopilotSubfolders(settings)) {
     try {
       await ensureFolderExists(vault, folder);
     } catch (error) {

@@ -298,6 +298,66 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("getFolder()", () => {
+    it("reads one registered folder, with its exclusions, by absolute path from /v0/folder", async () => {
+      const folder = {
+        path: "Vault",
+        absolute_path: "/Users/me/Vault",
+        exclude_folders: ["copilot"],
+      };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: folder,
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vault");
+
+      expect(response).toEqual(folder);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder?path=%2FUsers%2Fme%2FVault",
+          method: "GET",
+        })
+      );
+    });
+
+    it("rejects with the status when Miyo has no such folder registered", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail: "Folder not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vault")
+      ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe("updateFolder()", () => {
+    it("patches only the given fields of a registered folder through PATCH /v0/folder", async () => {
+      const request = { path: "/Users/me/Vault", exclude_folders: ["copilot/memory", "private"] };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { path: "Vault", exclude_folders: request.exclude_folders },
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().updateFolder("http://127.0.0.1:8742", request);
+
+      expect(response.exclude_folders).toEqual(["copilot/memory", "private"]);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "PATCH",
+          contentType: "application/json",
+          body: JSON.stringify(request),
+        })
+      );
+    });
+  });
+
   describe("scanFolder()", () => {
     it("posts the folder path and force flag to /v0/scan and returns the scan status", async () => {
       mockedRequestUrl.mockResolvedValue({
