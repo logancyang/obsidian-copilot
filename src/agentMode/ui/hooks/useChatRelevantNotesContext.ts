@@ -53,6 +53,10 @@ export function useChatRelevantNotesContext(
       candidates.filter((file) => shouldIndexFile(app, file, linkedNotes, exclusions, true))
     );
     const newestFirst = (a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime;
+    // Miyo skips project-folder files while Copilot's registration excludes its folder, so they
+    // rank by recency after linked notes and cannot push linked notes past the path cap.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/847
     return [...linked, ...candidates.filter((file) => !linked.has(file)).sort(newestFirst)];
   }, [app, projectId, contextSource]);
   // The unfinished assistant tail belongs to the running turn. Derive that
