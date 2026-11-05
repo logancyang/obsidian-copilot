@@ -19,6 +19,7 @@ import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
+import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
   nextProjectLandingPlacement,
@@ -34,7 +35,8 @@ import {
 } from "@/agentMode/ui/homeShelfPrefs";
 import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
-import { useRelevantNotesShelfSection } from "@/agentMode/ui/hooks/useRelevantNotesShelfSection";
+import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
+import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
@@ -71,7 +73,7 @@ import {
   useProjects,
 } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
-import { Files, Folder, MessageSquare } from "lucide-react";
+import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -100,7 +102,26 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
-  const relevantNotesSection = useRelevantNotesShelfSection(app, plugin);
+  const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
+  const relevantNotesSection = useMemo<AgentHomeShelfSection | null>(
+    () =>
+      isRelevantNotesPaneOpen
+        ? null
+        : {
+            id: "relevant-notes",
+            icon: <FileSearch className="tw-size-4" />,
+            title: "Relevant Notes",
+            renderBody: () => (
+              <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
+                <RelevantNotes
+                  className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
+                  onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
+                />
+              </RelevantNotesShelfPanel>
+            ),
+          },
+    [isRelevantNotesPaneOpen, plugin]
+  );
   const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
