@@ -156,12 +156,23 @@ describe("miyoVaultExclusions", () => {
       expect(mockMiyo.excludeFolders).toEqual([...DEFAULT_ROOT_SYSTEM_FOLDERS, "private"]);
     });
 
-    it("keeps a whole-Copilot-folder exclusion the user added back after the update, recognized by the sub-folder exclusions beside it — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
+    it("keeps a whole-Copilot-folder exclusion the user added back after the update, recognized by the full set of system exclusions beside it — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
       mockMiyo.excludeFolders = [...DEFAULT_ROOT_SYSTEM_FOLDERS, "copilot"];
 
       await migrateMiyoVaultExclusions(app);
 
       expect(mockMiyo.updateFolder).not.toHaveBeenCalled();
+    });
+
+    it("updates a registration whose Obsidian-ignored path inside the Copilot folder sat next to the whole-folder exclusion, keeping that path excluded — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
+      mockMiyo.excludeFolders = ["copilot", "copilot/projects/Falcon/private"];
+
+      await migrateMiyoVaultExclusions(app);
+
+      expect(mockMiyo.excludeFolders).toEqual([
+        ...DEFAULT_ROOT_SYSTEM_FOLDERS,
+        "copilot/projects/Falcon/private",
+      ]);
     });
 
     it("leaves a registration that never excluded the Copilot folder untouched", async () => {
