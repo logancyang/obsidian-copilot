@@ -9,7 +9,7 @@ import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
-import { getNotesWithTag, getProjectContextPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { getProjectContextPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { App, MarkdownView } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -29,14 +29,9 @@ export function useChatRelevantNotesContext(
   const { activeWebTabForMentions } = useActiveWebTabState();
   const projectFiles = useMemo(() => {
     const inclusions = getProjectContextPatterns(project?.contextSource?.inclusions);
-    if (!inclusions) return [];
-    // Linked tags match inline tags too, as the Files tab's tag rows list them; the shared
-    // pattern matcher reads only frontmatter tags.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
-    return [
-      ...app.vault.getFiles().filter((file) => shouldIndexFile(app, file, inclusions, null, true)),
-      ...(inclusions.tagPatterns ?? []).flatMap((tag) => getNotesWithTag(app, tag)),
-    ];
+    return inclusions
+      ? app.vault.getFiles().filter((file) => shouldIndexFile(app, file, inclusions, null, true))
+      : [];
   }, [app, project?.contextSource?.inclusions]);
   // The unfinished assistant tail belongs to the running turn. Derive that
   // boundary on mount and session changes instead of retaining partial text.
