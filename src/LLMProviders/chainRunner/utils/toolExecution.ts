@@ -65,25 +65,15 @@ export async function executeSequentialToolCall(
       toolArgs._userMessageContent = originalUserMessage;
     }
 
-    let timeout = DEFAULT_TOOL_TIMEOUT;
-    if (typeof metadata?.timeoutMs === "number") {
-      timeout = metadata.timeoutMs;
-    }
-
-    let result;
-    if (!timeout || timeout === Infinity) {
-      result = await ToolManager.callTool(tool, toolArgs);
-    } else {
-      result = await Promise.race([
-        ToolManager.callTool(tool, toolArgs),
-        new Promise((_, reject) =>
-          window.setTimeout(
-            () => reject(new Error(`Tool execution timed out after ${timeout}ms`)),
-            timeout
-          )
-        ),
-      ]);
-    }
+    const result = await Promise.race([
+      ToolManager.callTool(tool, toolArgs),
+      new Promise((_, reject) =>
+        window.setTimeout(
+          () => reject(new Error(`Tool execution timed out after ${DEFAULT_TOOL_TIMEOUT}ms`)),
+          DEFAULT_TOOL_TIMEOUT
+        )
+      ),
+    ]);
 
     if (result === null || result === undefined) {
       logWarn(`Tool ${toolCall.name} returned null/undefined result`);
