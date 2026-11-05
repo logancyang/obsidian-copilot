@@ -131,6 +131,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             timestamp={message.timestamp?.display}
             app={app}
             turnStopReason={message.turnStopReason}
+            agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
             fileChanges={message.fileChanges}
             onOpenFileChange={(change) =>

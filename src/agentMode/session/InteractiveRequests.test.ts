@@ -257,6 +257,30 @@ describe("InteractiveRequests", () => {
         });
         expect(requests.getPendingToolPermissions()).toHaveLength(0);
       });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4062 records a rejecting choice on the open reply, so an agent cancellation that follows names the declined permission", () => {
+        const store = new AgentMessageStore();
+        const replyId = addReply(store);
+        const { requests } = makeRequests({ store, getReplyId: () => replyId });
+        void requests.handleToolPermission(writePermissionRequest());
+
+        requests.resolveToolPermission("tc-write", "reject_once");
+        store.markCancelledByAgent(replyId);
+
+        expect(store.getMessage(replyId)?.agentCancelCause).toBe("permission_declined");
+      });
+
+      it("does not record an allowing choice as a declined permission", () => {
+        const store = new AgentMessageStore();
+        const replyId = addReply(store);
+        const { requests } = makeRequests({ store, getReplyId: () => replyId });
+        void requests.handleToolPermission(writePermissionRequest());
+
+        requests.resolveToolPermission("tc-write", "allow_once");
+        store.markCancelledByAgent(replyId);
+
+        expect(store.getMessage(replyId)?.agentCancelCause).toBe("unspecified");
+      });
     });
 
     describe("getPendingToolPermissions()", () => {
