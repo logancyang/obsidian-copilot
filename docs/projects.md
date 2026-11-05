@@ -60,7 +60,7 @@ Link notes, folders, tags, and web pages from the **Files** tab (see [Link notes
 
 Properties can target notes by a frontmatter field, such as `Topics: Physics`.
 
-When a new Project chat starts, Copilot gives the agent a list of the saved context: folders, notes, files, and the notes that have each linked tag by their location, and web pages and YouTube videos as links. Nothing is downloaded or converted in advance. The agent reads each source when a question needs it.
+When a new Project chat starts, Copilot gives the agent a list of the saved context: folders, notes, and files by their location, tags by name, and web pages and YouTube videos as links. Nothing is downloaded or converted in advance. The agent reads each source when a question needs it, and finds the notes that have a linked tag itself.
 
 An existing Project chat keeps the instructions and context captured when that chat started. Start a new chat after changing either one when you need the updated version.
 

@@ -1,10 +1,5 @@
 import { getCachedProjectRecordById } from "@/projects/state";
-import {
-  getMatchingPatterns,
-  getNotesWithTag,
-  shouldIndexFile,
-  type PatternCategory,
-} from "@/search/searchUtils";
+import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
 
 export const MAX_MANIFEST_ENTRIES = 100;
@@ -40,7 +35,6 @@ export interface ManifestSources {
   tags: string[];
   properties: string[];
   propertyNotes: ManifestPathEntry[];
-  tagNotes: ManifestPathEntry[];
   documents: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
@@ -58,6 +52,11 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
 // The system prompt is shared by every chat on a backend, so this policy rides the block only project chats get.
 // https://github.com/logancyang/obsidian-copilot/issues/3801
 export const PROJECT_WORKSPACE_POLICY = `The working directory is this project's workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
+
+// A tag can match thousands of notes, so the manifest names the tag and the agent resolves its notes on demand.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+export const LINKED_QUERY_INSTRUCTION =
+  "Tags are queries: find their notes with the Obsidian CLI tool (`tag name=<tag> verbose`) when it is available, otherwise by searching note text and frontmatter.";
 
 const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
@@ -117,9 +116,6 @@ export function buildProjectContext(app: App, projectId: string): string {
     tags,
     properties,
     propertyNotes: propertyNoteEntries,
-    tagNotes: resolveTagNotePaths(app, tags, exclusions, adapter).filter(
-      (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
-    ),
     documents: documentEntries,
     webUrls,
     youtubeUrls,
@@ -141,7 +137,6 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
   const expanded: ManifestLine[] = [
     ...sources.documents.map((e) => line("Document files", pathText(e))),
     ...sources.propertyNotes.map((e) => line("Notes matching an included property", pathText(e))),
-    ...sources.tagNotes.map((e) => line("Notes matching an included tag", pathText(e))),
   ];
   const lines: ManifestLine[] = [...declared, ...expanded];
 
@@ -164,6 +159,9 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     out.push(`- ${item.text}`);
   }
 
+  if (sources.tags.length > 0) {
+    out.push("", LINKED_QUERY_INSTRUCTION);
+  }
   if (omitted > 0) {
     out.push("", `> ${omitted} more sources are not listed; search the sources above for them.`);
   }
@@ -238,20 +236,6 @@ function resolvePropertyNotePaths(
   return app.vault
     .getMarkdownFiles()
     .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => toManifestEntry(file, adapter));
-}
-
-function resolveTagNotePaths(
-  app: App,
-  tagPatterns: string[],
-  exclusions: PatternCategory | null,
-  adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  if (tagPatterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
-  const files = new Set(tagPatterns.flatMap((tag) => getNotesWithTag(app, tag)));
-  return [...files]
-    .filter((file) => shouldIndexFile(app, file, null, exclusions))
     .sort((a, b) => a.path.localeCompare(b.path))
     .map((file) => toManifestEntry(file, adapter));
 }
