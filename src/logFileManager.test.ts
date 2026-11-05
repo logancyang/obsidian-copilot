@@ -3,6 +3,7 @@ import { getSettings } from "@/settings/model";
 import { Notice, type App } from "obsidian";
 
 jest.mock("@/settings/copilotFolder", () => ({
+  ...jest.requireActual<typeof import("@/settings/copilotFolder")>("@/settings/copilotFolder"),
   getEffectiveCopilotFolder: () => "copilot",
 }));
 jest.mock("@/settings/model", () => ({

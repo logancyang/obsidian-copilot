@@ -411,6 +411,29 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("updateFolder()", () => {
+    it("patches only the given fields of a registered folder through PATCH /v0/folder", async () => {
+      const request = { path: "/Users/me/Vault", exclude_folders: ["copilot/memory", "private"] };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: { path: "Vault", exclude_folders: request.exclude_folders },
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().updateFolder("http://127.0.0.1:8742", request);
+
+      expect(response.exclude_folders).toEqual(["copilot/memory", "private"]);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder",
+          method: "PATCH",
+          contentType: "application/json",
+          body: JSON.stringify(request),
+        })
+      );
+    });
+  });
+
   describe("scanFolder()", () => {
     it("posts the folder path and force flag to /v0/scan and returns the scan status", async () => {
       mockedRequestUrl.mockResolvedValue({

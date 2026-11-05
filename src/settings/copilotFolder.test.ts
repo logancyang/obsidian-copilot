@@ -2,7 +2,10 @@ import {
   COPILOT_SUBFOLDER,
   deriveConversationAttachmentsFolder,
   deriveConversationsFolder,
+  deriveCopilotFolder,
+  deriveCopilotSubfolders,
   deriveCustomPromptsFolder,
+  deriveLogFile,
   deriveMemoryFolder,
   deriveProjectsFolder,
   deriveSkillsFolder,
@@ -132,6 +135,35 @@ describe("copilotFolder", () => {
 
     it("re-roots the projects folder under a custom root", () => {
       expect(deriveProjectsFolder(settingsWithRoot("team/ai"))).toBe("team/ai/projects");
+    });
+  });
+
+  describe("deriveCopilotFolder()", () => {
+    it("returns the configured root", () => {
+      expect(deriveCopilotFolder(settingsWithRoot("team/ai"))).toBe("team/ai");
+    });
+
+    it("falls back to the default root when the configured root is blank", () => {
+      expect(deriveCopilotFolder(settingsWithRoot("  "))).toBe("copilot");
+    });
+  });
+
+  describe("deriveCopilotSubfolders()", () => {
+    it("lists every Copilot sub-folder under the root, the projects folder included", () => {
+      expect(deriveCopilotSubfolders(settingsWithRoot("team/ai"))).toEqual([
+        "team/ai/copilot-conversations",
+        "team/ai/copilot-custom-prompts",
+        "team/ai/system-prompts",
+        "team/ai/skills",
+        "team/ai/memory",
+        "team/ai/projects",
+      ]);
+    });
+  });
+
+  describe("deriveLogFile()", () => {
+    it("places the Copilot log at the top of the Copilot folder", () => {
+      expect(deriveLogFile(settingsWithRoot("team/ai"))).toBe("team/ai/copilot-log.md");
     });
   });
 
