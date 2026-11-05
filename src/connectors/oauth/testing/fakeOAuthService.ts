@@ -9,7 +9,6 @@ export interface FakeOAuthServiceOptions {
   issuesClientSecret?: boolean;
   publishesRevocation?: boolean;
   rejectsRegistration?: boolean;
-  accessTokenLifetimeSeconds?: number;
 }
 
 export interface FakeRequest {
@@ -189,7 +188,7 @@ export class FakeOAuthService {
     return {
       access_token: `access-${this.issued}`,
       token_type: "Bearer",
-      expires_in: this.options.accessTokenLifetimeSeconds ?? 3600,
+      expires_in: 3600,
       refresh_token: refreshToken,
     };
   }
