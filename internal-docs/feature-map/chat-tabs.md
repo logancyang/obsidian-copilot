@@ -1,6 +1,6 @@
 # Chat tabs
 
-Aliases: tab strip, open chats, multiple chats, new chat, close chat, switch chat, "+ replaced my chat", "my chat is still running after I closed it".
+Aliases: tab strip, session tabs.
 
 A tab is an open conversation: it stays until the user closes it, focused or not, and its agent session stays live while it is open. Closing the tab decides the session: a chat with a message sent this run, or unsent text in its composer, keeps running in the background; any other chat is released.
 

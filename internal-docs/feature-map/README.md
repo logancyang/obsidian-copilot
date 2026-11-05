@@ -18,10 +18,10 @@ A change's coverage set is every feature file whose `Where it lives` paths the d
 
 ## Features
 
-| File                                           | User task                                           | Aliases                                     |
-| ---------------------------------------------- | --------------------------------------------------- | ------------------------------------------- |
-| [`chat-tabs.md`](chat-tabs.md)                 | Keep several agent chats open and move between them | tab strip, open chats, new chat, close chat |
-| [`copilot-navigator.md`](copilot-navigator.md) | Browse chats and projects from a sidebar            | Navigator, sessions sidebar, green dot      |
+| File                                           | User task                                           | Aliases                     |
+| ---------------------------------------------- | --------------------------------------------------- | --------------------------- |
+| [`chat-tabs.md`](chat-tabs.md)                 | Keep several agent chats open and move between them | tab strip, session tabs     |
+| [`copilot-navigator.md`](copilot-navigator.md) | Browse chats and projects from a sidebar            | Navigator, sessions sidebar |
 
 ## Unmapped
 

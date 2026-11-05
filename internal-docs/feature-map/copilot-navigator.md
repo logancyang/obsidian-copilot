@@ -1,6 +1,6 @@
 # Copilot Navigator
 
-Aliases: Navigator, sessions sidebar, chat sidebar, browse chats, green dot, "session open" dot.
+Aliases: Navigator, sessions sidebar.
 
 A sidebar listing chats and projects for browsing. It has no open-conversation state: moving away from a chat through a Navigator action releases that chat unless the user sent a message in it this run or left unsent text in its composer. A green dot means the chat's session is live.
 
