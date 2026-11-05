@@ -121,13 +121,29 @@ async function getAvailablePath(app: App, folderPath: string, fileName: string):
   const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
   const extension = dot > 0 ? fileName.slice(dot) : "";
   let path = `${folderPath}/${fileName}`;
+  // A file dropped from the computer must never replace one already in sources/, so a taken name gets a number.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
   for (let n = 1; await app.vault.adapter.exists(path); n++) {
     path = `${folderPath}/${stem} ${n}${extension}`;
   }
   return path;
 }
 
-export async function copyIntoProjectSources(
+let pendingSourcesCopy: Promise<unknown> = Promise.resolve();
+
+export function copyIntoProjectSources(
+  app: App,
+  projectFolderPath: string,
+  files: readonly File[]
+): Promise<TFile[]> {
+  // Overlapping drops of same-named files would each pick the same free name, and the later write would fail.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  const result = pendingSourcesCopy.then(() => copyFiles(app, projectFolderPath, files));
+  pendingSourcesCopy = result.catch(() => undefined);
+  return result;
+}
+
+async function copyFiles(
   app: App,
   projectFolderPath: string,
   files: readonly File[]
