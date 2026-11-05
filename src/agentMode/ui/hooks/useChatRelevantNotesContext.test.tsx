@@ -4,6 +4,8 @@ import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel"
 import { useChatRelevantNotesContext } from "@/agentMode/ui/hooks/useChatRelevantNotesContext";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { ProjectConfig } from "@/aiParams";
+import { updateCachedProjectRecords } from "@/projects/state";
 import { getChatRelevantNotesStore } from "@/search/chatRelevantNotesContext";
 import { act, render, renderHook } from "@testing-library/react";
 import { App, MarkdownView, TFile } from "obsidian";
@@ -25,13 +27,25 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFolderName: () => "Vault",
   getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,
 }));
-jest.mock("@/search/searchUtils", () => ({
-  getMatchingPatterns: () => ({ inclusions: {}, exclusions: {} }),
-  shouldIndexFile: () => true,
-}));
+function vaultFile(path: string, mtime = 0): TFile {
+  return Object.assign(new (TFile as unknown as new (path: string) => TFile)(path), {
+    stat: { mtime },
+  });
+}
+function projectLinking(inclusions?: string): ProjectConfig {
+  return {
+    id: "trip",
+    name: "Trip",
+    systemPrompt: "",
+    contextSource: { inclusions },
+    created: 0,
+    UsageTimestamps: 0,
+  };
+}
 describe("useChatRelevantNotesContext", () => {
   describe("useChatRelevantNotesContext()", () => {
     let app: App;
+    let vaultFiles: TFile[];
     let root: HTMLDivElement;
     let draft: AgentInputDraftControls;
     const user: AgentChatMessage = {
@@ -42,10 +56,11 @@ describe("useChatRelevantNotesContext", () => {
       timestamp: null,
     };
     beforeEach(() => {
+      vaultFiles = [vaultFile("Research/project.md")];
       app = {
         workspace: { on: jest.fn(), offref: jest.fn() },
         vault: {
-          getFiles: () => [{ path: "project.md" }],
+          getFiles: () => vaultFiles,
           getAbstractFileByPath: (path: string) =>
             Object.assign(new (TFile as unknown as new (path: string) => TFile)("file.md"), {
               path,
@@ -66,6 +81,7 @@ describe("useChatRelevantNotesContext", () => {
     afterEach(() => {
       root.remove();
       mockActiveWebTab = null;
+      updateCachedProjectRecords([]);
       jest.restoreAllMocks();
     });
 
@@ -211,7 +227,9 @@ describe("useChatRelevantNotesContext", () => {
     });
 
     it("includes selected excerpts and project file references without implicitly attaching the active note (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
-      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], undefined));
+      renderHook(() =>
+        useChatRelevantNotesContext(app, root, "one", draft, [], projectLinking("Research"))
+      );
 
       act(() => {
         root.dispatchEvent(new Event("pointerdown"));
@@ -219,7 +237,77 @@ describe("useChatRelevantNotesContext", () => {
 
       const request = getChatRelevantNotesStore(app).getSnapshot()!.request;
       expect(request.excerpts).toEqual(["literal excerpt"]);
-      expect(request.file_paths).toEqual(["Vault/project.md"]);
+      expect(request.file_paths).toEqual(["Vault/Research/project.md"]);
+    });
+    it("sends the chat's own notes first, then the project's linked notes, then its other files newest first (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      vaultFiles = [
+        vaultFile("Research/old.md", 1),
+        vaultFile("Research/new.md", 3),
+        vaultFile("Archive/Packing list.md", 0),
+        vaultFile("Research/mid.md", 2),
+        vaultFile("Unrelated.md", 9),
+      ];
+      const sent: AgentChatMessage = {
+        ...user,
+        context: { notes: [vaultFile("sent.md")], urls: [] },
+      };
+      renderHook(() =>
+        useChatRelevantNotesContext(
+          app,
+          root,
+          "one",
+          { ...draft, contextNotes: [vaultFile("attached.md")], includeActiveNote: true },
+          [sent],
+          projectLinking("Research,[[Packing list]]")
+        )
+      );
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths).toEqual([
+        "Vault/sent.md",
+        "Vault/attached.md",
+        "Vault/active.md",
+        "Vault/Archive/Packing list.md",
+        "Vault/Research/new.md",
+        "Vault/Research/mid.md",
+        "Vault/Research/old.md",
+      ]);
+    });
+    it("caps file references at Miyo's 100-path limit by dropping the oldest project files (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      vaultFiles = Array.from({ length: 500 }, (_, i) => vaultFile(`Research/note-${i}.md`, i));
+      renderHook(() =>
+        useChatRelevantNotesContext(
+          app,
+          root,
+          "one",
+          { ...draft, contextNotes: [vaultFile("attached.md")] },
+          [],
+          projectLinking("Research")
+        )
+      );
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      const paths = getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths!;
+      expect(paths).toHaveLength(100);
+      expect(paths.slice(0, 2)).toEqual(["Vault/attached.md", "Vault/Research/note-499.md"]);
+      expect(paths.at(-1)).toBe("Vault/Research/note-401.md");
+    });
+    it("includes the project folder's own files, newest first, without its config or instructions file (https://github.com/Brevilabs/obsidian-copilot-private/issues/845)", () => {
+      const project = projectLinking();
+      updateCachedProjectRecords([
+        { project, filePath: "copilot/projects/Trip/project.md", folderName: "Trip" },
+      ]);
+      vaultFiles = [
+        vaultFile("copilot/projects/Trip/project.md", 5),
+        vaultFile("copilot/projects/Trip/AGENTS.md", 5),
+        vaultFile("copilot/projects/Trip/itinerary.md", 1),
+        vaultFile("copilot/projects/Trip/drafts/budget.md", 2),
+        vaultFile("copilot/projects/Other/notes.md", 3),
+      ];
+      renderHook(() => useChatRelevantNotesContext(app, root, "one", draft, [], project));
+      void act(() => root.dispatchEvent(new Event("pointerdown")));
+      expect(getChatRelevantNotesStore(app).getSnapshot()!.request.file_paths).toEqual([
+        "Vault/copilot/projects/Trip/drafts/budget.md",
+        "Vault/copilot/projects/Trip/itinerary.md",
+      ]);
     });
     it("includes the sent question immediately and adds the assistant answer only when streaming finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(
