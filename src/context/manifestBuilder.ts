@@ -1,11 +1,5 @@
 import { getCachedProjectRecordById } from "@/projects/state";
-import {
-  getMatchingPatterns,
-  getNotesWithProperty,
-  getNotesWithTag,
-  shouldIndexFile,
-  type PatternCategory,
-} from "@/search/searchUtils";
+import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
 import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
 
 export const MAX_MANIFEST_ENTRIES = 100;
@@ -40,8 +34,6 @@ export interface ManifestSources {
   extensions: string[];
   tags: string[];
   properties: string[];
-  propertyNotes: ManifestPathEntry[];
-  tagNotes: ManifestPathEntry[];
   documents: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
@@ -59,6 +51,11 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
 // The system prompt is shared by every chat on a backend, so this policy rides the block only project chats get.
 // https://github.com/logancyang/obsidian-copilot/issues/3801
 export const PROJECT_WORKSPACE_POLICY = `The working directory is this project's workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
+
+// A tag or property can match thousands of notes, so the manifest names it and the agent resolves its notes on demand.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+export const LINKED_QUERY_INSTRUCTION =
+  "Tags and properties are queries: find their notes with the Obsidian CLI tool (`tag name=<tag> verbose`, or `search` with `[property:value]`) when it is available, otherwise by searching note text and frontmatter.";
 
 const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "<project_context>",
@@ -102,13 +99,6 @@ export function buildProjectContext(app: App, projectId: string): string {
   const adapter = vaultAdapter(app);
   const noteEntries = resolveNotePaths(app, notes, adapter);
   const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
-  const propertyNoteEntries = resolveMatchingNotePaths(
-    app,
-    properties,
-    getNotesWithProperty,
-    exclusions,
-    adapter
-  ).filter((entry) => !declaredNotePaths.has(manifestEntryKey(entry)));
 
   // A document picked in the Files picker is already listed under Included notes, and a duplicate would spend the manifest cap. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
   const documentEntries = resolveDocumentPaths(app, inclusions, exclusions, adapter).filter(
@@ -121,10 +111,6 @@ export function buildProjectContext(app: App, projectId: string): string {
     extensions,
     tags,
     properties,
-    propertyNotes: propertyNoteEntries,
-    tagNotes: resolveMatchingNotePaths(app, tags, getNotesWithTag, exclusions, adapter).filter(
-      (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
-    ),
     documents: documentEntries,
     webUrls,
     youtubeUrls,
@@ -143,12 +129,10 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     ...sources.webUrls.map((u) => line("Included URLs", u)),
     ...sources.youtubeUrls.map((u) => line("Included YouTube", u)),
   ];
-  const expanded: ManifestLine[] = [
+  const lines: ManifestLine[] = [
+    ...declared,
     ...sources.documents.map((e) => line("Document files", pathText(e))),
-    ...sources.propertyNotes.map((e) => line("Notes matching an included property", pathText(e))),
-    ...sources.tagNotes.map((e) => line("Notes matching an included tag", pathText(e))),
   ];
-  const lines: ManifestLine[] = [...declared, ...expanded];
 
   const total = lines.length;
   const shown = lines.slice(0, MAX_MANIFEST_ENTRIES);
@@ -169,6 +153,9 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
     out.push(`- ${item.text}`);
   }
 
+  if (sources.tags.length > 0 || sources.properties.length > 0) {
+    out.push("", LINKED_QUERY_INSTRUCTION);
+  }
   if (omitted > 0) {
     out.push("", `> ${omitted} more sources are not listed; search the sources above for them.`);
   }
@@ -230,21 +217,6 @@ function resolveNotePaths(
       absPath: adapter.getFullPath(file.path),
     }));
   });
-}
-
-function resolveMatchingNotePaths(
-  app: App,
-  patterns: string[],
-  getNotes: (app: App, pattern: string) => TFile[],
-  exclusions: PatternCategory | null,
-  adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  if (patterns.length === 0) return EMPTY_MANIFEST_ENTRIES;
-  const files = new Set(patterns.flatMap((pattern) => getNotes(app, pattern)));
-  return [...files]
-    .filter((file) => shouldIndexFile(app, file, null, exclusions))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => toManifestEntry(file, adapter));
 }
 
 function resolveDocumentPaths(
