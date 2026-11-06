@@ -60,6 +60,10 @@ jest.mock("@/agentMode/session/debugSink", () => ({
   formatPayload: () => "",
 }));
 
+jest.mock("@/utils/loginShellPath", () => ({
+  agentShellPath: jest.fn(async () => "/login/bin:/usr/bin"),
+}));
+
 jest.mock("./effortOption", () => ({
   ...jest.requireActual("./effortOption"),
   getCachedSdkCatalog: jest.fn(),
@@ -866,9 +870,36 @@ describe("ClaudeSdkBackendProcess", () => {
         };
         expect(options.env).toEqual({
           ...process.env,
+          PATH: "/login/bin:/usr/bin",
           CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
           CLAUDE_CONFIG_DIR: "/config",
         });
+      });
+
+      it("runs Claude with the user's login-shell PATH, because its Bash tool keeps the PATH Claude starts with (https://github.com/logancyang/obsidian-copilot/issues/4096)", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc();
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as {
+          options: { env?: Record<string, string> };
+        };
+        expect(options.env?.PATH).toBe("/login/bin:/usr/bin");
+      });
+
+      it("lets a PATH set in the backend's env overrides win over the login-shell PATH", async () => {
+        queryMock.mockImplementation(answering([resultMessage()]));
+        const proc = makeProc({ getEnvOverrides: () => ({ PATH: "/custom/bin" }) });
+        const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+        await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+        const { options } = getPromptQueryCalls()[0][0] as {
+          options: { env?: Record<string, string> };
+        };
+        expect(options.env?.PATH).toBe("/custom/bin");
       });
 
       it("auto-allows only read tools so Write and Edit follow the session's permission mode and reach Copilot's prompt in Default mode (https://github.com/Brevilabs/obsidian-copilot-private/issues/690)", async () => {
