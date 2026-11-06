@@ -275,10 +275,13 @@ const AgentChatMessages = memo(
             role="region"
             aria-label="Pending agent actions"
             data-testid="agent-action-rail"
-            // A verbose question can exceed a short chat pane. Bound and scroll
-            // the rail so its resolution controls remain reachable.
+            // max-h + overflow-y: a verbose question can exceed a short chat pane, and its
+            // resolution controls must stay reachable.
             // https://github.com/logancyang/obsidian-copilot/issues/2948
-            className="tw-max-h-full tw-w-full tw-overflow-y-auto tw-bg-primary"
+            // select-text: Obsidian turns off text selection app-wide and only the transcript
+            // turns it back on, so cards in this rail could not be selected or copied.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/863
+            className="tw-max-h-full tw-w-full tw-select-text tw-overflow-y-auto tw-bg-primary"
           >
             <div key={pendingActionId} data-action-id={pendingActionId}>
               {pendingQuestion ? (
