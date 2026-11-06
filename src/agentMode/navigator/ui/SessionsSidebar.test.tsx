@@ -279,7 +279,7 @@ describe("SessionsSidebar", () => {
       renderSidebar(manager);
 
       const row = (name: RegExp) => screen.findByRole("button", { name });
-      expect(within(await row(/Runner/)).getByLabelText("Running")).toBeTruthy();
+      expect(within(await row(/Runner/)).getByLabelText("Responding")).toBeTruthy();
       expect(within(await row(/Waiter/)).getByLabelText("Waiting for permission")).toBeTruthy();
       expect(within(await row(/Reader/)).getByLabelText("Unread result")).toBeTruthy();
       expect(within(await row(/Idler/)).queryByRole("img")).toBeNull();
@@ -292,7 +292,7 @@ describe("SessionsSidebar", () => {
       renderSidebar(manager);
 
       openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
-      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Shut down" }));
 
       await waitFor(() => expect(manager.closeChatSession).toHaveBeenCalledWith("a.md"));
     });
@@ -305,10 +305,10 @@ describe("SessionsSidebar", () => {
       renderSidebar(manager);
 
       openMenuIn((await screen.findByRole("button", { name: /^Alpha/ })).parentElement!);
-      fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Shut down" }));
 
       await waitFor(() =>
-        expect(Notice).toHaveBeenCalledWith("Could not close chat: Agent is busy.")
+        expect(Notice).toHaveBeenCalledWith("Could not shut down chat: Agent is busy.")
       );
     });
 
@@ -350,7 +350,7 @@ describe("SessionsSidebar", () => {
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta", 2_000)];
       manager.open = new Set(["b.md"]);
       act(() => manager.emit());
-      await screen.findByRole("button", { name: /^Beta Session open$/ });
+      await screen.findByRole("button", { name: /^Beta Running$/ });
 
       manager.items = [chat("a.md", "Alpha", 1_000), chat("b.md", "Beta finished", 2_000)];
       manager.running = new Set(["b.md"]);

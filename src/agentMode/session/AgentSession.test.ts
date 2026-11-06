@@ -4801,7 +4801,7 @@ describe("AgentSession", () => {
           else mock.closeSession.mockRejectedValueOnce(new MethodUnsupportedError("session/close"));
 
           await expect(session.releaseBackendSession()).rejects.toThrow(
-            "This agent does not support closing individual sessions."
+            "This agent can't shut down a single chat."
           );
         }
       );
@@ -6587,6 +6587,36 @@ describe("AgentSession", () => {
 
         expect(session.getTasks()).toBe(ended);
         expect(ended).toEqual([expect.objectContaining({ status: "completed" })]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3842 lists each resumed run of a task under its resuming call and ends that run when the task ends again, so no run stays running", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { backendId: "claude" });
+        const { run } = launchTurn(mock, session);
+        run(AGENT_CARD, AGENT_LAUNCH, TASK_STARTED);
+        mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
+
+        for (const toolCallId of ["tool-resume-1", "tool-resume-2"]) {
+          mock.emitUpdate({
+            sessionUpdate: "tool_call",
+            toolCallId,
+            title: "SendMessage",
+            kind: "other",
+            status: "in_progress",
+            vendorToolName: "SendMessage",
+          });
+          mock.emitUpdate({ ...TASK_STARTED, toolCallId });
+          mock.emitUpdate({ sessionUpdate: "task_ended", taskId: "task-1", status: "completed" });
+        }
+
+        expect(session.getTasks()).toEqual([
+          expect.objectContaining({ toolCallId: "tool-agent", status: "completed" }),
+          expect.objectContaining({ toolCallId: "tool-resume-1", status: "completed" }),
+          expect.objectContaining({ toolCallId: "tool-resume-2", status: "completed" }),
+        ]);
+        expect(
+          aiMessage(session)?.parts?.find((p) => p.kind === "tool_call" && p.id === "tool-resume-2")
+        ).toMatchObject({ status: "completed" });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/749 ends a command a subagent was launching as stopped when that subagent ends first", async () => {
