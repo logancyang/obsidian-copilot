@@ -161,6 +161,13 @@ describe("ApprovedRulesPage", () => {
       expect(alert.textContent).toContain("settings.json is read-only");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 focuses Back when the page opens, so the page starts in view even when it replaces settings far down a scrolled tab", async () => {
+      renderPage(makeStore([GIT_STATUS]));
+      await screen.findByText("Bash(git status:*)");
+
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Back" }));
+    });
+
     it("returns to the agent's settings when Back is selected", async () => {
       const onBack = jest.fn();
       renderPage(makeStore([GIT_STATUS]), onBack);
