@@ -550,6 +550,30 @@ describe("ConfigureProviderDialog", () => {
       ]);
     });
 
+    it("does not save a context window reported by the previous Base URL after the Base URL changes (https://github.com/logancyang/obsidian-copilot/issues/3840)", async () => {
+      mockListProviderModels.mockResolvedValue({
+        ok: true,
+        modelIds: ["work-model"],
+        contextWindows: { "work-model": 262144 },
+      });
+      const onClose = jest.fn();
+      render(
+        <ConfigureProviderForm state={{ mode: "edit", providerId: "p-custom" }} onClose={onClose} />
+      );
+      await waitFor(() =>
+        expect(within(screen.getByTestId("model-row-work-model")).getByText(/262/)).toBeTruthy()
+      );
+      const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+      expect(baseUrlInput).not.toBeNull();
+      fireEvent.change(baseUrlInput!, { target: { value: "https://other.example/v1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(mockBulkSet).toHaveBeenCalledWith("p-custom", [
+        { id: "work-model", displayName: "Work model" },
+      ]);
+    });
+
     it("reports a CORS-only change as saved only after it is persisted (https://github.com/logancyang/obsidian-copilot/issues/3147) (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {
       const onSaved = jest.fn();
       let finishUpdate!: () => void;

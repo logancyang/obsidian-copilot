@@ -53,7 +53,10 @@ export function useModelCandidatePool({
     mode === "edit" ? new Set(existingModels.map((m) => m.info.id)) : new Set()
   );
   const [fetchedIds, setFetchedIds] = useState<string[]>([]);
-  const [fetchedContextWindows, setFetchedContextWindows] = useState(NO_CONTEXT_WINDOWS);
+  const [discoveredContext, setDiscoveredContext] = useState<{
+    baseUrl: string;
+    windows: Readonly<Record<string, number>>;
+  } | null>(null);
   const [manualIds, setManualIds] = useState<string[]>([]);
   const [removedExistingIds, setRemovedExistingIds] = useState<Set<string>>(() => new Set());
   const [fetching, setFetching] = useState(false);
@@ -63,6 +66,13 @@ export function useModelCandidatePool({
     () => new Map(existingModels.map((m) => [m.info.id, m.info])),
     [existingModels]
   );
+
+  // Context windows reported by one endpoint must not be saved for another.
+  // https://github.com/logancyang/obsidian-copilot/issues/3840
+  const fetchedContextWindows =
+    discoveredContext?.baseUrl === effectiveBaseUrl
+      ? discoveredContext.windows
+      : NO_CONTEXT_WINDOWS;
 
   const resolveModelInfo = useCallback(
     (id: string): ModelInfo => {
@@ -136,8 +146,10 @@ export function useModelCandidatePool({
         extras,
       });
       if (result.ok) {
-        const { contextWindows } = result;
-        if (contextWindows) setFetchedContextWindows((prev) => ({ ...prev, ...contextWindows }));
+        setDiscoveredContext({
+          baseUrl: effectiveBaseUrl,
+          windows: result.contextWindows ?? NO_CONTEXT_WINDOWS,
+        });
         const known = knownIdsRef.current;
         const trulyNew = result.modelIds.filter((id) => !known.has(id));
         if (trulyNew.length > 0) {
