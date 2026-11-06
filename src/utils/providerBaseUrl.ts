@@ -4,7 +4,7 @@
  * https://github.com/logancyang/obsidian-copilot-preview/issues/152
  */
 
-export function trimBaseUrl(baseUrl: string | undefined): string | undefined {
+function trimBaseUrl(baseUrl: string | undefined): string | undefined {
   const trimmed = (baseUrl ?? "").trim().replace(/\/+$/, "");
   return trimmed || undefined;
 }

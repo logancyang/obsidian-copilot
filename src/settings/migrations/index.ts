@@ -13,7 +13,6 @@ import { executeBedrockRemoval } from "./bedrockRemovalMigration";
 import { executeByokMigration } from "./byokMigration";
 import { planCodexModelIdCollapse } from "./codexModelIdMigration";
 import { executeGitHubCopilotRemoval } from "./githubCopilotRemovalMigration";
-import { planLegacyOllamaBaseUrlRepair } from "./legacyOllamaBaseUrlMigration";
 import { planOptionalCustomProviderAuthMigration } from "./optionalCustomProviderAuthMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
@@ -102,11 +101,6 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/716
   if (fromVersion < 16 && getSettings().enableMiyo !== true) {
     setSettings({ enableMiyoSearchSkill: true });
-  }
-
-  if (fromVersion < 17) {
-    const repaired = planLegacyOllamaBaseUrlRepair(getSettings());
-    if (repaired) setSettings({ providers: repaired });
   }
 
   setSettings({ settingsVersion: CURRENT_SETTINGS_VERSION });
