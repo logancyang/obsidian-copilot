@@ -344,6 +344,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
+  const dropOverlay = isDragActive && (
+    <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
+      <span>Drop files here...</span>
+    </div>
+  );
 
   const refreshContextForEmptyLanding = useCallback(async (): Promise<boolean> => {
     const active = manager.getActiveSession();
@@ -735,11 +740,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 currentVersion={plugin.manifest.version}
                 visible={isLanding && !isProjectLanding}
               />
-              {isDragActive && (
-                <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
-                  <span>Drop files here...</span>
-                </div>
-              )}
+              {!isProjectLanding && dropOverlay}
               <div
                 className={
                   isLanding
@@ -757,7 +758,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     composer={
                       <>
                         {queuedMessagesNode}
-                        {composerNode}
+                        {isProjectLanding ? (
+                          // The project home's Files tab takes its own drops, so only the message box shows the attach
+                          // overlay there. https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+                          <div className="tw-relative">
+                            {composerNode}
+                            {dropOverlay}
+                          </div>
+                        ) : (
+                          composerNode
+                        )}
                       </>
                     }
                     shelf={

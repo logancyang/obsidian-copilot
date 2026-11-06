@@ -10,10 +10,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
 import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
-import { useNoteDrag } from "@/hooks/useNoteDrag";
+import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { linkProjectItems, unlinkProjectPattern } from "@/projects/projectLinks";
+import { PROJECT_SOURCES_FOLDER_NAME } from "@/projects/constants";
+import {
+  copyIntoProjectSources,
+  getDraggedVaultItems,
+  linkProjectItems,
+  unlinkProjectPattern,
+} from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
 import { categorizePatterns, getDecodedPatterns } from "@/search/searchUtils";
@@ -50,6 +56,9 @@ const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[]
   { kind: "files", label: "Files", icon: File },
   { kind: "folders", label: "Folders", icon: Folder },
 ];
+
+export const FILES_DROP_HIGHLIGHT =
+  "tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring";
 
 const EMPTY_TREE: readonly ProjectTreeNode[] = Object.freeze([]);
 const EMPTY_LINKED: readonly LinkedProjectRow[] = Object.freeze([]);
@@ -376,6 +385,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const inclusions = useProjects().find((project) => project.id === projectId)?.contextSource
     ?.inclusions;
   const [expandedPaths, setExpandedPaths] = useState(NO_EXPANDED_FOLDERS);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
 
   useEffect(() => {
@@ -493,9 +503,51 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
   };
 
+  const acceptsDrag = (event: React.DragEvent): boolean =>
+    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+
+  const dropOnFiles = (event: React.DragEvent): void => {
+    if (!acceptsDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+    const items = getDraggedVaultItems(app);
+    if (items.length > 0) return linkItems(items);
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+    copyIntoProjectSources(app, folderPath, files)
+      .then((copies) => {
+        const names = copies.map((copy) => copy.name).join(", ");
+        new Notice(`Copied ${names} into ${PROJECT_SOURCES_FOLDER_NAME}/`);
+      })
+      .catch(reportFailure(`copy into ${PROJECT_SOURCES_FOLDER_NAME}/`));
+  };
+
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
-    <>
+    <div
+      data-copilot-drop-zone
+      className={cn(
+        "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
+        isDragOver && FILES_DROP_HIGHLIGHT
+      )}
+      onDragOver={(event) => {
+        if (!acceptsDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        if (!isDragOver) {
+          // A drag cancelled with Escape fires no dragleave, so the highlight would stay on until the next drag.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+          const endDrag = () => setIsDragOver(false);
+          event.currentTarget.ownerDocument.addEventListener("dragend", endDrag, { once: true });
+        }
+        setIsDragOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragOver(false);
+      }}
+      onDrop={dropOnFiles}
+    >
       <ProjectFolderSection
         folderPath={folderPath}
         nodes={nodes}
@@ -509,6 +561,6 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         onToggleFolder={toggleFolder}
         {...rowHandlers}
       />
-    </>
+    </div>
   );
 }
