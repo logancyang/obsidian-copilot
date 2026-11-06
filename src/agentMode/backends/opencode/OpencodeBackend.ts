@@ -8,6 +8,7 @@ import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/providerBaseUrl";
+import { agentShellPath } from "@/utils/loginShellPath";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -165,6 +166,7 @@ export class OpencodeBackend implements AcpBackend {
       cwd: ctx.vaultBasePath,
       env: {
         ...process.env,
+        PATH: await agentShellPath(),
         ...builtinSkillEnv,
         // OpenCode's level filters its file log and stderr together, and its
         // server logs request-failure causes at INFO, so WARN hid every cause.

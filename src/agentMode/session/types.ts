@@ -176,6 +176,8 @@ export type PromptContent =
 
 export type StopReason = "end_turn" | "cancelled" | "refusal" | "max_tokens" | "max_turn_requests";
 
+export type AgentCancelCause = "permission_declined" | "unspecified";
+
 export type AgentToolKind =
   | "read"
   | "edit"
@@ -562,6 +564,7 @@ export interface AgentChatMessage {
   context?: MessageContext;
   content?: unknown[];
   turnStopReason?: StopReason;
+  agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
