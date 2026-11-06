@@ -46,6 +46,8 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
 }) => {
   const [state, setState] = React.useState<LoadState>({ kind: "loading" });
   const [query, setQuery] = React.useState("");
+  // One removal at a time: two concurrent removals can rewrite the same settings file and lose one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/865
   const [removing, setRemoving] = React.useState(false);
   const [removeError, setRemoveError] = React.useState<RemoveError | null>(null);
 

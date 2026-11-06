@@ -117,7 +117,7 @@ describe("ApprovedRulesPage", () => {
       expect(screen.queryByText("Claude has no approved rules.")).toBeNull();
     });
 
-    it("disables every Remove while one removal is in progress, then drops the removed rule from the list", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 disables every Remove while one removal is in progress, then drops the removed rule from the list", async () => {
       let finishRemove: () => void = () => undefined;
       const store = makeStore([GIT_STATUS, NPM_TEST]);
       store.remove.mockReturnValue(
