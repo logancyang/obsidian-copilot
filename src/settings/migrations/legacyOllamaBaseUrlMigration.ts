@@ -1,10 +1,7 @@
 import { ChatModelProviders } from "@/constants";
 import type { Provider } from "@/modelManagement";
 import type { CopilotSettings } from "@/settings/model";
-
-function trimBaseUrl(baseUrl: string | undefined): string {
-  return (baseUrl ?? "").trim().replace(/\/+$/, "");
-}
+import { trimBaseUrl } from "@/utils/providerBaseUrl";
 
 export function planLegacyOllamaBaseUrlRepair(
   settings: Pick<CopilotSettings, "activeModels" | "providers">
@@ -12,10 +9,8 @@ export function planLegacyOllamaBaseUrlRepair(
   const legacyOllamaUrls = new Set(
     (settings.activeModels ?? [])
       .filter((model) => model.provider === (ChatModelProviders.OLLAMA as string))
-      .map((model) => trimBaseUrl(model.baseUrl).toLowerCase())
-      .filter(Boolean)
+      .map((model) => trimBaseUrl(model.baseUrl)?.toLowerCase())
   );
-  if (legacyOllamaUrls.size === 0) return null;
 
   let changed = false;
   const next: Record<string, Provider> = {};
@@ -28,6 +23,7 @@ export function planLegacyOllamaBaseUrlRepair(
       provider.origin.kind === "byok" &&
       !provider.origin.catalogProviderId &&
       provider.providerType === "openai-compatible" &&
+      baseUrl &&
       legacyOllamaUrls.has(baseUrl.toLowerCase()) &&
       !/\/v1$/i.test(baseUrl)
     ) {
