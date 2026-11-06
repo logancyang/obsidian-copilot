@@ -49,10 +49,10 @@ const meta = {
 export default meta;
 
 export const ShortContent: StoryObj<SettingsSubPageLayoutProps> = {
-  render: (args) => (
+  render: () => (
     <SettingsViewport>
       <SettingsSubPageLayout
-        {...args}
+        {...meta.args}
         toolbar={<SearchBar value="" onChange={() => undefined} placeholder="Search…" />}
       >
         <Rows count={3} />
@@ -62,10 +62,10 @@ export const ShortContent: StoryObj<SettingsSubPageLayoutProps> = {
 };
 
 export const FiftyItems: StoryObj<SettingsSubPageLayoutProps> = {
-  render: (args) => (
+  render: () => (
     <SettingsViewport>
       <SettingsSubPageLayout
-        {...args}
+        {...meta.args}
         title="Browse connectors"
         description="Connect a service so agents can use it in chats."
         toolbar={
