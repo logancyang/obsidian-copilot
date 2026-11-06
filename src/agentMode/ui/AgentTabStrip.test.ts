@@ -162,7 +162,7 @@ describe("AgentTabStrip", () => {
       };
       renderStrip(manager);
 
-      fireEvent.click(screen.getByRole("button", { name: "Close chat" }));
+      fireEvent.click(screen.getByRole("button", { name: "Close tab" }));
 
       expect(manager.detachSessionFromTab).toHaveBeenCalledWith(session.internalId);
       expect(manager.closeSession).not.toHaveBeenCalled();

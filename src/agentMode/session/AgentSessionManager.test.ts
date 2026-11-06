@@ -6266,7 +6266,7 @@ describe("AgentSessionManager", () => {
         expect(manager.getActiveSession()).toBe(reopened);
       });
 
-      it("reopens the same session when the chat's Close chat fails while the chat is being reopened for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
+      it("reopens the same session when the chat's Shut down fails while the chat is being reopened for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const replay = buildReplayingBackend();
         const { manager } = buildHistoryHarness({
           createBackendProcess: jest.fn(() => replay.backend),

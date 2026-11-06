@@ -223,7 +223,7 @@ export function ChatSettingsPopover() {
             <div className="tw-flex tw-flex-row tw-flex-wrap">
               <span className="tw-text-xs tw-text-normal">
                 <span className=" tw-italic">System prompt and Disable built-in system prompt</span>{" "}
-                <strong>apply to this chat session only</strong>.
+                <strong>apply to this chat only</strong>.
               </span>
             </div>
           </div>
