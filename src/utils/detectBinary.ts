@@ -1,5 +1,6 @@
 import { augmentPathForDetection } from "@/utils/binaryPath";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { loginShellPathDirs } from "@/utils/loginShellPath";
 
 function getExecFileAsync(): (
   cmd: string,
@@ -19,7 +20,10 @@ export async function detectBinary(name: string): Promise<string | null> {
   }
   const isWindows = process.platform === "win32";
   const cmd = isWindows ? "where" : "which";
-  const env = { ...process.env, PATH: augmentPathForDetection(process.env.PATH) };
+  // A Dock-launched Obsidian misses binaries installed by tools the hand-kept dirs don't name.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/873
+  const loginDirs = await loginShellPathDirs();
+  const env = { ...process.env, PATH: augmentPathForDetection(loginDirs, process.env.PATH) };
   const execFileAsync = getExecFileAsync();
   try {
     const { stdout } = await execFileAsync(cmd, [name], { timeout: 5000, env });

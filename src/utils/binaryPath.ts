@@ -44,8 +44,11 @@ export function detectionSearchDirs(): string[] {
   return [...nodeToolBinDirs(), ...wellKnown];
 }
 
-export function augmentPathForDetection(inherited: string | undefined): string {
-  return mergePath(detectionSearchDirs(), inherited);
+export function augmentPathForDetection(
+  loginShellDirs: readonly string[],
+  inherited: string | undefined
+): string {
+  return mergePath([...loginShellDirs, ...detectionSearchDirs()], inherited);
 }
 
 export function formatBinaryPathForDisplay(absolutePath: string): string {
