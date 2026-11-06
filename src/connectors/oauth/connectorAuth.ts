@@ -1,4 +1,9 @@
-import { COPILOT_OAUTH_CLIENT_METADATA_URL } from "@/constants";
+import {
+  COPILOT_AGENT_ICON_SVG,
+  COPILOT_OAUTH_CLIENT_METADATA_URL,
+  COPILOT_OAUTH_CLIENT_URI,
+  COPILOT_OAUTH_LOGO_URI,
+} from "@/constants";
 import { requestUrlFetch, ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
 import { logWarn } from "@/logger";
 import type { KeychainService } from "@/services/keychainService";
@@ -226,6 +231,8 @@ function startLogin(
     get clientMetadata() {
       return {
         client_name: CLIENT_NAME,
+        client_uri: COPILOT_OAUTH_CLIENT_URI,
+        logo_uri: COPILOT_OAUTH_LOGO_URI,
         redirect_uris: [redirectUrl],
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
@@ -375,7 +382,7 @@ async function revoke(stored: StoredLogin): Promise<void> {
 }
 
 const CONNECTED_BADGES = `<div class="badges" aria-hidden="true">
-<div class="tile copilot"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></div>
+<div class="tile copilot"><svg width="32" height="32" viewBox="0 0 100 100">${COPILOT_AGENT_ICON_SVG}</svg></div>
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1f8f4e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
 <div class="tile service">{initial}</div>
 </div>
@@ -408,7 +415,7 @@ body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify
 main { padding: 0 40px; }
 .badges { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px; }
 .tile { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-.copilot { background: #7350e0; color: #ffffff; }
+.copilot { background: #181931; color: #ffffff; }
 .service { border: 1px solid #dddddd; font-weight: 700; font-size: 20px; }
 h1 { margin: 0 0 12px; font-size: 22px; font-weight: 600; }
 p { margin: 0; font-size: 15px; color: #555555; }

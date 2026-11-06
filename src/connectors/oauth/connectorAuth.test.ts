@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import { COPILOT_OAUTH_CLIENT_METADATA_URL } from "@/constants";
+import { COPILOT_AGENT_ICON_PATH, COPILOT_OAUTH_CLIENT_METADATA_URL } from "@/constants";
 import {
   ConnectorAuth,
   loginFailureMessage,
@@ -141,7 +141,7 @@ describe("connectorAuth", () => {
         expect(stored.tokens.refresh_token).toMatch(/^refresh-/);
       });
 
-      it("shows '<Service> is connected to Copilot' in the browser after the login finishes", async () => {
+      it("shows '<Service> is connected to Copilot' with Copilot's brand mark in the browser after the login finishes", async () => {
         const { connect } = setUp();
 
         const page = await connect();
@@ -149,9 +149,10 @@ describe("connectorAuth", () => {
         expect(page.status).toBe(200);
         expect(page.body).toContain("Notion is connected to Copilot");
         expect(page.body).toContain("You can close this tab and go back to Obsidian.");
+        expect(page.body).toContain(COPILOT_AGENT_ICON_PATH);
       });
 
-      it("registers as 'Copilot for Obsidian' with its loopback callback when the service has no client metadata document support", async () => {
+      it("registers as 'Copilot for Obsidian' with its website, logo and loopback callback when the service has no client metadata document support", async () => {
         const { service, startLogin } = setUp();
 
         const { authorizationUrl } = await startLogin();
@@ -159,6 +160,8 @@ describe("connectorAuth", () => {
         expect(service.registrations).toEqual([
           expect.objectContaining({
             client_name: "Copilot for Obsidian",
+            client_uri: "https://www.obsidiancopilot.com",
+            logo_uri: "https://www.obsidiancopilot.com/oauth/copilot-logo.png",
             redirect_uris: [authorizationUrl.searchParams.get("redirect_uri")],
           }),
         ]);
