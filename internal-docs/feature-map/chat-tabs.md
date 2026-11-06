@@ -33,5 +33,5 @@ Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` com
 - A tab's `Close chat` appears only on hover. A chat row's `Close chat` is a different control ([chat-rows](chat-rows.md)).
 - `New chat` in the [chat controls](chat-controls.md) replaces the current tab's chat instead of adding a tab. The replaced chat follows the tab-close rule.
 - A past chat reopened from history counts as untouched until the user sends a message.
-- Opening the [Copilot Navigator](copilot-navigator.md) stops the agent of every untouched chat in a background tab, so those tabs are gone when it closes.
+- Opening the [Copilot Navigator](copilot-navigator.md), or closing Agent Chat, stops the agent of every untouched chat in a background tab, so those tabs are gone when the tabs show again.
 - Every running agent costs memory, a few hundred MB each for Claude. Tabs do not come back after Obsidian restarts.
