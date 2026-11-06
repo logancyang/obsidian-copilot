@@ -8,6 +8,7 @@ import {
 import { logWarn } from "@/logger";
 import { providerNeedsResolvedApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
+import { normalizeBaseUrl } from "@/utils/providerBaseUrl";
 
 export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   openai: ChatModelProviders.OPENAI,
@@ -21,10 +22,6 @@ export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   anthropic: ChatModelProviders.ANTHROPIC,
   google: ChatModelProviders.GOOGLE,
 };
-
-function normalizeBaseUrl(value: string | undefined): string {
-  return (value ?? "").trim().replace(/\/+$/, "").toLowerCase();
-}
 
 export function mapProviderTypeToChatModelProvider(provider: Provider): ChatModelProviders {
   if (provider.origin.kind === "copilot-plus") {

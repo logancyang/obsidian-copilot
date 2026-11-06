@@ -6,6 +6,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import type { CatalogProvider } from "@/modelManagement/types/catalog";
 import { transformWireToCatalog } from "./catalogTransform";
 import { isPlainObject } from "./modelsDevWire";
+import { normalizeBaseUrl } from "@/utils/providerBaseUrl";
 
 const CACHE_DIR = ".copilot";
 const CACHE_FILENAME = "model-catalog-cache.json";
@@ -142,9 +143,9 @@ export class CatalogDownloadService {
   }
 
   getProviderByBaseUrl(baseUrl: string): CatalogProvider | undefined {
-    const endpoint = endpointKey(baseUrl);
+    const endpoint = normalizeBaseUrl(baseUrl);
     return this.providers.find(
-      (p) => p.defaultBaseUrl !== undefined && endpointKey(p.defaultBaseUrl) === endpoint
+      (p) => p.defaultBaseUrl !== undefined && normalizeBaseUrl(p.defaultBaseUrl) === endpoint
     );
   }
 
@@ -229,8 +230,4 @@ export class CatalogDownloadService {
       }
     }
   }
-}
-
-function endpointKey(baseUrl: string): string {
-  return baseUrl.trim().replace(/\/+$/, "").toLowerCase();
 }
