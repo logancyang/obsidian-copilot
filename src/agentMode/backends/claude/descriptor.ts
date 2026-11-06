@@ -174,7 +174,9 @@ const claudeApprovedRules: ApprovedRuleStore = {
     const file = (rule.appliesTo as { path: string }).path;
     const settings = await readClaudeSettings(file);
     const permissions = settings?.permissions;
-    if (!Array.isArray(permissions?.allow)) return;
+    // A file edited since the page listed it is rewritten only to drop the rule, never just reformatted.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/866
+    if (!Array.isArray(permissions?.allow) || !permissions.allow.includes(rule.allows)) return;
     permissions.allow = permissions.allow.filter((allows: unknown) => allows !== rule.allows);
     await requireNodeModule<typeof import("node:fs")>("fs").promises.writeFile(
       file,

@@ -329,6 +329,17 @@ describe("descriptor", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 leaves the file byte-for-byte as it was when it no longer holds the rule", async () => {
+        writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
+        const [rule] = await store().list(plugin);
+        const edited = '{"permissions":{"allow":["Bash(ls:*)"]},\n"model":   "sonnet"}';
+        writeJson(localFile(), edited);
+
+        await store().remove(plugin, rule);
+
+        expect(fs.readFileSync(localFile(), "utf8")).toBe(edited);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 fails and leaves the file untouched when it stopped being valid JSON after the rule was listed", async () => {
         writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
         const [rule] = await store().list(plugin);
