@@ -228,6 +228,69 @@ export const StoppedCommand: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
+export const AgentStoppedAfterDeclinedPermission: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "hardware-request",
+        sender: "user",
+        message: "Save this Mac's hardware info to hardware.txt.",
+      },
+      {
+        ...message,
+        id: "declined-command",
+        message: "",
+        turnStopReason: "cancelled",
+        agentCancelCause: "permission_declined",
+        turnDurationMs: 24000,
+        parts: [
+          { kind: "text", text: "I'll ask for approval to write the report in the vault." },
+          {
+            kind: "tool_call",
+            id: "hardware-report",
+            title: "Run system_profiler SPHardwareDataType > hardware.txt",
+            status: "failed",
+            vendorToolName: "Bash",
+            input: { command: "system_profiler SPHardwareDataType > hardware.txt" },
+          },
+        ],
+      },
+    ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
+export const AgentStoppedBeforeReplying: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "summary-request",
+        sender: "user",
+        message: "Summarize this week's meeting notes.",
+      },
+      {
+        ...message,
+        id: "empty-cancelled-reply",
+        message: "",
+        turnStopReason: "cancelled",
+        agentCancelCause: "unspecified",
+        turnDurationMs: 3000,
+      },
+    ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 export const FinishedReplyWhileSubagentsRun: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,

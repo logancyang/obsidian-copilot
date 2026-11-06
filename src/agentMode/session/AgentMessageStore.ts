@@ -5,6 +5,7 @@ import {
   type FanoutTurn,
 } from "@/agentMode/session/fanout/fanoutTypes";
 import {
+  AgentCancelCause,
   AgentChatMessage,
   AgentMessagePart,
   AgentToolCallOutput,
@@ -27,6 +28,8 @@ interface StoredAgentMessage {
   context?: MessageContext;
   content?: unknown[];
   turnStopReason?: StopReason;
+  declinedPermission?: boolean;
+  agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
@@ -248,6 +251,18 @@ export class AgentMessageStore {
     msg.turnDurationMs = Math.max(0, durationMs);
     this.touch(msg);
     return true;
+  }
+
+  markPermissionDeclined(id: string): void {
+    const msg = this.messages.find((m) => m.id === id);
+    if (msg) msg.declinedPermission = true;
+  }
+
+  markCancelledByAgent(id: string): void {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return;
+    msg.agentCancelCause = msg.declinedPermission ? "permission_declined" : "unspecified";
+    this.touch(msg);
   }
 
   extendTurnDuration(id: string, durationMs: number): boolean {
@@ -514,6 +529,7 @@ export class AgentMessageStore {
       content: m.content,
       parts: m.parts,
       turnStopReason: m.turnStopReason,
+      agentCancelCause: m.agentCancelCause,
       turnDurationMs: m.turnDurationMs,
       fileChanges: m.fileChanges,
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),

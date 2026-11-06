@@ -377,6 +377,27 @@ describe("AgentTrail", () => {
     expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
   });
 
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the agent ended its turn after a declined permission, so a reply the agent cancelled does not look frozen", () => {
+    renderTrail({
+      parts: [text("I'll ask before running it."), toolCall("x1", { status: "failed" })],
+      turnStopReason: "cancelled",
+      agentCancelCause: "permission_declined",
+    });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "I'll ask before running it.",
+      "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
+    ]);
+  });
+
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined, even before any text or tool activity", () => {
+    renderTrail({ parts: [], turnStopReason: "cancelled", agentCancelCause: "unspecified" });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "**Stopped:** the agent ended its turn early. Send a message to continue.",
+    ]);
+  });
+
   it("uses one aligned folding header for reasoning and every tool-card family", () => {
     const { container } = renderTrail({
       parts: [
