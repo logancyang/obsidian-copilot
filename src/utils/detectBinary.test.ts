@@ -5,6 +5,11 @@ import { detectBinary, validateExecutableFile } from "./detectBinary";
 
 jest.mock("@/utils/nodeToolBinDirs", () => ({ resolveNodeToolBinDirs: jest.fn(() => []) }));
 
+const loginShellPathDirsMock = jest.fn<Promise<readonly string[]>, []>();
+jest.mock("@/utils/loginShellPath", () => ({
+  loginShellPathDirs: () => loginShellPathDirsMock(),
+}));
+
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
 type ExecFileArgs = [
   string,
@@ -38,6 +43,7 @@ describe("detectBinary", () => {
 
     beforeEach(() => {
       execFileMock.mockReset();
+      loginShellPathDirsMock.mockResolvedValue([]);
     });
 
     afterEach(() => {
@@ -80,6 +86,21 @@ describe("detectBinary", () => {
       expect(pathParts).toContain("/opt/homebrew/bin");
       expect(pathParts).toContain("/usr/local/bin");
       expect(pathParts.indexOf("/opt/homebrew/bin")).toBeLessThan(pathParts.indexOf("/usr/bin"));
+    });
+
+    test("https://github.com/Brevilabs/obsidian-copilot-private/issues/873 finds a binary that only the user's login shell has on PATH", async () => {
+      setPlatform("darwin");
+      process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+      loginShellPathDirsMock.mockResolvedValue(["/Users/me/.local/share/mise/shims"]);
+      execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+        cb(null, "/Users/me/.local/share/mise/shims/opencode\n", "")
+      );
+
+      await expect(detectBinary("opencode")).resolves.toBe(
+        "/Users/me/.local/share/mise/shims/opencode"
+      );
+      const [, , opts] = execFileMock.mock.calls[0];
+      expect((opts.env?.PATH ?? "").split(":")[0]).toBe("/Users/me/.local/share/mise/shims");
     });
 
     test("windows: augments PATH and calls `where`", async () => {
