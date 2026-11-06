@@ -339,10 +339,7 @@ function runCrossBackendPick(
     try {
       const seedSelection = { baseModelId, effort };
       if (oldSessionId) {
-        await manager.replaceSessionInPlace(oldSessionId, targetBackendId, {
-          preserveChatInput: true,
-          seedSelection,
-        });
+        await manager.replaceSessionInPlace(oldSessionId, targetBackendId, { seedSelection });
       } else {
         await manager.createSession(targetBackendId, undefined, seedSelection);
       }
