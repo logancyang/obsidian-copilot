@@ -506,8 +506,8 @@ function ChatHistoryItem({
                   size="sm"
                   variant="ghost"
                   className="tw-size-5 tw-p-0"
-                  aria-label="Close chat"
-                  title="Close chat"
+                  aria-label="Shut down"
+                  title="Shut down"
                   onClick={(event) => {
                     event.stopPropagation();
                     safeAsyncHandler(onCloseSession)(chat.id);
