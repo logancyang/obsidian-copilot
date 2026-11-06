@@ -40,6 +40,13 @@ describe("SettingsSubPageLayout", () => {
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Back" }));
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 names the scrolling body after the title without an aria-label, which Obsidian would show as a tooltip over the whole list", () => {
+      renderLayout();
+      const body = screen.getByRole("region", { name: "Approved rules" });
+
+      expect(body.hasAttribute("aria-label")).toBe(false);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 puts only the body in a scrolling region that fills the remaining height, keeping Back, title, toolbar and footer outside it so they stay in view", () => {
       renderLayout();
       const body = screen.getByRole("region", { name: "Approved rules" });
