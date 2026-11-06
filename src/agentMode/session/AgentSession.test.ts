@@ -3266,11 +3266,19 @@ describe("AgentSession", () => {
             return new Promise<never>(() => {});
           });
           const session = makeSession(mock, vault.app);
+          const changesShown = new Promise<void>((resolve) => {
+            subscribeTo(session, {
+              onMessagesChanged: () => {
+                if (fileChangesOf(session)) resolve();
+              },
+            });
+          });
 
           const { turn } = session.sendPrompt("edit it");
           await promptEntered;
           await session.cancel();
           await turn;
+          await changesShown;
 
           expect(fileChangesOf(session)).toMatchObject([
             { path: "notes/a.md", status: "modified", additions: 1, deletions: 0 },

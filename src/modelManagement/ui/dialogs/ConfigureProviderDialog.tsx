@@ -160,12 +160,6 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     };
   }, [api]);
 
-  const catalogMetadata = useMemo<Record<string, ModelInfo>>(() => {
-    if (!catalogProviderId) return EMPTY_METADATA;
-    return api.catalogService.getProvider(catalogProviderId)?.models ?? EMPTY_METADATA;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion intentionally invalidates metadata read through catalogService
-  }, [catalogProviderId, api, catalogVersion]);
-
   const [displayName, setDisplayName] = useState(() =>
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? "")
   );
@@ -194,6 +188,17 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
         "")
       : (provider?.baseUrl ?? KNOWN_DEFAULT_ENDPOINTS[catalogProviderId ?? ""] ?? "");
   const effectiveBaseUrl = baseUrl.trim() || defaultBaseUrl;
+
+  // A custom provider at a catalog provider's endpoint serves that provider's models, and without
+  // their catalog entry an image-capable model is treated as text-only.
+  // https://github.com/logancyang/obsidian-copilot/issues/4107
+  const catalogMetadata = useMemo<Record<string, ModelInfo>>(() => {
+    const catalogProvider = catalogProviderId
+      ? api.catalogService.getProvider(catalogProviderId)
+      : api.catalogService.getProviderByBaseUrl(effectiveBaseUrl);
+    return catalogProvider?.models ?? EMPTY_METADATA;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion intentionally invalidates metadata read through catalogService
+  }, [catalogProviderId, effectiveBaseUrl, api, catalogVersion]);
 
   const pool = useModelCandidatePool({
     mode: state.mode,

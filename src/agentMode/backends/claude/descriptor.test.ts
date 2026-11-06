@@ -478,6 +478,7 @@ describe("descriptor", () => {
       expect(ClaudeBackendDescriptor.getModeMapping?.(null, null)).toEqual({
         kind: "setMode",
         canonical: { default: "default", plan: "plan", auto: "auto" },
+        unlistedModeShowsAs: "auto",
       });
     });
 

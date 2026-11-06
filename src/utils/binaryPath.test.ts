@@ -58,16 +58,29 @@ describe("binaryPath", () => {
   });
 
   describe("augmentPathForDetection()", () => {
+    test("https://github.com/Brevilabs/obsidian-copilot-private/issues/873 searches the login-shell dirs before the hand-kept dirs and the inherited PATH", () => {
+      const nvmBin = "/home/me/.nvm/versions/node/v20.18.0/bin";
+      const miseShims = "/home/me/.local/share/mise/shims";
+      resolveMock.mockReturnValue([nvmBin]);
+
+      const parts = augmentPathForDetection([miseShims, "/usr/bin"], inheritedPath).split(
+        path.delimiter
+      );
+
+      expect(parts.slice(0, 3)).toEqual([miseShims, "/usr/bin", nvmBin]);
+      expect(parts).toEqual([...new Set(parts)]);
+    });
+
     test("prepends a discovered version-manager dir ahead of the inherited PATH", () => {
       const nvmBin = "/home/me/.nvm/versions/node/v20.18.0/bin";
       resolveMock.mockReturnValue([nvmBin]);
-      const parts = augmentPathForDetection(inheritedPath).split(path.delimiter);
+      const parts = augmentPathForDetection([], inheritedPath).split(path.delimiter);
       expect(parts[0]).toBe(nvmBin);
       expect(parts.indexOf(nvmBin)).toBeLessThan(parts.indexOf("/usr/bin"));
     });
 
     test("https://github.com/logancyang/obsidian-copilot/issues/2967 augments sparse PATH without POSIX prefixes on Windows", () => {
-      const result = augmentPathForDetection(inheritedPath);
+      const result = augmentPathForDetection([], inheritedPath);
       expect(result.split(path.delimiter)).toEqual([
         ...new Set([...nativeWellKnownDirs, ...inheritedPath.split(path.delimiter)]),
       ]);
@@ -77,7 +90,7 @@ describe("binaryPath", () => {
       const platform = Platform as { isMobile: boolean };
       platform.isMobile = true;
       try {
-        expect(() => augmentPathForDetection("/usr/bin")).toThrow(
+        expect(() => augmentPathForDetection([], "/usr/bin")).toThrow(
           /unavailable outside the desktop/
         );
       } finally {
