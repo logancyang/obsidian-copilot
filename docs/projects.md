@@ -34,7 +34,7 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 
 ## Add reusable context
 
-For a new Project, **Context** appears below the composer. After the Project has chats, it appears as a **Context** tab beside **Recent chats**.
+For a new Project, **Context** appears below the composer. After the Project has chats, it appears as a **Context** tab beside **Recent chats**. In a Project chat, Relevant Notes suggests from the chat itself, not from the Project's context.
 
 You can:
 
