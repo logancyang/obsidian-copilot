@@ -20,6 +20,7 @@ const HAND_WRITTEN = [
   "prefix_rule(pattern=['npm', 'test'], decision=\"allow\")",
   'prefix_rule(pattern=["rm"], decision="forbidden")',
   'network_rule(host="evil.example", protocol="https", decision="deny")',
+  'prefix_rule(pattern=["ls"], decision="allow")\r',
 ].join("\n");
 const GH_API = 'prefix_rule(pattern=["gh", "api"], decision="allow")';
 const COMMIT = 'prefix_rule(pattern=["git", "commit", "-m", "it\'s done"], decision="allow")';
