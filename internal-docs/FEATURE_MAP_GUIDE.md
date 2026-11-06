@@ -31,7 +31,7 @@ Follow the README's entry contract: an H1, one line on what the user sees, then 
 
 ## Multi-surface journeys
 
-Most behavior belongs to one feature: the one where the user acts. When its result shows somewhere else, say where to look ("its row no longer offers `Close chat`"), but keep it in the acting feature's file.
+Most behavior belongs to one feature: the one where the user acts. When its result shows somewhere else, say where to look ("its row no longer offers `Shut down`"), but keep it in the acting feature's file.
 
 Add a journey to `multi-surface-journeys.md` only when testing the features one at a time missed a real problem that crosses them. A journey is one thing a user sets out to do: an H2 named by the user's goal, one line on that goal, a step for each feature it crosses, and a `Touches:` line linking every feature involved. Name controls as the feature files do, and do not restate their rules.
 

@@ -23,15 +23,15 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 
 ## Driving it
 
-- Open: with one chat in a background tab, untouched, run `Open Copilot Navigator`. The sidebar shows Pinned and Recents, the chat tabs hide, and the background chat no longer shows `Session open`. The shown chat still does.
-- Browse: open chat A without sending anything, then chat B. A no longer shows `Session open`.
-- Worked-in: open A, send a message, wait for the reply, then open B. A still shows `Session open`.
-- Chat controls: open A without sending anything, then choose `New chat` in the [chat controls](chat-controls.md). A no longer shows `Session open`.
+- Open: with one chat in a background tab, untouched, run `Open Copilot Navigator`. The sidebar shows Pinned and Recents, the chat tabs hide, and the background chat no longer shows `Running`. The shown chat still does.
+- Browse: open chat A without sending anything, then chat B. A no longer shows `Running`.
+- Worked-in: open A, send a message, wait for the reply, then open B. A still shows `Running`.
+- Chat controls: open A without sending anything, then choose `New chat` in the [chat controls](chat-controls.md). A no longer shows `Running`.
 - Search: type part of a chat title into `Search chats`. Only matching chats remain.
 - Folder: choose a project folder. Its chats show, and Agent Chat still shows the same chat.
 - New chat in a project: hover a folder and choose `New chat in <project>`. Agent Chat shows a new chat inside that project.
 - Archived: choose `Sidebar options` → View archived. Archived chats are listed; Unarchive returns one to Recents.
-- Close: close the Navigator. The chat tabs return, one per chat still showing `Session open`.
+- Close: close the Navigator. The chat tabs return, one per chat still showing `Running`.
 
 ## Gotchas
 

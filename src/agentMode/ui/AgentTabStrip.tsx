@@ -96,7 +96,7 @@ function useSessionDisplay(session: AgentSession) {
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
-    displayLabel: label ?? descriptor?.displayName ?? "Session",
+    displayLabel: label ?? descriptor?.displayName ?? "Chat",
   };
 }
 
