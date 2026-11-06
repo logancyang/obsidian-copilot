@@ -37,7 +37,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [chat-input](chat-input.md) (sub-features only): model, mode, and effort pickers, mentions, note context, images, send, stop.
 - [queued-messages](queued-messages.md) (sub-features only): messages queued while the agent works.
 - [agent-replies](agent-replies.md) (sub-features only): streaming text, reasoning, tool and activity cards, subagents, tasks.
-- [agent-prompts](agent-prompts.md) (sub-features only): permission cards, questions from the agent, plan proposals, status and error cards.
+- [decision-cards](decision-cards.md) (sub-features only): cards in the conversation that wait on the user: permission requests, questions from the agent, plan proposals, status and error cards.
 - [turn-diffs](turn-diffs.md) (sub-features only): file changes per turn, Revoke.
 
 ## Projects and setup

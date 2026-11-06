@@ -4,7 +4,7 @@ Sending the team a report with diagnostics from inside Copilot.
 
 ## Sub-features
 
-- report-open: `Report an issue` from `More actions` in the [chat controls](chat-controls.md), from Settings → Advanced, or `Review & report` on a feedback card in [agent prompts](agent-prompts.md).
+- report-open: `Report an issue` from `More actions` in the [chat controls](chat-controls.md), from Settings → Advanced, or `Review & report` on a feedback card in [decision cards](decision-cards.md).
 - report-describe: `What went wrong?` takes the user's description, filled in with the chat's details when opened from a chat.
 - report-attachments: choose `Screenshot of the Obsidian window`, `Agent activity log`, `Copilot log`, and, for OpenCode, `OpenCode log`.
 - report-review: `Prepare report` lists the `Report contents`; `Show zip` reveals the file.
