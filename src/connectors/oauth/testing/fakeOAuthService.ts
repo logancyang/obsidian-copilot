@@ -42,6 +42,7 @@ export class FakeOAuthService {
   private readonly clientSecrets = new Map<string, string | undefined>();
   private readonly codes = new Map<string, IssuedCode>();
   private readonly refreshTokens = new Set<string>();
+  private readonly revocationWaiters: Array<(token: string) => void> = [];
   private issued = 0;
 
   constructor(private readonly options: FakeOAuthServiceOptions = {}) {}
@@ -79,6 +80,10 @@ export class FakeOAuthService {
 
   deny(authorizationUrl: string): string {
     return this.redirect(new URL(authorizationUrl), { error: "access_denied" });
+  }
+
+  nextRevocation(): Promise<string> {
+    return new Promise((resolve) => this.revocationWaiters.push(resolve));
   }
 
   rejectRefreshTokens(): void {
@@ -120,9 +125,12 @@ export class FakeOAuthService {
         return this.register(request);
       case "POST /token":
         return this.token(request);
-      case "POST /revoke":
-        this.revokedTokens.push(new URLSearchParams(request.body).get("token") ?? "");
+      case "POST /revoke": {
+        const token = new URLSearchParams(request.body).get("token") ?? "";
+        this.revokedTokens.push(token);
+        this.revocationWaiters.shift()?.(token);
         return { status: 200, headers: {}, text: "" };
+      }
       default:
         return json(404, { error: "not_found" });
     }

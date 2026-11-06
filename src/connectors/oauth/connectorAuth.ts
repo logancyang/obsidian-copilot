@@ -99,9 +99,19 @@ export class ConnectorAuth {
     if (this.active) {
       throw new Error(`Finish or cancel the ${this.active.serviceName} login first.`);
     }
-    const login = startLogin(target, this.deps.openUrl, (stored) =>
-      this.write(target.connectionId, stored)
-    );
+    const login = startLogin(target, this.deps.openUrl, async (stored) => {
+      // Logging in again replaces the stored login; revoke it (after any refresh in flight, as Disconnect
+      // does) so the service keeps only the new login's tokens.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+      await this.refreshes.get(target.connectionId);
+      const replaced = this.read(target.connectionId);
+      this.write(target.connectionId, stored);
+      if (replaced) {
+        void revoke(replaced).catch((error) =>
+          logWarn("[Connectors] Couldn't revoke the replaced login.", error)
+        );
+      }
+    });
     this.active = login;
     void login.outcome.then(() => {
       if (this.active === login) this.active = null;
@@ -190,7 +200,7 @@ export class ConnectorAuth {
 function startLogin(
   target: ConnectorLoginTarget,
   openUrl: (url: string) => void,
-  save: (stored: StoredLogin) => void
+  save: (stored: StoredLogin) => Promise<void>
 ): ConnectorLogin {
   const state = crypto.randomUUID();
   let redirectUrl = "";
@@ -226,7 +236,7 @@ function startLogin(
     tokens: () => undefined,
     saveTokens: (tokens) => {
       if (!client) throw new Error("The login finished without a client registration.");
-      save({
+      return save({
         issuer: tokens.issuer ?? target.serverUrl,
         client,
         tokens,

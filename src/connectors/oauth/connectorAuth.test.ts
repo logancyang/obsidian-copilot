@@ -15,6 +15,7 @@ import {
 } from "@/connectors/oauth/testing/fakeOAuthService";
 import { get as httpGet } from "node:http";
 import * as obsidian from "obsidian";
+import type { RequestUrlParam } from "obsidian";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
@@ -308,6 +309,52 @@ describe("connectorAuth", () => {
         await login.outcome;
 
         expect(storedLogin()).toEqual(before);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 revokes the replaced login's refresh token, never the new one, when a connection that has a login logs in again", async () => {
+        const { service, connect, storedLogin } = setUp({ publishesRevocation: true });
+        await connect();
+        const replaced = storedLogin().tokens.refresh_token;
+        const revocation = service.nextRevocation();
+
+        await connect();
+
+        await expect(revocation).resolves.toBe(replaced);
+        expect(storedLogin().tokens.refresh_token).not.toBe(replaced);
+        expect(service.revokedTokens).toEqual([replaced]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 waits for a refresh in flight before replacing the login, then keeps the new login and revokes the refreshed token", async () => {
+        const { service, keychain, connectorAuth, connect, startLogin, storedLogin } = setUp({
+          publishesRevocation: true,
+        });
+        await connect();
+        const replacedClientId = storedLogin().client.client_id;
+        let exchangeAnswered: () => void = () => {};
+        const exchangeDone = new Promise<void>((resolve) => (exchangeAnswered = resolve));
+        setRequestUrlImpl(async (param: RequestUrlParam) => {
+          const grantType = new URLSearchParams(
+            typeof param.body === "string" ? param.body : ""
+          ).get("grant_type");
+          if (grantType === "refresh_token") await exchangeDone;
+          const response = await service.requestUrl(param);
+          if (grantType === "authorization_code") exchangeAnswered();
+          return response;
+        });
+        const writes = jest.spyOn(keychain, "setSecretById");
+        const refreshing = connectorAuth.accessToken(CONNECTION_ID, { forceRefresh: true });
+        const revocation = service.nextRevocation();
+
+        const { login, authorizationUrl } = await startLogin();
+        await visit(service.approve(authorizationUrl.href));
+        await login.outcome;
+        await refreshing;
+
+        const refreshed = writes.mock.calls
+          .map(([, value]) => JSON.parse(value) as StoredLoginView)
+          .find((written) => written.client.client_id === replacedClientId);
+        expect(storedLogin().client.client_id).not.toBe(replacedClientId);
+        await expect(revocation).resolves.toBe(refreshed?.tokens.refresh_token);
       });
     });
 
