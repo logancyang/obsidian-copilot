@@ -5,16 +5,20 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 const MARKER = "__COPILOT_LOGIN_SHELL_PATH__";
 const LOGIN_SHELL_TIMEOUT_MS = 10_000;
 
-let resolved: Promise<string> | null = null;
+const NO_DIRS: readonly string[] = Object.freeze([]);
+
+let resolved: Promise<readonly string[]> | null = null;
+
+export function loginShellPathDirs(): Promise<readonly string[]> {
+  resolved ??= readLoginShellPath().then((loginPath) => loginPath?.split(":") ?? NO_DIRS);
+  return resolved;
+}
 
 // Obsidian opened from the Dock gets launchd's minimal PATH, and Claude Code pins its shell to the
 // PATH it was given, so agents miss commands the user's terminal finds.
 // https://github.com/logancyang/obsidian-copilot/issues/4096
-export function agentShellPath(): Promise<string> {
-  resolved ??= readLoginShellPath().then((loginPath) =>
-    mergePath(loginPath?.split(":") ?? [], process.env.PATH)
-  );
-  return resolved;
+export async function agentShellPath(): Promise<string> {
+  return mergePath(await loginShellPathDirs(), process.env.PATH);
 }
 
 async function readLoginShellPath(): Promise<string | null> {
