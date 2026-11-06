@@ -34,7 +34,7 @@ Keep stable rules in `AGENTS.md` and put one-off requests in chat. Start a new P
 
 ## Browse Project files
 
-A Project opens on its **Files** tab, beside **Recent chats** and **Relevant Notes**. When the Project has no chats, or the sidebar is open, the **Recent chats** tab is left out. The **Relevant Notes** tab is hidden while Relevant Notes is open in its own pane. **Files** shows the Project folder as a tree, folders first. **Linked** lists the notes, folders, tags, and web and YouTube links linked to the Project.
+A Project opens on its **Files** tab, beside **Recent chats**. When the Project has no chats, or the sidebar is open, **Files** appears alone below the message box. It shows the Project folder as a tree, folders first. **Linked** lists the notes, folders, tags, and web and YouTube links linked to the Project.
 
 - Select a file to open it, or a folder to expand it.
 - Drag a note, PDF, or image into the message box to add it to your message.
