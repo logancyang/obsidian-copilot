@@ -108,7 +108,9 @@ const AgentMessageRow = memo(function AgentMessageRow({
   const fanoutTurn = isAssistant ? message.fanout : undefined;
 
   return (
-    <div className="tw-w-full">
+    // Off-screen turns skip paint so scrolling a long chat costs what is on screen, not the whole transcript.
+    // https://github.com/logancyang/obsidian-copilot/issues/3343
+    <div className="tw-w-full [contain-intrinsic-size:auto_500px] [content-visibility:auto]">
       {fanoutTurn ? (
         <div className="tw-px-3 tw-pt-2">
           <FanoutMessageCard
