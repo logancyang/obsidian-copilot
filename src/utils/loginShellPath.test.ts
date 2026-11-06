@@ -1,6 +1,6 @@
 import { promisify } from "node:util";
 
-import type { agentShellPath as AgentShellPath } from "./loginShellPath";
+import type * as LoginShellPath from "./loginShellPath";
 
 const ISSUE_4096 = "https://github.com/logancyang/obsidian-copilot/issues/4096";
 const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
@@ -32,12 +32,16 @@ jest.mock("child_process", () => {
 
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
-function freshAgentShellPath(): typeof AgentShellPath {
-  let fn!: typeof AgentShellPath;
+function freshModule(): typeof LoginShellPath {
+  let mod!: typeof LoginShellPath;
   jest.isolateModules(() => {
-    fn = jest.requireActual<typeof import("./loginShellPath")>("./loginShellPath").agentShellPath;
+    mod = jest.requireActual<typeof LoginShellPath>("./loginShellPath");
   });
-  return fn;
+  return mod;
+}
+
+function freshAgentShellPath(): typeof LoginShellPath.agentShellPath {
+  return freshModule().agentShellPath;
 }
 
 function loginShellPrints(stdout: string): void {
@@ -48,24 +52,53 @@ function loginShellPrints(stdout: string): void {
 }
 
 describe("loginShellPath", () => {
+  const originalPlatform = process.platform;
+  const originalPath = process.env.PATH;
+  const originalShell = process.env.SHELL;
+
+  beforeEach(() => {
+    execFileMock.mockReset();
+    process.env.PATH = LAUNCHD_PATH;
+    process.env.SHELL = "/bin/zsh";
+    Object.defineProperty(process, "platform", { value: "darwin" });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+    process.env.PATH = originalPath;
+    process.env.SHELL = originalShell;
+  });
+
+  describe("loginShellPathDirs()", () => {
+    it(`returns only the login shell's PATH dirs, in order, so detection can search them first (https://github.com/Brevilabs/obsidian-copilot-private/issues/873)`, async () => {
+      loginShellPrints("<marker>\n/Users/me/.local/share/mise/shims:/usr/bin\n<marker>\n");
+
+      await expect(freshModule().loginShellPathDirs()).resolves.toEqual([
+        "/Users/me/.local/share/mise/shims",
+        "/usr/bin",
+      ]);
+    });
+
+    it("returns no dirs when the login shell fails", async () => {
+      execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+        cb(new Error("Command failed"), "", "")
+      );
+
+      await expect(freshModule().loginShellPathDirs()).resolves.toEqual([]);
+    });
+
+    it("shares one login-shell lookup with agentShellPath()", async () => {
+      loginShellPrints("<marker>\n/usr/local/bin\n<marker>\n");
+      const mod = freshModule();
+
+      await mod.loginShellPathDirs();
+      await mod.agentShellPath();
+
+      expect(execFileMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("agentShellPath()", () => {
-    const originalPlatform = process.platform;
-    const originalPath = process.env.PATH;
-    const originalShell = process.env.SHELL;
-
-    beforeEach(() => {
-      execFileMock.mockReset();
-      process.env.PATH = LAUNCHD_PATH;
-      process.env.SHELL = "/bin/zsh";
-      Object.defineProperty(process, "platform", { value: "darwin" });
-    });
-
-    afterEach(() => {
-      Object.defineProperty(process, "platform", { value: originalPlatform });
-      process.env.PATH = originalPath;
-      process.env.SHELL = originalShell;
-    });
-
     it(`puts the user's login-shell PATH ahead of Obsidian's, so an agent finds the commands a terminal finds (${ISSUE_4096})`, async () => {
       loginShellPrints("<marker>\n/usr/local/bin:/Users/me/.nvm/bin:/usr/bin\n<marker>\n");
 
