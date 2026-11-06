@@ -4,6 +4,7 @@ import type { CopilotSettings } from "@/settings/model";
 import type { InstallState } from "./session/types";
 import type { BuiltinSkillRuntime } from "./skills/SkillManager";
 import { createAgentSessionManager, isCopilotToolOn } from "./index";
+import { trackTabStripShown } from "./ui/trackTabStripShown";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
@@ -79,6 +80,7 @@ jest.mock("./ui/CopilotAgentView", () => ({}));
 jest.mock("./navigator/openSessionsSidebar", () => ({}));
 jest.mock("./navigator/ui/SessionsSidebarView", () => ({}));
 jest.mock("./ui/useBackendDescriptor", () => ({}));
+jest.mock("./ui/trackTabStripShown", () => ({ trackTabStripShown: jest.fn() }));
 jest.mock("./backends/opencode/opencodeProbePartition", () => ({}));
 jest.mock("./backends/opencode/opencodeModelResolve", () => ({}));
 jest.mock("./ui/AgentDefaultModelSetting", () => ({}));
@@ -180,6 +182,12 @@ describe("agentMode", () => {
           ),
         },
       } as unknown as CopilotPlugin;
+    });
+
+    it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
+      const manager = createAgentSessionManager({} as App, plugin);
+
+      expect(trackTabStripShown).toHaveBeenCalledWith(plugin, manager);
     });
 
     it("waits for each backend upgrade before preloading while other agents remain usable (https://github.com/Brevilabs/obsidian-copilot-private/issues/530)", async () => {
