@@ -22,9 +22,10 @@ async function readLoginShellPath(): Promise<string | null> {
   const os = requireNodeModule<typeof import("node:os")>("os");
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   const { promisify } = requireNodeModule<typeof import("node:util")>("util");
-  const shell = process.env.SHELL || os.userInfo().shell;
-  if (!shell) return null;
+  let shell: string | null = null;
   try {
+    shell = process.env.SHELL || os.userInfo().shell;
+    if (!shell) return null;
     const { stdout } = await promisify(execFile)(
       shell,
       ["-i", "-l", "-c", `echo ${MARKER}; printenv PATH; echo ${MARKER}`],
