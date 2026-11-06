@@ -5,6 +5,8 @@ import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel } from "@/modelManagement/types/persisted";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+const NO_CONTEXT_WINDOWS: Readonly<Record<string, number>> = Object.freeze({});
+
 export interface UseModelCandidatePoolArgs {
   mode: "new" | "edit";
   providerId: string | undefined;
@@ -51,6 +53,10 @@ export function useModelCandidatePool({
     mode === "edit" ? new Set(existingModels.map((m) => m.info.id)) : new Set()
   );
   const [fetchedIds, setFetchedIds] = useState<string[]>([]);
+  const [discoveredContext, setDiscoveredContext] = useState<{
+    baseUrl: string;
+    windows: Readonly<Record<string, number>>;
+  } | null>(null);
   const [manualIds, setManualIds] = useState<string[]>([]);
   const [removedExistingIds, setRemovedExistingIds] = useState<Set<string>>(() => new Set());
   const [fetching, setFetching] = useState(false);
@@ -61,16 +67,31 @@ export function useModelCandidatePool({
     [existingModels]
   );
 
+  // Context windows reported by one endpoint must not be saved for another.
+  // https://github.com/logancyang/obsidian-copilot/issues/3840
+  const fetchedContextWindows =
+    discoveredContext?.baseUrl === effectiveBaseUrl
+      ? discoveredContext.windows
+      : NO_CONTEXT_WINDOWS;
+
   const resolveModelInfo = useCallback(
-    (id: string): ModelInfo =>
-      catalogMetadata[id] ??
-      existingByWireId.get(id) ??
-      ({
-        id,
-        displayName: id,
-        ...(looksLikeEmbeddingModel(id) ? { isEmbedding: true } : {}),
-      } satisfies ModelInfo),
-    [catalogMetadata, existingByWireId]
+    (id: string): ModelInfo => {
+      const info =
+        catalogMetadata[id] ??
+        existingByWireId.get(id) ??
+        ({
+          id,
+          displayName: id,
+          ...(looksLikeEmbeddingModel(id) ? { isEmbedding: true } : {}),
+        } satisfies ModelInfo);
+      // A model without a known context window takes the one its endpoint reports, so OpenCode
+      // does not fall back to its 200k default. https://github.com/logancyang/obsidian-copilot/issues/3840
+      const context = fetchedContextWindows[id];
+      return context && !info.limits?.context
+        ? { ...info, limits: { ...info.limits, context } }
+        : info;
+    },
+    [catalogMetadata, existingByWireId, fetchedContextWindows]
   );
 
   const availableModels = useMemo<readonly ModelInfo[]>(() => {
@@ -125,6 +146,10 @@ export function useModelCandidatePool({
         extras,
       });
       if (result.ok) {
+        setDiscoveredContext({
+          baseUrl: effectiveBaseUrl,
+          windows: result.contextWindows ?? NO_CONTEXT_WINDOWS,
+        });
         const known = knownIdsRef.current;
         const trulyNew = result.modelIds.filter((id) => !known.has(id));
         if (trulyNew.length > 0) {

@@ -42,6 +42,7 @@ function registerTool<T extends ReturnType<typeof createLangChainTool>>(
 describe("toolExecution", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCheckIsPaidUser.mockReset();
     mockIsSelfHostModeValid.mockReturnValue(false);
     ToolRegistry.getInstance().clear();
   });
@@ -64,6 +65,48 @@ describe("toolExecution", () => {
       expect(result).toEqual({ toolName: "echo", result: "Result: test", success: true });
       expect(mockCheckIsPaidUser).not.toHaveBeenCalled();
     });
+
+    it.each(["writeFile", "editFile"])(
+      "counts %s without waiting for the license check (https://github.com/Brevilabs/obsidian-copilot-private/issues/852)",
+      async (name) => {
+        const tool = registerTool(
+          createLangChainTool({
+            name,
+            description: "File edit",
+            schema: z.object({}),
+            func: async () => "Edit proposed",
+          }),
+          { timeoutMs: Infinity }
+        );
+        mockCheckIsPaidUser.mockReturnValueOnce(new Promise(() => {}));
+
+        const result = await executeSequentialToolCall({ name, args: {} }, [tool]);
+
+        expect(result).toEqual({ toolName: name, result: "Edit proposed", success: true });
+        expect(mockCheckIsPaidUser).toHaveBeenCalledTimes(1);
+        expect(mockCheckIsPaidUser).toHaveBeenCalledWith(undefined, { trigger: "quick_chat_edit" });
+      }
+    );
+
+    it.each(["writeFile", "editFile"])(
+      "runs %s when the license check returns false (https://github.com/Brevilabs/obsidian-copilot-private/issues/852)",
+      async (name) => {
+        const tool = registerTool(
+          createLangChainTool({
+            name,
+            description: "File edit",
+            schema: z.object({}),
+            func: async () => "Edit proposed",
+          })
+        );
+        mockCheckIsPaidUser.mockResolvedValueOnce(false);
+
+        const result = await executeSequentialToolCall({ name, args: {} }, [tool]);
+
+        expect(result).toEqual({ toolName: name, result: "Edit proposed", success: true });
+        expect(mockCheckIsPaidUser).toHaveBeenCalledWith(undefined, { trigger: "quick_chat_edit" });
+      }
+    );
 
     it("hands the original user message to a tool that requires it", async () => {
       const summarize = registerTool(
