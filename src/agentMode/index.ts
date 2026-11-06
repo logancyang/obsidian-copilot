@@ -69,7 +69,12 @@ export { openSessionsSidebar } from "./navigator/openSessionsSidebar";
 export { default as SessionsSidebarView } from "./navigator/ui/SessionsSidebarView";
 export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBackendDescriptor";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
-export type { BackendDescriptor, BackendId } from "./session/types";
+export type {
+  ApprovedRule,
+  ApprovedRuleStore,
+  BackendDescriptor,
+  BackendId,
+} from "./session/types";
 export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbePartition";
 export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
 export type { CopilotMode, ModelSelection } from "./session/types";

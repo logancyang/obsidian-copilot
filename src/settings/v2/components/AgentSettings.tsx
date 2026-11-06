@@ -8,6 +8,7 @@ import {
   useManagedInstallActionState,
   type BackendDescriptor,
 } from "@/agentMode";
+import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { playNotificationSound } from "@/utils/notificationSound";
 import {
@@ -25,6 +26,7 @@ import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
+import { ApprovedRulesPage } from "./ui/ApprovedRulesPage";
 import { getVaultBase } from "@/utils/vaultPath";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
@@ -158,6 +160,7 @@ const BackendPanel: React.FC<{
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
+  const [showingApprovedRules, setShowingApprovedRules] = React.useState(false);
 
   React.useEffect(() => {
     if (!manager) return;
@@ -169,6 +172,17 @@ const BackendPanel: React.FC<{
   }, [manager, descriptor.id, installState.kind]);
 
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
+
+  if (showingApprovedRules && descriptor.approvedRules) {
+    return (
+      <ApprovedRulesPage
+        agentName={descriptor.displayName}
+        store={descriptor.approvedRules}
+        plugin={plugin}
+        onBack={() => setShowingApprovedRules(false)}
+      />
+    );
+  }
 
   return (
     <div className="tw-space-y-3">
@@ -205,6 +219,20 @@ const BackendPanel: React.FC<{
         )}
 
         {Panel && <Panel plugin={plugin} app={plugin.app} />}
+
+        {/* Only agents whose backend can read and remove its saved rules offer the page.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
+        {descriptor.approvedRules && (
+          <SettingItem
+            type="custom"
+            title="Approved rules"
+            description={`Actions ${descriptor.displayName} may take without asking, saved when you chose an “always” option.`}
+          >
+            <Button variant="secondary" size="sm" onClick={() => setShowingApprovedRules(true)}>
+              Edit approved rules
+            </Button>
+          </SettingItem>
+        )}
       </SettingSection>
     </div>
   );

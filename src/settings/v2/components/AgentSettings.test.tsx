@@ -53,6 +53,11 @@ function publishInstallState() {
   for (const listener of installStateListeners) listener();
 }
 
+const claudeRuleStore = {
+  list: jest.fn(),
+  remove: jest.fn(),
+};
+
 function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   return {
     id,
@@ -64,6 +69,7 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     getResolvedBinaryPath: () => resolvedPaths[id] ?? null,
     openInstallUI: jest.fn(),
     SettingsPanel: () => <div data-testid={`panel-${id}`}>settings panel</div>,
+    ...(id === "claude" ? { approvedRules: claudeRuleStore } : {}),
     ...(id === "codex"
       ? {
           managedInstall: {
@@ -160,6 +166,40 @@ describe("AgentSettings", () => {
       mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
       mockPreloadModels.mockReset().mockResolvedValue(undefined);
       resolvedPaths = {};
+      claudeRuleStore.list
+        .mockReset()
+        .mockResolvedValue([
+          { id: "rule-git", allows: "Bash(git status:*)", appliesTo: { kind: "agent" } },
+        ]);
+      claudeRuleStore.remove.mockReset().mockResolvedValue(undefined);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 offers Edit approved rules only on tabs of agents that can list their saved rules", () => {
+      render(<AgentSettings />);
+      expect(screen.queryByRole("button", { name: "Edit approved rules" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+
+      expect(screen.getByRole("button", { name: "Edit approved rules" })).not.toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 swaps the agent's settings for its approved rules, and Back restores the same agent tab", async () => {
+      render(<AgentSettings />);
+      fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit approved rules" }));
+
+      expect(await screen.findByText("Bash(git status:*)")).not.toBeNull();
+      expect(screen.queryByTestId("panel-claude")).toBeNull();
+      expect(screen.queryByTestId("model-list-claude")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(screen.getByTestId("panel-claude")).not.toBeNull();
+      expect(screen.getByRole("tab", { name: "Claude" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+      expect(screen.queryByText("Bash(git status:*)")).toBeNull();
     });
 
     it.each(["claude", "codex"])(
