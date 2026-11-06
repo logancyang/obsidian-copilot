@@ -218,44 +218,28 @@ Check that:
 
 ### Recover a vault stuck on a dangling plugin link
 
-`gallery:vault` and `test:vault` symlink a vault's `copilot-component-gallery`
-plugin folder into the worktree that deployed it. Once that worktree is
-deleted, the link points nowhere, and the next time that vault loads, its window
-shows "An error occurred while loading Obsidian. Error: ENOENT: no such file or
-directory, stat '…/.obsidian/plugins/copilot-component-gallery'". From then on,
-every CLI call that targets that vault or names no vault hangs without output.
-Calls that name a healthy vault still answer, and recovery runs through one of
-those.
+Deleting a worktree leaves any vault's `copilot-component-gallery` link pointing
+nowhere. That vault's window then fails with "ENOENT … plugins/copilot-component-gallery",
+and CLI calls to it, or with no `vault=`, hang. Calls to a healthy vault still
+work. Recover without asking:
 
-This happens often with shared vaults. When a CLI call hangs, recover without
-asking:
-
-1. Run every CLI call under `timeout`, for example `timeout 30 $OBS vault=…`,
-   so a hang ends instead of blocking the session. Stop any CLI call of your own
-   that is still waiting. Never kill Obsidian or other sessions' processes.
-2. Delete dangling links, and only dangling links, from every registered
-   vault's plugin folder. A link whose target exists is another session's live
-   deployment; leave it.
+1. Wrap CLI calls in `timeout 30`. Stop only your own hung calls.
+2. Delete dangling plugin links in every registered vault. Live links belong to
+   other sessions; this leaves them.
 
    ```bash
    node -e 'const c=require(require("os").homedir()+"/Library/Application Support/obsidian/obsidian.json");for(const v of Object.values(c.vaults))console.log(v.path)' |
-     while IFS= read -r v; do
-       find "$v/.obsidian/plugins" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete 2>/dev/null
-     done
+     while IFS= read -r v; do find "$v/.obsidian/plugins" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete 2>/dev/null; done
    ```
 
-3. From a vault whose CLI calls still answer, reload the broken window. Its
-   title starts with the broken vault's name.
+3. Reload the broken window from a healthy vault, then confirm
+   `$OBS vault=<broken> eval code="app.vault.getName()"` answers.
 
    ```bash
-   timeout 30 $OBS vault=<healthy> eval code="const {BrowserWindow}=require('@electron/remote'); BrowserWindow.getAllWindows().filter(w=>w.getTitle().startsWith('<broken> - ')).forEach(w=>w.webContents.reload()); 'ok'"
+   timeout 30 $OBS vault=<healthy> eval code="require('@electron/remote').BrowserWindow.getAllWindows().filter(w=>w.getTitle().startsWith('<broken> - ')).forEach(w=>w.webContents.reload()); 'ok'"
    ```
 
-4. Confirm with `timeout 15 $OBS vault=<broken> eval code="app.vault.getName()"`,
-   retrying for a few seconds while the window reloads.
-
-If no open vault answers, ask the user to click **Reload app** in the broken
-window after step 2.
+If no vault answers, ask the user to click **Reload app** in the broken window.
 
 ## 1. Setup once per session
 
