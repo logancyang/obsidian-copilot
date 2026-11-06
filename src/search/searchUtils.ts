@@ -368,6 +368,14 @@ export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 
+export function getNotesWithProperty(app: App, propertyPattern: string): TFile[] {
+  const inclusions: PatternCategory = { propertyPatterns: [propertyPattern] };
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => shouldIndexFile(app, file, inclusions, null, true))
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
 export function getFilePattern(file: TFile): string {
   return `[[${file.basename}]]`;
 }
