@@ -442,6 +442,23 @@ export class MiyoClient {
     });
   }
 
+  public async getFolder(baseUrl: string, path: string): Promise<MiyoFolderEntry> {
+    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+      method: "GET",
+      query: { path },
+    });
+  }
+
+  public async updateFolder(
+    baseUrl: string,
+    request: Pick<MiyoAddFolderRequest, "path" | "exclude_folders">
+  ): Promise<MiyoFolderEntry> {
+    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+      method: "PATCH",
+      body: request,
+    });
+  }
+
   public async fileStatus(baseUrl: string, filePath: string): Promise<MiyoFileStatusResponse> {
     return this.requestJson<MiyoFileStatusResponse>(baseUrl, "/v0/folder/file-status", {
       method: "GET",
@@ -487,7 +504,7 @@ export class MiyoClient {
     baseUrl: string,
     path: string,
     options: {
-      method: "GET" | "POST";
+      method: "GET" | "POST" | "PATCH";
       body?: unknown;
       sensitive?: boolean;
       query?: Record<string, string | number | boolean | undefined>;

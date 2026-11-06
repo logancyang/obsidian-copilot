@@ -49,6 +49,7 @@ jest.mock("@/system-prompts/migration", () => ({
   migrateSystemPromptsFromSettings: jest.fn(async () => null),
 }));
 jest.mock("@/openArtifacts/openArtifactsLedger", () => ({ migrateOpenArtifactsFolder: jest.fn() }));
+jest.mock("@/miyo/miyoVaultExclusions", () => ({ migrateMiyoVaultExclusions: jest.fn() }));
 jest.mock("@/state/vaultDataAtoms", () => ({
   VaultDataManager: { getInstance: jest.fn(() => ({ cleanup: jest.fn(), initialize: jest.fn() })) },
 }));
@@ -116,6 +117,7 @@ import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { logFileManager } from "@/logFileManager";
 import { flushPersistence, resetPersistenceState } from "@/services/settingsPersistence";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
+import { migrateMiyoVaultExclusions } from "@/miyo/miyoVaultExclusions";
 import { startActiveWebTabTracking } from "@/services/webViewerService/webViewerServiceSingleton";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -648,6 +650,16 @@ describe("main", () => {
           PLAN_PREVIEW_VIEW_TYPE,
           TURN_DIFF_VIEW_TYPE,
         ]);
+      });
+
+      it("updates the vault's Miyo exclusions once settings load so existing registrations index project folders — https://github.com/Brevilabs/obsidian-copilot-private/issues/847", async () => {
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        expect(migrateMiyoVaultExclusions).toHaveBeenCalledTimes(1);
+        expect(migrateMiyoVaultExclusions).toHaveBeenCalledWith(plugin.app);
       });
 
       it("opens the real chat view and registers commands and the ribbon icon once startup finishes", async () => {

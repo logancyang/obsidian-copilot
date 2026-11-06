@@ -29,7 +29,8 @@ import { MiyoConnectionPanel } from "@/miyo/ui/MiyoConnectionPanel";
 import { MiyoSearchFoldersPicker } from "@/miyo/ui/MiyoSearchFoldersPicker";
 import { useMiyoStatus } from "@/miyo/useMiyoStatus";
 import { notifyMiyoIndexChanged } from "@/miyo/miyoIndex";
-import { extractAppIgnoreSettings, getSystemExcludedFolders } from "@/search/searchUtils";
+import { getMiyoSystemExcludedFolders } from "@/miyo/miyoVaultExclusions";
+import { extractAppIgnoreSettings } from "@/search/searchUtils";
 import {
   getSettings,
   normalizeMiyoFolderNames,
@@ -236,7 +237,7 @@ export const MiyoSettings: React.FC = () => {
       !mountedRef.current ||
       !plugin.isPluginLifecycleActive();
     try {
-      // Keep Copilot's own roots and Obsidian-ignored paths out of Miyo's ranked
+      // Keep Copilot's system folders and Obsidian-ignored paths out of Miyo's ranked
       // candidate pool. They can contain enough chunks to exhaust the server's
       // bounded result window before Copilot applies its local QA filter.
       // User-authored QA rules remain local; Miyo owns those folder rules
@@ -244,7 +245,7 @@ export const MiyoSettings: React.FC = () => {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/284
       const initialExclusions = [
         ...new Set(
-          [...getSystemExcludedFolders(currentSettings), ...extractAppIgnoreSettings(app)]
+          [...getMiyoSystemExcludedFolders(currentSettings), ...extractAppIgnoreSettings(app)]
             .map((folder) => folder.replace(/\\/g, "/").replace(/\/+$/, ""))
             // A bare root or parent pointer can make Miyo exclude the entire
             // vault. Preserve other path text literally so an inert Obsidian

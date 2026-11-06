@@ -139,6 +139,7 @@ jest.mock("obsidian", () => ({
     }
   },
   Platform: { isMobile: false },
+  normalizePath: (path: string) => path,
 }));
 
 import { MiyoSettings } from "./MiyoSettings";
@@ -640,7 +641,7 @@ describe("MiyoSettings", () => {
       expect(lastModalOptions).toBeNull();
     });
 
-    it("registers the vault with system roots and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {
+    it("registers the vault with Copilot's system folders and Obsidian ignores, but no user QA rules — https://github.com/Brevilabs/obsidian-copilot-private/issues/284", async () => {
       mockRegistration = "unregistered";
       mockIgnoreFilters = ["private/", ".", "./", "..", "./notes", "/pattern/", "nested//ignored/"];
       render(<MiyoSettings />);
@@ -656,7 +657,19 @@ describe("MiyoSettings", () => {
       expect(addFolderBodies).toEqual([
         {
           path: "/vault",
-          exclude_folders: ["copilot", "private", "./notes", "/pattern", "nested//ignored"],
+          exclude_folders: [
+            "copilot/copilot-conversations",
+            "copilot/copilot-custom-prompts",
+            "copilot/system-prompts",
+            "copilot/skills",
+            "copilot/memory",
+            "copilot/projects/unsupported",
+            "copilot/copilot-log.md",
+            "private",
+            "./notes",
+            "/pattern",
+            "nested//ignored",
+          ],
           allow_remote_read: true,
         },
       ]);
@@ -679,7 +692,16 @@ describe("MiyoSettings", () => {
       expect(addFolderBodies).toEqual([
         {
           path: "/vault",
-          exclude_folders: ["copilot", "team-ai"],
+          exclude_folders: [
+            "team-ai/copilot-conversations",
+            "team-ai/copilot-custom-prompts",
+            "team-ai/system-prompts",
+            "team-ai/skills",
+            "team-ai/memory",
+            "team-ai/projects/unsupported",
+            "team-ai/copilot-log.md",
+            "copilot",
+          ],
           allow_remote_read: true,
         },
       ]);

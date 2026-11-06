@@ -13,6 +13,7 @@ import {
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
+import { isInternalExcludedFile } from "@/search/searchUtils";
 import { getSettings, type CopilotSettings } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { App, TFile } from "obsidian";
@@ -356,7 +357,9 @@ export async function findRelevantNotes({
   const notes = Array.from(scoreByPath.entries())
     .map(([path, score]) => {
       const file = app.vault.getAbstractFileByPath(path);
-      if (!(file instanceof TFile) || file.extension !== "md") {
+      // Miyo indexes project folders, whose instruction and config files are Copilot's, not notes.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/847
+      if (!(file instanceof TFile) || file.extension !== "md" || isInternalExcludedFile(file)) {
         return null;
       }
       return {
