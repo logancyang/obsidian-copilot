@@ -96,7 +96,12 @@ describe("detectBinary", () => {
         cb(null, "/Users/me/.local/share/mise/shims/opencode\n", "")
       );
 
-      await expect(detectBinary("opencode")).resolves.toBe(
+      let detectPosixBinary!: typeof detectBinary;
+      jest.isolateModules(() => {
+        detectPosixBinary =
+          jest.requireActual<typeof import("./detectBinary")>("./detectBinary").detectBinary;
+      });
+      await expect(detectPosixBinary("opencode")).resolves.toBe(
         "/Users/me/.local/share/mise/shims/opencode"
       );
       const [, , opts] = execFileMock.mock.calls[0];
