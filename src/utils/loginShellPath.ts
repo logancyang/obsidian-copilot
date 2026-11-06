@@ -29,7 +29,9 @@ async function readLoginShellPath(): Promise<string | null> {
     const { stdout } = await promisify(execFile)(
       shell,
       ["-i", "-l", "-c", `echo ${MARKER}; printenv PATH; echo ${MARKER}`],
-      { timeout: LOGIN_SHELL_TIMEOUT_MS }
+      // Interactive Bash ignores SIGTERM, so a stuck startup file would hang every agent start.
+      // https://github.com/logancyang/obsidian-copilot/issues/4096
+      { timeout: LOGIN_SHELL_TIMEOUT_MS, killSignal: "SIGKILL" }
     );
     return stdout.split(MARKER)[1]?.trim() || null;
   } catch (err) {

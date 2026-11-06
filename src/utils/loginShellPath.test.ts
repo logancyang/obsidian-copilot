@@ -6,7 +6,11 @@ const ISSUE_4096 = "https://github.com/logancyang/obsidian-copilot/issues/4096";
 const LAUNCHD_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
-type ExecFileArgs = [string, readonly string[], { timeout?: number }, ExecFileCallback];
+interface ExecFileOptions {
+  timeout?: number;
+  killSignal?: string;
+}
+type ExecFileArgs = [string, readonly string[], ExecFileOptions, ExecFileCallback];
 
 const execFileMock = jest.fn<void, ExecFileArgs>();
 
@@ -15,7 +19,7 @@ jest.mock("child_process", () => {
   (fn as unknown as Record<symbol, unknown>)[promisify.custom] = (
     cmd: string,
     args: readonly string[],
-    options: { timeout?: number }
+    options: ExecFileOptions
   ): Promise<{ stdout: string; stderr: string }> =>
     new Promise((resolve, reject) => {
       execFileMock(cmd, args, options, (err, stdout, stderr) => {
@@ -87,6 +91,16 @@ describe("loginShellPath", () => {
       );
 
       await expect(freshAgentShellPath()()).resolves.toBe(LAUNCHD_PATH);
+    });
+
+    it(`stops a stuck login shell with a signal interactive Bash cannot ignore, so agent starts never hang (${ISSUE_4096})`, async () => {
+      loginShellPrints("<marker>\n/usr/local/bin\n<marker>\n");
+
+      await freshAgentShellPath()();
+
+      const [, , options] = execFileMock.mock.calls[0];
+      expect(options.timeout).toBeGreaterThan(0);
+      expect(options.killSignal).toBe("SIGKILL");
     });
 
     it("asks the login shell once and reuses its PATH for every later agent", async () => {
