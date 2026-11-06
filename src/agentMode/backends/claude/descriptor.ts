@@ -2,7 +2,9 @@ import { resolveEffort } from "@/lib/model-effort";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
+import { err2String } from "@/errorFormat";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { getVaultBase } from "@/utils/vaultPath";
 import {
   getSettings,
   subscribeToSettingsChange,
@@ -28,6 +30,8 @@ import {
 import { urlDestination } from "@/modelManagement";
 import type { Destination } from "@/types/destination";
 import type {
+  ApprovedRule,
+  ApprovedRuleStore,
   BackendAuth,
   BackendConfigOption,
   BackendDescriptor,
@@ -93,6 +97,23 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
   };
 }
 
+interface ClaudeSettingsJson {
+  env?: Record<string, unknown>;
+  permissions?: { allow?: unknown };
+}
+
+function claudeSettingsFiles(env: NodeJS.ProcessEnv, vaultBase: string | null): string[] {
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
+  const files = [path.join(configDir, "settings.json")];
+  if (vaultBase) {
+    files.push(path.join(vaultBase, ".claude", "settings.json"));
+    files.push(path.join(vaultBase, ".claude", "settings.local.json"));
+  }
+  return files;
+}
+
 // Claude Code also takes `env` from its settings files, so a server set there (such as Bedrock)
 // must not read as Anthropic. https://github.com/logancyang/obsidian-copilot/issues/2889
 function claudeEffectiveEnv(
@@ -100,24 +121,67 @@ function claudeEffectiveEnv(
   vaultBase: string | null
 ): Record<string, unknown> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  const os = requireNodeModule<typeof import("node:os")>("os");
-  const path = requireNodeModule<typeof import("node:path")>("path");
   const env = claudeChildEnv(settings);
-  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
-  const files = [path.join(configDir, "settings.json")];
-  if (vaultBase) {
-    files.push(path.join(vaultBase, ".claude", "settings.json"));
-    files.push(path.join(vaultBase, ".claude", "settings.local.json"));
-  }
-  const fileEnvs = files.map((file): Record<string, unknown> | undefined => {
+  const fileEnvs = claudeSettingsFiles(env, vaultBase).map((file) => {
     try {
-      return (JSON.parse(fs.readFileSync(file, "utf8")) as { env?: Record<string, unknown> }).env;
+      return (JSON.parse(fs.readFileSync(file, "utf8")) as ClaudeSettingsJson).env;
     } catch {
       return undefined;
     }
   });
   return Object.assign({}, env, ...fileEnvs) as Record<string, unknown>;
 }
+
+async function readClaudeSettings(file: string): Promise<ClaudeSettingsJson | null> {
+  const text = await requireNodeModule<typeof import("node:fs")>("fs").promises.readFile(
+    file,
+    "utf8"
+  );
+  try {
+    return JSON.parse(text) as ClaudeSettingsJson | null;
+  } catch (error) {
+    throw new Error(`${file} isn't valid JSON. ${err2String(error)}`);
+  }
+}
+
+const claudeApprovedRules: ApprovedRuleStore = {
+  async list(plugin) {
+    const files = claudeSettingsFiles(claudeChildEnv(getSettings()), getVaultBase(plugin.app));
+    const perFile = await Promise.all(
+      files.map(async (path) => {
+        const settings = await readClaudeSettings(path).catch((error: NodeJS.ErrnoException) => {
+          // A settings file Claude Code never wrote holds no rules.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/866
+          if (error.code === "ENOENT") return null;
+          throw error;
+        });
+        const allow = settings?.permissions?.allow;
+        return (Array.isArray(allow) ? allow : [])
+          .filter((rule): rule is string => typeof rule === "string")
+          .map(
+            (allows): ApprovedRule => ({
+              id: `${path}\n${allows}`,
+              allows,
+              appliesTo: { kind: "file", path },
+            })
+          );
+      })
+    );
+    return perFile.flat();
+  },
+
+  async remove(_plugin, rule) {
+    const file = (rule.appliesTo as { path: string }).path;
+    const settings = await readClaudeSettings(file);
+    const permissions = settings?.permissions;
+    if (!Array.isArray(permissions?.allow)) return;
+    permissions.allow = permissions.allow.filter((allows: unknown) => allows !== rule.allows);
+    await requireNodeModule<typeof import("node:fs")>("fs").promises.writeFile(
+      file,
+      `${JSON.stringify(settings, null, 2)}\n`
+    );
+  },
+};
 
 // Same truthy values Claude Code accepts for its provider switches.
 // https://github.com/logancyang/obsidian-copilot/issues/2889
@@ -356,6 +420,8 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
   },
 
   SettingsPanel: ClaudeSettingsPanel,
+
+  approvedRules: claudeApprovedRules,
 
   getModeMapping(): ModeMapping {
     return {
