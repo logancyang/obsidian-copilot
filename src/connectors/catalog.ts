@@ -67,6 +67,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Projects, to-dos and messages",
     category: "Tasks & projects",
     serverUrl: "https://mcp.basecamp.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/basecamp-9c2b35d1.png`,
   },
   {
     id: "canva",
@@ -90,6 +91,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Workers, DNS and account settings",
     category: "Developer",
     serverUrl: "https://mcp.cloudflare.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/cloudflare-0e3733eb.png`,
   },
   {
     id: "coda",
@@ -201,6 +203,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Pages and databases",
     category: "Notes & docs",
     serverUrl: "https://mcp.notion.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/notion-aac4ea8f.png`,
   },
   {
     id: "paypal",
@@ -208,6 +211,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Invoices, orders and payments",
     category: "Business",
     serverUrl: "https://mcp.paypal.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/paypal-9ae7a96e.png`,
   },
   {
     id: "plaid",
@@ -239,6 +243,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Highlights and saved articles",
     category: "Notes & docs",
     serverUrl: "https://mcp2.readwise.io/mcp",
+    logoUrl: `${LOGO_BASE_URL}/readwise-8849e355.png`,
   },
   {
     id: "sentry",
@@ -254,6 +259,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Payments, orders and catalog",
     category: "Business",
     serverUrl: "https://mcp.squareup.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/square-15415117.png`,
   },
   {
     id: "stripe",
@@ -293,6 +299,7 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Sites, pages and CMS content",
     category: "Design",
     serverUrl: "https://mcp.webflow.com/mcp",
+    logoUrl: `${LOGO_BASE_URL}/webflow-df7b18d3.png`,
   },
   {
     id: "wix",
