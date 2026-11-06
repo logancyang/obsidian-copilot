@@ -103,25 +103,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
-  const relevantNotesSection = useMemo<AgentHomeShelfSection | null>(
-    () =>
-      isRelevantNotesPaneOpen
-        ? null
-        : {
-            id: "relevant-notes",
-            icon: <FileSearch className="tw-size-4" />,
-            title: "Relevant Notes",
-            renderBody: () => (
-              <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
-                <RelevantNotes
-                  className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
-                  onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
-                />
-              </RelevantNotesShelfPanel>
-            ),
-          },
-    [isRelevantNotesPaneOpen, plugin]
-  );
   const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
@@ -463,7 +444,23 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      ...(relevantNotesSection ? [relevantNotesSection] : []),
+      ...(isRelevantNotesPaneOpen
+        ? []
+        : [
+            {
+              id: "relevant-notes",
+              icon: <FileSearch className="tw-size-4" />,
+              title: "Relevant Notes",
+              renderBody: () => (
+                <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
+                  <RelevantNotes
+                    className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
+                    onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
+                  />
+                </RelevantNotesShelfPanel>
+              ),
+            },
+          ]),
       {
         id: "projects",
         icon: <Folder className="tw-size-4" />,
@@ -505,7 +502,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
-      relevantNotesSection,
+      isRelevantNotesPaneOpen,
+      plugin,
       settings.chatHistorySortStrategy,
     ]
   );
@@ -552,7 +550,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      ...(relevantNotesSection ? [relevantNotesSection] : []),
       {
         id: "project-context",
         icon: <Files className="tw-size-4" />,
@@ -584,7 +581,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
-      relevantNotesSection,
       settings.chatHistorySortStrategy,
     ]
   );
