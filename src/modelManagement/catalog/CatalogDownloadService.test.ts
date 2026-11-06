@@ -444,4 +444,26 @@ describe("CatalogDownloadService", () => {
       expect(svc.getAllProviders().map((p) => p.id)).toEqual(["anthropic", "helicone", "openai"]);
     });
   });
+
+  describe("getProviderByBaseUrl()", () => {
+    it("finds the provider whose default endpoint is the given base URL, ignoring case and trailing slashes (https://github.com/logancyang/obsidian-copilot/issues/4107)", async () => {
+      nowSpy = freezeNow(FIXED_NOW);
+      const adapter = buildAdapter({ fetchedAt: FIXED_NOW - 60 * 1000, data: FIXTURE });
+      const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
+
+      await svc.ensureLoaded();
+
+      expect(svc.getProviderByBaseUrl(" https://AI-Gateway.helicone.ai/v1/ ")?.id).toBe("helicone");
+    });
+
+    it("finds no provider for an endpoint that no catalog provider lists as its default", async () => {
+      nowSpy = freezeNow(FIXED_NOW);
+      const adapter = buildAdapter({ fetchedAt: FIXED_NOW - 60 * 1000, data: FIXTURE });
+      const svc = new CatalogDownloadService({ app: buildFakeApp(adapter) });
+
+      await svc.ensureLoaded();
+
+      expect(svc.getProviderByBaseUrl("http://127.0.0.1:8000/v1")).toBeUndefined();
+    });
+  });
 });

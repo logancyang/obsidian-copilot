@@ -141,6 +141,13 @@ export class CatalogDownloadService {
     return this.byId.get(id);
   }
 
+  getProviderByBaseUrl(baseUrl: string): CatalogProvider | undefined {
+    const endpoint = endpointKey(baseUrl);
+    return this.providers.find(
+      (p) => p.defaultBaseUrl !== undefined && endpointKey(p.defaultBaseUrl) === endpoint
+    );
+  }
+
   onChange(listener: Listener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -222,4 +229,8 @@ export class CatalogDownloadService {
       }
     }
   }
+}
+
+function endpointKey(baseUrl: string): string {
+  return baseUrl.trim().replace(/\/+$/, "").toLowerCase();
 }
