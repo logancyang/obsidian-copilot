@@ -1,5 +1,6 @@
 import type { ApprovedRule, ApprovedRuleStore } from "@/agentMode/session/types";
 import { sanitizeBuiltinSkillEnvOverrides } from "@/agentMode/backends/shared/builtinSkillEnv";
+import { oneAtATime } from "@/agentMode/backends/shared/oneAtATime";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { codexCliInvocation } from "./codexAuth";
@@ -16,17 +17,6 @@ const JSON_STRING = String.raw`"(?:[^"\\]|\\.)*"`;
 const NETWORK_GRANT = new RegExp(
   String.raw`^network_rule\(host=(${JSON_STRING}), protocol=(${JSON_STRING}), decision="allow"(?:, justification=${JSON_STRING})?\)$`
 );
-
-let previousCall: Promise<unknown> = Promise.resolve();
-
-// A removal rewrites the file from what it read, so two quick removals must not both read the
-// same text, and a re-list must not read before a pending removal lands.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/868
-function oneAtATime<T>(call: () => Promise<T>): Promise<T> {
-  const result = previousCall.then(call);
-  previousCall = result.catch(() => undefined);
-  return result;
-}
 
 function fs(): typeof import("node:fs").promises {
   return requireNodeModule<typeof import("node:fs")>("fs").promises;
