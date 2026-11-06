@@ -60,6 +60,16 @@ describe("SettingsPage", () => {
         expect(createPluginRoot).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 mounts the settings in a wrapper that takes no box, so a settings sub-page can fill the height of Obsidian's settings scroller", () => {
+        const { tab } = createTab(true);
+
+        tab.display();
+
+        const [root] = jest.mocked(createPluginRoot).mock.calls[0];
+        expect(root.parentNode).toBe(tab.containerEl);
+        expect((root as HTMLElement).className).toBe("tw-contents");
+      });
+
       it("shows that Copilot is starting instead of settings that have not loaded yet https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
         const { tab } = createTab(false);
 

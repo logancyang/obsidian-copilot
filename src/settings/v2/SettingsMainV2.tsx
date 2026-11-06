@@ -19,6 +19,7 @@ import { BasicSettings } from "./components/BasicSettings";
 import { DesktopOnlySettingsPanel } from "./components/DesktopOnlySettingsPanel";
 import { MiyoSettings } from "@/miyo/settings/MiyoSettings";
 import { SelfHostSettings } from "./components/SelfHostSettings";
+import { SettingsSubPageHost } from "./SettingsSubPage";
 
 const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
@@ -141,7 +142,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
     <PluginProvider plugin={plugin}>
       <ModelManagementProvider api={plugin.modelManagement}>
         <TabProvider initialTab={initialTab}>
-          <div className="tw-mx-auto tw-max-w-[860px]">
+          <SettingsSubPageHost className="tw-mx-auto tw-max-w-[860px]">
             <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
               <div
                 role="heading"
@@ -183,7 +184,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin, initialTab = "b
               </div>
             </div>
             <SettingsContent key={resetKey} />
-          </div>
+          </SettingsSubPageHost>
         </TabProvider>
       </ModelManagementProvider>
     </PluginProvider>

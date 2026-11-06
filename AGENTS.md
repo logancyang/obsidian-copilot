@@ -43,6 +43,7 @@ Read the matching guide when your task touches that area — they aren't loaded 
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | writing or altering tests, or doing E2E via the Obsidian CLI           | [`internal-docs/TESTING_GUIDE.md`](./internal-docs/TESTING_GUIDE.md)                         |
 | building or changing user-visible React components or visual states    | [`Component gallery workflow`](./internal-docs/TESTING_GUIDE.md#component-gallery-workflow)  |
+| building a settings second page (a page with Back)                     | [`Settings sub-pages`](./internal-docs/STYLE_GUIDE.md#settings-sub-pages)                    |
 | writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind  | [`internal-docs/STYLE_GUIDE.md`](./internal-docs/STYLE_GUIDE.md)                             |
 | touching plugin runtime: the `app`, network requests, popout windows   | [`internal-docs/PLUGIN_DEV_GUIDE.md`](./internal-docs/PLUGIN_DEV_GUIDE.md)                   |
 | running a multi-step dev session                                       | [`internal-docs/PROCESS_GUIDE.md`](./internal-docs/PROCESS_GUIDE.md)                         |
