@@ -10,6 +10,8 @@ import {
   getMatchingPatterns,
   getNotesWithProperty,
   getNotesWithTag,
+  getProjectContextPatterns,
+  getPropertyLabel,
   getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
@@ -525,6 +527,33 @@ describe("searchUtils", () => {
     });
   });
 
+  describe("getProjectContextPatterns()", () => {
+    it("categorizes a project's saved folders, notes, tags and properties", () => {
+      expect(
+        getProjectContextPatterns("Research,%5B%5BSpec%5D%5D,%23launch,%5Btopic%3Aphysics%5D")
+      ).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: ["[[Spec]]"],
+        tagPatterns: ["#launch"],
+        propertyPatterns: ["[topic:physics]"],
+      });
+    });
+
+    it("drops saved file-type patterns, which no longer count as project context https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      expect(getProjectContextPatterns("*.pdf,Research")).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: [],
+        tagPatterns: [],
+        propertyPatterns: [],
+      });
+    });
+
+    it("returns null when nothing but file-type patterns is saved https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      expect(getProjectContextPatterns("*.pdf,*.docx")).toBeNull();
+      expect(getProjectContextPatterns(undefined)).toBeNull();
+    });
+  });
+
   describe("getSystemExcludedFolders()", () => {
     it("always includes the historical copilot root", () => {
       const folders = getSystemExcludedFolders({
@@ -717,6 +746,20 @@ describe("searchUtils", () => {
 
     it("returns [key:] when value is empty string", () => {
       expect(getPropertyPattern("Topics", "")).toBe("[Topics:]");
+    });
+  });
+
+  describe("getPropertyLabel()", () => {
+    it("labels a property pattern as `key: value`", () => {
+      expect(getPropertyLabel("[Topics:Physics]")).toBe("Topics: Physics");
+    });
+
+    it("labels a key-only property pattern as `key: (any)`", () => {
+      expect(getPropertyLabel("[Topics:]")).toBe("Topics: (any)");
+    });
+
+    it("returns the raw pattern when it is not a property pattern", () => {
+      expect(getPropertyLabel("not-a-property")).toBe("not-a-property");
     });
   });
 

@@ -68,30 +68,26 @@ function getInclusionPatterns(): string[] {
   return getDecodedPatterns(getSettings().qaInclusions);
 }
 
-export function getMatchingPatterns(options?: {
-  inclusions?: string;
-  exclusions?: string;
-  isProject?: boolean;
-}): {
+export function getMatchingPatterns(): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusionPatterns = options?.inclusions
-    ? getDecodedPatterns(options.inclusions)
-    : options?.isProject
-      ? []
-      : getInclusionPatterns();
-
-  const exclusionPatterns = options?.exclusions
-    ? getDecodedPatterns(options.exclusions)
-    : options?.isProject
-      ? []
-      : getExclusionPatterns();
+  const inclusionPatterns = getInclusionPatterns();
+  const exclusionPatterns = getExclusionPatterns();
 
   return {
     inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,
     exclusions: exclusionPatterns.length > 0 ? categorizePatterns(exclusionPatterns) : null,
   };
+}
+
+export function getProjectContextPatterns(inclusions: string | undefined): PatternCategory | null {
+  // File-type patterns and exclusions no longer shape project context; saved values stay in project.md untouched. https://github.com/Brevilabs/obsidian-copilot-private/issues/841
+  const { folderPatterns, notePatterns, tagPatterns, propertyPatterns } = categorizePatterns(
+    getDecodedPatterns(inclusions ?? "")
+  );
+  const kept = { folderPatterns, notePatterns, tagPatterns, propertyPatterns };
+  return Object.values(kept).some((patterns) => patterns.length > 0) ? kept : null;
 }
 
 export function getSystemExcludedFolders(settings: CopilotSettings): string[] {
@@ -349,6 +345,12 @@ export function getTagPattern(tag: string): string {
 
 export function getPropertyPattern(key: string, value?: string): string {
   return value ? `[${key}:${value}]` : `[${key}:]`;
+}
+
+export function getPropertyLabel(propertyPattern: string): string {
+  const parsed = parsePropertyPattern(propertyPattern);
+  if (!parsed) return propertyPattern;
+  return parsed.value ? `${parsed.key}: ${parsed.value}` : `${parsed.key}: (any)`;
 }
 
 export function getNotesWithTag(app: App, tagPattern: string): TFile[] {

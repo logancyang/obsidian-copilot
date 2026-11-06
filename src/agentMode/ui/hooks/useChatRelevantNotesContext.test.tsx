@@ -26,7 +26,7 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,
 }));
 jest.mock("@/search/searchUtils", () => ({
-  getMatchingPatterns: () => ({ inclusions: {}, exclusions: {} }),
+  getProjectContextPatterns: () => ({}),
   shouldIndexFile: () => true,
 }));
 describe("useChatRelevantNotesContext", () => {

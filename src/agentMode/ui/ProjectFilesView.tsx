@@ -5,7 +5,6 @@ import { LinkUrlModal } from "@/components/modals/LinkUrlModal";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
-import { getBadgeLabel } from "@/components/project/ProjectContextBadgeList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -36,6 +35,7 @@ import {
   getDecodedPatterns,
   getNotesWithProperty,
   getNotesWithTag,
+  getPropertyLabel,
   getTagPattern,
 } from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
@@ -212,12 +212,7 @@ export function buildLinkedMatchRows(
   return [
     ...tagPatterns.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
     ...propertyPatterns.map((pattern) =>
-      row(
-        "property",
-        pattern,
-        getBadgeLabel({ pattern, type: "property" }),
-        getNotesWithProperty(app, pattern)
-      )
+      row("property", pattern, getPropertyLabel(pattern), getNotesWithProperty(app, pattern))
     ),
   ];
 }
@@ -728,7 +723,7 @@ export function ProjectFilesView({
     tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
     properties: () =>
       new PropertySearchModal(app, (pattern) =>
-        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
+        linkPattern(pattern, getPropertyLabel(pattern))
       ).open(),
     link: () =>
       new LinkUrlModal(app, (item) =>
