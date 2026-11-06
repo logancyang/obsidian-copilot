@@ -267,6 +267,39 @@ describe("settingsMigrations", () => {
       expect(getSettings().enableMiyoSearchSkill).toBe(true);
     });
 
+    it("v17: adds /v1 to a provider migrated from a Copilot 3 Ollama model (https://github.com/logancyang/obsidian-copilot/issues/4109)", async () => {
+      seedVault(
+        {
+          settingsVersion: 16,
+          providers: {
+            ollama: {
+              providerId: "ollama",
+              providerType: "openai-compatible",
+              displayName: "Ollama",
+              baseUrl: "http://localhost:11434",
+              origin: { kind: "byok" },
+              requiresApiKey: false,
+              addedAt: 0,
+            },
+          },
+        },
+        [
+          {
+            name: "llama3.2",
+            provider: ChatModelProviders.OLLAMA,
+            baseUrl: "http://localhost:11434",
+            enabled: true,
+          },
+        ]
+      );
+      const { api } = makeApi();
+
+      await runSettingsMigrations(api);
+
+      expect(getSettings().providers.ollama.baseUrl).toBe("http://localhost:11434/v1");
+      expect(getSettings().settingsVersion).toBe(CURRENT_SETTINGS_VERSION);
+    });
+
     it.each([7, undefined])(
       "v8: seeds the Copilot root, its history, and the upgrade flag for a settingsVersion=%s vault",
       async (settingsVersion) => {
