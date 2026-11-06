@@ -102,25 +102,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
-  const relevantNotesSection = useMemo<AgentHomeShelfSection | null>(
-    () =>
-      isRelevantNotesPaneOpen
-        ? null
-        : {
-            id: "relevant-notes",
-            icon: <FileSearch className="tw-size-4" />,
-            title: "Relevant Notes",
-            renderBody: () => (
-              <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
-                <RelevantNotes
-                  className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
-                  onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
-                />
-              </RelevantNotesShelfPanel>
-            ),
-          },
-    [isRelevantNotesPaneOpen, plugin]
-  );
   const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
@@ -463,7 +444,23 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      ...(relevantNotesSection ? [relevantNotesSection] : []),
+      ...(isRelevantNotesPaneOpen
+        ? []
+        : [
+            {
+              id: "relevant-notes",
+              icon: <FileSearch className="tw-size-4" />,
+              title: "Relevant Notes",
+              renderBody: () => (
+                <RelevantNotesShelfPanel onPopOut={() => void plugin.activateRelevantNotesView()}>
+                  <RelevantNotes
+                    className={cn("[&>[data-relevant-notes-empty-state]]:tw-py-6")}
+                    onAddToChat={(note) => void plugin.addNoteToActiveChat(note)}
+                  />
+                </RelevantNotesShelfPanel>
+              ),
+            },
+          ]),
       {
         id: "projects",
         icon: <Folder className="tw-size-4" />,
@@ -505,13 +502,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
-      relevantNotesSection,
+      isRelevantNotesPaneOpen,
+      plugin,
       settings.chatHistorySortStrategy,
     ]
   );
 
   // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and the project
-  // home drops its Recent chats tab.
+  // home keeps only its Files tab.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   const globalShelfSections = useMemo(
     () =>
@@ -556,7 +554,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      ...(relevantNotesSection ? [relevantNotesSection] : []),
     ],
     [
       chatHistoryItems,
@@ -576,7 +573,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleCloseSession,
       runningChatIds,
       attentionChatIds,
-      relevantNotesSection,
       settings.chatHistorySortStrategy,
     ]
   );
@@ -584,7 +580,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const projectShelfSections = useMemo(
     () =>
       isProjectContextInline
-        ? projectLandingSections.filter((section) => section.id !== "project-chats")
+        ? projectLandingSections.filter((section) => section.id === "project-files")
         : projectLandingSections,
     [isProjectContextInline, projectLandingSections]
   );
