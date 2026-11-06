@@ -268,7 +268,7 @@ describe("ChatSingleMessage", () => {
             testApp,
             "[[MarkdownTarget]]",
             expect.any(HTMLElement),
-            sourcePath,
+            `${sourcePath}?no-dataview`,
             expect.anything()
           )
         );
@@ -291,7 +291,7 @@ describe("ChatSingleMessage", () => {
           testApp,
           markdown,
           expect.any(HTMLElement),
-          "",
+          "?no-dataview",
           expect.anything()
         )
       );
