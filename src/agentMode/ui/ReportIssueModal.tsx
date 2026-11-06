@@ -199,7 +199,7 @@ export class ReportIssueModal extends Modal {
       sources.push({
         id: "opencodeLog",
         label: "OpenCode log",
-        description: "may include unrelated sessions",
+        description: "may include unrelated chats",
         // A report opened from a chat is about that chat, so it ticks the log Settings leaves off for privacy.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
         defaultChecked: this.params.preselectAllSources === true,

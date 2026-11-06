@@ -4801,7 +4801,7 @@ describe("AgentSession", () => {
           else mock.closeSession.mockRejectedValueOnce(new MethodUnsupportedError("session/close"));
 
           await expect(session.releaseBackendSession()).rejects.toThrow(
-            "This agent does not support closing individual sessions."
+            "This agent can't shut down a single chat."
           );
         }
       );

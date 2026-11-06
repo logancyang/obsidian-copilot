@@ -1,6 +1,11 @@
 import React, { useMemo } from "react";
 import { agentResponseText, buildAgentTrail } from "@/agentMode/ui/agentTrail";
-import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
+import type {
+  AgentCancelCause,
+  AgentMessagePart,
+  StopReason,
+  TurnFileChange,
+} from "@/agentMode/session/types";
 import { ActionCard } from "@/agentMode/ui/ActionCard";
 import { FilesChangedCard } from "@/agentMode/ui/FilesChangedCard";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
@@ -34,6 +39,7 @@ interface AgentTrailProps {
   timestamp?: string;
   app: App;
   turnStopReason?: StopReason;
+  agentCancelCause?: AgentCancelCause;
   errorText?: string;
   fileChanges?: TurnFileChange[];
   onOpenFileChange?: (change: TurnFileChange) => void;
@@ -48,7 +54,18 @@ const EARLY_STOP_CAUSES: Partial<Record<StopReason, string>> = {
   refusal: "the model's safety system stopped it",
 };
 
-function stopReasonNotice(stopReason: StopReason | undefined): string | undefined {
+// A turn the agent ended on its own leaves the chat silent, as if it froze. https://github.com/logancyang/obsidian-copilot/issues/4062
+const AGENT_CANCEL_NOTICES: Record<AgentCancelCause, string> = {
+  permission_declined:
+    "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
+  unspecified: "**Stopped:** the agent ended its turn early. Send a message to continue.",
+};
+
+function stopReasonNotice(
+  stopReason: StopReason | undefined,
+  agentCancelCause: AgentCancelCause | undefined
+): string | undefined {
+  if (agentCancelCause) return AGENT_CANCEL_NOTICES[agentCancelCause];
   const cause = stopReason && EARLY_STOP_CAUSES[stopReason];
   return (
     cause &&
@@ -64,6 +81,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   timestamp,
   app,
   turnStopReason,
+  agentCancelCause,
   errorText,
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
@@ -71,7 +89,10 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const answer = agentResponseText(parts);
   // A failed turn's error is stored as message text, which a reply with parts never shows.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  const notice = errorText && answer.length === 0 ? errorText : stopReasonNotice(turnStopReason);
+  const notice =
+    errorText && answer.length === 0
+      ? errorText
+      : stopReasonNotice(turnStopReason, agentCancelCause);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   // A compaction row reports its own progress and is not a reply to time or copy.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633

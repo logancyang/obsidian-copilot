@@ -18,7 +18,7 @@ Open Agent Chat and send a message, or open a past chat from Recent chats on the
 
 ## Driving it
 
-- New chat: in a chat you sent a message in, choose `New chat`. The tab shows a new start screen; the previous chat is in Recent chats and its row still offers `Close chat`.
+- New chat: in a chat you sent a message in, choose `New chat`. The tab shows a new start screen; the previous chat is in Recent chats and its row still offers `Shut down`.
 - History: choose `Chat history`, type part of a chat title into `Search...`, and choose the match. Its conversation shows in the current tab.
 - Usage: hover `Usage`. A tooltip shows `Context window` with used / total tokens and a percentage, plus the plan's usage windows (such as `Weekly · resets in …`) when the agent reports them.
 - Tasks: ask the agent to start a shell command in the background. `1 task running` shows at the left of the bar; choose it and the task is listed with `No output yet` or its last output line. Choose the task: its detail view opens, and `Back to chat` returns. Choose `Stop task`: the indicator goes away and the task's card reads `Stopped`.

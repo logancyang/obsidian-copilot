@@ -20,7 +20,7 @@ const SOURCES: ReportSourceOption[] = [
   {
     id: "opencodeLog",
     label: "OpenCode backend log",
-    description: "may include unrelated sessions",
+    description: "may include unrelated chats",
     defaultChecked: false,
   },
 ];
