@@ -3,16 +3,23 @@ import { safeFetchNoThrow } from "@/utils";
 const DEFAULT_TIMEOUT_MS = 8000;
 const MAX_BODY_CHARS = 200;
 
-export type ListModelsResult = { ok: true; modelIds: string[] } | { ok: false; message: string };
+interface ListedModels {
+  ok: true;
+  modelIds: string[];
+  contextWindows?: Record<string, number>;
+}
+
+export type ListModelsResult = ListedModels | { ok: false; message: string };
 
 export type ListModelsResponseResult =
-  | { ok: true; modelIds: string[] }
+  | ListedModels
   | { ok: false; message: string; status?: number };
 
 interface ModelListWireShape {
   listKey: "data" | "models";
   idKey: "id" | "name";
   normalizeId?: (id: string) => string;
+  contextKeys?: readonly string[];
 }
 
 export class ListModelsTimeoutError extends Error {
@@ -78,14 +85,20 @@ export async function parseModelListResponse(
 
   const seen = new Set<string>();
   const modelIds: string[] = [];
+  const contextWindows: Record<string, number> = {};
   for (const entry of list) {
-    const rawId = (entry as Record<string, unknown> | null)?.[shape.idKey];
+    const fields = entry as Record<string, unknown> | null;
+    const rawId = fields?.[shape.idKey];
     if (typeof rawId !== "string") continue;
     const trimmedId = rawId.trim();
     const id = shape.normalizeId?.(trimmedId) ?? trimmedId;
     if (!id || seen.has(id)) continue;
     seen.add(id);
     modelIds.push(id);
+    const context = shape.contextKeys?.map((key) => fields?.[key]).find(Number.isInteger);
+    if (typeof context === "number") contextWindows[id] = context;
   }
-  return { ok: true, modelIds };
+  return Object.keys(contextWindows).length > 0
+    ? { ok: true, modelIds, contextWindows }
+    : { ok: true, modelIds };
 }

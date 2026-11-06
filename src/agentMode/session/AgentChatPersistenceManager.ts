@@ -212,7 +212,23 @@ export class AgentChatPersistenceManager {
   }
 
   async updateTopic(fileId: string, newTopic: string): Promise<void> {
-    await patchFrontmatter(this.app, fileId, { topic: newTopic.trim() });
+    const topic = newTopic.trim();
+    const file = this.resolveExistingFile(fileId);
+    if (!file) return;
+    // Recent Chats reloads as soon as the rename resolves, and showed the old title while
+    // Obsidian was still re-reading the note. https://github.com/logancyang/obsidian-copilot/issues/3555
+    const { metadataCache } = this.app;
+    let markReread!: () => void;
+    const reread = new Promise<void>((resolve) => (markReread = resolve));
+    const ref = metadataCache.on("changed", (changed) => {
+      if (changed.path === file.path) markReread();
+    });
+    try {
+      await patchFrontmatter(this.app, fileId, { topic });
+      if (metadataCache.getFileCache(file)?.frontmatter?.topic !== topic) await reread;
+    } finally {
+      metadataCache.offref(ref);
+    }
   }
 
   async setPinnedAt(fileId: string, pinnedAt: number | null): Promise<void> {

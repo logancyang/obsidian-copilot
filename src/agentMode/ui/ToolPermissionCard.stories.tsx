@@ -128,3 +128,20 @@ export const SubagentRequester: StoryObj<ToolPermissionCardProps> = {
     },
   },
 };
+
+const longCommand =
+  "cd /Users/me/Documents/Obsidian/Research-Vault/Projects/2026-launch && mv 'Drafts/launch-brief-final-final-v3.md' 'Archive/2026/launch-brief-final-final-v3.md' && ls";
+
+export const LongCommandDetails: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Move the final launch brief into the archive",
+        kind: "execute",
+        rawInput: { command: longCommand, cwd: "/Users/me/Documents/Obsidian/Research-Vault" },
+      },
+    },
+  },
+};
