@@ -337,7 +337,14 @@ climbing past N iterations, the feature is leaking.
 ## 4. Interacting with the UI (clicks, typing)
 
 There is no first-class "click selector" or "type into input" CLI command.
-Two real options:
+Two real options are below. Two things trip runs before either:
+
+- Row and tab actions, such as `Close chat`, render only on hover or keyboard
+  focus. Hover or focus the row or tab first.
+- The test vault opens Settings in a popout window, which `dev:screenshot` and
+  `dev:cdp` cannot reach. Run
+  `app.vault.setConfig("settingsPopoutWindow", false)` before driving Settings,
+  such as entering a license, and set it back afterwards.
 
 ### 4a. `eval` — synthetic JS events (fast, easy, slightly fake)
 
@@ -432,6 +439,11 @@ checks fail across realms — a popout window has its own `HTMLElement`,
 `MouseEvent`, etc. constructors. Inside `eval`, use
 `element.instanceOf(HTMLElement)` / `event.instanceOf(MouseEvent)` if you need
 cross-realm type checks.
+
+## 4d. Driving Agent Mode
+
+- Never choose `Upload & open issue` in Report an issue: it uploads to
+  Brevilabs. Stop at the review screen and choose `Cancel`.
 
 ## 5. Vault data setup
 
