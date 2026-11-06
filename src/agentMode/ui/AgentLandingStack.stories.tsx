@@ -104,32 +104,26 @@ const projectSections: AgentHomeShelfSection[] = [
 
 const allSections = [...sections, ...relevantNotesSections, ...projectSections];
 
-const projectContextBody = (
-  <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-text-ui-small tw-text-normal">
-    Context: 3 notes, 1 folder
+const projectFilesBody = (
+  <div className="tw-p-3 tw-text-ui-small tw-text-normal">
+    Project folder: outputs, sources, AGENTS.md
   </div>
 );
 
 const projectLandingSections: AgentHomeShelfSection[] = [
-  { ...sections[0], id: "project-chats", title: "Recent chats" },
   {
-    id: "project-context",
+    id: "project-files",
     icon: <Files className="tw-size-4" />,
-    title: "Context",
-    count: 4,
-    renderBody: () => projectContextBody,
+    title: "Files",
+    renderBody: () => projectFilesBody,
   },
+  { ...sections[0], id: "project-chats", title: "Recent chats" },
 ];
 
 function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProps) {
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
-      <AgentLandingStack
-        hero={args.hero ?? null}
-        composer={args.composer ?? null}
-        context={args.context}
-        shelf={shelf}
-      />
+      <AgentLandingStack hero={args.hero ?? null} composer={args.composer ?? null} shelf={shelf} />
     </div>
   );
 }
@@ -164,22 +158,20 @@ function LandingCanvas({
   const globalSections = allSections.filter((section) =>
     section.id === "relevant-notes" ? !relevantNotesInSidePanel : !sidebarOpen
   );
-  const contextInline = project && sidebarOpen;
   const shelf = project ? (
-    contextInline ? undefined : (
-      <AgentHomeShelf sections={projectLandingSections} />
-    )
+    <AgentHomeShelf
+      sections={
+        sidebarOpen
+          ? projectLandingSections.filter((section) => section.id === "project-files")
+          : projectLandingSections
+      }
+    />
   ) : globalSections.length > 0 ? (
     <AgentHomeShelf sections={globalSections} />
   ) : undefined;
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
-      <AgentLandingStack
-        hero={args.hero ?? null}
-        composer={args.composer ?? null}
-        context={contextInline ? <div className="tw-pt-3">{projectContextBody}</div> : undefined}
-        shelf={shelf}
-      />
+      <AgentLandingStack hero={args.hero ?? null} composer={args.composer ?? null} shelf={shelf} />
     </div>
   );
 }

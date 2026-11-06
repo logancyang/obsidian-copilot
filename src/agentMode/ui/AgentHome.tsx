@@ -5,11 +5,11 @@ import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatChatReportNote } from "@/agentMode/session/feedback/feedbackOffer";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
-import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
+import { ProjectFilesView } from "@/agentMode/ui/ProjectFilesView";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
@@ -508,8 +508,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     ]
   );
 
-  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and shows the
-  // project context inline instead of a shelf.
+  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and the project
+  // home keeps only its Files tab.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
   const globalShelfSections = useMemo(
     () =>
@@ -519,10 +519,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [sidebarOpen, landingSections]
   );
 
-  const contextSummary = useMemo(() => buildContextSummary(activeProject), [activeProject]);
-
   const projectLandingSections = useMemo<AgentHomeShelfSection[]>(
     () => [
+      {
+        id: "project-files",
+        icon: <Files className="tw-size-4" />,
+        title: "Files",
+        renderBody: () => <ProjectFilesView projectId={activeProjectId} />,
+      },
       {
         id: "project-chats",
         icon: <MessageSquare className="tw-size-4" />,
@@ -550,22 +554,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         ),
       },
-      {
-        id: "project-context",
-        icon: <Files className="tw-size-4" />,
-        title: "Context",
-        count: contextSummary.totalItems,
-        renderBody: () => (
-          <AgentContextSection app={app} projectId={activeProjectId} popoverContainer={rootEl} />
-        ),
-      },
     ],
     [
       chatHistoryItems,
-      contextSummary.totalItems,
-      app,
       activeProjectId,
-      rootEl,
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
@@ -584,6 +576,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       settings.chatHistorySortStrategy,
     ]
   );
+
+  const projectShelfSections = useMemo(
+    () =>
+      isProjectContextInline
+        ? projectLandingSections.filter((section) => section.id === "project-files")
+        : projectLandingSections,
+    [isProjectContextInline, projectLandingSections]
+  );
+  const showProjectShelf = isProjectContextInline ? !isOrphanedProject : projectPlacement !== null;
 
   const composerNode = (
     <AgentChatInput
@@ -759,21 +760,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         {composerNode}
                       </>
                     }
-                    context={
-                      isProjectLanding && !isOrphanedProject && isProjectContextInline ? (
-                        <div className="tw-px-2 tw-pb-1 tw-pt-3">
-                          <AgentContextSection
-                            app={app}
-                            projectId={activeProjectId}
-                            popoverContainer={rootEl}
-                          />
-                        </div>
-                      ) : undefined
-                    }
                     shelf={
                       isProjectLanding ? (
-                        projectPlacement && !isProjectContextInline ? (
-                          <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
+                        showProjectShelf ? (
+                          <AgentHomeShelf key={activeProjectId} sections={projectShelfSections} />
                         ) : null
                       ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf
