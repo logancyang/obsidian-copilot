@@ -208,12 +208,54 @@ Check that:
 
 ### Failure modes to recognise
 
-| Symptom                                                   | Cause                                                                                                    | Fix                                             |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `Vault not found.`                                        | Typo in `vault=<name>` (case-sensitive, matches the vault name shown in `vaults verbose`)                | Run `$OBS vaults verbose` to list known vaults  |
-| Command exits 0 with empty stdout, `eval` returns nothing | The named vault is registered but no renderer is open _yet_ — Obsidian is launching it. Retry after 1–2s | `sleep 2 && retry`, then verify                 |
-| Default vault keeps changing between commands             | You omitted `vault=<name>` — focus moved                                                                 | Always pass the flag, never rely on the default |
-| Screenshot shows a different vault than expected          | Same — captured the focused renderer, not the targeted one                                               | Re-take with `vault=<name>` explicit            |
+| Symptom                                                   | Cause                                                                                                    | Fix                                                            |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `Vault not found.`                                        | Typo in `vault=<name>` (case-sensitive, matches the vault name shown in `vaults verbose`)                | Run `$OBS vaults verbose` to list known vaults                 |
+| Command exits 0 with empty stdout, `eval` returns nothing | The named vault is registered but no renderer is open _yet_ — Obsidian is launching it. Retry after 1–2s | `sleep 2 && retry`, then verify                                |
+| Default vault keeps changing between commands             | You omitted `vault=<name>` — focus moved                                                                 | Always pass the flag, never rely on the default                |
+| Screenshot shows a different vault than expected          | Same — captured the focused renderer, not the targeted one                                               | Re-take with `vault=<name>` explicit                           |
+| CLI calls hang with no output, even `vaults`              | A vault window failed to load on a dangling plugin symlink                                               | [Recover it](#recover-a-vault-stuck-on-a-dangling-plugin-link) |
+
+### Recover a vault stuck on a dangling plugin link
+
+`gallery:vault` and `test:vault` symlink a vault's `copilot-component-gallery`
+plugin folder into the worktree that deployed it. Once that worktree is
+deleted, the link points nowhere, and the next time that vault loads, its window
+shows "An error occurred while loading Obsidian. Error: ENOENT: no such file or
+directory, stat '…/.obsidian/plugins/copilot-component-gallery'". From then on,
+every CLI call that targets that vault or names no vault hangs without output.
+Calls that name a healthy vault still answer, and recovery runs through one of
+those.
+
+This happens often with shared vaults. When a CLI call hangs, recover without
+asking:
+
+1. Run every CLI call under `timeout`, for example `timeout 30 $OBS vault=…`,
+   so a hang ends instead of blocking the session. Stop any CLI call of your own
+   that is still waiting. Never kill Obsidian or other sessions' processes.
+2. Delete dangling links, and only dangling links, from every registered
+   vault's plugin folder. A link whose target exists is another session's live
+   deployment; leave it.
+
+   ```bash
+   node -e 'const c=require(require("os").homedir()+"/Library/Application Support/obsidian/obsidian.json");for(const v of Object.values(c.vaults))console.log(v.path)' |
+     while IFS= read -r v; do
+       find "$v/.obsidian/plugins" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete 2>/dev/null
+     done
+   ```
+
+3. From a vault whose CLI calls still answer, reload the broken window. Its
+   title starts with the broken vault's name.
+
+   ```bash
+   timeout 30 $OBS vault=<healthy> eval code="const {BrowserWindow}=require('@electron/remote'); BrowserWindow.getAllWindows().filter(w=>w.getTitle().startsWith('<broken> - ')).forEach(w=>w.webContents.reload()); 'ok'"
+   ```
+
+4. Confirm with `timeout 15 $OBS vault=<broken> eval code="app.vault.getName()"`,
+   retrying for a few seconds while the window reloads.
+
+If no open vault answers, ask the user to click **Reload app** in the broken
+window after step 2.
 
 ## 1. Setup once per session
 
