@@ -12,7 +12,7 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 - setup-default-model: each agent's `Default model` and `Default effort`.
 - setup-models: each agent's model list switches models on or off, with `Search <agent> models…`; only switched-on models show in `Default model` and in the chat's model picker.
 - setup-agent-options: per-agent options, such as Claude's `Auto mode permissions` (`Auto`, `Accept edits`, `Bypass permissions`) and `Show extended thinking`, and each agent's `Environment variables` with `Add variable`.
-- setup-approved-rules: Claude's tab ends with `Approved rules` and `Edit approved rules`, which swaps the tab's settings for a page listing each rule saved by `Allow always`, with "Saved in <file>", `Search approved rules…`, `Remove` per rule, and `Back`.
+- setup-approved-rules: Claude's tab ends with `Approved rules` and `Edit approved rules`, which replaces the Copilot settings view with a page listing each rule saved by `Allow always`, with "Saved in <file>", `Search approved rules…`, `Remove` per rule, and `Back`.
 - setup-notification: `Notification` plays a `Sound` (Piano key, Marimba, Bell, Doorbell) when an agent finishes a turn.
 
 ## How to get to it
