@@ -176,7 +176,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     const oldId = active.internalId;
     void (async () => {
       try {
-        await manager.replaceSessionInPlace(oldId, active.backendId);
+        await manager.startNewChatInPlace(oldId, active.backendId);
       } catch (e) {
         logError("[AgentMode] new chat failed", e);
         new Notice("Failed to start a new chat. Please try again.");
@@ -355,9 +355,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft.queue.length === 0;
     if (!draftEmpty) return false;
     try {
-      await manager.replaceSessionInPlace(active.internalId, active.backendId, {
-        preserveChatInput: true,
-      });
+      await manager.replaceSessionInPlace(active.internalId, active.backendId);
       return true;
     } catch (e) {
       logError("[AgentMode] refresh landing context failed", e);

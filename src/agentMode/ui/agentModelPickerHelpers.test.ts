@@ -1124,7 +1124,6 @@ describe("agentModelPickerHelpers", () => {
       await new Promise((r) => window.setTimeout(r, 0));
       expect(persistDefaultSelection).not.toHaveBeenCalled();
       expect(replaceSessionInPlace).toHaveBeenCalledWith("tab-1", "claude", {
-        preserveChatInput: true,
         seedSelection: { baseModelId: "opus", effort: "low" },
       });
       expect(setDefaultBackend).toHaveBeenCalledWith("claude");
