@@ -118,7 +118,6 @@ const projectLandingSections: AgentHomeShelfSection[] = [
     renderBody: () => projectFilesBody,
   },
   { ...sections[0], id: "project-chats", title: "Recent chats" },
-  ...relevantNotesSections,
 ];
 
 function LandingStackCanvas({ args, shelf = args.shelf }: LandingStackCanvasProps) {
@@ -159,13 +158,14 @@ function LandingCanvas({
   const globalSections = allSections.filter((section) =>
     section.id === "relevant-notes" ? !relevantNotesInSidePanel : !sidebarOpen
   );
-  const projectShelfSections = projectLandingSections.filter((section) =>
-    section.id === "relevant-notes"
-      ? !relevantNotesInSidePanel
-      : section.id !== "project-chats" || !sidebarOpen
-  );
   const shelf = project ? (
-    <AgentHomeShelf sections={projectShelfSections} />
+    <AgentHomeShelf
+      sections={
+        sidebarOpen
+          ? projectLandingSections.filter((section) => section.id === "project-files")
+          : projectLandingSections
+      }
+    />
   ) : globalSections.length > 0 ? (
     <AgentHomeShelf sections={globalSections} />
   ) : undefined;
@@ -219,16 +219,6 @@ export const ProjectLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
 
 export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
   render: (args) => <LandingCanvas args={args} sidebarOpen project />,
-};
-
-export const ProjectLandingRelevantNotesInSidePanel: StoryObj<AgentLandingStackProps> = {
-  render: (args) => (
-    <LandingCanvas args={args} sidebarOpen={false} project relevantNotesInSidePanel />
-  ),
-};
-
-export const ProjectLandingSidebarOpenRelevantNotesInSidePanel: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen project relevantNotesInSidePanel />,
 };
 
 export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
