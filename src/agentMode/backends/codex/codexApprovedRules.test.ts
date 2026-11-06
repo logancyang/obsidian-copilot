@@ -35,6 +35,8 @@ echo '{"matchedRules":[]}'
 
 describe("codexApprovedRules", () => {
   let codexHome: string;
+  let inheritedHome: string;
+  let savedInheritedHome: string | undefined;
   let bundle: string;
   let checkLog: string;
   const rulesFile = () => path.join(codexHome, "rules", "default.rules");
@@ -59,6 +61,9 @@ describe("codexApprovedRules", () => {
 
   beforeEach(() => {
     codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
+    inheritedHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-inherited-home-"));
+    savedInheritedHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = inheritedHome;
     bundle = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bundle-"));
     checkLog = path.join(bundle, "check.log");
     fs.writeFileSync(path.join(bundle, "codex-acp"), "", { mode: 0o755 });
@@ -79,7 +84,10 @@ describe("codexApprovedRules", () => {
   });
   afterEach(() => {
     resetSettings();
+    if (savedInheritedHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = savedInheritedHome;
     fs.rmSync(codexHome, { recursive: true, force: true });
+    fs.rmSync(inheritedHome, { recursive: true, force: true });
     fs.rmSync(bundle, { recursive: true, force: true });
   });
 
@@ -105,27 +113,18 @@ describe("codexApprovedRules", () => {
     });
 
     it(`reads the CODEX_HOME codex-acp gets: the user's Codex env override over Obsidian's own environment: ${ISSUE}`, async () => {
-      const inheritedHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-inherited-home-"));
-      const savedHome = process.env.CODEX_HOME;
-      process.env.CODEX_HOME = inheritedHome;
-      try {
-        writeRules(`${GH_API}\n`);
-        fs.mkdirSync(path.join(inheritedHome, "rules"));
-        fs.writeFileSync(path.join(inheritedHome, "rules", "default.rules"), `${COMMIT}\n`);
+      writeRules(`${GH_API}\n`);
+      fs.mkdirSync(path.join(inheritedHome, "rules"));
+      fs.writeFileSync(path.join(inheritedHome, "rules", "default.rules"), `${COMMIT}\n`);
 
-        const fromOverride = await codexApprovedRules.list(plugin);
-        configure({ CODEX_HOME: "" });
-        const fromInherited = await codexApprovedRules.list(plugin);
+      const fromOverride = await codexApprovedRules.list(plugin);
+      configure({ CODEX_HOME: "" });
+      const fromInherited = await codexApprovedRules.list(plugin);
 
-        expect(fromOverride.map((rule) => rule.id)).toEqual([GH_API]);
-        expect(fromInherited.map((rule) => [rule.id, rule.appliesTo])).toEqual([
-          [COMMIT, { kind: "file", path: path.join(inheritedHome, "rules", "default.rules") }],
-        ]);
-      } finally {
-        if (savedHome === undefined) delete process.env.CODEX_HOME;
-        else process.env.CODEX_HOME = savedHome;
-        fs.rmSync(inheritedHome, { recursive: true, force: true });
-      }
+      expect(fromOverride.map((rule) => rule.id)).toEqual([GH_API]);
+      expect(fromInherited.map((rule) => [rule.id, rule.appliesTo])).toEqual([
+        [COMMIT, { kind: "file", path: path.join(inheritedHome, "rules", "default.rules") }],
+      ]);
     });
 
     it(`gives no rules when the Codex home has no rules file yet: ${ISSUE}`, async () => {
