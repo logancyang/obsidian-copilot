@@ -124,7 +124,7 @@ describe("SettingsMainV2", () => {
       await waitFor(() => expect(mockSkillManagerRefresh).toHaveBeenCalledTimes(1));
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 replaces the header, tab strip and tab content with a page a section opens, and Back restores the same tab with its state", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 replaces the header, tab strip and tab content with a page a section opens, and Back restores the same tab with its state", () => {
       render(<SettingsMainV2 plugin={plugin} />);
       fireEvent.click(screen.getByRole("button", { name: "Agent tab: OpenCode" }));
 

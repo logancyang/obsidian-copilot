@@ -1,3 +1,5 @@
+import { useTab } from "@/contexts/TabContext";
+import { cn } from "@/lib/utils";
 import { getScrollableParent } from "@/utils/dom/scrollableParent";
 import React from "react";
 
@@ -28,6 +30,7 @@ export const SettingsSubPageHost: React.FC<SettingsSubPageHostProps> = ({
   className,
   children,
 }) => {
+  const { selectedTab } = useTab();
   const [page, setPage] = React.useState<React.ReactNode>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const returnPoint = React.useRef<ReturnPoint | null>(null);
@@ -47,6 +50,13 @@ export const SettingsSubPageHost: React.FC<SettingsSubPageHostProps> = ({
     []
   );
 
+  // A page belongs to the tab it was opened from, so selecting another tab shows that tab instead.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/874
+  React.useLayoutEffect(() => {
+    returnPoint.current = null;
+    setPage(null);
+  }, [selectedTab]);
+
   React.useLayoutEffect(() => {
     const scroller = rootRef.current && getScrollableParent(rootRef.current);
     const back = returnPoint.current;
@@ -61,9 +71,10 @@ export const SettingsSubPageHost: React.FC<SettingsSubPageHostProps> = ({
 
   return (
     <SettingsSubPageContext.Provider value={api}>
-      <div ref={rootRef} className={className}>
-        {/* The settings stay mounted while a sub-page shows, so Back finds the same tabs and local state.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
+      <div ref={rootRef} className={cn(className, page !== null && "tw-h-full")}>
+        {/* The settings stay mounted while a sub-page shows, so Back finds the same tabs and local
+            state, and work in progress there (such as a connector login) is not cancelled.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/874 */}
         <div hidden={page !== null}>{children}</div>
         {page}
       </div>

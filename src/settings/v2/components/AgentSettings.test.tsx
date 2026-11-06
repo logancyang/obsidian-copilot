@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import React from "react";
 import { setSettings } from "@/settings/model";
 import { playNotificationSound } from "@/utils/notificationSound";
+import { TabProvider } from "@/contexts/TabContext";
 import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
 import { AgentSettings } from "./AgentSettings";
 
@@ -83,8 +84,14 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   };
 }
 
+const SettingsView: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <TabProvider>
+    <SettingsSubPageHost>{children}</SettingsSubPageHost>
+  </TabProvider>
+);
+
 function renderAgentSettings() {
-  return render(<AgentSettings />, { wrapper: SettingsSubPageHost });
+  return render(<AgentSettings />, { wrapper: SettingsView });
 }
 
 const DESCRIPTORS = [
@@ -190,11 +197,11 @@ describe("AgentSettings", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 replaces the whole settings view with the agent's approved rules, and Back restores it on the same agent tab", async () => {
       render(
-        <SettingsSubPageHost>
+        <SettingsView>
           <h1>Copilot settings</h1>
           <AgentSettings />
           <section aria-label="General">General settings</section>
-        </SettingsSubPageHost>
+        </SettingsView>
       );
       fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
 
