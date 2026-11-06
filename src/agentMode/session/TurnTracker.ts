@@ -350,6 +350,10 @@ export class TurnTracker {
       }
       return settle();
     }
+    // An agent can end its own turn, as Codex does when a permission is declined, and the chat must say so instead of going quiet. https://github.com/logancyang/obsidian-copilot/issues/4062
+    if (end.stopReason === "cancelled" && this.placeholderId) {
+      this.deps.store.markCancelledByAgent(this.placeholderId);
+    }
     void this.finalizeReply(end.stopReason, end.turnDiff).then(settle);
   }
 

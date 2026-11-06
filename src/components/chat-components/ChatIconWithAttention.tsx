@@ -18,12 +18,12 @@ export const ChatIconWithAttention: React.FC<ChatIconWithAttentionProps> = ({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/429
   <span
     className="tw-relative tw-inline-flex tw-shrink-0 tw-items-center tw-justify-center"
-    title={isSessionLive ? "Session is running" : undefined}
+    title={isSessionLive ? "Running" : undefined}
   >
     <Icon className={iconClassName} />
     {(needsAttention || isSessionLive) && (
       <span
-        aria-label={isSessionLive ? "Session live" : undefined}
+        aria-label={isSessionLive ? "Running" : undefined}
         aria-hidden={!isSessionLive}
         className={cn(
           "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-size-1.5 tw-rounded-full tw-ring-1 tw-ring-[var(--background-primary)]",

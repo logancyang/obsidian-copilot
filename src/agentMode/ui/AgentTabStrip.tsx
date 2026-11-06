@@ -96,7 +96,7 @@ function useSessionDisplay(session: AgentSession) {
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
-    displayLabel: label ?? descriptor?.displayName ?? "Session",
+    displayLabel: label ?? descriptor?.displayName ?? "Chat",
   };
 }
 
@@ -389,7 +389,7 @@ const BrandIcon: React.FC<BrandIconProps> = ({
         <Button
           variant="ghost2"
           size="icon"
-          aria-label="Close chat"
+          aria-label="Close tab"
           onClick={(e) => {
             e.stopPropagation();
             onCloseOnHover();
@@ -482,7 +482,7 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
       <Button
         variant="ghost2"
         size="icon"
-        aria-label="Close chat"
+        aria-label="Close tab"
         onClick={(e) => {
           e.stopPropagation();
           onClose();

@@ -125,7 +125,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       } catch (error) {
         logError("[AgentMode] close chat session failed", error);
         new Notice(
-          `Could not close chat: ${error instanceof Error ? error.message : "Try again."}`
+          `Could not shut down chat: ${error instanceof Error ? error.message : "Try again."}`
         );
       }
     },

@@ -1072,13 +1072,13 @@ export class AgentSession {
   async releaseBackendSession(): Promise<void> {
     const backendSessionId = this.backendSessionId;
     if (!backendSessionId || !this.backend.closeSession) {
-      throw new Error("This agent does not support closing individual sessions.");
+      throw new Error("This agent can't shut down a single chat.");
     }
     try {
       await this.backend.closeSession({ sessionId: backendSessionId });
     } catch (error) {
       if (error instanceof MethodUnsupportedError) {
-        throw new Error("This agent does not support closing individual sessions.");
+        throw new Error("This agent can't shut down a single chat.");
       }
       throw error;
     }
@@ -1503,9 +1503,11 @@ export class AgentSession {
     this.publishTasks();
   }
 
+  // A resumed subagent runs again under its earlier task id, listed under the resuming call, so the task's updates belong to its latest run. https://github.com/logancyang/obsidian-copilot/issues/3842
   private taskWithId(taskId: string): AgentTask | undefined {
-    for (const task of this.tasks.values()) if (task.taskId === taskId) return task;
-    return undefined;
+    let latest: AgentTask | undefined;
+    for (const task of this.tasks.values()) if (task.taskId === taskId) latest = task;
+    return latest;
   }
 
   // A launch that settles before the agent names its task never became one: it was denied, failed or stopped. https://github.com/Brevilabs/obsidian-copilot-private/issues/749

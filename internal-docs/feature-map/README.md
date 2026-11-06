@@ -18,7 +18,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 
 - Exercise every entry point and every path the change can affect.
 - Record the action and the resulting screen, not only the final one.
-- A chat's agent is running when its row offers `Close chat` or shows `Session open`.
+- A chat's agent is running when its row offers `Shut down` or shows `Running`.
 - When a path is unreachable, name it and what blocks it (license, OS, an agent not installed), then cover the closest path that remains.
 
 ## Start
