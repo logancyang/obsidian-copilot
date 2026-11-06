@@ -39,6 +39,6 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 
 - `Default model` and `Default effort` also change chats that are already open, on their next turn.
 - An agent's installation and its `Environment variables` are kept per computer. The same vault on another computer shows the agent as not set up until it is set up there.
-- Removing an approved rule also reaches a Claude chat that is already open: its next request for that action asks again.
+- Removing an approved rule also reaches a Claude chat that is already open: its next request for that action asks again. If that rule's `Allow always` tooltip also listed "all file edits", the open chat keeps accepting file edits, so a command such as `touch` still runs there without asking.
 - `Edit approved rules` lists only rules saved in Claude's config folder and the vault folder. Rules saved for a project chat live in the project note's folder and do not show.
 - A managed agent is installed once per computer and shared by every vault. `Uninstall` removes it for all of them.
