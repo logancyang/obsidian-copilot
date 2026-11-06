@@ -4,6 +4,7 @@ import { oneAtATime } from "@/agentMode/backends/shared/oneAtATime";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { codexCliInvocation } from "./codexAuth";
+import type { CodexAcpInvocation } from "./codexVersion";
 import { defaultCodexHome } from "./codexPlanUsage";
 
 const CHECK_TIMEOUT_MS = 30_000;
@@ -64,9 +65,7 @@ function describeGrant(line: string): string | null {
     : null;
 }
 
-type CodexCli = Awaited<ReturnType<typeof codexCliInvocation>>;
-
-function checkRules(codex: CodexCli, file: string): Promise<void> {
+function checkRules(codex: CodexAcpInvocation, file: string): Promise<void> {
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   return new Promise((resolve, reject) => {
     execFile(
