@@ -390,12 +390,12 @@ describe("AgentTrail", () => {
     ]);
   });
 
-  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined", () => {
-    renderTrail({ turnStopReason: "cancelled", agentCancelCause: "unspecified" });
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined, even before any text or tool activity", () => {
+    renderTrail({ parts: [], turnStopReason: "cancelled", agentCancelCause: "unspecified" });
 
-    expect(screen.getAllByTestId("agent-md")[1].textContent).toBe(
-      "**Stopped:** the agent ended its turn early. Send a message to continue."
-    );
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "**Stopped:** the agent ended its turn early. Send a message to continue.",
+    ]);
   });
 
   it("uses one aligned folding header for reasoning and every tool-card family", () => {

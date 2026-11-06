@@ -265,6 +265,32 @@ export const AgentStoppedAfterDeclinedPermission: StoryObj<AgentChatMessagesProp
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
+export const AgentStoppedBeforeReplying: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      {
+        ...message,
+        id: "summary-request",
+        sender: "user",
+        message: "Summarize this week's meeting notes.",
+      },
+      {
+        ...message,
+        id: "empty-cancelled-reply",
+        message: "",
+        turnStopReason: "cancelled",
+        agentCancelCause: "unspecified",
+        turnDurationMs: 3000,
+      },
+    ],
+    isLoading: false,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 export const FinishedReplyWhileSubagentsRun: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,
