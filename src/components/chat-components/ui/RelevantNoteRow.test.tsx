@@ -49,7 +49,7 @@ function renderRow(props: Partial<React.ComponentProps<typeof RelevantNoteRow>> 
 
 describe("RelevantNoteRow", () => {
   describe("RelevantNoteRow()", () => {
-    it("renders the hover preview as Markdown with links relative to the previewed note", async () => {
+    it("renders the hover preview as Markdown with links relative to the previewed note and without live Dataview queries", async () => {
       const file: unknown = Object.create(TFile.prototype);
       if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
       Object.assign(file, {
@@ -75,7 +75,8 @@ describe("RelevantNoteRow", () => {
         "# Readable preview\n\n**Key idea**",
         expect.any(HTMLElement),
         file.path,
-        expect.anything()
+        expect.anything(),
+        false
       );
     });
 

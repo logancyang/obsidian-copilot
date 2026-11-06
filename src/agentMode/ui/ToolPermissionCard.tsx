@@ -108,7 +108,7 @@ export const ToolPermissionCard: React.FC<ToolPermissionCardProps> = ({
         ) : inputJson ? (
           <details>
             <summary className="tw-cursor-pointer tw-text-xs tw-text-muted">Show details</summary>
-            <pre className="tw-mt-1 tw-max-h-48 tw-overflow-auto tw-rounded tw-bg-primary tw-p-2 tw-text-xs">
+            <pre className="tw-mt-1 tw-max-h-48 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-primary tw-p-2 tw-text-xs [overflow-wrap:anywhere]">
               {inputJson}
             </pre>
           </details>

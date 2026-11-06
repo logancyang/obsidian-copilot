@@ -49,7 +49,7 @@ describe("AgentMarkdownText", () => {
       expect(badge.parentElement?.nextElementSibling?.textContent).toBe("Standing desk setup");
     });
 
-    it("resolves rendered links from the active note", async () => {
+    it("resolves rendered links from the active note and asks for live Dataview query results (https://github.com/logancyang/obsidian-copilot/issues/3988)", async () => {
       const app = new App();
       const TFileConstructor = TFile as unknown as new (path: string) => TFile;
       const activeFile = new TFileConstructor("Projects/Active note.md");
@@ -70,7 +70,8 @@ describe("AgentMarkdownText", () => {
         "[[Related note]]",
         expect.any(HTMLElement),
         "Projects/Active note.md",
-        expect.anything()
+        expect.anything(),
+        true
       );
     });
   });
