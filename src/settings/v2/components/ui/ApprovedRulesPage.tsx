@@ -135,7 +135,7 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
 
       {allRules.length > 0 &&
         (visibleRules.length > 0 ? (
-          <ul aria-label="Approved rules" className="tw-m-0 tw-list-none tw-p-0">
+          <ul className="tw-m-0 tw-list-none tw-p-0">
             {visibleRules.map((rule, index) => (
               <li
                 key={rule.id}

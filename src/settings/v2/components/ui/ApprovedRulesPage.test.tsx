@@ -36,7 +36,7 @@ function renderPage(store: ApprovedRuleStore, onBack: () => void = jest.fn()) {
 }
 
 function ruleRows(): HTMLElement[] {
-  return within(screen.getByRole("list", { name: "Approved rules" })).getAllByRole("listitem");
+  return within(screen.getByRole("list")).getAllByRole("listitem");
 }
 
 describe("ApprovedRulesPage", () => {
@@ -95,7 +95,7 @@ describe("ApprovedRulesPage", () => {
       });
 
       expect(screen.getByText("No rules match “curl”.")).not.toBeNull();
-      expect(screen.queryByRole("list", { name: "Approved rules" })).toBeNull();
+      expect(screen.queryByRole("list")).toBeNull();
     });
 
     it("says the agent has no approved rules when its store lists none", async () => {
@@ -166,7 +166,7 @@ describe("ApprovedRulesPage", () => {
       await screen.findByText("Bash(git status:*)");
       const body = screen.getByRole("region", { name: "Approved rules" });
 
-      expect(body.contains(screen.getByRole("list", { name: "Approved rules" }))).toBe(true);
+      expect(body.contains(screen.getByRole("list"))).toBe(true);
       expect(body.contains(screen.getByPlaceholderText("Search approved rules…"))).toBe(false);
     });
 
