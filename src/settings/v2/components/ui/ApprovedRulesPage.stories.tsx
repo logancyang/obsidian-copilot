@@ -36,6 +36,20 @@ function fakeRuleStore(overrides: Partial<ApprovedRuleStore> = {}): ApprovedRule
 
 const PLUGIN = {} as CopilotPlugin;
 
+const MANY_RULES: ReadonlyArray<ApprovedRule> = Array.from({ length: 30 }, (_, index) => ({
+  id: `rule-${index}`,
+  allows: `Bash(tool${index + 1}:*)`,
+  appliesTo: { kind: "agent" },
+}));
+
+function InSettingsViewport(args: Partial<ApprovedRulesPageProps>): React.ReactElement {
+  return (
+    <div className="tw-h-[480px]">
+      <ApprovedRulesPage {...meta.args} {...args} />
+    </div>
+  );
+}
+
 function typeSearch(root: HTMLElement, text: string): boolean {
   const input = root.querySelector<HTMLInputElement>('input[placeholder="Search approved rules…"]');
   if (!input) return false;
@@ -56,7 +70,7 @@ function SearchedPage({ text }: { text: string }): React.ReactElement {
     return () => observer.disconnect();
   }, [text]);
   return (
-    <div ref={root}>
+    <div ref={root} className="tw-h-[480px]">
       <ApprovedRulesPage
         agentName="Claude"
         store={fakeRuleStore()}
@@ -80,13 +94,20 @@ const meta = {
 } satisfies Meta<ApprovedRulesPageProps>;
 export default meta;
 
-export const Populated: StoryObj<ApprovedRulesPageProps> = {};
+export const Populated: StoryObj<ApprovedRulesPageProps> = { render: InSettingsViewport };
+
+export const ManyRules: StoryObj<ApprovedRulesPageProps> = {
+  args: { store: fakeRuleStore({ list: async () => MANY_RULES }) },
+  render: InSettingsViewport,
+};
 
 export const Loading: StoryObj<ApprovedRulesPageProps> = {
+  render: InSettingsViewport,
   args: { store: fakeRuleStore({ list: () => new Promise(() => undefined) }) },
 };
 
 export const Empty: StoryObj<ApprovedRulesPageProps> = {
+  render: InSettingsViewport,
   args: { store: fakeRuleStore({ list: async () => [] }) },
 };
 
@@ -95,6 +116,7 @@ export const SearchWithNoMatch: StoryObj<ApprovedRulesPageProps> = {
 };
 
 export const CantRead: StoryObj<ApprovedRulesPageProps> = {
+  render: InSettingsViewport,
   args: {
     store: fakeRuleStore({
       list: async () => {
@@ -105,6 +127,7 @@ export const CantRead: StoryObj<ApprovedRulesPageProps> = {
 };
 
 export const RemoveError: StoryObj<ApprovedRulesPageProps> = {
+  render: InSettingsViewport,
   args: {
     store: fakeRuleStore({
       remove: async () => {

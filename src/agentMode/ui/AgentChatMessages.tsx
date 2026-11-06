@@ -18,6 +18,7 @@ import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentMessagePart,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -26,6 +27,8 @@ import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
 import { App, Plugin } from "obsidian";
 import React, { memo, useMemo } from "react";
+
+const EMPTY_PARTS = Object.freeze([]) as unknown as AgentMessagePart[];
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
@@ -92,7 +95,8 @@ const AgentMessageRow = memo(function AgentMessageRow({
   const adaptedMessage = toChatMessageView(message);
   const isAssistant = message.sender !== USER_SENDER;
   const hasParts = (message.parts?.length ?? 0) > 0;
-  const renderTrail = isAssistant && hasParts;
+  // A reply the agent cancelled before any text or tool activity still owes the user its stop notice. https://github.com/logancyang/obsidian-copilot/issues/4062
+  const renderTrail = isAssistant && (hasParts || message.agentCancelCause !== undefined);
   const completedTurnDurationMs = isLatestAssistant ? message.turnDurationMs : undefined;
   const runningTurnStartedAtMs =
     isLatestAssistant && isStreaming ? message.timestamp?.epoch : undefined;
@@ -126,13 +130,14 @@ const AgentMessageRow = memo(function AgentMessageRow({
       ) : renderTrail ? (
         <div className="tw-px-3 tw-pt-2">
           <AgentTrail
-            parts={message.parts!}
+            parts={message.parts ?? EMPTY_PARTS}
             isStreaming={isStreaming}
             turnStartedAtMs={runningTurnStartedAtMs}
             turnDurationMs={completedTurnDurationMs}
             timestamp={message.timestamp?.display}
             app={app}
             turnStopReason={message.turnStopReason}
+            agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
             fileChanges={message.fileChanges}
             onOpenFileChange={(change) =>

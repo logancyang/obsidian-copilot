@@ -76,7 +76,7 @@ export const OpenSessions: StoryObj<GlobalRecentChatsSectionProps> = {
   args: {
     items: items.slice(0, 3).map((item, index) => ({
       ...item,
-      title: ["Session live", "Agent responding", "Saved chat, session closed"][index],
+      title: ["Running chat", "Agent responding", "Saved chat, shut down"][index],
     })),
     openChatIds: new Set([items[0].id, items[1].id]),
     runningChatIds: new Set([items[1].id]),

@@ -41,6 +41,7 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   readOnlyModeId?: string | null;
+  unlistedModeShowsAs?: CopilotMode;
 }
 
 export interface ModeOption {
@@ -178,6 +179,8 @@ export type PromptContent =
   | { type: "resource_link"; uri: string; name?: string };
 
 export type StopReason = "end_turn" | "cancelled" | "refusal" | "max_tokens" | "max_turn_requests";
+
+export type AgentCancelCause = "permission_declined" | "unspecified";
 
 export type AgentToolKind =
   | "read"
@@ -565,6 +568,7 @@ export interface AgentChatMessage {
   context?: MessageContext;
   content?: unknown[];
   turnStopReason?: StopReason;
+  agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
