@@ -28,18 +28,10 @@ import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 import { ApprovedRulesPage } from "./ui/ApprovedRulesPage";
 import { getVaultBase } from "@/utils/vaultPath";
+import { getScrollableParent } from "@/utils/dom/scrollableParent";
+import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
-
-function getScrollableParent(el: HTMLElement): HTMLElement | null {
-  let node: HTMLElement | null = el.parentElement;
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll") return node;
-    node = node.parentElement;
-  }
-  return null;
-}
 
 export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -160,7 +152,8 @@ const BackendPanel: React.FC<{
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
-  const [showingApprovedRules, setShowingApprovedRules] = React.useState(false);
+  const approvedRules = descriptor.approvedRules;
+  const subPage = useSettingsSubPage();
 
   React.useEffect(() => {
     if (!manager) return;
@@ -172,17 +165,6 @@ const BackendPanel: React.FC<{
   }, [manager, descriptor.id, installState.kind]);
 
   const showCloudWarning = backendNeedsSelfHostWarning(descriptor, settings);
-
-  if (showingApprovedRules && descriptor.approvedRules) {
-    return (
-      <ApprovedRulesPage
-        agentName={descriptor.displayName}
-        store={descriptor.approvedRules}
-        plugin={plugin}
-        onBack={() => setShowingApprovedRules(false)}
-      />
-    );
-  }
 
   return (
     <div className="tw-space-y-3">
@@ -222,13 +204,26 @@ const BackendPanel: React.FC<{
 
         {/* Only agents whose backend can read and remove its saved rules offer the page.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
-        {descriptor.approvedRules && (
+        {approvedRules && (
           <SettingItem
             type="custom"
             title="Approved rules"
             description={`Actions ${descriptor.displayName} may take without asking, saved when you chose an “always” option.`}
           >
-            <Button variant="secondary" size="sm" onClick={() => setShowingApprovedRules(true)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                subPage.open(
+                  <ApprovedRulesPage
+                    agentName={descriptor.displayName}
+                    store={approvedRules}
+                    plugin={plugin}
+                    onBack={subPage.close}
+                  />
+                )
+              }
+            >
               Edit approved rules
             </Button>
           </SettingItem>

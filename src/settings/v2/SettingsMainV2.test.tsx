@@ -1,9 +1,38 @@
 import type CopilotPlugin from "@/main";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () => null }));
+jest.mock("@/settings/v2/components/BasicSettings", () => {
+  const { useState } = jest.requireActual<typeof import("react")>("react");
+  const { useSettingsSubPage } = jest.requireActual<typeof import("@/settings/v2/SettingsSubPage")>(
+    "@/settings/v2/SettingsSubPage"
+  );
+  const MockBasicSettings = () => {
+    const { open, close } = useSettingsSubPage();
+    const [agentTab, setAgentTab] = useState("OpenCode");
+    return (
+      <div>
+        <button type="button" onClick={() => setAgentTab("Claude")}>
+          Agent tab: {agentTab}
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            open(
+              <button type="button" onClick={close}>
+                Back
+              </button>
+            )
+          }
+        >
+          Edit approved rules
+        </button>
+      </div>
+    );
+  };
+  return { BasicSettings: MockBasicSettings };
+});
 jest.mock("@/miyo/settings/MiyoSettings", () => ({
   MiyoSettings: () => <div>Miyo settings content</div>,
 }));
@@ -93,6 +122,25 @@ describe("SettingsMainV2", () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
       await waitFor(() => expect(mockSkillManagerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 replaces the header, tab strip and tab content with a page a section opens, and Back restores the same tab with its state", () => {
+      render(<SettingsMainV2 plugin={plugin} />);
+      fireEvent.click(screen.getByRole("button", { name: "Agent tab: OpenCode" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit approved rules" }));
+
+      expect(screen.getByRole("button", { name: "Back" })).not.toBeNull();
+      expect(screen.queryByRole("heading", { name: /Copilot settings/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset settings" })).toBeNull();
+      expect(screen.queryAllByRole("tab")).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: "Agent tab: Claude" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(screen.getByRole("heading", { name: /Copilot settings/ })).not.toBeNull();
+      expect(screen.getByRole("tab", { name: "Basic" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByRole("button", { name: "Agent tab: Claude" })).not.toBeNull();
     });
 
     it("opens on a requested tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {

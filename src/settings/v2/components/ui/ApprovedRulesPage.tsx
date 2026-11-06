@@ -87,8 +87,6 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
 
   return (
     <div className="tw-space-y-3">
-      {/* The page replaces a panel low in a long settings tab; focusing Back scrolls its top into view.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
       <Button variant="ghost" size="sm" className="tw-px-2" onClick={onBack} autoFocus>
         <ArrowLeft className="tw-size-4" />
         Back
