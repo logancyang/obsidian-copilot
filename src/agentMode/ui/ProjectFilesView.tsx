@@ -1,3 +1,4 @@
+import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { LinkUrlModal } from "@/components/modals/LinkUrlModal";
@@ -385,7 +386,7 @@ interface ProjectFilesSectionProps {
   children: React.ReactNode;
 }
 
-function ProjectFilesSection({
+export function ProjectFilesSection({
   title,
   detail,
   action,
@@ -426,6 +427,34 @@ export function ProjectFolderSection({
         <ProjectTreeRows nodes={nodes} {...handlers} />
       )}
     </ProjectFilesSection>
+  );
+}
+
+export interface FileDetailRowProps extends Omit<ProjectRowProps, "expanded"> {
+  name: string;
+  folder: string;
+  status: string;
+}
+
+export function FileDetailRow({
+  name,
+  folder,
+  status,
+  children,
+  ...rowProps
+}: FileDetailRowProps): React.ReactElement {
+  return (
+    <ProjectRow {...rowProps}>
+      <File aria-hidden="true" className="tw-ml-5 tw-size-3.5 tw-shrink-0 tw-text-faint" />
+      <span className="tw-min-w-0 tw-shrink tw-truncate" title={name}>
+        {name}
+      </span>
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
+        {folder || "/"}
+      </span>
+      <FileStatusLabel>{status}</FileStatusLabel>
+      {children}
+    </ProjectRow>
   );
 }
 
@@ -555,9 +584,13 @@ export function LinkedSection({
 
 interface ProjectFilesViewProps {
   projectId: string;
+  acceptsDrops?: boolean;
 }
 
-export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.ReactElement | null {
+export function ProjectFilesView({
+  projectId,
+  acceptsDrops = false,
+}: ProjectFilesViewProps): React.ReactElement | null {
   const app = useApp();
   const startNoteDrag = useNoteDrag();
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
@@ -711,8 +744,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     unlinkProjectUrl(app, projectId, item).catch(reportFailure("unlink from the project"));
   };
 
+  // Drops link or copy only on the project home; in a chat's popover they looked too busy and aren't needed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/839
   const acceptsDrag = (event: React.DragEvent): boolean =>
-    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+    acceptsDrops && !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
 
   const dropOnFiles = (event: React.DragEvent): void => {
     if (!acceptsDrag(event)) return;
@@ -734,7 +769,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
     <div
-      data-copilot-drop-zone
+      data-copilot-drop-zone={acceptsDrops || undefined}
       className={cn(
         "tw-flex tw-min-h-full tw-flex-1 tw-flex-col tw-rounded-md",
         isDragOver && FILES_DROP_HIGHLIGHT

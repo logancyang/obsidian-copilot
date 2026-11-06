@@ -6,14 +6,6 @@ import { App, normalizePath, TFile, TFolder } from "obsidian";
 export const AGENTS_FILE_NAME = "AGENTS.md";
 export const CLAUDE_FILE_NAME = "CLAUDE.md";
 
-const CLAUDE_REFERENCE_PATTERN = /^[ \t>-]*@\.?\/?AGENTS\.md[ \t]*$/im;
-
-export function isClaudeImportOnly(content: string): boolean {
-  return content
-    .split(/\r?\n/)
-    .every((line) => line.trim().length === 0 || CLAUDE_REFERENCE_PATTERN.test(line));
-}
-
 const GENERATED_MIRROR_HEADER =
   /^(\uFEFF?)<!-- copilot:generated-agents-mirror [^\r\n]* -->\r?\n\r?\n/;
 

@@ -200,11 +200,6 @@ export interface AgentPlanEntry {
   status: "pending" | "in_progress" | "completed";
 }
 
-export interface AgentTodoListEntry {
-  content: string;
-  status: AgentPlanEntry["status"];
-}
-
 export interface AgentToolProgress {
   description?: string;
   toolName?: string;

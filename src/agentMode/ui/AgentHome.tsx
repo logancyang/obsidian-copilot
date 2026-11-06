@@ -113,7 +113,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     isTurnInFlight,
     hasPendingPlanPermission,
     currentPlan,
-    currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
     feedbackOffer,
@@ -530,7 +529,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         id: "project-files",
         icon: <Files className="tw-size-4" />,
         title: "Files",
-        renderBody: () => <ProjectFilesView projectId={activeProjectId} />,
+        renderBody: () => <ProjectFilesView projectId={activeProjectId} acceptsDrops />,
       },
       {
         id: "project-chats",
@@ -716,7 +715,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 <ProjectInfoPopover
                   app={app}
                   project={activeProject}
-                  todoList={currentTodoList}
+                  messages={messages}
                   container={rootEl}
                 />
               ) : undefined

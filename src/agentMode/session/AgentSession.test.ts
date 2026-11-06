@@ -700,27 +700,6 @@ describe("AgentSession", () => {
         expect(session.getStatus()).toBe("idle");
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/643 restores the last replayed task list as the current todo list", async () => {
-        const mock = makeMockBackend();
-        const session = makeAwaitingResumeSession(mock);
-        const onCurrentTodoListChanged = jest.fn();
-        subscribeTo(session, { onCurrentTodoListChanged });
-
-        mock.emitUpdate({
-          sessionUpdate: "plan",
-          entries: [{ content: "step", status: "pending", priority: "medium" }],
-        });
-        mock.emitUpdate({
-          sessionUpdate: "plan",
-          entries: [{ content: "step", status: "completed", priority: "medium" }],
-        });
-        session.completeResume(emptyState());
-        await session.ready;
-
-        expect(session.getCurrentTodoList()).toEqual([{ content: "step", status: "completed" }]);
-        expect(onCurrentTodoListChanged).toHaveBeenCalled();
-      });
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 gives a replayed reply the agent started on its own its own bubble when the replay ends the turn before it", () => {
         const mock = makeMockBackend();
         const session = makeAwaitingResumeSession(mock);
@@ -6951,39 +6930,6 @@ describe("AgentSession", () => {
         expect(session.getTaskMessages("tool-agent")[0]?.parts).toEqual([
           expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
           expect.objectContaining({ id: "tool-write", status: "completed" }),
-        ]);
-      });
-    });
-
-    describe("getCurrentTodoList()", () => {
-      const planUpdate = (entries: { content: string; status: string; priority?: string }[]) => ({
-        sessionId: "acp-1",
-        update: { sessionUpdate: "plan", entries } as never,
-      });
-
-      const makeLiveSession = (mock: MockBackend): AgentSession => {
-        const session = makeSession(mock);
-        session.loadDisplayMessages([]);
-        return session;
-      };
-
-      it("starts null, snapshots plan entries, and notifies the dedicated channel", () => {
-        const mock = makeMockBackend();
-        const session = makeLiveSession(mock);
-        expect(session.getCurrentTodoList()).toBeNull();
-
-        let notified = 0;
-        subscribeTo(session, { onCurrentTodoListChanged: () => notified++ });
-        mock.emit(
-          planUpdate([
-            { content: "step A", status: "in_progress", priority: "medium" },
-            { content: "step B", status: "pending", priority: "medium" },
-          ])
-        );
-        expect(notified).toBe(1);
-        expect(session.getCurrentTodoList()).toEqual([
-          { content: "step A", status: "in_progress" },
-          { content: "step B", status: "pending" },
         ]);
       });
     });

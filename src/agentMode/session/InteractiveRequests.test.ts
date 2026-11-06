@@ -2,7 +2,7 @@ import { AI_SENDER } from "@/constants";
 import { AgentMessageStore } from "./AgentMessageStore";
 import { InteractiveRequests, type InteractiveRequestsDeps } from "./InteractiveRequests";
 import { planPermissionRequest, writePermissionRequest } from "./testing/permissionPrompts";
-import type { AgentPlanEntry, AskUserQuestionPrompt } from "./types";
+import type { AskUserQuestionPrompt } from "./types";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -15,7 +15,6 @@ function makeRequests(overrides: Partial<InteractiveRequestsDeps> = {}) {
     recomputeStatus: jest.fn(),
     notifyMessages: jest.fn(),
     notifyPlanChanged: jest.fn(),
-    notifyTodoListChanged: jest.fn(),
   };
   const requests = new InteractiveRequests({
     store: new AgentMessageStore(),
@@ -122,12 +121,6 @@ describe("InteractiveRequests", () => {
     describe("getCurrentPlan()", () => {
       it("starts with no plan", () => {
         expect(makeRequests().requests.getCurrentPlan()).toBeNull();
-      });
-    });
-
-    describe("getCurrentTodoList()", () => {
-      it("starts with no todo list", () => {
-        expect(makeRequests().requests.getCurrentTodoList()).toBeNull();
       });
     });
 
@@ -465,52 +458,14 @@ describe("InteractiveRequests", () => {
       });
     });
 
-    describe("applyTodoList()", () => {
-      const entries = (...contents: string[]): AgentPlanEntry[] =>
-        contents.map((content) => ({ content, status: "pending", priority: "medium" }));
-
-      it("snapshots the entries' content and status and notifies the todo-list channel", () => {
-        const { requests, notifyTodoListChanged } = makeRequests();
-
-        requests.applyTodoList(entries("step A", "step B"));
-
-        expect(requests.getCurrentTodoList()).toEqual([
-          { content: "step A", status: "pending" },
-          { content: "step B", status: "pending" },
-        ]);
-        expect(notifyTodoListChanged).toHaveBeenCalledTimes(1);
-      });
-
-      it("dedupes identical lists (synthesized + real plan channel) by content signature", () => {
-        const { requests, notifyTodoListChanged } = makeRequests();
-        requests.applyTodoList([{ content: "same", status: "pending", priority: "high" }]);
-        const snapshot = requests.getCurrentTodoList();
-
-        requests.applyTodoList([{ content: "same", status: "pending", priority: "low" }]);
-
-        expect(notifyTodoListChanged).toHaveBeenCalledTimes(1);
-        expect(requests.getCurrentTodoList()).toBe(snapshot);
-      });
-
-      it("clears to null on an empty plan", () => {
-        const { requests } = makeRequests();
-        requests.applyTodoList(entries("only"));
-
-        requests.applyTodoList([]);
-
-        expect(requests.getCurrentTodoList()).toBeNull();
-      });
-    });
-
     describe("dispose()", () => {
-      it("rejects pending permissions, withdraws questions, and clears the plan and todo list", async () => {
+      it("rejects pending permissions, withdraws questions, and clears the plan", async () => {
         const { requests } = makeRequests();
         const plan = requests.handlePlanProposalPermission(
           planPermissionRequest("tc-plan", PLAN_INFO)
         );
         const tool = requests.handleToolPermission(writePermissionRequest());
         const question = requests.handleAskUserQuestion(fruitQuestion());
-        requests.applyTodoList([{ content: "again", status: "pending", priority: "medium" }]);
 
         requests.dispose();
 
@@ -520,7 +475,6 @@ describe("InteractiveRequests", () => {
         await expect(question).resolves.toEqual({});
         expect(requests.hasPending()).toBe(false);
         expect(requests.getCurrentPlan()).toBeNull();
-        expect(requests.getCurrentTodoList()).toBeNull();
       });
     });
   });

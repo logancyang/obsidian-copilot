@@ -4,7 +4,6 @@ import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
-  AgentTodoListEntry,
   AskUserQuestionPrompt,
   BackendId,
   BackendState,
@@ -56,8 +55,6 @@ export interface AgentChatBackend {
   ): Promise<void>;
 
   getCurrentPlan(): CurrentPlan | null;
-
-  getCurrentTodoList(): AgentTodoListEntry[] | null;
 
   getSessionUsage(): SessionUsage | null;
 

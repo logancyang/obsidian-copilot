@@ -31,15 +31,21 @@ export const FileChangeCounts: React.FC<FileChangeCountsProps> = ({ additions, d
   </span>
 );
 
+export interface FileStatusLabelProps {
+  children: React.ReactNode;
+}
+
+export const FileStatusLabel: React.FC<FileStatusLabelProps> = ({ children }) => (
+  <span className="tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-secondary-alt tw-px-1 tw-text-xs tw-text-muted">
+    {children}
+  </span>
+);
+
 export interface FileChangeStatusBadgeProps {
   status: TurnFileChange["status"];
 }
 
 export const FileChangeStatusBadge: React.FC<FileChangeStatusBadgeProps> = ({ status }) => {
   if (status === "modified") return null;
-  return (
-    <span className="tw-shrink-0 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-bg-secondary-alt tw-px-1 tw-text-xs tw-text-muted">
-      {status === "created" ? "new" : "deleted"}
-    </span>
-  );
+  return <FileStatusLabel>{status === "created" ? "new" : "deleted"}</FileStatusLabel>;
 };
