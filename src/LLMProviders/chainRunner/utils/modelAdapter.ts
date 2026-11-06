@@ -241,9 +241,6 @@ class GPTModelAdapter extends BaseModelAdapter {
       toolMetadata
     );
 
-    const tools = availableToolNames || [];
-    const hasComposerTools = tools.includes("writeFile") || tools.includes("editFile");
-
     const gptSectionParts: string[] = [];
 
     if (this.isGPT5Model()) {
@@ -256,22 +253,6 @@ class GPTModelAdapter extends BaseModelAdapter {
       gptSectionParts.push(
         "CRITICAL FOR GPT MODELS: You MUST use tools when the user's request requires them. Do not just describe what you plan to do - actually call the tools."
       );
-    }
-
-    if (hasComposerTools) {
-      gptSectionParts.push(`🚨 FILE EDITING WITH COMPOSER TOOLS 🚨
-
-When user asks you to edit or modify a file, you MUST:
-1. Determine if it's a small edit (use editFile) or major rewrite (use writeFile)
-2. Call the tool immediately - do not just describe what you plan to do
-
-For editFile, pass the exact text to find and its replacement:
-- path: vault-relative file path
-- oldText: exact text to find (include surrounding context lines to make it unique)
-- newText: replacement text (empty string to delete)
-
-❌ WRONG: "I'll help you add item 4 to the list. Let me update that for you." [No tool call = FAILURE]
-✅ CORRECT: Actually call editFile or writeFile with proper parameters`);
     }
 
     gptSectionParts.push(
@@ -307,21 +288,8 @@ For editFile, pass the exact text to find and its replacement:
       lowerMessage.includes("search") ||
       lowerMessage.includes("my notes");
 
-    const requiresFileEdit =
-      lowerMessage.includes("edit") ||
-      lowerMessage.includes("modify") ||
-      lowerMessage.includes("update") ||
-      lowerMessage.includes("change") ||
-      lowerMessage.includes("fix") ||
-      lowerMessage.includes("add") ||
-      lowerMessage.includes("typo");
-
     if (requiresSearch) {
       return `${message}\n\nREMINDER: Call the localSearch tool now.`;
-    }
-
-    if (requiresFileEdit) {
-      return `${message}\n\n🚨 GPT REMINDER: Use editFile for small edits (oldText/newText parameters) or writeFile for full rewrites.`;
     }
 
     return message;

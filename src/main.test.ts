@@ -85,7 +85,6 @@ import CopilotView from "@/components/CopilotView";
 import { getSelectedTextContexts } from "@/selection/selectionStore";
 import { DEFAULT_SETTINGS, EVENT_NAMES } from "@/constants";
 import {
-  APPLY_VIEW_TYPE,
   CHAT_AGENT_VIEWTYPE,
   CHAT_VIEWTYPE,
   PLAN_PREVIEW_VIEW_TYPE,
@@ -626,7 +625,6 @@ describe("main", () => {
         expect(registrations.addSettingTab).toHaveBeenCalledTimes(1);
         expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
           CHAT_VIEWTYPE,
-          APPLY_VIEW_TYPE,
           RELEVANT_NOTES_VIEWTYPE,
         ]);
         expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(StartupLoadingView);
@@ -641,7 +639,6 @@ describe("main", () => {
 
         expect(registrations.registerView.mock.calls.map(([type]) => type)).toEqual([
           CHAT_VIEWTYPE,
-          APPLY_VIEW_TYPE,
           RELEVANT_NOTES_VIEWTYPE,
           CHAT_AGENT_VIEWTYPE,
           SESSIONS_SIDEBAR_VIEWTYPE,

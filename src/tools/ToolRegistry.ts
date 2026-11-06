@@ -9,7 +9,6 @@ export interface ToolMetadata {
   requiresVault?: boolean;
   customPromptInstructions?: string;
   copilotCommands?: string[];
-  timeoutMs?: number;
   isBackground?: boolean;
   isPlusOnly?: boolean;
   requiresUserMessageContent?: boolean;

@@ -567,16 +567,6 @@ export function cleanMessageForCopy(message: string): string {
   cleanedMessage = removeThinkTags(cleanedMessage);
 
   cleanedMessage = cleanedMessage.replace(
-    /```xml\s*[\s\S]*?<write(?:File|ToFile)>[\s\S]*?<\/write(?:File|ToFile)>[\s\S]*?```/g,
-    ""
-  );
-
-  cleanedMessage = cleanedMessage.replace(
-    /<write(?:File|ToFile)>[\s\S]*?<\/write(?:File|ToFile)>/g,
-    ""
-  );
-
-  cleanedMessage = cleanedMessage.replace(
     /<!--TOOL_CALL_START:[^:]+:[^:]+:[^:]+:[^:]+:[^:]*:[^:]+-->[\s\S]*?<!--TOOL_CALL_END:[^:]+:[\s\S]*?-->/g,
     ""
   );
@@ -867,30 +857,4 @@ export function truncateToByteLimit(str: string, byteLimit: number): string {
   }
 
   return result;
-}
-
-const MAX_FILENAME_BYTES = 255;
-
-export function sanitizeFilePath(filePath: string): string {
-  const parts = filePath.split("/");
-  const basename = parts[parts.length - 1];
-
-  if (getUtf8ByteLength(basename) <= MAX_FILENAME_BYTES) {
-    return filePath;
-  }
-
-  const extIndex = basename.lastIndexOf(".");
-  const ext = extIndex >= 0 ? basename.substring(extIndex) : "";
-  const name = extIndex >= 0 ? basename.substring(0, extIndex) : basename;
-
-  const extBytes = getUtf8ByteLength(ext);
-  const availableBytes = MAX_FILENAME_BYTES - extBytes;
-
-  if (availableBytes <= 0) {
-    parts[parts.length - 1] = truncateToByteLimit(basename, MAX_FILENAME_BYTES);
-  } else {
-    parts[parts.length - 1] = truncateToByteLimit(name, availableBytes) + ext;
-  }
-
-  return parts.join("/");
 }

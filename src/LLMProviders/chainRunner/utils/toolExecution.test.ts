@@ -128,24 +128,29 @@ describe("toolExecution", () => {
       expect(result.result).toBe("saw: original question");
     });
 
-    it("fails a tool that outlasts its timeoutMs", async () => {
-      const slow = registerTool(
-        createLangChainTool({
-          name: "slow",
-          description: "Never finishes",
-          schema: z.object({}),
-          func: () => new Promise<string>(() => {}),
-        }),
-        { timeoutMs: 20 }
-      );
+    it("fails a tool that runs past the two-minute tool timeout", async () => {
+      jest.useFakeTimers();
+      try {
+        const slow = registerTool(
+          createLangChainTool({
+            name: "slow",
+            description: "Never finishes",
+            schema: z.object({}),
+            func: () => new Promise<string>(() => {}),
+          })
+        );
 
-      const result = await executeSequentialToolCall({ name: "slow", args: {} }, [slow]);
+        const pending = executeSequentialToolCall({ name: "slow", args: {} }, [slow]);
+        await jest.advanceTimersByTimeAsync(120000);
 
-      expect(result).toEqual({
-        toolName: "slow",
-        result: "Error: Tool execution timed out after 20ms",
-        success: false,
-      });
+        expect(await pending).toEqual({
+          toolName: "slow",
+          result: "Error: Tool execution timed out after 120000ms",
+          success: false,
+        });
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it("reports the thrown message as a failed result when the tool throws", async () => {

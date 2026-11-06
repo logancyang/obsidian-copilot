@@ -2,13 +2,10 @@ import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainType";
 import { ChatModeSelector } from "@/components/chat-components/ChatModeSelector";
 import { Button } from "@/components/ui/button";
-import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { navigateToPlusPage, useIsPaidUser } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
-import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import { CheckCircle, Download, History, MessageCirclePlus, MoreHorizontal } from "lucide-react";
+import { useSettingsValue } from "@/settings/model";
+import { Download, History, MessageCirclePlus } from "lucide-react";
 import React from "react";
 import {
   ChatHistoryItem,
@@ -104,29 +101,6 @@ export function ChatControls({
           </ChatHistoryPopover>
           <TooltipContent>Chat history</TooltipContent>
         </Tooltip>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="icon" title="Advanced settings">
-              <MoreHorizontal className="tw-size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="tw-w-64">
-            <DropdownMenuItem
-              className="tw-flex tw-justify-between"
-              onSelect={(e) => {
-                e.preventDefault();
-                updateSetting("autoAcceptEdits", !settings.autoAcceptEdits);
-              }}
-            >
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <CheckCircle className="tw-size-4" />
-                Auto-accept edits
-              </div>
-              <SettingSwitch checked={settings.autoAcceptEdits} />
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </div>
   );

@@ -1,1 +1,1 @@
-export const AVAILABLE_TOOLS = ["@vault", "@websearch", "@composer", "@memory"];
+export const AVAILABLE_TOOLS = ["@vault", "@websearch", "@memory"];

@@ -184,20 +184,6 @@ export function summarizeToolResult(
     }
     case "updateMemory":
       return "Updated memory";
-    case "writeFile":
-    case "editFile": {
-      const filePath = args?.path as string | undefined;
-      const fileName = filePath ? filePath.split("/").pop() || filePath : "file";
-
-      const resultStr = result.result || "";
-      if (resultStr.includes('"rejected"') || resultStr.includes("rejected")) {
-        return `Edit rejected for "${fileName}"`;
-      }
-      if (resultStr.includes('"failed"') || resultStr.includes("Error")) {
-        return `Edit failed for "${fileName}"`;
-      }
-      return toolName === "writeFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
-    }
     default:
       return "Done";
   }
@@ -310,22 +296,6 @@ export function summarizeToolCall(toolName: string, args?: Record<string, unknow
     }
     case "updateMemory":
       return "Saving to memory";
-    case "writeFile": {
-      const filePath = args?.path as string | undefined;
-      if (filePath) {
-        const fileName = filePath.split("/").pop() || filePath;
-        return `Writing to "${fileName}"`;
-      }
-      return "Writing to file";
-    }
-    case "editFile": {
-      const filePath = args?.path as string | undefined;
-      if (filePath) {
-        const fileName = filePath.split("/").pop() || filePath;
-        return `Editing "${fileName}"`;
-      }
-      return "Editing file";
-    }
     default:
       return "Processing";
   }

@@ -119,8 +119,6 @@ export interface CopilotSettings {
   enableSavedMemory: boolean;
   quickCommandModelKey: string | undefined;
   quickCommandIncludeNoteContext: boolean;
-  autoAcceptEdits: boolean;
-  diffViewMode: "side-by-side" | "split";
   userSystemPromptsFolder: string;
   defaultSystemPromptTitle: string;
   autoCompactThreshold: number;
@@ -565,12 +563,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
-  const toolIdRenames: Record<string, string> = {
-    writeToFile: "writeFile",
-    replaceInFile: "editFile",
-  };
+  // Quick Chat no longer edits vault files, so saved file-editing tools and their
+  // preferences are dropped. https://github.com/Brevilabs/obsidian-copilot-private/issues/850
+  const removedFileEditToolIds = ["writeFile", "editFile", "writeToFile", "replaceInFile"];
   sanitizedSettings.autonomousAgentEnabledToolIds =
-    sanitizedSettings.autonomousAgentEnabledToolIds.map((id) => toolIdRenames[id] ?? id);
+    sanitizedSettings.autonomousAgentEnabledToolIds.filter(
+      (id) => !removedFileEditToolIds.includes(id)
+    );
+  delete sanitizedSettingsRecord.autoAcceptEdits;
+  delete sanitizedSettingsRecord.diffViewMode;
 
   if (
     !sanitizedSettings.memoryFolderName ||
@@ -623,10 +624,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     typeof settingsToSanitize.quickCommandModelKey !== "string"
   ) {
     sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
-  }
-
-  if (typeof sanitizedSettings.autoAcceptEdits !== "boolean") {
-    sanitizedSettings.autoAcceptEdits = DEFAULT_SETTINGS.autoAcceptEdits;
   }
 
   if (!Object.values(SEND_SHORTCUT).includes(sanitizedSettings.defaultSendShortcut)) {

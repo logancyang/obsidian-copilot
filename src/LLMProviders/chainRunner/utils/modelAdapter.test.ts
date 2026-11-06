@@ -79,19 +79,19 @@ describe("modelAdapter", () => {
         const toolMetadata = [
           createToolMetadata("localSearch", "LocalSearch specific instructions"),
           createToolMetadata("webSearch", "WebSearch specific instructions"),
-          createToolMetadata("writeFile", "WriteToFile specific instructions"),
+          createToolMetadata("readNote", "ReadNote specific instructions"),
         ];
 
         const prompt = adapterFor("gpt-4").enhanceSystemPrompt(
           BASE_PROMPT,
           TOOL_DESCRIPTIONS,
-          ["localSearch", "webSearch", "writeFile"],
+          ["localSearch", "webSearch", "readNote"],
           toolMetadata
         );
 
         expect(prompt).toContain("LocalSearch specific instructions");
         expect(prompt).toContain("WebSearch specific instructions");
-        expect(prompt).toContain("WriteToFile specific instructions");
+        expect(prompt).toContain("ReadNote specific instructions");
       });
 
       it("leaves out the instructions of tools that are not enabled", () => {
@@ -104,7 +104,7 @@ describe("modelAdapter", () => {
 
         expect(prompt).toContain("LocalSearch specific instructions");
         expect(prompt).not.toContain("WebSearch specific instructions");
-        expect(prompt).not.toContain("WriteToFile specific instructions");
+        expect(prompt).not.toContain("ReadNote specific instructions");
       });
 
       it("adds no tool instructions when no tool metadata is supplied", () => {
@@ -117,18 +117,6 @@ describe("modelAdapter", () => {
 
         expect(prompt).not.toContain("LocalSearch specific instructions");
         expect(prompt).not.toContain("WebSearch specific instructions");
-      });
-
-      it("adds composer editing examples for GPT when the file tools are enabled", () => {
-        const prompt = adapterFor("gpt-4").enhanceSystemPrompt(
-          BASE_PROMPT,
-          TOOL_DESCRIPTIONS,
-          ["editFile", "writeFile"],
-          []
-        );
-
-        expect(prompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
-        expect(prompt).toContain("oldText");
       });
     });
 
@@ -147,11 +135,10 @@ describe("modelAdapter", () => {
     });
 
     describe("enhanceUserMessage()", () => {
-      it("appends the GPT file-editing reminder to an edit request when tools are required", () => {
-        const enhanced = adapterFor("gpt-4").enhanceUserMessage("fix the typo in my note", true);
-
-        expect(enhanced).toContain("GPT REMINDER");
-        expect(enhanced).toContain("oldText/newText parameters");
+      it("appends the localSearch reminder to a search request when tools are required", () => {
+        expect(adapterFor("gpt-4").enhanceUserMessage("search my notes for X", true)).toBe(
+          "search my notes for X\n\nREMINDER: Call the localSearch tool now."
+        );
       });
 
       it("returns the message unchanged when no tools are required", () => {

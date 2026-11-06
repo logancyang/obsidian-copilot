@@ -397,41 +397,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         return processCollapsibleSection(content, "think", "Thought for a while", "Thinking...");
       };
 
-      const processWriteFileSection = (content: string): string => {
-        const normalizeLegacyTags = (text: string): string =>
-          text.replace(/<(\/?)writeToFile>/g, "<$1writeFile>");
-
-        const unwrapXmlCodeblocks = (text: string): string => {
-          const xmlCodeblockRegex =
-            /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
-
-          return text.replace(xmlCodeblockRegex, (_match: string, xmlContent: string) => {
-            return xmlContent.trim();
-          });
-        };
-
-        const unwrapStreamingXmlCodeblocks = (text: string): string => {
-          if (!isStreaming) return text;
-
-          const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeFile>[\s\S]*?)$/g;
-
-          return text.replace(streamingXmlCodeblockRegex, (_match: string, xmlContent: string) => {
-            return xmlContent.trim();
-          });
-        };
-
-        let processedContent = normalizeLegacyTags(content);
-        processedContent = unwrapXmlCodeblocks(processedContent);
-        processedContent = unwrapStreamingXmlCodeblocks(processedContent);
-
-        return processCollapsibleSection(
-          processedContent,
-          "writeFile",
-          "Generated new content",
-          "Generating changes..."
-        );
-      };
-
       const replaceLinks = (text: string, regex: RegExp, template: (file: TFile) => string) => {
         const parts = text.split(/(```[\s\S]*?```|`[^`]*`)/g);
 
@@ -458,10 +423,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       const thinkSectionProcessed = processThinkSection(noteImageProcessed);
 
-      const writeFileSectionProcessed = processWriteFileSection(thinkSectionProcessed);
-
       const sourcesSectionProcessed = processInlineCitations(
-        writeFileSectionProcessed,
+        thinkSectionProcessed,
         settings.enableInlineCitations
       );
 

@@ -19,7 +19,6 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
 
   const [vaultToggle, setVaultToggle] = useState(false);
   const [webToggle, setWebToggle] = useState(false);
-  const [composerToggle, setComposerToggle] = useState(false);
   const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
     settings.enableAutonomousAgent
   );
@@ -40,16 +39,11 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
     chatInputRef.current?.removeToolPills(["@websearch", "@web"]);
   }, []);
 
-  const handleComposerToggleOff = useCallback(() => {
-    chatInputRef.current?.removeToolPills(["@composer"]);
-  }, []);
-
   const handleToolPillsChange = useCallback(
     (toolNames: string[]) => {
       if (autonomousAgentToggle) return;
       setVaultToggle(toolNames.includes("@vault"));
       setWebToggle(toolNames.includes("@websearch") || toolNames.includes("@web"));
-      setComposerToggle(toolNames.includes("@composer"));
     },
     [autonomousAgentToggle]
   );
@@ -75,24 +69,13 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
       if (webToggle && !messageLower.includes("@websearch") && !messageLower.includes("@web")) {
         toolCalls.push("@websearch");
       }
-      if (composerToggle && !messageLower.includes("@composer")) {
-        toolCalls.push("@composer");
-      }
       if (toolCalls.length === 0) {
         handleSendMessage(metadata);
         return;
       }
       handleSendMessage({ ...metadata, toolCalls });
     },
-    [
-      handleSendMessage,
-      inputMessage,
-      isCopilotPlus,
-      autonomousAgentToggle,
-      vaultToggle,
-      webToggle,
-      composerToggle,
-    ]
+    [handleSendMessage, inputMessage, isCopilotPlus, autonomousAgentToggle, vaultToggle, webToggle]
   );
 
   const toolControls = useMemo(
@@ -102,25 +85,20 @@ const ChatModeInput: React.FC<ChatModeInputProps> = (props) => {
         setVaultToggle={setVaultToggle}
         webToggle={webToggle}
         setWebToggle={setWebToggle}
-        composerToggle={composerToggle}
-        setComposerToggle={setComposerToggle}
         autonomousAgentToggle={autonomousAgentToggle}
         setAutonomousAgentToggle={setAutonomousAgentToggle}
         currentChain={currentChain}
         onVaultToggleOff={handleVaultToggleOff}
         onWebToggleOff={handleWebToggleOff}
-        onComposerToggleOff={handleComposerToggleOff}
       />
     ),
     [
       vaultToggle,
       webToggle,
-      composerToggle,
       autonomousAgentToggle,
       currentChain,
       handleVaultToggleOff,
       handleWebToggleOff,
-      handleComposerToggleOff,
     ]
   );
 

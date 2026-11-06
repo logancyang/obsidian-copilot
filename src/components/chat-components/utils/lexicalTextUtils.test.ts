@@ -9,7 +9,7 @@ jest.mock("@/logger", () => ({
 }));
 
 jest.mock("../constants/tools", () => ({
-  AVAILABLE_TOOLS: ["@vault", "@websearch", "@composer"],
+  AVAILABLE_TOOLS: ["@vault", "@websearch"],
 }));
 
 const mockApp = {

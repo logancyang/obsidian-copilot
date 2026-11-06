@@ -552,6 +552,29 @@ describe("model", () => {
       expect(sanitized.contextTurns).toBe(4);
     });
 
+    it("drops saved Quick Chat file-editing tools and preferences while keeping the other enabled tools (https://github.com/Brevilabs/obsidian-copilot-private/issues/850)", () => {
+      const withFileEditing = {
+        ...DEFAULT_SETTINGS,
+        autonomousAgentEnabledToolIds: [
+          "localSearch",
+          "writeFile",
+          "editFile",
+          "writeToFile",
+          "replaceInFile",
+          "readNote",
+        ],
+        autoAcceptEdits: true,
+        diffViewMode: "side-by-side",
+      } as unknown as CopilotSettings;
+
+      const sanitized = sanitizeSettings(withFileEditing);
+      const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
+
+      expect(sanitized.autonomousAgentEnabledToolIds).toEqual(["localSearch", "readNote"]);
+      expect("autoAcceptEdits" in sanitizedRecord).toBe(false);
+      expect("diffViewMode" in sanitizedRecord).toBe(false);
+    });
+
     it("keeps a Claude auto permission mode the SDK understands", () => {
       const sanitized = sanitizeClaudeSlice("acceptEdits");
 

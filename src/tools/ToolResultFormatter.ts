@@ -130,10 +130,6 @@ export class ToolResultFormatter {
           return this.formatWebSearch(parsedResult);
         case "youtubeTranscription":
           return this.formatYoutubeTranscription(parsedResult);
-        case "writeFile":
-          return this.formatWriteToFile(parsedResult);
-        case "editFile":
-          return this.formatReplaceInFile(parsedResult);
         case "readNote":
           return this.formatReadNote(parsedResult);
         default:
@@ -519,56 +515,6 @@ export class ToolResultFormatter {
     }
 
     return typeof result === "object" ? JSON.stringify(result, null, 2) : "";
-  }
-
-  private static formatWriteToFile(result: unknown): string {
-    const r =
-      typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
-    const status = r ? r.result : result;
-    const statusStr = (
-      typeof status === "string"
-        ? status
-        : typeof status === "number" || typeof status === "boolean"
-          ? String(status)
-          : ""
-    ).toLowerCase();
-
-    if (statusStr.includes("accepted")) {
-      return "✅ File change: accepted";
-    } else if (statusStr.includes("rejected")) {
-      return "❌ File change: rejected";
-    }
-
-    return r && typeof r.message === "string"
-      ? r.message
-      : typeof status === "string"
-        ? status
-        : "";
-  }
-
-  private static formatReplaceInFile(result: unknown): string {
-    const r =
-      typeof result === "object" && result !== null ? (result as Record<string, unknown>) : null;
-    const rResult = r ? r.result : undefined;
-    const status = r
-      ? typeof rResult === "string" || typeof rResult === "number" || typeof rResult === "boolean"
-        ? String(rResult)
-        : ""
-      : typeof result === "string"
-        ? result
-        : "";
-    const diff = r ? r.diff : undefined;
-    const diffStr = typeof diff === "string" ? diff : typeof diff === "number" ? String(diff) : "";
-
-    if (status.toLowerCase().includes("accepted") && diffStr) {
-      return `✅ Edit accepted\n\`\`\`diff\n${diffStr}\n\`\`\``;
-    } else if (status.toLowerCase().includes("accepted")) {
-      return "✅ Edit accepted";
-    } else if (status.toLowerCase().includes("rejected")) {
-      return "❌ Edit rejected";
-    }
-
-    return r && typeof r.message === "string" ? r.message : status;
   }
 
   private static formatReadNote(result: unknown): string {
