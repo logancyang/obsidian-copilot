@@ -290,7 +290,7 @@ function translateSetModeMapping(
     apply[value] = { kind: "setMode", nativeId: native };
   }
   if (options.length === 0) return null;
-  const current = reverseProjectMode(mapping.canonical, modeState.currentModeId, options);
+  const current = reverseProjectMode(mapping, modeState.currentModeId, options);
   return { current, options, apply };
 }
 
@@ -321,21 +321,22 @@ function translateConfigOptionModeMapping(
   }
   if (options.length === 0) return null;
 
-  const current = reverseProjectMode(mapping.canonical, String(opt.currentValue), options);
+  const current = reverseProjectMode(mapping, String(opt.currentValue), options);
   return { current, options, apply };
 }
 
 function reverseProjectMode(
-  canonical: ModeMapping["canonical"],
+  mapping: ModeMapping,
   nativeId: string,
   visibleOptions: ModeOption[]
 ): CopilotMode | null {
   const visible = new Set(visibleOptions.map((o) => o.value));
   for (const opt of CANONICAL_ORDER) {
     if (!visible.has(opt)) continue;
-    if (canonical[opt] === nativeId) return opt;
+    if (mapping.canonical[opt] === nativeId) return opt;
   }
-  return null;
+  const fallback = mapping.unlistedModeShowsAs;
+  return fallback && visible.has(fallback) ? fallback : null;
 }
 
 function normalizeName(name: string, descriptor: BackendDescriptor): string {

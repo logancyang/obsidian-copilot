@@ -122,6 +122,7 @@ function pickerDescriptor(auto: string): BackendDescriptor {
     getModeMapping: () => ({
       kind: "setMode",
       canonical: { default: "default", plan: "plan", auto },
+      unlistedModeShowsAs: "auto",
     }),
   };
 }
@@ -659,12 +660,9 @@ describe("ClaudeSdkBackendProcess", () => {
         expect(options.resume).toBeUndefined();
       });
 
-      it.each([
-        ["acceptEdits", "auto"],
-        ["auto", null],
-      ])(
-        `when Claude switches the chat to accepting edits mid-reply, as an approved Allow always that covers all file edits does, reports the picker mode for it, with Auto set to %s: %s (${ISSUE_870})`,
-        async (auto, pickerMode) => {
+      it.each([["acceptEdits"], ["auto"]])(
+        `when Claude switches the chat to accepting edits mid-reply, as an approved Allow always that covers all file edits does, shows Auto in the picker, with Auto set to %s (${ISSUE_870})`,
+        async (auto) => {
           queryMock.mockImplementation(
             answering([permissionModeStatus("acceptEdits"), resultMessage()])
           );
@@ -677,7 +675,7 @@ describe("ClaudeSdkBackendProcess", () => {
           const states = events.flatMap(({ update }) =>
             update.sessionUpdate === "state_changed" ? [update.state.mode?.current] : []
           );
-          expect(states).toEqual([pickerMode]);
+          expect(states).toEqual(["auto"]);
         }
       );
 
