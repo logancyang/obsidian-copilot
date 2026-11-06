@@ -4,6 +4,7 @@ import React from "react";
 
 export interface SettingsSubPageLayoutProps {
   title: string;
+  titleAction?: React.ReactNode;
   description?: React.ReactNode;
   toolbar?: React.ReactNode;
   footer?: React.ReactNode;
@@ -13,6 +14,7 @@ export interface SettingsSubPageLayoutProps {
 
 export const SettingsSubPageLayout: React.FC<SettingsSubPageLayoutProps> = ({
   title,
+  titleAction,
   description,
   toolbar,
   footer,
@@ -33,18 +35,22 @@ export const SettingsSubPageLayout: React.FC<SettingsSubPageLayoutProps> = ({
         Back
       </Button>
       <div className="tw-space-y-1">
-        <div id={titleId} role="heading" aria-level={2} className="tw-text-base tw-font-semibold">
-          {title}
+        <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
+          <div id={titleId} role="heading" aria-level={2} className="tw-text-base tw-font-semibold">
+            {title}
+          </div>
+          {titleAction}
         </div>
         {description && <div className="tw-text-sm tw-text-muted">{description}</div>}
       </div>
       {toolbar}
       {/* Obsidian shows every aria-label as a hover tooltip, so the region takes its name from the title.
+          The minimum height makes a short settings window scroll the whole page instead of hiding the list.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/874 */}
       <div
         role="region"
         aria-labelledby={titleId}
-        className="tw-min-h-0 tw-flex-1 tw-overflow-y-auto tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-4 tw-shadow-sm"
+        className="tw-min-h-32 tw-flex-1 tw-overflow-y-auto tw-rounded-xl tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-4 tw-shadow-sm"
       >
         {children}
       </div>

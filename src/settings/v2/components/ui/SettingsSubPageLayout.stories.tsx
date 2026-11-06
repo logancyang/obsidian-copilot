@@ -68,22 +68,18 @@ export const FiftyItems: StoryObj<SettingsSubPageLayoutProps> = {
         {...meta.args}
         title="Browse connectors"
         description="Connect a service so agents can use it in chats."
-        toolbar={
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <div className="tw-min-w-0 tw-flex-1">
-              <SearchBar value="" onChange={() => undefined} placeholder="Search…" />
-            </div>
-            <ObsidianNativeSelect
-              aria-label="Category"
-              containerClassName="tw-w-40"
-              defaultValue="all"
-              options={[
-                { label: "All categories", value: "all" },
-                { label: "Productivity", value: "productivity" },
-              ]}
-            />
-          </div>
+        titleAction={
+          <ObsidianNativeSelect
+            aria-label="Category"
+            containerClassName="tw-w-40"
+            defaultValue="all"
+            options={[
+              { label: "All categories", value: "all" },
+              { label: "Productivity", value: "productivity" },
+            ]}
+          />
         }
+        toolbar={<SearchBar value="" onChange={() => undefined} placeholder="Search…" />}
         footer={
           <div className="tw-text-sm tw-text-muted">
             Don&apos;t see your service? Request a connector.

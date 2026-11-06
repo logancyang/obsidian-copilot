@@ -66,7 +66,7 @@ in `src/agentMode/AGENTS.md` updated to match.
 A settings sub-page is a page with Back, opened from a control in Copilot settings.
 
 - Open it with `useSettingsSubPage().open(page)` (`src/settings/v2/SettingsSubPage.tsx`). It replaces the whole Copilot settings view; the settings stay mounted, hidden. Back calls `close()`, which restores the tab, sub-tab, scroll position and focus. Selecting another settings tab closes the page.
-- Build the page with `SettingsSubPageLayout` (`src/settings/v2/components/ui/SettingsSubPageLayout.tsx`). Back, title, description, `toolbar` (search, filters) and `footer` stay fixed; only the body scrolls, inside a fixed-height card that fills the settings viewport.
+- Build the page with `SettingsSubPageLayout` (`src/settings/v2/components/ui/SettingsSubPageLayout.tsx`). Back, title, `titleAction` (a control beside the title), description, `toolbar` (search, filters) and `footer` stay fixed; only the body scrolls, inside a fixed-height card that fills the settings viewport. Loading, empty and error states go in the body too.
 - Never build a one-off second page, a page that scrolls as a whole, or a page that swaps only part of the settings.
 
 ## Comments
