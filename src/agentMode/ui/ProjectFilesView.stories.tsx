@@ -2,11 +2,13 @@ import {
   FILES_DROP_HIGHLIGHT,
   LinkedSection,
   type LinkedProjectRow,
+  type LinkedMatchRow,
   ProjectFolderSection,
   type ProjectFolderSectionProps,
   type ProjectTreeNode,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { Meta, StoryObj } from "@/lib/story";
+import { createUrlItem, type UrlItem } from "@/lib/url-tag";
 import { cn } from "@/lib/utils";
 import React from "react";
 
@@ -137,15 +139,51 @@ const LINKED_ROWS: LinkedProjectRow[] = [
   ),
 ];
 
-function renderWithLinked(rows: LinkedProjectRow[], isDragOver: boolean) {
+function matchedNote(path: string) {
+  const name = path.split("/").pop() ?? path;
+  return { node: { kind: "file", path, name } as const, parent: path.slice(0, -name.length) };
+}
+
+function tag(pattern: string, count: number, notes: string[] | null = null): LinkedMatchRow {
+  return { pattern, label: pattern, count, notes: notes?.map(matchedNote) ?? null };
+}
+
+const LINKED_TAGS: LinkedMatchRow[] = [
+  tag("#launch", 3, [
+    "Meetings/Launch syncs/2026-10-21 sync.md",
+    "Plans/Q4 launch brief.md",
+    "Work/Clients/Northwind Traders/Research/Regional launch readiness checklist.md",
+  ]),
+  tag("#research/pricing", 1),
+  tag("#archived", 0),
+];
+
+const LINKED_URLS: UrlItem[] = [
+  createUrlItem("https://example.com/launch/brief"),
+  createUrlItem(
+    "https://developer.example.com/docs/pricing/enterprise-tiers-and-regional-discounts?ref=launch-plan"
+  ),
+  createUrlItem("https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+];
+
+function renderWithLinked(
+  rows: LinkedProjectRow[],
+  isDragOver: boolean,
+  matches: LinkedMatchRow[] = [],
+  urls: UrlItem[] = []
+) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
     return (
       <div className={cn("tw-flex tw-flex-col tw-rounded-md", isDragOver && FILES_DROP_HIGHLIGHT)}>
         <ProjectFolderSection {...props} />
         <LinkedSection
           rows={rows}
+          matches={matches}
+          urls={urls}
           onLink={() => {}}
           onUnlink={() => {}}
+          onOpenUrl={() => {}}
+          onUnlinkUrl={() => {}}
           onToggleFolder={() => {}}
           onOpenFile={() => {}}
           onShowFileMenu={() => {}}
@@ -170,4 +208,9 @@ export const LinkedPopulated: StoryObj<ProjectFolderSectionProps> = {
 export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
   render: renderWithLinked(LINKED_ROWS, true),
+};
+
+export const LinkedTagsAndLinks: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS.slice(0, 2), false, LINKED_TAGS, LINKED_URLS),
 };

@@ -8,6 +8,7 @@ import {
   createPatternSettingsValue,
   getDecodedPatterns,
   getMatchingPatterns,
+  getNotesWithTag,
   getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
@@ -16,6 +17,7 @@ import {
 } from "./searchUtils";
 
 jest.mock("obsidian", () => ({
+  getAllTags: jest.requireActual<typeof obsidian>("obsidian").getAllTags,
   normalizePath: (path: string) => path.replace(/\/+/g, "/").replace(/^\/|\/$/g, ""),
   Platform: { isWin: false, isMacOS: true, isIosApp: false },
   TFile: class TFile {
@@ -714,6 +716,41 @@ describe("searchUtils", () => {
 
     it("returns [key:] when value is empty string", () => {
       expect(getPropertyPattern("Topics", "")).toBe("[Topics:]");
+    });
+  });
+
+  describe("getNotesWithTag()", () => {
+    function taggedVault(caches: Record<string, unknown>) {
+      const files = Object.keys(caches).map(createTestFile);
+      return {
+        vault: { getMarkdownFiles: () => files },
+        metadataCache: { getFileCache: (file: TFile) => caches[file.path] ?? null },
+      } as unknown as typeof window.app;
+    }
+
+    it("lists the notes that carry the tag in their properties or inline in the text, by path", () => {
+      const app = taggedVault({
+        "Work/standup.md": { tags: [{ tag: "#launch" }] },
+        "Plans/brief.md": { frontmatter: { tags: ["launch", "q4"] } },
+        "Plans/budget.md": { frontmatter: { tags: "q4" } },
+        "Inbox/unindexed.md": null,
+      });
+
+      expect(getNotesWithTag(app, "#launch").map((file) => file.path)).toEqual([
+        "Plans/brief.md",
+        "Work/standup.md",
+      ]);
+    });
+
+    it("matches the tag in any case and every tag nested under it, as Obsidian's tag search does, but not a longer tag that only starts the same — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const app = taggedVault({
+        "a.md": { tags: [{ tag: "#Launch" }] },
+        "b.md": { frontmatter: { tags: ["launch/press"] } },
+        "c.md": { tags: [{ tag: "#launchpad" }] },
+      });
+
+      expect(getNotesWithTag(app, "#launch").map((file) => file.path)).toEqual(["a.md", "b.md"]);
+      expect(getNotesWithTag(app, "#launch/press").map((file) => file.path)).toEqual(["b.md"]);
     });
   });
 });

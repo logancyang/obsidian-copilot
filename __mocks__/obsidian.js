@@ -102,6 +102,27 @@ module.exports = {
       this.setPlaceholder = jest.fn();
     }
   },
+  SuggestModal: class SuggestModal {
+    constructor(app) {
+      this.app = app;
+      this.open = jest.fn();
+      this.close = jest.fn();
+      this.setPlaceholder = jest.fn();
+    }
+  },
+  getAllTags: (cache) => {
+    const raw = cache?.frontmatter?.tags ?? cache?.frontmatter?.tag;
+    const frontmatterTags = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw.split(/[,\s]+/)
+        : [];
+    const tags = frontmatterTags
+      .filter((tag) => typeof tag === "string" && tag.trim())
+      .map((tag) => (tag.startsWith("#") ? tag.trim() : `#${tag.trim()}`));
+    for (const { tag } of cache?.tags ?? []) tags.push(tag);
+    return tags;
+  },
   App: jest.fn().mockImplementation(() => ({
     workspace: {
       getActiveFile: jest.fn(),
