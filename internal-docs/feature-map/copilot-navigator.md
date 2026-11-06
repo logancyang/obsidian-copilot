@@ -36,6 +36,3 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 ## Gotchas
 
 - The rule covers every way of leaving a chat, not only the Navigator's own rows. `New chat` and `Chat history` in the [chat controls](chat-controls.md) stop an untouched chat the same way.
-- The upgrade prompt has no close button; press Escape.
-- In the test vault, settings open in a popout window. Turn that off before entering a license.
-- Reordering is drag only. If the driver cannot drag, mark it manual instead of claiming coverage.

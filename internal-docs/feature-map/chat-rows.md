@@ -30,6 +30,4 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 
 ## Gotchas
 
-- Row actions appear only on hover or keyboard focus.
-- Two controls are named `Close chat`: a row's stops the agent, a tab's closes the tab. Look only within the row.
-- Archive and delete change the test vault's chats. Restore the chats the baseline needs afterwards.
+- Two controls are named `Close chat`: a row's stops the agent, a tab's closes the tab.

@@ -337,7 +337,14 @@ climbing past N iterations, the feature is leaking.
 ## 4. Interacting with the UI (clicks, typing)
 
 There is no first-class "click selector" or "type into input" CLI command.
-Two real options:
+Two real options are below. Two things trip runs before either:
+
+- Row and tab actions, such as `Close chat`, render only on hover or keyboard
+  focus. Hover or focus the row or tab first.
+- The test vault opens Settings in a popout window, which `dev:screenshot` and
+  `dev:cdp` cannot reach. Run
+  `app.vault.setConfig("settingsPopoutWindow", false)` before driving Settings,
+  such as entering a license, and set it back afterwards.
 
 ### 4a. `eval` — synthetic JS events (fast, easy, slightly fake)
 
