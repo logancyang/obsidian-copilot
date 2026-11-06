@@ -49,7 +49,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 
 ## Multi-surface journeys
 
-- [multi-surface-journeys](multi-surface-journeys.md): bugs where features each worked on their own and failed together, each from a filed issue.
+- [multi-surface-journeys](multi-surface-journeys.md): the main things a user does, walked through the features each one crosses.
 
 ## Entry contract
 

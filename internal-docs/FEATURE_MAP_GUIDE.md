@@ -33,9 +33,9 @@ Follow the README's entry contract: an H1, one line on what the user sees, then 
 
 Most behavior belongs to one feature: the one where the user acts. When its result shows somewhere else, say where to look ("its row no longer offers `Close chat`"), but keep it in the acting feature's file.
 
-`multi-surface-journeys.md` holds bugs where features each did what their own files say and still failed together, such as stopping a browsed chat's agent hiding the chat from every list. Add a journey only with the issue that found it; no issue, no journey. Expectations nobody has seen break, like two chats not mixing their replies, stay out.
+`multi-surface-journeys.md` walks the product's main flows across features, at a high level, so a reader sees how the parts fit together. A journey is one thing a user sets out to do, such as going back to a past chat, with a step for each feature it crosses. Edge cases and past bugs stay out: rules live in the feature files, and edge cases in unit tests and the issue-linked comments beside the code.
 
-Each journey gets an H2, a `From <issue link>:` line saying what broke, a few steps, and a `Touches:` line linking every feature involved. Name controls as the feature files do, and do not restate their rules.
+Each journey gets an H2 named by the user's goal, one line on that goal, a few steps, and a `Touches:` line linking every feature involved. Name controls as the feature files do, and do not restate their rules.
 
 ## Keep out
 
