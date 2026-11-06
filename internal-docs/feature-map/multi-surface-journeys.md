@@ -9,7 +9,7 @@ The user opens Agent Chat and gets an answer.
 - If no agent is ready, Agent Chat shows `Select your agent`. Install or sign in from [agent setup](agent-setup.md).
 - The [start screen](agent-home.md) shows a greeting and the [chat input](chat-input.md). Type a message and send it.
 - The start screen turns into the conversation, and the reply streams in ([agent replies](agent-replies.md)).
-- The chat now has a [row](chat-rows.md) in Recent chats, and its note opens from `More actions` → `Open chat note` in the [chat controls](chat-controls.md).
+- The chat now has a [row](chat-rows.md) in Recent chats. Once it is saved as a note, `More actions` → `Open chat note` in the [chat controls](chat-controls.md) opens it.
 
 Touches: [agent setup](agent-setup.md), [agent home](agent-home.md), [chat input](chat-input.md), [agent replies](agent-replies.md), [chat rows](chat-rows.md), [chat controls](chat-controls.md).
 
@@ -59,6 +59,6 @@ Touches: [agent home](agent-home.md), [projects](projects.md), [chat tabs](chat-
 The user hits an error and gets unstuck.
 
 - A failed reply shows `<agent> ran into a problem` with `Retry` ([decision cards](decision-cards.md)). An agent that cannot start offers its fix, such as `Sign in` ([agent setup](agent-setup.md)).
-- If it keeps failing, `Report this to the Copilot team?` offers `Review & report`, which opens [Report an issue](report-issue.md) with the chat's details. `More actions` → `Report an issue` in the [chat controls](chat-controls.md) opens it any time.
+- After a failed reply, `Report this to the Copilot team?` offers `Review & report`, which opens [Report an issue](report-issue.md) with the chat's details. `More actions` → `Report an issue` in the [chat controls](chat-controls.md) opens it any time.
 
 Touches: [decision cards](decision-cards.md), [agent setup](agent-setup.md), [report issue](report-issue.md), [chat controls](chat-controls.md).

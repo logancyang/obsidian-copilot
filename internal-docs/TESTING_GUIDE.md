@@ -440,6 +440,31 @@ checks fail across realms — a popout window has its own `HTMLElement`,
 `element.instanceOf(HTMLElement)` / `event.instanceOf(MouseEvent)` if you need
 cross-realm type checks.
 
+## 4d. Driving Agent Mode
+
+- Radix menus and pickers (`Mode`, `More actions`, `Model · effort`) ignore
+  `.click()` and CDP mouse events. Dispatch `pointerdown`, `mousedown`,
+  `pointerup`, and `click` on the trigger. `Model · effort` commits the picked
+  row only when the popover closes, so press Escape after picking.
+- On the start screen every Recent chats row has its own `More actions`; scope
+  the query to the chat controls.
+- Activating the Agent Chat leaf moves focus to the chat input, so CDP
+  `insertText` meant for another box (plan feedback, a question's `Other`)
+  lands in the chat input. Set those textareas with the native value setter
+  plus an `input` event.
+- Recent chats and Projects rows measure zero-size while Agent Chat is not the
+  active leaf. Activate it before computing CDP click coordinates.
+- Relevant Notes switches to `Agent chat context` only when focus lands inside
+  Agent Chat; call `.focus()` on the chat input.
+- A copied vault opens with the trust modal and a license-invalid modal, shows
+  OpenCode and Codex as not set up (their installs are per device), and shows
+  `Miyo is not connected` until the vault is registered in Miyo.
+- For a long-running agent task, ask for `ping -c 20 127.0.0.1`; a foreground
+  `sleep` can be refused by the user's agent hooks. For a plan card with
+  Claude, ask it to "propose it with ExitPlanMode".
+- Never choose `Upload & open issue` in Report an issue: it uploads to
+  Brevilabs. Stop at the review screen and choose `Cancel`.
+
 ## 5. Vault data setup
 
 For deterministic test fixtures, prefer creating notes via the CLI rather
