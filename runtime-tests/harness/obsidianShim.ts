@@ -55,6 +55,16 @@ export class FileSystemAdapter {
   }
 }
 
+/** Every notice Copilot showed, oldest first. The harness empties it for each scenario. */
+export const shownNotices: string[] = [];
+
+/** Obsidian's toast. Records its message so a scenario can assert what the user was told. */
+export class Notice {
+  constructor(message: string) {
+    shownNotices.push(message);
+  }
+}
+
 interface RequestUrlParam {
   url: string;
   method?: string;
