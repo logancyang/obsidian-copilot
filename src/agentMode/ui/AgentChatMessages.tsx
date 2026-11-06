@@ -18,6 +18,7 @@ import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentMessagePart,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -26,6 +27,8 @@ import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
 import { App, Plugin } from "obsidian";
 import React, { memo, useMemo } from "react";
+
+const EMPTY_PARTS = Object.freeze([]) as unknown as AgentMessagePart[];
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
@@ -92,7 +95,8 @@ const AgentMessageRow = memo(function AgentMessageRow({
   const adaptedMessage = toChatMessageView(message);
   const isAssistant = message.sender !== USER_SENDER;
   const hasParts = (message.parts?.length ?? 0) > 0;
-  const renderTrail = isAssistant && hasParts;
+  // A reply the agent cancelled before any text or tool activity still owes the user its stop notice. https://github.com/logancyang/obsidian-copilot/issues/4062
+  const renderTrail = isAssistant && (hasParts || message.agentCancelCause !== undefined);
   const completedTurnDurationMs = isLatestAssistant ? message.turnDurationMs : undefined;
   const runningTurnStartedAtMs =
     isLatestAssistant && isStreaming ? message.timestamp?.epoch : undefined;
@@ -108,7 +112,9 @@ const AgentMessageRow = memo(function AgentMessageRow({
   const fanoutTurn = isAssistant ? message.fanout : undefined;
 
   return (
-    <div className="tw-w-full">
+    // Off-screen turns skip paint so scrolling a long chat costs what is on screen, not the whole transcript.
+    // https://github.com/logancyang/obsidian-copilot/issues/3343
+    <div className="tw-w-full [contain-intrinsic-size:auto_500px] [content-visibility:auto]">
       {fanoutTurn ? (
         <div className="tw-px-3 tw-pt-2">
           <FanoutMessageCard
@@ -124,13 +130,14 @@ const AgentMessageRow = memo(function AgentMessageRow({
       ) : renderTrail ? (
         <div className="tw-px-3 tw-pt-2">
           <AgentTrail
-            parts={message.parts!}
+            parts={message.parts ?? EMPTY_PARTS}
             isStreaming={isStreaming}
             turnStartedAtMs={runningTurnStartedAtMs}
             turnDurationMs={completedTurnDurationMs}
             timestamp={message.timestamp?.display}
             app={app}
             turnStopReason={message.turnStopReason}
+            agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
             fileChanges={message.fileChanges}
             onOpenFileChange={(change) =>
@@ -273,10 +280,13 @@ const AgentChatMessages = memo(
             role="region"
             aria-label="Pending agent actions"
             data-testid="agent-action-rail"
-            // A verbose question can exceed a short chat pane. Bound and scroll
-            // the rail so its resolution controls remain reachable.
+            // max-h + overflow-y: a verbose question can exceed a short chat pane, and its
+            // resolution controls must stay reachable.
             // https://github.com/logancyang/obsidian-copilot/issues/2948
-            className="tw-max-h-full tw-w-full tw-overflow-y-auto tw-bg-primary"
+            // select-text: Obsidian turns off text selection app-wide and only the transcript
+            // turns it back on, so cards in this rail could not be selected or copied.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/863
+            className="tw-max-h-full tw-w-full tw-select-text tw-overflow-y-auto tw-bg-primary"
           >
             <div key={pendingActionId} data-action-id={pendingActionId}>
               {pendingQuestion ? (

@@ -159,7 +159,7 @@ export function RecentChatMenu({
           {isSessionOpen && onCloseSession && (
             <DropdownMenuItem onSelect={() => safeAsyncHandler(onCloseSession)(item.id)}>
               <Power />
-              Close chat
+              Shut down
             </DropdownMenuItem>
           )}
           <DropdownMenuItem

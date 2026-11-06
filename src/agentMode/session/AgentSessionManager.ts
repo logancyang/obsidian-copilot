@@ -166,7 +166,6 @@ export interface ArchivedChat {
 }
 
 export interface ReplaceSessionOptions {
-  preserveChatInput?: boolean;
   seedSelection?: ModelSelection;
 }
 
@@ -235,6 +234,9 @@ export class AgentSessionManager {
   private readonly promptedChatInputIds = new Set<string>();
   private readonly closingSessions = new Map<string, Promise<void>>();
   private lastShownSessionId: string | null = null;
+  // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+  private tabStripShown = false;
   /**
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -573,9 +575,17 @@ export class AgentSessionManager {
     );
   }
 
+  setTabStripShown(shown: boolean): void {
+    if (shown === this.tabStripShown) return;
+    this.tabStripShown = shown;
+    if (shown || this.disposed) return;
+    for (const id of Array.from(this.sessions.keys())) this.closeSessionIfLeft(id);
+  }
+
   private closeSessionIfLeft(id: string): void {
     const session = this.sessions.get(id);
     if (!session || id === this.activeSessionId || this.keepsSessionWhenLeft(session)) return;
+    if (this.tabStripShown && !this.detachedFromTabIds.has(id)) return;
     // A starting chat has no agent session to release yet, so it closes once it has started.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     if (session.getStatus() === "starting") {
@@ -1702,23 +1712,37 @@ export class AgentSessionManager {
   ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     const replaced = this.sessions.get(oldId);
-    const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
-    const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
     const created = await this.createSession(
       backendId,
-      replacedProjectId,
+      replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
-      chatInputId
+      replaced?.chatInputId
     );
-    if (oldIdx >= 0) {
-      this.moveMapEntry(this.sessions, created.internalId, oldIdx);
-      this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
-      this.notify();
-    }
+    this.moveIntoTabSlot(created.internalId, oldIdx);
     void this.closeSession(oldId).catch((e) =>
       logWarn(`[AgentMode] closeSession during replaceSessionInPlace failed`, e)
     );
     return created;
+  }
+
+  async startNewChatInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
+    const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
+    const created = await this.createSession(
+      backendId,
+      this.sessions.get(oldId)?.projectId ?? this.activeProjectId
+    );
+    this.moveIntoTabSlot(created.internalId, oldIdx);
+    // The chat New chat replaces leaves its tab as closing the tab would: a chat the user worked in keeps running, reachable from Recent chats.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+    this.detachSessionFromTab(oldId);
+    return created;
+  }
+
+  private moveIntoTabSlot(id: string, slot: number): void {
+    if (slot < 0) return;
+    this.moveMapEntry(this.sessions, id, slot);
+    this.moveMapEntry(this.chatUIStates, id, slot);
+    this.notify();
   }
 
   private moveMapEntry<V>(map: Map<string, V>, key: string, targetIdx: number): void {
@@ -2107,7 +2131,7 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
-    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);

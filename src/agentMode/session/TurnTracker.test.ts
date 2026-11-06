@@ -539,6 +539,18 @@ describe("TurnTracker", () => {
         expect(deps.endLaunches).toHaveBeenCalledWith("stopped");
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/4062 gives a reply the user stopped no agent cancel cause, even after a declined permission and the agent's own cancelled turn end", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        deps.store.markPermissionDeclined(replyId);
+
+        tracker.stop(false);
+        tracker.endTurn({ turnId: "t1", stopReason: "cancelled" });
+        await outcome;
+
+        expect(deps.store.getMessage(replyId)?.agentCancelCause).toBeUndefined();
+      });
+
       it("aborts a send that has not reached the backend and closes its reply without waiting for a turn", async () => {
         const { deps, tracker } = setup();
         tracker.openReply();
@@ -892,6 +904,32 @@ describe("TurnTracker", () => {
         expect(transcript(deps.store)).toEqual([[AI_SENDER, "hello", "end_turn"]]);
         expect(deps.endLaunches).toHaveBeenCalledWith("failed");
         expect(deps.onTurnCompleted).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4062 marks a reply the agent cancelled on its own with the declined permission that preceded it", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        deps.store.appendAgentText(replyId, "I'll ask before running it.");
+        deps.store.markPermissionDeclined(replyId);
+
+        tracker.endTurn({ turnId: "t1", stopReason: "cancelled" });
+
+        await expect(outcome).resolves.toMatchObject({ stopReason: "cancelled" });
+        expect(deps.store.getMessage(replyId)).toMatchObject({
+          turnStopReason: "cancelled",
+          agentCancelCause: "permission_declined",
+        });
+      });
+
+      it("leaves a reply that ended normally without an agent cancel cause", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        deps.store.appendAgentText(replyId, "done");
+
+        tracker.endTurn({ turnId: "t1", stopReason: "end_turn" });
+        await outcome;
+
+        expect(deps.store.getMessage(replyId)?.agentCancelCause).toBeUndefined();
       });
 
       it("keeps a prompt the agent has not taken waiting for the turn that answers it", async () => {

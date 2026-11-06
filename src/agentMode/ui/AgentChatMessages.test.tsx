@@ -60,12 +60,14 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     timestamp,
     parts,
     errorText,
+    agentCancelCause,
     fileChanges,
     onOpenFileChange,
   }: {
     timestamp?: string;
     parts: unknown[];
     errorText?: string;
+    agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
     onOpenFileChange?: (change: TurnFileChange) => void;
   }) => {
@@ -74,6 +76,9 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
       <div data-testid="agent-trail-timestamp">
         {timestamp}
         {errorText ? <span data-testid="agent-trail-error">{errorText}</span> : null}
+        {agentCancelCause ? (
+          <span data-testid="agent-trail-cancel-cause">{agentCancelCause}</span>
+        ) : null}
         {fileChanges?.map((change) => (
           <button key={change.path} type="button" onClick={() => onOpenFileChange?.(change)}>
             {change.path}
@@ -424,6 +429,22 @@ describe("AgentChatMessages", () => {
       ]);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/4062 hands an agent-cancelled reply with no text or tool activity to the trail, so its stop notice shows", () => {
+      renderMessages(
+        [
+          assistantMessage("cancelled-1", 62_000, {
+            message: "",
+            turnStopReason: "cancelled",
+            agentCancelCause: "unspecified",
+          }),
+        ],
+        false
+      );
+
+      expect(screen.getByTestId("agent-trail-cancel-cause").textContent).toBe("unspecified");
+      expect(mockSingleMessageRender).not.toHaveBeenCalled();
+    });
+
     it("keeps completed plain and structured turns mounted without rendering them again while the live turn streams https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
       const user = assistantMessage("user-1", 1_000, {
         sender: "user",
@@ -460,6 +481,25 @@ describe("AgentChatMessages", () => {
       expect(mockTrailRender).toHaveBeenCalledTimes(3);
       expect(mockTrailRender.mock.calls[0][0]).toBe(originalCompletedParts);
       expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
+    });
+
+    it("lets the browser skip painting every turn that is scrolled out of view https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
+      renderMessages(
+        [
+          assistantMessage("user-1", 1_000, { sender: "user", message: "Summarize this note" }),
+          assistantMessage("answer-1", 2_000, {
+            parts: [{ kind: "text", text: "The note has three points." }],
+          }),
+        ],
+        false
+      );
+
+      const rows = Array.from(screen.getByTestId("chat-messages").firstElementChild!.children);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.className).toContain("[content-visibility:auto]");
+        expect(row.className).toContain("[contain-intrinsic-size:auto_500px]");
+      }
     });
 
     it("opens the clicked file's diff against the turn that changed it", () => {
