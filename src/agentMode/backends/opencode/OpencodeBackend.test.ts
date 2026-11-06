@@ -47,6 +47,10 @@ jest.mock("./OpencodeBinaryManager", () => ({
   verifyOpencodeBinary: jest.fn().mockResolvedValue({ stdout: "2.0.21" }),
 }));
 
+jest.mock("@/utils/loginShellPath", () => ({
+  agentShellPath: jest.fn(async () => "/login/bin:/usr/bin"),
+}));
+
 jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
   isObsidianCliEnabled: () => true,
 }));
@@ -1105,6 +1109,16 @@ describe("OpencodeBackend", () => {
         });
 
         expect(desc.env.OPENCODE_LOG_LEVEL).toBe("INFO");
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4096 runs OpenCode with the user's login-shell PATH, because its shell reads no login or interactive startup files", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+
+        const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+          vaultBasePath: "/vault",
+        });
+
+        expect(desc.env.PATH).toBe("/login/bin:/usr/bin");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 lets a user opt into more detailed OpenCode logs", async () => {

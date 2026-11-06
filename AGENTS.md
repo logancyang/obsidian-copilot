@@ -39,17 +39,18 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 Read the matching guide when your task touches that area — they aren't loaded by default.
 
-| When you're…                                                          | Read                                                                                         |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| writing or altering tests, or doing E2E via the Obsidian CLI          | [`internal-docs/TESTING_GUIDE.md`](./internal-docs/TESTING_GUIDE.md)                         |
-| building or changing user-visible React components or visual states   | [`Component gallery workflow`](./internal-docs/TESTING_GUIDE.md#component-gallery-workflow)  |
-| writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind | [`internal-docs/STYLE_GUIDE.md`](./internal-docs/STYLE_GUIDE.md)                             |
-| touching plugin runtime: the `app`, network requests, popout windows  | [`internal-docs/PLUGIN_DEV_GUIDE.md`](./internal-docs/PLUGIN_DEV_GUIDE.md)                   |
-| running a multi-step dev session                                      | [`internal-docs/PROCESS_GUIDE.md`](./internal-docs/PROCESS_GUIDE.md)                         |
-| changing user-facing behavior                                         | [`internal-docs/DOCS_GUIDE.md`](./internal-docs/DOCS_GUIDE.md)                               |
-| reviewing code or preparing an Obsidian submission                    | [`internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md`](./internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md) |
-| verifying a user-facing change end to end                             | [`internal-docs/feature-map/`](./internal-docs/feature-map/README.md)                        |
-| adding or updating a feature map entry                                | [`internal-docs/FEATURE_MAP_GUIDE.md`](./internal-docs/FEATURE_MAP_GUIDE.md)                 |
+| When you're…                                                           | Read                                                                                         |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| writing or altering tests, or doing E2E via the Obsidian CLI           | [`internal-docs/TESTING_GUIDE.md`](./internal-docs/TESTING_GUIDE.md)                         |
+| building or changing user-visible React components or visual states    | [`Component gallery workflow`](./internal-docs/TESTING_GUIDE.md#component-gallery-workflow)  |
+| writing code: DI/structure, TypeScript, React, comments, CSS/Tailwind  | [`internal-docs/STYLE_GUIDE.md`](./internal-docs/STYLE_GUIDE.md)                             |
+| touching plugin runtime: the `app`, network requests, popout windows   | [`internal-docs/PLUGIN_DEV_GUIDE.md`](./internal-docs/PLUGIN_DEV_GUIDE.md)                   |
+| running a multi-step dev session                                       | [`internal-docs/PROCESS_GUIDE.md`](./internal-docs/PROCESS_GUIDE.md)                         |
+| changing user-facing behavior                                          | [`internal-docs/DOCS_GUIDE.md`](./internal-docs/DOCS_GUIDE.md)                               |
+| reviewing code or preparing an Obsidian submission                     | [`internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md`](./internal-docs/OBSIDIAN_COMMUNITY_REVIEW.md) |
+| verifying a user-facing change end to end                              | [`internal-docs/feature-map/`](./internal-docs/feature-map/README.md)                        |
+| adding or updating a feature map entry                                 | [`internal-docs/FEATURE_MAP_GUIDE.md`](./internal-docs/FEATURE_MAP_GUIDE.md)                 |
+| writing or changing any text users see (labels, notices, errors, docs) | [`internal-docs/NOMENCLATURE.md`](./internal-docs/NOMENCLATURE.md)                           |
 
 ## Important notes
 

@@ -60,12 +60,14 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     timestamp,
     parts,
     errorText,
+    agentCancelCause,
     fileChanges,
     onOpenFileChange,
   }: {
     timestamp?: string;
     parts: unknown[];
     errorText?: string;
+    agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
     onOpenFileChange?: (change: TurnFileChange) => void;
   }) => {
@@ -74,6 +76,9 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
       <div data-testid="agent-trail-timestamp">
         {timestamp}
         {errorText ? <span data-testid="agent-trail-error">{errorText}</span> : null}
+        {agentCancelCause ? (
+          <span data-testid="agent-trail-cancel-cause">{agentCancelCause}</span>
+        ) : null}
         {fileChanges?.map((change) => (
           <button key={change.path} type="button" onClick={() => onOpenFileChange?.(change)}>
             {change.path}
@@ -422,6 +427,22 @@ describe("AgentChatMessages", () => {
       expect(screen.getAllByTestId("agent-trail-error").map((el) => el.textContent)).toEqual([
         "**Error:** stream error",
       ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/4062 hands an agent-cancelled reply with no text or tool activity to the trail, so its stop notice shows", () => {
+      renderMessages(
+        [
+          assistantMessage("cancelled-1", 62_000, {
+            message: "",
+            turnStopReason: "cancelled",
+            agentCancelCause: "unspecified",
+          }),
+        ],
+        false
+      );
+
+      expect(screen.getByTestId("agent-trail-cancel-cause").textContent).toBe("unspecified");
+      expect(mockSingleMessageRender).not.toHaveBeenCalled();
     });
 
     it("keeps completed plain and structured turns mounted without rendering them again while the live turn streams https://github.com/logancyang/obsidian-copilot/issues/3343", () => {
