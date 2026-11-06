@@ -338,7 +338,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       options.sessionId = sessionId;
     }
     if (session.model) options.model = session.model;
-    if (session.permissionMode) options.permissionMode = session.permissionMode;
+    // Without an explicit mode Claude starts in its settings' defaultMode, not the one the picker shows. https://github.com/Brevilabs/obsidian-copilot-private/issues/870
+    options.permissionMode = session.permissionMode ?? "default";
     if (session.effort) options.effort = session.effort;
     if (session.mcpServers?.length) {
       options.mcpServers = Object.fromEntries(
@@ -393,6 +394,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onTurnStarted: (q) => void this.refreshPlanUsage(q),
       onSignedOut: () => {
         this.authConfirmed = false;
+      },
+      onPermissionModeChanged: (mode) => {
+        session.permissionMode = mode;
+        this.dispatchStateChanged(sessionId, this.computeState(sessionId));
       },
       onEnded: () => {
         if (session.live === live) session.live = undefined;

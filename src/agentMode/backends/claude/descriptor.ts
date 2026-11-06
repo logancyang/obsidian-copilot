@@ -365,6 +365,8 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
         plan: "plan",
         auto: resolveClaudeAutoModePermission(getSettings()),
       },
+      // A mode Claude switches to on its own, such as accepting edits after an "Allow always", has no picker choice and shows as Auto rather than as no mode. https://github.com/Brevilabs/obsidian-copilot-private/issues/870
+      unlistedModeShowsAs: "auto",
     };
   },
 
