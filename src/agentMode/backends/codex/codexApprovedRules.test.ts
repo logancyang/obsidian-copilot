@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
-import * as os from "node:os";
+import * as os from "os";
 import * as path from "node:path";
 import type CopilotPlugin from "@/main";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { getSettings, resetSettings, setSettings } from "@/settings/model";
 import { codexApprovedRules } from "./codexApprovedRules";
+
+jest.mock("os", () => ({ ...jest.requireActual<object>("os"), homedir: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/868";
 const plugin = {} as CopilotPlugin;
@@ -36,6 +38,7 @@ echo '{"matchedRules":[]}'
 describe("codexApprovedRules", () => {
   let codexHome: string;
   let inheritedHome: string;
+  let userHome: string;
   let savedInheritedHome: string | undefined;
   let bundle: string;
   let checkLog: string;
@@ -45,7 +48,7 @@ describe("codexApprovedRules", () => {
     fs.writeFileSync(rulesFile(), text);
   };
   const readRules = () => fs.readFileSync(rulesFile(), "utf8");
-  const configure = (envOverrides: Record<string, string> = {}) =>
+  const configure = (envOverrides: Record<string, string> = { CODEX_HOME: codexHome }) =>
     setSettings({
       agentMode: {
         ...getSettings().agentMode,
@@ -53,7 +56,7 @@ describe("codexApprovedRules", () => {
           codex: {
             binaryPath: path.join(bundle, "codex-acp"),
             binarySource: "managed",
-            envOverrides: { CODEX_HOME: codexHome, FAKE_CODEX_LOG: checkLog, ...envOverrides },
+            envOverrides: { FAKE_CODEX_LOG: checkLog, ...envOverrides },
           },
         },
       },
@@ -62,6 +65,8 @@ describe("codexApprovedRules", () => {
   beforeEach(() => {
     codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-home-"));
     inheritedHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-inherited-home-"));
+    userHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-user-home-"));
+    jest.mocked(os.homedir).mockReturnValue(userHome);
     savedInheritedHome = process.env.CODEX_HOME;
     process.env.CODEX_HOME = inheritedHome;
     bundle = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bundle-"));
@@ -88,6 +93,7 @@ describe("codexApprovedRules", () => {
     else process.env.CODEX_HOME = savedInheritedHome;
     fs.rmSync(codexHome, { recursive: true, force: true });
     fs.rmSync(inheritedHome, { recursive: true, force: true });
+    fs.rmSync(userHome, { recursive: true, force: true });
     fs.rmSync(bundle, { recursive: true, force: true });
   });
 
@@ -112,19 +118,23 @@ describe("codexApprovedRules", () => {
       ]);
     });
 
-    it(`reads the CODEX_HOME codex-acp gets: the user's Codex env override over Obsidian's own environment: ${ISSUE}`, async () => {
-      writeRules(`${GH_API}\n`);
-      fs.mkdirSync(path.join(inheritedHome, "rules"));
-      fs.writeFileSync(path.join(inheritedHome, "rules", "default.rules"), `${COMMIT}\n`);
+    it(`reads the CODEX_HOME codex-acp gets: the user's Codex env override, else Obsidian's own, and Codex's default home when the override is empty: ${ISSUE}`, async () => {
+      const homes = [codexHome, inheritedHome, path.join(userHome, ".codex")];
+      for (const home of homes) {
+        fs.mkdirSync(path.join(home, "rules"), { recursive: true });
+        fs.writeFileSync(path.join(home, "rules", "default.rules"), `${GH_API}\n`);
+      }
+      const listedFile = async () => (await codexApprovedRules.list(plugin))[0].appliesTo;
 
-      const fromOverride = await codexApprovedRules.list(plugin);
+      const fromOverride = await listedFile();
+      configure({});
+      const fromObsidian = await listedFile();
       configure({ CODEX_HOME: "" });
-      const fromInherited = await codexApprovedRules.list(plugin);
+      const fromEmptyOverride = await listedFile();
 
-      expect(fromOverride.map((rule) => rule.id)).toEqual([GH_API]);
-      expect(fromInherited.map((rule) => [rule.id, rule.appliesTo])).toEqual([
-        [COMMIT, { kind: "file", path: path.join(inheritedHome, "rules", "default.rules") }],
-      ]);
+      expect([fromOverride, fromObsidian, fromEmptyOverride]).toEqual(
+        homes.map((home) => ({ kind: "file", path: path.join(home, "rules", "default.rules") }))
+      );
     });
 
     it(`gives no rules when the Codex home has no rules file yet: ${ISSUE}`, async () => {
@@ -181,7 +191,7 @@ describe("codexApprovedRules", () => {
       const before = `${HAND_WRITTEN}\n${GH_API}\n`;
       writeRules(before);
       const [ghApi] = await codexApprovedRules.list(plugin);
-      configure({ FAKE_CODEX_FAIL: "1" });
+      configure({ CODEX_HOME: codexHome, FAKE_CODEX_FAIL: "1" });
 
       await expect(codexApprovedRules.remove(plugin, ghApi)).rejects.toThrow(
         "Codex couldn't read the rules file without it, so the file was left as it was. starlark error: Parse error"

@@ -33,10 +33,11 @@ function fs(): typeof import("node:fs").promises {
 }
 
 function rulesFile(): string {
-  const overrides = sanitizeBuiltinSkillEnvOverrides(
-    getSettings().agentMode?.backends?.codex?.envOverrides
-  );
-  const codexHome = overrides.CODEX_HOME || process.env.CODEX_HOME || defaultCodexHome();
+  const env = {
+    ...process.env,
+    ...sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.codex?.envOverrides),
+  };
+  const codexHome = env.CODEX_HOME || defaultCodexHome();
   return requireNodeModule<typeof import("node:path")>("path").join(
     codexHome,
     "rules",
