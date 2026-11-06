@@ -14,11 +14,11 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 - setup-agent-options: per-agent options, such as Claude's `Auto mode permissions` (`Auto`, `Accept edits`, `Bypass permissions`) and `Show extended thinking`, and each agent's `Environment variables` with `Add variable`.
 - setup-notification: `Notification` plays a `Sound` (Piano key, Marimba, Bell, Doorbell) when an agent finishes a turn.
 
-## How to get to it (user POV)
+## How to get to it
 
 - Settings → Copilot → Basic → Agents: `Default agent` and `Notification`, then a tab per agent (OpenCode, Claude, Codex) with its status, `Configure`, defaults, models, and options.
 - Agent Chat shows `Select your agent` when the default agent cannot start and no chat is open.
-- `Install <agent>`, `Configure <agent>`, `Update`, and `Sign in` on a status card in [decision cards](decision-cards.md).
+- `Install <agent>`, `Configure <agent>`, `Update`, and `Sign in` on a [status card](status-and-error-cards.md).
 
 ## Driving it
 

@@ -4,18 +4,18 @@ The `Report an issue` dialog: the user describes what went wrong, picks diagnost
 
 ## Sub-features
 
-- report-open: `Report an issue` from `More actions` in the [chat controls](chat-controls.md), from Settings → Advanced, or `Review & report` on a feedback card in [decision cards](decision-cards.md).
+- report-open: `Report an issue` from `More actions` in the [chat controls](chat-controls.md), from Settings → Advanced, or `Review & report` on a [feedback card](status-and-error-cards.md).
 - report-describe: `What went wrong?` takes the user's description. Opened from a chat, it starts with the chat's agent, model, and session; from a feedback card, with the agent's draft; from Settings, empty.
 - report-attachments: choose `Screenshot of the Obsidian window`, `Agent activity log`, `Copilot log`, and, for OpenCode, `OpenCode log`. Opened from a chat or a feedback card, every attachment starts ticked.
 - report-notice: `Before you upload` says what is redacted, that screenshots are not, and that reports are private and deleted after 60 days.
 - report-review: `Prepare report` lists the `Report contents`, each file with its size, and the zip; `Show zip` reveals the zip; `Cancel` discards it.
 - report-upload: `Upload & open issue` uploads the report and opens a GitHub issue in the browser with its report ID.
 
-## How to get to it (user POV)
+## How to get to it
 
 - `More actions` → `Report an issue` in the [chat controls](chat-controls.md), once the chat has a message.
 - Settings → Copilot → Advanced → Debugging & support → `Report an issue`.
-- `Review & report` on a `Report this to the Copilot team?` card in [decision cards](decision-cards.md).
+- `Review & report` on a `Report this to the Copilot team?` card in [status and error cards](status-and-error-cards.md).
 
 ## Driving it
 

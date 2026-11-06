@@ -13,7 +13,7 @@ Notes related to the current note or chat, found by Miyo, in the start screen's 
 - rn-pane: `Open in separate pane` in the [start screen](agent-home.md)'s shelf, or the `Open Relevant Notes` command, opens the standalone pane.
 - rn-miyo: with Miyo off, the list offers `Add semantic matches with Miyo`, `Download Miyo`, and `Set up in Copilot`; other Miyo states, such as `Miyo is not connected`, explain why there are no matches.
 
-## How to get to it (user POV)
+## How to get to it
 
 - The `Relevant Notes` tab in the shelf on the [start screen](agent-home.md).
 - The `Open Relevant Notes` command, or `Open in separate pane` under the shelf's list.
@@ -32,5 +32,4 @@ Notes related to the current note or chat, found by Miyo, in the start screen's 
 
 ## Gotchas
 
-- Every row comes from Miyo. Without it there is no list at all, not a link-based fallback.
 - The source follows where the user last worked: clicking into Agent Chat switches it to `Agent chat context`, and activating a note switches it back. Clicks inside Relevant Notes keep the current source.

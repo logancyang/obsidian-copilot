@@ -13,7 +13,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - row-delete: `More actions` → Delete chat.
 - row-note: `Open chat note`, `Copy chat link`, and bookmarking, for chats saved as notes.
 
-## How to get to it (user POV)
+## How to get to it
 
 - Recent chats on the [start screen](agent-home.md).
 - `Chat history` in the [chat controls](chat-controls.md).
@@ -30,4 +30,4 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 
 ## Gotchas
 
-- Two controls are named `Close chat`: a row's stops the agent, a tab's closes the tab.
+- A row's `Close chat` also closes the chat's [tab](chat-tabs.md), if it has one.

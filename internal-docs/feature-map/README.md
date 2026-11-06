@@ -37,7 +37,10 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [chat-input](chat-input.md): model, mode, and effort pickers, mentions, note context, images, send, stop.
 - [queued-messages](queued-messages.md): messages queued while the agent works.
 - [agent-replies](agent-replies.md): streaming text, reasoning, tool and activity cards, subagents, tasks.
-- [decision-cards](decision-cards.md): cards in the conversation that wait on the user: permission requests, questions from the agent, plan proposals, status and error cards.
+- [permission-requests](permission-requests.md): `Permission required` cards that wait for the user to allow or deny a tool call.
+- [agent-questions](agent-questions.md): `Question from agent` cards that wait for the user's answer.
+- [plan-proposals](plan-proposals.md): Plan mode cards to approve, reject, or redirect a plan.
+- [status-and-error-cards](status-and-error-cards.md): agent status, settings changed, error, and feedback cards.
 - [turn-diffs](turn-diffs.md): file changes per turn, Revoke.
 
 ## Projects and setup
@@ -49,13 +52,13 @@ The feature file a change touches defines its coverage set. Also drive every jou
 
 ## Multi-surface journeys
 
-- [multi-surface-journeys](multi-surface-journeys.md): the main things a user does, walked through the features each one crosses.
+- [multi-surface-journeys](multi-surface-journeys.md): flows that cross features, added when testing the features one at a time misses a real problem.
 
 ## Entry contract
 
-A fully mapped feature file uses these four H2s, in order. A `(sub-features only)` file has just the first.
+A feature file uses these four H2s, in order.
 
 1. `Sub-features`
-2. `How to get to it (user POV)`
+2. `How to get to it`
 3. `Driving it`
 4. `Gotchas`

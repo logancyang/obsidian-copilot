@@ -17,7 +17,7 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-files-changed: a turn that edited notes ends with its [turn diffs](turn-diffs.md).
 - reply-actions: `Copy` and `Insert / Replace at cursor` under a finished reply.
 
-## How to get to it (user POV)
+## How to get to it
 
 Send a message from the [chat input](chat-input.md). The reply shows below the message in Agent Chat. Running background tasks are also listed under `N tasks running` in the [chat controls](chat-controls.md).
 

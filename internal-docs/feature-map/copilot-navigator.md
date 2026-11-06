@@ -1,6 +1,6 @@
 # Copilot Navigator
 
-A sidebar listing chats and projects. While it is open there are no chat tabs to hold chats, so leaving a chat stops its agent unless the user worked in it, whichever control the user leaves it with.
+A sidebar listing chats and projects, available only as a preview for Supporters. While it is open there are no chat tabs to hold chats, so leaving a chat stops its agent unless the user worked in it, whichever control the user leaves it with.
 
 ## Sub-features
 
@@ -13,13 +13,13 @@ A sidebar listing chats and projects. While it is open there are no chat tabs to
 - nav-new-project: `New project` creates a project and opens it, under the same rule.
 - nav-reorder: drag pinned chats and projects to reorder them.
 - nav-archived: `Sidebar options` → View archived lists archived chats and projects to open or unarchive, under the same rule.
-- nav-upgrade: without Navigator access, opening it shows an upgrade prompt instead.
+- nav-upgrade: without a Supporter license, opening it shows `Copilot Navigator is a preview for Supporters` instead.
 
 Each chat in the list is a [chat row](chat-rows.md).
 
-## How to get to it (user POV)
+## How to get to it
 
-Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at the left of the chat tabs. Needs a license with Navigator access.
+Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at the left of the chat tabs. Supporter preview only: it needs a Supporter license.
 
 ## Driving it
 

@@ -14,7 +14,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - input-model-effort: `Model · effort` lists models grouped by agent, with an Effort slider; the choice applies when the picker closes.
 - input-mode: `Mode` picks `Safe`, `Plan`, or `Auto`; Shift+Tab cycles through them.
 
-## How to get to it (user POV)
+## How to get to it
 
 - At the bottom of Agent Chat, on the [start screen](agent-home.md) and in every chat. Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` command.
 - The `Add selection to chat context` and `Add web selection to chat context` commands add the current selection.

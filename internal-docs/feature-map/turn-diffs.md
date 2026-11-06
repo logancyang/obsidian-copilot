@@ -13,7 +13,7 @@ The file changes an agent made in each turn, and Revoke.
 - diff-open-note: `Open note` opens the changed note itself.
 - diff-selection: text selected in a diff is added to the [chat input](chat-input.md) as a `Selection` badge.
 
-## How to get to it (user POV)
+## How to get to it
 
 - The list of changed files at the end of a turn in the [agent's reply](agent-replies.md); choose a file to open its diff.
 - In an open diff, the `Go to next change in file diff` and `Go to previous change in file diff` commands step between changes.

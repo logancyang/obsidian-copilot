@@ -15,7 +15,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-navigator: while the [Copilot Navigator](copilot-navigator.md) is open, the shelf keeps only Relevant Notes.
 - home-release-update: when a newer Copilot is out, a `Copilot <version> is ready` card offers `See what’s new` for the release notes, and `Dismiss release update`.
 
-## How to get to it (user POV)
+## How to get to it
 
 - Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` command. A chat with no messages shows the start screen.
 - `New chat` (**+**) in the [chat tabs](chat-tabs.md), or `New chat` in the [chat controls](chat-controls.md).

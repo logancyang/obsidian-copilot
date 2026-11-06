@@ -12,7 +12,7 @@ The tabs across the top of Agent Chat, one per open chat. A tab stays open, and 
 - tab-overflow: tabs that do not fit move into a `Show N more chats` menu.
 - tab-project: each project has its own tabs; leaving the project brings the other tabs back with their chats still open.
 
-## How to get to it (user POV)
+## How to get to it
 
 Open Agent Chat from the ribbon icon or the `Open Copilot Agent Chat window` command. The tabs run across the top. They are hidden while the [Copilot Navigator](copilot-navigator.md) is open.
 

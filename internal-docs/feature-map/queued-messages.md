@@ -9,10 +9,10 @@ Messages the user sends while the agent is still working, listed above the [chat
 - queue-send-now: `Send now` stops the agent's current reply and has it read the waiting messages right away.
 - queue-withdraw: `Withdraw queued message` takes back a message before the agent reads it and puts it back in the chat input.
 - queue-remove: `Remove queued message` deletes a held message.
-- queue-combine: held messages go out together as one message when the agent finishes; `/compact` always goes alone.
+- queue-combine: held messages go out together as one message when the agent finishes.
 - queue-stop: stopping the reply puts held messages back in the chat input instead of sending them.
 
-## How to get to it (user POV)
+## How to get to it
 
 Send a message from the [chat input](chat-input.md) while the agent is working (`Stop generating` shows). The queue appears just above the chat input.
 
@@ -29,4 +29,5 @@ Send a message from the [chat input](chat-input.md) while the agent is working (
 
 ## Gotchas
 
+- `/compact` is never combined with other held messages; it always goes out alone.
 - Stopping the reply, with `Stop generating` or Escape, never sends held messages; they return to the chat input.

@@ -12,7 +12,7 @@ The bar above the [chat input](chat-input.md) once a chat has a message, with `U
 - controls-more: `More actions` → `Open chat note` (once the chat is saved as a note), `Copy chat link`, and `Add to bookmarks` / `Remove from bookmarks`.
 - controls-report: `More actions` → `Report an issue` opens [Report an issue](report-issue.md) with this chat's agent, model, and session filled in.
 
-## How to get to it (user POV)
+## How to get to it
 
 Open Agent Chat and send a message, or open a past chat from Recent chats on the [start screen](agent-home.md). The bar sits between the conversation and the chat input. The start screen has no bar.
 

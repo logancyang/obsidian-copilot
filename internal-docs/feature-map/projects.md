@@ -14,7 +14,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-files: `Project files` in the project info lists `AGENTS.md` and the files in the project folder to open, and `Outputs`.
 - project-context: the project's `Context` takes files and folders dragged in, links from `+ URL`, and more sources from `Manage`.
 
-## How to get to it (user POV)
+## How to get to it
 
 - The `Projects` tab on the [start screen](agent-home.md): `New project`, or choose a project.
 - `New project`, a project folder, or `New chat in <project>` in the [Copilot Navigator](copilot-navigator.md).
