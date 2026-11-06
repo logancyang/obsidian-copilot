@@ -12,6 +12,9 @@ import { opencodeApprovedRules } from "./opencodeApprovedRules";
 
 jest.mock("obsidian", () => ({ ...jest.requireActual("obsidian"), requestUrl: jest.fn() }));
 jest.mock("child_process", () => ({ spawn: jest.fn() }));
+jest.mock("@/utils/loginShellPath", () => ({
+  agentShellPath: jest.fn(async () => "/login/bin:/usr/bin"),
+}));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/867";
 const SERVER_URL = "http://127.0.0.1:4100";
@@ -132,7 +135,7 @@ describe("opencodeApprovedRules", () => {
       ]);
     });
 
-    it("asks a short-lived `opencode serve --stdio` started in the vault folder with the agent's environment variables, using the password it was started with, and stops it afterwards", async () => {
+    it("asks a short-lived `opencode serve --stdio` started in the vault folder with the agent's login-shell PATH and environment variables, using the password it was started with, and stops it afterwards", async () => {
       installOpencode("2.0.32", { XDG_DATA_HOME: "/scratch/data" });
       const server = fakeServer();
       jest.mocked(spawn).mockReturnValue(server as never);
@@ -150,6 +153,7 @@ describe("opencodeApprovedRules", () => {
         ["serve", "--stdio", "--port", "0"],
         PROJECT.directory,
       ]);
+      expect(spawnOptions.env.PATH).toBe("/login/bin:/usr/bin");
       expect(spawnOptions.env.XDG_DATA_HOME).toBe("/scratch/data");
       const password = spawnOptions.env.OPENCODE_PASSWORD;
       expect(password).toMatch(/.{32,}/);
