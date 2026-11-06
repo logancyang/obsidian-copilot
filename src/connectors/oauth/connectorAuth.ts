@@ -172,6 +172,8 @@ export class ConnectorAuth {
       this.write(connectionId, { ...stored, tokens, expiresAt: expiresAt(tokens) });
       return { status: "connected", accessToken: tokens.access_token };
     } catch (error) {
+      // Only a refusal of the credentials ends the login; a network or server failure keeps it for the next try.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
       if (
         error instanceof InvalidGrantError ||
         error instanceof InvalidClientError ||

@@ -413,7 +413,7 @@ describe("connectorAuth", () => {
         expect(service.requestsTo("/token")).toHaveLength(2);
       });
 
-      it("returns needs-login and forgets the login when the service rejects the refresh token", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 returns needs-login and forgets the login when the service rejects the refresh token", async () => {
         const { service, keychain, connectorAuth, connect } = setUp();
         await connect();
         service.rejectRefreshTokens();
@@ -432,7 +432,7 @@ describe("connectorAuth", () => {
         });
       });
 
-      it("returns unreachable and keeps the login when the service cannot be reached", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 returns unreachable and keeps the login when the service cannot be reached", async () => {
         const { service, connectorAuth, connect, storedLogin } = setUp();
         await connect();
         const before = storedLogin();
