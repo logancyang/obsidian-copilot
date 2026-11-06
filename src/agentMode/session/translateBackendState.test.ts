@@ -763,6 +763,24 @@ describe("translateBackendState", () => {
         );
         expect(state.mode!.current).toBeNull();
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/870 shows an unmapped native mode as the mapping's chosen picker mode when it names one", () => {
+        const modes: RawModeState = {
+          currentModeId: "acceptEdits",
+          availableModes: [
+            { id: "default", name: "Default" },
+            { id: "plan", name: "Plan" },
+            { id: "acceptEdits", name: "Accept Edits" },
+            { id: "bypassPermissions", name: "Bypass Permissions" },
+          ],
+        };
+        const state = translateBackendState(
+          { models: null, modes, configOptions: null },
+          descriptor({ getModeMapping: () => ({ ...mapping, unlistedModeShowsAs: "auto" }) })
+        );
+        expect(state.mode!.current).toBe("auto");
+        expect(state.mode!.apply.auto).toEqual({ kind: "setMode", nativeId: "bypassPermissions" });
+      });
     });
 
     describe("mode (configOption style)", () => {

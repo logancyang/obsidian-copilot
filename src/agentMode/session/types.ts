@@ -41,6 +41,7 @@ export interface ModeMapping {
   configId?: string;
   canonical: Partial<Record<CopilotMode, string>>;
   readOnlyModeId?: string | null;
+  unlistedModeShowsAs?: CopilotMode;
 }
 
 export interface ModeOption {

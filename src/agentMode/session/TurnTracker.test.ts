@@ -1,4 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
+import { logError } from "@/logger";
 import { Notice } from "obsidian";
 import { TurnTracker, type TurnOutcome, type TurnSend } from "./TurnTracker";
 import {
@@ -528,10 +529,12 @@ describe("TurnTracker", () => {
         const { deps, tracker } = setup();
         const { outcome } = runningTurn(tracker, "p1", "t1");
         deps.store.appendAgentText(tracker.resolveContentTarget("m1")!, "partial");
+        const replyClosed = deps.nextMessagesChange();
 
         tracker.stop(false);
 
         await expect(outcome).resolves.toEqual({ stopReason: "cancelled" });
+        await replyClosed;
         expect(transcript(deps.store)).toEqual([[AI_SENDER, "partial", "cancelled"]]);
         expect(tracker.getReplyId()).toBeNull();
         expect(tracker.resolveContentTarget("m1")).toBeNull();
@@ -603,6 +606,56 @@ describe("TurnTracker", () => {
           "tc-read": "cancelled",
           "tc-background": "in_progress",
         });
+      });
+      it("shows the stopped turn's file changes on the reply it closes", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        deps.captureFileChanges.mockImplementationOnce(async (_files, messageId) =>
+          deps.store.setFileChanges(messageId, [
+            {
+              path: "note.md",
+              status: "modified",
+              before: "a\n",
+              after: "a\nb\n",
+              additions: 1,
+              deletions: 0,
+            },
+          ])
+        );
+        const replyClosed = deps.nextMessagesChange();
+
+        tracker.stop(false);
+        await outcome;
+        await replyClosed;
+
+        expect(deps.captureFileChanges).toHaveBeenCalledWith(expect.any(Map), replyId, undefined);
+        expect(deps.store.getMessage(replyId)?.fileChanges?.map((c) => c.path)).toEqual([
+          "note.md",
+        ]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4081 resolves the stopped prompt as cancelled and logs the error when closing the reply throws", async () => {
+        const { deps, tracker } = setup();
+        const { outcome } = runningTurn(tracker, "p1", "t1");
+        const failure = new Error("stopToolCalls failed");
+        jest.spyOn(deps.store, "stopToolCalls").mockImplementation(() => {
+          throw failure;
+        });
+
+        tracker.stop(false);
+
+        await expect(outcome).resolves.toEqual({ stopReason: "cancelled" });
+        expect(logError).toHaveBeenCalledWith(expect.any(String), failure);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4081 resolves the stopped prompt as cancelled while the reply's file changes are still being captured", async () => {
+        const { deps, tracker } = setup();
+        const { outcome } = runningTurn(tracker, "p1", "t1");
+        deps.captureFileChanges.mockReturnValueOnce(new Promise<boolean>(() => {}));
+
+        tracker.stop(false);
+
+        await expect(outcome).resolves.toEqual({ stopReason: "cancelled" });
       });
     });
 
@@ -1038,6 +1091,21 @@ describe("TurnTracker", () => {
 
         expect(tracker.getReplyId()).toBe(nextReply);
         expect(tracker.whenStoppedTurnEnds(new AbortController().signal)).toBeNull();
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4081 resolves the delivered prompt and logs the error when closing the reply throws", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        deps.store.appendAgentText(replyId, "done");
+        const failure = new Error("markTurnComplete failed");
+        jest.spyOn(deps.store, "markTurnComplete").mockImplementation(() => {
+          throw failure;
+        });
+
+        tracker.endTurn({ turnId: "t1", stopReason: "end_turn" });
+
+        await expect(outcome).resolves.toMatchObject({ stopReason: "end_turn" });
+        expect(logError).toHaveBeenCalledWith(expect.any(String), failure);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 still closes the reply when its file changes cannot be captured", async () => {

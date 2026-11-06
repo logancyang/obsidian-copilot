@@ -99,6 +99,11 @@ model ID. The API key is optional; add one when the endpoint requires
 authentication. Model discovery uses the endpoint's `/v1/models` response, but
 you can always enter an exact model ID before searching the discovered list.
 
+When the base URL is the endpoint of a provider in the **Add a provider** list,
+its models get that provider's details, such as image support. Edit and save the
+provider to refresh the details of models it already has. OpenCode sends images
+only to models known to support them.
+
 If **Test** succeeds but Quick Chat cannot send a message, edit the provider
 and turn on **Enable CORS**. Responses then appear after completion instead of
 streaming token by token. For LM Studio, you can enable CORS in LM Studio to
