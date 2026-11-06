@@ -334,6 +334,24 @@ describe("OpencodeBackend", () => {
       });
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3840 passes the endpoint-reported 262144 context window to OpenCode for a custom model", async () => {
+      const provider = makeOpenAICompatibleProvider("p-custom", "https://my-endpoint/v1", "Custom");
+      const model = makeModel("p-custom", "qwen3-coder");
+      model.info.limits = { context: 262_144 };
+      const deps = makeDeps({
+        resolved: [okEntry(provider, model)],
+        keys: { "p-custom": "secret-key" },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+
+      expect(cfg.providers["p-custom"].models?.["qwen3-coder"]).toEqual({
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        limit: { context: 262_144 },
+        variants: [],
+      });
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/557 inherits catalog effort choices for a BYOK reasoning model", async () => {
       const provider = makeProvider("p-anthropic", {
         kind: "byok",
