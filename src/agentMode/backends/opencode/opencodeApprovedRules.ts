@@ -4,6 +4,7 @@ import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompat
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { agentShellPath } from "@/utils/loginShellPath";
 import { getVaultBase } from "@/utils/vaultPath";
 import { computeInstallState } from "./OpencodeBinaryManager";
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
@@ -80,7 +81,12 @@ function withOpencodeServer<T>(
     const password = randomBytes(32).toString("base64url");
     const server = spawn(install.path, ["serve", "--stdio", "--port", "0"], {
       cwd: getVaultBase(plugin.app) ?? undefined,
-      env: { ...process.env, ...opencode?.envOverrides, OPENCODE_PASSWORD: password },
+      env: {
+        ...process.env,
+        PATH: await agentShellPath(),
+        ...opencode?.envOverrides,
+        OPENCODE_PASSWORD: password,
+      },
       stdio: ["pipe", "pipe", "ignore"],
       windowsHide: true,
     });
