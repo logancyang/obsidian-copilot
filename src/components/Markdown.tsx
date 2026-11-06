@@ -9,6 +9,7 @@ export interface MarkdownProps {
   className?: string;
   nested?: boolean;
   onRendered?: (container: HTMLElement) => void;
+  runDataviewQueries?: boolean;
   sourcePath: string;
   text: string;
 }
@@ -17,6 +18,7 @@ export function Markdown({
   className,
   nested,
   onRendered,
+  runDataviewQueries = false,
   sourcePath,
   text,
 }: MarkdownProps): React.ReactElement {
@@ -32,7 +34,7 @@ export function Markdown({
     component.load();
     if (!nested) target.classList.add("markdown-rendered");
     target.replaceChildren();
-    void renderMarkdown(app, text, target, sourcePath, component)
+    void renderMarkdown(app, text, target, sourcePath, component, runDataviewQueries)
       .then(() => {
         if (!cancelled) onRendered?.(target);
       })
@@ -47,7 +49,7 @@ export function Markdown({
       component.unload();
       target.replaceChildren();
     };
-  }, [app, nested, onRendered, sourcePath, text]);
+  }, [app, nested, onRendered, runDataviewQueries, sourcePath, text]);
 
   return <div className={cn(className)} ref={targetRef} />;
 }
