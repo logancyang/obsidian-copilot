@@ -483,6 +483,31 @@ describe("connectorAuth", () => {
         expect(keychain.secrets.size).toBe(0);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/23 answers needs-login to a refresh requested while the revocation is in flight and leaves no keychain entry", async () => {
+        const { service, keychain, connectorAuth, connect } = setUp({ publishesRevocation: true });
+        await connect();
+        let revocationStarted: () => void = () => {};
+        const revoking = new Promise<void>((resolve) => (revocationStarted = resolve));
+        let releaseRevocation: () => void = () => {};
+        const revocationReleased = new Promise<void>((resolve) => (releaseRevocation = resolve));
+        setRequestUrlImpl(async (param: RequestUrlParam) => {
+          if (new URL(param.url).pathname === "/revoke") {
+            revocationStarted();
+            await revocationReleased;
+          }
+          return service.requestUrl(param);
+        });
+
+        const disconnecting = connectorAuth.disconnect(CONNECTION_ID);
+        await revoking;
+        const refreshing = connectorAuth.accessToken(CONNECTION_ID, { forceRefresh: true });
+        releaseRevocation();
+        await disconnecting;
+
+        await expect(refreshing).resolves.toEqual({ status: "needs-login" });
+        expect(keychain.secrets.size).toBe(0);
+      });
+
       it("deletes the keychain entry even when the service cannot be reached to revoke", async () => {
         const { service, keychain, connectorAuth, connect } = setUp({ publishesRevocation: true });
         await connect();

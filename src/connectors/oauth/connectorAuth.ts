@@ -146,12 +146,14 @@ export class ConnectorAuth {
     await this.refreshes.get(connectionId);
     const stored = this.read(connectionId);
     if (!stored) return;
+    // Deleting before revoking leaves a refresh requested during revocation no login to write back.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+    this.deps.keychain.deleteSecretById(this.keychainId(connectionId));
     try {
       await revoke(stored);
     } catch (error) {
-      logWarn("[Connectors] Couldn't revoke the login; deleting it locally.", error);
+      logWarn("[Connectors] Couldn't revoke the login.", error);
     }
-    this.deps.keychain.deleteSecretById(this.keychainId(connectionId));
   }
 
   private async refresh(connectionId: string, stored: StoredLogin): Promise<AccessTokenResult> {
