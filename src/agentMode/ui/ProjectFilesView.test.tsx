@@ -25,16 +25,43 @@ jest.mock("obsidian", () => {
   };
 });
 
+const mockUpdateProject = jest.fn();
+const mockOpenPicker = jest.fn();
+
+jest.mock("@/projects/ProjectFileManager", () => ({
+  ProjectFileManager: { getInstance: () => ({ updateProject: mockUpdateProject }) },
+}));
+
+jest.mock("@/components/modals/ProjectFileSelectModal", () => ({
+  ProjectFileSelectModal: jest.fn().mockImplementation(({ onFileSelect }) => ({
+    open: () => mockOpenPicker("files", onFileSelect),
+  })),
+}));
+
+jest.mock("@/components/modals/FolderSearchModal", () => ({
+  FolderSearchModal: jest.fn().mockImplementation((_app, onChooseFolder) => ({
+    open: () => mockOpenPicker("folders", onChooseFolder),
+  })),
+}));
+
 import {
+  buildLinkedRows,
   buildProjectTree,
+  LinkedSection,
+  type LinkedProjectRow,
   ProjectFilesView,
   ProjectFolderSection,
 } from "@/agentMode/ui/ProjectFilesView";
 import type { ProjectConfig } from "@/aiParams";
 import { AppContext } from "@/context";
-import { updateCachedProjectRecords } from "@/projects/state";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { App, EventRef, Menu, TAbstractFile, TFile, TFolder } from "obsidian";
+import { installRadixMenuPolyfills } from "@/agentMode/ui/testing/radixMenuPolyfills";
+import {
+  getCachedProjectRecordById,
+  updateCachedProjectRecords,
+  upsertCachedProjectRecord,
+} from "@/projects/state";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { App, EventRef, Menu, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import React from "react";
 
 interface FakeMenuItem {
@@ -76,15 +103,36 @@ function rename(file: TAbstractFile, path: string): void {
   (file as unknown as { name: string }).name = path.split("/").pop() ?? "";
 }
 
-function makeProject(): ProjectConfig {
+function makeProject(contextSource: ProjectConfig["contextSource"] = {}): ProjectConfig {
   return {
     id: "q4",
     name: "Q4 Launch",
     systemPrompt: "",
-    contextSource: {},
+    contextSource,
     created: 0,
     UsageTimestamps: 0,
   };
+}
+
+function inclusionsOf(patterns: string[]): string {
+  return patterns.map(encodeURIComponent).join(",");
+}
+
+function linkPatterns(patterns: string[]): void {
+  updateCachedProjectRecords([
+    {
+      folderName: "q4-launch",
+      filePath: CONFIG_PATH,
+      project: makeProject({ inclusions: inclusionsOf(patterns) }),
+    },
+  ]);
+}
+
+function savedPatterns(): string[] {
+  return (getCachedProjectRecordById("q4")?.project.contextSource.inclusions ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map((pattern) => decodeURIComponent(pattern));
 }
 
 interface FakeVault {
@@ -98,12 +146,17 @@ interface FakeVault {
   promptForDeletion: jest.Mock;
 }
 
-function makeFakeVault(root: TFolder | null): FakeVault {
+function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault {
   const listeners = new Map<EventRef, { event: string; listener: VaultListener }>();
   const filesByPath = new Map<string, TAbstractFile>();
   const index = (entry: TAbstractFile): void => {
     filesByPath.set(entry.path, entry);
     if (entry instanceof TFolder) entry.children.forEach(index);
+  };
+  const reindex = (): void => {
+    filesByPath.clear();
+    if (root) index(root);
+    outside.forEach(index);
   };
   const openFile = jest.fn().mockResolvedValue(undefined);
   const trigger = jest.fn();
@@ -114,9 +167,12 @@ function makeFakeVault(root: TFolder | null): FakeVault {
     fileManager: { promptForFileRename, promptForDeletion },
     vault: {
       getAbstractFileByPath: (path: string) => {
-        filesByPath.clear();
-        if (root) index(root);
+        reindex();
         return filesByPath.get(path) ?? null;
+      },
+      getFiles: () => {
+        reindex();
+        return [...filesByPath.values()].filter((entry) => entry instanceof TFile);
       },
       on: (event: string, listener: VaultListener) => {
         const ref = {} as EventRef;
@@ -163,14 +219,29 @@ function renderView(vault: FakeVault) {
 }
 
 function rowNames(): string[] {
-  return screen.getAllByRole("button").map((row) => row.textContent ?? "");
+  return within(screen.getByRole("region", { name: "Project folder" }))
+    .getAllByRole("button")
+    .map((row) => row.textContent ?? "");
 }
 
-beforeAll(() => {
-  window.activeDocument = window.document;
-});
+function chooseLinkKind(label: string): void {
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: label }));
+}
+
+beforeAll(installRadixMenuPolyfills);
 
 beforeEach(() => {
+  mockUpdateProject.mockReset().mockImplementation(async (_id: string, next: ProjectConfig) => {
+    const record = getCachedProjectRecordById(next.id)!;
+    act(() => upsertCachedProjectRecord({ ...record, project: next }));
+    return record;
+  });
+  mockOpenPicker.mockReset();
+  (Notice as unknown as jest.Mock).mockClear();
   updateCachedProjectRecords([
     { folderName: "q4-launch", filePath: CONFIG_PATH, project: makeProject() },
   ]);
@@ -265,6 +336,96 @@ describe("ProjectFilesView", () => {
     });
   });
 
+  describe("buildLinkedRows()", () => {
+    function linkedVault() {
+      const tiers = makeFile("Research/Pricing/tiers.md");
+      const enterprise = makeFolder("Research/Pricing/enterprise");
+      const pricing = makeFolder("Research/Pricing", [tiers, enterprise]);
+      const work = makeFolder("Work", [makeFolder("Work/Notes")]);
+      const personal = makeFolder("Personal", [makeFolder("Personal/Notes")]);
+      const meetings = makeFolder("Meetings", [makeFile("Meetings/Q3 retro.md")]);
+      return makeFakeVault(null, [makeFolder("Research", [pricing]), work, personal, meetings]).app;
+    }
+
+    function describeRows(rows: readonly LinkedProjectRow[]): string[] {
+      return rows.map((row) => `${row.node.kind} ${row.node.name} in ${row.parent || "/"}`);
+    }
+
+    it("lists linked folders, then linked notes, each by name with the folder it sits in", () => {
+      const rows = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["[[Q3 retro]]", "Research/Pricing"]),
+        new Set(),
+        CONFIG_PATH
+      );
+
+      expect(describeRows(rows)).toEqual([
+        "folder Pricing in Research/",
+        "file Q3 retro.md in Meetings/",
+      ]);
+      expect(rows.map((row) => row.pattern)).toEqual(["Research/Pricing", "[[Q3 retro]]"]);
+    });
+
+    it("keeps two same-named folders under different parents as two rows with their own paths — https://github.com/logancyang/obsidian-copilot/issues/3089", () => {
+      const rows = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["Work/Notes", "Personal/Notes"]),
+        new Set(),
+        CONFIG_PATH
+      );
+
+      expect(rows.map((row) => row.node.path)).toEqual(["Work/Notes", "Personal/Notes"]);
+      expect(describeRows(rows)).toEqual(["folder Notes in Work/", "folder Notes in Personal/"]);
+    });
+
+    it("reads an expanded linked folder's current contents with the Project folder tree's rules", () => {
+      const [collapsed] = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["Research/Pricing"]),
+        new Set(),
+        CONFIG_PATH
+      );
+      const [expanded] = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["Research/Pricing"]),
+        new Set(["Research/Pricing"]),
+        CONFIG_PATH
+      );
+
+      expect(collapsed.node).toMatchObject({ kind: "folder", children: null });
+      expect(
+        expanded.node.kind === "folder" && expanded.node.children?.map((child) => child.name)
+      ).toEqual(["enterprise", "tiers.md"]);
+    });
+
+    it("keeps a link whose note or folder no longer exists as a missing row, so it can still be unlinked", () => {
+      const rows = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["[[Old plan]]", "Archive/2025"]),
+        new Set(),
+        CONFIG_PATH
+      );
+
+      expect(rows.map((row) => [row.node.name, row.missing])).toEqual([
+        ["2025", true],
+        ["Old plan", true],
+      ]);
+    });
+
+    it("returns the same empty list when nothing linkable is saved, such as only tags", () => {
+      const first = buildLinkedRows(linkedVault(), undefined, new Set(), CONFIG_PATH);
+      const second = buildLinkedRows(
+        linkedVault(),
+        inclusionsOf(["#launch"]),
+        new Set(),
+        CONFIG_PATH
+      );
+
+      expect(first).toEqual([]);
+      expect(first).toBe(second);
+    });
+  });
+
   describe("ProjectFolderSection()", () => {
     const handlers = {
       onToggleFolder: jest.fn(),
@@ -313,6 +474,89 @@ describe("ProjectFilesView", () => {
     });
   });
 
+  describe("LinkedSection()", () => {
+    const handlers = {
+      onToggleFolder: jest.fn(),
+      onOpenFile: jest.fn(),
+      onShowFileMenu: jest.fn(),
+      onDragFile: jest.fn(),
+      onLink: jest.fn(),
+      onUnlink: jest.fn(),
+    };
+    const ROWS: LinkedProjectRow[] = [
+      {
+        pattern: "Research/Pricing",
+        node: { kind: "folder", path: "Research/Pricing", name: "Pricing", children: null },
+        parent: "Research/",
+        missing: false,
+      },
+      {
+        pattern: "[[Q3 retro]]",
+        node: { kind: "file", path: "Meetings/Q3 retro.md", name: "Q3 retro.md" },
+        parent: "Meetings/",
+        missing: false,
+      },
+    ];
+
+    function linkedRegion(): HTMLElement {
+      return screen.getByRole("region", { name: "Linked" });
+    }
+
+    it("titles the section Linked and shows each item with the folder it sits in", () => {
+      render(<LinkedSection rows={ROWS} {...handlers} />);
+
+      const pricing = within(linkedRegion()).getByRole("button", { name: /^Pricing/ });
+      expect(pricing.textContent).toBe("PricingResearch/");
+      expect(within(linkedRegion()).getByRole("button", { name: /^Q3 retro/ }).textContent).toBe(
+        "Q3 retro.mdMeetings/"
+      );
+    });
+
+    it("says a missing item is not found", () => {
+      render(
+        <LinkedSection
+          rows={[{ ...ROWS[1], node: { ...ROWS[1].node, path: "[[Q3 retro]]" }, missing: true }]}
+          {...handlers}
+        />
+      );
+
+      expect(within(linkedRegion()).getByText("Not found")).toBeTruthy();
+    });
+
+    it("says nothing is linked yet, with no drop hint, when the section is empty", () => {
+      render(<LinkedSection rows={[]} {...handlers} />);
+
+      expect(linkedRegion().textContent).toBe("LinkedLink contextNothing linked yet.");
+    });
+
+    it("offers Files and Folders from Link context and reports the kind chosen", () => {
+      render(<LinkedSection rows={[]} {...handlers} />);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const menu = screen.getByRole("menu");
+      expect(
+        within(menu)
+          .getAllByRole("menuitem")
+          .map((item) => item.textContent)
+      ).toEqual(["Files", "Folders"]);
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Folders" }));
+
+      expect(handlers.onLink).toHaveBeenCalledWith("folders");
+    });
+
+    it("unlinks an item by its saved link from its Unlink button without opening it", () => {
+      render(<LinkedSection rows={ROWS} {...handlers} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Unlink Q3 retro.md" }));
+
+      expect(handlers.onUnlink).toHaveBeenCalledWith("[[Q3 retro]]");
+      expect(handlers.onOpenFile).not.toHaveBeenCalled();
+    });
+  });
+
   describe("ProjectFilesView()", () => {
     function makeProjectFolder() {
       const funnel = makeFile(`${PROJECT_FOLDER}/outputs/charts/funnel.png`);
@@ -323,6 +567,105 @@ describe("ProjectFilesView", () => {
       const root = makeFolder(PROJECT_FOLDER, [makeFile(CONFIG_PATH), agents, outputs]);
       return { root, outputs, charts, funnel, timeline, agents };
     }
+
+    function linkedFixture() {
+      const { root, timeline } = makeProjectFolder();
+      const tiers = makeFile("Research/Pricing/tiers.md");
+      const pricing = makeFolder("Research/Pricing", [tiers]);
+      const research = makeFolder("Research", [pricing]);
+      const workNotes = makeFolder("Work/Notes");
+      const personalNotes = makeFolder("Personal/Notes");
+      const work = makeFolder("Work", [workNotes]);
+      const personal = makeFolder("Personal", [personalNotes]);
+      const retro = makeFile("Meetings/Q3 retro.md");
+      const meetings = makeFolder("Meetings", [retro]);
+      const vault = makeFakeVault(root, [research, work, personal, meetings]);
+      return { vault, timeline, pricing, workNotes, personalNotes, retro };
+    }
+
+    function linkedNames(): string[] {
+      return within(screen.getByRole("region", { name: "Linked" }))
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("role") === "button")
+        .map((row) => row.querySelector("span[title]")?.textContent ?? "");
+    }
+
+    function noticeMessages(): string[] {
+      return (Notice as unknown as jest.Mock).mock.calls.map(([message]) => message);
+    }
+
+    it("lists linked notes and folders below the Project folder and expands a linked folder to its current contents", () => {
+      linkPatterns(["[[Q3 retro]]", "Research/Pricing"]);
+      const { vault } = linkedFixture();
+      renderView(vault);
+
+      const tree = screen.getByRole("region", { name: "Project folder" });
+      const linked = screen.getByRole("region", { name: "Linked" });
+      expect(tree.compareDocumentPosition(linked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(linkedNames()).toEqual(["Pricing", "Q3 retro.md"]);
+
+      fireEvent.click(within(linked).getByRole("button", { name: /^Pricing/ }));
+
+      expect(linkedNames()).toEqual(["Pricing", "tiers.md", "Q3 retro.md"]);
+    });
+
+    it("unlinks an item and leaves the original in the vault", async () => {
+      linkPatterns(["[[Q3 retro]]", "Research/Pricing"]);
+      const { vault } = linkedFixture();
+      renderView(vault);
+
+      fireEvent.click(screen.getByRole("button", { name: "Unlink Pricing" }));
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Q3 retro.md"]));
+      expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
+      expect(vault.promptForDeletion).not.toHaveBeenCalled();
+      expect(vault.app.vault.getAbstractFileByPath("Research/Pricing")).toBeTruthy();
+    });
+
+    it("links the nested folder chosen from Link context's Folders picker by its full vault path", async () => {
+      const { vault } = linkedFixture();
+      renderView(vault);
+
+      chooseLinkKind("Folders");
+      const [kind, chooseFolder] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("folders");
+      act(() => {
+        chooseFolder("Work/Notes");
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Notes"]));
+      expect(savedPatterns()).toEqual(["Work/Notes"]);
+      expect(noticeMessages()).toContain("Linked Notes to the project");
+    });
+
+    it("links the note chosen from Link context's Files picker by its [[name]] link", async () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault);
+
+      chooseLinkKind("Files");
+      const [kind, chooseFile] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("files");
+      act(() => {
+        chooseFile(retro);
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["Q3 retro.md"]));
+      expect(savedPatterns()).toEqual(["[[Q3 retro]]"]);
+    });
+
+    it("says an item from the project folder is already in this project instead of linking it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {
+      const { vault, timeline } = linkedFixture();
+      renderView(vault);
+
+      chooseLinkKind("Files");
+      const [, chooseFile] = mockOpenPicker.mock.calls[0];
+      act(() => {
+        chooseFile(timeline);
+      });
+
+      await waitFor(() => expect(noticeMessages()).toContain("Already in this project"));
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
 
     it("lists the project folder's top level with folders first and the config note hidden", () => {
       const { root } = makeProjectFolder();
