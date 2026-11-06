@@ -42,7 +42,6 @@ async function loadCatalog() {
     write: false,
     format: "esm",
     platform: "node",
-    loader: { ".svg": "empty" },
     tsconfig: path.join(ROOT, "tsconfig.json"),
     logLevel: "silent",
   });

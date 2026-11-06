@@ -1,8 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { CONNECTOR_CATALOG, CONNECTOR_CATEGORIES } from "@/connectors/catalog";
-
-const LOGO_DIR = join(__dirname, "logos");
 
 describe("catalog", () => {
   describe("CONNECTOR_CATALOG", () => {
@@ -46,24 +42,18 @@ describe("catalog", () => {
       }
     });
 
-    it("ships a logo file named after the id for exactly the services that show a logo", () => {
-      const logoFiles = readdirSync(LOGO_DIR).sort();
+    it("serves each logo from the Brevilabs CDN at its own https URL with no query or fragment", () => {
+      const logoUrls = CONNECTOR_CATALOG.flatMap((entry) => (entry.logoUrl ? [entry.logoUrl] : []));
 
-      const expectedFiles = CONNECTOR_CATALOG.filter((entry) => entry.Logo)
-        .map((entry) => `${entry.id}.svg`)
-        .sort();
+      for (const logoUrl of logoUrls) {
+        const url = new URL(logoUrl);
 
-      expect(logoFiles).toEqual(expectedFiles);
-    });
-
-    it("ships logos as single-color SVGs that take the theme's text color and load nothing external", () => {
-      for (const file of readdirSync(LOGO_DIR)) {
-        const svg = readFileSync(join(LOGO_DIR, file), "utf8");
-
-        expect(svg).toMatch(/^<svg [^>]*viewBox="[\d. ]+"/);
-        expect(svg).toContain('fill="currentColor"');
-        expect(svg).not.toMatch(/<script|<image|<style|href=|url\(|fill="#/i);
+        expect(url.protocol).toBe("https:");
+        expect(url.host).toBe("images.brevilabs.com");
+        expect(url.search + url.hash).toBe("");
       }
+      expect(logoUrls.length).toBeGreaterThan(0);
+      expect(new Set(logoUrls).size).toBe(logoUrls.length);
     });
   });
 });
