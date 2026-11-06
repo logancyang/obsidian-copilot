@@ -442,6 +442,35 @@ describe("OpencodeBackend", () => {
       expect(cfg.providers.openai.models).toEqual({ "gpt-5": {} });
     });
 
+    it("stops OpenCode from swapping a BYOK provider's keychain key for that provider's environment variable, such as DEEPSEEK_API_KEY (https://github.com/logancyang/obsidian-copilot/issues/3837)", async () => {
+      const provider = makeProvider("p-deepseek", { kind: "byok", catalogProviderId: "deepseek" });
+      const deps = makeDeps({
+        resolved: [okEntry(provider, makeModel("p-deepseek", "deepseek-chat"))],
+        keys: { "p-deepseek": "ds-verified" },
+      });
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+      expect(cfg.providers.deepseek.env).toEqual([]);
+      expect(cfg.providers.deepseek.settings).toEqual({ apiKey: "ds-verified" });
+    });
+
+    it("leaves a keyless provider's environment variables to OpenCode when Copilot has no key to give it (https://github.com/logancyang/obsidian-copilot/issues/3837)", async () => {
+      const provider = makeProvider(
+        "p-ollama-catalog",
+        { kind: "byok", catalogProviderId: "ollama" },
+        {
+          providerType: "openai-compatible",
+          baseUrl: "http://localhost:11434/v1",
+          requiresApiKey: false,
+        }
+      );
+      const deps = makeDeps({
+        resolved: [okEntry(provider, makeModel("p-ollama-catalog", "llama3.2"))],
+        keys: { "p-ollama-catalog": null },
+      });
+      const cfg = await buildOpencodeConfig(getSettings(), deps);
+      expect(cfg.providers.ollama.env).toBeUndefined();
+    });
+
     it("skips a model when a key-requiring provider has no key in the keychain", async () => {
       const provider = makeProvider("p-openai", { kind: "byok", catalogProviderId: "openai" });
       const deps = makeDeps({

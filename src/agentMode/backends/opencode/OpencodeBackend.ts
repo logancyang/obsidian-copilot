@@ -261,6 +261,9 @@ export async function buildOpencodeConfig(
       models = {};
       modelsByProvider[mapping.id] = models;
       providers[mapping.id] = {
+        // OpenCode prefers a provider's env var (DEEPSEEK_API_KEY) over this key, so a stale one fails every turn.
+        // https://github.com/logancyang/obsidian-copilot/issues/3837
+        env: apiKey ? [] : undefined,
         package: hasCatalogIdentity ? undefined : "aisdk:@ai-sdk/openai-compatible",
         name: hasCatalogIdentity ? undefined : entry.provider.displayName,
         settings: {
