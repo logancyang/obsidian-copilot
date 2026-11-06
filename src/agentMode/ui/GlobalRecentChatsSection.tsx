@@ -190,7 +190,7 @@ const RecentChatRow = memo(function RecentChatRow({
           </RowActionButton>
           {isSessionOpen && onCloseSession && (
             <RowActionButton
-              label="Close chat"
+              label="Shut down"
               onClick={() => safeAsyncHandler(onCloseSession)(item.id)}
             >
               <Power className="tw-size-3" />

@@ -2,10 +2,21 @@ import {
   googleHostBaseUrl,
   groqHostBaseUrl,
   isCatalogProviderDefaultEndpoint,
+  normalizeBaseUrl,
   opencodeSdkBaseUrl,
 } from "./providerBaseUrl";
 
 describe("providerBaseUrl", () => {
+  describe("normalizeBaseUrl()", () => {
+    it("ignores surrounding whitespace, trailing slashes, and letter case", () => {
+      expect(normalizeBaseUrl(" https://API.Example.com/v1// ")).toBe("https://api.example.com/v1");
+    });
+
+    it("turns a missing base URL into an empty string", () => {
+      expect(normalizeBaseUrl(undefined)).toBe("");
+    });
+  });
+
   describe("googleHostBaseUrl()", () => {
     it("strips a trailing /v1beta (Google's documented endpoint form)", () => {
       expect(googleHostBaseUrl("https://generativelanguage.googleapis.com/v1beta")).toBe(

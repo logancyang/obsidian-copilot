@@ -44,6 +44,7 @@ import type {
 import type { ProjectScopeId } from "@/agentMode/session/scope";
 import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { agentShellPath } from "@/utils/loginShellPath";
 import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTodoPlan";
 import { ClaudeLiveQuery } from "./claudeLiveQuery";
 import {
@@ -298,6 +299,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   ): Promise<ClaudeLiveQuery> {
     // Settings are read after the last await, so a change made while the query starts still reaches it. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
+    const shellPath = await agentShellPath();
     const permissionBridge = new PermissionBridge(sessionId, {
       getPrompter: () => this.permissionPrompter,
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
@@ -336,7 +338,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       options.sessionId = sessionId;
     }
     if (session.model) options.model = session.model;
-    if (session.permissionMode) options.permissionMode = session.permissionMode;
+    // Without an explicit mode Claude starts in its settings' defaultMode, not the one the picker shows. https://github.com/Brevilabs/obsidian-copilot-private/issues/870
+    options.permissionMode = session.permissionMode ?? "default";
     if (session.effort) options.effort = session.effort;
     if (session.mcpServers?.length) {
       options.mcpServers = Object.fromEntries(
@@ -361,6 +364,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const envOverrides = this.opts.getEnvOverrides?.();
     options.env = {
       ...process.env,
+      PATH: shellPath,
       // Claude reports when it has finished its subagents and its replies about them only when asked. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
       CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
       ...managedEnv,
@@ -390,6 +394,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       onTurnStarted: (q) => void this.refreshPlanUsage(q),
       onSignedOut: () => {
         this.authConfirmed = false;
+      },
+      onPermissionModeChanged: (mode) => {
+        session.permissionMode = mode;
+        this.dispatchStateChanged(sessionId, this.computeState(sessionId));
       },
       onEnded: () => {
         if (session.live === live) session.live = undefined;

@@ -1,4 +1,5 @@
 import type {
+  PermissionMode,
   Query,
   SDKMessage,
   SDKResultMessage,
@@ -30,6 +31,7 @@ export interface ClaudeLiveQueryOptions {
   emit: (event: SessionEvent) => void;
   onTurnStarted: (query: Query) => void;
   onSignedOut: () => void;
+  onPermissionModeChanged: (mode: PermissionMode) => void;
   onEnded: () => void;
   stallTimeoutMs?: number;
 }
@@ -138,6 +140,10 @@ export class ClaudeLiveQuery {
     if (msg.type === "system" && msg.subtype === "session_state_changed") {
       this.emit({ sessionUpdate: "busy_changed", busy: msg.state !== "idle" });
       return;
+    }
+    // Claude changes the chat's mode on its own, such as for an approved "Allow always" that covers all file edits, so the picker must follow its reports. https://github.com/Brevilabs/obsidian-copilot-private/issues/870
+    if (msg.type === "system" && msg.subtype === "status" && msg.permissionMode) {
+      this.opts.onPermissionModeChanged(msg.permissionMode);
     }
     // Claude announces each turn with an init frame, well before a reply it starts on its own streams, so that reply's duration counts from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (msg.type === "system" && msg.subtype === "init" && !this.openTurnId) {

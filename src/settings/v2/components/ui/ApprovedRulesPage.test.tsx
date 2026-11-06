@@ -36,7 +36,7 @@ function renderPage(store: ApprovedRuleStore, onBack: () => void = jest.fn()) {
 }
 
 function ruleRows(): HTMLElement[] {
-  return within(screen.getByRole("list", { name: "Approved rules" })).getAllByRole("listitem");
+  return within(screen.getByRole("list")).getAllByRole("listitem");
 }
 
 describe("ApprovedRulesPage", () => {
@@ -95,7 +95,7 @@ describe("ApprovedRulesPage", () => {
       });
 
       expect(screen.getByText("No rules match “curl”.")).not.toBeNull();
-      expect(screen.queryByRole("list", { name: "Approved rules" })).toBeNull();
+      expect(screen.queryByRole("list")).toBeNull();
     });
 
     it("says the agent has no approved rules when its store lists none", async () => {
@@ -161,14 +161,16 @@ describe("ApprovedRulesPage", () => {
       expect(alert.textContent).toContain("settings.json is read-only");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 focuses Back when the page opens, so the page starts in view even when it replaces settings far down a scrolled tab", async () => {
-      renderPage(makeStore([GIT_STATUS]));
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 scrolls only the rule list, keeping the search box outside it so it stays in view", async () => {
+      renderPage(makeStore([GIT_STATUS, NPM_TEST]));
       await screen.findByText("Bash(git status:*)");
+      const body = screen.getByRole("region", { name: "Approved rules" });
 
-      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Back" }));
+      expect(body.contains(screen.getByRole("list"))).toBe(true);
+      expect(body.contains(screen.getByPlaceholderText("Search approved rules…"))).toBe(false);
     });
 
-    it("returns to the agent's settings when Back is selected", async () => {
+    it("returns to the settings when Back is selected", async () => {
       const onBack = jest.fn();
       renderPage(makeStore([GIT_STATUS]), onBack);
       await screen.findByText("Bash(git status:*)");

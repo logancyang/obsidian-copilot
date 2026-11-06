@@ -16,6 +16,7 @@
 
 - Allow: in `Safe` mode, ask Claude to create a note with the Write tool. `Permission required` shows "The agent wants to run Write <path>.", `Type: edit`, and `Show details`, which opens to the file and its content. Choose `Allow once`. The card goes away, the trail reads `Edited <note>`, and the note exists.
 - Scope: hover `Allow always`. A tooltip says what it covers, such as "Covers all file edits until this chat ends. Start a new chat to undo."
+- Allow always: on a Claude Write card that covers all file edits, choose `Allow always`. `Mode` shows `Auto`, and later edits run without a card until you choose `Safe`.
 - Deny: ask for another note and choose `Deny once`. The trail reads `Didn't edit <note>` and the agent says the write was declined.
 - Task approval: in `Safe` mode, ask Claude to launch a background subagent that creates a note. `Permission required` names the subagent: `general-purpose "<task>" wants to run Write <path>`. `1 task running` lists the task as `Needs approval`. Open the task: "The chat is waiting for your answer." shows with `Open chat`, which returns to the conversation and its card.
 

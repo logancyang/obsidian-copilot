@@ -24,6 +24,7 @@ interface LegacyProviderMapping {
   catalogProviderId?: string;
   opencodeRoutable: boolean;
   requiresBaseUrl?: boolean;
+  openAiCompatiblePath?: string;
 }
 
 const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
@@ -73,6 +74,7 @@ const LEGACY_PROVIDER_MAP: Partial<Record<string, LegacyProviderMapping>> = {
     providerType: "openai-compatible",
     opencodeRoutable: true,
     requiresBaseUrl: true,
+    openAiCompatiblePath: "/v1",
   },
   [ChatModelProviders.LM_STUDIO]: {
     providerType: "openai-compatible",
@@ -142,6 +144,12 @@ function resolveCandidate(model: CustomModel, settings: CopilotSettings): Resolv
   if (mapping.requiresBaseUrl) {
     baseUrl = model.baseUrl?.trim() || undefined;
     if (!baseUrl) return null;
+    // Copilot 3 saved Ollama's native API root, but the provider speaks OpenAI-compatible, which
+    // Ollama serves only under /v1, so a copied root URL made every chat request 404.
+    // https://github.com/logancyang/obsidian-copilot/issues/4109
+    const apiPath = mapping.openAiCompatiblePath;
+    const root = baseUrl.replace(/\/+$/, "");
+    if (apiPath && !root.toLowerCase().endsWith(apiPath)) baseUrl = root + apiPath;
   } else {
     baseUrl = model.baseUrl?.trim() || defaultBaseUrlFor(model.provider);
     if (!apiKey) return null;

@@ -43,6 +43,7 @@ const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_195 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/195";
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
 const ISSUE_757 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/757";
+const ISSUE_870 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/870";
 
 interface Harness {
   live: ClaudeLiveQuery;
@@ -50,11 +51,13 @@ interface Harness {
   recorder: SessionEventRecorder;
   ended: Promise<void>;
   onSignedOut: jest.Mock;
+  onPermissionModeChanged: jest.Mock;
 }
 
 function startLive(stallTimeoutMs?: number): Harness {
   const recorder = new SessionEventRecorder();
   const onSignedOut = jest.fn();
+  const onPermissionModeChanged = jest.fn();
   let fake!: FakeClaudeQuery;
   let markEnded!: () => void;
   const ended = new Promise<void>((resolve) => (markEnded = resolve));
@@ -68,10 +71,11 @@ function startLive(stallTimeoutMs?: number): Harness {
     emit: recorder.handler,
     onTurnStarted: jest.fn(),
     onSignedOut,
+    onPermissionModeChanged,
     onEnded: markEnded,
     stallTimeoutMs,
   });
-  return { live, fake, recorder, ended, onSignedOut };
+  return { live, fake, recorder, ended, onSignedOut, onPermissionModeChanged };
 }
 
 function lifecycle(updates: SessionUpdate[]): string[] {
@@ -118,6 +122,16 @@ function sessionState(state: "idle" | "running" | "requires_action"): SDKMessage
     state,
     session_id: SESSION_ID,
     uuid: `uuid-state-${state}`,
+  } as unknown as SDKMessage;
+}
+
+function statusFrame(fields: Record<string, unknown>): SDKMessage {
+  return {
+    type: "system",
+    subtype: "status",
+    session_id: SESSION_ID,
+    uuid: "uuid-status",
+    ...fields,
   } as unknown as SDKMessage;
 }
 
@@ -232,6 +246,21 @@ describe("claudeLiveQuery", () => {
           "turn_started",
           "turn_ended",
         ]);
+      });
+
+      it(`reports each permission mode Claude switches the chat to, and nothing for a status without one (${ISSUE_870})`, async () => {
+        const { live, fake, recorder, onPermissionModeChanged } = startLive();
+        live.push("prompt-1", "edit the note");
+        fake.echo(await fake.nextInput(0));
+
+        fake.emit(
+          statusFrame({ status: "compacting" }),
+          statusFrame({ status: null, permissionMode: "acceptEdits" }),
+          resultFrame()
+        );
+        await recorder.waitFor("turn_ended");
+
+        expect(onPermissionModeChanged.mock.calls).toEqual([["acceptEdits"]]);
       });
 
       it(`reports Claude busy from its first reply until it has reported on its last subagent, across the replies in between (${ISSUE_757})`, async () => {

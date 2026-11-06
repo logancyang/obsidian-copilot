@@ -2131,7 +2131,7 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
-    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);

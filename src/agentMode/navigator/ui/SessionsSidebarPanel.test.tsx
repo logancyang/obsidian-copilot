@@ -360,7 +360,7 @@ describe("SessionsSidebarPanel", () => {
       it.each([
         ["waiting", { waitingChatIds: new Set(["chats/p1-2.md"]) }, "Waiting for permission"],
         ["unread", { attentionChatIds: new Set(["chats/p1-2.md"]) }, "Unread result"],
-        ["running", { runningChatIds: new Set(["chats/p1-2.md"]) }, "Running"],
+        ["running", { runningChatIds: new Set(["chats/p1-2.md"]) }, "Responding"],
       ])(
         "shows a %s chat of a collapsed project on its folder row for https://github.com/Brevilabs/obsidian-copilot-private/issues/802",
         (_status, sets, label) => {
@@ -381,7 +381,7 @@ describe("SessionsSidebarPanel", () => {
 
         expect(folderStatus("Waiting for permission")).toBe(true);
         expect(folderStatus("Unread result")).toBe(false);
-        expect(folderStatus("Running")).toBe(false);
+        expect(folderStatus("Responding")).toBe(false);
       });
 
       it("ignores a stale needs-attention snapshot once the live attention flag clears for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
@@ -492,7 +492,7 @@ describe("SessionsSidebarPanel", () => {
       });
 
       it.each([
-        ["running", { runningChatIds: new Set(["chats/b.md"]) }, "Running"],
+        ["running", { runningChatIds: new Set(["chats/b.md"]) }, "Responding"],
         ["waiting", { waitingChatIds: new Set(["chats/b.md"]) }, "Waiting for permission"],
         ["unread", { attentionChatIds: new Set(["chats/b.md"]) }, "Unread result"],
       ])("marks a %s chat's row with its status", (_status, sets, label) => {
@@ -515,9 +515,9 @@ describe("SessionsSidebarPanel", () => {
           openChatIds: new Set(["chats/b.md"]),
         });
 
-        expect(screen.getAllByLabelText("Session open")).toHaveLength(1);
+        expect(screen.getAllByLabelText("Running")).toHaveLength(1);
         expect(
-          within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText("Session open")
+          within(screen.getByRole("button", { name: /^Chat B/ })).getByLabelText("Running")
         ).toBeTruthy();
         fireEvent.pointerDown(
           within(screen.getByRole("button", { name: /^Chat B/ }).parentElement!).getByRole(
@@ -526,7 +526,7 @@ describe("SessionsSidebarPanel", () => {
           ),
           { button: 0, ctrlKey: false }
         );
-        fireEvent.click(screen.getByRole("menuitem", { name: "Close chat" }));
+        fireEvent.click(screen.getByRole("menuitem", { name: "Shut down" }));
 
         expect(actions.onCloseSession).toHaveBeenCalledWith("chats/b.md");
         expect(onOpenChat).not.toHaveBeenCalled();

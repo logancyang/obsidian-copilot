@@ -1,12 +1,11 @@
 import type { ApprovedRule, ApprovedRuleStore } from "@/agentMode";
 import { Button } from "@/components/ui/button";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { SettingSection } from "@/components/ui/setting-section";
 import { err2String } from "@/errorFormat";
 import { cn } from "@/lib/utils";
 import type CopilotPlugin from "@/main";
-import { ArrowLeft } from "lucide-react";
 import React from "react";
+import { SettingsSubPageLayout } from "./SettingsSubPageLayout";
 
 export interface ApprovedRulesPageProps {
   agentName: string;
@@ -86,22 +85,28 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
     : allRules;
 
   return (
-    <div className="tw-space-y-3">
-      {/* The page replaces a panel low in a long settings tab; focusing Back scrolls its top into view.
-          https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
-      <Button variant="ghost" size="sm" className="tw-px-2" onClick={onBack} autoFocus>
-        <ArrowLeft className="tw-size-4" />
-        Back
-      </Button>
-
-      <div className="tw-space-y-1">
-        <div className="tw-text-base tw-font-semibold">Approved rules</div>
-        <div className="tw-text-sm tw-text-muted">
+    <SettingsSubPageLayout
+      title="Approved rules"
+      description={
+        <>
           Actions {agentName} may take without asking, saved when you chose an &ldquo;always&rdquo;
           option. Remove a rule to have {agentName} ask again.
-        </div>
-      </div>
-
+        </>
+      }
+      onBack={onBack}
+      toolbar={
+        allRules.length > 0 && (
+          <>
+            <SearchBar value={query} onChange={setQuery} placeholder="Search approved rules…" />
+            {removeError && (
+              <div role="alert" className="tw-text-sm tw-text-error">
+                Couldn&apos;t remove {removeError.rule.allows}. {removeError.message}
+              </div>
+            )}
+          </>
+        )
+      }
+    >
       {state.kind === "loading" && (
         <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
           Loading approved rules…
@@ -113,7 +118,7 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/865
         <div
           role="alert"
-          className="tw-rounded-md tw-border tw-border-solid tw-border-error tw-px-3 tw-py-2.5 tw-text-sm"
+          className="tw-my-4 tw-rounded-md tw-border tw-border-solid tw-border-error tw-px-3 tw-py-2.5 tw-text-sm"
         >
           <div className="tw-font-semibold tw-text-error">
             Couldn&apos;t read {agentName}&apos;s approved rules.
@@ -128,52 +133,39 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
         </div>
       )}
 
-      {allRules.length > 0 && (
-        <>
-          <SearchBar value={query} onChange={setQuery} placeholder="Search approved rules…" />
-
-          {removeError && (
-            <div role="alert" className="tw-text-sm tw-text-error">
-              Couldn&apos;t remove {removeError.rule.allows}. {removeError.message}
-            </div>
-          )}
-
-          {visibleRules.length > 0 ? (
-            <SettingSection>
-              <ul aria-label="Approved rules" className="tw-m-0 tw-list-none tw-p-0">
-                {visibleRules.map((rule, index) => (
-                  <li
-                    key={rule.id}
-                    className={cn(
-                      "tw-flex tw-items-center tw-justify-between tw-gap-3 tw-py-3",
-                      index > 0 && "copilot-divider-t"
-                    )}
-                  >
-                    <div className="tw-min-w-0">
-                      <div className="tw-break-words tw-font-mono tw-text-sm">{rule.allows}</div>
-                      <div className="tw-break-words tw-text-xs tw-text-muted">
-                        {describeScope(rule, agentName)}
-                      </div>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={removing}
-                      onClick={() => void handleRemove(rule)}
-                    >
-                      Remove
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </SettingSection>
-          ) : (
-            <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
-              No rules match &ldquo;{query.trim()}&rdquo;.
-            </div>
-          )}
-        </>
-      )}
-    </div>
+      {allRules.length > 0 &&
+        (visibleRules.length > 0 ? (
+          <ul className="tw-m-0 tw-list-none tw-p-0">
+            {visibleRules.map((rule, index) => (
+              <li
+                key={rule.id}
+                className={cn(
+                  "tw-flex tw-items-center tw-justify-between tw-gap-3 tw-py-3",
+                  index > 0 && "copilot-divider-t"
+                )}
+              >
+                <div className="tw-min-w-0">
+                  <div className="tw-break-words tw-font-mono tw-text-sm">{rule.allows}</div>
+                  <div className="tw-break-words tw-text-xs tw-text-muted">
+                    {describeScope(rule, agentName)}
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={removing}
+                  onClick={() => void handleRemove(rule)}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="tw-py-6 tw-text-center tw-text-sm tw-text-muted">
+            No rules match &ldquo;{query.trim()}&rdquo;.
+          </div>
+        ))}
+    </SettingsSubPageLayout>
   );
 };

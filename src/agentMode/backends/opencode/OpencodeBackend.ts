@@ -8,6 +8,7 @@ import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/providerBaseUrl";
+import { agentShellPath } from "@/utils/loginShellPath";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -165,6 +166,7 @@ export class OpencodeBackend implements AcpBackend {
       cwd: ctx.vaultBasePath,
       env: {
         ...process.env,
+        PATH: await agentShellPath(),
         ...builtinSkillEnv,
         // OpenCode's level filters its file log and stderr together, and its
         // server logs request-failure causes at INFO, so WARN hid every cause.
@@ -261,6 +263,9 @@ export async function buildOpencodeConfig(
       models = {};
       modelsByProvider[mapping.id] = models;
       providers[mapping.id] = {
+        // OpenCode prefers a provider's env var (DEEPSEEK_API_KEY) over this key, so a stale one fails every turn.
+        // https://github.com/logancyang/obsidian-copilot/issues/3837
+        env: apiKey ? [] : undefined,
         package: hasCatalogIdentity ? undefined : "aisdk:@ai-sdk/openai-compatible",
         name: hasCatalogIdentity ? undefined : entry.provider.displayName,
         settings: {

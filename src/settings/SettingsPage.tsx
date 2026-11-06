@@ -35,7 +35,9 @@ export class CopilotSettingTab extends PluginSettingTab {
       return;
     }
     containerEl.addClass("tw-select-text");
-    const div = containerEl.createDiv("div");
+    // A settings sub-page fills the scroller's height, which a box in between would hide from it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/874
+    const div = containerEl.createDiv({ cls: "tw-contents" });
     const sections = createPluginRoot(div, this.app);
 
     sections.render(
