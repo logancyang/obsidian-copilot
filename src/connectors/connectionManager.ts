@@ -64,7 +64,7 @@ export class ConnectionManager {
   constructor(private readonly deps: ConnectionManagerDeps) {
     this.services = new Map(deps.catalog.map((service) => [service.id, service]));
     this.snapshot = this.buildSnapshot();
-    // A custom connector that lacks its key on this device raises the same banner and settings dot as a catalog login.
+    // A custom connector that couldn't start or lacks its key raises the same banner and settings dot as a catalog login.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
     deps.custom?.subscribe(() => this.publish());
   }
