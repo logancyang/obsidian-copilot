@@ -3029,6 +3029,30 @@ describe("AgentSessionManager", () => {
         expect(selected).not.toContain(otherAgentChat.chatInputId);
         expect(mgr.getActiveSession()?.chatInputId).toBe(reloaded.chatInputId);
       });
+
+      it("selects the other agent's open chat when the reloaded chat fails to come back (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const failingRestart = {
+          ...makeMockBackendProcess(),
+          start: jest.fn(async () => {
+            throw new Error("spawn failed");
+          }),
+        };
+        const createBackendProcess = jest
+          .fn()
+          .mockReturnValueOnce(makeMockBackendProcess())
+          .mockReturnValue(failingRestart);
+        const mgr = buildManager({
+          descriptor: buildDescriptor({ createBackendProcess }),
+          otherDescriptors: [buildDescriptor({ id: "codex" })],
+        });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        await createWorkedSession(mgr, "opencode");
+        await mgr.noteSpawnConfigChanged("opencode", "custom connector added");
+
+        await expect(mgr.applyHeldConfigChange("opencode")).rejects.toThrow("spawn failed");
+
+        expect(mgr.getActiveSession()?.chatInputId).toBe(otherAgentChat.chatInputId);
+      });
     });
 
     describe("restartBackend()", () => {
