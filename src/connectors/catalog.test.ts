@@ -42,18 +42,12 @@ describe("catalog", () => {
       }
     });
 
-    it("serves each logo from the Brevilabs CDN at its own https URL with no query or fragment", () => {
-      const logoUrls = CONNECTOR_CATALOG.flatMap((entry) => (entry.logoUrl ? [entry.logoUrl] : []));
-
-      for (const logoUrl of logoUrls) {
-        const url = new URL(logoUrl);
-
-        expect(url.protocol).toBe("https:");
-        expect(url.host).toBe("images.brevilabs.com");
-        expect(url.search + url.hash).toBe("");
+    it("serves every service's logo from a fixed Brevilabs CDN URL named by its id, so the image can be replaced without a release", () => {
+      for (const entry of CONNECTOR_CATALOG) {
+        expect(entry.logoUrl).toBe(
+          `https://images.brevilabs.com/newsletters/copilot-plugin/connectors/${entry.id}.png`
+        );
       }
-      expect(logoUrls.length).toBeGreaterThan(0);
-      expect(new Set(logoUrls).size).toBe(logoUrls.length);
     });
   });
 });

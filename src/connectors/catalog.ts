@@ -28,14 +28,13 @@ export interface ConnectorCatalogEntry {
 
 const LOGO_BASE_URL = "https://images.brevilabs.com/newsletters/copilot-plugin/connectors";
 
-export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze([
+const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
   {
     id: "airtable",
     name: "Airtable",
     description: "Bases, tables and records",
     category: "Tasks & projects",
     serverUrl: "https://mcp.airtable.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/airtable-3485dbce.png`,
   },
   {
     id: "apify",
@@ -43,7 +42,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Web scrapers and their results",
     category: "Automation",
     serverUrl: "https://mcp.apify.com",
-    logoUrl: `${LOGO_BASE_URL}/apify-3960488a.png`,
   },
   {
     id: "atlassian",
@@ -51,7 +49,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Jira issues and Confluence pages",
     category: "Tasks & projects",
     serverUrl: "https://mcp.atlassian.com/v2/mcp",
-    logoUrl: `${LOGO_BASE_URL}/atlassian-8fc2f1c1.png`,
   },
   {
     id: "attio",
@@ -59,7 +56,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "CRM records and lists",
     category: "Business",
     serverUrl: "https://mcp.attio.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/attio-83c63d76.png`,
   },
   {
     id: "basecamp",
@@ -67,7 +63,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Projects, to-dos and messages",
     category: "Tasks & projects",
     serverUrl: "https://mcp.basecamp.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/basecamp-9c2b35d1.png`,
   },
   {
     id: "canva",
@@ -75,7 +70,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Designs and brand assets",
     category: "Design",
     serverUrl: "https://mcp.canva.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/canva-600e2be9.png`,
   },
   {
     id: "clickup",
@@ -83,7 +77,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Tasks, docs and goals",
     category: "Tasks & projects",
     serverUrl: "https://mcp.clickup.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/clickup-34a83547.png`,
   },
   {
     id: "cloudflare",
@@ -91,7 +84,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Workers, DNS and account settings",
     category: "Developer",
     serverUrl: "https://mcp.cloudflare.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/cloudflare-0e3733eb.png`,
   },
   {
     id: "coda",
@@ -99,7 +91,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Docs and tables",
     category: "Notes & docs",
     serverUrl: "https://coda.io/apis/mcp",
-    logoUrl: `${LOGO_BASE_URL}/coda-7589a40a.png`,
   },
   {
     id: "dropbox",
@@ -107,7 +98,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Files and folders",
     category: "Notes & docs",
     serverUrl: "https://mcp.dropbox.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/dropbox-cdfc9e50.png`,
   },
   {
     id: "egnyte",
@@ -115,7 +105,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Company files and folders",
     category: "Notes & docs",
     serverUrl: "https://mcp-server.egnyte.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/egnyte-306d3e27.png`,
   },
   {
     id: "fireflies",
@@ -123,7 +112,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Meeting transcripts and summaries",
     category: "Meetings",
     serverUrl: "https://api.fireflies.ai/mcp",
-    logoUrl: `${LOGO_BASE_URL}/fireflies-cc4f88b8.png`,
   },
   {
     id: "granola",
@@ -131,7 +119,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Meeting notes",
     category: "Meetings",
     serverUrl: "https://mcp.granola.ai/mcp",
-    logoUrl: `${LOGO_BASE_URL}/granola-729cf7e2.png`,
   },
   {
     id: "intercom",
@@ -139,7 +126,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Conversations and contacts",
     category: "Business",
     serverUrl: "https://mcp.intercom.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/intercom-7ca05390.png`,
   },
   {
     id: "jam",
@@ -147,7 +133,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Bug reports and recordings",
     category: "Developer",
     serverUrl: "https://mcp.jam.dev/mcp",
-    logoUrl: `${LOGO_BASE_URL}/jam-34f96879.png`,
   },
   {
     id: "linear",
@@ -155,7 +140,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Issues, projects and cycles",
     category: "Tasks & projects",
     serverUrl: "https://mcp.linear.app/mcp",
-    logoUrl: `${LOGO_BASE_URL}/linear-345b80e4.png`,
   },
   {
     id: "make",
@@ -163,7 +147,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Scenarios and automations",
     category: "Automation",
     serverUrl: "https://mcp.make.com",
-    logoUrl: `${LOGO_BASE_URL}/make-7bbf4af3.png`,
   },
   {
     id: "miro",
@@ -171,7 +154,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Boards and diagrams",
     category: "Design",
     serverUrl: "https://mcp.miro.com/",
-    logoUrl: `${LOGO_BASE_URL}/miro-fc79b8b3.png`,
   },
   {
     id: "monday",
@@ -179,7 +161,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Boards, items and updates",
     category: "Tasks & projects",
     serverUrl: "https://mcp.monday.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/monday-3a2d6373.png`,
   },
   {
     id: "neon",
@@ -187,7 +168,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Postgres projects and databases",
     category: "Developer",
     serverUrl: "https://mcp.neon.tech/mcp",
-    logoUrl: `${LOGO_BASE_URL}/neon-19bd03dd.png`,
   },
   {
     id: "netlify",
@@ -195,7 +175,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Sites and deploys",
     category: "Developer",
     serverUrl: "https://netlify-mcp.netlify.app/mcp",
-    logoUrl: `${LOGO_BASE_URL}/netlify-180bbd1b.png`,
   },
   {
     id: "notion",
@@ -203,7 +182,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Pages and databases",
     category: "Notes & docs",
     serverUrl: "https://mcp.notion.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/notion-aac4ea8f.png`,
   },
   {
     id: "paypal",
@@ -211,7 +189,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Invoices, orders and payments",
     category: "Business",
     serverUrl: "https://mcp.paypal.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/paypal-9ae7a96e.png`,
   },
   {
     id: "plaid",
@@ -219,7 +196,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Item debugging and Link analytics",
     category: "Business",
     serverUrl: "https://api.dashboard.plaid.com/mcp/",
-    logoUrl: `${LOGO_BASE_URL}/plaid-b2ebc197.png`,
   },
   {
     id: "posthog",
@@ -227,7 +203,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Product analytics and feature flags",
     category: "Developer",
     serverUrl: "https://mcp.posthog.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/posthog-0f44b7b0.png`,
   },
   {
     id: "raindrop",
@@ -235,7 +210,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Bookmarks and collections",
     category: "Notes & docs",
     serverUrl: "https://api.raindrop.io/rest/v2/ai/mcp",
-    logoUrl: `${LOGO_BASE_URL}/raindrop-884abcb8.png`,
   },
   {
     id: "readwise",
@@ -243,7 +217,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Highlights and saved articles",
     category: "Notes & docs",
     serverUrl: "https://mcp2.readwise.io/mcp",
-    logoUrl: `${LOGO_BASE_URL}/readwise-8849e355.png`,
   },
   {
     id: "sentry",
@@ -251,7 +224,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Errors and issues",
     category: "Developer",
     serverUrl: "https://mcp.sentry.dev/mcp",
-    logoUrl: `${LOGO_BASE_URL}/sentry-5ffdb891.png`,
   },
   {
     id: "square",
@@ -259,7 +231,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Payments, orders and catalog",
     category: "Business",
     serverUrl: "https://mcp.squareup.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/square-15415117.png`,
   },
   {
     id: "stripe",
@@ -267,7 +238,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Payments, customers and invoices",
     category: "Business",
     serverUrl: "https://mcp.stripe.com",
-    logoUrl: `${LOGO_BASE_URL}/stripe-b4d10ace.png`,
   },
   {
     id: "supabase",
@@ -275,7 +245,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Projects, databases and functions",
     category: "Developer",
     serverUrl: "https://mcp.supabase.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/supabase-196ba8bf.png`,
   },
   {
     id: "todoist",
@@ -283,7 +252,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Tasks and projects",
     category: "Tasks & projects",
     serverUrl: "https://ai.todoist.net/mcp",
-    logoUrl: `${LOGO_BASE_URL}/todoist-7dc5adc6.png`,
   },
   {
     id: "vercel",
@@ -291,7 +259,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Projects, deployments and logs",
     category: "Developer",
     serverUrl: "https://mcp.vercel.com",
-    logoUrl: `${LOGO_BASE_URL}/vercel-23d5a4f2.png`,
   },
   {
     id: "webflow",
@@ -299,7 +266,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Sites, pages and CMS content",
     category: "Design",
     serverUrl: "https://mcp.webflow.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/webflow-df7b18d3.png`,
   },
   {
     id: "wix",
@@ -307,7 +273,6 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Sites, stores and bookings",
     category: "Design",
     serverUrl: "https://mcp.wix.com/mcp",
-    logoUrl: `${LOGO_BASE_URL}/wix-1bec6355.png`,
   },
   {
     id: "zapier",
@@ -315,6 +280,9 @@ export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze
     description: "Actions in thousands of apps",
     category: "Automation",
     serverUrl: "https://mcp.zapier.com/api/v1/connect",
-    logoUrl: `${LOGO_BASE_URL}/zapier-0e063958.png`,
   },
-]);
+];
+
+export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze(
+  CATALOG_ENTRIES.map((entry) => ({ ...entry, logoUrl: `${LOGO_BASE_URL}/${entry.id}.png` }))
+);
