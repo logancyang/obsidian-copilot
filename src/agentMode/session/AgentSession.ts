@@ -115,6 +115,7 @@ import {
   type ChatStateKey,
   type ChatStates,
   type ChatView,
+  type PromptNote,
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
@@ -941,9 +942,16 @@ export class AgentSession implements ChatStateHost, ChatView {
             CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
+      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      const promptNotes = sendsCompact ? [] : this.takePromptNotes();
       const leadingContextBlock = sendsCompact
         ? null
-        : [historyBlock, buildPriorFanoutContextBlock(this.pendingFanoutContext)]
+        : [
+            historyBlock,
+            buildPriorFanoutContextBlock(this.pendingFanoutContext),
+            ...promptNotes.map(({ note }) => note.note),
+          ]
             .filter(Boolean)
             .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
@@ -967,6 +975,11 @@ export class AgentSession implements ChatStateHost, ChatView {
       if (outcome.error !== undefined) return outcome;
       if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
+      }
+      // A note counts as told only once the backend accepts the prompt.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      for (const { extension, note } of promptNotes) {
+        this.updateChatState(extension.key, note.delivered);
       }
       if (sendsSavedHistory && outcome.stopReason !== "cancelled") {
         this.resendSavedHistory = false;
@@ -1163,6 +1176,27 @@ export class AgentSession implements ChatStateHost, ChatView {
       const state = extension.onTurnFailed(this.readChatState(extension.key), this, failure);
       this.chatStates = withChatState(this.chatStates, extension.key, state);
     }
+  }
+
+  getReloadableChatStates(): ChatStates {
+    return this.chatExtensions
+      .filter((extension) => extension.keepOnReload)
+      .reduce(
+        (states, { key }) => withChatState(states, key, this.readChatState(key)),
+        EMPTY_CHAT_STATES
+      );
+  }
+
+  restoreChatStates(states: ChatStates): void {
+    this.chatStates = states;
+    this.notifyMessages();
+  }
+
+  private takePromptNotes(): { extension: ChatExtension<unknown>; note: PromptNote<unknown> }[] {
+    return this.chatExtensions.flatMap((extension) => {
+      const note = extension.beforePrompt?.(this.readChatState(extension.key));
+      return note ? [{ extension, note }] : [];
+    });
   }
 
   getSessionUsage(): SessionUsage | null {

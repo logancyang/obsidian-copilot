@@ -241,6 +241,19 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
 
 const COUNTER: ChatStateKey<number> = Object.freeze({ id: "counter", initial: 0 });
 
+const NEWS: ChatStateKey<readonly string[]> = Object.freeze({ id: "news", initial: [] });
+
+const NEWS_EXTENSION = defineChatExtension({
+  key: NEWS,
+  beforePrompt: (news) =>
+    news.length > 0
+      ? {
+          note: `<news>${news.join(", ")}</news>`,
+          delivered: (latest) => latest.filter((item) => !news.includes(item)),
+        }
+      : null,
+});
+
 function makeSession(
   mock: MockBackend,
   { initialState = null, ...overrides }: ResumedSessionOverrides = {}
@@ -1425,6 +1438,51 @@ describe("AgentSession", () => {
     });
 
     describe("sendPrompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 adds each chat extension's note in front of the next message, once", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { chatExtensions: [NEWS_EXTENSION] });
+        session.updateChatState(NEWS, () => ["notion connected"]);
+
+        await session.sendPrompt("go on").turn;
+        await session.sendPrompt("and then?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[0])).toBe(
+          "<news>notion connected</news>\n\n<user-message>\ngo on\n</user-message>"
+        );
+        expect(promptText(sent[1])).toBe("and then?");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 sends a chat extension's note again after the prompt that carried it failed", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockRejectedValueOnce(new Error("transport down"));
+        const session = makeSession(mock, { chatExtensions: [NEWS_EXTENSION] });
+        session.updateChatState(NEWS, () => ["notion connected"]);
+
+        await expect(session.sendPrompt("go on").turn).rejects.toThrow("transport down");
+        await session.sendPrompt("retry").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[1])).toContain("<news>notion connected</news>");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 hands a delivered note the feature's latest state, so news added during the reply waits for the next message", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { chatExtensions: [NEWS_EXTENSION] });
+        session.updateChatState(NEWS, () => ["notion connected"]);
+        mock.prompt.mockImplementationOnce(async () => {
+          session.updateChatState(NEWS, (news) => [...news, "linear ignored"]);
+          return { stopReason: "end_turn" };
+        });
+
+        await session.sendPrompt("go on").turn;
+        await session.sendPrompt("and then?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[1])).toContain("<news>linear ignored</news>");
+        expect(promptText(sent[1])).not.toContain("notion");
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 hands a failed reply's error to each chat extension with the chat, and keeps the state it returns", async () => {
         const mock = makeMockBackend();
         mock.prompt.mockRejectedValue(new Error("model not supported: gemini-4"));
@@ -6240,6 +6298,38 @@ describe("AgentSession", () => {
 
         expect(session.getChatStates()).not.toBe(empty);
         expect(session.getChatStates()).toBe(session.getChatStates());
+      });
+    });
+
+    describe("getReloadableChatStates()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 returns only the state of features kept across Reload", () => {
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, keepOnReload: true })],
+        });
+        session.updateChatState(NEWS, () => ["notion connected"]);
+        session.updateChatState(COUNTER, (count) => count + 1);
+
+        const states = session.getReloadableChatStates();
+
+        expect([...states.keys()]).toEqual(["news"]);
+        expect(states.get("news")).toEqual(["notion connected"]);
+      });
+    });
+
+    describe("restoreChatStates()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 carries a chat's kept state into the session that replaces it on Reload, and redraws", () => {
+        const before = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, keepOnReload: true })],
+        });
+        before.updateChatState(NEWS, () => ["notion connected"]);
+        const after = makeSession(makeMockBackend());
+        const onMessagesChanged = jest.fn();
+        subscribeTo(after, { onMessagesChanged });
+
+        after.restoreChatStates(before.getReloadableChatStates());
+
+        expect(after.readChatState(NEWS)).toEqual(["notion connected"]);
+        expect(onMessagesChanged).toHaveBeenCalled();
       });
     });
 
