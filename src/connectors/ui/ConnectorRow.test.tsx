@@ -1,6 +1,7 @@
 import { CONNECTOR_SERVICES, type ConnectorCatalogEntry } from "@/connectors/catalog";
 import type { WaitingLogin } from "@/connectors/connectionManager";
 import {
+  ConnectedStatus,
   ConnectorRow,
   FailedLoginStatus,
   LoginButton,
@@ -66,6 +67,39 @@ describe("ConnectorRow", () => {
       render(<StatusLine tone="ok">Connected</StatusLine>);
 
       expect(screen.getByText("Connected").parentElement?.className).not.toContain("tw-text-error");
+    });
+  });
+
+  describe("ConnectedStatus()", () => {
+    it("says Connected with the account name and a tool count that opens the tools", () => {
+      const onShowTools = jest.fn();
+      const { container } = render(
+        <ConnectedStatus accountLabel="Acme workspace" toolCount={12} onShowTools={onShowTools} />
+      );
+
+      expect(container.textContent).toBe("Connected · Acme workspace · 12 tools");
+      fireEvent.click(screen.getByRole("button", { name: "12 tools" }));
+      expect(onShowTools).toHaveBeenCalledTimes(1);
+    });
+
+    it("counts a single tool in the singular", () => {
+      render(<ConnectedStatus toolCount={1} onShowTools={jest.fn()} />);
+
+      expect(screen.getByRole("button", { name: "1 tool" })).toBeTruthy();
+    });
+
+    it("says only Connected while the tools aren't known yet", () => {
+      const { container } = render(<ConnectedStatus toolCount={null} onShowTools={jest.fn()} />);
+
+      expect(container.textContent).toBe("Connected");
+      expect(screen.queryByRole("button")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/878 shows 0 tools as text, since there are no tools to open", () => {
+      const { container } = render(<ConnectedStatus toolCount={0} onShowTools={jest.fn()} />);
+
+      expect(container.textContent).toBe("Connected · 0 tools");
+      expect(screen.queryByRole("button")).toBeNull();
     });
   });
 

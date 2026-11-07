@@ -15,6 +15,10 @@ If no browser window opens, click **Copy the login link** and open it yourself. 
 
 New chats can use the service right away. A chat that is already open shows **settings changed** with **Reload**; click **Reload** to give that chat the service. See [Applying a settings change](agent-mode-and-tools.md#applying-a-settings-change).
 
+## See what agents can do with a service
+
+A connected service shows how many tools it gives agents, such as **Connected · 14 tools**. Click the number to see each tool with a short description, grouped into **Read only** and **Can make changes**. Use the search box to filter a long list, and **Back** to return to **Connectors**.
+
 ## Connect from a chat
 
 When your request needs a service you haven't connected, the agent shows a card such as **Connect Notion** below its reply.

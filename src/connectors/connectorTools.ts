@@ -32,7 +32,7 @@ export interface ConnectorToolDefinition {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: unknown;
-  readonly annotations?: { readonly readOnlyHint?: boolean };
+  readonly annotations?: { readonly title?: string; readonly readOnlyHint?: boolean };
 }
 
 export interface ConnectorToolResult {
@@ -60,8 +60,9 @@ export function describeConnectorTool(agentName: string): ConnectorToolDescripti
     : null;
 }
 
-interface ServiceToolInfo {
+export interface ServiceToolInfo {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   annotations?: ConnectorToolDefinition["annotations"];
@@ -78,6 +79,7 @@ export interface McpRequester {
 export interface ListedTools {
   readonly toolNames: ReadonlyMap<string, string>;
   readonly definitions: readonly ConnectorToolDefinition[];
+  readonly tools: readonly ServiceToolInfo[];
 }
 
 interface LoadedService extends ListedTools {
@@ -113,6 +115,8 @@ export class ConnectorTools {
   private readonly services: ReadonlyMap<string, ConnectorCatalogEntry>;
   private readonly loaded = new Map<string, LoadedService>();
   private readonly listings = new Map<string, { backendId: string; ids: ReadonlySet<string> }>();
+  private readonly listeners = new Set<() => void>();
+  private toolsByConnection: ReadonlyMap<string, readonly ServiceToolInfo[]> = new Map();
 
   constructor(private readonly deps: ConnectorToolsDeps) {
     this.services = new Map(deps.catalog.map((service) => [service.id, service]));
@@ -121,14 +125,27 @@ export class ConnectorTools {
   async refresh(): Promise<void> {
     if (!this.deps.isEnabled()) return;
     const custom = this.deps.custom?.refresh();
-    const { connections } = this.deps.manager.getSnapshot();
-    for (const [id, { session }] of this.loaded) {
-      if (connections.some((connection) => connection.id === id)) continue;
-      this.loaded.delete(id);
-      void session.close();
-    }
-    await Promise.all(connections.map((connection) => this.load(connection)).concat(custom ?? []));
+    await Promise.all([this.loadConnected(), custom]);
   }
+
+  // Settings counts each connected service's tools, which nothing lists before a chat starts.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+  async loadConnected(): Promise<void> {
+    if (!this.deps.isEnabled()) return;
+    const { connections } = this.deps.manager.getSnapshot();
+    const gone = [...this.loaded].filter(([id]) => !connections.some((c) => c.id === id));
+    if (gone.length > 0) this.updateLoaded(() => gone.forEach(([id]) => this.loaded.delete(id)));
+    gone.forEach(([, { session }]) => void session.close());
+    await Promise.all(connections.map((connection) => this.load(connection)));
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  readonly getSnapshot = (): ReadonlyMap<string, readonly ServiceToolInfo[]> =>
+    this.toolsByConnection;
 
   // A stored login can be valid while the service is down, so only a real tool listing shows it is reachable again.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
@@ -137,7 +154,7 @@ export class ConnectorTools {
       .getSnapshot()
       .connections.find(({ id }) => id === connectionId);
     if (!connection) return;
-    this.loaded.delete(connectionId);
+    this.updateLoaded(() => this.loaded.delete(connectionId));
     await this.load(connection);
   }
 
@@ -209,6 +226,12 @@ export class ConnectorTools {
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }
 
+  private updateLoaded(update: () => void): void {
+    update();
+    this.toolsByConnection = new Map([...this.loaded].map(([id, { tools }]) => [id, tools]));
+    this.listeners.forEach((listener) => listener());
+  }
+
   private toolSet(): { connectionIds: string; connected: ReadonlySet<string> } {
     const enabled = this.deps.isEnabled();
     const connections = enabled ? this.deps.manager.getSnapshot().connections : [];
@@ -261,12 +284,10 @@ export class ConnectorTools {
         `Loading ${service.name} tools`
       );
       if (!tools) return;
-      this.loaded.set(connection.id, {
-        connectionId: connection.id,
-        service,
-        session,
-        ...defineTools(service, tools, this.deps.maxToolNameLength),
-      });
+      const listed = defineTools(service, tools, this.deps.maxToolNameLength);
+      this.updateLoaded(() =>
+        this.loaded.set(connection.id, { connectionId: connection.id, service, session, ...listed })
+      );
     } catch (error) {
       void session.close();
       logWarn(
@@ -432,6 +453,7 @@ export function defineTools(
   return {
     toolNames: new Map(definitions.map((definition, i) => [definition.name, tools[i].name])),
     definitions,
+    tools,
   };
 }
 

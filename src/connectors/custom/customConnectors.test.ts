@@ -63,6 +63,13 @@ function setUp(options: { enabled?: boolean } = {}) {
   return { custom, secrets, device, processes, remote, statusOf, add };
 }
 
+function connectedWith(...names: string[]) {
+  return {
+    kind: "connected",
+    tools: names.map((name): unknown => expect.objectContaining({ name })),
+  };
+}
+
 function loggedText(): string {
   return jest
     .mocked(logWarn)
@@ -134,7 +141,7 @@ describe("customConnectors", () => {
         expect(started.options.env.PATH).toBe(
           augmentPathForDetection(["/login-shell/bin"], process.env.PATH)
         );
-        expect(fake.statusOf("echo")).toEqual({ kind: "connected", toolCount: 2 });
+        expect(fake.statusOf("echo")).toEqual(connectedWith("echo", "remember"));
       });
 
       it("connects a remote server with its headers and counts its tools", async () => {
@@ -142,7 +149,7 @@ describe("customConnectors", () => {
 
         await fake.add(REMOTE_JSON);
 
-        expect(fake.statusOf("acme")).toEqual({ kind: "connected", toolCount: 1 });
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
         expect(fake.remote.callsOf("tools/list")[0].token).toBe("acme-1");
       });
 
@@ -215,7 +222,7 @@ describe("customConnectors", () => {
         );
         await fake.custom.refresh();
 
-        expect(fake.statusOf("echo")).toEqual({ kind: "connected", toolCount: 2 });
+        expect(fake.statusOf("echo")).toEqual(connectedWith("echo", "remember"));
         expect(fake.custom.getSnapshot().needsAttention).toBe(false);
         expect(fake.processes[fake.processes.length - 1].options.env.FAKE_KEY).toBe("k-2");
       });
@@ -293,7 +300,7 @@ describe("customConnectors", () => {
         await fake.custom.refresh();
 
         expect(fake.processes).toHaveLength(2);
-        expect(fake.statusOf("echo")).toEqual({ kind: "connected", toolCount: 2 });
+        expect(fake.statusOf("echo")).toEqual(connectedWith("echo", "remember"));
       });
     });
 
@@ -425,7 +432,7 @@ describe("customConnectors", () => {
 
         await fake.custom.refresh();
 
-        expect(fake.statusOf("acme")).toEqual({ kind: "connected", toolCount: 1 });
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
       });
 
       it(`lets a chat start after 10 seconds while a slow server keeps starting: ${ISSUE}`, async () => {
@@ -454,7 +461,7 @@ describe("customConnectors", () => {
         );
         await jest.advanceTimersByTimeAsync(1_000);
         expect(fake.processes).toHaveLength(2);
-        expect(fake.statusOf("echo")).toEqual({ kind: "connected", toolCount: 2 });
+        expect(fake.statusOf("echo")).toEqual(connectedWith("echo", "remember"));
         expect(textOf(await fake.custom.call("echo_echo", { text: "back" }))).toBe("k-1: back");
 
         fake.processes[1].crash("segfault");

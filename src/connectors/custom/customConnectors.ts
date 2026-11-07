@@ -11,6 +11,7 @@ import {
   type ConnectorToolResult,
   type ListedTools,
   type McpRequester,
+  type ServiceToolInfo,
 } from "@/connectors/connectorTools";
 import {
   parseCustomConnectors,
@@ -40,7 +41,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 export type CustomConnectorStatus =
   | { readonly kind: "idle" }
   | { readonly kind: "starting" }
-  | { readonly kind: "connected"; readonly toolCount: number }
+  | { readonly kind: "connected"; readonly tools: readonly ServiceToolInfo[] }
   | { readonly kind: "couldnt-start"; readonly reason: string }
   | { readonly kind: "unreachable"; readonly reason: string }
   | { readonly kind: "key-not-accepted" }
@@ -234,7 +235,7 @@ export class CustomConnectors {
     run.started = withTimeout(() => this.open(run), START_TIMEOUT_MS, `Starting ${config.name}`)
       .then((tools) => {
         run.tools = tools;
-        this.setRunStatus(run, { kind: "connected", toolCount: tools.definitions.length });
+        this.setRunStatus(run, { kind: "connected", tools: tools.tools });
       })
       .catch((error: unknown) => {
         logWarn(

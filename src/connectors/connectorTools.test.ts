@@ -18,6 +18,7 @@ jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/857";
 const CUSTOM_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
+const TOOLS_PAGE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/878";
 const ECHO_JSON = JSON.stringify({ name: "Echo", command: "echo", env: { FAKE_KEY: "k" } });
 
 const NOTION: ConnectorCatalogEntry = {
@@ -312,6 +313,93 @@ describe("connectorTools", () => {
 
         expect(fake.processes).toHaveLength(1);
         expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
+      });
+    });
+
+    describe("loadConnected()", () => {
+      it(`${TOOLS_PAGE_ISSUE} lists each connected service's tools, with their titles and read-only hints, without waiting for a chat`, async () => {
+        const fake = setUp({
+          connections: [
+            { id: "c-notion", serviceId: "notion" },
+            { id: "c-linear", serviceId: "linear" },
+          ],
+        });
+        fake.notion.tools = [{ ...SEARCH_NOTES, title: "Search notes" }, CREATE_NOTE];
+        await fake.manager.checkStatus();
+
+        await fake.tools.loadConnected();
+
+        expect(fake.tools.getSnapshot().get("c-notion")).toEqual([
+          expect.objectContaining({
+            name: "search_notes",
+            title: "Search notes",
+            description: "Search notes by keyword.",
+            annotations: { readOnlyHint: true, openWorldHint: false },
+          }),
+          expect.objectContaining({ name: "create_note", annotations: CREATE_NOTE.annotations }),
+        ]);
+        expect(fake.tools.getSnapshot().has("c-linear")).toBe(false);
+      });
+
+      it("lists a service only once, however often Settings opens", async () => {
+        const fake = setUp();
+
+        await fake.tools.loadConnected();
+        await fake.tools.loadConnected();
+        await fake.tools.refresh();
+
+        expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
+      });
+
+      it("drops a disconnected service's tools", async () => {
+        const fake = setUp();
+        await fake.tools.loadConnected();
+
+        await fake.manager.disconnect("c-notion");
+        await fake.tools.loadConnected();
+
+        expect(fake.tools.getSnapshot().size).toBe(0);
+      });
+
+      it("contacts no service while the connectors entitlement is off", async () => {
+        const fake = setUp({ enabled: false });
+
+        await fake.tools.loadConnected();
+
+        expect(fake.notion.requests).toEqual([]);
+      });
+    });
+
+    describe("subscribe()", () => {
+      it("tells the listener when a service's tools are listed or dropped, until it unsubscribes", async () => {
+        const fake = setUp();
+        const listener = jest.fn();
+        const unsubscribe = fake.tools.subscribe(listener);
+
+        await fake.tools.loadConnected();
+        expect(listener).toHaveBeenCalledTimes(1);
+        fake.notion.unreachable = true;
+        await fake.tools.checkAgain("c-notion");
+        expect(listener).toHaveBeenCalledTimes(2);
+
+        unsubscribe();
+        fake.notion.unreachable = false;
+        await fake.tools.checkAgain("c-notion");
+        expect(listener).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe("getSnapshot()", () => {
+      it("returns the same snapshot until the listed tools change", async () => {
+        const fake = setUp();
+        const empty = fake.tools.getSnapshot();
+        expect(fake.tools.getSnapshot()).toBe(empty);
+
+        await fake.tools.loadConnected();
+
+        const listed = fake.tools.getSnapshot();
+        expect(listed).not.toBe(empty);
+        expect(fake.tools.getSnapshot()).toBe(listed);
       });
     });
 
