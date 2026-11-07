@@ -77,6 +77,7 @@ jest.mock("@/agentMode", () => ({
   createAgentSessionManager: jest.fn(() => ({})),
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
+jest.mock("@/connectors/connectionManager");
 
 import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -121,6 +122,7 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
+import { ConnectionManager } from "@/connectors/connectionManager";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -677,6 +679,35 @@ describe("main", () => {
         expect(startActiveWebTabTracking).toHaveBeenCalledWith(plugin.app, {
           preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
         });
+      });
+
+      it("starts the connection manager on desktop, checks connector logins once, and disposes it with the plugin", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const manager = jest.mocked(ConnectionManager).mock.instances[0];
+        expect(plugin.connectionManager).toBe(manager);
+        expect(manager.checkStatus).toHaveBeenCalledTimes(1);
+        expect(manager.dispose).not.toHaveBeenCalled();
+        for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
+        expect(manager.dispose).toHaveBeenCalledTimes(1);
+      });
+
+      it("starts no connection manager on mobile, where connector logins cannot run", async () => {
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        expect(ConnectionManager).not.toHaveBeenCalled();
+        expect(plugin.connectionManager).toBeUndefined();
       });
 
       it.each([

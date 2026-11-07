@@ -11,6 +11,7 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/src/$1",
     "^obsidian$": "<rootDir>/__mocks__/obsidian.js",
     "^yaml$": "<rootDir>/node_modules/yaml/dist/index.js",
+    "^pkce-challenge$": "<rootDir>/node_modules/pkce-challenge/dist/index.node.cjs",
     "^@anthropic-ai/sdk/lib/(.*)$": "<rootDir>/node_modules/@anthropic-ai/sdk/lib/$1.js",
     "^@agentclientprotocol/sdk$": "<rootDir>/__mocks__/@agentclientprotocol/sdk.js",
     "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",

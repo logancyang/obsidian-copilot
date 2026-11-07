@@ -96,6 +96,10 @@ export class ConnectorAuth {
 
   constructor(private readonly deps: ConnectorAuthDeps) {}
 
+  hasLogin(connectionId: string): boolean {
+    return this.read(connectionId) !== null;
+  }
+
   login(target: ConnectorLoginTarget): ConnectorLogin {
     if (this.active) {
       throw new Error(`Finish or cancel the ${this.active.serviceName} login first.`);
@@ -242,6 +246,9 @@ function startLogin(
     },
     tokens: () => undefined,
     saveTokens: (tokens) => {
+      // A login cancelled or timed out during the code exchange has no connection to hold it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/856
+      if (settled) return;
       if (!client) throw new Error("The login finished without a client registration.");
       return save({
         issuer: tokens.issuer ?? target.serverUrl,
