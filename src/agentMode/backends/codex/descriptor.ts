@@ -2,6 +2,7 @@ import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfi
 import { Notice } from "obsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { codexAuth } from "./codexAuth";
+import { codexApprovedRules } from "./codexApprovedRules";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
@@ -236,6 +237,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   SettingsPanel: CodexSettingsPanel,
+
+  approvedRules: codexApprovedRules,
 
   getModeMapping() {
     return buildCodexModeMapping();

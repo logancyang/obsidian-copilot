@@ -1,6 +1,7 @@
 import { requestUrl } from "obsidian";
 import type { ApprovedRuleStore } from "@/agentMode/session/types";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
+import { oneAtATime } from "@/agentMode/backends/shared/oneAtATime";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -23,17 +24,6 @@ interface SavedPermission {
 
 interface OpencodeLocation {
   project: { id: string; directory: string };
-}
-
-let previousCall: Promise<unknown> = Promise.resolve();
-
-// A remove and a re-list each start their own server; running them in order keeps a list from
-// reading the rules before a pending removal lands.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/867
-function oneAtATime<T>(call: () => Promise<T>): Promise<T> {
-  const result = previousCall.then(call);
-  previousCall = result.catch(() => undefined);
-  return result;
 }
 
 function firstStdoutLine(server: ChildProcess): Promise<string> {
