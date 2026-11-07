@@ -705,13 +705,13 @@ describe("main", () => {
         expect(manager.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 gives the plugin custom connectors on desktop, whose calls for attention reach the connection manager", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 gives the plugin custom connectors on desktop and stops their servers when the plugin unloads", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
           layoutRef: {},
         });
-        const { plugin, finishStartup } = createLoadingPlugin();
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
 
         plugin.onload();
         await finishStartup();
@@ -719,6 +719,9 @@ describe("main", () => {
         const custom = jest.mocked(CustomConnectors).mock.instances[0];
         expect(plugin.customConnectors).toBe(custom);
         expect(jest.mocked(ConnectionManager).mock.calls[0][0].custom).toBe(custom);
+        expect(custom.dispose).not.toHaveBeenCalled();
+        for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
+        expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {

@@ -5,6 +5,9 @@ import { MAX_PROVIDED_TOOL_NAME_LENGTH } from "@/agentMode/session/copilotMcpSer
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
 import { ConnectionManager, type ConnectorAuthPort } from "@/connectors/connectionManager";
 import { ConnectorTools, describeConnectorTool } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
+import { FakeProcess } from "@/connectors/custom/testing/fakeCustomProcess";
+import { fakeKeychain } from "@/connectors/custom/testing/fakeKeychain";
 import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
 import { FakeMcpService } from "@/connectors/testing/fakeMcpService";
 import { logWarn } from "@/logger";
@@ -14,6 +17,8 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/857";
+const CUSTOM_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
+const ECHO_JSON = JSON.stringify({ name: "Echo", command: "echo", env: { FAKE_KEY: "k" } });
 
 const NOTION: ConnectorCatalogEntry = {
   id: "notion",
@@ -61,7 +66,10 @@ function setUp(
   options: { connections?: Array<{ id: string; serviceId: string }>; enabled?: boolean } = {}
 ) {
   jest.mocked(logWarn).mockClear();
-  setSettings({ connectors: options.connections ?? [{ id: "c-notion", serviceId: "notion" }] });
+  setSettings({
+    connectors: options.connections ?? [{ id: "c-notion", serviceId: "notion" }],
+    customConnectors: [],
+  });
   const logins = new Map<string, AccessTokenResult>([
     ["c-notion", connected("notion-1")],
     ["c-atlassian", connected("atlassian-1")],
@@ -102,7 +110,25 @@ function setUp(
 
   let enabled = options.enabled ?? true;
   const enabledListeners = new Set<() => void>();
+  const processes: FakeProcess[] = [];
+  const custom = new CustomConnectors({
+    keychain: fakeKeychain().keychain,
+    deviceStorage: { load: () => null, save: () => {} },
+    catalogIds: [NOTION.id, ATLASSIAN.id, LINEAR.id],
+    isEnabled: () => enabled,
+    maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+    startProcess: (processOptions, crash) => {
+      const process = new FakeProcess(processOptions, crash);
+      processes.push(process);
+      return process;
+    },
+  });
+  const addCustom = (text: string) => {
+    const parsed = custom.parse(text);
+    if (parsed.ok) custom.add(parsed.connectors);
+  };
   const tools = new ConnectorTools({
+    custom,
     manager,
     catalog: [NOTION, ATLASSIAN, LINEAR],
     isEnabled: () => enabled,
@@ -119,7 +145,20 @@ function setUp(
   };
   const statusOf = (connectionId: string) =>
     manager.getSnapshot().connections.find(({ id }) => id === connectionId)?.status;
-  return { auth, logins, refreshed, manager, notion, atlassian, tools, setEnabled, statusOf };
+  return {
+    auth,
+    logins,
+    refreshed,
+    manager,
+    notion,
+    atlassian,
+    tools,
+    setEnabled,
+    statusOf,
+    custom,
+    addCustom,
+    processes,
+  };
 }
 
 function loggedText(): string {
@@ -210,7 +249,7 @@ describe("connectorTools", () => {
 
         await fake.tools.refresh();
 
-        expect(loggedText()).toContain("rejected Bearer ***");
+        expect(loggedText()).toContain("HTTP 400 rejected ***");
         expect(loggedText()).not.toContain("notion-1");
       });
 
@@ -255,10 +294,24 @@ describe("connectorTools", () => {
       it("contacts no service while the connectors entitlement is off", async () => {
         const fake = setUp({ enabled: false });
 
+        fake.addCustom(ECHO_JSON);
         await fake.tools.refresh();
 
         expect(fake.auth.accessToken).not.toHaveBeenCalled();
         expect(fake.notion.requests).toEqual([]);
+        expect(fake.processes).toEqual([]);
+      });
+
+      it(`starts custom connectors added on this device alongside the catalog services: ${CUSTOM_ISSUE}`, async () => {
+        const fake = setUp();
+        setSettings({
+          customConnectors: [{ id: "echo", name: "Echo", command: "echo", args: [], envNames: [] }],
+        });
+
+        await fake.tools.refresh();
+
+        expect(fake.processes).toHaveLength(1);
+        expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
       });
     });
 
@@ -366,6 +419,19 @@ describe("connectorTools", () => {
         fake.manager.reportFailure("c-notion", "needs-login");
 
         expect(fake.tools.tools()).toEqual([]);
+      });
+
+      it(`lists a connected custom connector's tools after the catalog services' tools, as <connector>_<tool>: ${CUSTOM_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.addCustom(ECHO_JSON);
+        await fake.tools.refresh();
+
+        expect(fake.tools.tools().map(({ name }) => name)).toEqual([
+          "notion_search_notes",
+          "notion_create_note",
+          "echo_echo",
+          "echo_remember",
+        ]);
       });
 
       it("lists nothing while the connectors entitlement is off", async () => {
@@ -644,6 +710,16 @@ describe("connectorTools", () => {
 
         expect(fake.tools.call("notion_unknown", {})).toBeNull();
       });
+
+      it(`forwards a custom connector's tool to its server: ${CUSTOM_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.addCustom(ECHO_JSON);
+        await fake.tools.refresh();
+
+        const result = await fake.tools.call("echo_echo", { text: "hi" });
+
+        expect(textOf(result!)).toBe("k: hi");
+      });
     });
 
     describe("subscribeToToolSetChange()", () => {
@@ -708,6 +784,44 @@ describe("connectorTools", () => {
 
         expect(listener).toHaveBeenCalledTimes(1);
         expect(listener.mock.calls[0][0]("claude")).toBe(true);
+      });
+
+      it(`tells every backend when a custom connector is added, edited, turned off or removed: ${CUSTOM_ISSUE}`, async () => {
+        const fake = setUp();
+        const listener = jest.fn();
+        fake.tools.subscribeToToolSetChange(listener);
+
+        fake.addCustom(ECHO_JSON);
+        await fake.custom.refresh();
+        fake.custom.edit("echo", JSON.stringify({ name: "Echo", command: "echo2" }));
+        await fake.custom.refresh();
+        fake.custom.setTurnedOff("echo", true);
+        fake.custom.remove("echo");
+
+        expect(listener).toHaveBeenCalledTimes(3);
+        expect(listener.mock.calls.every(([affects]) => affects("opencode"))).toBe(true);
+      });
+
+      it(`tells only the backend of a chat that listed no tools of a custom connector that couldn't start, once it starts in a later chat: ${CUSTOM_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.addCustom(JSON.stringify({ name: "Echo", command: "echo" }));
+        await fake.tools.refresh();
+        expect(fake.custom.getSnapshot().connectors[0].status.kind).toBe("couldnt-start");
+        fake.tools.tools({ sessionKey: "chat-a", backendId: "codex" });
+        const listener = jest.fn();
+        fake.tools.subscribeToToolSetChange(listener);
+        process.env.FAKE_KEY = "from-shell";
+
+        try {
+          await fake.tools.refresh();
+        } finally {
+          delete process.env.FAKE_KEY;
+        }
+
+        expect(fake.custom.getSnapshot().connectors[0].status.kind).toBe("connected");
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener.mock.calls[0][0]("codex")).toBe(true);
+        expect(listener.mock.calls[0][0]("claude")).toBe(false);
       });
 
       it("tells the listener when the connectors entitlement turns on or off", () => {
