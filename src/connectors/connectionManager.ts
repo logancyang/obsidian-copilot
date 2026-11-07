@@ -1,4 +1,5 @@
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
+import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import type {
   AccessTokenResult,
   ConnectorAuth,
@@ -47,6 +48,7 @@ export type ConnectorAuthPort = Pick<
 export interface ConnectionManagerDeps {
   auth: ConnectorAuthPort;
   catalog: readonly ConnectorCatalogEntry[];
+  custom?: Pick<CustomConnectors, "subscribe" | "getSnapshot">;
 }
 
 const EMPTY_CONNECTIONS: readonly ConnectionState[] = Object.freeze([]);
@@ -62,6 +64,9 @@ export class ConnectionManager {
   constructor(private readonly deps: ConnectionManagerDeps) {
     this.services = new Map(deps.catalog.map((service) => [service.id, service]));
     this.snapshot = this.buildSnapshot();
+    // A custom connector that lacks its key on this device raises the same banner and settings dot as a catalog login.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+    deps.custom?.subscribe(() => this.publish());
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -197,7 +202,9 @@ export class ConnectionManager {
       connections: connections.length > 0 ? Object.freeze(connections) : EMPTY_CONNECTIONS,
       waitingLogin: this.waitingLogin,
       failedLogin: this.failedLogin,
-      needsAttention: connections.some(({ status }) => status === "needs-login"),
+      needsAttention:
+        connections.some(({ status }) => status === "needs-login") ||
+        this.deps.custom?.getSnapshot().needsAttention === true,
     });
   }
 }
