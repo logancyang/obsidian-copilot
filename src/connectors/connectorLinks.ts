@@ -12,3 +12,10 @@ export function loginRejectedIssueUrl(service: ConnectorCatalogEntry): string {
     `${service.name} didn't accept Copilot's login.\n\nServer: ${service.serverUrl}`
   );
 }
+
+export function connectorRequestUrl(serviceName = ""): string {
+  return newIssueUrl(
+    `Connector request: ${serviceName}`,
+    "Which service should Copilot connect to, and what would you ask your agents to do with it?"
+  );
+}
