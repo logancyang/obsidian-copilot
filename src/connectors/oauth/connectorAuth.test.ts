@@ -74,7 +74,7 @@ function fakeBrowser() {
   };
 }
 
-const instances: ConnectorAuth[] = [];
+const startedLogins: ConnectorLogin[] = [];
 
 function setUp(options: FakeOAuthServiceOptions = {}) {
   const service = new FakeOAuthService(options);
@@ -82,11 +82,11 @@ function setUp(options: FakeOAuthServiceOptions = {}) {
   const keychain = fakeKeychain();
   const browser = fakeBrowser();
   const connectorAuth = new ConnectorAuth({ keychain, openUrl: browser.open });
-  instances.push(connectorAuth);
 
   async function startLogin(): Promise<{ login: ConnectorLogin; authorizationUrl: URL }> {
     const opened = browser.nextUrl();
     const login = connectorAuth.login(NOTION);
+    startedLogins.push(login);
     return { login, authorizationUrl: new URL(await opened) };
   }
 
@@ -106,7 +106,7 @@ function setUp(options: FakeOAuthServiceOptions = {}) {
 
 describe("connectorAuth", () => {
   afterEach(() => {
-    for (const instance of instances.splice(0)) instance.activeLogin?.cancel();
+    for (const login of startedLogins.splice(0)) login.cancel();
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
@@ -280,12 +280,11 @@ describe("connectorAuth", () => {
       });
 
       it("exposes the login URL while waiting so it can be copied or opened again", async () => {
-        const { connectorAuth, startLogin } = setUp();
+        const { startLogin } = setUp();
 
         const { login, authorizationUrl } = await startLogin();
 
         expect(login.loginUrl()).toBe(authorizationUrl.href);
-        expect(connectorAuth.activeLogin).toBe(login);
       });
 
       it("refuses to start another login while one is waiting, and allows one after it ends", async () => {
@@ -298,7 +297,6 @@ describe("connectorAuth", () => {
         login.cancel();
         await login.outcome;
 
-        expect(connectorAuth.activeLogin).toBeNull();
         expect(() => connectorAuth.login(NOTION).cancel()).not.toThrow();
       });
 

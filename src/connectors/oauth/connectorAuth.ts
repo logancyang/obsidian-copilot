@@ -96,10 +96,6 @@ export class ConnectorAuth {
 
   constructor(private readonly deps: ConnectorAuthDeps) {}
 
-  get activeLogin(): ConnectorLogin | null {
-    return this.active;
-  }
-
   login(target: ConnectorLoginTarget): ConnectorLogin {
     if (this.active) {
       throw new Error(`Finish or cancel the ${this.active.serviceName} login first.`);
