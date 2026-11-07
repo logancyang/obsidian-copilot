@@ -71,11 +71,9 @@ export function ConnectedConnectors({
       <div className="tw-flex tw-flex-wrap tw-items-start tw-justify-between tw-gap-3">
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-basis-64 tw-flex-col tw-gap-1">
           <div role="heading" aria-level={2} className="tw-break-words tw-text-xl tw-font-bold">
-            Connected <span className="tw-font-normal tw-text-muted">{listed.length}</span>
+            Connectors
           </div>
-          <p className="tw-m-0 tw-text-sm tw-text-muted">
-            Every agent can use these in your chats. Logins stay in this device&apos;s keychain.
-          </p>
+          <p className="tw-m-0 tw-text-sm tw-text-muted">Connect agents with external services.</p>
         </div>
         {onBrowse && (
           <Button className="tw-max-w-full" onClick={onBrowse}>
