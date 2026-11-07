@@ -6,6 +6,7 @@ import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
+import { humanizeToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
@@ -92,16 +93,6 @@ function targetFromTitle(part: ToolCallPart): string {
   if (!t) return "…";
   if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
   return t;
-}
-
-function humanizeToolName(name: string): string {
-  const words = name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .toLowerCase();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
 function genericToolLabel(part: ToolCallPart): string {

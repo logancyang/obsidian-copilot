@@ -25,7 +25,7 @@ export interface ConnectorToolDefinition {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: unknown;
-  readonly annotations?: { readonly readOnlyHint?: boolean };
+  readonly annotations?: { readonly title?: string; readonly readOnlyHint?: boolean };
 }
 
 export interface ConnectorToolResult {
@@ -53,8 +53,9 @@ export function describeConnectorTool(agentName: string): ConnectorToolDescripti
     : null;
 }
 
-interface ServiceToolInfo {
+export interface ServiceToolInfo {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   annotations?: ConnectorToolDefinition["annotations"];
@@ -67,6 +68,7 @@ export interface McpRequester {
 export interface ListedTools {
   readonly toolNames: ReadonlyMap<string, string>;
   readonly definitions: readonly ConnectorToolDefinition[];
+  readonly tools: readonly ServiceToolInfo[];
 }
 
 interface LoadedService extends ListedTools {
@@ -110,7 +112,10 @@ class SessionEndedError extends Error {}
 export class ConnectorTools {
   private readonly services: ReadonlyMap<string, ConnectorCatalogEntry>;
   private readonly loaded = new Map<string, LoadedService>();
+  private readonly loading = new Map<string, Promise<void>>();
   private readonly listings = new Map<string, { backendId: string; ids: ReadonlySet<string> }>();
+  private readonly listeners = new Set<() => void>();
+  private toolsByConnection: ReadonlyMap<string, readonly ServiceToolInfo[]> = new Map();
 
   constructor(private readonly deps: ConnectorToolsDeps) {
     this.services = new Map(deps.catalog.map((service) => [service.id, service]));
@@ -126,17 +131,30 @@ export class ConnectorTools {
       SERVICE_TIMEOUT_MS,
       "Checking connector logins"
     );
+    await Promise.all([this.loadConnected(), custom]);
+  }
+
+  // Settings counts each connected service's tools, which nothing lists before a chat starts.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+  async loadConnected(): Promise<void> {
+    if (!this.deps.isEnabled()) return;
     const { connections } = this.deps.manager.getSnapshot();
-    for (const id of this.loaded.keys()) {
-      if (!connections.some((connection) => connection.id === id)) this.loaded.delete(id);
-    }
+    const gone = [...this.loaded.keys()].filter((id) => !connections.some((c) => c.id === id));
+    if (gone.length > 0) this.updateLoaded(() => gone.forEach((id) => this.loaded.delete(id)));
     await Promise.all(
       connections
         .filter(({ id, status }) => status === "connected" && !this.loaded.has(id))
         .map((connection) => this.load(connection))
-        .concat(custom ?? [])
     );
   }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  readonly getSnapshot = (): ReadonlyMap<string, readonly ServiceToolInfo[]> =>
+    this.toolsByConnection;
 
   // A stored login can be valid while the service is down, so only a real tool listing shows it is reachable again.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
@@ -145,7 +163,7 @@ export class ConnectorTools {
       .getSnapshot()
       .connections.find(({ id }) => id === connectionId);
     if (!connection) return;
-    this.loaded.delete(connectionId);
+    this.updateLoaded(() => this.loaded.delete(connectionId));
     await this.load(connection);
   }
 
@@ -211,6 +229,12 @@ export class ConnectorTools {
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }
 
+  private updateLoaded(update: () => void): void {
+    update();
+    this.toolsByConnection = new Map([...this.loaded].map(([id, { tools }]) => [id, tools]));
+    this.listeners.forEach((listener) => listener());
+  }
+
   private toolSet(): { connectionIds: string; connected: ReadonlySet<string> } {
     const enabled = this.deps.isEnabled();
     const connections = enabled ? this.deps.manager.getSnapshot().connections : [];
@@ -234,7 +258,18 @@ export class ConnectorTools {
     };
   }
 
-  private async load(connection: ConnectionState): Promise<void> {
+  // Settings lists a service again when its row turns connected, which a Try again in flight already does.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+  private load(connection: ConnectionState): Promise<void> {
+    let loading = this.loading.get(connection.id);
+    if (!loading) {
+      loading = this.list(connection).finally(() => this.loading.delete(connection.id));
+      this.loading.set(connection.id, loading);
+    }
+    return loading;
+  }
+
+  private async list(connection: ConnectionState): Promise<void> {
     const service = this.services.get(connection.serviceId);
     if (!service) return;
     const session = new ServiceSession(
@@ -255,12 +290,10 @@ export class ConnectorTools {
         SERVICE_TIMEOUT_MS,
         `Listing ${service.name} tools`
       );
-      this.loaded.set(connection.id, {
-        connectionId: connection.id,
-        service,
-        session,
-        ...defineTools(service, tools, this.deps.maxToolNameLength),
-      });
+      const listed = defineTools(service, tools, this.deps.maxToolNameLength);
+      this.updateLoaded(() =>
+        this.loaded.set(connection.id, { connectionId: connection.id, service, session, ...listed })
+      );
     } catch (error) {
       logWarn(
         `[Connectors] Couldn't list ${service.name} tools`,
@@ -459,6 +492,7 @@ export function defineTools(
   return {
     toolNames: new Map(definitions.map((definition, i) => [definition.name, tools[i].name])),
     definitions,
+    tools,
   };
 }
 

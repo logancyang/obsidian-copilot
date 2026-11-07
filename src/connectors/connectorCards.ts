@@ -340,7 +340,7 @@ function customOutcomeText(card: CustomConnectorCard, status: CustomConnectorSta
     case undefined:
       return `The user sent this message without ${update ? "updating" : "adding"} ${name}.`;
     case "connected":
-      return `${did} and it connected (${status.toolCount} ${status.toolCount === 1 ? "tool" : "tools"}). Use its tools; if none are listed yet, they appear once the user clicks Reload at the top of the chat, or in a new chat if no Reload is shown.`;
+      return `${did} and it connected (${status.tools.length} ${status.tools.length === 1 ? "tool" : "tools"}). Use its tools; if none are listed yet, they appear once the user clicks Reload at the top of the chat, or in a new chat if no Reload is shown.`;
     case "couldnt-start":
       return `${did}, but it couldn't start: ${shortReason(status.reason)}. ${CUSTOM_FIX}`;
     case "unreachable":

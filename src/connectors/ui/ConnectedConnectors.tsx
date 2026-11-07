@@ -4,11 +4,13 @@ import type {
   ConnectionStatus,
   ConnectorsSnapshot,
 } from "@/connectors/connectionManager";
+import type { ServiceToolInfo } from "@/connectors/connectorTools";
 import type {
   CustomConnectorState,
   CustomConnectorStatus,
 } from "@/connectors/custom/customConnectors";
 import {
+  ConnectedStatus,
   ConnectorRow,
   FailedLoginStatus,
   LoginButton,
@@ -46,12 +48,14 @@ const CUSTOM_STATUS_ORDER: Record<CustomConnectorStatus["kind"], number> = {
 export interface ConnectedConnectorsProps {
   snapshot: ConnectorsSnapshot;
   customConnectors: readonly CustomConnectorState[];
+  toolsByConnection: ReadonlyMap<string, readonly ServiceToolInfo[]>;
   onBrowse: () => void;
   onAddCustom: () => void;
   onConnect: (serviceId: string) => void;
   onReconnect: (connectionId: string) => void;
   onCheckAgain: (connectionId: string) => Promise<void>;
   onDisconnect: (connectionId: string) => void;
+  onShowTools: (connectionId: string) => void;
   customActions: CustomConnectorActions;
 }
 
@@ -160,7 +164,7 @@ function firstLoginRow(
 
 interface ConnectedRowProps extends Pick<
   ConnectedConnectorsProps,
-  "snapshot" | "onReconnect" | "onCheckAgain" | "onDisconnect"
+  "snapshot" | "toolsByConnection" | "onReconnect" | "onCheckAgain" | "onDisconnect" | "onShowTools"
 > {
   connection: ConnectionState;
   service: ConnectorCatalogEntry;
@@ -170,9 +174,11 @@ function ConnectedRow({
   connection,
   service,
   snapshot: { waitingLogin, failedLogin },
+  toolsByConnection,
   onReconnect,
   onCheckAgain,
   onDisconnect,
+  onShowTools,
 }: ConnectedRowProps): React.ReactElement {
   // The check reads the stored login before contacting the service, so the row would show Connected while the service is still down.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
@@ -226,9 +232,11 @@ function ConnectedRow({
     );
   } else {
     detail = (
-      <StatusLine tone="ok">
-        {connection.accountLabel ? `Connected · ${connection.accountLabel}` : "Connected"}
-      </StatusLine>
+      <ConnectedStatus
+        accountLabel={connection.accountLabel}
+        toolCount={toolsByConnection.get(connection.id)?.length ?? null}
+        onShowTools={() => onShowTools(connection.id)}
+      />
     );
   }
 

@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
+const THREE_TOOLS = [{ name: "search" }, { name: "create" }, { name: "delete" }];
 
 function localConnector(status: CustomConnectorStatus): CustomConnectorState {
   return {
@@ -21,6 +22,7 @@ function renderRow(status: CustomConnectorStatus) {
     onTryAgain: jest.fn(),
     onSetTurnedOff: jest.fn(),
     onRemove: jest.fn(),
+    onShowTools: jest.fn(),
   };
   render(
     <ul>
@@ -47,16 +49,17 @@ describe("CustomConnectorRow", () => {
   });
 
   describe("CustomConnectorRow()", () => {
-    it("tags the connector as Custom and counts its tools when it is connected", () => {
-      const { row } = renderRow({ kind: "connected", toolCount: 3 });
+    it("tags the connector as Custom and, when it is connected, says so with a tool count that opens its tools", () => {
+      const { row, onShowTools } = renderRow({ kind: "connected", tools: THREE_TOOLS });
 
       expect(row.getByText("Custom")).toBeTruthy();
-      expect(row.getByText("3 tools")).toBeTruthy();
+      expect(row.getByText(/^Connected ·/)).toBeTruthy();
       expect(row.queryByRole("button", { name: "Try again" })).toBeNull();
+      fireEvent.click(row.getByRole("button", { name: "3 tools" }));
+      expect(onShowTools).toHaveBeenCalledWith("github");
     });
 
     it.each<[CustomConnectorStatus, string]>([
-      [{ kind: "connected", toolCount: 1 }, "1 tool"],
       [{ kind: "starting" }, "Starting…"],
       [{ kind: "idle" }, "Starts in your next chat"],
       [
@@ -118,7 +121,10 @@ describe("CustomConnectorRow", () => {
     });
 
     it("offers Edit, Turn off on this device and Remove in its more-actions menu", async () => {
-      const { onEdit, onSetTurnedOff, onRemove } = renderRow({ kind: "connected", toolCount: 2 });
+      const { onEdit, onSetTurnedOff, onRemove } = renderRow({
+        kind: "connected",
+        tools: THREE_TOOLS,
+      });
 
       openMenu();
       const items = await screen.findAllByRole("menuitem");
@@ -149,7 +155,10 @@ describe("CustomConnectorRow", () => {
 
   describe("customStatusText()", () => {
     it("gives each status its tone and line, with the reason after the status", () => {
-      expect(customStatusText({ kind: "connected", toolCount: 1 })).toEqual(["ok", "1 tool"]);
+      expect(customStatusText({ kind: "connected", tools: THREE_TOOLS })).toEqual([
+        "ok",
+        "Connected · 3 tools",
+      ]);
       expect(customStatusText({ kind: "couldnt-start", reason: "boom" })).toEqual([
         "attention",
         "Couldn't start · boom",

@@ -495,11 +495,11 @@ describe("connectorCards", () => {
         named("Unclicked"),
       ];
       const customStatus = statusOf({
-        up: { kind: "connected", toolCount: 2 },
+        up: { kind: "connected", tools: [{ name: "t1" }, { name: "t2" }] },
         broken: { kind: "couldnt-start", reason: "fake-custom: FAKE_KEY is not set" },
         gone: { kind: "unreachable", reason: "connect ECONNREFUSED 127.0.0.1:8887" },
         locked: { kind: "key-not-accepted" },
-        fixed: { kind: "connected", toolCount: 1 },
+        fixed: { kind: "connected", tools: [{ name: "t1" }] },
       });
 
       const first = takeConnectorCardOutcomes(before, () => false, customStatus);
@@ -532,7 +532,7 @@ describe("connectorCards", () => {
       const later = takeConnectorCardOutcomes(
         starting.cards,
         () => false,
-        statusOf({ fakenotes: { kind: "connected", toolCount: 2 } })
+        statusOf({ fakenotes: { kind: "connected", tools: [{ name: "t1" }, { name: "t2" }] } })
       );
 
       expect(starting.note).toContain("The user added Fake Notes; it's still starting.");

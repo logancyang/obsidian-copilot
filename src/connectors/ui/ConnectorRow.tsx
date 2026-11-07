@@ -100,6 +100,33 @@ export function StatusLine({ tone, children }: StatusLineProps): React.ReactElem
   );
 }
 
+interface ConnectedStatusProps {
+  accountLabel?: string;
+  toolCount: number | null;
+  onShowTools: () => void;
+}
+
+export function ConnectedStatus({
+  accountLabel,
+  toolCount,
+  onShowTools,
+}: ConnectedStatusProps): React.ReactElement {
+  return (
+    <StatusLine tone="ok">
+      {accountLabel ? `Connected · ${accountLabel}` : "Connected"}
+      {toolCount !== null && " · "}
+      {/* A service that lists no tools has no tools page to open.
+        https://github.com/Brevilabs/obsidian-copilot-private/issues/878 */}
+      {toolCount === 0 && "0 tools"}
+      {toolCount !== null && toolCount > 0 && (
+        <TextButton className="tw-align-baseline" onClick={onShowTools}>
+          {toolCount} {toolCount === 1 ? "tool" : "tools"}
+        </TextButton>
+      )}
+    </StatusLine>
+  );
+}
+
 export function TextButton({ className, ...props }: ButtonProps): React.ReactElement {
   return (
     <Button
