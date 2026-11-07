@@ -24,6 +24,7 @@ export type ProductUtmMedium =
   | "preview_hint"
   | "navigator_dialog"
   | "navigator_blocked_view"
+  | "connectors_settings"
   | "skill_no_license"
   | "skill_license_invalid"
   | "openartifacts_private_sharing"

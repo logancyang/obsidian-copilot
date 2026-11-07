@@ -8,10 +8,15 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
+import { useSelectRequestedCopilotSettingsTab } from "@/settings/openSettings";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, ShieldCheck, Sparkle, Wrench } from "lucide-react";
+import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
+import { useIsConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
+import { usePlugin } from "@/contexts/PluginContext";
+import { Cog, Command, Cpu, Plug, ShieldCheck, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
@@ -43,6 +48,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
+  connectors: <Plug className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -53,6 +59,7 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
+  connectors: ConnectorsSettings,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -63,6 +70,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   selfhost: "Self-Host",
   command: "Commands",
   skills: "Skills",
+  connectors: "Connectors",
   advanced: "Advanced",
 };
 
@@ -74,7 +82,12 @@ const tabs = COPILOT_SETTINGS_TAB_IDS.map((id) => ({
 
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
+  useSelectRequestedCopilotSettingsTab(setSelectedTab);
   const skillLoadErrorCount = useSkillLoadErrorCount();
+  const connectorsSnapshot = useConnectorsSnapshot(usePlugin().connectionManager);
+  const connectorsEnabled = useIsConnectorsEnabled();
+  const connectorsNeedAttention =
+    connectorsSnapshot?.needsAttention === true && connectorsEnabled !== false;
 
   return (
     <div className="tw-flex tw-flex-col">
@@ -90,7 +103,10 @@ const SettingsContent: React.FC = () => {
               warningLabel:
                 tab.id === "skills" && skillLoadErrorCount > 0
                   ? "Some skills failed to load"
-                  : undefined,
+                  : tab.id === "connectors" && connectorsNeedAttention
+                    ? "You have connectors that need your attention"
+                    : undefined,
+              warningTone: tab.id === "connectors" ? "error" : "warning",
             }}
             isSelected={selectedTab === tab.id}
             onClick={() => setSelectedTab(tab.id)}
