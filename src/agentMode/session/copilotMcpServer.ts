@@ -1,4 +1,5 @@
 import type { AgentMcpServer, BackendId } from "@/agentMode/session/types";
+import type { ConnectorCardCaller, ConnectorCardResult } from "@/connectors/connectorCards";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
@@ -77,6 +78,17 @@ export type FeedbackOfferHandler = (
   callerSessionId: string | null
 ) => FeedbackOfferResult;
 
+export type ConnectorCardHandler = (
+  serviceId: string,
+  callerSessionId: string | null
+) => ConnectorCardResult;
+
+interface SessionHandlers {
+  onOffer: FeedbackOfferHandler;
+  onConnectorCard?: ConnectorCardHandler;
+  listing: ToolListing;
+}
+
 const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.freeze({
   shown: "Shown to the user. Continue; don't mention it unless asked.",
   already_offered: `Already offered this session. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
@@ -98,7 +110,7 @@ export interface McpToolDefinition {
 export interface HostedTool {
   definition: McpToolDefinition;
   turnedOffText: string;
-  call: (args: unknown) => Promise<HostedToolResult>;
+  call: (args: unknown, caller: ConnectorCardCaller) => Promise<HostedToolResult>;
 }
 
 export interface ProvidedToolResult {
@@ -118,11 +130,6 @@ export interface ToolProvider {
   forget(sessionKey: string): void;
 }
 
-interface TokenHolder {
-  onOffer: FeedbackOfferHandler;
-  listing: ToolListing;
-}
-
 type ServerTool = Omit<HostedTool, "call"> & Partial<Pick<HostedTool, "call">>;
 
 const SEND_FEEDBACK_HOSTED_TOOL: ServerTool = Object.freeze({
@@ -136,7 +143,8 @@ export interface CopilotMcpServer {
   connect(
     sessionKey: string,
     onOffer: FeedbackOfferHandler,
-    backendId: BackendId
+    backendId: BackendId,
+    onConnectorCard?: ConnectorCardHandler
   ): Promise<AgentMcpServer>;
   disconnect(sessionKey: string): void;
   dispose(): void;
@@ -157,7 +165,7 @@ export function createCopilotMcpServer(
   toolProvider?: ToolProvider
 ): CopilotMcpServer {
   const hostedTools: readonly ServerTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
-  const holdersByToken = new Map<string, TokenHolder>();
+  const handlersByToken = new Map<string, SessionHandlers>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
   let disposed = false;
@@ -166,11 +174,12 @@ export function createCopilotMcpServer(
     async connect(
       sessionKey: string,
       onOffer: FeedbackOfferHandler,
-      backendId: BackendId
+      backendId: BackendId,
+      onConnectorCard?: ConnectorCardHandler
     ): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
-        handleHttpRequest(request, response, holdersByToken, isToolOn, hostedTools, toolProvider)
+        handleHttpRequest(request, response, handlersByToken, isToolOn, hostedTools, toolProvider)
       );
       // Agents read the tool list once per session, so each new session first brings connected services up to date.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
@@ -186,7 +195,7 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      holdersByToken.set(token, { onOffer, listing: { sessionKey, backendId } });
+      handlersByToken.set(token, { onOffer, onConnectorCard, listing: { sessionKey, backendId } });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,
@@ -202,12 +211,12 @@ export function createCopilotMcpServer(
       const token = tokensBySession.get(sessionKey);
       if (!token) return;
       tokensBySession.delete(sessionKey);
-      holdersByToken.delete(token);
+      handlersByToken.delete(token);
       toolProvider?.forget(sessionKey);
     },
     dispose(): void {
       disposed = true;
-      holdersByToken.clear();
+      handlersByToken.clear();
       tokensBySession.clear();
       server?.close();
       server = null;
@@ -218,7 +227,7 @@ export function createCopilotMcpServer(
 async function handleHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  holdersByToken: ReadonlyMap<string, TokenHolder>,
+  handlersByToken: ReadonlyMap<string, SessionHandlers>,
   isToolOn: ToolSwitch,
   hostedTools: readonly ServerTool[],
   toolProvider: ToolProvider | undefined
@@ -227,8 +236,8 @@ async function handleHttpRequest(
   // Each session's token selects its own chat, so another vault, session or local page cannot raise a card in it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1];
-  const holder = token ? holdersByToken.get(token) : undefined;
-  if (!holder) return writeJson(response, 401, { error: "Unauthorized." });
+  const handlers = token ? handlersByToken.get(token) : undefined;
+  if (!handlers) return writeJson(response, 401, { error: "Unauthorized." });
   // Copilot never pushes server-initiated messages, so the optional SSE stream is declined.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   if (request.method !== "POST") return writeJson(response, 405, { error: "Method not allowed." });
@@ -249,13 +258,13 @@ async function handleHttpRequest(
   writeJson(response, 200, {
     jsonrpc: "2.0",
     id: message.id,
-    ...(await reply(message, holder, isToolOn, hostedTools, toolProvider)),
+    ...(await reply(message, handlers, isToolOn, hostedTools, toolProvider)),
   });
 }
 
 async function reply(
   message: JsonRpcRequest,
-  holder: TokenHolder,
+  handlers: SessionHandlers,
   isToolOn: ToolSwitch,
   hostedTools: readonly ServerTool[],
   toolProvider: ToolProvider | undefined
@@ -283,19 +292,13 @@ async function reply(
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
               .map((tool) => tool.definition),
-            ...(toolProvider?.tools(holder.listing) ?? []),
+            ...(toolProvider?.tools(handlers.listing) ?? []),
           ],
         },
       };
     case "tools/call":
       return {
-        result: await callTool(
-          message.params ?? {},
-          holder.onOffer,
-          isToolOn,
-          hostedTools,
-          toolProvider
-        ),
+        result: await callTool(message.params ?? {}, handlers, isToolOn, hostedTools, toolProvider),
       };
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
@@ -304,7 +307,7 @@ async function reply(
 
 async function callTool(
   params: Record<string, unknown>,
-  onOffer: FeedbackOfferHandler,
+  { onOffer, onConnectorCard }: SessionHandlers,
   isToolOn: ToolSwitch,
   hostedTools: readonly ServerTool[],
   toolProvider: ToolProvider | undefined
@@ -318,7 +321,10 @@ async function callTool(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
   if (tool.call) {
-    const result = await tool.call(params.arguments);
+    const result = await tool.call(params.arguments, {
+      showConnectorCard: (serviceId) =>
+        onConnectorCard?.(serviceId, callerSessionId(params.arguments)) ?? "unattributed",
+    });
     const reply = toolText(result.text, result.isError);
     return result.image
       ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }
@@ -330,7 +336,7 @@ async function callTool(
 }
 
 function callerSessionId(args: unknown): string | null {
-  const value = (args as Record<string, unknown>)[CALLER_SESSION_ARGUMENT];
+  const value = (args as Record<string, unknown> | undefined)?.[CALLER_SESSION_ARGUMENT];
   return typeof value === "string" && value ? value : null;
 }
 

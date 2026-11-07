@@ -283,13 +283,54 @@ describe("copilotMcpServer", () => {
         rpc(3, "tools/call", { name: "lookup", arguments: { query: "sourdough" } })
       );
 
-      expect(call).toHaveBeenCalledWith({ query: "sourdough" });
+      expect(call).toHaveBeenCalledWith({ query: "sourdough" }, expect.anything());
       expect(offer).not.toHaveBeenCalled();
       expect(result.body).toEqual({
         jsonrpc: "2.0",
         id: 3,
         result: { content: [{ type: "text", text: '{"results":[]}' }], isError: false },
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 lets a hosted tool show a connector card in the calling session, with the caller session an agent stamped on the call", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          lookupTool(async (_args, caller) => ({
+            text: caller.showConnectorCard("notion"),
+            isError: false,
+          })),
+        ]
+      );
+      const showCard = jest.fn().mockReturnValue("shown");
+      const channel = await server.connect("opencode:/vault", jest.fn(), "claude", showCard);
+
+      const result = await post(
+        channel,
+        rpc(3, "tools/call", { name: "lookup", arguments: { caller_session_id: "ses_caller" } })
+      );
+
+      expect(showCard).toHaveBeenCalledWith("notion", "ses_caller");
+      expect(result.body).toMatchObject({ result: { content: [{ text: "shown" }] } });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 answers unattributed when a session can't show connector cards", async () => {
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          lookupTool(async (_args, caller) => ({
+            text: caller.showConnectorCard("notion"),
+            isError: false,
+          })),
+        ]
+      );
+      const channel = await server.connect("session-a", jest.fn(), "claude");
+
+      const result = await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: {} }));
+
+      expect(result.body).toMatchObject({ result: { content: [{ text: "unattributed" }] } });
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 returns a hosted tool's image after its text", async () => {

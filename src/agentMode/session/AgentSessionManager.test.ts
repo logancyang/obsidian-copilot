@@ -10,6 +10,7 @@ import { playNotificationSound } from "@/utils/notificationSound";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
+import { EMPTY_CONNECTOR_CARDS } from "@/connectors/connectorCards";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -245,6 +246,9 @@ function makeMockSession(overrides: {
     seedSessionUsage: jest.fn(),
     resendSavedHistoryOnNextTurn: jest.fn(),
     offerFeedback: jest.fn(() => "shown"),
+    showConnectorCard: jest.fn(() => "shown"),
+    getConnectorCards: jest.fn(() => EMPTY_CONNECTOR_CARDS),
+    restoreConnectorCards: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -430,6 +434,7 @@ interface ManagerOptions {
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
+  isConnectorConnected?: ManagerDeps["isConnectorConnected"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -460,6 +465,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
       copilotMcpServer: options.copilotMcpServer,
+      isConnectorConnected: options.isConnectorConnected,
     }
   );
   builtManagers.push(manager);
@@ -1017,7 +1023,8 @@ describe("AgentSessionManager", () => {
         expect(copilotMcpServer.connect).toHaveBeenCalledWith(
           session.internalId,
           expect.any(Function),
-          session.backendId
+          session.backendId,
+          expect.any(Function)
         );
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
@@ -1025,6 +1032,22 @@ describe("AgentSessionManager", () => {
         const onOffer = copilotMcpServer.connect.mock.calls[0][1] as (draft: unknown) => string;
         expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
         expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+        const onConnectorCard = copilotMcpServer.connect.mock.calls[0][3] as (
+          serviceId: string
+        ) => string;
+        expect(onConnectorCard("notion")).toBe("shown");
+        expect(session.showConnectorCard).toHaveBeenCalledWith("notion");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 gives each new session the check for whether a service is connected, for its connector card outcomes", async () => {
+        const isConnectorConnected = jest.fn(() => true);
+        const mgr = buildManager({ isConnectorConnected });
+
+        await mgr.createSession();
+
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ isConnectorConnected })
+        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
@@ -1058,6 +1081,25 @@ describe("AgentSessionManager", () => {
         expect(onOffer(FEEDBACK_DRAFT, caller.getBackendSessionId())).toBe("shown");
         expect(caller.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
         expect(newest.offerFeedback).not.toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 shows a shared connection's connector card in the chat the agent stamped on the call, and in none when it names no chat", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({
+          copilotMcpServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        const caller = await mgr.createSession();
+        const newest = await mgr.createSession();
+        const onConnectorCard = copilotMcpServer.connect.mock.calls[1][3] as (
+          serviceId: string,
+          callerSessionId: string | null
+        ) => string;
+
+        expect(onConnectorCard("notion", caller.getBackendSessionId())).toBe("shown");
+        expect(onConnectorCard("notion", null)).toBe("unattributed");
+        expect(caller.showConnectorCard).toHaveBeenCalledTimes(1);
+        expect(newest.showConnectorCard).not.toHaveBeenCalled();
       });
 
       it.each([
@@ -3100,6 +3142,17 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(first);
         expect(mgr.getActiveSession()?.chatInputId).toBe(chatInputId);
         expect(mgr.drafts.get(chatInputId)?.input).toBe("half-written question");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 gives the replacement the replaced chat's connector cards, so a card connected before Reload still reports to the agent", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const cards = [{ serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null }];
+        jest.mocked(first.getConnectorCards).mockReturnValue(cards);
+
+        await mgr.restartBackend("opencode", "connectors changed");
+
+        expect(mgr.getActiveSession()?.restoreConnectorCards).toHaveBeenCalledWith(cards);
       });
 
       it("reports the replaced chat input as live while no session owns it (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {

@@ -451,7 +451,7 @@ describe("connectorTools", () => {
         expect(fake.statusOf("c-notion")).toBe("connected");
       });
 
-      it(`${ISSUE} tells the agent, without flagging a tool failure that would raise a Copilot bug report, that the user must reconnect the service, and shows it as needs login, when its login can't be refreshed`, async () => {
+      it(`${ISSUE} https://github.com/Brevilabs/obsidian-copilot-private/issues/860 tells the agent, without flagging a tool failure that would raise a Copilot bug report, to show the user a Reconnect card, and shows the service as needs login, when its login can't be refreshed`, async () => {
         const fake = setUp();
         await fake.tools.refresh();
         fake.notion.validTokens.clear();
@@ -463,7 +463,7 @@ describe("connectorTools", () => {
           content: [
             {
               type: "text",
-              text: "Notion needs a new login because the login expired or was revoked, which isn't a Copilot failure. Tell the user to reconnect Notion in Settings → Connectors, then try again.",
+              text: 'Notion needs a new login because the login expired or was revoked, which isn\'t a Copilot failure. Call suggest_connector with service "notion" so the user can reconnect it.',
             },
           ],
           isError: false,
@@ -479,7 +479,7 @@ describe("connectorTools", () => {
 
         const result = await fake.tools.call("notion_search_notes", {});
 
-        expect(textOf(result!)).toContain("reconnect Notion in Settings → Connectors");
+        expect(textOf(result!)).toContain('Call suggest_connector with service "notion"');
         expect(fake.statusOf("c-notion")).toBe("needs-login");
       });
 
@@ -490,7 +490,7 @@ describe("connectorTools", () => {
 
         const result = await fake.tools.call("notion_search_notes", {});
 
-        expect(textOf(result!)).toContain("reconnect Notion in Settings → Connectors");
+        expect(textOf(result!)).toContain('Call suggest_connector with service "notion"');
         expect(fake.notion.callsOf("tools/call")).toEqual([]);
       });
 

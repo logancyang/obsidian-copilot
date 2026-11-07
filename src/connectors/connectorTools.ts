@@ -1,5 +1,6 @@
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
 import type { ConnectionManager, ConnectionState } from "@/connectors/connectionManager";
+import { SUGGEST_CONNECTOR_TOOL_NAME } from "@/connectors/connectorCards";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
 import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
 import { nodeFetch } from "@/connectors/nodeFetch";
@@ -222,8 +223,10 @@ export class ConnectorTools {
         this.deps.manager.reportFailure(loaded.connectionId, "needs-login");
         // Agents offer a Copilot bug report for an obsidian-copilot tool that fails, or stops working mid-chat even without isError, but an expired login only needs the user to reconnect.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+        // The agent raises the Reconnect card itself, so the card lands in the chat that hit the failure.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
         return toolText(
-          `${name} needs a new login because the login expired or was revoked, which isn't a Copilot failure. Tell the user to reconnect ${name} in Settings → Connectors, then try again.`,
+          `${name} needs a new login because the login expired or was revoked, which isn't a Copilot failure. Call ${SUGGEST_CONNECTOR_TOOL_NAME} with service "${loaded.service.id}" so the user can reconnect it.`,
           false
         );
       }
