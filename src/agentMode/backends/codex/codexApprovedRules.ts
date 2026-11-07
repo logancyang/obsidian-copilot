@@ -122,7 +122,7 @@ export const codexApprovedRules: ApprovedRuleStore = {
         "Install Codex before removing its approved rules."
       );
       const withoutRule = async () => {
-        const lines = (await fs().readFile(file, "utf8")).match(/[^\n]*\n|[^\n]+/g) ?? [];
+        const lines: string[] = (await fs().readFile(file, "utf8")).match(/[^\n]*\n|[^\n]+/g) ?? [];
         const kept = lines.filter((line) => line.replace(/\n$/, "") !== rule.id);
         return kept.length === lines.length ? null : kept.join("");
       };
