@@ -13,6 +13,7 @@ import {
   FailedLoginStatus,
   LoginButton,
   StatusLine,
+  TextButton,
   WaitingConnectorRow,
 } from "@/connectors/ui/ConnectorRow";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ const CATEGORY_OPTIONS: SelectOption[] = [
 export interface BrowseConnectorsProps {
   snapshot: ConnectorsSnapshot;
   onBack: () => void;
+  onAddCustom: () => void;
   onConnect: (serviceId: string) => void;
   onReconnect: (connectionId: string) => void;
 }
@@ -37,6 +39,7 @@ export interface BrowseConnectorsProps {
 export function BrowseConnectors({
   snapshot,
   onBack,
+  onAddCustom,
   ...actions
 }: BrowseConnectorsProps): React.ReactElement {
   const [query, setQuery] = useState("");
@@ -98,7 +101,15 @@ export function BrowseConnectors({
               Don&apos;t see your service?{" "}
               <a href={connectorRequestUrl()} target="_blank" rel="noopener noreferrer">
                 Request a connector
-              </a>
+              </a>{" "}
+              or{" "}
+              <TextButton
+                className="tw-font-normal tw-underline tw-underline-offset-auto"
+                onClick={onAddCustom}
+              >
+                add a custom connector
+              </TextButton>
+              .
             </p>
           )}
         </>
@@ -117,7 +128,7 @@ export function BrowseConnectors({
   );
 }
 
-interface CatalogRowProps extends Omit<BrowseConnectorsProps, "onBack"> {
+interface CatalogRowProps extends Omit<BrowseConnectorsProps, "onBack" | "onAddCustom"> {
   service: ConnectorCatalogEntry;
 }
 

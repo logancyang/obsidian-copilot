@@ -55,9 +55,34 @@ Your list of connectors follows a synced vault, but each device logs in on its o
 
 At the bottom of **Browse connectors**, click **Request a connector**. If a search finds nothing, click the **Request** button it offers instead. Either link opens a prefilled request on GitHub.
 
+## Add a custom connector
+
+Add a server that isn't in **Browse connectors**, such as one that runs on your computer or takes an API key.
+
+1. Open **Settings → Copilot → Connectors** and click **Add custom connector**, or click **add a custom connector** at the bottom of **Browse connectors**.
+2. Paste the server's config from its README: a whole `"mcpServers"` block, which can add several servers, or one server with a `"name"`. A local server has `command`, `args`, and `env`. A remote server has `url` and `headers`.
+3. Check the command or URL shown below the box, then click **Add**.
+
+Every agent gets the connector's tools in new chats. A chat that is already open shows **settings changed** with **Reload**.
+
+Values in `env` and `headers` stay in this device's keychain and don't sync. Put API keys there, not in `args` or the `url`, which sync with your vault. On each other device, the connector shows **Add API key on this device** until you click **Add API key** and fill in the values there.
+
+| Status                         | What to do                                                        |
+| ------------------------------ | ----------------------------------------------------------------- |
+| **Add API key on this device** | Click **Add API key** and fill in the values.                     |
+| **Key not accepted**           | Click **Add API key** and enter a new key.                        |
+| **Couldn't start**             | Check the command and the reason shown, then click **Try again**. |
+| **Couldn't reach**             | Check the URL, then click **Try again**.                          |
+
+From a custom connector's **⋯** menu:
+
+- **Edit** opens its config with every value blank. Leave a value blank to keep the one on this device. The dialog names any value this device doesn't have yet.
+- **Turn off on this device** stops it on this device only. Your other devices keep using it.
+- **Remove** deletes it from all your devices.
+
 ## A service shows up twice
 
-If you already added a service as an MCP server directly in Claude Code, Codex, or OpenCode, that agent sees the service twice: once from its own setup and once from Copilot. Remove one of them so the agent has a single set of that service's tools.
+If you already added a service or a custom connector's server as an MCP server directly in Claude Code, Codex, or OpenCode, that agent sees it twice: once from its own setup and once from Copilot. Remove one of them so the agent has a single set of its tools.
 
 ## Service names and logos
 

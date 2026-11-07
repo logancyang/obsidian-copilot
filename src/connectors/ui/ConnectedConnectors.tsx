@@ -4,22 +4,25 @@ import type {
   ConnectionStatus,
   ConnectorsSnapshot,
 } from "@/connectors/connectionManager";
+import type {
+  CustomConnectorState,
+  CustomConnectorStatus,
+} from "@/connectors/custom/customConnectors";
 import {
   ConnectorRow,
   FailedLoginStatus,
   LoginButton,
+  RowMenu,
   StatusLine,
   WaitingConnectorRow,
 } from "@/connectors/ui/ConnectorRow";
-import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChevronRight, Lock, MoreHorizontal, Plug, Plus, RotateCw, Unplug } from "lucide-react";
-import React, { useRef, useState } from "react";
+  CustomConnectorRow,
+  type CustomConnectorActions,
+} from "@/connectors/ui/CustomConnectorRow";
+import { Button } from "@/components/ui/button";
+import { ChevronRight, Lock, Plug, Plus, RotateCw, Unplug } from "lucide-react";
+import React, { useState } from "react";
 
 const LIST_CLASS = "tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-2 tw-p-0";
 
@@ -29,31 +32,65 @@ const STATUS_ORDER: Record<ConnectionStatus, number> = {
   connected: 2,
 };
 
+const CUSTOM_STATUS_ORDER: Record<CustomConnectorStatus["kind"], number> = {
+  "couldnt-start": 0,
+  "key-not-accepted": 0,
+  "needs-key": 0,
+  unreachable: 1,
+  connected: 2,
+  starting: 2,
+  idle: 2,
+  off: 3,
+};
+
 export interface ConnectedConnectorsProps {
   snapshot: ConnectorsSnapshot;
+  customConnectors: readonly CustomConnectorState[];
   onBrowse: () => void;
+  onAddCustom: () => void;
   onConnect: (serviceId: string) => void;
   onReconnect: (connectionId: string) => void;
   onCheckAgain: (connectionId: string) => Promise<void>;
   onDisconnect: (connectionId: string) => void;
+  customActions: CustomConnectorActions;
 }
 
 export function ConnectedConnectors({
   snapshot,
+  customConnectors,
   onBrowse,
+  onAddCustom,
   onConnect,
+  customActions,
   ...actions
 }: ConnectedConnectorsProps): React.ReactElement {
-  const listed = snapshot.connections
-    .flatMap((connection) => {
+  const listed = [
+    ...snapshot.connections.flatMap((connection) => {
       const service = CONNECTOR_SERVICES.get(connection.serviceId);
-      return service ? [{ connection, service }] : [];
-    })
-    .sort(
-      (a, b) =>
-        STATUS_ORDER[a.connection.status] - STATUS_ORDER[b.connection.status] ||
-        a.service.name.localeCompare(b.service.name)
-    );
+      if (!service) return [];
+      const row = (
+        <ConnectedRow
+          key={connection.id}
+          connection={connection}
+          service={service}
+          snapshot={snapshot}
+          {...actions}
+        />
+      );
+      return [{ order: STATUS_ORDER[connection.status], name: service.name, row }];
+    }),
+    ...customConnectors.map((connector) => ({
+      order: CUSTOM_STATUS_ORDER[connector.status.kind],
+      name: connector.config.name,
+      row: (
+        <CustomConnectorRow
+          key={`custom-${connector.config.id}`}
+          connector={connector}
+          {...customActions}
+        />
+      ),
+    })),
+  ].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 
   const firstLogin = firstLoginRow(snapshot, onConnect);
 
@@ -61,7 +98,7 @@ export function ConnectedConnectors({
     return (
       <>
         {firstLogin && <ul className={LIST_CLASS}>{firstLogin}</ul>}
-        <ConnectorsEmptyState onBrowse={onBrowse} />
+        <ConnectorsEmptyState onBrowse={onBrowse} onAddCustom={onAddCustom} />
       </>
     );
   }
@@ -82,16 +119,12 @@ export function ConnectedConnectors({
       </div>
       <ul className={LIST_CLASS}>
         {firstLogin}
-        {listed.map(({ connection, service }) => (
-          <ConnectedRow
-            key={connection.id}
-            connection={connection}
-            service={service}
-            snapshot={snapshot}
-            {...actions}
-          />
-        ))}
+        {listed.map(({ row }) => row)}
       </ul>
+      <Button variant="ghost2" size="sm" className="tw-self-start" onClick={onAddCustom}>
+        <Plus className="tw-size-icon-xs" />
+        Add custom connector
+      </Button>
     </section>
   );
 }
@@ -125,7 +158,10 @@ function firstLoginRow(
   );
 }
 
-interface ConnectedRowProps extends Omit<ConnectedConnectorsProps, "onBrowse" | "onConnect"> {
+interface ConnectedRowProps extends Pick<
+  ConnectedConnectorsProps,
+  "snapshot" | "onReconnect" | "onCheckAgain" | "onDisconnect"
+> {
   connection: ConnectionState;
   service: ConnectorCatalogEntry;
 }
@@ -138,9 +174,6 @@ function ConnectedRow({
   onCheckAgain,
   onDisconnect,
 }: ConnectedRowProps): React.ReactElement {
-  const menuContainer = useRef<HTMLDivElement>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const disconnectOnMenuClose = useRef(false);
   // The check reads the stored login before contacting the service, so the row would show Connected while the service is still down.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
   const [checking, setChecking] = useState(false);
@@ -202,48 +235,24 @@ function ConnectedRow({
       actions={
         <>
           {action}
-          <div ref={menuContainer}>
-            <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost2"
-                  size="icon"
-                  aria-label={`More actions for ${service.name}`}
-                  title="More actions"
-                >
-                  <MoreHorizontal className="tw-size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              {/* A menu outside the settings modal loses focus to the modal, which closes it at once.
-                https://github.com/Brevilabs/obsidian-copilot-private/issues/858 */}
-              <DropdownMenuContent
-                align="end"
-                container={menuContainer.current}
-                onCloseAutoFocus={(event) => {
-                  if (!disconnectOnMenuClose.current) return;
-                  disconnectOnMenuClose.current = false;
-                  // A confirm opened while the menu was still mounted lost focus to the menu, then to the settings popout, so Enter did nothing.
-                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
-                  event.preventDefault();
-                  onDisconnect(connection.id);
-                }}
-              >
-                <DropdownMenuItem disabled={blockedBy !== null} onSelect={reconnect}>
-                  <RotateCw />
-                  Reconnect
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="tw-text-error focus:tw-text-error"
-                  onSelect={() => {
-                    disconnectOnMenuClose.current = true;
-                  }}
-                >
-                  <Unplug />
-                  Disconnect
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <RowMenu
+            name={service.name}
+            items={[
+              {
+                label: "Reconnect",
+                icon: <RotateCw />,
+                onSelect: reconnect,
+                disabled: blockedBy !== null,
+              },
+              {
+                label: "Disconnect",
+                icon: <Unplug />,
+                onSelect: () => onDisconnect(connection.id),
+                opensDialog: true,
+                destructive: true,
+              },
+            ]}
+          />
         </>
       }
     />
@@ -252,9 +261,13 @@ function ConnectedRow({
 
 interface ConnectorsEmptyStateProps {
   onBrowse: () => void;
+  onAddCustom: () => void;
 }
 
-function ConnectorsEmptyState({ onBrowse }: ConnectorsEmptyStateProps): React.ReactElement {
+function ConnectorsEmptyState({
+  onBrowse,
+  onAddCustom,
+}: ConnectorsEmptyStateProps): React.ReactElement {
   return (
     <section className="tw-flex tw-flex-col tw-items-center tw-gap-3 tw-px-4 tw-py-12 tw-text-center">
       <div
@@ -270,10 +283,15 @@ function ConnectorsEmptyState({ onBrowse }: ConnectorsEmptyStateProps): React.Re
         Let Claude, Codex and OpenCode read and update Notion, Linear, Jira, Todoist and more. Log
         in once and every agent can use it.
       </p>
-      <Button className="tw-mt-2" onClick={onBrowse}>
-        Browse connectors
-        <ChevronRight className="tw-size-4" />
-      </Button>
+      <div className="tw-mt-2 tw-flex tw-max-w-full tw-flex-wrap tw-justify-center tw-gap-2">
+        <Button className="tw-max-w-full" onClick={onBrowse}>
+          Browse connectors
+          <ChevronRight className="tw-size-4" />
+        </Button>
+        <Button variant="secondary" className="tw-max-w-full" onClick={onAddCustom}>
+          <span className="tw-truncate">Add custom connector</span>
+        </Button>
+      </div>
       <p className="tw-m-0 tw-mt-1 tw-flex tw-items-center tw-gap-1.5 tw-text-ui-smaller tw-text-muted">
         <Lock aria-hidden="true" className="tw-size-3" />
         Logins stay in this device&apos;s keychain. Copilot never sees your password.
