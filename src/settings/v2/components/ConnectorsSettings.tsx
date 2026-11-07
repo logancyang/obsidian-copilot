@@ -6,6 +6,7 @@ import {
   useIsConnectorsEnabled,
 } from "@/connectors/connectorsEntitlement";
 import type { LoginOutcome } from "@/connectors/oauth/connectorAuth";
+import { BrowseConnectors, type BrowseConnectorsProps } from "@/connectors/ui/BrowseConnectors";
 import { ConnectedConnectors } from "@/connectors/ui/ConnectedConnectors";
 import { ConnectorsUpsell } from "@/connectors/ui/ConnectorsUpsell";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
@@ -16,6 +17,7 @@ import { useTab } from "@/contexts/TabContext";
 import { navigateToPlusPage } from "@/plusUtils";
 import { err2String } from "@/utils";
 import { Notice } from "obsidian";
+import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 import React, { useEffect, useRef } from "react";
 import { DesktopOnlySettingsPanel } from "./DesktopOnlySettingsPanel";
 
@@ -37,6 +39,7 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
   const { setSelectedTab } = useTab();
   const snapshot = useConnectorsSnapshot(manager);
   const enabled = useIsConnectorsEnabled();
+  const subPage = useSettingsSubPage();
   const loginStartedHere = useRef<WaitingLogin | null>(null);
 
   useEffect(
@@ -70,12 +73,29 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
   };
   const serviceIdOf = (connectionId: string) =>
     snapshot.connections.find(({ id }) => id === connectionId)?.serviceId ?? "";
+  const connect = (serviceId: string) => runLogin(() => manager.connect(serviceId));
+  const reconnect = (connectionId: string) => runLogin(() => manager.reconnect(connectionId));
+  const openBrowse = () => {
+    manager.dismissFailedLogin();
+    subPage.open(
+      <BrowsePage
+        manager={manager}
+        onBack={() => {
+          manager.dismissFailedLogin();
+          subPage.close();
+        }}
+        onConnect={connect}
+        onReconnect={reconnect}
+      />
+    );
+  };
 
   return (
     <ConnectedConnectors
       snapshot={snapshot}
-      onConnect={(serviceId) => runLogin(() => manager.connect(serviceId))}
-      onReconnect={(connectionId) => runLogin(() => manager.reconnect(connectionId))}
+      onBrowse={openBrowse}
+      onConnect={connect}
+      onReconnect={reconnect}
       onCheckAgain={(connectionId) => tools.checkAgain(connectionId)}
       onDisconnect={(connectionId) => {
         const service = CONNECTOR_SERVICES.get(serviceIdOf(connectionId));
@@ -93,4 +113,13 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
       }}
     />
   );
+}
+
+interface BrowsePageProps extends Omit<BrowseConnectorsProps, "snapshot"> {
+  manager: ConnectionManager;
+}
+
+function BrowsePage({ manager, ...props }: BrowsePageProps): React.ReactElement | null {
+  const snapshot = useConnectorsSnapshot(manager);
+  return snapshot && <BrowseConnectors snapshot={snapshot} {...props} />;
 }

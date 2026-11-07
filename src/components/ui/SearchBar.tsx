@@ -29,7 +29,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
         autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={cn("tw-pr-10", inputClassName)}
+        className={cn("!tw-pr-10", inputClassName)}
       />
       {value && (
         <Button
