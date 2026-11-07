@@ -27,17 +27,21 @@ const COMMIT = 'prefix_rule(pattern=["git", "commit", "-m", "it\'s done"], decis
 const GITHUB_HOST =
   'network_rule(host="api.github.com", protocol="https", decision="allow", justification="Allow https_connect access to api.github.com")';
 
-const FAKE_BUNDLED_CODEX_RUNTIME = `#!/bin/sh
-printf '%s\\n' "$@" "CODEX_HOME=$CODEX_HOME" "PATH=$PATH" > "$FAKE_CODEX_LOG"
-cp "$4" "$FAKE_CODEX_LOG.checked"
-if [ -n "$FAKE_CODEX_SAVES" ]; then
-  printf '%s\\n' "$FAKE_CODEX_SAVES" >> "$CODEX_HOME/rules/default.rules"
-fi
-if [ -n "$FAKE_CODEX_FAIL" ]; then
-  echo "starlark error: Parse error: unexpected new line --> $4:2:1" >&2
-  exit 1
-fi
-echo '{"matchedRules":[]}'
+const FAKE_CODEX = `#!/usr/bin/env node
+const fs = require("fs");
+const path = require("path");
+const args = process.argv.slice(2);
+const env = process.env;
+fs.writeFileSync(env.FAKE_CODEX_LOG, [...args, "CODEX_HOME=" + env.CODEX_HOME, "PATH=" + env.PATH, ""].join("\\n"));
+fs.copyFileSync(args[3], env.FAKE_CODEX_LOG + ".checked");
+if (env.FAKE_CODEX_SAVES) {
+  fs.appendFileSync(path.join(env.CODEX_HOME, "rules", "default.rules"), env.FAKE_CODEX_SAVES + "\\n");
+}
+if (env.FAKE_CODEX_FAIL) {
+  process.stderr.write("starlark error: Parse error: unexpected new line --> " + args[3] + ":2:1\\n");
+  process.exit(1);
+}
+process.stdout.write('{"matchedRules":[]}\\n');
 `;
 
 describe("codexApprovedRules", () => {
@@ -46,7 +50,7 @@ describe("codexApprovedRules", () => {
   let userHome: string;
   let savedInheritedHome: string | undefined;
   let savedHome: string | undefined;
-  let bundle: string;
+  let install: string;
   let checkLog: string;
   const rulesFile = () => path.join(codexHome, "rules", "default.rules");
   const writeRules = (text: string) => {
@@ -60,8 +64,15 @@ describe("codexApprovedRules", () => {
         ...getSettings().agentMode,
         backends: {
           codex: {
-            binaryPath: path.join(bundle, "codex-acp"),
-            binarySource: "managed",
+            binaryPath: path.join(
+              install,
+              "node_modules",
+              "@agentclientprotocol",
+              "codex-acp",
+              "dist",
+              "index.js"
+            ),
+            binarySource: "custom",
             envOverrides: { FAKE_CODEX_LOG: checkLog, ...envOverrides },
           },
         },
@@ -77,21 +88,22 @@ describe("codexApprovedRules", () => {
     process.env.HOME = userHome;
     savedInheritedHome = process.env.CODEX_HOME;
     process.env.CODEX_HOME = inheritedHome;
-    bundle = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bundle-"));
-    checkLog = path.join(bundle, "check.log");
-    fs.writeFileSync(path.join(bundle, "codex-acp"), "", { mode: 0o755 });
+    install = fs.mkdtempSync(path.join(os.tmpdir(), "codex-install-"));
+    checkLog = path.join(install, "check.log");
+    const adapter = path.join(install, "node_modules", "@agentclientprotocol", "codex-acp");
+    fs.mkdirSync(path.join(adapter, "dist"), { recursive: true });
+    fs.writeFileSync(path.join(adapter, "dist", "index.js"), "");
     fs.writeFileSync(
-      path.join(bundle, "provenance.json"),
-      JSON.stringify({ acpVersion: "2.2.2", target: `${process.platform}-${process.arch}` })
+      path.join(adapter, "package.json"),
+      JSON.stringify({
+        name: "@agentclientprotocol/codex-acp",
+        version: "2.2.2",
+        bin: { "codex-acp": "dist/index.js" },
+      })
     );
-    fs.mkdirSync(path.join(bundle, "codex-runtime", "bin"), { recursive: true });
-    fs.writeFileSync(
-      path.join(bundle, "codex-runtime", "bin", "codex"),
-      FAKE_BUNDLED_CODEX_RUNTIME,
-      {
-        mode: 0o755,
-      }
-    );
+    const codex = path.join(adapter, "node_modules", "@openai", "codex", "bin", "codex.js");
+    fs.mkdirSync(path.dirname(codex), { recursive: true });
+    fs.writeFileSync(codex, FAKE_CODEX, { mode: 0o755 });
     resetSettings();
     configure();
   });
@@ -104,7 +116,7 @@ describe("codexApprovedRules", () => {
     fs.rmSync(codexHome, { recursive: true, force: true });
     fs.rmSync(inheritedHome, { recursive: true, force: true });
     fs.rmSync(userHome, { recursive: true, force: true });
-    fs.rmSync(bundle, { recursive: true, force: true });
+    fs.rmSync(install, { recursive: true, force: true });
   });
 
   describe("list()", () => {
@@ -155,14 +167,18 @@ describe("codexApprovedRules", () => {
       }
       delete process.env.CODEX_HOME;
       configure({ HOME: overriddenHome });
-      const listedFile = async () => (await codexApprovedRules.list(plugin))[0].appliesTo;
+      const listedFileOn = async (platform: NodeJS.Platform) => {
+        const host = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+        Object.defineProperty(process, "platform", { value: platform });
+        try {
+          return (await codexApprovedRules.list(plugin))[0].appliesTo;
+        } finally {
+          Object.defineProperty(process, "platform", host);
+        }
+      };
 
-      const onMacOrLinux = await listedFile();
-      const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
-      Object.defineProperty(process, "platform", { value: "win32" });
-      const onWindows = await listedFile().finally(() =>
-        Object.defineProperty(process, "platform", platform)
-      );
+      const onMacOrLinux = await listedFileOn("linux");
+      const onWindows = await listedFileOn("win32");
 
       expect([onMacOrLinux, onWindows]).toEqual([
         { kind: "file", path: path.join(overriddenHome, ".codex", "rules", "default.rules") },
