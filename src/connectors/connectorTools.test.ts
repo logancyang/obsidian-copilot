@@ -351,6 +351,15 @@ describe("connectorTools", () => {
         expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
       });
 
+      it(`${TOOLS_PAGE_ISSUE} lists a service once when Settings asks for its tools while a Try again is still listing them`, async () => {
+        const fake = setUp();
+
+        await Promise.all([fake.tools.checkAgain("c-notion"), fake.tools.loadConnected()]);
+
+        expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
+        expect(fake.tools.getSnapshot().get("c-notion")).toHaveLength(2);
+      });
+
       it("drops a disconnected service's tools", async () => {
         const fake = setUp();
         await fake.tools.loadConnected();

@@ -114,6 +114,7 @@ class SessionEndedError extends Error {}
 export class ConnectorTools {
   private readonly services: ReadonlyMap<string, ConnectorCatalogEntry>;
   private readonly loaded = new Map<string, LoadedService>();
+  private readonly loading = new Map<string, Promise<void>>();
   private readonly listings = new Map<string, { backendId: string; ids: ReadonlySet<string> }>();
   private readonly listeners = new Set<() => void>();
   private toolsByConnection: ReadonlyMap<string, readonly ServiceToolInfo[]> = new Map();
@@ -255,7 +256,18 @@ export class ConnectorTools {
     };
   }
 
-  private async load(connection: ConnectionState): Promise<void> {
+  // Settings lists a service again when its row turns connected, which a Try again in flight already does.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+  private load(connection: ConnectionState): Promise<void> {
+    let loading = this.loading.get(connection.id);
+    if (!loading) {
+      loading = this.list(connection).finally(() => this.loading.delete(connection.id));
+      this.loading.set(connection.id, loading);
+    }
+    return loading;
+  }
+
+  private async list(connection: ConnectionState): Promise<void> {
     const service = this.services.get(connection.serviceId);
     if (!service) return;
     const session = new ServiceSession(
