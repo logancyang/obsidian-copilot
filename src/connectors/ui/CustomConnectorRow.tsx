@@ -2,7 +2,13 @@ import type {
   CustomConnectorState,
   CustomConnectorStatus,
 } from "@/connectors/custom/customConnectors";
-import { ConnectorRow, RowMenu, StatusLine, type StatusTone } from "@/connectors/ui/ConnectorRow";
+import {
+  ConnectedStatus,
+  ConnectorRow,
+  RowMenu,
+  StatusLine,
+  type StatusTone,
+} from "@/connectors/ui/ConnectorRow";
 import { Button } from "@/components/ui/button";
 import { Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import React from "react";
@@ -12,6 +18,7 @@ export interface CustomConnectorActions {
   onTryAgain: () => void;
   onSetTurnedOff: (id: string, off: boolean) => void;
   onRemove: (id: string) => void;
+  onShowTools: (id: string) => void;
 }
 
 interface CustomConnectorRowProps extends CustomConnectorActions {
@@ -24,6 +31,7 @@ export function CustomConnectorRow({
   onTryAgain,
   onSetTurnedOff,
   onRemove,
+  onShowTools,
 }: CustomConnectorRowProps): React.ReactElement {
   const [tone, text] = customStatusText(status);
   let action: React.ReactNode = null;
@@ -47,13 +55,20 @@ export function CustomConnectorRow({
       service={config}
       tag="Custom"
       detail={
-        <StatusLine tone={tone}>
-          {/* A remote server's error can be a whole HTTP error page.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/862 */}
-          <span className="tw-block tw-truncate" title={text}>
-            {text}
-          </span>
-        </StatusLine>
+        status.kind === "connected" ? (
+          <ConnectedStatus
+            toolCount={status.tools.length}
+            onShowTools={() => onShowTools(config.id)}
+          />
+        ) : (
+          <StatusLine tone={tone}>
+            {/* A remote server's error can be a whole HTTP error page.
+              https://github.com/Brevilabs/obsidian-copilot-private/issues/862 */}
+            <span className="tw-block tw-truncate" title={text}>
+              {text}
+            </span>
+          </StatusLine>
+        )
       }
       actions={
         <>
@@ -90,7 +105,10 @@ export function CustomConnectorRow({
 export function customStatusText(status: CustomConnectorStatus): [StatusTone, string] {
   switch (status.kind) {
     case "connected":
-      return ["ok", `${status.toolCount} ${status.toolCount === 1 ? "tool" : "tools"}`];
+      return [
+        "ok",
+        `Connected · ${status.tools.length} ${status.tools.length === 1 ? "tool" : "tools"}`,
+      ];
     case "starting":
       return ["idle", "Starting…"];
     case "idle":

@@ -8,6 +8,7 @@ import {
   ConnectedConnectors,
   type ConnectedConnectorsProps,
 } from "@/connectors/ui/ConnectedConnectors";
+import { FAKE_CUSTOM_TOOLS, NOTION_TOOLS } from "@/connectors/ui/testing/serviceTools";
 import type { Meta, StoryObj } from "@/lib/story";
 
 const EVERY_STATUS: ConnectionState[] = [
@@ -21,7 +22,11 @@ const EVERY_STATUS: ConnectionState[] = [
 const CUSTOM_EVERY_STATUS: CustomConnectorState[] = [
   {
     config: { id: "github", name: "GitHub", command: "npx", args: [], envNames: ["TOKEN"] },
-    status: { kind: "connected", toolCount: 26 },
+    status: { kind: "connected", tools: [...NOTION_TOOLS, ...NOTION_TOOLS, ...FAKE_CUSTOM_TOOLS] },
+  },
+  {
+    config: { id: "time", name: "Time", command: "uvx", args: [], envNames: [] },
+    status: { kind: "connected", tools: [] },
   },
   {
     config: { id: "memory", name: "Memory", command: "npx", args: [], envNames: [] },
@@ -83,6 +88,7 @@ const meta = {
   args: {
     snapshot: snapshotOf(),
     customConnectors: [],
+    toolsByConnection: new Map([["c1", NOTION_TOOLS]]),
     onBrowse: () => undefined,
     onAddCustom: () => undefined,
     customActions: {
@@ -90,11 +96,13 @@ const meta = {
       onTryAgain: () => undefined,
       onSetTurnedOff: () => undefined,
       onRemove: () => undefined,
+      onShowTools: () => undefined,
     },
     onConnect: () => undefined,
     onReconnect: () => undefined,
     onCheckAgain: async () => undefined,
     onDisconnect: () => undefined,
+    onShowTools: () => undefined,
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
 } satisfies Meta<ConnectedConnectorsProps>;

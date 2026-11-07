@@ -123,8 +123,8 @@ export function CustomConnectorChatCardView({
   if (status?.kind === "connected") {
     return (
       <ConnectedChatCard>
-        {name} connected with {status.toolCount} {status.toolCount === 1 ? "tool" : "tools"}. Every
-        agent can use it now.
+        {name} connected with {status.tools.length} {status.tools.length === 1 ? "tool" : "tools"}.
+        Every agent can use it now.
       </ConnectedChatCard>
     );
   }

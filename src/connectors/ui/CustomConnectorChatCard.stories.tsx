@@ -58,7 +58,7 @@ export const Starting: Story = {
 };
 
 export const Connected: Story = {
-  args: { status: { kind: "connected", toolCount: 2 } },
+  args: { status: { kind: "connected", tools: [{ name: "t1" }, { name: "t2" }] } },
 };
 
 export const CouldNotStart: Story = {
