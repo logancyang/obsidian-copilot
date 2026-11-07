@@ -80,6 +80,39 @@ export const WebSearchQuery: StoryObj<ToolPermissionCardProps> = {
   },
 };
 
+export const OpencodeCopilotTool: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Fake Remote · Remember",
+        kind: "other",
+        rawInput: {
+          code: 'const res = await tools["obsidian-copilot"].fakeremote_remember({ fact: "Orion ships Friday" });\nreturn res;',
+        },
+      },
+    },
+  },
+};
+
+export const OpencodeSeveralTools: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    toolName: "execute",
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "execute",
+        kind: "other",
+        rawInput: {
+          code: 'return Promise.all([\n  tools["obsidian-copilot"].fakeremote_echo({ text: "Orion" }),\n  tools["obsidian-copilot"].fakeremote_remember({ fact: "Orion ships Friday" }),\n]);',
+        },
+      },
+    },
+  },
+};
+
 const codexCommand =
   'python3 -c \'from pathlib import Path; p = Path("/Users/me/Vault/launch-brief.md"); p.write_text("Review on Friday")\'';
 

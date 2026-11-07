@@ -117,6 +117,24 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       arguments: { title: "Orion retro" },
     },
   }),
+  say("OpenCode's execute code that calls one Copilot tool is named after that tool."),
+  tool("opencode-notion-create", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    input: {
+      code: 'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;',
+    },
+  }),
+  say("Code that calls several tools keeps OpenCode's execute name."),
+  tool("opencode-notion-both", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    input: {
+      code: 'return Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "Orion" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "Orion" }),\n]);',
+    },
+  }),
   say("Another server's tools keep the server's name."),
   tool("context7-docs", "query-docs", { mcpServer: "context7" }),
 ];
