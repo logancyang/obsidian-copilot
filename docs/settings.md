@@ -269,6 +269,10 @@ On Windows, creating links can require administrator access or **Settings → Pr
 
 See [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
+## Connectors
+
+The tab lists the services you connected and their status. Click **Browse connectors** to add one. See [Connectors](connectors.md).
+
 ## Command
 
 Custom commands are reusable prompt files loaded from `<Copilot folder>/copilot-custom-prompts/`. The Command tab and command execution do not require a Copilot license, but the selected model or hosted service can have its own cost. Editing the Markdown files directly updates this tab.
