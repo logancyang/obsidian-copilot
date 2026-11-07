@@ -5,7 +5,12 @@ import {
   useIsConnectorsEnabled,
 } from "@/connectors/connectorsEntitlement";
 import type { ConnectorLoginTarget, LoginOutcome } from "@/connectors/oauth/connectorAuth";
-import { ConnectorChatCard, type ConnectorChatCardProps } from "@/connectors/ui/ConnectorChatCard";
+import {
+  ChatCard,
+  ConnectedChatCard,
+  ConnectorChatCard,
+  type ConnectorChatCardProps,
+} from "@/connectors/ui/ConnectorChatCard";
 import { AppContext } from "@/context";
 import { navigateToPlusPage } from "@/plusUtils";
 import { setSettings } from "@/settings/model";
@@ -208,6 +213,36 @@ describe("ConnectorChatCard", () => {
       fireEvent.click(button("See plans"));
 
       expect(navigateToPlusPage).toHaveBeenCalledWith("connectors_chat");
+    });
+  });
+
+  describe("ChatCard()", () => {
+    it("shows the service's tile, title, detail, actions and footer", () => {
+      render(
+        <ChatCard
+          service={{ name: "Fake Notes" }}
+          title="Add custom connector"
+          detail="Local · node server.mjs"
+          actions={<button type="button">Act</button>}
+          footer={<span>Footer</span>}
+        />
+      );
+
+      expect(screen.getByText("F")).toBeTruthy();
+      expect(screen.getByText("Add custom connector")).toBeTruthy();
+      expect(screen.getByText("Local · node server.mjs")).toBeTruthy();
+      expect(button("Act")).toBeTruthy();
+      expect(screen.getByText("Footer")).toBeTruthy();
+    });
+  });
+
+  describe("ConnectedChatCard()", () => {
+    it("shows its text as a success note", () => {
+      render(<ConnectedChatCard>Fake Notes connected.</ConnectedChatCard>);
+
+      expect(screen.getByText("Fake Notes connected.").parentElement?.className).toContain(
+        "tw-bg-success"
+      );
     });
   });
 });

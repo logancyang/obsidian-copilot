@@ -4,7 +4,9 @@ import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { FeedbackCard, findTrailingCardIndex } from "@/agentMode/ui/FeedbackCard";
 import type { ConnectionManager } from "@/connectors/connectionManager";
-import type { ConnectorCard } from "@/connectors/connectorCards";
+import { connectorCardKey, type ConnectorCard } from "@/connectors/connectorCards";
+import type { CustomConnectors } from "@/connectors/custom/customConnectors";
+import { CustomConnectorChatCard } from "@/connectors/ui/CustomConnectorChatCard";
 import { ConnectorChatCard } from "@/connectors/ui/ConnectorChatCard";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
@@ -51,6 +53,7 @@ interface AgentChatMessagesProps {
 export interface ChatConnectors {
   cards: readonly ConnectorCard[];
   manager: ConnectionManager;
+  customConnectors?: CustomConnectors;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -275,24 +278,38 @@ const AgentChatMessages = memo(
     const connectorCardsByIndex = useMemo(() => {
       const byIndex = new Map<number, React.ReactNode[]>();
       if (!connectors) return byIndex;
-      const { cards, manager } = connectors;
+      const { cards, manager, customConnectors } = connectors;
       const userMessageIds = messages
         .filter((message) => message.sender === USER_SENDER)
         .map((message) => message.id);
       for (const card of cards) {
-        if (card.dismissed || !("serviceId" in card)) continue;
+        if (card.dismissed) continue;
         const index = findTrailingCardIndex(
           visible,
           userMessageIds[card.afterUserTurn - 1] ?? null
         );
+        const key = connectorCardKey(card);
+        const onDismiss = () => chatBackend.dismissConnectorCard(key);
         byIndex.set(index, [
           ...(byIndex.get(index) ?? []),
-          <ConnectorChatCard
-            key={card.serviceId}
-            serviceId={card.serviceId}
-            manager={manager}
-            onDismiss={() => chatBackend.dismissConnectorCard(card.serviceId)}
-          />,
+          "serviceId" in card ? (
+            <ConnectorChatCard
+              key={key}
+              serviceId={card.serviceId}
+              manager={manager}
+              onDismiss={onDismiss}
+            />
+          ) : (
+            customConnectors && (
+              <CustomConnectorChatCard
+                key={key}
+                card={card}
+                customConnectors={customConnectors}
+                onDismiss={onDismiss}
+                onAdded={(connectorId) => chatBackend.markConnectorCardAdded(key, connectorId)}
+              />
+            )
+          ),
         ]);
       }
       return byIndex;
