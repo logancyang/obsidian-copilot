@@ -5,6 +5,10 @@ import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
 export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
+export const COPILOT_OAUTH_CLIENT_METADATA_URL =
+  "https://www.obsidiancopilot.com/oauth/client-metadata.json";
+export const COPILOT_OAUTH_CLIENT_URI = "https://www.obsidiancopilot.com";
+export const COPILOT_OAUTH_LOGO_URI = "https://www.obsidiancopilot.com/oauth/copilot-logo.png";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";

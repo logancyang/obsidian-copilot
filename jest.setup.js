@@ -1,6 +1,11 @@
 import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
 
+// Node-environment suites (real loopback HTTP and Web Crypto) run plugin code that schedules timers on `window`.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+// eslint-disable-next-line obsidianmd/no-global-this -- jest's node environment has no window to use instead
+if (typeof window === "undefined") global.window = global;
+
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;
 
