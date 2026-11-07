@@ -525,23 +525,18 @@ describe("connectorTools", () => {
         expect(fake.notion.callsOf("initialize")).toHaveLength(2);
       });
 
-      it(`${ISSUE} cuts a result over 50,000 characters and tells the agent how to get the rest`, async () => {
+      it("returns a very large result whole, leaving its size to the agent", async () => {
+        const content = [
+          { type: "text", text: "a".repeat(400_000) },
+          { type: "image", data: "aW1n", mimeType: "image/png" },
+        ];
         const fake = setUp();
-        fake.notion.answer = () => ({
-          content: [
-            { type: "text", text: "a".repeat(40_000) },
-            { type: "text", text: "b".repeat(40_000) },
-          ],
-        });
+        fake.notion.answer = () => ({ content });
         await fake.tools.refresh();
 
         const result = await fake.tools.call("notion_search_notes", {});
 
-        expect(result!.content).toHaveLength(1);
-        expect(textOf(result!)).toBe(
-          `${"a".repeat(40_000)}\n${"b".repeat(9_999)}\n\n[Copilot cut this Notion result at 50,000 characters. Ask for less, for example with a narrower query or a smaller page.]`
-        );
-        expect(result!.isError).toBe(false);
+        expect(result).toEqual({ content, isError: false });
       });
 
       it("returns null for a name no connected service lists, so Copilot's server answers it as unknown", async () => {
