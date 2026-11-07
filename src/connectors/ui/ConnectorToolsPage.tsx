@@ -32,7 +32,10 @@ export function ConnectorToolsPage({
   onBack,
 }: ConnectorToolsPageProps): React.ReactElement {
   const [query, setQuery] = useState("");
-  const readable = useMemo(() => tools?.map(toReadableTool) ?? [], [tools]);
+  const readable = useMemo(
+    () => tools?.map((tool) => toReadableTool(tool, service.name)) ?? [],
+    [tools, service.name]
+  );
   const needle = query.trim().toLowerCase();
   const found = readable.filter(
     ({ name, description }) =>
@@ -73,17 +76,27 @@ export function ConnectorToolsPage({
 
 // A service names its tools for agents, may describe them in long markdown, and isn't bound to send text, so the page shows a title or the name in words, and the description's first paragraph as plain text.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
-function toReadableTool(tool: ServiceToolInfo): ReadableTool {
+function toReadableTool(tool: ServiceToolInfo, serviceName: string): ReadableTool {
   const title = [tool.title, tool.annotations?.title].find(
     (candidate) => typeof candidate === "string" && candidate.trim()
   );
   const description = typeof tool.description === "string" ? tool.description.trim() : "";
   return {
     key: tool.name,
-    name: title?.trim() ?? humanizeToolName(tool.name),
+    name: title?.trim() ?? nameInWords(tool.name, serviceName),
     description: description.split(/\n\s*\n/)[0],
     readOnly: tool.annotations?.readOnlyHint === true,
   };
+}
+
+// Services such as Notion prefix every tool name with their own name, which the page title already gives.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+function nameInWords(toolName: string, serviceName: string): string {
+  const words = humanizeToolName(toolName);
+  const prefix = `${serviceName.toLowerCase()} `;
+  return words.toLowerCase().startsWith(prefix)
+    ? humanizeToolName(words.slice(prefix.length))
+    : words;
 }
 
 interface ToolGroupProps {

@@ -51,16 +51,12 @@ describe("ConnectorToolsPage", () => {
       expect(toolNames(/^Read only/)).toEqual([
         "Search Notion and connected sources",
         "Fetch a page or database",
-        "Notion get users",
-        "Notion get comments",
-        "Notion get teams",
+        "Get users",
+        "Get comments",
+        "Get teams",
       ]);
       expect(screen.getByRole("heading", { name: "Can make changes 3" })).toBeTruthy();
-      expect(toolNames(/^Can make changes/)).toEqual([
-        "Notion create pages",
-        "Notion update page",
-        "Notion move pages",
-      ]);
+      expect(toolNames(/^Can make changes/)).toEqual(["Create pages", "Update page", "Move pages"]);
     });
 
     it(`names a tool by its own title, then its annotation title, and otherwise turns its name into words: ${ISSUE}`, () => {
@@ -77,6 +73,19 @@ describe("ConnectorToolsPage", () => {
         "Annotation title",
         "Get confluence page",
       ]);
+    });
+
+    it(`drops the service's name from the front of a tool name it turns into words, since the page already names the service: ${ISSUE}`, () => {
+      renderPage({
+        service: { name: "Google Drive" },
+        tools: [
+          { name: "google_drive_search" },
+          { name: "google-drive" },
+          { name: "googleSearch" },
+        ],
+      });
+
+      expect(toolNames(/^Can make changes/)).toEqual(["Search", "Google drive", "Google search"]);
     });
 
     it(`shows only the first paragraph of a description, as plain text without its markdown rendered: ${ISSUE}`, () => {
@@ -137,15 +146,15 @@ describe("ConnectorToolsPage", () => {
       });
 
       expect(screen.getByRole("heading", { name: "Read only 1" })).toBeTruthy();
-      expect(toolNames(/^Read only/)).toEqual(["Notion get comments"]);
-      expect(toolNames(/^Can make changes/)).toEqual(["Notion create comment"]);
+      expect(toolNames(/^Read only/)).toEqual(["Get comments"]);
+      expect(toolNames(/^Can make changes/)).toEqual(["Create comment"]);
 
       fireEvent.change(screen.getByPlaceholderText("Search tools"), {
         target: { value: "PARENT" },
       });
 
       expect(screen.queryByRole("heading", { name: /^Read only/ })).toBeNull();
-      expect(toolNames(/^Can make changes/)).toEqual(["Notion create pages", "Notion move pages"]);
+      expect(toolNames(/^Can make changes/)).toEqual(["Create pages", "Move pages"]);
     });
 
     it("says when no tool matches the search", () => {
