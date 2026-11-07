@@ -75,7 +75,7 @@ describe("ConnectedConnectors", () => {
       expect(onBrowse).toHaveBeenCalledTimes(1);
     });
 
-    it("counts the connected services and lists those needing a login first, then unreachable ones, then the rest by name", () => {
+    it("titles the list Connectors and lists those needing a login first, then unreachable ones, then the rest by name", () => {
       renderList({
         snapshot: snapshotOf([
           { id: "c1", serviceId: "notion", status: "connected", accountLabel: "Acme workspace" },
@@ -85,12 +85,9 @@ describe("ConnectedConnectors", () => {
         ]),
       });
 
-      expect(screen.getByRole("heading", { name: "Connected 4" })).toBeTruthy();
-      expect(
-        screen.getByText(
-          "Every agent can use these in your chats. Logins stay in this device's keychain."
-        )
-      ).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Connectors" })).toBeTruthy();
+      expect(screen.getByText("Connect agents with external services.")).toBeTruthy();
+      expect(screen.queryByText(/keychain/)).toBeNull();
       expect(
         screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
       ).toEqual(["Linear", "Miro", "Granola", "Notion"]);
@@ -246,14 +243,14 @@ describe("ConnectedConnectors", () => {
       ).toBeTruthy();
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 lists a first login waiting for the browser beside the connected services without counting it", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 lists a first login waiting for the browser above the connected services", () => {
       renderList({
         snapshot: snapshotOf([{ id: "c2", serviceId: "linear", status: "connected" }], {
           waitingLogin: waitingFor("new-id", "notion"),
         }),
       });
 
-      expect(screen.getByRole("heading", { name: "Connected 1" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Connectors" })).toBeTruthy();
       expect(
         screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
       ).toEqual(["Notion", "Linear"]);
