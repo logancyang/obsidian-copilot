@@ -1,5 +1,5 @@
 import {
-  connectorToolLabel,
+  copilotToolLabel,
   displayTargetFromPath,
   lookupToolSummary,
   extractSubAgentInputPrompt,
@@ -18,6 +18,15 @@ function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
     ...overrides,
   };
 }
+
+function opencodeExecute(code: string): ToolCallPart {
+  return tool({ title: "execute", toolKind: "other", input: { code } });
+}
+
+const OPENCODE_NOTION_CALL =
+  'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;';
+const OPENCODE_TWO_CALLS =
+  'const [a, b] = await Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "a" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "b" }),\n]);\nreturn { a, b };';
 
 describe("toolSummaries", () => {
   describe("lookupToolSummary()", () => {
@@ -160,6 +169,14 @@ describe("toolSummaries", () => {
         expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Notion · Search pages");
       }
     );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names an OpenCode execute row after the one Copilot tool its code calls, and keeps 'Execute' when the code calls several", () => {
+      const single = opencodeExecute(OPENCODE_NOTION_CALL);
+      const several = opencodeExecute(OPENCODE_TWO_CALLS);
+
+      expect(lookupToolSummary(single).collapsedLine(single, CTX)).toBe("Notion · Create page");
+      expect(lookupToolSummary(several).collapsedLine(several, CTX)).toBe("Execute");
+    });
 
     it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
       const t = tool({
@@ -527,22 +544,82 @@ describe("toolSummaries", () => {
     });
   });
 
-  describe("connectorToolLabel()", () => {
+  describe("copilotToolLabel()", () => {
     it("names the service and the readable tool of a Copilot connector call", () => {
       const t = tool({ mcpServer: "obsidian-copilot", vendorToolName: "linear_create_issue" });
-      expect(connectorToolLabel(t)).toBe("Linear · Create issue");
+      expect(copilotToolLabel(t)).toBe("Linear · Create issue");
+    });
+
+    it.each([
+      ["a dotted", OPENCODE_NOTION_CALL],
+      [
+        "a quoted",
+        'const result = await tools["obsidian-copilot"]["notion_create_page"]({ title: "Orion" });\nreturn result;',
+      ],
+      [
+        "a single-quoted namespace and dotted",
+        "return tools['obsidian-copilot'].notion_create_page({ title: 'Orion' });",
+      ],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names the connector tool that OpenCode execute code calls once by %s member",
+      (_shape, code) => {
+        expect(copilotToolLabel(opencodeExecute(code))).toBe("Notion · Create page");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names one of Copilot's own tools called once from OpenCode execute code as Copilot's server and the readable tool", () => {
+      const t = opencodeExecute(
+        'return await tools["obsidian-copilot"].obsidian_cli({ command: "files" });'
+      );
+      expect(copilotToolLabel(t)).toBe("obsidian-copilot · Obsidian cli");
     });
 
     it.each([
       [
-        "Copilot's own tool",
+        "Copilot's own tool called directly",
         tool({ mcpServer: "obsidian-copilot", vendorToolName: "send_feedback" }),
       ],
       ["another server's tool", tool({ mcpServer: "notion", vendorToolName: "notion_search" })],
       ["a native tool", tool({ vendorToolName: "Read" })],
-    ])("returns null for %s", (_name, t) => {
-      expect(connectorToolLabel(t)).toBeNull();
-    });
+      ["OpenCode execute code calling two Copilot tools", opencodeExecute(OPENCODE_TWO_CALLS)],
+      [
+        "OpenCode execute code calling a Copilot tool and another namespace's tool",
+        opencodeExecute(
+          'await tools.opencode.list_mcp_resources({});\nreturn tools["obsidian-copilot"].notion_search({ query: "a" });'
+        ),
+      ],
+      [
+        "OpenCode execute code that only searches the catalog",
+        opencodeExecute('const r = search({ query: "notion" });\nreturn r;'),
+      ],
+      [
+        "OpenCode execute code calling another namespace's tool",
+        opencodeExecute("return await tools.opencode.list_mcp_resources({});"),
+      ],
+      [
+        "OpenCode execute code that reaches Copilot's tools through an alias",
+        opencodeExecute(
+          'const copilot = tools["obsidian-copilot"];\nreturn copilot.notion_search({ query: "a" });'
+        ),
+      ],
+      [
+        "OpenCode execute code that calls one Copilot tool directly and another through a destructured alias",
+        opencodeExecute(
+          'const { "obsidian-copilot": copilot } = tools;\nawait tools["obsidian-copilot"].notion_search({ query: "a" });\nreturn copilot.notion_create_page({ title: "b" });'
+        ),
+      ],
+      [
+        "OpenCode execute code that fetches a URL beside one Copilot tool call",
+        opencodeExecute(
+          'const page = await fetch("https://example.com");\nreturn tools["obsidian-copilot"].notion_search({ query: await page.text() });'
+        ),
+      ],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 returns null for %s",
+      (_name, t) => {
+        expect(copilotToolLabel(t)).toBeNull();
+      }
+    );
   });
 
   describe("displayTargetFromPath()", () => {
