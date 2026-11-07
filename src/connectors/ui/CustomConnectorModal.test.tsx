@@ -3,6 +3,7 @@ import { parseCustomConnectors } from "@/connectors/custom/customConnectorConfig
 import {
   CustomConnectorForm,
   CustomConnectorModal,
+  ServerSummary,
   type CustomConnectorFormProps,
 } from "@/connectors/ui/CustomConnectorModal";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
@@ -151,6 +152,27 @@ describe("CustomConnectorModal", () => {
 
       expect(onCancel).toHaveBeenCalledTimes(1);
       expect(onSubmit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("ServerSummary()", () => {
+    it("shows a local server's whole command, how many values stay in the keychain, and the values still missing", () => {
+      render(
+        <ServerSummary
+          config={{
+            id: "fake",
+            name: "Fake",
+            command: "node",
+            args: ["/srv/fake.mjs", "--verbose"],
+            envNames: ["FAKE_KEY", "FAKE_STORE"],
+          }}
+          missing={["FAKE_STORE"]}
+        />
+      );
+
+      expect(screen.getByText("Local · node /srv/fake.mjs --verbose")).toBeTruthy();
+      expect(screen.getByText("2 values stay in this device's keychain")).toBeTruthy();
+      expect(screen.getByText("No value on this device: FAKE_STORE")).toBeTruthy();
     });
   });
 

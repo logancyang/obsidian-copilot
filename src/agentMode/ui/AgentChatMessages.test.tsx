@@ -64,6 +64,27 @@ jest.mock("@/connectors/ui/ConnectorChatCard", () => ({
   ),
 }));
 
+jest.mock("@/connectors/ui/CustomConnectorChatCard", () => ({
+  CustomConnectorChatCard: ({
+    card,
+    onDismiss,
+    onAdded,
+  }: {
+    card: { proposal: { name: string } };
+    onDismiss: () => void;
+    onAdded: (connectorId: string) => void;
+  }) => (
+    <>
+      <button type="button" onClick={onDismiss}>
+        Not now {card.proposal.name}
+      </button>
+      <button type="button" onClick={() => onAdded("fakenotes")}>
+        Add {card.proposal.name}
+      </button>
+    </>
+  ),
+}));
+
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   AgentTrail: ({
     timestamp,
@@ -172,12 +193,14 @@ const chatBackend = {
   dismissFeedbackOffer: jest.fn(),
   markFeedbackReported: jest.fn(),
   dismissConnectorCard: jest.fn(),
+  markConnectorCardAdded: jest.fn(),
 } as unknown as AgentChatBackend;
 
 function chatConnectors(cards: ConnectorCard[]): ChatConnectors {
   return {
     cards,
     manager: {} as ChatConnectors["manager"],
+    customConnectors: {} as ChatConnectors["customConnectors"],
   };
 }
 
@@ -312,6 +335,38 @@ describe("AgentChatMessages", () => {
       fireEvent.click(screen.getByRole("button", { name: "Connect card notion" }));
 
       expect(chatBackend.dismissConnectorCard).toHaveBeenCalledWith("notion");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 shows a custom connector card after its turn's reply, and dismisses it or records what it added through the chat", () => {
+      const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        connectors: chatConnectors([
+          {
+            proposal: {
+              id: "fakenotes",
+              name: "Fake Notes",
+              command: "node",
+              args: [],
+              envNames: [],
+            },
+            updates: null,
+            addedId: null,
+            afterUserTurn: 1,
+            dismissed: false,
+            reported: null,
+          },
+        ]),
+      });
+
+      const text = container.textContent ?? "";
+      expect(text.indexOf("Add Fake Notes")).toBeLessThan(text.indexOf("next question"));
+      fireEvent.click(screen.getByRole("button", { name: "Not now Fake Notes" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add Fake Notes" }));
+
+      expect(chatBackend.dismissConnectorCard).toHaveBeenCalledWith("custom:fake notes");
+      expect(chatBackend.markConnectorCardAdded).toHaveBeenCalledWith(
+        "custom:fake notes",
+        "fakenotes"
+      );
     });
 
     it("hides a dismissed feedback card", () => {

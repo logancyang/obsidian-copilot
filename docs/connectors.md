@@ -65,6 +65,8 @@ Add a server that isn't in **Browse connectors**, such as one that runs on your 
 
 Every agent gets the connector's tools in new chats. A chat that is already open shows **settings changed** with **Reload**.
 
+You can also ask the agent in a chat to set up a service that isn't in **Browse connectors**. It looks up the server and shows an **Add custom connector** card with the full command or URL. Type any keys into the card, not the chat, then click **Add**. If the connector can't start, tell the agent and it shows a card that updates the same connector.
+
 Values in `env` and `headers` stay in this device's keychain and don't sync. Put API keys there, not in `args` or the `url`, which sync with your vault. On each other device, the connector shows **Add API key on this device** until you click **Add API key** and fill in the values there.
 
 | Status                         | What to do                                                        |

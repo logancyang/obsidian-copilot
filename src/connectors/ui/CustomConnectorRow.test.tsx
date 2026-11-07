@@ -2,7 +2,7 @@ import type {
   CustomConnectorState,
   CustomConnectorStatus,
 } from "@/connectors/custom/customConnectors";
-import { CustomConnectorRow } from "@/connectors/ui/CustomConnectorRow";
+import { CustomConnectorRow, customStatusText } from "@/connectors/ui/CustomConnectorRow";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
@@ -144,6 +144,17 @@ describe("CustomConnectorRow", () => {
       fireEvent.click(await screen.findByRole("menuitem", { name: "Turn on on this device" }));
 
       expect(onSetTurnedOff).toHaveBeenCalledWith("github", false);
+    });
+  });
+
+  describe("customStatusText()", () => {
+    it("gives each status its tone and line, with the reason after the status", () => {
+      expect(customStatusText({ kind: "connected", toolCount: 1 })).toEqual(["ok", "1 tool"]);
+      expect(customStatusText({ kind: "couldnt-start", reason: "boom" })).toEqual([
+        "attention",
+        "Couldn't start · boom",
+      ]);
+      expect(customStatusText({ kind: "starting" })).toEqual(["idle", "Starting…"]);
     });
   });
 });

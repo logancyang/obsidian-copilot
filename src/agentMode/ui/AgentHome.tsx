@@ -187,10 +187,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [manager]);
 
   const descriptor = useSessionBackendDescriptor(manager);
-  const { connectionManager } = plugin;
+  const { connectionManager, customConnectors } = plugin;
   const connectors = useMemo(
-    () => connectionManager && { cards: connectorCards, manager: connectionManager },
-    [connectorCards, connectionManager]
+    () =>
+      connectionManager && { cards: connectorCards, manager: connectionManager, customConnectors },
+    [connectorCards, connectionManager, customConnectors]
   );
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
