@@ -14,6 +14,8 @@ import {
 } from "@/connectors/connectorTools";
 import {
   parseCustomConnectors,
+  requireOneServer,
+  secretNames,
   type CustomConnectorConfig,
   type CustomConnectorParse,
   type ParsedCustomConnector,
@@ -135,11 +137,8 @@ export class CustomConnectors {
   }
 
   edit(id: string, text: string): CustomConnectorParse {
-    const parsed = parseCustomConnectors(text, new Set());
+    const parsed = requireOneServer(parseCustomConnectors(text, new Set()));
     if (!parsed.ok) return parsed;
-    if (parsed.connectors.length !== 1) {
-      return { ok: false, error: "Paste one server to edit this connector." };
-    }
     const [{ config, secrets }] = parsed.connectors;
     const edited = { ...config, id };
     const stored = this.secretsOf(id);
@@ -174,6 +173,10 @@ export class CustomConnectors {
     else offIds.delete(id);
     this.saveOffIds([...offIds]);
     this.restart(id);
+  }
+
+  storedValueNames(id: string): ReadonlySet<string> {
+    return new Set(Object.keys(this.secretsOf(id)));
   }
 
   async refresh(): Promise<void> {
@@ -241,11 +244,10 @@ export class CustomConnectors {
         void run.process?.stop();
         if (run.session instanceof ServiceSession) void run.session.close();
         run.session = null;
-        const reason = this.masked(
-          config.id,
-          error instanceof Error ? error.message : String(error)
+        this.setRunStatus(
+          run,
+          failureStatus(config, error, (text) => this.masked(config.id, text))
         );
-        this.setRunStatus(run, failureStatus(config, error, reason));
       });
     this.publish();
     return run.started;
@@ -342,11 +344,10 @@ export class CustomConnectors {
         );
       }
       if (error instanceof ServiceUnreachableError) {
-        this.setRunStatus(run, { kind: "unreachable", reason: error.message });
+        this.setRunStatus(run, { kind: "unreachable", reason: unreachableReason(error) });
         return toolText(`Couldn't reach ${name}, which isn't a Copilot failure. Try again later.`);
       }
-      const message = error instanceof Error ? error.message : String(error);
-      return toolText(`${name} returned an error: ${this.masked(run.config.id, message)}`);
+      return toolText(`${name} returned an error: ${this.masked(run.config.id, messageOf(error))}`);
     }
   }
 
@@ -447,10 +448,6 @@ function configs(): readonly CustomConnectorConfig[] {
   return getSettings().customConnectors;
 }
 
-function secretNames(config: CustomConnectorConfig): readonly string[] {
-  return "command" in config ? config.envNames : config.headerNames;
-}
-
 function pick(values: Record<string, string>, names: readonly string[]): Record<string, string> {
   return Object.fromEntries(names.flatMap((name) => (values[name] ? [[name, values[name]]] : [])));
 }
@@ -464,8 +461,20 @@ function isKeyRejection(error: unknown): boolean {
 function failureStatus(
   config: CustomConnectorConfig,
   error: unknown,
-  reason: string
+  mask: (text: string) => string
 ): CustomConnectorStatus {
-  if ("command" in config) return { kind: "couldnt-start", reason };
-  return isKeyRejection(error) ? KEY_NOT_ACCEPTED : { kind: "unreachable", reason };
+  if ("command" in config) return { kind: "couldnt-start", reason: mask(messageOf(error)) };
+  return isKeyRejection(error)
+    ? KEY_NOT_ACCEPTED
+    : { kind: "unreachable", reason: mask(unreachableReason(error)) };
+}
+
+// The row already says "Couldn't reach", so the reason is the network error underneath rather than another "Couldn't reach <url>".
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+function unreachableReason(error: unknown): string {
+  return messageOf(error instanceof ServiceUnreachableError ? (error.cause ?? error) : error);
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
