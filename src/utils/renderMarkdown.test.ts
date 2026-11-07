@@ -153,6 +153,43 @@ describe("renderMarkdown", () => {
       expect(el.querySelector("pre code.language-dataview")?.textContent).toBe('LIST FROM ""');
     });
 
+    it.each([
+      ["click", { button: 0 }],
+      ["click", { button: 0, ctrlKey: true }],
+      ["click", { button: 0, metaKey: true }],
+      ["auxclick", { button: 1 }],
+    ] as const)(
+      "opens a nested Markdown link once from its nearest source for %s %j (https://github.com/Brevilabs/obsidian-copilot-private/issues/882)",
+      async (eventType, init) => {
+        const app = buildApp();
+        const outer = document.body.appendChild(document.createElement("div"));
+        const inner = outer.appendChild(document.createElement("div"));
+        const component = { register: jest.fn() } as unknown as Parameters<
+          typeof renderMarkdown
+        >[4];
+        await renderMarkdown(app as unknown as App, "layout", outer, "chat.md", component);
+        await renderMarkdown(
+          app as unknown as App,
+          "[[Related]]",
+          inner,
+          "notes/nested.md",
+          component
+        );
+        const link = inner.appendChild(document.createElement("a"));
+        link.className = "internal-link";
+        link.setAttribute("data-href", "Related");
+
+        link.dispatchEvent(new MouseEvent(eventType, { bubbles: true, cancelable: true, ...init }));
+
+        expect(app.workspace.openLinkText).toHaveBeenCalledTimes(1);
+        expect(app.workspace.openLinkText).toHaveBeenCalledWith(
+          "Related",
+          "notes/nested.md",
+          "tab"
+        );
+      }
+    );
+
     it("opens a clicked internal link with its absolute in-vault path converted to vault-relative", async () => {
       const app = buildApp();
       await clickInternalLink(app, "/Users/me/vault/00_Inbox/Foo.md");

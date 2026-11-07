@@ -72,6 +72,8 @@ function wireInternalLinks(
     if (!link || !el.contains(link)) return;
     if (e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
+    // Nested Markdown owners must not navigate the same link twice. https://github.com/Brevilabs/obsidian-copilot-private/issues/882
+    e.stopPropagation();
     const raw = link.getAttribute("data-href") || link.getAttribute("href");
     if (!raw) return;
     let href: string;
