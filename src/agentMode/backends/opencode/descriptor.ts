@@ -212,6 +212,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
           }
           return bridge.getChannel();
         },
+        readCopilotReadOnlyToolNames: async () =>
+          (await args.copilotMcpServer?.readOnlyToolNames()) ?? [],
       })
     );
   },

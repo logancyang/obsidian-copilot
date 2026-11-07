@@ -1,7 +1,7 @@
 import { CONNECTOR_CATALOG, type ConnectorCatalogEntry } from "@/connectors/catalog";
 import type { ConnectionManager, ConnectionState } from "@/connectors/connectionManager";
+import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
-import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
 import { nodeFetch } from "@/connectors/nodeFetch";
 import { ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
 import { err2String } from "@/errorFormat";
@@ -20,7 +20,13 @@ const NAME_HASH_LENGTH = 8;
 const SERVICE_TIMEOUT_MS = 10_000;
 const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 
-interface ConnectorToolDefinition {
+export const MCP_INITIALIZE_PARAMS = Object.freeze({
+  protocolVersion: "2025-06-18",
+  capabilities: {},
+  clientInfo: { name: "Copilot for Obsidian", version: "1.0.0" },
+});
+
+export interface ConnectorToolDefinition {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: unknown;
@@ -59,12 +65,19 @@ interface ServiceToolInfo {
   annotations?: ConnectorToolDefinition["annotations"];
 }
 
-interface LoadedService {
+export interface McpRequester {
+  request(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+export interface ListedTools {
+  readonly toolNames: ReadonlyMap<string, string>;
+  readonly definitions: readonly ConnectorToolDefinition[];
+}
+
+interface LoadedService extends ListedTools {
   readonly connectionId: string;
   readonly service: ConnectorCatalogEntry;
   readonly session: ServiceSession;
-  readonly toolNames: ReadonlyMap<string, string>;
-  readonly definitions: readonly ConnectorToolDefinition[];
 }
 
 export interface ConnectorToolsDeps {
@@ -74,9 +87,19 @@ export interface ConnectorToolsDeps {
   subscribeToEnabledChange: (listener: () => void) => () => void;
   maxToolNameLength: number;
   fetch?: FetchLike;
+  custom?: Pick<CustomConnectors, "subscribe" | "getSnapshot" | "refresh" | "listed" | "call">;
 }
 
-class NeedsLoginError extends Error {}
+export class NeedsLoginError extends Error {}
+
+export class HttpStatusError extends Error {
+  constructor(
+    readonly status: number,
+    body: string
+  ) {
+    super(`HTTP ${status} ${body}`);
+  }
+}
 
 class SessionEndedError extends Error {}
 
@@ -91,13 +114,14 @@ export class ConnectorTools {
 
   async refresh(): Promise<void> {
     if (!this.deps.isEnabled()) return;
+    const custom = this.deps.custom?.refresh();
     const { connections } = this.deps.manager.getSnapshot();
     for (const [id, { session }] of this.loaded) {
       if (connections.some((connection) => connection.id === id)) continue;
       this.loaded.delete(id);
       void session.close();
     }
-    await Promise.all(connections.map((connection) => this.load(connection)));
+    await Promise.all(connections.map((connection) => this.load(connection)).concat(custom ?? []));
   }
 
   // A stored login can be valid while the service is down, so only a real tool listing shows it is reachable again.
@@ -113,13 +137,19 @@ export class ConnectorTools {
 
   tools(listedBy?: { sessionKey: string; backendId: string }): readonly ConnectorToolDefinition[] {
     const listed = this.deps.isEnabled()
-      ? this.deps.manager
-          .getSnapshot()
-          .connections.filter(({ status }) => status === "connected")
-          .flatMap(({ id }) => this.loaded.get(id) ?? [])
+      ? [
+          ...this.deps.manager
+            .getSnapshot()
+            .connections.filter(({ status }) => status === "connected")
+            .flatMap(({ id }) => {
+              const loaded = this.loaded.get(id);
+              return loaded ? [{ id, definitions: loaded.definitions }] : [];
+            }),
+          ...(this.deps.custom?.listed() ?? []),
+        ]
       : [];
     if (listedBy) {
-      const ids = new Set(listed.map(({ connectionId }) => connectionId));
+      const ids = new Set(listed.map(({ id }) => id));
       this.listings.set(listedBy.sessionKey, { backendId: listedBy.backendId, ids });
     }
     const definitions = listed.flatMap(({ definitions }) => definitions);
@@ -142,7 +172,8 @@ export class ConnectorTools {
       .getSnapshot()
       .connections.map(({ id }) => this.loaded.get(id))
       .find((entry) => entry?.toolNames.has(name));
-    return loaded ? this.forward(loaded, loaded.toolNames.get(name) ?? name, args) : null;
+    if (loaded) return this.forward(loaded, loaded.toolNames.get(name) ?? name, args);
+    return this.deps.custom?.call(name, args) ?? null;
   }
 
   subscribeToToolSetChange(
@@ -167,17 +198,31 @@ export class ConnectorTools {
     const unsubscribers = [
       this.deps.manager.subscribe(onChange),
       this.deps.subscribeToEnabledChange(onChange),
+      ...(this.deps.custom ? [this.deps.custom.subscribe(onChange)] : []),
     ];
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }
 
   private toolSet(): { connectionIds: string; connected: ReadonlySet<string> } {
-    const connections = this.deps.isEnabled() ? this.deps.manager.getSnapshot().connections : [];
+    const enabled = this.deps.isEnabled();
+    const connections = enabled ? this.deps.manager.getSnapshot().connections : [];
+    const custom = (enabled && this.deps.custom?.getSnapshot().connectors) || [];
+    // A custom connector's tools come and go with its config, its keys on this device and its turned-off switch, all of which open chats only pick up through Reload.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+    const runnable = custom.filter(
+      ({ status }) => status.kind !== "off" && status.kind !== "needs-key"
+    );
     return {
-      connectionIds: connections.map(({ id }) => id).join("\n"),
-      connected: new Set(
-        connections.filter(({ status }) => status === "connected").map(({ id }) => id)
-      ),
+      connectionIds: [
+        ...connections.map(({ id }) => id),
+        ...runnable.map(({ config }) => JSON.stringify(config)),
+      ].join("\n"),
+      connected: new Set([
+        ...connections.filter(({ status }) => status === "connected").map(({ id }) => id),
+        ...custom
+          .filter(({ status }) => status.kind === "connected")
+          .map(({ config }) => config.id),
+      ]),
     };
   }
 
@@ -186,7 +231,14 @@ export class ConnectorTools {
     if (!service) return;
     const session = new ServiceSession(
       service.serverUrl,
-      (forceRefresh) => this.deps.manager.accessToken(connection.id, { forceRefresh }),
+      async (forceRefresh) => {
+        const token = await this.deps.manager.accessToken(connection.id, { forceRefresh });
+        if (token.status === "needs-login") throw new NeedsLoginError();
+        if (token.status === "unreachable") {
+          throw new ServiceUnreachableError(service.serverUrl, token);
+        }
+        return { authorization: `Bearer ${token.accessToken}` };
+      },
       this.deps.fetch ?? nodeFetch
     );
     try {
@@ -203,18 +255,11 @@ export class ConnectorTools {
         `Loading ${service.name} tools`
       );
       if (!tools) return;
-      const definitions = tools.map((tool) =>
-        toDefinition(service, tool, this.deps.maxToolNameLength)
-      );
-      definitions.forEach(({ name }, i) =>
-        listedToolNames.set(name, { serviceName: service.name, toolName: tools[i].name })
-      );
       this.loaded.set(connection.id, {
         connectionId: connection.id,
         service,
         session,
-        toolNames: new Map(definitions.map((definition, i) => [definition.name, tools[i].name])),
-        definitions,
+        ...defineTools(service, tools, this.deps.maxToolNameLength),
       });
     } catch (error) {
       void session.close();
@@ -266,14 +311,14 @@ export class ConnectorTools {
   }
 }
 
-class ServiceSession {
+export class ServiceSession implements McpRequester {
   private client: Promise<Client> | null = null;
   private transport: StreamableHTTPClientTransport | null = null;
-  private readonly sentTokens = new Set<string>();
+  private readonly sentAuthValues = new Set<string>();
 
   constructor(
     private readonly url: string,
-    private readonly accessToken: (forceRefresh: boolean) => Promise<AccessTokenResult>,
+    private readonly authHeaders: (forceRefresh: boolean) => Promise<Record<string, string>>,
     private readonly fetch: FetchLike
   ) {}
 
@@ -295,10 +340,10 @@ class ServiceSession {
     }
   }
 
-  // A service's error body can echo the request, bearer token included, into the log or the agent's chat.
+  // A service's error body can echo the request, auth header values included, into the log or the agent's chat.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
   mask(text: string): string {
-    return maskSecretValues(text, [...this.sentTokens]);
+    return maskSecretValues(text, [...this.sentAuthValues]);
   }
 
   close(): Promise<void> {
@@ -310,7 +355,7 @@ class ServiceSession {
 
   private connect(): Promise<Client> {
     if (this.client) return this.client;
-    const client = new Client({ name: "Copilot for Obsidian", version: "1.0.0" });
+    const client = new Client(MCP_INITIALIZE_PARAMS.clientInfo);
     const transport = new StreamableHTTPClientTransport(new URL(this.url), {
       fetch: this.authorizedFetch,
     });
@@ -341,7 +386,7 @@ class ServiceSession {
     if (response.status >= 500) {
       throw new ServiceUnreachableError(this.url, new Error(`HTTP ${response.status}`));
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${await response.text()}`);
+    if (!response.ok) throw new HttpStatusError(response.status, await response.text());
     return response;
   };
 
@@ -350,17 +395,17 @@ class ServiceSession {
     init: RequestInit | undefined,
     forceRefresh: boolean
   ): Promise<Response> {
-    const token = await this.accessToken(forceRefresh);
-    if (token.status === "needs-login") throw new NeedsLoginError();
-    if (token.status === "unreachable") throw new ServiceUnreachableError(this.url, token);
-    this.sentTokens.add(token.accessToken);
+    const authHeaders = await this.authHeaders(forceRefresh);
     const headers = new Headers(init?.headers);
-    headers.set("authorization", `Bearer ${token.accessToken}`);
+    for (const [name, value] of Object.entries(authHeaders)) {
+      this.sentAuthValues.add(value);
+      headers.set(name, value);
+    }
     return this.fetch(url, { ...init, headers });
   }
 }
 
-async function listTools(session: ServiceSession): Promise<ServiceToolInfo[]> {
+export async function listTools(session: McpRequester): Promise<ServiceToolInfo[]> {
   const tools: ServiceToolInfo[] = [];
   let cursor: unknown;
   do {
@@ -371,8 +416,23 @@ async function listTools(session: ServiceSession): Promise<ServiceToolInfo[]> {
   return tools;
 }
 
+export function defineTools(
+  service: { readonly id: string; readonly name: string },
+  tools: readonly ServiceToolInfo[],
+  maxNameLength: number
+): ListedTools {
+  const definitions = tools.map((tool) => toDefinition(service, tool, maxNameLength));
+  definitions.forEach(({ name }, i) =>
+    listedToolNames.set(name, { serviceName: service.name, toolName: tools[i].name })
+  );
+  return {
+    toolNames: new Map(definitions.map((definition, i) => [definition.name, tools[i].name])),
+    definitions,
+  };
+}
+
 function toDefinition(
-  service: ConnectorCatalogEntry,
+  service: { readonly id: string; readonly name: string },
   tool: ServiceToolInfo,
   maxNameLength: number
 ): ConnectorToolDefinition {
@@ -394,7 +454,7 @@ function agentToolName(name: string, maxLength: number): string {
   return `${name.slice(0, maxLength - NAME_HASH_LENGTH - 1)}_${hash}`;
 }
 
-function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
+export function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
   return {
     content:
       Array.isArray(result.content) && result.content.length > 0
@@ -404,6 +464,6 @@ function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
   };
 }
 
-function toolText(text: string, isError = true): ConnectorToolResult {
+export function toolText(text: string, isError = true): ConnectorToolResult {
   return { content: [{ type: "text", text }], isError };
 }
