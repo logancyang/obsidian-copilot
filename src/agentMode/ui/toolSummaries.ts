@@ -21,17 +21,18 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-const CODE_TOOL_REFERENCE = /\btools\s*[.[]/g;
+const CODE_EXTERNAL_ACCESS = /\b(?:tools|fetch)\b/g;
 const CODE_COPILOT_TOOL_CALL = new RegExp(
   `\\btools\\[["']${COPILOT_MCP_SERVER_NAME}["']\\](?:\\.(\\w+)|\\[["']([\\w-]+)["']\\])\\s*\\(`
 );
 
-// OpenCode names every Copilot tool call `execute` and sends the tool only inside its code, so code that calls
-// exactly one tool is named after it; any other code may run several tools, or none, and keeps OpenCode's name.
+// OpenCode names every Copilot tool call `execute` and sends the tool only inside its code, and its approval may be
+// for any tool or `fetch` that code reaches, even through an alias of `tools`. So only code that names `tools` or
+// `fetch` once, in a direct Copilot tool call, is named after that tool; any other code keeps OpenCode's name.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/872
 function opencodeCopilotToolName(part: ToolCallPart): string | null {
   const code = (part.input as { code?: unknown } | null | undefined)?.code;
-  if (typeof code !== "string" || code.match(CODE_TOOL_REFERENCE)?.length !== 1) return null;
+  if (typeof code !== "string" || code.match(CODE_EXTERNAL_ACCESS)?.length !== 1) return null;
   const call = CODE_COPILOT_TOOL_CALL.exec(code);
   return call ? (call[1] ?? call[2]) : null;
 }
