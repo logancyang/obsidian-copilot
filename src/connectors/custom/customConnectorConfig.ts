@@ -65,6 +65,25 @@ export function isCustomConnectorConfig(value: unknown): value is CustomConnecto
     : !("command" in value) && typeof value.url === "string" && isStringList(value.headerNames);
 }
 
+export function secretNames(config: CustomConnectorConfig): readonly string[] {
+  return "command" in config ? config.envNames : config.headerNames;
+}
+
+export function requireOneServer(parsed: CustomConnectorParse): CustomConnectorParse {
+  return parsed.ok && parsed.connectors.length !== 1
+    ? { ok: false, error: "Paste one server to edit this connector." }
+    : parsed;
+}
+
+export function editableConfigText(config: CustomConnectorConfig): string {
+  const blank = (names: readonly string[]) => Object.fromEntries(names.map((name) => [name, ""]));
+  const server =
+    "command" in config
+      ? { command: config.command, args: config.args, env: blank(config.envNames) }
+      : { url: config.url, headers: blank(config.headerNames) };
+  return JSON.stringify({ mcpServers: { [config.name]: server } }, null, 2);
+}
+
 function namedServers(json: unknown): [string, unknown][] {
   if (!isRecord(json)) throw new ConfigError(UNKNOWN_SHAPE);
   if (isRecord(json.mcpServers)) {

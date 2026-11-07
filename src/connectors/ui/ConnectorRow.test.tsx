@@ -4,11 +4,12 @@ import {
   ConnectorRow,
   FailedLoginStatus,
   LoginButton,
+  RowMenu,
   StatusLine,
   TextButton,
   WaitingConnectorRow,
 } from "@/connectors/ui/ConnectorRow";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
 function service(id: string): ConnectorCatalogEntry {
@@ -37,6 +38,14 @@ describe("ConnectorRow", () => {
       expect(row.getByText("Connected")).toBeTruthy();
       expect(row.getByRole("button", { name: "Reconnect" })).toBeTruthy();
       expect(row.getByText("Didn't see a browser window?")).toBeTruthy();
+    });
+
+    it("shows a tag beside the name, and a letter tile for a connector without a logo", () => {
+      render(<ConnectorRow service={{ name: "acme docs" }} tag="Custom" detail="2 tools" />);
+
+      const row = within(screen.getByRole("listitem", { name: "acme docs" }));
+      expect(row.getByText("Custom")).toBeTruthy();
+      expect(row.getByText("A")).toBeTruthy();
     });
 
     it("leaves out the actions and footer when it has none", () => {
@@ -182,6 +191,76 @@ describe("ConnectorRow", () => {
       expect(button.parentElement?.getAttribute("title")).toBe(
         "Finish or cancel the Notion login first"
       );
+    });
+  });
+
+  describe("RowMenu()", () => {
+    beforeAll(() => {
+      if (!("PointerEvent" in window)) {
+        (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = MouseEvent;
+      }
+      Element.prototype.hasPointerCapture = () => false;
+      Element.prototype.releasePointerCapture = () => {};
+    });
+
+    const openMenu = () =>
+      fireEvent.pointerDown(screen.getByRole("button", { name: "More actions for Acme" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+
+    it("lists its items under a button named after the row, and runs the chosen one", async () => {
+      const onEdit = jest.fn();
+      render(
+        <RowMenu
+          name="Acme"
+          items={[
+            { label: "Edit", icon: null, onSelect: onEdit },
+            { label: "Remove", icon: null, onSelect: jest.fn(), destructive: true },
+          ]}
+        />
+      );
+
+      openMenu();
+      const items = await screen.findAllByRole("menuitem");
+      expect(items.map((item) => item.textContent)).toEqual(["Edit", "Remove"]);
+      expect(items[1].className).toContain("tw-text-error");
+      fireEvent.click(items[0]);
+      expect(onEdit).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a disabled item from running", async () => {
+      const onSelect = jest.fn();
+      render(
+        <RowMenu
+          name="Acme"
+          items={[{ label: "Reconnect", icon: null, onSelect, disabled: true }]}
+        />
+      );
+
+      openMenu();
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Reconnect" }));
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 opens an item's dialog only once the menu has closed, and leaves focus in that dialog", async () => {
+      const dialogButton = document.body.appendChild(document.createElement("button"));
+      let menuShownWithDialog: boolean | undefined;
+      const onSelect = jest.fn(() => {
+        menuShownWithDialog = screen.queryByRole("menu") !== null;
+        dialogButton.focus();
+      });
+      render(
+        <RowMenu name="Acme" items={[{ label: "Edit", icon: null, onSelect, opensDialog: true }]} />
+      );
+
+      openMenu();
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+
+      await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
+      expect(menuShownWithDialog).toBe(false);
+      expect(document.activeElement).toBe(dialogButton);
+      dialogButton.remove();
     });
   });
 });

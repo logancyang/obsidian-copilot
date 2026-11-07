@@ -4,6 +4,16 @@ import type {
   WaitingLogin,
 } from "@/connectors/connectionManager";
 import {
+  editableConfigText,
+  parseCustomConnectors,
+  type CustomConnectorConfig,
+} from "@/connectors/custom/customConnectorConfig";
+import type {
+  CustomConnectorsSnapshot,
+  CustomConnectorState,
+} from "@/connectors/custom/customConnectors";
+import { CustomConnectorModal } from "@/connectors/ui/CustomConnectorModal";
+import {
   ensureConnectorsEntitlement,
   useIsConnectorsEnabled,
 } from "@/connectors/connectorsEntitlement";
@@ -27,10 +37,43 @@ jest.mock("@/connectors/connectorsEntitlement", () => ({
 jest.mock("@/components/modals/ConfirmModal", () => ({
   ConfirmModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
 }));
+jest.mock("@/connectors/ui/CustomConnectorModal", () => ({
+  CustomConnectorModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
+}));
 
 const mockedEnabled = jest.mocked(useIsConnectorsEnabled);
 const mockedEnsure = jest.mocked(ensureConnectorsEntitlement);
 const MockedConfirmModal = jest.mocked(ConfirmModal);
+const MockedCustomConnectorModal = jest.mocked(CustomConnectorModal);
+
+const GITHUB: CustomConnectorConfig = {
+  id: "github",
+  name: "GitHub",
+  command: "npx",
+  args: ["-y", "@modelcontextprotocol/server-github"],
+  envNames: ["GITHUB_TOKEN"],
+};
+
+function fakeCustomConnectors(connectors: CustomConnectorState[] = []) {
+  const snapshot: CustomConnectorsSnapshot = { connectors, needsAttention: false };
+  return {
+    subscribe: () => () => {},
+    getSnapshot: () => snapshot,
+    parse: jest.fn((text: string) => parseCustomConnectors(text, new Set())),
+    add: jest.fn(),
+    edit: jest.fn(),
+    remove: jest.fn(),
+    setTurnedOff: jest.fn(),
+    refresh: jest.fn(async () => {}),
+    storedValueNames: jest.fn(() => new Set(["GITHUB_TOKEN"])),
+  };
+}
+
+function lastModalForm() {
+  const [, title, form] = MockedCustomConnectorModal.mock.calls.at(-1) ?? [];
+  if (!form) throw new Error("No custom connector dialog opened");
+  return { title, ...form };
+}
 
 function fakeManager(connections: ConnectionState[]) {
   let snapshot: ConnectorsSnapshot = {
@@ -84,10 +127,16 @@ function SettingsTabs(): React.ReactElement {
 
 function renderSettings(
   manager: ReturnType<typeof fakeManager>["manager"] | undefined,
-  connectorTools = manager && { checkAgain: jest.fn(async () => {}) }
+  connectorTools = manager && { checkAgain: jest.fn(async () => {}) },
+  customConnectors = manager && fakeCustomConnectors()
 ) {
   const app = new App();
-  const plugin = { app, connectionManager: manager, connectorTools } as unknown as CopilotPlugin;
+  const plugin = {
+    app,
+    connectionManager: manager,
+    connectorTools,
+    customConnectors,
+  } as unknown as CopilotPlugin;
   return render(
     <AppContext.Provider value={app}>
       <PluginProvider plugin={plugin}>
@@ -356,6 +405,138 @@ describe("ConnectorsSettings", () => {
       unmount();
 
       expect(fake.manager.dismissFailedLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it("lists this device's custom connectors beside the services", () => {
+      const custom = fakeCustomConnectors([
+        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+      ]);
+      renderSettings(fakeManager([LINEAR_NEEDS_LOGIN]).manager, undefined, custom);
+
+      expect(
+        screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
+      ).toEqual(["Linear", "GitHub"]);
+      expect(
+        within(screen.getByRole("listitem", { name: "GitHub" })).getByText("4 tools")
+      ).toBeTruthy();
+    });
+
+    it("opens the Add custom connector dialog after checking the entitlement, and adds the servers it previews", async () => {
+      const custom = fakeCustomConnectors();
+      renderSettings(fakeManager([]).manager, undefined, custom);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add custom connector" }));
+
+      await waitFor(() => expect(MockedCustomConnectorModal).toHaveBeenCalledTimes(1));
+      expect(mockedEnsure).toHaveBeenCalledTimes(1);
+      const form = lastModalForm();
+      expect(form).toMatchObject({
+        title: "Add custom connector",
+        helper:
+          "Paste the MCP server config from its README. Values in env and headers stay in this device's keychain.",
+        submitLabel: "Add",
+      });
+      const text = '{"name": "Echo", "command": "echo-server"}';
+      const parsed = form.parse(text);
+      expect(custom.parse).toHaveBeenCalledWith(text);
+      if (!parsed.ok) throw new Error(parsed.error);
+      form.onSubmit(text, parsed.connectors);
+      expect(custom.add).toHaveBeenCalledWith(parsed.connectors);
+    });
+
+    it("opens no Add dialog when the entitlement check says the user isn't a Supporter", async () => {
+      mockedEnsure.mockResolvedValue(false);
+      renderSettings(fakeManager([]).manager);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add custom connector" }));
+
+      await act(() => mockedEnsure.mock.results[0].value as Promise<boolean>);
+      expect(MockedCustomConnectorModal).not.toHaveBeenCalled();
+    });
+
+    it("opens the same Add dialog from Browse connectors", async () => {
+      renderSettings(fakeManager([]).manager);
+      fireEvent.click(screen.getByRole("button", { name: "Browse connectors" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "add a custom connector" }));
+
+      await waitFor(() => expect(lastModalForm()).toMatchObject({ title: "Add custom connector" }));
+    });
+
+    it("opens Edit with the connector's config, every value blank and the names of the values this device stores, accepting one server, and saves through edit", () => {
+      const custom = fakeCustomConnectors([{ config: GITHUB, status: { kind: "needs-key" } }]);
+      renderSettings(fakeManager([]).manager, undefined, custom);
+
+      fireEvent.click(screen.getByRole("button", { name: "Add API key" }));
+
+      const form = lastModalForm();
+      expect(form).toMatchObject({
+        title: "Edit GitHub",
+        helper: "Leave a value blank to keep the one stored on this device.",
+        initialText: editableConfigText(GITHUB),
+        storedValueNames: new Set(["GITHUB_TOKEN"]),
+        submitLabel: "Save",
+      });
+      expect(custom.storedValueNames).toHaveBeenCalledWith("github");
+      expect(
+        form.parse(JSON.stringify({ mcpServers: { A: { command: "a" }, B: { command: "b" } } }))
+      ).toEqual({ ok: false, error: "Paste one server to edit this connector." });
+      form.onSubmit("edited text", []);
+      expect(custom.edit).toHaveBeenCalledWith("github", "edited text");
+    });
+
+    it("starts a custom connector that couldn't start again on Try again", () => {
+      const custom = fakeCustomConnectors([
+        { config: GITHUB, status: { kind: "couldnt-start", reason: "npx: not found" } },
+      ]);
+      renderSettings(fakeManager([]).manager, undefined, custom);
+
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+      expect(custom.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("turns a custom connector off on this device from its menu", async () => {
+      const custom = fakeCustomConnectors([
+        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+      ]);
+      renderSettings(fakeManager([]).manager, undefined, custom);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "More actions for GitHub" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Turn off on this device" }));
+
+      expect(custom.setTurnedOff).toHaveBeenCalledWith("github", true);
+    });
+
+    it("removes a custom connector only after the user confirms its dialog", async () => {
+      const custom = fakeCustomConnectors([
+        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+      ]);
+      renderSettings(fakeManager([]).manager, undefined, custom);
+
+      fireEvent.pointerDown(screen.getByRole("button", { name: "More actions for GitHub" }), {
+        button: 0,
+        ctrlKey: false,
+      });
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Remove" }));
+
+      await waitFor(() => expect(MockedConfirmModal).toHaveBeenCalled());
+      expect(MockedConfirmModal).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.any(Function),
+        "Agents lose access to GitHub on all your devices. You can add it again anytime.",
+        "Remove GitHub?",
+        "Remove",
+        "Cancel",
+        undefined,
+        "destructive"
+      );
+      expect(custom.remove).not.toHaveBeenCalled();
+      void MockedConfirmModal.mock.calls[0][1]();
+      expect(custom.remove).toHaveBeenCalledWith("github");
     });
   });
 });
