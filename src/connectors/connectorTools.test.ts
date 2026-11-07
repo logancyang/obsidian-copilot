@@ -253,6 +253,36 @@ describe("connectorTools", () => {
       });
     });
 
+    describe("checkAgain()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 lists a couldn't-reach service's tools again and shows it connected once it answers", async () => {
+        const fake = setUp();
+        fake.notion.unreachable = true;
+        await fake.tools.refresh();
+        expect(fake.statusOf("c-notion")).toBe("unreachable");
+        fake.notion.unreachable = false;
+
+        await fake.tools.checkAgain("c-notion");
+
+        expect(fake.statusOf("c-notion")).toBe("connected");
+        expect(fake.tools.tools().map(({ name }) => name)).toEqual([
+          "notion_search_notes",
+          "notion_create_note",
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 keeps a service that is still down as couldn't reach, though its login is still valid", async () => {
+        const fake = setUp();
+        await fake.tools.refresh();
+        fake.notion.unreachable = true;
+        fake.manager.reportFailure("c-notion", "unreachable");
+
+        await fake.tools.checkAgain("c-notion");
+
+        expect(fake.statusOf("c-notion")).toBe("unreachable");
+        expect(fake.tools.tools()).toEqual([]);
+      });
+    });
+
     describe("tools()", () => {
       it("lists each connected service's tools as <serviceId>_<tool>, named after the service in the description, with the service's annotations", async () => {
         const fake = setUp();

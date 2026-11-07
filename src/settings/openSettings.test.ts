@@ -2,7 +2,9 @@ import {
   consumeRequestedCopilotSettingsTab,
   openCopilotSettings,
   openCorePluginSettings,
+  useSelectRequestedCopilotSettingsTab,
 } from "@/settings/openSettings";
+import { renderHook } from "@testing-library/react";
 import { COPILOT_SETTINGS_TAB_IDS } from "@/settings/settingsTabs";
 import type { App } from "obsidian";
 
@@ -58,6 +60,43 @@ describe("openSettings", () => {
 
       expect(openTabById).toHaveBeenCalledWith("copilot");
       expect(consumedTabs).toEqual(["miyo"]);
+    });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 selects the tab in Copilot settings already on screen instead of reopening them, so a login the Connectors tab shows keeps waiting", () => {
+      const select = jest.fn();
+      renderHook(() => useSelectRequestedCopilotSettingsTab(select));
+      const ownerWindow = { requestAnimationFrame: jest.fn() } as unknown as Window;
+      const open = jest.fn();
+      const app = { setting: { open, openTabById: jest.fn() } } as unknown as App;
+
+      openCopilotSettings(app, ownerWindow, "connectors");
+
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(select).toHaveBeenCalledWith("connectors");
+      expect(ownerWindow.requestAnimationFrame).not.toHaveBeenCalled();
+      expect(consumeRequestedCopilotSettingsTab()).toBe("basic");
+    });
+  });
+
+  describe("useSelectRequestedCopilotSettingsTab()", () => {
+    it("stops taking requests once Copilot settings leave the screen, so the next request opens the tab", () => {
+      const select = jest.fn();
+      const { unmount } = renderHook(() => useSelectRequestedCopilotSettingsTab(select));
+      unmount();
+      let deferredHandoff: FrameRequestCallback | undefined;
+      const ownerWindow = {
+        requestAnimationFrame: jest.fn((callback: FrameRequestCallback) => {
+          deferredHandoff = callback;
+          return 1;
+        }),
+      } as unknown as Window;
+      const openTabById = jest.fn();
+      const app = { setting: { open: jest.fn(), openTabById } } as unknown as App;
+
+      openCopilotSettings(app, ownerWindow, "miyo");
+      deferredHandoff?.(0);
+
+      expect(select).not.toHaveBeenCalled();
+      expect(openTabById).toHaveBeenCalledWith("copilot");
     });
   });
 

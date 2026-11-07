@@ -1,6 +1,8 @@
 import type CopilotPlugin from "@/main";
+import { openCopilotSettings } from "@/settings/openSettings";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { App } from "obsidian";
 import React from "react";
 
 jest.mock("@/settings/v2/components/BasicSettings", () => {
@@ -63,6 +65,14 @@ jest.mock("@/hooks/useLatestVersion", () => ({
   useLatestVersion: () => ({ latestVersion: mockLatestVersion, hasUpdate: mockHasUpdate }),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => true }));
+jest.mock("@/settings/v2/components/ConnectorsSettings", () => ({
+  ConnectorsSettings: () => null,
+}));
+let mockConnectorsEnabled: boolean | undefined = true;
+jest.mock("@/connectors/connectorsEntitlement", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
+  useIsConnectorsEnabled: () => mockConnectorsEnabled,
+}));
 
 const plugin = {
   app: {},
@@ -70,12 +80,21 @@ const plugin = {
   skills: { refresh: mockSkillManagerRefresh },
 } as unknown as CopilotPlugin;
 
+function withConnectorsNeedingAttention(needsAttention: boolean): CopilotPlugin {
+  const snapshot = { connections: [], waitingLogin: null, failedLogin: null, needsAttention };
+  return {
+    ...plugin,
+    connectionManager: { subscribe: () => () => {}, getSnapshot: () => snapshot },
+  } as unknown as CopilotPlugin;
+}
+
 describe("SettingsMainV2", () => {
   describe("SettingsMainV2()", () => {
     beforeEach(() => {
       mockSkillLoadErrorCount = 0;
       mockLatestVersion = null;
       mockHasUpdate = false;
+      mockConnectorsEnabled = true;
       mockSkillManagerRefresh.mockClear();
     });
 
@@ -101,6 +120,7 @@ describe("SettingsMainV2", () => {
         "BYOK",
         "Miyo",
         "Skills",
+        "Connectors",
         "Commands",
         "Self-Host",
         "Advanced",
@@ -116,6 +136,44 @@ describe("SettingsMainV2", () => {
         screen.getByRole("tab", { name: "Skills: Some skills failed to load" })
       ).not.toBeNull();
       expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 switches to a tab Copilot asks for while settings are on screen", () => {
+      render(<SettingsMainV2 plugin={plugin} initialTab="basic" />);
+      const app = { setting: { open: jest.fn(), openTabById: jest.fn() } } as unknown as App;
+
+      act(() => openCopilotSettings(app, window, "connectors"));
+
+      expect(screen.getByRole("tab", { name: "Connectors" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+    });
+
+    it("marks the Connectors tab with a red dot while a connector needs a login", () => {
+      render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(true)} />);
+
+      expect(
+        screen.getByRole("tab", {
+          name: "Connectors: You have connectors that need your attention",
+        })
+      ).not.toBeNull();
+    });
+
+    it("leaves the Connectors tab unmarked when no connector needs attention or connectors are desktop-only", () => {
+      const { unmount } = render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(false)} />);
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
+      unmount();
+
+      render(<SettingsMainV2 plugin={plugin} />);
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
+    });
+
+    it("leaves the Connectors tab unmarked for a user without the connectors preview, who sees the upsell there", () => {
+      mockConnectorsEnabled = false;
+
+      render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(true)} />);
+
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
     });
 
     it("refreshes hidden Agent repairs when Settings reopens for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {

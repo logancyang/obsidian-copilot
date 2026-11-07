@@ -94,6 +94,17 @@ export class ConnectorTools {
     );
   }
 
+  // A stored login can be valid while the service is down, so only a real tool listing shows it is reachable again.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
+  async checkAgain(connectionId: string): Promise<void> {
+    const connection = this.deps.manager
+      .getSnapshot()
+      .connections.find(({ id }) => id === connectionId);
+    if (!connection) return;
+    this.loaded.delete(connectionId);
+    await this.load(connection);
+  }
+
   tools(listedBy?: { sessionKey: string; backendId: string }): readonly ConnectorToolDefinition[] {
     const listed = this.deps.isEnabled()
       ? this.deps.manager

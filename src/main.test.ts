@@ -75,6 +75,7 @@ jest.mock("@/agentMode", () => ({
   registerTurnDiffCommands: jest.fn(),
   acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
   createAgentSessionManager: jest.fn(() => ({})),
+  MAX_PROVIDED_TOOL_NAME_LENGTH: 41,
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
 jest.mock("@/connectors/connectionManager");
@@ -123,6 +124,7 @@ import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import { ConnectionManager } from "@/connectors/connectionManager";
+import { ConnectorTools } from "@/connectors/connectorTools";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -681,7 +683,7 @@ describe("main", () => {
         });
       });
 
-      it("starts the connection manager on desktop, checks connector logins once, and disposes it with the plugin", async () => {
+      it("starts the connection manager and its connector tools on desktop, checks connector logins once, and disposes the manager with the plugin", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
@@ -694,6 +696,7 @@ describe("main", () => {
 
         const manager = jest.mocked(ConnectionManager).mock.instances[0];
         expect(plugin.connectionManager).toBe(manager);
+        expect(plugin.connectorTools).toBeInstanceOf(ConnectorTools);
         expect(manager.checkStatus).toHaveBeenCalledTimes(1);
         expect(manager.dispose).not.toHaveBeenCalled();
         for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
@@ -708,6 +711,7 @@ describe("main", () => {
 
         expect(ConnectionManager).not.toHaveBeenCalled();
         expect(plugin.connectionManager).toBeUndefined();
+        expect(plugin.connectorTools).toBeUndefined();
       });
 
       it.each([
