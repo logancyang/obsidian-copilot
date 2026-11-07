@@ -105,11 +105,12 @@ export class ConnectionManager {
     options?: { forceRefresh?: boolean }
   ): Promise<AccessTokenResult> {
     const result = await this.deps.auth.accessToken(connectionId, options);
-    if (this.statuses.get(connectionId) !== result.status) {
-      this.statuses.set(connectionId, result.status);
-      this.publish();
-    }
+    this.setStatus(connectionId, result.status);
     return result;
+  }
+
+  reportFailure(connectionId: string, status: Exclude<ConnectionStatus, "connected">): void {
+    this.setStatus(connectionId, status);
   }
 
   async checkStatus(): Promise<void> {
@@ -159,6 +160,12 @@ export class ConnectionManager {
       this.publish();
       return outcome;
     });
+  }
+
+  private setStatus(connectionId: string, status: ConnectionStatus): void {
+    if (this.statuses.get(connectionId) === status) return;
+    this.statuses.set(connectionId, status);
+    this.publish();
   }
 
   private publish(): void {

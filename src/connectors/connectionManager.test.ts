@@ -354,6 +354,34 @@ describe("connectionManager", () => {
       });
     });
 
+    describe("reportFailure()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 moves a connected service to couldn't reach or needs login when a tool call fails, and tells subscribers", async () => {
+        const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
+        fake.logins.add("c1");
+        await fake.manager.accessToken("c1");
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.reportFailure("c1", "unreachable");
+        expect(statusOf(fake.manager, "c1")).toBe("unreachable");
+        fake.manager.reportFailure("c1", "needs-login");
+
+        expect(statusOf(fake.manager, "c1")).toBe("needs-login");
+        expect(fake.manager.getSnapshot().needsAttention).toBe(true);
+        expect(listener).toHaveBeenCalledTimes(2);
+      });
+
+      it("leaves the snapshot alone when the connection already has that status", async () => {
+        const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
+        await fake.manager.accessToken("c1");
+        const before = fake.manager.getSnapshot();
+
+        fake.manager.reportFailure("c1", "needs-login");
+
+        expect(fake.manager.getSnapshot()).toBe(before);
+      });
+    });
+
     describe("checkStatus()", () => {
       it("checks every connection's login, as on Obsidian start and when a chat starts", async () => {
         const fake = setUp({
