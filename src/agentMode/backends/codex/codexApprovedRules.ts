@@ -5,7 +5,6 @@ import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { codexCliInvocation } from "./codexAuth";
 import type { CodexAcpInvocation } from "./codexVersion";
-import { defaultCodexHome } from "./codexPlanUsage";
 
 const CHECK_TIMEOUT_MS = 30_000;
 const ANY_COMMAND = "true";
@@ -23,17 +22,24 @@ function fs(): typeof import("node:fs").promises {
   return requireNodeModule<typeof import("node:fs")>("fs").promises;
 }
 
+function path(): typeof import("node:path") {
+  return requireNodeModule<typeof import("node:path")>("path");
+}
+
+function os(): typeof import("node:os") {
+  return requireNodeModule<typeof import("node:os")>("os");
+}
+
 function rulesFile(): string {
   const env = {
     ...process.env,
     ...sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.codex?.envOverrides),
   };
-  const codexHome = env.CODEX_HOME || defaultCodexHome();
-  return requireNodeModule<typeof import("node:path")>("path").join(
-    codexHome,
-    "rules",
-    "default.rules"
-  );
+  // Without CODEX_HOME, Codex uses the HOME it runs with, which its env overrides can change;
+  // Windows Codex reads the profile folder instead.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/868
+  const home = (process.platform !== "win32" && env.HOME) || os().homedir();
+  return path().join(env.CODEX_HOME || path().join(home, ".codex"), "rules", "default.rules");
 }
 
 function parseJson(text: string): unknown {
@@ -65,23 +71,26 @@ function describeGrant(line: string): string | null {
     : null;
 }
 
-function checkRules(codex: CodexAcpInvocation, file: string): Promise<void> {
+async function checkRules(codex: CodexAcpInvocation, text: string, file: string): Promise<void> {
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
-  return new Promise((resolve, reject) => {
+  const dir = await fs().mkdtemp(path().join(os().tmpdir(), "copilot-codex-rules-"));
+  const copy = path().join(dir, "default.rules");
+  await fs().writeFile(copy, text);
+  await new Promise<void>((resolve, reject) => {
     execFile(
       codex.command,
-      [...codex.args, "execpolicy", "check", "--rules", file, ANY_COMMAND],
+      [...codex.args, "execpolicy", "check", "--rules", copy, ANY_COMMAND],
       { env: codex.env, timeout: CHECK_TIMEOUT_MS, windowsHide: true },
       (error, _stdout, stderr) =>
         error
           ? reject(
               new Error(
-                `Codex couldn't read the rules file without it, so the file was left as it was. ${String(stderr).trim() || error.message}`
+                `Codex couldn't read the rules file without it, so the file was left as it was. ${String(stderr).trim().replaceAll(copy, file) || error.message}`
               )
             )
           : resolve()
     );
-  });
+  }).finally(() => fs().rm(dir, { recursive: true, force: true }));
 }
 
 export const codexApprovedRules: ApprovedRuleStore = {
@@ -112,22 +121,21 @@ export const codexApprovedRules: ApprovedRuleStore = {
         getSettings(),
         "Install Codex before removing its approved rules."
       );
-      const before = await fs().readFile(file, "utf8");
-      const lines = before.match(/[^\n]*\n|[^\n]+/g) ?? [];
-      const kept = lines.filter((line) => line.replace(/\n$/, "") !== rule.id);
-      // A file edited since the page listed it is rewritten only to drop the rule.
+      const withoutRule = async () => {
+        const lines = (await fs().readFile(file, "utf8")).match(/[^\n]*\n|[^\n]+/g) ?? [];
+        const kept = lines.filter((line) => line.replace(/\n$/, "") !== rule.id);
+        return kept.length === lines.length ? null : kept.join("");
+      };
+      const edited = await withoutRule();
+      if (edited === null) return;
+      // Codex drops every rule in its rules folder when one file fails to parse, so the edited text
+      // is checked in a copy before the real file changes.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/868
-      if (kept.length === lines.length) return;
-      await fs().writeFile(file, kept.join(""));
-      try {
-        await checkRules(codex, file);
-      } catch (error) {
-        // Codex drops every rule in its rules folder when one file fails to parse, so a failed check
-        // puts every byte back.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/868
-        await fs().writeFile(file, before);
-        throw error;
-      }
+      await checkRules(codex, edited, file);
+      // Codex can save a grant while the check runs, so the rule is dropped from a fresh read.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/868
+      const latest = await withoutRule();
+      if (latest !== null) await fs().writeFile(file, latest);
     });
   },
 };

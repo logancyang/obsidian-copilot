@@ -29,8 +29,12 @@ const GITHUB_HOST =
 
 const FAKE_BUNDLED_CODEX_RUNTIME = `#!/bin/sh
 printf '%s\\n' "$@" "CODEX_HOME=$CODEX_HOME" "PATH=$PATH" > "$FAKE_CODEX_LOG"
+cp "$4" "$FAKE_CODEX_LOG.checked"
+if [ -n "$FAKE_CODEX_SAVES" ]; then
+  printf '%s\\n' "$FAKE_CODEX_SAVES" >> "$CODEX_HOME/rules/default.rules"
+fi
 if [ -n "$FAKE_CODEX_FAIL" ]; then
-  echo "starlark error: Parse error: unexpected new line" >&2
+  echo "starlark error: Parse error: unexpected new line --> $4:2:1" >&2
   exit 1
 fi
 echo '{"matchedRules":[]}'
@@ -41,6 +45,7 @@ describe("codexApprovedRules", () => {
   let inheritedHome: string;
   let userHome: string;
   let savedInheritedHome: string | undefined;
+  let savedHome: string | undefined;
   let bundle: string;
   let checkLog: string;
   const rulesFile = () => path.join(codexHome, "rules", "default.rules");
@@ -68,6 +73,8 @@ describe("codexApprovedRules", () => {
     inheritedHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-inherited-home-"));
     userHome = fs.mkdtempSync(path.join(os.tmpdir(), "codex-user-home-"));
     jest.mocked(os.homedir).mockReturnValue(userHome);
+    savedHome = process.env.HOME;
+    process.env.HOME = userHome;
     savedInheritedHome = process.env.CODEX_HOME;
     process.env.CODEX_HOME = inheritedHome;
     bundle = fs.mkdtempSync(path.join(os.tmpdir(), "codex-bundle-"));
@@ -92,6 +99,8 @@ describe("codexApprovedRules", () => {
     resetSettings();
     if (savedInheritedHome === undefined) delete process.env.CODEX_HOME;
     else process.env.CODEX_HOME = savedInheritedHome;
+    if (savedHome === undefined) delete process.env.HOME;
+    else process.env.HOME = savedHome;
     fs.rmSync(codexHome, { recursive: true, force: true });
     fs.rmSync(inheritedHome, { recursive: true, force: true });
     fs.rmSync(userHome, { recursive: true, force: true });
@@ -138,6 +147,29 @@ describe("codexApprovedRules", () => {
       );
     });
 
+    it(`reads <HOME>/.codex when the user's Codex env overrides HOME without a CODEX_HOME, except on Windows where Codex ignores HOME: ${ISSUE}`, async () => {
+      const overriddenHome = path.join(codexHome, "home");
+      for (const home of [path.join(overriddenHome, ".codex"), path.join(userHome, ".codex")]) {
+        fs.mkdirSync(path.join(home, "rules"), { recursive: true });
+        fs.writeFileSync(path.join(home, "rules", "default.rules"), `${GH_API}\n`);
+      }
+      delete process.env.CODEX_HOME;
+      configure({ HOME: overriddenHome });
+      const listedFile = async () => (await codexApprovedRules.list(plugin))[0].appliesTo;
+
+      const onMacOrLinux = await listedFile();
+      const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+      Object.defineProperty(process, "platform", { value: "win32" });
+      const onWindows = await listedFile().finally(() =>
+        Object.defineProperty(process, "platform", platform)
+      );
+
+      expect([onMacOrLinux, onWindows]).toEqual([
+        { kind: "file", path: path.join(overriddenHome, ".codex", "rules", "default.rules") },
+        { kind: "file", path: path.join(userHome, ".codex", "rules", "default.rules") },
+      ]);
+    });
+
     it(`gives no rules when the Codex home has no rules file yet: ${ISSUE}`, async () => {
       await expect(codexApprovedRules.list(plugin)).resolves.toEqual([]);
     });
@@ -150,19 +182,29 @@ describe("codexApprovedRules", () => {
   });
 
   describe("remove()", () => {
-    it("deletes only that rule's line, keeps every other byte, and checks the file with the configured Codex", async () => {
+    it("deletes only that rule's line, keeps every other byte, and has the configured Codex check the edited text first", async () => {
       writeRules(`${HAND_WRITTEN}\n${GH_API}\n${COMMIT}\n`);
       const [ghApi] = await codexApprovedRules.list(plugin);
 
       await codexApprovedRules.remove(plugin, ghApi);
 
       expect(readRules()).toBe(`${HAND_WRITTEN}\n${COMMIT}\n`);
-      expect(fs.readFileSync(checkLog, "utf8").split("\n").slice(0, 4)).toEqual([
+      expect(fs.readFileSync(checkLog, "utf8").split("\n").slice(0, 3)).toEqual([
         "execpolicy",
         "check",
         "--rules",
-        rulesFile(),
       ]);
+      expect(fs.readFileSync(`${checkLog}.checked`, "utf8")).toBe(`${HAND_WRITTEN}\n${COMMIT}\n`);
+    });
+
+    it(`keeps a grant Codex saves while the check runs: ${ISSUE}`, async () => {
+      writeRules(`${GH_API}\n${COMMIT}\n`);
+      const [ghApi] = await codexApprovedRules.list(plugin);
+      configure({ CODEX_HOME: codexHome, FAKE_CODEX_SAVES: GITHUB_HOST });
+
+      await codexApprovedRules.remove(plugin, ghApi);
+
+      expect(readRules()).toBe(`${COMMIT}\n${GITHUB_HOST}\n`);
     });
 
     it(`runs the check with the environment codex-acp gets, including its PATH and the user's CODEX_HOME: ${ISSUE}`, async () => {
@@ -188,16 +230,15 @@ describe("codexApprovedRules", () => {
       expect(readRules()).toBe(`${HAND_WRITTEN}\n`);
     });
 
-    it(`puts the previous bytes back and rejects with Codex's error when Codex can't read the edited file: ${ISSUE}`, async () => {
-      const before = `${HAND_WRITTEN}\n${GH_API}\n`;
-      writeRules(before);
+    it(`leaves the file as it was, including a grant Codex saves meanwhile, and rejects with Codex's error when Codex can't read the edited text: ${ISSUE}`, async () => {
+      writeRules(`${HAND_WRITTEN}\n${GH_API}\n`);
       const [ghApi] = await codexApprovedRules.list(plugin);
-      configure({ CODEX_HOME: codexHome, FAKE_CODEX_FAIL: "1" });
+      configure({ CODEX_HOME: codexHome, FAKE_CODEX_FAIL: "1", FAKE_CODEX_SAVES: GITHUB_HOST });
 
       await expect(codexApprovedRules.remove(plugin, ghApi)).rejects.toThrow(
-        "Codex couldn't read the rules file without it, so the file was left as it was. starlark error: Parse error"
+        `Codex couldn't read the rules file without it, so the file was left as it was. starlark error: Parse error: unexpected new line --> ${rulesFile()}:2:1`
       );
-      expect(readRules()).toBe(before);
+      expect(readRules()).toBe(`${HAND_WRITTEN}\n${GH_API}\n${GITHUB_HOST}\n`);
     });
 
     it(`leaves the file untouched when it no longer holds the rule: ${ISSUE}`, async () => {
