@@ -113,6 +113,12 @@ export class ConnectionManager {
     this.setStatus(connectionId, status);
   }
 
+  dismissFailedLogin(): void {
+    if (!this.failedLogin) return;
+    this.failedLogin = null;
+    this.publish();
+  }
+
   async checkStatus(): Promise<void> {
     await Promise.all(this.snapshot.connections.map(({ id }) => this.accessToken(id)));
   }

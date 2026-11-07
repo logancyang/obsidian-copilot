@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@/lib/story";
-import { Cog, Cpu, Sigma, Sparkle } from "lucide-react";
+import { Cog, Cpu, Plug, Sigma, Sparkle } from "lucide-react";
 import * as React from "react";
 import { TabContent, TabItem, type TabVariant } from "./setting-tabs";
 
@@ -68,6 +68,35 @@ export const WarningDot: StoryObj<TabItemProps> = {
           label: "Skills",
           icon: <Sparkle className="tw-size-5" />,
           warningLabel: "Some skills failed to load",
+        }}
+        isSelected
+        onClick={() => undefined}
+      />
+    </div>
+  ),
+};
+
+export const ErrorDot: StoryObj<TabItemProps> = {
+  render: () => (
+    <div className="tw-flex tw-gap-2">
+      <TabItem
+        tab={{
+          id: "connectors-idle",
+          label: "Connectors",
+          icon: <Plug className="tw-size-5" />,
+          warningLabel: "You have connectors that need your attention",
+          warningTone: "error",
+        }}
+        isSelected={false}
+        onClick={() => undefined}
+      />
+      <TabItem
+        tab={{
+          id: "connectors-selected",
+          label: "Connectors",
+          icon: <Plug className="tw-size-5" />,
+          warningLabel: "You have connectors that need your attention",
+          warningTone: "error",
         }}
         isSelected
         onClick={() => undefined}

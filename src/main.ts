@@ -60,6 +60,8 @@ import {
 import { KeychainService } from "@/services/keychainService";
 import { CONNECTOR_CATALOG } from "@/connectors/catalog";
 import { ConnectionManager } from "@/connectors/connectionManager";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { ConnectorTools } from "@/connectors/connectorTools";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
@@ -73,6 +75,7 @@ import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/pro
 import {
   checkIsPaidUser,
   ENTITLEMENT_REFRESH_INTERVAL_MS,
+  subscribeToEntitlementChange,
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import {
@@ -175,6 +178,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
   connectionManager?: ConnectionManager;
+  connectorTools?: ConnectorTools;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -385,6 +389,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           registerTurnDiffCommands,
           acpFrameSink,
           createAgentSessionManager,
+          MAX_PROVIDED_TOOL_NAME_LENGTH,
           setFrameSinkVaultBasePath,
           SkillManager,
         },
@@ -417,6 +422,13 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         catalog: CONNECTOR_CATALOG,
       });
       this.connectionManager = connectionManager;
+      this.connectorTools = new ConnectorTools({
+        manager: connectionManager,
+        catalog: CONNECTOR_CATALOG,
+        isEnabled: () => isConnectorsEnabled() === true,
+        subscribeToEnabledChange: subscribeToEntitlementChange,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+      });
       this.register(() => connectionManager.dispose());
       void connectionManager.checkStatus();
 

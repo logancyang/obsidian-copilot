@@ -16,10 +16,6 @@ import {
   runInRunningObsidian,
 } from "@/services/obsidianCli/obsidianCliTool";
 import { requireNodeModule } from "@/utils/desktopRuntime";
-import { CONNECTOR_CATALOG } from "@/connectors/catalog";
-import { ConnectorTools } from "@/connectors/connectorTools";
-import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
-import { subscribeToEntitlementChange } from "@/plusUtils";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
@@ -31,7 +27,6 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import {
   createCopilotMcpServer,
-  MAX_PROVIDED_TOOL_NAME_LENGTH,
   SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
@@ -90,6 +85,7 @@ export {
   listBackendDescriptors,
 } from "./backends/registry";
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
+export { MAX_PROVIDED_TOOL_NAME_LENGTH } from "./session/copilotMcpServer";
 export { getManagedSkills, SkillManager, SkillsSettings } from "./skills";
 export type { Skill } from "./skills";
 function isAgentModeEnabled(): boolean {
@@ -219,15 +215,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   let managerRef: AgentSessionManager | null = null;
-  const connectorTools =
-    plugin.connectionManager &&
-    new ConnectorTools({
-      manager: plugin.connectionManager,
-      catalog: CONNECTOR_CATALOG,
-      isEnabled: () => isConnectorsEnabled() === true,
-      subscribeToEnabledChange: subscribeToEntitlementChange,
-      maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
-    });
+  const { connectorTools } = plugin;
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null,
     (id) => managerRef?.isReadOnlyFanoutSession(id) ?? false
