@@ -1,6 +1,9 @@
 import {
+  editableConfigText,
   isCustomConnectorConfig,
   parseCustomConnectors,
+  requireOneServer,
+  secretNames,
 } from "@/connectors/custom/customConnectorConfig";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
@@ -171,6 +174,82 @@ describe("customConnectorConfig", () => {
       ],
     ])(`rejects %s from a synced or hand-edited data.json: ${ISSUE}`, (_case, value) => {
       expect(isCustomConnectorConfig(value)).toBe(false);
+    });
+  });
+
+  describe("editableConfigText()", () => {
+    it("writes a local connector as an mcpServers block with every env value blank", () => {
+      const text = editableConfigText({
+        id: "github",
+        name: "GitHub",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-github"],
+        envNames: ["GITHUB_TOKEN"],
+      });
+
+      expect(JSON.parse(text)).toEqual({
+        mcpServers: {
+          GitHub: {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-github"],
+            env: { GITHUB_TOKEN: "" },
+          },
+        },
+      });
+    });
+
+    it("writes a remote connector with every header value blank, and parses back to the same config", () => {
+      const config = {
+        id: "acmedocs",
+        name: "Acme Docs",
+        url: "https://mcp.acme.test/mcp",
+        headerNames: ["Authorization"],
+      };
+
+      const text = editableConfigText(config);
+
+      expect(JSON.parse(text)).toEqual({
+        mcpServers: {
+          "Acme Docs": { url: "https://mcp.acme.test/mcp", headers: { Authorization: "" } },
+        },
+      });
+      expect(parseCustomConnectors(text, new Set())).toEqual({
+        ok: true,
+        connectors: [{ config, secrets: { Authorization: "" } }],
+      });
+    });
+  });
+
+  describe("secretNames()", () => {
+    it("names a local connector's env values and a remote connector's header values", () => {
+      expect(
+        secretNames({ id: "echo", name: "Echo", command: "echo", args: [], envNames: ["KEY"] })
+      ).toEqual(["KEY"]);
+      expect(
+        secretNames({ id: "acme", name: "Acme", url: "https://a.test", headerNames: ["Auth"] })
+      ).toEqual(["Auth"]);
+    });
+  });
+
+  describe("requireOneServer()", () => {
+    it("keeps a parse with exactly one server, and an error as it is", () => {
+      const one = parseCustomConnectors('{"name": "Echo", "command": "echo"}', new Set());
+      const invalid = parseCustomConnectors("{", new Set());
+
+      expect(requireOneServer(one)).toBe(one);
+      expect(requireOneServer(invalid)).toBe(invalid);
+    });
+
+    it("turns a parse with several servers into an error, because Edit changes one connector", () => {
+      const two = parseCustomConnectors(
+        JSON.stringify({ mcpServers: { A: { command: "a" }, B: { url: "https://b.test" } } }),
+        new Set()
+      );
+
+      expect(requireOneServer(two)).toEqual({
+        ok: false,
+        error: "Paste one server to edit this connector.",
+      });
     });
   });
 });

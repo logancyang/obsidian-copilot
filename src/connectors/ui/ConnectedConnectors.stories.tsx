@@ -3,6 +3,7 @@ import type {
   ConnectorsSnapshot,
   WaitingLogin,
 } from "@/connectors/connectionManager";
+import type { CustomConnectorState } from "@/connectors/custom/customConnectors";
 import {
   ConnectedConnectors,
   type ConnectedConnectorsProps,
@@ -15,6 +16,48 @@ const EVERY_STATUS: ConnectionState[] = [
   { id: "c3", serviceId: "linear", status: "needs-login" },
   { id: "c4", serviceId: "todoist", status: "needs-login" },
   { id: "c5", serviceId: "miro", status: "unreachable" },
+];
+
+const CUSTOM_EVERY_STATUS: CustomConnectorState[] = [
+  {
+    config: { id: "github", name: "GitHub", command: "npx", args: [], envNames: ["TOKEN"] },
+    status: { kind: "connected", toolCount: 26 },
+  },
+  {
+    config: { id: "memory", name: "Memory", command: "npx", args: [], envNames: [] },
+    status: { kind: "starting" },
+  },
+  {
+    config: { id: "sqlite", name: "SQLite", command: "uvx", args: [], envNames: [] },
+    status: { kind: "idle" },
+  },
+  {
+    config: { id: "postgres", name: "Postgres", command: "npx", args: [], envNames: ["URL"] },
+    status: {
+      kind: "couldnt-start",
+      reason: "Error: connect ECONNREFUSED 127.0.0.1:5432 while connecting to the database",
+    },
+  },
+  {
+    config: { id: "acmedocs", name: "Acme Docs", url: "https://mcp.acme.test", headerNames: [] },
+    status: {
+      kind: "unreachable",
+      reason:
+        "HTTP 404: <!DOCTYPE html><html><head><title>404 Not Found</title></head><body><h1>Not Found</h1><p>The requested URL was not found on this server.</p></body></html>",
+    },
+  },
+  {
+    config: { id: "linearapi", name: "Linear API", url: "https://a.test", headerNames: ["Key"] },
+    status: { kind: "key-not-accepted" },
+  },
+  {
+    config: { id: "brave", name: "Brave Search", command: "npx", args: [], envNames: ["KEY"] },
+    status: { kind: "needs-key" },
+  },
+  {
+    config: { id: "fetch", name: "Fetch", command: "uvx", args: [], envNames: [] },
+    status: { kind: "off" },
+  },
 ];
 
 const LINEAR_WAITING: WaitingLogin = {
@@ -39,7 +82,15 @@ const meta = {
   component: ConnectedConnectors,
   args: {
     snapshot: snapshotOf(),
+    customConnectors: [],
     onBrowse: () => undefined,
+    onAddCustom: () => undefined,
+    customActions: {
+      onEdit: () => undefined,
+      onTryAgain: () => undefined,
+      onSetTurnedOff: () => undefined,
+      onRemove: () => undefined,
+    },
     onConnect: () => undefined,
     onReconnect: () => undefined,
     onCheckAgain: async () => undefined,
@@ -54,6 +105,16 @@ export const NothingConnected: StoryObj<ConnectedConnectorsProps> = {
 };
 
 export const EveryRowState: StoryObj<ConnectedConnectorsProps> = {};
+
+export const CustomConnectorsInEveryStatus: StoryObj<ConnectedConnectorsProps> = {
+  args: {
+    snapshot: snapshotOf({
+      connections: [{ id: "c1", serviceId: "notion", status: "connected" }],
+      needsAttention: false,
+    }),
+    customConnectors: CUSTOM_EVERY_STATUS,
+  },
+};
 
 export const ReconnectWaitingForBrowser: StoryObj<ConnectedConnectorsProps> = {
   args: { snapshot: snapshotOf({ waitingLogin: LINEAR_WAITING }) },

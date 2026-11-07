@@ -3,6 +3,7 @@ import type {
   ConnectorsSnapshot,
   WaitingLogin,
 } from "@/connectors/connectionManager";
+import type { CustomConnectorState } from "@/connectors/custom/customConnectors";
 import {
   ConnectedConnectors,
   type ConnectedConnectorsProps,
@@ -34,7 +35,15 @@ function waitingFor(connectionId: string, serviceId: string): WaitingLogin {
 
 function renderList(props: Partial<ConnectedConnectorsProps> & { snapshot: ConnectorsSnapshot }) {
   const handlers = {
+    customConnectors: [] as readonly CustomConnectorState[],
     onBrowse: jest.fn(),
+    onAddCustom: jest.fn(),
+    customActions: {
+      onEdit: jest.fn(),
+      onTryAgain: jest.fn(),
+      onSetTurnedOff: jest.fn(),
+      onRemove: jest.fn(),
+    },
     onConnect: jest.fn(),
     onReconnect: jest.fn(),
     onCheckAgain: jest.fn(async () => {}),
@@ -47,6 +56,19 @@ function renderList(props: Partial<ConnectedConnectorsProps> & { snapshot: Conne
       rerender(<ConnectedConnectors {...handlers} {...props} snapshot={snapshot} />),
   };
 }
+
+const CUSTOM_NEEDS_KEY: CustomConnectorState = {
+  config: { id: "acme", name: "Acme Docs", url: "https://a.test/mcp", headerNames: ["Key"] },
+  status: { kind: "needs-key" },
+};
+const CUSTOM_CONNECTED: CustomConnectorState = {
+  config: { id: "echo", name: "Echo", command: "echo-server", args: [], envNames: [] },
+  status: { kind: "connected", toolCount: 2 },
+};
+const CUSTOM_OFF: CustomConnectorState = {
+  config: { id: "zeta", name: "Zeta", command: "zeta", args: [], envNames: [] },
+  status: { kind: "off" },
+};
 
 function row(name: string): HTMLElement {
   return screen.getByRole("listitem", { name });
@@ -91,6 +113,52 @@ describe("ConnectedConnectors", () => {
       expect(
         screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
       ).toEqual(["Linear", "Miro", "Granola", "Notion"]);
+    });
+
+    it("offers Add custom connector beside Browse connectors on the empty state and below the list", () => {
+      const { onAddCustom, showSnapshot } = renderList({ snapshot: snapshotOf([]) });
+
+      fireEvent.click(screen.getByRole("button", { name: "Add custom connector" }));
+      showSnapshot(snapshotOf([{ id: "c1", serviceId: "notion", status: "connected" }]));
+      fireEvent.click(screen.getByRole("button", { name: "Add custom connector" }));
+
+      expect(onAddCustom).toHaveBeenCalledTimes(2);
+    });
+
+    it("lists custom connectors with the services, those needing the user first and those off last", () => {
+      renderList({
+        snapshot: snapshotOf([
+          { id: "c1", serviceId: "notion", status: "connected" },
+          { id: "c2", serviceId: "linear", status: "needs-login" },
+        ]),
+        customConnectors: [CUSTOM_OFF, CUSTOM_CONNECTED, CUSTOM_NEEDS_KEY],
+      });
+
+      expect(
+        screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
+      ).toEqual(["Acme Docs", "Linear", "Echo", "Notion", "Zeta"]);
+      expect(within(row("Acme Docs")).getByText("Custom")).toBeTruthy();
+    });
+
+    it("shows the list instead of the empty state when only custom connectors are added", () => {
+      renderList({ snapshot: snapshotOf([]), customConnectors: [CUSTOM_CONNECTED] });
+
+      expect(screen.getByRole("heading", { name: "Connectors" })).toBeTruthy();
+      expect(
+        screen.queryByRole("heading", { name: "Connect the services you work in" })
+      ).toBeNull();
+      expect(within(row("Echo")).getByText("2 tools")).toBeTruthy();
+    });
+
+    it("passes a custom row's actions through", () => {
+      const { customActions } = renderList({
+        snapshot: snapshotOf([]),
+        customConnectors: [CUSTOM_NEEDS_KEY],
+      });
+
+      fireEvent.click(within(row("Acme Docs")).getByRole("button", { name: "Add API key" }));
+
+      expect(customActions.onEdit).toHaveBeenCalledWith("acme");
     });
 
     it("shows each status in words, with the account name when the service gives one", () => {

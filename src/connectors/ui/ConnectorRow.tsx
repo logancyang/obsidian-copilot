@@ -3,18 +3,26 @@ import type { FailedLogin, WaitingLogin } from "@/connectors/connectionManager";
 import { loginRejectedIssueUrl } from "@/connectors/connectorLinks";
 import { loginFailureMessage } from "@/connectors/oauth/connectorAuth";
 import { ConnectorLogo } from "@/connectors/ui/ConnectorLogo";
+import { Badge } from "@/components/ui/badge";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Copy, Loader2 } from "lucide-react";
-import React from "react";
+import { AlertCircle, Copy, Loader2, MoreHorizontal } from "lucide-react";
+import React, { useRef, useState } from "react";
 
 // Obsidian shows every aria-label as its own tooltip, which floated service names over the rows below.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
 export const NO_OBSIDIAN_TOOLTIP = "[--no-tooltip:true]";
 
 export interface ConnectorRowProps {
-  service: ConnectorCatalogEntry;
+  service: Pick<ConnectorCatalogEntry, "name" | "logoUrl">;
+  tag?: string;
   detail: React.ReactNode;
   actions?: React.ReactNode;
   footer?: React.ReactNode;
@@ -23,6 +31,7 @@ export interface ConnectorRowProps {
 
 export function ConnectorRow({
   service,
+  tag,
   detail,
   actions,
   footer,
@@ -42,8 +51,15 @@ export function ConnectorRow({
       <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-3 tw-gap-y-2">
         <ConnectorLogo service={service} />
         <div className="tw-min-w-0 tw-flex-1 tw-basis-24">
-          <div className="tw-truncate tw-text-ui-small tw-font-semibold tw-text-normal">
-            {service.name}
+          <div className="tw-flex tw-min-w-0 tw-flex-wrap tw-items-center tw-gap-x-1.5 tw-gap-y-0.5">
+            <div className="tw-truncate tw-text-ui-small tw-font-semibold tw-text-normal">
+              {service.name}
+            </div>
+            {tag && (
+              <Badge variant="secondary" className="tw-shrink-0 tw-font-normal">
+                {tag}
+              </Badge>
+            )}
           </div>
           <div className="tw-text-ui-smaller tw-text-muted">{detail}</div>
         </div>
@@ -79,7 +95,7 @@ export function StatusLine({ tone, children }: StatusLineProps): React.ReactElem
           tone === "idle" && "tw-text-faint"
         )}
       />
-      <span>{children}</span>
+      <span className="tw-min-w-0">{children}</span>
     </span>
   );
 }
@@ -176,5 +192,71 @@ export function LoginButton({ blockedBy, ...props }: LoginButtonProps): React.Re
     <span title={`Finish or cancel the ${blockedBy} login first`} className="tw-inline-flex">
       <Button size="sm" {...props} disabled />
     </span>
+  );
+}
+
+export interface RowMenuItem {
+  label: string;
+  icon: React.ReactNode;
+  onSelect: () => void;
+  opensDialog?: boolean;
+  destructive?: boolean;
+  disabled?: boolean;
+}
+
+interface RowMenuProps {
+  name: string;
+  items: readonly RowMenuItem[];
+}
+
+export function RowMenu({ name, items }: RowMenuProps): React.ReactElement {
+  const menuContainer = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const runAfterClose = useRef<(() => void) | null>(null);
+  return (
+    <div ref={menuContainer}>
+      <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost2"
+            size="icon"
+            aria-label={`More actions for ${name}`}
+            title="More actions"
+          >
+            <MoreHorizontal className="tw-size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        {/* A menu outside the settings modal loses focus to the modal, which closes it at once.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/858 */}
+        <DropdownMenuContent
+          align="end"
+          container={menuContainer.current}
+          onCloseAutoFocus={(event) => {
+            const action = runAfterClose.current;
+            if (!action) return;
+            runAfterClose.current = null;
+            // A dialog opened while the menu was still mounted lost focus to the menu, then to the settings popout, so Enter did nothing.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
+            event.preventDefault();
+            action();
+          }}
+        >
+          {items.map(({ label, icon, onSelect, opensDialog, destructive, disabled }) => (
+            <DropdownMenuItem
+              key={label}
+              disabled={disabled}
+              className={cn(destructive && "tw-text-error focus:tw-text-error")}
+              onSelect={() => {
+                if (opensDialog) runAfterClose.current = onSelect;
+                else onSelect();
+              }}
+            >
+              {icon}
+              {label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
   );
 }
