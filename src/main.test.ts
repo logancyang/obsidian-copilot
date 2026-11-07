@@ -9,6 +9,7 @@ jest.mock("obsidian", () => {
     Plugin: class Plugin {},
     PluginSettingTab: class PluginSettingTab {},
     MarkdownView: class MarkdownView {},
+    MarkdownRenderChild: class MarkdownRenderChild {},
     addIcon: jest.fn(),
   };
 });
@@ -520,6 +521,7 @@ describe("main", () => {
           registerInterval: jest.fn(),
           registerView: jest.fn<void, [string, (leaf: WorkspaceLeaf) => unknown]>(),
           registerEditorExtension: jest.fn(),
+          registerMarkdownCodeBlockProcessor: jest.fn(),
           registerObsidianProtocolHandler: jest.fn(),
           addSettingTab: jest.fn(),
           addRibbonIcon: jest.fn(),
@@ -615,6 +617,10 @@ describe("main", () => {
 
         expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledWith(
           "copilot-chat",
+          expect.any(Function)
+        );
+        expect(registrations.registerMarkdownCodeBlockProcessor).toHaveBeenCalledWith(
+          "copilot-ui",
           expect.any(Function)
         );
         expect(registrations.addCommand).not.toHaveBeenCalled();

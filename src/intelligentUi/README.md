@@ -43,7 +43,13 @@ architecture fixtures for the renderer, integration and evaluation steps.
 source for its rejected-block code fallback. Callers supply `sourcePath` and an
 `AppContext` provider; Markdown bodies use the existing Obsidian renderer and
 own their component lifecycle. Plain text and attributes remain React text.
-The renderer does not register a Markdown processor or connect chat surfaces.
+`registerIntelligentUiProcessor` registers one unconditional Markdown code-block
+processor during plugin load. Obsidian supplies chat, Reading view and native
+Live Preview integration; each React root belongs to a `MarkdownRenderChild`.
+Generation preferences never disable rendering of saved blocks. Incomplete
+bodies show their entire source, since the processor has no stream lifecycle;
+progressive rendering is handled separately. Copy, insertion and chat saving
+continue to consume the original fenced message text.
 
 Row and grid layouts query their own container width: below 32rem they stack
 in source order. Grid cells in one line share a height. In a row, boxes share
