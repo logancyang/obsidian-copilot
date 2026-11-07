@@ -1,4 +1,5 @@
 import {
+  connectorToolLabel,
   displayTargetFromPath,
   lookupToolSummary,
   extractSubAgentInputPrompt,
@@ -130,6 +131,35 @@ describe("toolSummaries", () => {
       });
       expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("context7 · Query docs");
     });
+
+    it.each([
+      [
+        "Claude",
+        tool({
+          vendorToolName: "notion_search_pages",
+          title: "notion_search_pages",
+          mcpServer: "obsidian-copilot",
+          toolKind: "other",
+        }),
+      ],
+      [
+        "Codex",
+        tool({
+          title: "mcp.obsidian-copilot.notion_search_pages",
+          toolKind: "execute",
+          input: {
+            server: "obsidian-copilot",
+            tool: "notion_search_pages",
+            arguments: { query: "Orion" },
+          },
+        }),
+      ],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/857 renders a %s connector tool as 'Service · Tool name' instead of Copilot's server and the raw tool name",
+      (_backend, t) => {
+        expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Notion · Search pages");
+      }
+    );
 
     it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
       const t = tool({
@@ -494,6 +524,24 @@ describe("toolSummaries", () => {
       expect(lookupToolSummary(read).expandedDetails).toBeUndefined();
       const edit = tool({ vendorToolName: "Edit", title: "edit" });
       expect(lookupToolSummary(edit).expandedDetails).toBeUndefined();
+    });
+  });
+
+  describe("connectorToolLabel()", () => {
+    it("names the service and the readable tool of a Copilot connector call", () => {
+      const t = tool({ mcpServer: "obsidian-copilot", vendorToolName: "linear_create_issue" });
+      expect(connectorToolLabel(t)).toBe("Linear · Create issue");
+    });
+
+    it.each([
+      [
+        "Copilot's own tool",
+        tool({ mcpServer: "obsidian-copilot", vendorToolName: "send_feedback" }),
+      ],
+      ["another server's tool", tool({ mcpServer: "notion", vendorToolName: "notion_search" })],
+      ["a native tool", tool({ vendorToolName: "Read" })],
+    ])("returns null for %s", (_name, t) => {
+      expect(connectorToolLabel(t)).toBeNull();
     });
   });
 

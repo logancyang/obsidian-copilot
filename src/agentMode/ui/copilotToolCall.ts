@@ -25,6 +25,14 @@ export function copilotToolCall(part: ToolCallPart, toolName: string): CopilotTo
   return call ? { code: code.slice(call.index) } : null;
 }
 
+export function copilotToolName(part: ToolCallPart): string | null {
+  if (part.mcpServer === COPILOT_MCP_SERVER_NAME) return part.vendorToolName ?? null;
+  const input = asRecord(part.input);
+  return input.server === COPILOT_MCP_SERVER_NAME && typeof input.tool === "string"
+    ? input.tool
+    : null;
+}
+
 export function codeStringField(code: string, field: string): string | null {
   const literal = new RegExp(
     `\\b${field}["']?:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|'((?:[^'\\\\]|\\\\.)*)')`

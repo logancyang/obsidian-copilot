@@ -1,4 +1,4 @@
-import type { ConnectorCatalogEntry } from "@/connectors/catalog";
+import { CONNECTOR_CATALOG, type ConnectorCatalogEntry } from "@/connectors/catalog";
 import type { ConnectionManager, ConnectionState } from "@/connectors/connectionManager";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
 import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
@@ -33,6 +33,24 @@ export interface ConnectorToolResult {
 }
 
 const EMPTY_TOOLS: readonly ConnectorToolDefinition[] = Object.freeze([]);
+
+export interface ConnectorToolDescription {
+  readonly serviceName: string;
+  readonly toolName: string;
+}
+
+// A name shortened to fit agents' length cap can't be read back, so the chat looks up the names Copilot listed, and reads a restored chat's not-yet-listed name by its catalog prefix.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+const listedToolNames = new Map<string, ConnectorToolDescription>();
+
+export function describeConnectorTool(agentName: string): ConnectorToolDescription | null {
+  const listed = listedToolNames.get(agentName);
+  if (listed) return listed;
+  const service = CONNECTOR_CATALOG.find(({ id }) => agentName.startsWith(`${id}_`));
+  return service
+    ? { serviceName: service.name, toolName: agentName.slice(service.id.length + 1) }
+    : null;
+}
 
 interface ServiceToolInfo {
   name: string;
@@ -187,6 +205,9 @@ export class ConnectorTools {
       if (!tools) return;
       const definitions = tools.map((tool) =>
         toDefinition(service, tool, this.deps.maxToolNameLength)
+      );
+      definitions.forEach(({ name }, i) =>
+        listedToolNames.set(name, { serviceName: service.name, toolName: tools[i].name })
       );
       this.loaded.set(connection.id, {
         connectionId: connection.id,

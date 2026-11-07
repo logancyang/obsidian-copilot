@@ -1,5 +1,5 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
+import { codeStringField, copilotToolCall, copilotToolName } from "@/agentMode/ui/copilotToolCall";
 
 function tool(overrides: Partial<ToolCallPart>): ToolCallPart {
   return { kind: "tool_call", id: "x", title: "tool", status: "completed", ...overrides };
@@ -67,6 +67,36 @@ describe("copilotToolCall", () => {
       ["a call without input", tool({ input: undefined })],
     ])("returns null for %s", (_name, part) => {
       expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
+    });
+  });
+
+  describe("copilotToolName()", () => {
+    it("returns the tool name of a Claude call on Copilot's server", () => {
+      const part = tool({ mcpServer: "obsidian-copilot", vendorToolName: "notion_search" });
+      expect(copilotToolName(part)).toBe("notion_search");
+    });
+
+    it("returns the tool name of a Codex call on Copilot's server", () => {
+      const part = tool({
+        title: "mcp.obsidian-copilot.notion_search",
+        input: { server: "obsidian-copilot", tool: "notion_search", arguments: {} },
+      });
+      expect(copilotToolName(part)).toBe("notion_search");
+    });
+
+    it.each([
+      ["a call on another server", tool({ mcpServer: "other", vendorToolName: "notion_search" })],
+      [
+        "a Codex call on another server",
+        tool({ input: { server: "other", tool: "notion_search" } }),
+      ],
+      [
+        "OpenCode code, which may call several tools",
+        tool({ input: { code: 'return tools["obsidian-copilot"].notion_search({});' } }),
+      ],
+      ["a native tool", tool({ vendorToolName: "Read" })],
+    ])("returns null for %s", (_name, part) => {
+      expect(copilotToolName(part)).toBeNull();
     });
   });
 
