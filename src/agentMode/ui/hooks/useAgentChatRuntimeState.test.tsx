@@ -8,6 +8,7 @@ import type {
   QueuedPrompt,
 } from "@/agentMode/session/types";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type { ConnectorCard } from "@/connectors/connectorCards";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { act, render, renderHook } from "@testing-library/react";
@@ -24,6 +25,7 @@ interface FakeBackendState {
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   feedbackOffer?: FeedbackOffer | null;
+  connectorCards?: readonly ConnectorCard[];
   queuedPrompts?: readonly QueuedPrompt[];
   tasks?: readonly AgentTask[];
 }
@@ -40,6 +42,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
     feedbackOffer: initial.feedbackOffer ?? null,
+    connectorCards: initial.connectorCards ?? [],
     queuedPrompts: initial.queuedPrompts ?? [],
     tasks: initial.tasks ?? [],
   };
@@ -60,6 +63,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
     getFeedbackOffer: () => state.feedbackOffer ?? null,
+    getConnectorCards: () => state.connectorCards ?? [],
     getQueuedPrompts: () => state.queuedPrompts ?? [],
     getTasks: () => state.tasks ?? [],
   } as unknown as AgentChatBackend;
@@ -125,6 +129,21 @@ describe("useAgentChatRuntimeState", () => {
       });
 
       expect(result.current.feedbackOffer).toBe(offer);
+    });
+
+    it("picks up a connector card the moment the agent asks for one", () => {
+      const fake = makeFakeBackend();
+      const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
+      const cards: ConnectorCard[] = [
+        { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+      ];
+
+      act(() => {
+        fake.state.connectorCards = cards;
+        fake.emit();
+      });
+
+      expect(result.current.connectorCards).toBe(cards);
     });
 
     it("re-syncs every field when the backend notifies", () => {

@@ -118,6 +118,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     pendingToolPermissions,
     pendingAskUserQuestions,
     feedbackOffer,
+    connectorCards,
     queuedPrompts,
     tasks,
     isReplyRunning,
@@ -186,6 +187,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   }, [manager]);
 
   const descriptor = useSessionBackendDescriptor(manager);
+  const { connectionManager } = plugin;
+  const connectors = useMemo(
+    () => connectionManager && { cards: connectorCards, manager: connectionManager },
+    [connectorCards, connectionManager]
+  );
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
@@ -810,6 +816,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         chatBackend={backend}
                         isLoading={isLoading}
                         feedbackOffer={feedbackOffer}
+                        connectors={connectors}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

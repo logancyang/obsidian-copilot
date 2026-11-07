@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { FeedbackCard, findFeedbackCardIndex } from "./FeedbackCard";
+import { FeedbackCard, findTrailingCardIndex } from "./FeedbackCard";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 
@@ -40,25 +40,21 @@ function renderCard(offer: FeedbackOffer = OPEN_OFFER) {
 jest.mock("@/constants", () => ({ USER_SENDER: "user" }));
 
 describe("FeedbackCard", () => {
-  describe("findFeedbackCardIndex()", () => {
+  describe("findTrailingCardIndex()", () => {
     it("places the card after the last reply of the turn that raised it", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT, OPEN_OFFER)).toBe(4);
+      expect(findTrailingCardIndex(TRANSCRIPT, "user-2")).toBe(4);
     });
 
     it("places the card at the end while the raising turn is still the latest", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT.slice(0, 5), OPEN_OFFER)).toBe(4);
+      expect(findTrailingCardIndex(TRANSCRIPT.slice(0, 5), "user-2")).toBe(4);
     });
 
     it("places the card at the end when the raising message is no longer in the transcript", () => {
-      expect(
-        findFeedbackCardIndex(TRANSCRIPT.slice(0, 2), { ...OPEN_OFFER, afterUserMessageId: null })
-      ).toBe(1);
+      expect(findTrailingCardIndex(TRANSCRIPT.slice(0, 2), null)).toBe(1);
     });
 
-    it("hides the card when there is no offer, it was dismissed, or there are no messages", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT, null)).toBe(-1);
-      expect(findFeedbackCardIndex(TRANSCRIPT, { ...OPEN_OFFER, status: "dismissed" })).toBe(-1);
-      expect(findFeedbackCardIndex([], OPEN_OFFER)).toBe(-1);
+    it("places no card when there are no messages", () => {
+      expect(findTrailingCardIndex([], "user-2")).toBe(-1);
     });
   });
 

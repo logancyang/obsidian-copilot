@@ -8,7 +8,8 @@ import type {
   CurrentPlan,
   PermissionPrompt,
 } from "@/agentMode/session/types";
-import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import AgentChatMessages, { type ChatConnectors } from "@/agentMode/ui/AgentChatMessages";
+import type { ConnectorCard } from "@/connectors/connectorCards";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { AI_SENDER } from "@/constants";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
@@ -53,6 +54,14 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
       </div>
     );
   },
+}));
+
+jest.mock("@/connectors/ui/ConnectorChatCard", () => ({
+  ConnectorChatCard: ({ serviceId, onDismiss }: { serviceId: string; onDismiss: () => void }) => (
+    <button type="button" onClick={onDismiss}>
+      Connect card {serviceId}
+    </button>
+  ),
 }));
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
@@ -162,7 +171,15 @@ const chatBackend = {
   resolveAskUserQuestion: jest.fn(),
   dismissFeedbackOffer: jest.fn(),
   markFeedbackReported: jest.fn(),
+  dismissConnectorCard: jest.fn(),
 } as unknown as AgentChatBackend;
+
+function chatConnectors(cards: ConnectorCard[]): ChatConnectors {
+  return {
+    cards,
+    manager: {} as ChatConnectors["manager"],
+  };
+}
 
 const FEEDBACK_OFFER: FeedbackOffer = {
   trigger: "agent",
@@ -264,6 +281,37 @@ describe("AgentChatMessages", () => {
       expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
         text.indexOf("next question")
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 shows each connector card after the reply of the turn that asked for it, counted by turn so a Reload that renumbers messages keeps it there, beside its feedback card, and hides dismissed ones", () => {
+      const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        feedbackOffer: FEEDBACK_OFFER,
+        connectors: chatConnectors([
+          { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+          { serviceId: "linear", afterUserTurn: 2, dismissed: false, reported: null },
+          { serviceId: "todoist", afterUserTurn: 2, dismissed: true, reported: null },
+        ]),
+      });
+
+      const text = container.textContent ?? "";
+      expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
+        text.indexOf("Connect card notion")
+      );
+      expect(text.indexOf("Connect card notion")).toBeLessThan(text.indexOf("next question"));
+      expect(text.indexOf("Next answer.")).toBeLessThan(text.indexOf("Connect card linear"));
+      expect(text).not.toContain("Connect card todoist");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 dismisses a connector card through the chat", () => {
+      renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        connectors: chatConnectors([
+          { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+        ]),
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Connect card notion" }));
+
+      expect(chatBackend.dismissConnectorCard).toHaveBeenCalledWith("notion");
     });
 
     it("hides a dismissed feedback card", () => {

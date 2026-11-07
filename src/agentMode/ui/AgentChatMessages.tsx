@@ -2,7 +2,10 @@ import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
-import { FeedbackCard, findFeedbackCardIndex } from "@/agentMode/ui/FeedbackCard";
+import { FeedbackCard, findTrailingCardIndex } from "@/agentMode/ui/FeedbackCard";
+import type { ConnectionManager } from "@/connectors/connectionManager";
+import type { ConnectorCard } from "@/connectors/connectorCards";
+import { ConnectorChatCard } from "@/connectors/ui/ConnectorChatCard";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { setSettings } from "@/settings/model";
@@ -40,6 +43,12 @@ interface AgentChatMessagesProps {
   chatBackend: AgentChatBackend;
   isLoading: boolean;
   feedbackOffer: FeedbackOffer | null;
+  connectors?: ChatConnectors;
+}
+
+export interface ChatConnectors {
+  cards: readonly ConnectorCard[];
+  manager: ConnectionManager;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -175,6 +184,7 @@ const AgentChatMessages = memo(
     chatBackend,
     isLoading,
     feedbackOffer,
+    connectors,
   }: AgentChatMessagesProps) => {
     const { app } = plugin;
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
@@ -216,7 +226,10 @@ const AgentChatMessages = memo(
         : null;
 
     const feedbackCardIndex = useMemo(
-      () => findFeedbackCardIndex(visible, feedbackOffer),
+      () =>
+        feedbackOffer && feedbackOffer.status !== "dismissed"
+          ? findTrailingCardIndex(visible, feedbackOffer.afterUserMessageId)
+          : -1,
       [visible, feedbackOffer]
     );
     const feedbackCard = useMemo(
@@ -244,6 +257,32 @@ const AgentChatMessages = memo(
       [feedbackOffer, plugin, chatBackend]
     );
 
+    const connectorCardsByIndex = useMemo(() => {
+      const byIndex = new Map<number, React.ReactNode[]>();
+      if (!connectors) return byIndex;
+      const { cards, manager } = connectors;
+      const userMessageIds = messages
+        .filter((message) => message.sender === USER_SENDER)
+        .map((message) => message.id);
+      for (const card of cards) {
+        if (card.dismissed) continue;
+        const index = findTrailingCardIndex(
+          visible,
+          userMessageIds[card.afterUserTurn - 1] ?? null
+        );
+        byIndex.set(index, [
+          ...(byIndex.get(index) ?? []),
+          <ConnectorChatCard
+            key={card.serviceId}
+            serviceId={card.serviceId}
+            manager={manager}
+            onDismiss={() => chatBackend.dismissConnectorCard(card.serviceId)}
+          />,
+        ]);
+      }
+      return byIndex;
+    }, [messages, visible, connectors, chatBackend]);
+
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
     // The chat keeps running while Claude waits on its subagents with no reply open, so only an unfinished reply gets the live timer. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
     const streamingMessageId =
@@ -269,7 +308,14 @@ const AgentChatMessages = memo(
                   message.sender !== USER_SENDER && message.id === latestAssistant?.id
                 }
                 isStreaming={message.id === streamingMessageId}
-                trailingCard={index === feedbackCardIndex ? feedbackCard : undefined}
+                trailingCard={
+                  index === feedbackCardIndex || connectorCardsByIndex.has(index) ? (
+                    <>
+                      {index === feedbackCardIndex && feedbackCard}
+                      {connectorCardsByIndex.get(index)}
+                    </>
+                  ) : undefined
+                }
               />
             );
           })}

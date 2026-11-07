@@ -18,6 +18,7 @@ import type {
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type { ConnectorCard } from "@/connectors/connectorCards";
 
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
@@ -209,6 +210,14 @@ export class AgentChatUIState implements AgentChatBackend {
 
   markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
     this.session.markFeedbackReported(report);
+  }
+
+  getConnectorCards(): readonly ConnectorCard[] {
+    return this.session.getConnectorCards();
+  }
+
+  dismissConnectorCard(serviceId: string): void {
+    this.session.dismissConnectorCard(serviceId);
   }
 
   getSessionUsage(): SessionUsage | null {
