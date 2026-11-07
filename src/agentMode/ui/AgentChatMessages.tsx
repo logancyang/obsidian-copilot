@@ -280,7 +280,7 @@ const AgentChatMessages = memo(
         .filter((message) => message.sender === USER_SENDER)
         .map((message) => message.id);
       for (const card of cards) {
-        if (card.dismissed) continue;
+        if (card.dismissed || !("serviceId" in card)) continue;
         const index = findTrailingCardIndex(
           visible,
           userMessageIds[card.afterUserTurn - 1] ?? null

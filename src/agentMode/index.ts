@@ -17,7 +17,11 @@ import {
 } from "@/services/obsidianCli/obsidianCliTool";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { CONNECTOR_CATALOG } from "@/connectors/catalog";
-import { createSuggestConnectorTool, isServiceConnected } from "@/connectors/connectorCards";
+import {
+  createSuggestConnectorTool,
+  isServiceConnected,
+  PROPOSE_CUSTOM_CONNECTOR_TOOL,
+} from "@/connectors/connectorCards";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
@@ -202,7 +206,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
     refreshSystemPromptAffected();
   };
-  const { connectionManager, connectorTools } = plugin;
+  const { connectionManager, connectorTools, customConnectors } = plugin;
   const connectorsOn = () => isConnectorsEnabled() === true;
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
@@ -256,6 +260,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             }),
           ]
         : []),
+      ...(customConnectors ? [PROPOSE_CUSTOM_CONNECTOR_TOOL] : []),
     ],
     connectorTools
   );
@@ -297,6 +302,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       connectionManager &&
       ((serviceId) =>
         connectorsOn() && isServiceConnected(connectionManager.getSnapshot(), serviceId)),
+    customConnectorStatus: customConnectors && ((id) => customConnectors.statusOf(id)),
     copilotMcpServer,
   });
   managerRef = manager;

@@ -218,6 +218,24 @@ describe("customConnectorConfig", () => {
         connectors: [{ config, secrets: { Authorization: "" } }],
       });
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 fills in the values it's given, leaving the others blank, so a chat card can add what the user typed", () => {
+      const text = editableConfigText(
+        {
+          id: "fake",
+          name: "Fake",
+          command: "node",
+          args: [],
+          envNames: ["FAKE_KEY", "FAKE_STORE"],
+        },
+        { FAKE_KEY: "typed-key" }
+      );
+
+      expect(JSON.parse(text).mcpServers.Fake.env).toEqual({
+        FAKE_KEY: "typed-key",
+        FAKE_STORE: "",
+      });
+    });
   });
 
   describe("secretNames()", () => {

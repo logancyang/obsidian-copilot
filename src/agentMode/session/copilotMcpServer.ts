@@ -1,5 +1,5 @@
 import type { AgentMcpServer, BackendId } from "@/agentMode/session/types";
-import type { ConnectorCardCaller, ConnectorCardResult } from "@/connectors/connectorCards";
+import { UNATTRIBUTED_CARD_CALLER, type ConnectorCardCaller } from "@/connectors/connectorCards";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import {
@@ -79,9 +79,8 @@ export type FeedbackOfferHandler = (
 ) => FeedbackOfferResult;
 
 export type ConnectorCardHandler = (
-  serviceId: string,
   callerSessionId: string | null
-) => ConnectorCardResult;
+) => ConnectorCardCaller | undefined;
 
 interface SessionHandlers {
   onOffer: FeedbackOfferHandler;
@@ -339,10 +338,10 @@ async function callTool(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
   if (tool.call) {
-    const result = await tool.call(params.arguments, {
-      showConnectorCard: (serviceId) =>
-        onConnectorCard?.(serviceId, callerSessionId(params.arguments)) ?? "unattributed",
-    });
+    const result = await tool.call(
+      params.arguments,
+      onConnectorCard?.(callerSessionId(params.arguments)) ?? UNATTRIBUTED_CARD_CALLER
+    );
     const reply = toolText(result.text, result.isError);
     return result.image
       ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }

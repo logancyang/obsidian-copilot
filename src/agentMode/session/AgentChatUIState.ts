@@ -216,8 +216,12 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getConnectorCards();
   }
 
-  dismissConnectorCard(serviceId: string): void {
-    this.session.dismissConnectorCard(serviceId);
+  dismissConnectorCard(key: string): void {
+    this.session.dismissConnectorCard(key);
+  }
+
+  markConnectorCardAdded(key: string, connectorId: string): void {
+    this.session.markConnectorCardAdded(key, connectorId);
   }
 
   getSessionUsage(): SessionUsage | null {

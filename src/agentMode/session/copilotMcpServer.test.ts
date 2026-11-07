@@ -347,19 +347,21 @@ describe("copilotMcpServer", () => {
           })),
         ]
       );
-      const showCard = jest.fn().mockReturnValue("shown");
-      const channel = await server.connect("opencode:/vault", jest.fn(), "claude", showCard);
+      const cards = { showConnectorCard: jest.fn(() => "shown" as const) };
+      const cardsOf = jest.fn().mockReturnValue(cards);
+      const channel = await server.connect("opencode:/vault", jest.fn(), "claude", cardsOf);
 
       const result = await post(
         channel,
         rpc(3, "tools/call", { name: "lookup", arguments: { caller_session_id: "ses_caller" } })
       );
 
-      expect(showCard).toHaveBeenCalledWith("notion", "ses_caller");
+      expect(cardsOf).toHaveBeenCalledWith("ses_caller");
+      expect(cards.showConnectorCard).toHaveBeenCalledWith("notion");
       expect(result.body).toMatchObject({ result: { content: [{ text: "shown" }] } });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 answers unattributed when a session can't show connector cards", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 answers unattributed when a session can't show connector cards or names no chat that can", async () => {
       server.dispose();
       server = createCopilotMcpServer(
         () => true,
@@ -370,11 +372,18 @@ describe("copilotMcpServer", () => {
           })),
         ]
       );
-      const channel = await server.connect("session-a", jest.fn(), "claude");
+      const noSessionChannel = await server.connect("session-a", jest.fn(), "claude");
+      const unknownChatChannel = await server.connect(
+        "session-b",
+        jest.fn(),
+        "claude",
+        () => undefined
+      );
 
-      const result = await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: {} }));
-
-      expect(result.body).toMatchObject({ result: { content: [{ text: "unattributed" }] } });
+      for (const channel of [noSessionChannel, unknownChatChannel]) {
+        const result = await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: {} }));
+        expect(result.body).toMatchObject({ result: { content: [{ text: "unattributed" }] } });
+      }
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 returns a hosted tool's image after its text", async () => {

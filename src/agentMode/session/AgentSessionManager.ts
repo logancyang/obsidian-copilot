@@ -5,6 +5,7 @@ import type {
   CopilotMcpServer,
   FeedbackOfferHandler,
 } from "@/agentMode/session/copilotMcpServer";
+import type { CustomConnectorStatus } from "@/connectors/custom/customConnectors";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -183,6 +184,7 @@ export interface AgentSessionManagerOptions {
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
   isConnectorConnected?: (serviceId: string) => boolean;
+  customConnectorStatus?: (connectorId: string) => CustomConnectorStatus | undefined;
 }
 
 export class AgentSessionManager {
@@ -934,6 +936,7 @@ export class AgentSessionManager {
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
       isConnectorConnected: this.opts.isConnectorConnected,
+      customConnectorStatus: this.opts.customConnectorStatus,
       mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -1875,18 +1878,17 @@ export class AgentSessionManager {
           this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
           "unattributed"
       : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
-    const showConnectorCard: ConnectorCardHandler = (serviceId, callerSessionId) =>
-      (shared
+    const cardsOf: ConnectorCardHandler = (callerSessionId) =>
+      shared
         ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
-        : this.sessions.get(internalId)
-      )?.showConnectorCard(serviceId) ?? "unattributed";
+        : this.sessions.get(internalId);
     try {
       return [
         await server.connect(
           shared ? `${descriptor.id}:${cwd}` : internalId,
           offer,
           descriptor.id,
-          showConnectorCard
+          cardsOf
         ),
       ];
     } catch (err) {
@@ -2236,6 +2238,7 @@ export class AgentSessionManager {
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
       isConnectorConnected: this.opts.isConnectorConnected,
+      customConnectorStatus: this.opts.customConnectorStatus,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
