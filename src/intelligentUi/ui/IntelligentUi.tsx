@@ -43,6 +43,7 @@ function Markdown({ node, sourcePath }: NodeProps) {
     const target = host.createDiv();
     const owner = new Component();
     let disposed = false;
+    let settled = false;
     owner.load();
     // Detached rendering prevents an older async body from overwriting a newer one. https://github.com/Brevilabs/obsidian-copilot-private/issues/881
     host.replaceChildren();
@@ -52,12 +53,14 @@ function Markdown({ node, sourcePath }: NodeProps) {
         target.textContent = node.text;
       })
       .then(() => {
+        settled = true;
         if (disposed) owner.unload();
         else host.replaceChildren(target);
       });
     return () => {
       disposed = true;
-      owner.unload();
+      // Renderers may register cleanup until their promise settles. https://github.com/Brevilabs/obsidian-copilot-private/issues/881
+      if (settled) owner.unload();
     };
   }, [app, node.text, sourcePath]);
   return <div ref={ref} className="markdown-rendered tw-min-w-0 tw-break-words" />;

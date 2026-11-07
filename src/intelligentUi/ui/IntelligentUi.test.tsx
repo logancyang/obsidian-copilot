@@ -152,12 +152,13 @@ describe("IntelligentUi", () => {
           />
         </AppContext.Provider>
       );
+      expect(unload).not.toHaveBeenCalled();
       await act(async () => {
         finish();
       });
       expect(screen.getByText("new")).toBeTruthy();
       expect(screen.queryByText("old")).toBeNull();
-      expect(unload).toHaveBeenCalled();
+      expect(unload).toHaveBeenCalledTimes(1);
     });
   });
 });
