@@ -12,11 +12,12 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 - setup-default-model: each agent's `Default model` and `Default effort`.
 - setup-models: each agent's model list switches models on or off, with `Search <agent> models…`; only switched-on models show in `Default model` and in the chat's model picker.
 - setup-agent-options: per-agent options, such as Claude's `Auto mode permissions` (`Auto`, `Accept edits`, `Bypass permissions`) and `Show extended thinking`, and each agent's `Environment variables` with `Add variable`.
+- setup-approved-rules: Claude's tab ends with `Approved rules` and `Edit approved rules`, which replaces the Copilot settings view with a page listing each rule saved by `Allow always`, with "Saved in <file>", `Search approved rules…`, `Remove` per rule, and `Back`.
 - setup-notification: `Notification` plays a `Sound` (Piano key, Marimba, Bell, Doorbell) when an agent finishes a turn.
 
 ## How to get to it
 
-- Settings → Copilot → Basic → Agents: `Default agent` and `Notification`, then a tab per agent (OpenCode, Claude, Codex) with its status, `Configure`, defaults, models, and options.
+- Settings → Copilot → Basic → Agents: `Default agent` and `Notification`, then a tab per agent (OpenCode, Claude, Codex) with its status, `Configure`, defaults, models, and options. Claude's tab also offers `Edit approved rules`.
 - Agent Chat shows `Select your agent` when the default agent cannot start and no chat is open.
 - `Install <agent>`, `Configure <agent>`, `Update`, and `Sign in` on a [status card](status-and-error-cards.md).
 
@@ -31,10 +32,13 @@ Choosing and installing an agent, signing in, and its defaults: the `Select your
 - Default model and effort: in Settings → Claude, set `Default model` to Sonnet 5.5 and `Default effort` to low, then choose `New chat`. The chat's `Model · effort` reads `Sonnet 5.5 · low`.
 - Models: switch on Haiku 5.5 in Claude's model list. `Default model` and the chat's `Model · effort` now list Haiku 5.5.
 - Options: in Settings → Claude, `Auto mode permissions` lists `Auto`, `Accept edits`, and `Bypass permissions`. Under `Environment variables`, `Add variable` adds a name and value row.
+- Approved rules: in a `Safe` chat, ask Claude to run `curl -sI https://example.org` and choose `Allow always` on the [permission request](permission-requests.md). In Settings → Claude, choose `Edit approved rules`. The page lists `Bash(curl -sI https://example.org)` "Saved in <vault>/.claude/settings.local.json". Choose `Remove`: the row goes away, and asking again in a new chat shows `Permission required`. `Back` returns to Claude's settings.
 - Notification: turn on `Notification`. A `Sound` choice appears with Piano key, Marimba, Bell, and Doorbell; picking one plays it.
 
 ## Gotchas
 
 - `Default model` and `Default effort` also change chats that are already open, on their next turn.
 - An agent's installation and its `Environment variables` are kept per computer. The same vault on another computer shows the agent as not set up until it is set up there.
+- Removing an approved rule also reaches a Claude chat that is already open: its next request for that action asks again. If that rule's `Allow always` tooltip also listed "all file edits", the open chat keeps accepting file edits, so a command such as `touch` still runs there without asking.
+- `Edit approved rules` lists only rules saved in Claude's config folder and the vault folder. Rules saved for a project chat live in the project note's folder and do not show.
 - A managed agent is installed once per computer and shared by every vault. `Uninstall` removes it for all of them.

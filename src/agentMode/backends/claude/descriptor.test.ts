@@ -1,12 +1,17 @@
 import * as path from "node:path";
-import * as os from "node:os";
+import * as os from "os";
 import * as fs from "node:fs";
 import { signOutFromClaude } from "./claudeAuth";
 jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
+jest.mock("os", () => {
+  const actual = jest.requireActual<typeof import("os")>("os");
+  return { ...actual, homedir: jest.fn(() => actual.homedir()) };
+});
 
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState } from "@/agentMode/session/types";
-import { resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import { getSettings, resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import type CopilotPlugin from "@/main";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
@@ -220,6 +225,146 @@ describe("descriptor", () => {
         expect(destination(arrange())).toEqual(expected);
       }
     );
+  });
+
+  describe("ClaudeBackendDescriptor.approvedRules", () => {
+    const savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    let homeDir: string;
+    let configDir: string;
+    let vaultBase: string;
+    let plugin: CopilotPlugin;
+    const userFile = () => path.join(configDir, "settings.json");
+    const projectFile = () => path.join(vaultBase, ".claude", "settings.json");
+    const localFile = () => path.join(vaultBase, ".claude", "settings.local.json");
+    const writeJson = (file: string, value: unknown) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, typeof value === "string" ? value : JSON.stringify(value, null, 2));
+    };
+    const readJson = (file: string): unknown => JSON.parse(fs.readFileSync(file, "utf8"));
+    const store = () => ClaudeBackendDescriptor.approvedRules!;
+
+    beforeEach(() => {
+      homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-home-"));
+      jest.mocked(os.homedir).mockReturnValue(homeDir);
+      delete process.env.CLAUDE_CONFIG_DIR;
+      configDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-config-"));
+      vaultBase = fs.mkdtempSync(path.join(os.tmpdir(), "claude-vault-"));
+      resetSettings();
+      __resetVaultBaseCache();
+      setSettings({
+        agentMode: {
+          ...getSettings().agentMode,
+          backends: { claude: { envOverrides: { CLAUDE_CONFIG_DIR: configDir } } },
+        },
+      });
+      const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
+      adapter.getBasePath = () => vaultBase;
+      plugin = { app: { vault: { adapter } } } as never;
+    });
+    afterEach(() => {
+      resetSettings();
+      __resetVaultBaseCache();
+      jest.mocked(os.homedir).mockReset();
+      if (savedConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+      fs.rmSync(homeDir, { recursive: true, force: true });
+      fs.rmSync(configDir, { recursive: true, force: true });
+      fs.rmSync(vaultBase, { recursive: true, force: true });
+    });
+
+    describe("list()", () => {
+      it("lists every allow rule from the Claude config folder's settings.json and the vault's .claude/settings.json and settings.local.json, each with its file", async () => {
+        writeJson(userFile(), {
+          permissions: { allow: ["Bash(git status:*)"], deny: ["Bash(rm:*)"] },
+        });
+        writeJson(projectFile(), { permissions: { allow: ["WebFetch(domain:example.com)"] } });
+        writeJson(localFile(), {
+          permissions: { allow: ["Bash(npm test:*)", "Read(//tmp/**)"], ask: ["Bash(curl:*)"] },
+        });
+
+        const rules = await store().list(plugin);
+
+        expect(rules.map((rule) => [rule.allows, rule.appliesTo])).toEqual([
+          ["Bash(git status:*)", { kind: "file", path: userFile() }],
+          ["WebFetch(domain:example.com)", { kind: "file", path: projectFile() }],
+          ["Bash(npm test:*)", { kind: "file", path: localFile() }],
+          ["Read(//tmp/**)", { kind: "file", path: localFile() }],
+        ]);
+        expect(new Set(rules.map((rule) => rule.id)).size).toBe(4);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 lists no rules from a settings file that does not exist", async () => {
+        writeJson(localFile(), { permissions: { allow: ["Bash(ls:*)"] } });
+
+        const rules = await store().list(plugin);
+
+        expect(rules.map((rule) => rule.allows)).toEqual(["Bash(ls:*)"]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 fails naming the file when a settings file isn't valid JSON, so the page shows it can't read the rules", async () => {
+        writeJson(userFile(), { permissions: { allow: ["Bash(ls:*)"] } });
+        writeJson(projectFile(), "{ not json");
+
+        await expect(store().list(plugin)).rejects.toThrow(`${projectFile()} isn't valid JSON`);
+      });
+    });
+
+    describe("remove()", () => {
+      it("deletes only that rule from permissions.allow in its file and keeps every other key, value, and file as it was", async () => {
+        writeJson(userFile(), { permissions: { allow: ["Bash(git status:*)"] } });
+        writeJson(localFile(), {
+          env: { HTTPS_PROXY: "http://proxy.example" },
+          permissions: {
+            allow: ["Bash(npm test:*)", "Read(//tmp/**)"],
+            deny: ["Bash(rm:*)"],
+            defaultMode: "default",
+          },
+          model: "sonnet",
+        });
+        const userBefore = fs.readFileSync(userFile(), "utf8");
+        const rule = (await store().list(plugin)).find((r) => r.allows === "Bash(npm test:*)")!;
+
+        await store().remove(plugin, rule);
+
+        expect(readJson(localFile())).toEqual({
+          env: { HTTPS_PROXY: "http://proxy.example" },
+          permissions: {
+            allow: ["Read(//tmp/**)"],
+            deny: ["Bash(rm:*)"],
+            defaultMode: "default",
+          },
+          model: "sonnet",
+        });
+        expect(fs.readFileSync(userFile(), "utf8")).toBe(userBefore);
+        expect((await store().list(plugin)).map((r) => r.allows)).toEqual([
+          "Bash(git status:*)",
+          "Read(//tmp/**)",
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 leaves the file byte-for-byte as it was when it no longer holds the rule", async () => {
+        writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
+        const [rule] = await store().list(plugin);
+        const edited = '{"permissions":{"allow":["Bash(ls:*)"]},\n"model":   "sonnet"}';
+        writeJson(localFile(), edited);
+
+        await store().remove(plugin, rule);
+
+        expect(fs.readFileSync(localFile(), "utf8")).toBe(edited);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/866 fails and leaves the file untouched when it stopped being valid JSON after the rule was listed", async () => {
+        writeJson(localFile(), { permissions: { allow: ["Bash(npm test:*)"] } });
+        const [rule] = await store().list(plugin);
+        writeJson(localFile(), '{ "permissions": { "allow": ["Bash(npm test:*)"] ');
+
+        await expect(store().remove(plugin, rule)).rejects.toThrow(
+          `${localFile()} isn't valid JSON`
+        );
+        expect(fs.readFileSync(localFile(), "utf8")).toBe(
+          '{ "permissions": { "allow": ["Bash(npm test:*)"] '
+        );
+      });
+    });
   });
 
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {

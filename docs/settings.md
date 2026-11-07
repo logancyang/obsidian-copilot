@@ -88,6 +88,7 @@ The Claude settings card also includes:
 | **Auto mode permissions**                           | **Auto**                                  | **Auto** lets Claude judge risk and still ask about sensitive work. **Accept edits** automatically approves file edits only. **Bypass permissions** skips all checks and should be used only in a trusted vault and task. |
 | **Show extended thinking**                          | Off                                       | Streams Claude's reasoning blocks in the conversation. This can increase token use.                                                                                                                                       |
 | **Environment variables**                           | No rows                                   | Passes values such as `CLAUDE_CONFIG_DIR` or `HTTPS_PROXY` to Claude. These can change where Claude reads configuration and credentials.                                                                                  |
+| **Approved rules**                                  | Not applicable                            | **Edit approved rules** lists the rules Claude saved when you chose **Allow always**, with the settings file each is saved in. Select **Remove** on a rule to have Claude ask again.                                      |
 
 #### Codex
 
