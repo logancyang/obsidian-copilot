@@ -602,6 +602,18 @@ describe("toolSummaries", () => {
           'const copilot = tools["obsidian-copilot"];\nreturn copilot.notion_search({ query: "a" });'
         ),
       ],
+      [
+        "OpenCode execute code that calls one Copilot tool directly and another through a destructured alias",
+        opencodeExecute(
+          'const { "obsidian-copilot": copilot } = tools;\nawait tools["obsidian-copilot"].notion_search({ query: "a" });\nreturn copilot.notion_create_page({ title: "b" });'
+        ),
+      ],
+      [
+        "OpenCode execute code that fetches a URL beside one Copilot tool call",
+        opencodeExecute(
+          'const page = await fetch("https://example.com");\nreturn tools["obsidian-copilot"].notion_search({ query: await page.text() });'
+        ),
+      ],
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 returns null for %s",
       (_name, t) => {
