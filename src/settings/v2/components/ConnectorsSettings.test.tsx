@@ -15,6 +15,7 @@ import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import type CopilotPlugin from "@/main";
 import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
+import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App, Notice } from "obsidian";
 import React from "react";
@@ -91,7 +92,9 @@ function renderSettings(
     <AppContext.Provider value={app}>
       <PluginProvider plugin={plugin}>
         <TabProvider initialTab="connectors">
-          <SettingsTabs />
+          <SettingsSubPageHost>
+            <SettingsTabs />
+          </SettingsSubPageHost>
         </TabProvider>
       </PluginProvider>
     </AppContext.Provider>
@@ -286,6 +289,60 @@ describe("ConnectorsSettings", () => {
       unmount();
 
       expect(cancelCardLogin).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 opens Browse connectors as a settings sub-page in place of the list, and Back returns to the list", () => {
+      renderSettings(fakeManager([LINEAR_NEEDS_LOGIN]).manager);
+
+      fireEvent.click(screen.getByRole("button", { name: "Browse connectors" }));
+      expect(screen.getByRole("heading", { name: "Browse connectors" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Connectors" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      expect(screen.getByRole("heading", { name: "Connectors" })).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 keeps a login started on Browse waiting after Back, and cancels it once the user switches to another settings tab", async () => {
+      const fake = fakeManager([LINEAR_NEEDS_LOGIN]);
+      renderSettings(fake.manager);
+      fireEvent.click(screen.getByRole("button", { name: "Browse connectors" }));
+      fireEvent.click(
+        within(screen.getByRole("listitem", { name: "Linear" })).getByRole("button", {
+          name: "Reconnect",
+        })
+      );
+      await waitFor(() => expect(fake.manager.reconnect).toHaveBeenCalledWith("c2"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      expect(fake.cancelLogin).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Commands tab" }));
+      expect(fake.cancelLogin).toHaveBeenCalledTimes(1);
+    });
+
+    it("connects a service from Browse after checking the entitlement", async () => {
+      const { manager } = fakeManager([]);
+      renderSettings(manager);
+      fireEvent.click(screen.getByRole("button", { name: "Browse connectors" }));
+
+      fireEvent.click(
+        within(screen.getByRole("listitem", { name: "Notion" })).getByRole("button", {
+          name: "Connect",
+        })
+      );
+
+      await waitFor(() => expect(manager.connect).toHaveBeenCalledWith("notion"));
+      expect(mockedEnsure).toHaveBeenCalledTimes(1);
+    });
+
+    it("clears a login that didn't finish when the user moves between the list and Browse", () => {
+      const fake = fakeManager([LINEAR_NEEDS_LOGIN]);
+      renderSettings(fake.manager);
+
+      fireEvent.click(screen.getByRole("button", { name: "Browse connectors" }));
+      expect(fake.manager.dismissFailedLogin).toHaveBeenCalledTimes(1);
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      expect(fake.manager.dismissFailedLogin).toHaveBeenCalledTimes(2);
     });
 
     it("clears a login that didn't finish when the user leaves the tab", () => {
