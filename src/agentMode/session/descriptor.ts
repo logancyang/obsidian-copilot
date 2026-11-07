@@ -52,10 +52,7 @@ export interface ManagedInstallAction {
   run(plugin: CopilotPlugin): Promise<void>;
 }
 
-export type ApprovedRuleScope =
-  | { kind: "agent" }
-  | { kind: "folder"; path: string }
-  | { kind: "file"; path: string };
+export type ApprovedRuleScope = { kind: "folder"; path: string } | { kind: "file"; path: string };
 
 export interface ApprovedRule {
   readonly id: string;

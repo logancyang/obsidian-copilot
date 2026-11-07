@@ -5,7 +5,11 @@ import React from "react";
 import { ApprovedRulesPage, type ApprovedRulesPageProps } from "./ApprovedRulesPage";
 
 const RULES: ReadonlyArray<ApprovedRule> = [
-  { id: "git-status", allows: "Bash(git status:*)", appliesTo: { kind: "agent" } },
+  {
+    id: "git-status",
+    allows: "Bash(git status:*)",
+    appliesTo: { kind: "file", path: "/Users/alex/.claude/settings.json" },
+  },
   {
     id: "npm-test",
     allows: "Bash(npm run test:*)",
@@ -39,7 +43,7 @@ const PLUGIN = {} as CopilotPlugin;
 const MANY_RULES: ReadonlyArray<ApprovedRule> = Array.from({ length: 30 }, (_, index) => ({
   id: `rule-${index}`,
   allows: `Bash(tool${index + 1}:*)`,
-  appliesTo: { kind: "agent" },
+  appliesTo: { kind: "file", path: "/Users/alex/.claude/settings.json" },
 }));
 
 function InSettingsViewport(args: Partial<ApprovedRulesPageProps>): React.ReactElement {

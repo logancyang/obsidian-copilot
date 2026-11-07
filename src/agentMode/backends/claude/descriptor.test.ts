@@ -1,8 +1,12 @@
 import * as path from "node:path";
-import * as os from "node:os";
+import * as os from "os";
 import * as fs from "node:fs";
 import { signOutFromClaude } from "./claudeAuth";
 jest.mock("./claudeAuth", () => ({ signOutFromClaude: jest.fn() }));
+jest.mock("os", () => {
+  const actual = jest.requireActual<typeof import("os")>("os");
+  return { ...actual, homedir: jest.fn(() => actual.homedir()) };
+});
 
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState } from "@/agentMode/session/types";
@@ -224,6 +228,8 @@ describe("descriptor", () => {
   });
 
   describe("ClaudeBackendDescriptor.approvedRules", () => {
+    const savedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    let homeDir: string;
     let configDir: string;
     let vaultBase: string;
     let plugin: CopilotPlugin;
@@ -238,6 +244,9 @@ describe("descriptor", () => {
     const store = () => ClaudeBackendDescriptor.approvedRules!;
 
     beforeEach(() => {
+      homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-home-"));
+      jest.mocked(os.homedir).mockReturnValue(homeDir);
+      delete process.env.CLAUDE_CONFIG_DIR;
       configDir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-config-"));
       vaultBase = fs.mkdtempSync(path.join(os.tmpdir(), "claude-vault-"));
       resetSettings();
@@ -255,6 +264,9 @@ describe("descriptor", () => {
     afterEach(() => {
       resetSettings();
       __resetVaultBaseCache();
+      jest.mocked(os.homedir).mockReset();
+      if (savedConfigDir !== undefined) process.env.CLAUDE_CONFIG_DIR = savedConfigDir;
+      fs.rmSync(homeDir, { recursive: true, force: true });
       fs.rmSync(configDir, { recursive: true, force: true });
       fs.rmSync(vaultBase, { recursive: true, force: true });
     });

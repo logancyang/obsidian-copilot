@@ -178,11 +178,13 @@ describe("AgentSettings", () => {
       mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
       mockPreloadModels.mockReset().mockResolvedValue(undefined);
       resolvedPaths = {};
-      claudeRuleStore.list
-        .mockReset()
-        .mockResolvedValue([
-          { id: "rule-git", allows: "Bash(git status:*)", appliesTo: { kind: "agent" } },
-        ]);
+      claudeRuleStore.list.mockReset().mockResolvedValue([
+        {
+          id: "rule-git",
+          allows: "Bash(git status:*)",
+          appliesTo: { kind: "file", path: "/Users/me/.claude/settings.json" },
+        },
+      ]);
       claudeRuleStore.remove.mockReset().mockResolvedValue(undefined);
     });
 
