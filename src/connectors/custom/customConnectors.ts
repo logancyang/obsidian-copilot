@@ -175,6 +175,10 @@ export class CustomConnectors {
     this.restart(id);
   }
 
+  statusOf(id: string): CustomConnectorStatus | undefined {
+    return this.snapshot.connectors.find(({ config }) => config.id === id)?.status;
+  }
+
   storedValueNames(id: string): ReadonlySet<string> {
     return new Set(Object.keys(this.secretsOf(id)));
   }

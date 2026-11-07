@@ -1,6 +1,6 @@
 import { fakeChat } from "@/agentMode/session/testing/fakeChat";
 import type { AgentChatMessage } from "@/agentMode/session/types";
-import { CONNECTOR_CARDS, type ConnectorCard } from "@/connectors/agentMode/connectorCards";
+import { CONNECTOR_CARDS, type ServiceConnectorCard } from "@/connectors/agentMode/connectorCards";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -27,7 +27,10 @@ const TRANSCRIPT = [
   message("u2", USER_SENDER),
 ];
 
-function card(serviceId: string, overrides: Partial<ConnectorCard> = {}): ConnectorCard {
+function card(
+  serviceId: string,
+  overrides: Partial<ServiceConnectorCard> = {}
+): ServiceConnectorCard {
   return { serviceId, afterUserTurn: 1, dismissed: false, reported: null, ...overrides };
 }
 
@@ -45,6 +48,21 @@ describe("connectorCardSlot", () => {
     it("places a card at the end when its turn is no longer in the transcript", () => {
       expect(connectorCardSlot.place([card("notion", { afterUserTurn: 5 })], TRANSCRIPT)).toEqual([
         { id: "notion", afterUserMessageId: null },
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 leaves custom connector cards to their own slot", () => {
+      const custom = {
+        proposal: { id: "fakenotes", name: "Fake Notes", command: "node", args: [], envNames: [] },
+        updates: null,
+        addedId: null,
+        afterUserTurn: 1,
+        dismissed: false,
+        reported: null,
+      };
+
+      expect(connectorCardSlot.place([custom, card("notion")], TRANSCRIPT)).toEqual([
+        { id: "notion", afterUserMessageId: "u1" },
       ]);
     });
 

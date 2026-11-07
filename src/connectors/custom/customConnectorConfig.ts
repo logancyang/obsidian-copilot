@@ -75,12 +75,16 @@ export function requireOneServer(parsed: CustomConnectorParse): CustomConnectorP
     : parsed;
 }
 
-export function editableConfigText(config: CustomConnectorConfig): string {
-  const blank = (names: readonly string[]) => Object.fromEntries(names.map((name) => [name, ""]));
+export function editableConfigText(
+  config: CustomConnectorConfig,
+  values: Readonly<Record<string, string>> = {}
+): string {
+  const fill = (names: readonly string[]) =>
+    Object.fromEntries(names.map((name) => [name, values[name] ?? ""]));
   const server =
     "command" in config
-      ? { command: config.command, args: config.args, env: blank(config.envNames) }
-      : { url: config.url, headers: blank(config.headerNames) };
+      ? { command: config.command, args: config.args, env: fill(config.envNames) }
+      : { url: config.url, headers: fill(config.headerNames) };
   return JSON.stringify({ mcpServers: { [config.name]: server } }, null, 2);
 }
 

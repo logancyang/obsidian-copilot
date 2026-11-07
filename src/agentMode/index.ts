@@ -21,6 +21,7 @@ import {
   createConnectorCardsExtension,
   createSuggestConnectorTool,
   isServiceConnected,
+  PROPOSE_CUSTOM_CONNECTOR_TOOL,
 } from "@/connectors/agentMode/connectorCards";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
@@ -207,7 +208,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
     refreshSystemPromptAffected();
   };
-  const { connectionManager, connectorTools } = plugin;
+  const { connectionManager, connectorTools, customConnectors } = plugin;
   const connectorsOn = () => isConnectorsEnabled() === true;
   const copilotMcpServer = createCopilotMcpServer(
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
@@ -261,6 +262,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             }),
           ]
         : []),
+      ...(customConnectors ? [PROPOSE_CUSTOM_CONNECTOR_TOOL] : []),
     ],
     connectorTools
   );
@@ -298,13 +300,16 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     sessionIndex,
     chatExtensions: [
       FEEDBACK_OFFER_EXTENSION,
-      ...(connectionManager
+      ...(connectionManager || customConnectors
         ? [
-            // A stored login without the entitlement gives agents no tools, so its card must not report it connected.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
             createConnectorCardsExtension(
+              // A stored login without the entitlement gives agents no tools, so its card must not report it connected.
+              // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
               (serviceId) =>
-                connectorsOn() && isServiceConnected(connectionManager.getSnapshot(), serviceId)
+                !!connectionManager &&
+                connectorsOn() &&
+                isServiceConnected(connectionManager.getSnapshot(), serviceId),
+              (connectorId) => customConnectors?.statusOf(connectorId)
             ),
           ]
         : []),

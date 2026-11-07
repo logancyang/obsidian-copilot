@@ -674,8 +674,33 @@ describe("agentMode", () => {
       createAgentSessionManager({} as App, plugin);
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
-      expect(hosted.map(({ definition }) => definition.name)).not.toContain("suggest_connector");
+      const names = hosted.map(({ definition }) => definition.name);
+      expect(names).not.toContain("suggest_connector");
+      expect(names).not.toContain("propose_custom_connector");
       expect(connectorCardsExtension()).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 offers agents propose_custom_connector on a device with custom connectors, and reports each custom connector the user added in a chat's card outcomes", () => {
+      const statusOf = jest.fn(() => ({ kind: "couldnt-start", reason: "bad key ***" }) as const);
+      createAgentSessionManager(
+        {} as App,
+        { ...plugin, customConnectors: { statusOf } } as unknown as CopilotPlugin
+      );
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("propose_custom_connector");
+      const note = connectorCardsExtension()?.beforePrompt?.([
+        {
+          proposal: { name: "Fake Notes", command: "node", args: [], env: {} },
+          updates: null,
+          addedId: "fakenotes",
+          afterUserTurn: 1,
+          dismissed: false,
+          reported: null,
+        },
+      ])?.note;
+      expect(note).toContain("couldn't start: bad key ***");
+      expect(statusOf).toHaveBeenCalledWith("fakenotes");
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

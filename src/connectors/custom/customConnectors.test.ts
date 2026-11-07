@@ -313,6 +313,30 @@ describe("customConnectors", () => {
       });
     });
 
+    describe("statusOf()", () => {
+      it("gives a connector's status, and nothing for an unknown connector", async () => {
+        const fake = setUp();
+        await fake.add(LOCAL_JSON);
+
+        expect(fake.custom.statusOf("echo")).toEqual({ kind: "connected", toolCount: 2 });
+        expect(fake.custom.statusOf("missing")).toBeUndefined();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 gives a reason that quoted the connector's key with *** in its place, since a chat card's outcome sends the reason to the agent", async () => {
+        const fake = setUp();
+        jest
+          .spyOn(FakeProcess.prototype, "start")
+          .mockRejectedValueOnce(new Error("key k-1 was rejected (k-1)"));
+
+        await fake.add(LOCAL_JSON);
+
+        expect(fake.custom.statusOf("echo")).toEqual({
+          kind: "couldnt-start",
+          reason: "key *** was rejected (***)",
+        });
+      });
+    });
+
     describe("refresh()", () => {
       it(`shows "Add API key on this device" for a synced connector whose values this device lacks, and doesn't start it: ${ISSUE}`, async () => {
         const fake = setUp();
