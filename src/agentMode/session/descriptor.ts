@@ -52,6 +52,19 @@ export interface ManagedInstallAction {
   run(plugin: CopilotPlugin): Promise<void>;
 }
 
+export type ApprovedRuleScope = { kind: "folder"; path: string } | { kind: "file"; path: string };
+
+export interface ApprovedRule {
+  readonly id: string;
+  readonly allows: string;
+  readonly appliesTo: ApprovedRuleScope;
+}
+
+export interface ApprovedRuleStore {
+  list(plugin: CopilotPlugin): Promise<ReadonlyArray<ApprovedRule>>;
+  remove(plugin: CopilotPlugin, rule: ApprovedRule): Promise<void>;
+}
+
 export interface BackendAuthStatus {
   signedIn: boolean;
   label?: string;
@@ -128,6 +141,8 @@ export interface BackendDescriptor {
   managedInstall?: ManagedInstallAction;
 
   auth?: BackendAuth;
+
+  approvedRules?: ApprovedRuleStore;
 
   createBackendProcess(args: {
     plugin: CopilotPlugin;
