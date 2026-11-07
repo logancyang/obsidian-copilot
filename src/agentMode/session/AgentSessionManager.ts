@@ -947,7 +947,9 @@ export class AgentSessionManager {
     }
     this.detachedFromTabIds.delete(session.internalId);
     this.lastActiveByScope.set(projectId, session.internalId);
-    if (projectId === this.activeProjectId) {
+    // A restart reselects the user's chat once every chat is rebuilt; a rebuilt chat taking the selection meanwhile would receive the user's next message.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+    if (projectId === this.activeProjectId && !this.restartingBackends.has(resolvedId)) {
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
@@ -2769,7 +2771,6 @@ export class AgentSessionManager {
       });
       if (resumed) {
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
-        this.setActiveSession(resumed.internalId);
         return resumed;
       }
     }
@@ -2833,6 +2834,9 @@ export class AgentSessionManager {
         retainedChatInputIds.push(replacement.chatInputId);
         this.retainedChatInputIds.add(replacement.chatInputId);
       }
+      // Closing the selected chat would select another agent's chat until the rebuild, and a message sent then runs there.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+      if (replacements.some((r) => r.internalId === activeSessionId)) this.activeSessionId = null;
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }

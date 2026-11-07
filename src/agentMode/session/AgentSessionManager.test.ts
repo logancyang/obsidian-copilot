@@ -425,6 +425,7 @@ interface ManagerOptions {
   app?: App;
   plugin?: unknown;
   descriptor?: BackendDescriptor;
+  otherDescriptors?: BackendDescriptor[];
   preloader?: Record<string, unknown>;
   persistence?: unknown;
   sessionIndex?: AgentSessionIndex;
@@ -435,7 +436,10 @@ interface ManagerOptions {
 const builtManagers: AgentSessionManager[] = [];
 
 function buildManager(options: ManagerOptions = {}): AgentSessionManager {
-  const descriptor = options.descriptor ?? buildDescriptor();
+  const descriptors = [
+    options.descriptor ?? buildDescriptor(),
+    ...(options.otherDescriptors ?? []),
+  ];
   const manager = new AgentSessionManager(
     options.app ?? buildApp(),
     (options.plugin ?? {
@@ -443,7 +447,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
     }) as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       permissionPrompter: jest.fn(),
-      resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+      resolveDescriptor: (id) => descriptors.find((descriptor) => descriptor.id === id),
       modelPreloader: {
         getCachedModelCatalog: jest.fn(() => null),
         getEffortCatalog: jest.fn(() => null),
@@ -3011,6 +3015,20 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.chatInputId).toBe(landing.chatInputId);
         expect(mgr.getActiveProjectId()).toBe(projectId);
       });
+
+      it("keeps the reloaded chat selected instead of another agent's open chat while its agent restarts (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const mgr = buildManager({ otherDescriptors: [buildDescriptor({ id: "codex" })] });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        const reloaded = await createWorkedSession(mgr, "opencode");
+        await mgr.noteSpawnConfigChanged("opencode", "custom connector added");
+        const selected: (string | null)[] = [];
+        mgr.subscribe(() => selected.push(mgr.getActiveSession()?.chatInputId ?? null));
+
+        await mgr.applyHeldConfigChange("opencode");
+
+        expect(selected).not.toContain(otherAgentChat.chatInputId);
+        expect(mgr.getActiveSession()?.chatInputId).toBe(reloaded.chatInputId);
+      });
     });
 
     describe("restartBackend()", () => {
@@ -3971,6 +3989,39 @@ describe("AgentSessionManager", () => {
         expect(mockBackendShutdown).toHaveBeenCalled();
         expect(preloader.preload).toHaveBeenCalledWith("opencode");
       });
+
+      it.each([
+        [
+          "resuming them",
+          {
+            loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+              sessionId,
+              state: { model: null, mode: null },
+            })),
+          },
+        ],
+        ["starting them fresh", {}],
+      ])(
+        "keeps another agent's selected chat selected while the changed agent rebuilds its chats by %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)",
+        async (_, backendOverrides) => {
+          const mgr = buildManager({
+            descriptor: buildDescriptor({
+              createBackendProcess: () => ({ ...makeMockBackendProcess(), ...backendOverrides }),
+            }),
+            otherDescriptors: [buildDescriptor({ id: "codex" })],
+          });
+          const rebuilt = await createWorkedSession(mgr, "opencode");
+          const selectedChat = await createWorkedSession(mgr, "codex");
+          const selected: (string | null)[] = [];
+          mgr.subscribe(() => selected.push(mgr.getActiveSession()?.chatInputId ?? null));
+
+          await mgr.onInstallStateChanged("opencode");
+
+          expect(mockBackendShutdown).toHaveBeenCalled();
+          expect(new Set(selected)).toEqual(new Set([selectedChat.chatInputId]));
+          expect(mgr.getSessions().map((s) => s.chatInputId)).toContain(rebuilt.chatInputId);
+        }
+      );
 
       it("tears down and drops the warm probe when the binary is no longer available", async () => {
         const { mgr, preloader, setInstallState } = buildInstallStateManager({
