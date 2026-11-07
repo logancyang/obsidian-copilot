@@ -483,6 +483,7 @@ function buildCopilotMcpServer({
 }: { connect?: jest.Mock } = {}) {
   return {
     connect,
+    readOnlyToolNames: jest.fn(async () => []),
     disconnect: jest.fn(),
     dispose: jest.fn(),
   };
@@ -1012,6 +1013,18 @@ describe("AgentSessionManager", () => {
         await mgr.createSession();
 
         expect(refreshLatestVersion).toHaveBeenCalledTimes(2);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 starts the backend with Copilot's MCP server, so an agent with fixed permission rules knows which Copilot tools are read-only", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const descriptor = buildDescriptor();
+        const mgr = buildManager({ copilotMcpServer, descriptor });
+
+        await mgr.createSession();
+
+        expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
+          expect.objectContaining({ copilotMcpServer })
+        );
       });
 
       it("attaches the Copilot MCP server to a new session and routes its cards to that session", async () => {

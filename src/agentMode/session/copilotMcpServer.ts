@@ -146,6 +146,7 @@ export interface CopilotMcpServer {
     backendId: BackendId,
     onConnectorCard?: ConnectorCardHandler
   ): Promise<AgentMcpServer>;
+  readOnlyToolNames(): Promise<ReadonlyArray<string>>;
   disconnect(sessionKey: string): void;
   dispose(): void;
 }
@@ -169,6 +170,16 @@ export function createCopilotMcpServer(
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
   let disposed = false;
+  const refreshProvidedTools = async (): Promise<void> =>
+    toolProvider
+      ?.refresh()
+      .catch((error) => logWarn("[AgentMode] Couldn't refresh connector tools", error));
+  const listReadOnlyToolNames = (): ReadonlyArray<string> =>
+    Object.freeze(
+      [...hostedTools.map((tool) => tool.definition), ...providedTools(hostedTools, toolProvider)]
+        .filter((definition) => definition.annotations?.readOnlyHint === true)
+        .map((definition) => definition.name)
+    );
 
   return Object.freeze({
     async connect(
@@ -183,12 +194,7 @@ export function createCopilotMcpServer(
       );
       // Agents read the tool list once per session, so each new session first brings connected services up to date.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-      const [origin] = await Promise.all([
-        server.origin,
-        toolProvider
-          ?.refresh()
-          .catch((error) => logWarn("[AgentMode] Couldn't refresh connector tools", error)),
-      ]);
+      const [origin] = await Promise.all([server.origin, refreshProvidedTools()]);
       const url = `${origin}${MCP_PATH}`;
       const crypto = requireNodeModule<typeof import("node:crypto")>("crypto");
       // A shared key keeps its token, so a later chat re-registering the server leaves the folder's connection on a valid token.
@@ -200,12 +206,12 @@ export function createCopilotMcpServer(
         name: COPILOT_MCP_SERVER_NAME,
         url,
         headers: Object.freeze({ Authorization: `Bearer ${token}` }),
-        readOnlyToolNames: Object.freeze(
-          [...hostedTools.map((tool) => tool.definition), ...(toolProvider?.tools() ?? [])]
-            .filter((definition) => definition.annotations?.readOnlyHint === true)
-            .map((definition) => definition.name)
-        ),
+        readOnlyToolNames: listReadOnlyToolNames(),
       });
+    },
+    async readOnlyToolNames(): Promise<ReadonlyArray<string>> {
+      await refreshProvidedTools();
+      return listReadOnlyToolNames();
     },
     disconnect(sessionKey: string): void {
       const token = tokensBySession.get(sessionKey);
@@ -292,7 +298,7 @@ async function reply(
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
               .map((tool) => tool.definition),
-            ...(toolProvider?.tools(handlers.listing) ?? []),
+            ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },
       };
@@ -303,6 +309,18 @@ async function reply(
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
   }
+}
+
+// A custom connector can name a tool like one of Copilot's own, and a call by that name always reaches Copilot's tool.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+function providedTools(
+  hostedTools: readonly ServerTool[],
+  toolProvider: ToolProvider | undefined,
+  listing?: ToolListing
+): readonly McpToolDefinition[] {
+  return (toolProvider?.tools(listing) ?? []).filter(
+    ({ name }) => !hostedTools.some(({ definition }) => definition.name === name)
+  );
 }
 
 async function callTool(

@@ -140,6 +140,26 @@ describe("copilotMcpServer", () => {
       expect(channel.readOnlyToolNames).toEqual(["send_feedback", "peek"]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 names the read-only tools, connected services' included after a refresh, for an agent whose permission rules are fixed when it starts", async () => {
+      server.dispose();
+      const provider = connectorProvider();
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          { ...lookupTool(), definition: { name: "peek", annotations: { readOnlyHint: true } } },
+          { ...lookupTool(), definition: { name: "draw", annotations: { readOnlyHint: false } } },
+        ],
+        provider
+      );
+
+      await expect(server.readOnlyToolNames()).resolves.toEqual([
+        "send_feedback",
+        "peek",
+        "notion_search",
+      ]);
+      expect(provider.refresh).toHaveBeenCalledTimes(1);
+    });
+
     it(`${CONNECTORS_ISSUE} refreshes the connected services before handing a session its server, then lists their tools after its own and names their read-only ones`, async () => {
       server.dispose();
       server = createCopilotMcpServer(() => true, [], connectorProvider());
@@ -150,6 +170,30 @@ describe("copilotMcpServer", () => {
       expect(channel.readOnlyToolNames).toEqual(["send_feedback", "notion_search"]);
       expect(result.body).toMatchObject({
         result: { tools: [SEND_FEEDBACK_TOOL, NOTION_SEARCH, NOTION_CREATE] },
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 leaves out a connector tool named like one of Copilot's own tools, whose calls reach Copilot's tool, so it neither lists twice nor makes Copilot's tool read-only", async () => {
+      server.dispose();
+      const clash = Object.freeze({
+        name: "lookup",
+        inputSchema: { type: "object" },
+        annotations: { readOnlyHint: true },
+      });
+      server = createCopilotMcpServer(
+        () => true,
+        [lookupTool()],
+        connectorProvider({ tools: jest.fn(() => [NOTION_SEARCH, clash]) })
+      );
+
+      const channel = await server.connect("session-a", jest.fn(), "claude");
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(channel.readOnlyToolNames).toEqual(["send_feedback", "notion_search"]);
+      expect(result.body).toEqual({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { tools: [SEND_FEEDBACK_TOOL, LOOKUP_DEFINITION, NOTION_SEARCH] },
       });
     });
 

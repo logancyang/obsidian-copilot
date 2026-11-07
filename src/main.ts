@@ -419,8 +419,12 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           save: (key, value) => this.app.saveLocalStorage(key, value),
         },
         catalogIds: CONNECTOR_CATALOG.map(({ id }) => id),
+        isEnabled: () => isConnectorsEnabled() === true,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        cwd: adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined,
       });
       this.customConnectors = customConnectors;
+      this.register(() => customConnectors.dispose());
       const connectionManager = new ConnectionManager({
         auth: new ConnectorAuth({
           keychain: KeychainService.getInstance(),
@@ -440,6 +444,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         isEnabled: () => isConnectorsEnabled() === true,
         subscribeToEnabledChange: subscribeToEntitlementChange,
         maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        custom: customConnectors,
       });
       this.register(() => connectionManager.dispose());
       void connectionManager.checkStatus();
