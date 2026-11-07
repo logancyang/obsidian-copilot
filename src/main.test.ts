@@ -79,6 +79,7 @@ jest.mock("@/agentMode", () => ({
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
 jest.mock("@/connectors/connectionManager");
+jest.mock("@/connectors/custom/customConnectors");
 
 import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -125,6 +126,7 @@ import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import { ConnectionManager } from "@/connectors/connectionManager";
 import { ConnectorTools } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -703,6 +705,22 @@ describe("main", () => {
         expect(manager.dispose).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 gives the plugin custom connectors on desktop, whose calls for attention reach the connection manager", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const custom = jest.mocked(CustomConnectors).mock.instances[0];
+        expect(plugin.customConnectors).toBe(custom);
+        expect(jest.mocked(ConnectionManager).mock.calls[0][0].custom).toBe(custom);
+      });
+
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {
         const { plugin, finishStartup } = createLoadingPlugin();
 
@@ -712,6 +730,7 @@ describe("main", () => {
         expect(ConnectionManager).not.toHaveBeenCalled();
         expect(plugin.connectionManager).toBeUndefined();
         expect(plugin.connectorTools).toBeUndefined();
+        expect(plugin.customConnectors).toBeUndefined();
       });
 
       it.each([

@@ -62,6 +62,7 @@ import { CONNECTOR_CATALOG } from "@/connectors/catalog";
 import { ConnectionManager } from "@/connectors/connectionManager";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { ConnectorTools } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
@@ -179,6 +180,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   agentSessionManager?: AgentSessionManager;
   connectionManager?: ConnectionManager;
   connectorTools?: ConnectorTools;
+  customConnectors?: CustomConnectors;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -410,6 +412,15 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
 
+      const customConnectors = new CustomConnectors({
+        keychain: KeychainService.getInstance(),
+        deviceStorage: {
+          load: (key) => this.app.loadLocalStorage(key),
+          save: (key, value) => this.app.saveLocalStorage(key, value),
+        },
+        catalogIds: CONNECTOR_CATALOG.map(({ id }) => id),
+      });
+      this.customConnectors = customConnectors;
       const connectionManager = new ConnectionManager({
         auth: new ConnectorAuth({
           keychain: KeychainService.getInstance(),
@@ -420,6 +431,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           },
         }),
         catalog: CONNECTOR_CATALOG,
+        custom: customConnectors,
       });
       this.connectionManager = connectionManager;
       this.connectorTools = new ConnectorTools({

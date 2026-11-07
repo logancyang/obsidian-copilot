@@ -140,6 +140,33 @@ describe("connectionManager", () => {
         expect(manager.getSnapshot().connections).toEqual([]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 needs attention while a custom connector does, and tells subscribers when that changes", () => {
+        setSettings({ connectors: [] });
+        let customSnapshot = { connectors: [], needsAttention: false };
+        const customListeners = new Set<() => void>();
+        const manager = new ConnectionManager({
+          auth: fakeAuth().auth,
+          catalog: [NOTION],
+          custom: {
+            subscribe: (listener) => {
+              customListeners.add(listener);
+              return () => customListeners.delete(listener);
+            },
+            getSnapshot: () => customSnapshot,
+          },
+        });
+        managers.push(manager);
+        const listener = jest.fn();
+        manager.subscribe(listener);
+        expect(manager.getSnapshot().needsAttention).toBe(false);
+
+        customSnapshot = { connectors: [], needsAttention: true };
+        customListeners.forEach((notify) => notify());
+
+        expect(manager.getSnapshot().needsAttention).toBe(true);
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
       it("returns the same snapshot until something changes, so React does not re-render", async () => {
         const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
         fake.logins.add("c1");
