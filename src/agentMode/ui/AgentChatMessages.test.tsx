@@ -113,7 +113,7 @@ jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
     toolName?: string;
     requester?: string;
   }) => (
-    <div>
+    <div title={request.toolCall.title}>
       Permission {request.toolCall.toolCallId}
       {toolName ? ` via ${toolName}` : ""}
       {requester ? ` from ${requester}` : ""}
@@ -634,6 +634,29 @@ describe("AgentChatMessages", () => {
       expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
         "Permission search-1 via websearch"
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 names a connector tool's permission request by its service and readable tool name", () => {
+      const toolTurn = assistantMessage("answer-1", 62_000, {
+        parts: [
+          {
+            kind: "tool_call",
+            id: "create-1",
+            title: "notion_create_page",
+            status: "pending",
+            mcpServer: "obsidian-copilot",
+            vendorToolName: "notion_create_page",
+          },
+        ] as AgentChatMessage["parts"],
+      });
+      const request = permission("create-1");
+      request.toolCall.title = "notion_create_page";
+
+      renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+
+      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      expect(rail.textContent).toBe("Permission create-1");
+      expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
     });
 
     it("labels a permission request with the task that asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {

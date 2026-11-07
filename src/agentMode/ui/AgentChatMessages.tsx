@@ -10,6 +10,8 @@ import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { setSettings } from "@/settings/model";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { connectorToolLabel } from "@/agentMode/ui/toolSummaries";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
@@ -66,10 +68,10 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 
 // A permission card names the tool its request omits from the chat's own tool call.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
-function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): string | undefined {
+function findToolCall(messages: AgentChatMessage[], toolCallId: string): ToolCallPart | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const part = messages[i].parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
-    if (part?.kind === "tool_call") return part.title;
+    if (part?.kind === "tool_call") return part;
   }
   return undefined;
 }
@@ -204,12 +206,25 @@ const AgentChatMessages = memo(
     ) : null;
     const pendingQuestion = pendingAskUserQuestions[0];
     const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
-    const pendingToolName = useMemo(
+    const pendingToolCall = useMemo(
       () =>
         pendingPermission
-          ? findToolCallTitle(messages, pendingPermission.toolCall.toolCallId)
+          ? findToolCall(messages, pendingPermission.toolCall.toolCallId)
           : undefined,
       [messages, pendingPermission]
+    );
+    const pendingConnectorTool = pendingToolCall ? connectorToolLabel(pendingToolCall) : null;
+    // A connector tool's request names it by the service's id, which users don't know.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+    const pendingRequest = useMemo(
+      () =>
+        pendingPermission && pendingConnectorTool
+          ? {
+              ...pendingPermission,
+              toolCall: { ...pendingPermission.toolCall, title: pendingConnectorTool },
+            }
+          : pendingPermission,
+      [pendingPermission, pendingConnectorTool]
     );
     const tasks = useAgentTasks();
     const pendingRequester =
@@ -340,10 +355,10 @@ const AgentChatMessages = memo(
                   request={pendingQuestion}
                   onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
                 />
-              ) : pendingPermission ? (
+              ) : pendingRequest ? (
                 <ToolPermissionCard
-                  request={pendingPermission}
-                  toolName={pendingToolName}
+                  request={pendingRequest}
+                  toolName={pendingConnectorTool ? undefined : pendingToolCall?.title}
                   requester={pendingRequester}
                   onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
                 />
