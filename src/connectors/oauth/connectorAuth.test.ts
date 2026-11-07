@@ -269,6 +269,31 @@ describe("connectorAuth", () => {
         expect(keychain.secrets.size).toBe(0);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/856 stores nothing when the login is cancelled while the code exchange is in flight", async () => {
+        const { service, startLogin, keychain } = setUp();
+        let exchangeStarted: () => void = () => {};
+        const exchanging = new Promise<void>((resolve) => (exchangeStarted = resolve));
+        let releaseExchange: () => void = () => {};
+        const exchangeReleased = new Promise<void>((resolve) => (releaseExchange = resolve));
+        setRequestUrlImpl(async (param: RequestUrlParam) => {
+          if (new URL(param.url).pathname === "/token") {
+            exchangeStarted();
+            await exchangeReleased;
+          }
+          return service.requestUrl(param);
+        });
+        const { login, authorizationUrl } = await startLogin();
+
+        const page = visit(service.approve(authorizationUrl.href));
+        await exchanging;
+        login.cancel();
+        releaseExchange();
+        await page;
+
+        await expect(login.outcome).resolves.toEqual({ status: "cancelled" });
+        expect(keychain.secrets.size).toBe(0);
+      });
+
       it("stops listening for the callback once the login connects", async () => {
         const { service, startLogin } = setUp();
         const { login, authorizationUrl } = await startLogin();
@@ -443,6 +468,19 @@ describe("connectorAuth", () => {
 
         expect(result).toEqual({ status: "unreachable" });
         expect(storedLogin()).toEqual(before);
+      });
+    });
+
+    describe("hasLogin()", () => {
+      it("is true once a login is stored on this device and false after it is disconnected", async () => {
+        const { connectorAuth, connect } = setUp();
+        expect(connectorAuth.hasLogin(CONNECTION_ID)).toBe(false);
+
+        await connect();
+        expect(connectorAuth.hasLogin(CONNECTION_ID)).toBe(true);
+
+        await connectorAuth.disconnect(CONNECTION_ID);
+        expect(connectorAuth.hasLogin(CONNECTION_ID)).toBe(false);
       });
     });
 

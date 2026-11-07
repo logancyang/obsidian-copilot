@@ -58,6 +58,9 @@ import {
   type ModelManagementApi,
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
+import { CONNECTOR_CATALOG } from "@/connectors/catalog";
+import { ConnectionManager } from "@/connectors/connectionManager";
+import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -99,6 +102,7 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { getElectronShell } from "@/utils/electronShell";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ContextProcessor } from "@/contextProcessor";
@@ -170,6 +174,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  connectionManager?: ConnectionManager;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -399,6 +404,21 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // A log left permissive by an older build is only reachable here when
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
+
+      const connectionManager = new ConnectionManager({
+        auth: new ConnectorAuth({
+          keychain: KeychainService.getInstance(),
+          openUrl: (url) => {
+            getElectronShell()
+              ?.openExternal?.(url)
+              .catch((error) => logError("[Connectors] could not open the system browser:", error));
+          },
+        }),
+        catalog: CONNECTOR_CATALOG,
+      });
+      this.connectionManager = connectionManager;
+      this.register(() => connectionManager.dispose());
+      void connectionManager.checkStatus();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       this.skills = SkillManager.getInstance();
