@@ -19,6 +19,8 @@ import {
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { connectorCardKey } from "@/connectors/connectorCards";
+import type { CustomConnectorConfig } from "@/connectors/custom/customConnectorConfig";
 import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
@@ -300,6 +302,13 @@ function withdrawingDescriptor(): BackendDescriptor {
 }
 
 const ISSUE_747 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/747";
+const FAKE_NOTES_PROPOSAL: CustomConnectorConfig = {
+  id: "fakenotes",
+  name: "Fake Notes",
+  command: "node",
+  args: ["/srv/fake/stdio-server.mjs"],
+  envNames: ["FAKE_KEY"],
+};
 const ISSUE_749 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/749";
 const ISSUE_757 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/757";
 
@@ -2764,6 +2773,28 @@ describe("AgentSession", () => {
           ].join("\n")
         );
         expect(promptText(sent[1])).toBe("and then?");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 tells the agent on the next prompt what came of a custom connector card, from the status of the connector the user added", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, {
+          customConnectorStatus: (id) =>
+            id === "fakenotes"
+              ? { kind: "couldnt-start", reason: "FAKE_KEY is not set" }
+              : undefined,
+        });
+        session.showCustomConnectorCard(FAKE_NOTES_PROPOSAL);
+        session.markConnectorCardAdded(
+          connectorCardKey(session.getConnectorCards()[0]),
+          "fakenotes"
+        );
+
+        await session.sendPrompt("did it work?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[0])).toContain(
+          "The user added Fake Notes, but it couldn't start: FAKE_KEY is not set. To fix it, call propose_custom_connector again with the same name."
+        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 tells the agent the card outcome again after the prompt that carried it failed", async () => {
@@ -6470,6 +6501,52 @@ describe("AgentSession", () => {
         expect(session.getConnectorCards()).toEqual([
           expect.objectContaining({ serviceId: "notion", dismissed: true }),
         ]);
+      });
+    });
+
+    describe("showCustomConnectorCard()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 adds a card proposing the connector after the latest user turn, notifies, and answers update once an earlier card in the chat added it", () => {
+        const session = makeSession(makeMockBackend());
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        expect(session.showCustomConnectorCard(FAKE_NOTES_PROPOSAL)).toBe("add");
+        session.markConnectorCardAdded(
+          connectorCardKey(session.getConnectorCards()[0]),
+          "fakenotes"
+        );
+
+        expect(onMessagesChanged).toHaveBeenCalled();
+        expect(session.showCustomConnectorCard(FAKE_NOTES_PROPOSAL)).toBe("update");
+        expect(session.getConnectorCards()).toEqual([
+          {
+            proposal: FAKE_NOTES_PROPOSAL,
+            updates: "fakenotes",
+            addedId: null,
+            afterUserTurn: 0,
+            dismissed: false,
+            reported: null,
+          },
+        ]);
+      });
+    });
+
+    describe("markConnectorCardAdded()", () => {
+      it("records the connector the user's click added on the card and notifies, sending nothing to the agent", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.showCustomConnectorCard(FAKE_NOTES_PROPOSAL);
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        session.markConnectorCardAdded(
+          connectorCardKey(session.getConnectorCards()[0]),
+          "fakenotes"
+        );
+
+        expect(session.getConnectorCards()[0]).toMatchObject({ addedId: "fakenotes" });
+        expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+        expect(mock.prompt).not.toHaveBeenCalled();
       });
     });
 

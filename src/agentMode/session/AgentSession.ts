@@ -114,11 +114,15 @@ import type {
 import {
   dismissConnectorCard,
   EMPTY_CONNECTOR_CARDS,
+  markConnectorCardAdded,
   showConnectorCard,
+  showCustomConnectorCard,
   takeConnectorCardOutcomes,
   type ConnectorCard,
   type ConnectorCardResult,
 } from "@/connectors/connectorCards";
+import type { CustomConnectorStatus } from "@/connectors/custom/customConnectors";
+import type { CustomConnectorConfig } from "@/connectors/custom/customConnectorConfig";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -206,6 +210,7 @@ export interface ProjectContextUpdatesHooks {
   getProjectContextUpdates?: () => ProjectContextUpdates | null;
   markProjectContextUpdatesDelivered?: (epoch: number) => void;
   isConnectorConnected?: (serviceId: string) => boolean;
+  customConnectorStatus?: (connectorId: string) => CustomConnectorStatus | undefined;
 }
 
 export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
@@ -293,6 +298,7 @@ export class AgentSession {
   private feedbackOffer: FeedbackOffer | null = null;
   private connectorCards: readonly ConnectorCard[] = EMPTY_CONNECTOR_CARDS;
   private readonly isConnectorConnected: (serviceId: string) => boolean;
+  private readonly customConnectorStatus: ProjectContextUpdatesHooks["customConnectorStatus"];
 
   private needsAttention = false;
   private notifyScheduled = false;
@@ -338,6 +344,7 @@ export class AgentSession {
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
     this.isConnectorConnected = opts.isConnectorConnected ?? (() => false);
+    this.customConnectorStatus = opts.customConnectorStatus;
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     this.requests = new InteractiveRequests({
@@ -948,7 +955,11 @@ export class AgentSession {
       const cardsBeforeTurn = this.connectorCards;
       const connectorOutcomes = sendsCompact
         ? null
-        : takeConnectorCardOutcomes(cardsBeforeTurn, this.isConnectorConnected);
+        : takeConnectorCardOutcomes(
+            cardsBeforeTurn,
+            this.isConnectorConnected,
+            this.customConnectorStatus
+          );
       const leadingContextBlock = sendsCompact
         ? null
         : [
@@ -1218,18 +1229,32 @@ export class AgentSession {
   }
 
   showConnectorCard(serviceId: string): ConnectorCardResult {
-    const userTurns = this.store
-      .getDisplayMessages()
-      .filter((message) => message.sender === USER_SENDER).length;
-    const shown = showConnectorCard(this.connectorCards, serviceId, userTurns);
+    const shown = showConnectorCard(this.connectorCards, serviceId, this.userTurnCount());
     this.connectorCards = shown.cards;
     this.notifyMessages();
     return shown.result;
   }
 
-  dismissConnectorCard(serviceId: string): void {
-    this.connectorCards = dismissConnectorCard(this.connectorCards, serviceId);
+  showCustomConnectorCard(proposal: CustomConnectorConfig): "add" | "update" {
+    const shown = showCustomConnectorCard(this.connectorCards, proposal, this.userTurnCount());
+    this.connectorCards = shown.cards;
     this.notifyMessages();
+    return shown.result;
+  }
+
+  dismissConnectorCard(key: string): void {
+    this.connectorCards = dismissConnectorCard(this.connectorCards, key);
+    this.notifyMessages();
+  }
+
+  markConnectorCardAdded(key: string, connectorId: string): void {
+    this.connectorCards = markConnectorCardAdded(this.connectorCards, key, connectorId);
+    this.notifyMessages();
+  }
+
+  private userTurnCount(): number {
+    return this.store.getDisplayMessages().filter((message) => message.sender === USER_SENDER)
+      .length;
   }
 
   restoreConnectorCards(cards: readonly ConnectorCard[]): void {

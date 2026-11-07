@@ -336,6 +336,21 @@ describe("opencodeCopilotPlugin", () => {
         expect(input).toEqual({ service: "notion", caller_session_id: "ses_caller" });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 stamps the calling session on a propose_custom_connector call, so its card lands in that chat", async () => {
+        const input = await runBefore({
+          tool: "obsidian-copilot_propose_custom_connector",
+          sessionID: "ses_caller",
+          id: "call-1",
+          input: { name: "Fake Notes", command: "node" },
+        });
+
+        expect(input).toEqual({
+          name: "Fake Notes",
+          command: "node",
+          caller_session_id: "ses_caller",
+        });
+      });
+
       it("leaves other tools' input untouched", async () => {
         const original = { title: "t" };
 

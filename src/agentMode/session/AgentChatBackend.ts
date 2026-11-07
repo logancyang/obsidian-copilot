@@ -82,5 +82,7 @@ export interface AgentChatBackend {
 
   getConnectorCards(): readonly ConnectorCard[];
 
-  dismissConnectorCard(serviceId: string): void;
+  dismissConnectorCard(key: string): void;
+
+  markConnectorCardAdded(key: string, connectorId: string): void;
 }

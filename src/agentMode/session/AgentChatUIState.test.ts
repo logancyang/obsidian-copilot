@@ -320,6 +320,27 @@ describe("AgentChatUIState", () => {
     });
   });
 
+  describe("markConnectorCardAdded()", () => {
+    it("records on the session's custom connector card which connector the user added, and notifies the view", () => {
+      const session = feedbackSession();
+      const chat = chatOn(session);
+      session.showCustomConnectorCard({
+        id: "fakenotes",
+        name: "Fake Notes",
+        command: "node",
+        args: [],
+        envNames: [],
+      });
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.markConnectorCardAdded("custom:fake notes", "fakenotes");
+
+      expect(chat.getConnectorCards()[0]).toMatchObject({ addedId: "fakenotes" });
+      expect(listener).toHaveBeenCalled();
+    });
+  });
+
   describe("isTurnInFlight()", () => {
     it("stays true while an approved plan is being implemented and clears when the turn finishes (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", async () => {
       const review = planReview("next_turn");

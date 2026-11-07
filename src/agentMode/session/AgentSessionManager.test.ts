@@ -11,6 +11,7 @@ import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import { EMPTY_CONNECTOR_CARDS } from "@/connectors/connectorCards";
+import type { ConnectorCardHandler } from "@/agentMode/session/copilotMcpServer";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -435,6 +436,7 @@ interface ManagerOptions {
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
   isConnectorConnected?: ManagerDeps["isConnectorConnected"];
+  customConnectorStatus?: ManagerDeps["customConnectorStatus"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -466,6 +468,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       beforeBackendStart: options.beforeBackendStart,
       copilotMcpServer: options.copilotMcpServer,
       isConnectorConnected: options.isConnectorConnected,
+      customConnectorStatus: options.customConnectorStatus,
     }
   );
   builtManagers.push(manager);
@@ -1045,21 +1048,19 @@ describe("AgentSessionManager", () => {
         const onOffer = copilotMcpServer.connect.mock.calls[0][1] as (draft: unknown) => string;
         expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
         expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
-        const onConnectorCard = copilotMcpServer.connect.mock.calls[0][3] as (
-          serviceId: string
-        ) => string;
-        expect(onConnectorCard("notion")).toBe("shown");
-        expect(session.showConnectorCard).toHaveBeenCalledWith("notion");
+        const cardsOf = copilotMcpServer.connect.mock.calls[0][3] as ConnectorCardHandler;
+        expect(cardsOf(null)).toBe(session);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 gives each new session the check for whether a service is connected, for its connector card outcomes", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 gives each new session the checks for whether a service is connected and how a custom connector is doing, for its connector card outcomes", async () => {
         const isConnectorConnected = jest.fn(() => true);
-        const mgr = buildManager({ isConnectorConnected });
+        const customConnectorStatus = jest.fn(() => undefined);
+        const mgr = buildManager({ isConnectorConnected, customConnectorStatus });
 
         await mgr.createSession();
 
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
-          expect.objectContaining({ isConnectorConnected })
+          expect.objectContaining({ isConnectorConnected, customConnectorStatus })
         );
       });
 
@@ -1104,15 +1105,11 @@ describe("AgentSessionManager", () => {
         });
         const caller = await mgr.createSession();
         const newest = await mgr.createSession();
-        const onConnectorCard = copilotMcpServer.connect.mock.calls[1][3] as (
-          serviceId: string,
-          callerSessionId: string | null
-        ) => string;
+        const cardsOf = copilotMcpServer.connect.mock.calls[1][3] as ConnectorCardHandler;
 
-        expect(onConnectorCard("notion", caller.getBackendSessionId())).toBe("shown");
-        expect(onConnectorCard("notion", null)).toBe("unattributed");
-        expect(caller.showConnectorCard).toHaveBeenCalledTimes(1);
-        expect(newest.showConnectorCard).not.toHaveBeenCalled();
+        expect(cardsOf(caller.getBackendSessionId())).toBe(caller);
+        expect(cardsOf(null)).toBeUndefined();
+        expect(newest).not.toBe(caller);
       });
 
       it.each([
