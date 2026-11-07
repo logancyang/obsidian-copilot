@@ -29,6 +29,7 @@ import {
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
+import { opencodeApprovedRules } from "./opencodeApprovedRules";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
@@ -217,6 +218,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 
   SettingsPanel: OpencodeSettingsPanel,
+
+  approvedRules: opencodeApprovedRules,
 
   async onPluginLoad(plugin: CopilotPlugin): Promise<void> {
     const manager = getOpencodeBinaryManager(plugin);
