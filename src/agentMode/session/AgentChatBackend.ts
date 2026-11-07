@@ -1,6 +1,7 @@
 import type { MessageContext } from "@/types/message";
 import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
+import type { ConnectorCard } from "@/connectors/connectorCards";
 import type {
   AgentChatMessage,
   AgentQuestionAnswers,
@@ -78,4 +79,8 @@ export interface AgentChatBackend {
   dismissFeedbackOffer(): void;
 
   markFeedbackReported(report: { reportId: string; issueUrl: string }): void;
+
+  getConnectorCards(): readonly ConnectorCard[];
+
+  dismissConnectorCard(serviceId: string): void;
 }

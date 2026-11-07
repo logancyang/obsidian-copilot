@@ -12,12 +12,11 @@ export interface FeedbackCardProps {
   onTurnOff: () => void;
 }
 
-export function findFeedbackCardIndex(
+export function findTrailingCardIndex(
   messages: ReadonlyArray<AgentChatMessage>,
-  offer: FeedbackOffer | null
+  afterUserMessageId: string | null
 ): number {
-  if (!offer || offer.status === "dismissed") return -1;
-  const start = messages.findIndex((message) => message.id === offer.afterUserMessageId);
+  const start = messages.findIndex((message) => message.id === afterUserMessageId);
   if (start === -1) return messages.length - 1;
   const nextUser = messages.findIndex(
     (message, index) => index > start && message.sender === USER_SENDER

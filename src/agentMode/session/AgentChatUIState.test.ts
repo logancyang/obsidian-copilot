@@ -239,6 +239,16 @@ describe("AgentChatUIState", () => {
   });
 
   function feedbackChat(): AgentChatUIState {
+    return chatOn(feedbackSession());
+  }
+
+  function chatOn(session: AgentSession): AgentChatUIState {
+    const chat = new AgentChatUIState(session);
+    session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
+    return chat;
+  }
+
+  function feedbackSession(): AgentSession {
     const session = new AgentSession({
       backend: {
         isRunning: () => true,
@@ -250,9 +260,7 @@ describe("AgentChatUIState", () => {
       backendId: "claude",
     });
     session.completeResume(null);
-    const chat = new AgentChatUIState(session);
-    session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
-    return chat;
+    return session;
   }
 
   describe("getFeedbackOffer()", () => {
@@ -284,6 +292,31 @@ describe("AgentChatUIState", () => {
         status: "reported",
         report: { reportId: "r1", issueUrl: "https://example.com" },
       });
+    });
+  });
+
+  describe("getConnectorCards()", () => {
+    it("serves the session's connector cards", () => {
+      const session = feedbackSession();
+      const chat = chatOn(session);
+      session.showConnectorCard("notion");
+
+      expect(chat.getConnectorCards()).toEqual([expect.objectContaining({ serviceId: "notion" })]);
+    });
+  });
+
+  describe("dismissConnectorCard()", () => {
+    it("dismisses the session's card for the service and notifies the view", () => {
+      const session = feedbackSession();
+      const chat = chatOn(session);
+      session.showConnectorCard("notion");
+      const listener = jest.fn();
+      chat.subscribe(listener);
+
+      chat.dismissConnectorCard("notion");
+
+      expect(chat.getConnectorCards()[0].dismissed).toBe(true);
+      expect(listener).toHaveBeenCalled();
     });
   });
 
