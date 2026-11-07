@@ -16,6 +16,13 @@ import {
   runInRunningObsidian,
 } from "@/services/obsidianCli/obsidianCliTool";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { CONNECTOR_CATALOG } from "@/connectors/catalog";
+import {
+  createConnectorCardsExtension,
+  createSuggestConnectorTool,
+  isServiceConnected,
+} from "@/connectors/agentMode/connectorCards";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
@@ -216,7 +223,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   let managerRef: AgentSessionManager | null = null;
-  const { connectorTools } = plugin;
+  const { connectionManager, connectorTools } = plugin;
+  const connectorsOn = () => isConnectorsEnabled() === true;
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null,
     (id) => managerRef?.isReadOnlyFanoutSession(id) ?? false
@@ -232,7 +240,19 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    chatExtensions: [FEEDBACK_OFFER_EXTENSION],
+    chatExtensions: [
+      FEEDBACK_OFFER_EXTENSION,
+      ...(connectionManager
+        ? [
+            // A stored login without the entitlement gives agents no tools, so its card must not report it connected.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            createConnectorCardsExtension(
+              (serviceId) =>
+                connectorsOn() && isServiceConnected(connectionManager.getSnapshot(), serviceId)
+            ),
+          ]
+        : []),
+    ],
     copilotMcpServer: createCopilotMcpServer(
       (toolName) => isCopilotToolOn(toolName, getSettings(), app),
       [
@@ -276,6 +296,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             run: runInRunningObsidian,
           }),
         },
+        ...(connectionManager
+          ? [
+              createSuggestConnectorTool({
+                catalog: CONNECTOR_CATALOG,
+                getSnapshot: connectionManager.getSnapshot,
+                isEnabled: connectorsOn,
+              }),
+            ]
+          : []),
       ],
       connectorTools
     ),

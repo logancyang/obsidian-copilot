@@ -2835,6 +2835,9 @@ export class AgentSessionManager {
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            // A card that just connected a service is why the user reloads, and its outcome is still owed to the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            chatStates: session.getReloadableChatStates(),
             notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
@@ -2886,6 +2889,7 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
               rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
+            rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }

@@ -22,8 +22,15 @@ export interface TurnFailure {
   error: unknown;
 }
 
+export interface PromptNote<S> {
+  note: string;
+  delivered: (latest: S) => S;
+}
+
 export interface ChatExtension<S> {
   readonly key: ChatStateKey<S>;
+  readonly keepOnReload?: boolean;
+  beforePrompt?(state: S): PromptNote<S> | null;
   onTurnFailed?(state: S, chat: ChatView, failure: TurnFailure): S;
 }
 
