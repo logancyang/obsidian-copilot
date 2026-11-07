@@ -9,7 +9,7 @@ const PLUGIN = {} as CopilotPlugin;
 const GIT_STATUS: ApprovedRule = {
   id: "rule-git",
   allows: "Bash(git status:*)",
-  appliesTo: { kind: "agent" },
+  appliesTo: { kind: "file", path: "/Users/me/.claude/settings.json" },
 };
 const NPM_TEST: ApprovedRule = {
   id: "rule-npm",
@@ -59,7 +59,7 @@ describe("ApprovedRulesPage", () => {
 
       expect(screen.queryByText("Loading approved rules…")).toBeNull();
       expect(ruleRows().map((row) => row.textContent)).toEqual([
-        expect.stringContaining("Bash(git status:*)All Claude chats"),
+        expect.stringContaining("Bash(git status:*)Saved in /Users/me/.claude/settings.json"),
         expect.stringContaining("Bash(npm run test:*)Chats in /Users/me/vault"),
         expect.stringContaining(
           "WebFetch(domain:docs.obsidian.md)Saved in /Users/me/vault/.claude/settings.local.json"
