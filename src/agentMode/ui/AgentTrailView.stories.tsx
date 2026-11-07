@@ -99,6 +99,28 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
+const CONNECTOR_TOOLS: AgentMessagePart[] = [
+  say("A connector tool is named by its service and its readable tool name."),
+  tool("notion-search", "notion_search", {
+    mcpServer: "obsidian-copilot",
+    input: { query: "Orion" },
+    output: [{ type: "text", text: "Orion kickoff plan" }],
+  }),
+  say("Codex names the same call through Copilot's server."),
+  tool("linear-create", "linear_create_issue", {
+    vendorToolName: undefined,
+    title: "mcp.obsidian-copilot.linear_create_issue",
+    toolKind: "execute",
+    input: {
+      server: "obsidian-copilot",
+      tool: "linear_create_issue",
+      arguments: { title: "Orion retro" },
+    },
+  }),
+  say("Another server's tools keep the server's name."),
+  tool("context7-docs", "query-docs", { mcpServer: "context7" }),
+];
+
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
 const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
@@ -161,6 +183,10 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 
 export const FailedFileChanges: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
+};
+
+export const ConnectorTools: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={CONNECTOR_TOOLS} />,
 };
 
 export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {

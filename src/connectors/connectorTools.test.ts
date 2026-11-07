@@ -4,7 +4,7 @@
 import { MAX_PROVIDED_TOOL_NAME_LENGTH } from "@/agentMode/session/copilotMcpServer";
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
 import { ConnectionManager, type ConnectorAuthPort } from "@/connectors/connectionManager";
-import { ConnectorTools } from "@/connectors/connectorTools";
+import { ConnectorTools, describeConnectorTool } from "@/connectors/connectorTools";
 import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
 import { FakeMcpService } from "@/connectors/testing/fakeMcpService";
 import { logWarn } from "@/logger";
@@ -722,5 +722,40 @@ describe("connectorTools", () => {
         expect(listener).toHaveBeenCalledTimes(2);
       });
     });
+  });
+
+  describe("describeConnectorTool()", () => {
+    it(`${ISSUE} names the service and the service's own tool for a name agents see, even one shortened with a hash`, async () => {
+      const fake = setUp({ connections: [{ id: "c-atlassian", serviceId: "atlassian" }] });
+      fake.atlassian.tools = [
+        { name: "getConfluencePageDescendantsWithReplies" },
+        { name: "getConfluencePageDescendantsWithLabels" },
+      ];
+      await fake.tools.refresh();
+      const [replies, labels] = fake.tools.tools().map(({ name }) => name);
+
+      expect(describeConnectorTool(replies)).toEqual({
+        serviceName: "Atlassian",
+        toolName: "getConfluencePageDescendantsWithReplies",
+      });
+      expect(describeConnectorTool(labels)).toEqual({
+        serviceName: "Atlassian",
+        toolName: "getConfluencePageDescendantsWithLabels",
+      });
+    });
+
+    it(`${ISSUE} names a catalog service's tool that no chat has listed since Obsidian started, as in a restored chat`, () => {
+      expect(describeConnectorTool("notion_search_pages")).toEqual({
+        serviceName: "Notion",
+        toolName: "search_pages",
+      });
+    });
+
+    it.each(["send_feedback", "suggest_connector", "miyo_search", "notion"])(
+      "returns null for %s, which names no catalog service's tool",
+      (name) => {
+        expect(describeConnectorTool(name)).toBeNull();
+      }
+    );
   });
 });
