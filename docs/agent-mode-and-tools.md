@@ -289,9 +289,13 @@ While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and 
 - In the chat, a Copilot card marks each drawing the agent draws, edits or reads. Click the drawing's name to open it.
 - Codex asks you to approve each change to a drawing unless the chat is in **Auto**.
 
+## Outside services
+
+Connect services such as Notion, Linear, and Todoist under **Settings → Copilot → Connectors**, and Claude Code, Codex, and OpenCode can use them in your chats. See [Connectors](connectors.md).
+
 ## Applying a settings change
 
-Agents read their configuration when they start: API keys, enabled models, instructions, and skills. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **settings changed** notice and a **Reload** action, and the chat keeps working in the meantime.
+Agents read their configuration when they start: API keys, enabled models, instructions, skills, and connectors. A change you make while a chat is open does not reach the agent already running. Agent Chat says so with a **settings changed** notice and a **Reload** action, and the chat keeps working in the meantime.
 
 The notice names the agent that needs to reload. Changing Claude's enabled models does not ask you to reload OpenCode. Settings an agent can apply without restarting do not need a reload notice.
 
@@ -304,6 +308,7 @@ Turning on Self-Host Mode never waits: it restarts the agent straight away, so n
 - [Getting Started](getting-started.md)
 - [Models, Effort, and Permissions](models-and-parameters.md)
 - [Projects](projects.md)
+- [Connectors](connectors.md)
 - [Instructions for Agent Chat and Quick Chat](system-prompts.md)
 - [Copilot Commands and Quick Ask](custom-commands.md)
 - [Copilot Plans, Privacy, and Self-Hosting](copilot-plus-and-self-host.md)
