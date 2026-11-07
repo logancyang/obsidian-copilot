@@ -16,6 +16,10 @@ import {
   runInRunningObsidian,
 } from "@/services/obsidianCli/obsidianCliTool";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { CONNECTOR_CATALOG } from "@/connectors/catalog";
+import { ConnectorTools } from "@/connectors/connectorTools";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { subscribeToEntitlementChange } from "@/plusUtils";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { getBuiltinSkillEnvRestartPolicy } from "./backends/shared/builtinSkillEnv";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
@@ -27,6 +31,7 @@ import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import {
   createCopilotMcpServer,
+  MAX_PROVIDED_TOOL_NAME_LENGTH,
   SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
 import { seedCopilotDefaultModel } from "./session/copilotDefaultModel";
@@ -214,6 +219,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   let managerRef: AgentSessionManager | null = null;
+  const connectorTools =
+    plugin.connectionManager &&
+    new ConnectorTools({
+      manager: plugin.connectionManager,
+      catalog: CONNECTOR_CATALOG,
+      isEnabled: () => isConnectorsEnabled() === true,
+      subscribeToEnabledChange: subscribeToEntitlementChange,
+      maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+    });
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null,
     (id) => managerRef?.isReadOnlyFanoutSession(id) ?? false
@@ -272,10 +286,22 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
             run: runInRunningObsidian,
           }),
         },
-      ]
+      ],
+      connectorTools
     ),
   });
   managerRef = manager;
+  // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+  connectorTools?.subscribeToToolSetChange((affectsBackend) => {
+    for (const descriptor of listBackendDescriptors().filter(({ id }) => affectsBackend(id))) {
+      void manager
+        .noteSpawnConfigChanged(descriptor.id, "connectors changed")
+        .catch((error) =>
+          logError(`[AgentMode] restart after connectors change failed: ${descriptor.id}`, error)
+        );
+    }
+  });
   trackTabStripShown(plugin, manager);
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
   // file an agent just wrote must not close the conversation that asked for it. https://github.com/Brevilabs/obsidian-copilot-private/issues/475

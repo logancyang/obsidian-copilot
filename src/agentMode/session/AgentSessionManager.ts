@@ -1870,7 +1870,9 @@ export class AgentSessionManager {
           "unattributed"
       : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
     try {
-      return [await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer)];
+      return [
+        await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer, descriptor.id),
+      ];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
