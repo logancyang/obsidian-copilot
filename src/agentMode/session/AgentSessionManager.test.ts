@@ -1016,7 +1016,8 @@ describe("AgentSessionManager", () => {
 
         expect(copilotMcpServer.connect).toHaveBeenCalledWith(
           session.internalId,
-          expect.any(Function)
+          expect.any(Function),
+          session.backendId
         );
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })

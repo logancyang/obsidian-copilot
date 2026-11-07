@@ -4,7 +4,9 @@ import {
   COPILOT_OAUTH_CLIENT_URI,
   COPILOT_OAUTH_LOGO_URI,
 } from "@/constants";
+import { maskSecretValues } from "@/connectors/maskSecretValues";
 import { requestUrlFetch, ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
+import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
 import type { KeychainService } from "@/services/keychainService";
 import { startLoopbackServer } from "@/utils/loopbackServer";
@@ -188,7 +190,16 @@ export class ConnectorAuth {
         this.deps.keychain.deleteSecretById(this.keychainId(connectionId));
         return NEEDS_LOGIN;
       }
-      logWarn("[Connectors] Couldn't refresh the login.", error);
+      // A token endpoint's error body can echo the request, refresh token included, into the log.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+      logWarn(
+        "[Connectors] Couldn't refresh the login.",
+        maskSecretValues(err2String(error, true), [
+          stored.tokens.refresh_token,
+          stored.tokens.access_token,
+          stored.client.client_secret ?? "",
+        ])
+      );
       return UNREACHABLE;
     }
   }
