@@ -87,6 +87,14 @@ On Windows, **Turn on Windows Developer Mode to share skills with your agents** 
 
 Learn more in [Skills across agents](agent-mode-and-tools.md#skills-across-agents).
 
+### A connector shows Needs login or Couldn't reach
+
+See [Reconnect a service](connectors.md#reconnect-a-service).
+
+### The agent can't use a service you just connected
+
+Click **Reload** on the chat's **settings changed** notice, then send your next message. Learn more in [Connectors](connectors.md).
+
 ## Miyo is unavailable or search is not running
 
 Open **Settings → Copilot → Miyo**.
@@ -164,7 +172,7 @@ Logs and screenshots can contain prompts, note contents, paths, and tool inputs.
 
 ## What works on mobile?
 
-Agent Chat, including OpenCode, Claude, Codex, Projects, and Skill execution, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
+Agent Chat, including OpenCode, Claude, Codex, Projects, Skill execution, and Connectors, is desktop-only. On mobile, use Quick Chat. Agent settings display **Agent settings are available on desktop.** Miyo on mobile requires a remote Miyo connection and manual vault registration in Miyo.
 
 ## Related
 
