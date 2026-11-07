@@ -26,10 +26,8 @@ interface RemoveError {
   message: string;
 }
 
-function describeScope(rule: ApprovedRule, agentName: string): string {
+function describeScope(rule: ApprovedRule): string {
   switch (rule.appliesTo.kind) {
-    case "agent":
-      return `All ${agentName} chats`;
     case "folder":
       return `Chats in ${rule.appliesTo.path}`;
     case "file":
@@ -80,7 +78,7 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
   const needle = query.trim().toLowerCase();
   const visibleRules = needle
     ? allRules.filter((rule) =>
-        `${rule.allows}\n${describeScope(rule, agentName)}`.toLowerCase().includes(needle)
+        `${rule.allows}\n${describeScope(rule)}`.toLowerCase().includes(needle)
       )
     : allRules;
 
@@ -147,7 +145,7 @@ export const ApprovedRulesPage: React.FC<ApprovedRulesPageProps> = ({
                 <div className="tw-min-w-0">
                   <div className="tw-break-words tw-font-mono tw-text-sm">{rule.allows}</div>
                   <div className="tw-break-words tw-text-xs tw-text-muted">
-                    {describeScope(rule, agentName)}
+                    {describeScope(rule)}
                   </div>
                 </div>
                 <Button
