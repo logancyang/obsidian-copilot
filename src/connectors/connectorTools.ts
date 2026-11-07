@@ -13,7 +13,6 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const NAME_HASH_LENGTH = 8;
 const SERVICE_TIMEOUT_MS = 10_000;
-const MAX_RESULT_CHARS = 50_000;
 
 interface ConnectorToolDefinition {
   readonly name: string;
@@ -206,7 +205,7 @@ export class ConnectorTools {
         name: toolName,
         arguments: args ?? {},
       });
-      return limitResult(result, name);
+      return toToolResult(result);
     } catch (error) {
       if (error instanceof NeedsLoginError) {
         this.deps.manager.reportFailure(loaded.connectionId, "needs-login");
@@ -396,27 +395,13 @@ function agentToolName(name: string, maxLength: number): string {
   return `${name.slice(0, maxLength - NAME_HASH_LENGTH - 1)}_${hash}`;
 }
 
-function limitResult(result: Record<string, unknown>, serviceName: string): ConnectorToolResult {
-  const isError = result.isError === true;
-  const content =
-    Array.isArray(result.content) && result.content.length > 0
-      ? (result.content as unknown[])
-      : [{ type: "text", text: JSON.stringify(result.structuredContent ?? {}) }];
-  if (JSON.stringify(content).length <= MAX_RESULT_CHARS) return { content, isError };
-  // Agents fail or overflow their context on a very large tool result, so Copilot cuts it and says how to ask for less.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-  const text = content
-    .map((item) => (item as { text?: unknown }).text)
-    .filter((part): part is string => typeof part === "string")
-    .join("\n");
+function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
   return {
-    content: [
-      {
-        type: "text",
-        text: `${text.slice(0, MAX_RESULT_CHARS)}\n\n[Copilot cut this ${serviceName} result at ${MAX_RESULT_CHARS.toLocaleString("en-US")} characters. Ask for less, for example with a narrower query or a smaller page.]`,
-      },
-    ],
-    isError,
+    content:
+      Array.isArray(result.content) && result.content.length > 0
+        ? (result.content as unknown[])
+        : [{ type: "text", text: JSON.stringify(result.structuredContent ?? {}) }],
+    isError: result.isError === true,
   };
 }
 
