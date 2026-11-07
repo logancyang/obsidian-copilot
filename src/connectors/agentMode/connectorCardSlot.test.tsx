@@ -1,12 +1,36 @@
 import { fakeChat } from "@/agentMode/session/testing/fakeChat";
 import type { AgentChatMessage } from "@/agentMode/session/types";
-import { CONNECTOR_CARDS, type ServiceConnectorCard } from "@/connectors/agentMode/connectorCards";
+import {
+  CONNECTOR_CARDS,
+  type CustomConnectorCard,
+  type ServiceConnectorCard,
+} from "@/connectors/agentMode/connectorCards";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type CopilotPlugin from "@/main";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { connectorCardSlot } from "./connectorCardSlot";
 
+jest.mock("@/connectors/ui/CustomConnectorChatCard", () => ({
+  CustomConnectorChatCard: ({
+    card,
+    onDismiss,
+    onAdded,
+  }: {
+    card: { proposal: { name: string } };
+    onDismiss: () => void;
+    onAdded: (connectorId: string) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onAdded("fakenotes")}>
+        Add {card.proposal.name}
+      </button>
+      <button type="button" onClick={onDismiss}>
+        Not now {card.proposal.name}
+      </button>
+    </>
+  ),
+}));
 jest.mock("@/connectors/ui/ConnectorChatCard", () => ({
   ConnectorChatCard: ({ serviceId, onDismiss }: { serviceId: string; onDismiss: () => void }) => (
     <button type="button" onClick={onDismiss}>
@@ -20,6 +44,15 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/860"
 function message(id: string, sender: string): AgentChatMessage {
   return { id, sender, message: id, timestamp: null, isVisible: true };
 }
+
+const CUSTOM: CustomConnectorCard = {
+  proposal: { id: "fakenotes", name: "Fake Notes", command: "node", args: [], envNames: [] },
+  updates: null,
+  addedId: null,
+  afterUserTurn: 1,
+  dismissed: false,
+  reported: null,
+};
 
 const TRANSCRIPT = [
   message("u1", USER_SENDER),
@@ -51,17 +84,9 @@ describe("connectorCardSlot", () => {
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 leaves custom connector cards to their own slot", () => {
-      const custom = {
-        proposal: { id: "fakenotes", name: "Fake Notes", command: "node", args: [], envNames: [] },
-        updates: null,
-        addedId: null,
-        afterUserTurn: 1,
-        dismissed: false,
-        reported: null,
-      };
-
-      expect(connectorCardSlot.place([custom, card("notion")], TRANSCRIPT)).toEqual([
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 places a custom connector card by its name beside service cards", () => {
+      expect(connectorCardSlot.place([CUSTOM, card("notion")], TRANSCRIPT)).toEqual([
+        { id: "custom:fake notes", afterUserMessageId: "u1" },
         { id: "notion", afterUserMessageId: "u1" },
       ]);
     });
@@ -85,11 +110,28 @@ describe("connectorCardSlot", () => {
       expect(chat.readChatState(CONNECTOR_CARDS)).toEqual([card("notion", { dismissed: true })]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/871 draws a custom connector card that records the connector it added, or dismisses through the chat", () => {
+      const chat = fakeChat();
+      chat.updateChatState(CONNECTOR_CARDS, () => [CUSTOM]);
+      const plugin = { customConnectors: {} } as unknown as CopilotPlugin;
+
+      render(<>{connectorCardSlot.render([CUSTOM], "custom:fake notes", { plugin, chat })}</>);
+      fireEvent.click(screen.getByRole("button", { name: "Add Fake Notes" }));
+      expect(chat.readChatState(CONNECTOR_CARDS)).toEqual([{ ...CUSTOM, addedId: "fakenotes" }]);
+      fireEvent.click(screen.getByRole("button", { name: "Not now Fake Notes" }));
+      expect(chat.readChatState(CONNECTOR_CARDS)).toEqual([
+        { ...CUSTOM, addedId: "fakenotes", dismissed: true },
+      ]);
+    });
+
     it("draws nothing where connectors aren't available", () => {
       const plugin = {} as CopilotPlugin;
 
       expect(
         connectorCardSlot.render([card("notion")], "notion", { plugin, chat: fakeChat() })
+      ).toBeNull();
+      expect(
+        connectorCardSlot.render([CUSTOM], "custom:fake notes", { plugin, chat: fakeChat() })
       ).toBeNull();
     });
   });

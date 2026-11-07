@@ -91,7 +91,7 @@ export function ConnectorChatCardView({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
   if (locked) {
     return (
-      <Card
+      <ChatCard
         service={service}
         tone="accent"
         title={`Connect ${name} with Connectors`}
@@ -106,7 +106,7 @@ export function ConnectorChatCardView({
   }
   if (waiting) {
     return (
-      <Card
+      <ChatCard
         service={service}
         tone="accent"
         title={title}
@@ -121,21 +121,11 @@ export function ConnectorChatCardView({
     );
   }
   if (connection?.status === "connected") {
-    return (
-      <div
-        className={cn(
-          CARD,
-          "tw-gap-2.5 tw-border-transparent tw-bg-success tw-py-2.5 tw-text-success"
-        )}
-      >
-        <Check aria-hidden="true" className="tw-size-4 tw-shrink-0" />
-        <span className="tw-flex-1">{name} connected. Every agent can use it now.</span>
-      </div>
-    );
+    return <ConnectedChatCard>{name} connected. Every agent can use it now.</ConnectedChatCard>;
   }
   if (failed) {
     return (
-      <Card
+      <ChatCard
         service={service}
         title={title}
         detail={<span className="tw-text-error">{loginFailureMessage(failed.reason, name)}</span>}
@@ -155,7 +145,7 @@ export function ConnectorChatCardView({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
   if (connection?.status === "unreachable") {
     return (
-      <Card
+      <ChatCard
         service={service}
         title={`Couldn't reach ${name}`}
         detail={<span className="tw-text-muted">Copilot tries again in your next chat.</span>}
@@ -165,7 +155,7 @@ export function ConnectorChatCardView({
   }
   if (connection) {
     return (
-      <Card
+      <ChatCard
         service={service}
         tone="error"
         title={title}
@@ -179,7 +169,7 @@ export function ConnectorChatCardView({
     );
   }
   return (
-    <Card
+    <ChatCard
       service={service}
       title={title}
       detail={
@@ -211,8 +201,22 @@ const TONES = {
   error: cn("tw-border-border tw-bg-modifier-error-rgb/10"),
 };
 
-interface CardProps {
-  service: ConnectorCatalogEntry;
+export function ConnectedChatCard({ children }: { children: React.ReactNode }): React.ReactElement {
+  return (
+    <div
+      className={cn(
+        CARD,
+        "tw-gap-2.5 tw-border-transparent tw-bg-success tw-py-2.5 tw-text-success"
+      )}
+    >
+      <Check aria-hidden="true" className="tw-size-4 tw-shrink-0" />
+      <span className="tw-flex-1">{children}</span>
+    </div>
+  );
+}
+
+interface ChatCardProps {
+  service: Pick<ConnectorCatalogEntry, "name" | "logoUrl">;
   title: string;
   tone?: keyof typeof TONES;
   detail: React.ReactNode;
@@ -220,7 +224,14 @@ interface CardProps {
   footer?: React.ReactNode;
 }
 
-function Card({ service, title, tone = "normal", detail, actions, footer }: CardProps) {
+export function ChatCard({
+  service,
+  title,
+  tone = "normal",
+  detail,
+  actions,
+  footer,
+}: ChatCardProps): React.ReactElement {
   return (
     <div className={cn(CARD, "tw-flex-col tw-items-stretch tw-gap-2", TONES[tone])}>
       <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3">

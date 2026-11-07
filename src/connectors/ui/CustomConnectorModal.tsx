@@ -108,7 +108,7 @@ interface ServerSummaryProps {
   missing: readonly string[];
 }
 
-function ServerSummary({ config, missing }: ServerSummaryProps): React.ReactElement {
+export function ServerSummary({ config, missing }: ServerSummaryProps): React.ReactElement {
   const values = secretNames(config).length;
   return (
     <>

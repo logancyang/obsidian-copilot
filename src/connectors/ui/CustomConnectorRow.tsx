@@ -25,7 +25,7 @@ export function CustomConnectorRow({
   onSetTurnedOff,
   onRemove,
 }: CustomConnectorRowProps): React.ReactElement {
-  const [tone, text] = statusText(status);
+  const [tone, text] = customStatusText(status);
   let action: React.ReactNode = null;
   if (status.kind === "needs-key" || status.kind === "key-not-accepted") {
     action = (
@@ -87,7 +87,7 @@ export function CustomConnectorRow({
   );
 }
 
-function statusText(status: CustomConnectorStatus): [StatusTone, string] {
+export function customStatusText(status: CustomConnectorStatus): [StatusTone, string] {
   switch (status.kind) {
     case "connected":
       return ["ok", `${status.toolCount} ${status.toolCount === 1 ? "tool" : "tools"}`];
