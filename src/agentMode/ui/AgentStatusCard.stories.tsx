@@ -119,3 +119,11 @@ export const ConfigChangedReloading: StoryObj<AgentStatusCardProps> = {
     action: { label: "Reloading…", onClick: () => undefined, disabled: true },
   },
 };
+
+export const ConnectorsNeedAttention: StoryObj<AgentStatusCardProps> = {
+  args: {
+    layout: "row",
+    message: "You have connectors that need your attention",
+    action: { label: "Manage", onClick: () => undefined },
+  },
+};
