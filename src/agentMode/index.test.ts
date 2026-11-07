@@ -9,6 +9,8 @@ import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import { createCopilotMcpServer } from "./session/copilotMcpServer";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -56,6 +58,10 @@ jest.mock("./session/AgentSessionManager", () => ({
   AgentSessionManager: jest.fn(() => mockManager),
 }));
 jest.mock("./session/copilotDefaultModel", () => ({ seedCopilotDefaultModel: jest.fn() }));
+jest.mock("./session/copilotMcpServer", () => {
+  const actual = jest.requireActual("./session/copilotMcpServer");
+  return { ...actual, createCopilotMcpServer: jest.fn(actual.createCopilotMcpServer) };
+});
 jest.mock("./skills", () => ({
   SkillManager: {
     initialize: (_app: App, _dirs: unknown, runtime: BuiltinSkillRuntime) => {
@@ -90,6 +96,7 @@ jest.mock("./ui/ReportIssueModal", () => ({}));
 jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
+jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
@@ -609,6 +616,58 @@ describe("agentMode", () => {
       expect(mockManager.noteSpawnConfigChanged.mock.calls).toEqual([
         ["opencode", "connectors changed"],
       ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers agents suggest_connector on a device with connectors, and tells chats which services are connected", () => {
+      jest.mocked(isConnectorsEnabled).mockReturnValue(true);
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectionManager: {
+            getSnapshot: () => ({
+              connections: [
+                { id: "c1", serviceId: "notion", status: "connected" },
+                { id: "c2", serviceId: "linear", status: "needs-login" },
+              ],
+            }),
+          },
+        } as unknown as CopilotPlugin
+      );
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("suggest_connector");
+      const options = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      expect(options.isConnectorConnected?.("notion")).toBe(true);
+      expect(options.isConnectorConnected?.("linear")).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 tells chats no service is connected while the connectors entitlement is off, even with a stored login", () => {
+      jest.mocked(isConnectorsEnabled).mockReturnValue(false);
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectionManager: {
+            getSnapshot: () => ({
+              connections: [{ id: "c1", serviceId: "notion", status: "connected" }],
+            }),
+          },
+        } as unknown as CopilotPlugin
+      );
+
+      const options = jest.mocked(AgentSessionManager).mock.calls[0][2];
+      expect(options.isConnectorConnected?.("notion")).toBe(false);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers no suggest_connector where connectors aren't available, such as mobile", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).not.toContain("suggest_connector");
+      expect(
+        jest.mocked(AgentSessionManager).mock.calls[0][2].isConnectorConnected
+      ).toBeUndefined();
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

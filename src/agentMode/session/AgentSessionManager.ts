@@ -1,6 +1,10 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
+import type {
+  ConnectorCardHandler,
+  CopilotMcpServer,
+  FeedbackOfferHandler,
+} from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -178,6 +182,7 @@ export interface AgentSessionManagerOptions {
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
+  isConnectorConnected?: (serviceId: string) => boolean;
 }
 
 export class AgentSessionManager {
@@ -928,6 +933,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      isConnectorConnected: this.opts.isConnectorConnected,
       mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -1869,9 +1875,19 @@ export class AgentSessionManager {
           this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
           "unattributed"
       : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
+    const showConnectorCard: ConnectorCardHandler = (serviceId, callerSessionId) =>
+      (shared
+        ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
+        : this.sessions.get(internalId)
+      )?.showConnectorCard(serviceId) ?? "unattributed";
     try {
       return [
-        await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer, descriptor.id),
+        await server.connect(
+          shared ? `${descriptor.id}:${cwd}` : internalId,
+          offer,
+          descriptor.id,
+          showConnectorCard
+        ),
       ];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
@@ -2219,6 +2235,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      isConnectorConnected: this.opts.isConnectorConnected,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2828,6 +2845,9 @@ export class AgentSessionManager {
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            // A card that just connected a service is why the user reloads, and its outcome is still owed to the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            connectorCards: session.getConnectorCards(),
             notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
@@ -2879,6 +2899,7 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
               rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
+            rebuilt.restoreConnectorCards(replacement.connectorCards);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }

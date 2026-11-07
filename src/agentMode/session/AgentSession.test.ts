@@ -2740,6 +2740,63 @@ describe("AgentSession", () => {
         expect(promptText(1)).toContain("<project_context>");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 tells the agent on the next prompt, once, whether the user connected, dismissed or ignored each connector card", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { isConnectorConnected: (id) => id === "notion" });
+        session.showConnectorCard("notion");
+        session.showConnectorCard("linear");
+        session.showConnectorCard("todoist");
+        session.dismissConnectorCard("linear");
+
+        await session.sendPrompt("go on").turn;
+        await session.sendPrompt("and then?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[0])).toContain(
+          [
+            "<connector-cards>",
+            "The user connected Notion. Use its tools; if none are listed yet, they appear once the user clicks Reload at the top of the chat, or in a new chat if no Reload is shown.",
+            "The user chose not to connect Linear. Continue without it; they can connect it later in Settings → Connectors.",
+            "The user sent this message without connecting Todoist.",
+            "</connector-cards>",
+            "",
+            "<user-message>\ngo on\n</user-message>",
+          ].join("\n")
+        );
+        expect(promptText(sent[1])).toBe("and then?");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 tells the agent the card outcome again after the prompt that carried it failed", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockRejectedValueOnce(new Error("transport down"));
+        const session = makeSession(mock, { isConnectorConnected: (id) => id === "notion" });
+        session.showConnectorCard("notion");
+
+        await expect(session.sendPrompt("go on").turn).rejects.toThrow("transport down");
+        await session.sendPrompt("retry").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[1])).toContain("The user connected Notion.");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 keeps a card the agent shows during a turn unreported until a later prompt carries its outcome", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.showConnectorCard("notion");
+        mock.prompt.mockImplementationOnce(async () => {
+          session.showConnectorCard("linear");
+          return { stopReason: "end_turn" };
+        });
+
+        await session.sendPrompt("go on").turn;
+        await session.sendPrompt("and then?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[0])).toContain("without connecting Notion.");
+        expect(promptText(sent[1])).toContain("without connecting Linear.");
+        expect(promptText(sent[1])).not.toContain("Notion");
+      });
+
       describe("with the same web page on several turns", () => {
         const PAGE = {
           url: "https://www.youtube.com/watch?v=arj7oStGLkU",
@@ -6375,6 +6432,75 @@ describe("AgentSession", () => {
 
         expect(session.getFeedbackOffer()).toMatchObject({ status: "dismissed" });
         expect(session.getFeedbackOffer()?.report).toBeUndefined();
+      });
+    });
+
+    describe("showConnectorCard()", () => {
+      const sessionWithTranscript = () => {
+        const session = makeSession(makeMockBackend());
+        session.loadDisplayMessages([
+          { id: "u1", sender: USER_SENDER, message: "find it", isVisible: true, timestamp: null },
+          { id: "a1", sender: AI_SENDER, message: "Connect it", isVisible: true, timestamp: null },
+        ]);
+        return session;
+      };
+
+      it("adds a card for the service after the latest user turn and notifies", () => {
+        const session = sessionWithTranscript();
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        expect(session.showConnectorCard("notion")).toBe("shown");
+
+        expect(onMessagesChanged).toHaveBeenCalled();
+        expect(session.getConnectorCards()).toEqual([
+          { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+        ]);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 keeps at most one card per service in the chat and never brings back a dismissed one", () => {
+        const session = sessionWithTranscript();
+        session.showConnectorCard("notion");
+        session.showConnectorCard("notion");
+        expect(session.getConnectorCards()).toHaveLength(1);
+
+        session.dismissConnectorCard("notion");
+
+        expect(session.showConnectorCard("notion")).toBe("dismissed");
+        expect(session.getConnectorCards()).toEqual([
+          expect.objectContaining({ serviceId: "notion", dismissed: true }),
+        ]);
+      });
+    });
+
+    describe("dismissConnectorCard()", () => {
+      it("hides the service's card and notifies, sending nothing to the agent", () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.showConnectorCard("notion");
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
+
+        session.dismissConnectorCard("notion");
+
+        expect(session.getConnectorCards()[0].dismissed).toBe(true);
+        expect(onMessagesChanged).toHaveBeenCalledTimes(1);
+        expect(mock.prompt).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("restoreConnectorCards()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 carries a chat's cards into the session that replaces it on Reload, and redraws them", () => {
+        const before = makeSession(makeMockBackend());
+        before.showConnectorCard("notion");
+        const after = makeSession(makeMockBackend());
+        const onMessagesChanged = jest.fn();
+        subscribeTo(after, { onMessagesChanged });
+
+        after.restoreConnectorCards(before.getConnectorCards());
+
+        expect(after.getConnectorCards()).toBe(before.getConnectorCards());
+        expect(onMessagesChanged).toHaveBeenCalled();
       });
     });
 

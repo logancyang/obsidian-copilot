@@ -111,6 +111,14 @@ import type {
   FeedbackOffer,
   FeedbackOfferTrigger,
 } from "@/agentMode/session/feedback/feedbackOffer";
+import {
+  dismissConnectorCard,
+  EMPTY_CONNECTOR_CARDS,
+  showConnectorCard,
+  takeConnectorCardOutcomes,
+  type ConnectorCard,
+  type ConnectorCardResult,
+} from "@/connectors/connectorCards";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -197,6 +205,7 @@ export interface ProjectContextUpdates {
 export interface ProjectContextUpdatesHooks {
   getProjectContextUpdates?: () => ProjectContextUpdates | null;
   markProjectContextUpdatesDelivered?: (epoch: number) => void;
+  isConnectorConnected?: (serviceId: string) => boolean;
 }
 
 export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
@@ -282,6 +291,8 @@ export class AgentSession {
   private readonly requests: InteractiveRequests;
   private readonly usageTracker: UsageTracker;
   private feedbackOffer: FeedbackOffer | null = null;
+  private connectorCards: readonly ConnectorCard[] = EMPTY_CONNECTOR_CARDS;
+  private readonly isConnectorConnected: (serviceId: string) => boolean;
 
   private needsAttention = false;
   private notifyScheduled = false;
@@ -326,6 +337,7 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
+    this.isConnectorConnected = opts.isConnectorConnected ?? (() => false);
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     this.requests = new InteractiveRequests({
@@ -931,9 +943,19 @@ export class AgentSession {
             CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
+      // The connector card's tool call returned before the user answered, so the answer rides their next message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      const cardsBeforeTurn = this.connectorCards;
+      const connectorOutcomes = sendsCompact
+        ? null
+        : takeConnectorCardOutcomes(cardsBeforeTurn, this.isConnectorConnected);
       const leadingContextBlock = sendsCompact
         ? null
-        : [historyBlock, buildPriorFanoutContextBlock(this.pendingFanoutContext)]
+        : [
+            historyBlock,
+            buildPriorFanoutContextBlock(this.pendingFanoutContext),
+            connectorOutcomes?.note,
+          ]
             .filter(Boolean)
             .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
@@ -957,6 +979,14 @@ export class AgentSession {
       if (outcome.error !== undefined) return outcome;
       if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
+      }
+      // Outcomes count as told only once the backend accepts the prompt, and a card shown or dismissed mid-turn still has news.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      if (connectorOutcomes) {
+        this.connectorCards = this.connectorCards.map((card) => {
+          const index = cardsBeforeTurn.indexOf(card);
+          return index === -1 ? card : connectorOutcomes.cards[index];
+        });
       }
       if (sendsSavedHistory && outcome.stopReason !== "cancelled") {
         this.resendSavedHistory = false;
@@ -1180,6 +1210,30 @@ export class AgentSession {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     if (this.feedbackOffer?.status !== "open") return;
     this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
+    this.notifyMessages();
+  }
+
+  getConnectorCards(): readonly ConnectorCard[] {
+    return this.connectorCards;
+  }
+
+  showConnectorCard(serviceId: string): ConnectorCardResult {
+    const userTurns = this.store
+      .getDisplayMessages()
+      .filter((message) => message.sender === USER_SENDER).length;
+    const shown = showConnectorCard(this.connectorCards, serviceId, userTurns);
+    this.connectorCards = shown.cards;
+    this.notifyMessages();
+    return shown.result;
+  }
+
+  dismissConnectorCard(serviceId: string): void {
+    this.connectorCards = dismissConnectorCard(this.connectorCards, serviceId);
+    this.notifyMessages();
+  }
+
+  restoreConnectorCards(cards: readonly ConnectorCard[]): void {
+    this.connectorCards = cards;
     this.notifyMessages();
   }
 
