@@ -52,6 +52,9 @@ describe("intelligentUi/parser", () => {
         "grid",
         "card",
         "panel",
+        "callout",
+        "tabs",
+        "tab",
         "divider",
         "heading",
         "text",
@@ -63,6 +66,22 @@ describe("intelligentUi/parser", () => {
         "markdown",
       ]);
       expect(parseIntelligentUi("")).toEqual({ status: "complete", nodes: [], pending: null });
+    });
+    it(`accepts toned callouts and titled tabs that contain elements (${ISSUE})`, () => {
+      expect(
+        parseIntelligentUi(
+          '<callout tone="warning" title="Back up first"><text>Sync can overwrite notes.</text></callout><tabs><tab title="macOS"><text>Open Finder.</text></tab><tab title="Windows"><steps><step>Open Explorer.</step></steps></tab></tabs>'
+        )
+      ).toMatchObject({
+        status: "complete",
+        nodes: [
+          { tag: "callout", props: { tone: "warning", title: "Back up first" } },
+          {
+            tag: "tabs",
+            children: [{ props: { title: "macOS" } }, { props: { title: "Windows" } }],
+          },
+        ],
+      });
     });
     it(`retains completed children inside unfinished containers (${ISSUE})`, () => {
       expect(parseIntelligentUi('<stack><text>Done</text><card title="Later')).toMatchObject({
@@ -99,6 +118,11 @@ describe("intelligentUi/parser", () => {
       ['<metric value="1"/>', "missing-prop"],
       ["<step/>", "invalid-parent"],
       ["<steps><text/></steps>", "invalid-parent"],
+      ['<tab title="Alone"/>', "invalid-parent"],
+      ["<tabs><text/></tabs>", "invalid-parent"],
+      ['<tabs><step title="x"/></tabs>', "invalid-parent"],
+      ["<tabs><tab/></tabs>", "missing-prop"],
+      ['<callout tone="loud"/>', "invalid-prop"],
       ["<text><badge/></text>", "invalid-child"],
       ["<text>&amp;</text>", "forbidden-text"],
       ["<text>&#60;</text>", "forbidden-text"],

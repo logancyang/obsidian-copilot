@@ -24,12 +24,22 @@ export const SUPPORTED_ICONS = Object.freeze([
   "zap",
 ] as const);
 
-type PropRule = "string" | "columns" | "icon";
-interface PrimitiveSchema {
+export const CALLOUT_TONES = Object.freeze([
+  "note",
+  "info",
+  "tip",
+  "success",
+  "warning",
+  "danger",
+] as const);
+
+type PropRule = "string" | "columns" | "icon" | readonly string[];
+export interface PrimitiveSchema {
+  readonly description: string;
   readonly props: Readonly<Record<string, PropRule>>;
   readonly required: readonly string[];
   readonly parents: "containers" | readonly string[];
-  readonly children: "elements" | "text" | "none" | "steps" | "content";
+  readonly children: "elements" | "text" | "none" | "items" | "content";
 }
 const CONTAINER = Object.freeze({
   props: Object.freeze({}),
@@ -40,39 +50,85 @@ const CONTAINER = Object.freeze({
 const TEXT = Object.freeze({ ...CONTAINER, children: "text" } as const);
 
 export const UI_SCHEMA = Object.freeze({
-  stack: CONTAINER,
-  row: CONTAINER,
+  stack: Object.freeze({ ...CONTAINER, description: "Vertical group of elements." }),
+  row: Object.freeze({
+    ...CONTAINER,
+    description:
+      "Places children side by side and stacks them on narrow screens. For a flow, put arrow-right icons between cards.",
+  }),
   grid: Object.freeze({
     ...CONTAINER,
+    description:
+      "Equal-width columns that stack on narrow screens; cells in a line share one height. Use for side-by-side comparisons.",
     props: Object.freeze({ columns: "columns" }),
     required: Object.freeze(["columns"]),
   }),
-  card: Object.freeze({ ...CONTAINER, props: Object.freeze({ title: "string", icon: "icon" }) }),
-  panel: CONTAINER,
-  divider: Object.freeze({ ...CONTAINER, children: "none" }),
-  heading: TEXT,
-  text: TEXT,
-  badge: TEXT,
+  card: Object.freeze({
+    ...CONTAINER,
+    description: "Bordered box with an optional title, icon and one-line description.",
+    props: Object.freeze({ title: "string", icon: "icon", description: "string" }),
+  }),
+  panel: Object.freeze({
+    ...CONTAINER,
+    description: "Shaded box without a border for secondary or grouped content.",
+  }),
+  callout: Object.freeze({
+    ...CONTAINER,
+    description:
+      "Highlighted aside for a key takeaway, tip or caution, with an optional title. tone defaults to note.",
+    props: Object.freeze({ tone: CALLOUT_TONES, title: "string" }),
+  }),
+  tabs: Object.freeze({
+    ...CONTAINER,
+    description:
+      "Alternative views the reader switches between, such as per-platform instructions. The first tab shows first.",
+    children: "items",
+  }),
+  tab: Object.freeze({
+    ...CONTAINER,
+    description: "One view inside tabs; title is its label.",
+    props: Object.freeze({ title: "string" }),
+    required: Object.freeze(["title"]),
+    parents: Object.freeze(["tabs"]),
+  }),
+  divider: Object.freeze({
+    ...CONTAINER,
+    description: "Separator line; vertical between items in a row.",
+    children: "none",
+  }),
+  heading: Object.freeze({ ...TEXT, description: "Section heading." }),
+  text: Object.freeze({ ...TEXT, description: "Paragraph of plain text." }),
+  badge: Object.freeze({ ...TEXT, description: "Short label such as a status or tag." }),
   icon: Object.freeze({
     ...CONTAINER,
+    description: "Standalone icon.",
     props: Object.freeze({ name: "icon" }),
     required: Object.freeze(["name"]),
     children: "none",
   }),
-  steps: Object.freeze({ ...CONTAINER, children: "steps" }),
+  steps: Object.freeze({
+    ...CONTAINER,
+    description: "Numbered sequence of steps.",
+    children: "items",
+  }),
   step: Object.freeze({
     ...CONTAINER,
+    description: "One step inside steps; icon replaces its number.",
     props: Object.freeze({ title: "string", icon: "icon" }),
     parents: Object.freeze(["steps"]),
     children: "content",
   }),
   metric: Object.freeze({
     ...CONTAINER,
+    description: "Key number with a label and an optional change such as +3 or -2%.",
     props: Object.freeze({ value: "string", label: "string", delta: "string" }),
     required: Object.freeze(["value", "label"]),
     children: "none",
   }),
-  markdown: TEXT,
+  markdown: Object.freeze({
+    ...TEXT,
+    description: "Markdown with links, wikilinks, emphasis, lists and tables.",
+  }),
 } satisfies Record<string, PrimitiveSchema>);
 
 export type UiTag = keyof typeof UI_SCHEMA;
@@ -200,12 +256,12 @@ export function parseIntelligentUi(source: string): UiParseResult {
     if (
       parent &&
       (parent.text.trim() ||
-        !["elements", "steps", "content"].includes(UI_SCHEMA[parent.tag].children))
+        !["elements", "items", "content"].includes(UI_SCHEMA[parent.tag].children))
     )
       return error("invalid-child", start);
     if (
       schema.parents === "containers"
-        ? parent?.tag === "steps"
+        ? parent !== undefined && UI_SCHEMA[parent.tag].children === "items"
         : !parent || !schema.parents.includes(parent.tag)
     )
       return error("invalid-parent", start);
@@ -233,7 +289,8 @@ export function parseIntelligentUi(source: string): UiParseResult {
       } else {
         if (
           attr[4] !== undefined ||
-          (rule === "icon" && !(SUPPORTED_ICONS as readonly string[]).includes(value))
+          (rule === "icon" && !(SUPPORTED_ICONS as readonly string[]).includes(value)) ||
+          (Array.isArray(rule) && !rule.includes(value))
         )
           return error("invalid-prop", start);
         props[name] = value;

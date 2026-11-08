@@ -15,8 +15,11 @@ tag is withheld until its closing `>` arrives. A closed prefix may return
 `complete` even when more siblings will subsequently arrive. Consumers must
 use the enclosing fence/stream lifecycle to know whether generation has ended.
 
-`UI_SCHEMA` is the persisted vocabulary. Layout containers accept elements;
-`steps` accepts only `step`, and `step` requires a `steps` parent. Text-bearing
+`UI_SCHEMA` is the persisted vocabulary and the single source for its model
+guidance: each primitive carries the description, props and nesting rules the
+prompt states. Layout containers accept elements; `steps` and `tabs` accept only
+their `step` and `tab` items, which require that parent. `callout.tone` accepts
+only `CALLOUT_TONES`. Text-bearing
 primitives accept plain text only. A `step` accepts either plain text or child
 elements; mixing both is rejected to preserve content order. `markdown` preserves Markdown links and
 wikilinks verbatim for a later ordinary Markdown renderer. No entities are
