@@ -73,6 +73,7 @@ function Markdown({ node, sourcePath }: NodeProps) {
   );
 }
 
+// Reading view and chat style h1–h6, p, ol, li and hr above utility classes, so layout text uses ARIA roles on divs. https://github.com/Brevilabs/obsidian-copilot-private/issues/881
 const ATOMS: readonly string[] = ["icon", "badge", "divider"];
 const InBoxContext = React.createContext(false);
 
@@ -89,15 +90,19 @@ function Card(props: NodeProps) {
       {(title || description) && (
         <div className="tw-flex tw-flex-col tw-gap-1">
           {title && (
-            <h3
+            <div
+              role="heading"
+              aria-level={3}
               id={id}
               className="tw-m-0 tw-flex tw-items-center tw-gap-2 tw-text-ui-medium tw-font-semibold tw-leading-tight"
             >
               {icon && <Icon name={String(icon)} decorative />}
               {title}
-            </h3>
+            </div>
           )}
-          {description && <p className="tw-m-0 tw-text-ui-small tw-text-muted">{description}</p>}
+          {description && (
+            <div className="tw-m-0 tw-text-ui-small tw-text-muted">{description}</div>
+          )}
         </div>
       )}
       {!title && icon && <Icon name={String(icon)} />}
@@ -189,9 +194,9 @@ function Tabs(props: NodeProps) {
 function Steps(props: NodeProps) {
   const steps = props.node.children;
   return (
-    <ol className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-p-0">
+    <div role="list" className="tw-flex tw-flex-col">
       {steps.map((node, index) => (
-        <li key={index} className="tw-flex tw-min-w-0 tw-gap-3">
+        <div role="listitem" key={index} className="tw-flex tw-min-w-0 tw-gap-3">
           <div aria-hidden="true" className="tw-flex tw-flex-col tw-items-center">
             <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-ui-smaller tw-font-medium tw-text-muted">
               {node.props.icon ? <Icon name={String(node.props.icon)} decorative /> : index + 1}
@@ -207,25 +212,29 @@ function Steps(props: NodeProps) {
             )}
           >
             {node.props.title && (
-              <h3 className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-6">
+              <div
+                role="heading"
+                aria-level={3}
+                className="tw-m-0 tw-text-ui-medium tw-font-semibold tw-leading-6"
+              >
                 {node.props.title}
-              </h3>
+              </div>
             )}
             {node.text && (
-              <p
+              <div
                 className={cn(
                   "tw-m-0 tw-whitespace-pre-wrap tw-leading-6",
                   node.props.title && "tw-text-muted"
                 )}
               >
                 {node.text}
-              </p>
+              </div>
             )}
             <Children {...props} node={node} />
           </div>
-        </li>
+        </div>
       ))}
-    </ol>
+    </div>
   );
 }
 
@@ -269,9 +278,21 @@ function Children(props: NodeProps) {
 
 function Heading({ node }: NodeProps) {
   return useContext(InBoxContext) ? (
-    <h4 className="tw-m-0 tw-text-ui-small tw-font-semibold tw-text-muted">{node.text}</h4>
+    <div
+      role="heading"
+      aria-level={4}
+      className="tw-m-0 tw-text-ui-small tw-font-semibold tw-text-muted"
+    >
+      {node.text}
+    </div>
   ) : (
-    <h2 className="tw-m-0 tw-text-ui-larger tw-font-semibold tw-leading-tight">{node.text}</h2>
+    <div
+      role="heading"
+      aria-level={2}
+      className="tw-m-0 tw-text-ui-larger tw-font-semibold tw-leading-tight"
+    >
+      {node.text}
+    </div>
   );
 }
 
@@ -322,12 +343,15 @@ function Primitive(props: NodeProps) {
       return <Icon name={String(node.props.name)} />;
     case "divider":
       return (
-        <hr className="tw-m-0 tw-w-full tw-border-0 tw-border-t tw-border-solid tw-border-border" />
+        <div
+          role="separator"
+          className="tw-h-px tw-w-full tw-bg-[var(--background-modifier-border)]"
+        />
       );
     case "heading":
       return <Heading {...props} />;
     case "text":
-      return <p className="tw-m-0 tw-whitespace-pre-wrap">{node.text}</p>;
+      return <div className="tw-m-0 tw-whitespace-pre-wrap">{node.text}</div>;
     case "badge":
       return (
         <UiBadge variant="outline" className="tw-w-fit">
@@ -380,9 +404,9 @@ export function IntelligentUi({ result, source, sourcePath }: IntelligentUiProps
   if (result.status === "error")
     return (
       <div className="tw-min-w-0 tw-space-y-3">
-        <p role="status" className="tw-m-0 tw-text-sm tw-text-muted">
+        <div role="status" className="tw-m-0 tw-text-sm tw-text-muted">
           This layout could not be displayed. Original source:
-        </p>
+        </div>
         <pre className="tw-m-0 tw-overflow-x-auto tw-rounded tw-bg-secondary tw-p-3">
           <code>{source}</code>
         </pre>

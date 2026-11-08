@@ -62,7 +62,7 @@ describe("IntelligentUi", () => {
       }
     );
 
-    it("renders all primitives with semantic headings, labelled cards, ordered steps and neutral deltas", async () => {
+    it(`renders all primitives with role-based headings, lists and separators that note styles cannot restyle (${ISSUE})`, async () => {
       const { container } = mount(
         '<stack><heading>Overview</heading><panel><grid columns="3"><card title="Plan" icon="list"><text>Read</text><badge>Ready</badge><divider/><icon name="check"/></card></grid><row><metric value="42" label="Notes" delta="+3"/></row><steps><step title="First" icon="search">Collect</step><step><text>Connect</text></step></steps></panel></stack>'
       );
@@ -74,20 +74,20 @@ describe("IntelligentUi", () => {
       expect(screen.getByRole("heading", { name: "Overview", level: 2 })).toBeTruthy();
       expect(screen.getByRole("region", { name: "Plan" })).toBeTruthy();
       expect(screen.getByRole("heading", { name: "Plan", level: 3 })).toBeTruthy();
-      expect(screen.getByRole("list").tagName).toBe("OL");
       expect(screen.getAllByRole("listitem")).toHaveLength(2);
       expect(screen.getByRole("separator")).toBeTruthy();
       expect(screen.getByText("+3").className).toContain("tw-text-muted");
       expect(container.querySelector('[data-icon="check"]')).toBeTruthy();
       expect(setIcon).toHaveBeenCalledWith(expect.any(HTMLElement), "list");
       expect(screen.getByText("Ready")).toBeTruthy();
+      expect(container.querySelector("h1, h2, h3, h4, h5, h6, p, ol, ul, li, hr")).toBeNull();
     });
 
     it("numbers steps unless an icon replaces the number, and shrinks headings inside boxes", () => {
       const { container } = mount(
         '<steps><step title="Collect">Read</step><step title="Link" icon="link">Connect</step></steps><card title="Plan" description="This week"><heading>Inside</heading></card>'
       );
-      const markers = [...container.querySelectorAll("li > [aria-hidden]")];
+      const markers = [...container.querySelectorAll("[role=listitem] > [aria-hidden]")];
       expect(markers.map((marker) => marker.firstElementChild?.textContent)).toEqual(["1", ""]);
       expect(markers[1].querySelector('[data-icon="link"]')).toBeTruthy();
       expect(screen.getByRole("heading", { name: "Inside", level: 4 })).toBeTruthy();
