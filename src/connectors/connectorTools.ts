@@ -232,6 +232,7 @@ export class ConnectorTools {
 
 class ServiceSession {
   private client: Promise<Client> | null = null;
+  private transport: StreamableHTTPClientTransport | null = null;
   private readonly sentTokens = new Set<string>();
 
   constructor(
@@ -264,23 +265,28 @@ class ServiceSession {
     return maskSecretValues(text, [...this.sentTokens]);
   }
 
-  async close(): Promise<void> {
-    const client = this.client;
+  close(): Promise<void> {
+    const transport = this.transport;
     this.client = null;
-    await (await client?.catch(() => null))?.close();
+    this.transport = null;
+    return transport?.close() ?? Promise.resolve();
   }
 
   private connect(): Promise<Client> {
-    this.client ??= (async () => {
-      const client = new Client({ name: "Copilot for Obsidian", version: "1.0.0" });
-      await client.connect(
-        new StreamableHTTPClientTransport(new URL(this.url), { fetch: this.authorizedFetch })
-      );
-      return client;
-    })().catch((error: unknown) => {
-      this.client = null;
-      throw error;
+    if (this.client) return this.client;
+    const client = new Client({ name: "Copilot for Obsidian", version: "1.0.0" });
+    const transport = new StreamableHTTPClientTransport(new URL(this.url), {
+      fetch: this.authorizedFetch,
     });
+    this.transport = transport;
+    this.client = client.connect(transport).then(
+      () => client,
+      (error: unknown) => {
+        this.client = null;
+        this.transport = null;
+        throw error;
+      }
+    );
     return this.client;
   }
 

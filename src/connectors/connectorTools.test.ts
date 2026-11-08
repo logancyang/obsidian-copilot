@@ -368,7 +368,7 @@ describe("connectorTools", () => {
     });
 
     describe("dispose()", () => {
-      it("closes every connected service's connections and stops offering their tools", async () => {
+      it("closes every connected service's connections as it is called and stops offering their tools", async () => {
         const fake = setUp({
           connections: [
             { id: "c-notion", serviceId: "notion" },
@@ -378,7 +378,7 @@ describe("connectorTools", () => {
         fake.atlassian.tools = [{ name: "search", inputSchema: { type: "object" } }];
         await fake.tools.refresh();
 
-        await fake.tools.dispose();
+        void fake.tools.dispose();
 
         expect(fake.tools.tools()).toEqual([]);
         const requests = [...fake.notion.requests, ...fake.atlassian.requests];
