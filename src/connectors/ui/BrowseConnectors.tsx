@@ -194,7 +194,7 @@ interface NoConnectorFoundProps {
 function NoConnectorFound({ query }: NoConnectorFoundProps): React.ReactElement {
   const serviceName = query.charAt(0).toUpperCase() + query.slice(1);
   return (
-    <section className="tw-flex tw-flex-col tw-items-center tw-gap-2 tw-px-4 tw-py-10 tw-text-center">
+    <section className="tw-flex tw-min-h-full tw-flex-col tw-items-center tw-justify-center tw-gap-2 tw-px-4 tw-py-10 tw-text-center">
       <Search aria-hidden="true" className="tw-size-6 tw-text-muted" />
       <div role="heading" aria-level={3} className="tw-text-base tw-font-semibold">
         No connector for “{query}” yet
