@@ -3,7 +3,7 @@ import { IntelligentUi } from "@/intelligentUi/ui/IntelligentUi";
 import { parseIntelligentUi, UiNode } from "@/intelligentUi/parser";
 import { GOLDEN_EXAMPLES } from "@/intelligentUi/testing/golden";
 import { renderMarkdown } from "@/utils/renderMarkdown";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { App, Component, setIcon } from "obsidian";
 import React from "react";
 
@@ -46,8 +46,8 @@ describe("IntelligentUi", () => {
           nodes
             .flatMap((node) => [
               String(node.props.title ?? ""),
-              String(node.props.value ?? ""),
               String(node.props.label ?? ""),
+              String(node.props.value ?? ""),
               String(node.props.delta ?? ""),
               node.text,
               ...texts(node.children),
@@ -81,6 +81,71 @@ describe("IntelligentUi", () => {
       expect(container.querySelector('[data-icon="check"]')).toBeTruthy();
       expect(setIcon).toHaveBeenCalledWith(expect.any(HTMLElement), "list");
       expect(screen.getByText("Ready")).toBeTruthy();
+    });
+
+    it("numbers steps unless an icon replaces the number, and shrinks headings inside boxes", () => {
+      const { container } = mount(
+        '<steps><step title="Collect">Read</step><step title="Link" icon="link">Connect</step></steps><card title="Plan" description="This week"><heading>Inside</heading></card>'
+      );
+      const markers = [...container.querySelectorAll("li > [aria-hidden]")];
+      expect(markers.map((marker) => marker.firstElementChild?.textContent)).toEqual(["1", ""]);
+      expect(markers[1].querySelector('[data-icon="link"]')).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Inside", level: 4 })).toBeTruthy();
+      expect(screen.getByText("This week")).toBeTruthy();
+    });
+
+    it(`marks signed metric changes with a trend icon and leaves unsigned ones plain (${ISSUE})`, () => {
+      const { container } = mount(
+        '<row><metric value="42" label="Notes" delta="+3"/><metric value="8" label="Bugs" delta="-2"/><metric value="1" label="Ties" delta="same"/></row>'
+      );
+      expect(
+        [...container.querySelectorAll("[data-icon]")].map((icon) => icon.getAttribute("data-icon"))
+      ).toEqual(["trending-up", "trending-down"]);
+      expect(screen.getByText("same")).toBeTruthy();
+    });
+
+    it(`turns row arrows downward when the row stacks and draws row dividers vertically (${ISSUE})`, () => {
+      const { container } = mount(
+        '<row><card title="In"/><icon name="arrow-right"/><divider/><card title="Out"/></row>'
+      );
+      expect(
+        container.querySelector('[data-icon="arrow-right"]')?.parentElement?.className
+      ).toContain("tw-rotate-90");
+      expect(screen.getByRole("separator").className).toContain("@lg:tw-w-px");
+    });
+
+    it(`labels callouts with their title or tone and uses the theme's callout icon (${ISSUE})`, () => {
+      jest.spyOn(window, "getComputedStyle").mockReturnValue({
+        getPropertyValue: () => " lucide-flame ",
+      } as unknown as CSSStyleDeclaration);
+      const { container } = mount(
+        '<callout tone="tip"><text>Link notes.</text></callout><callout title="Heads up"><text>Back up.</text></callout>'
+      );
+      const callouts = [...container.querySelectorAll(".callout")];
+      expect(callouts.map((callout) => callout.getAttribute("data-callout"))).toEqual([
+        "tip",
+        "note",
+      ]);
+      expect(
+        callouts.map((callout) => callout.querySelector(".callout-title-inner")?.textContent)
+      ).toEqual(["Tip", "Heads up"]);
+      expect(callouts[0].querySelector('.callout-icon[data-icon="lucide-flame"]')).toBeTruthy();
+    });
+
+    it("shows the first tab and switches panels by click or arrow keys", () => {
+      mount(
+        '<tabs><tab title="macOS"><text>Open Finder.</text></tab><tab title="Windows"><text>Open Explorer.</text></tab></tabs>'
+      );
+      const [mac, windows] = screen.getAllByRole("tab");
+      expect(mac.getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByRole("tabpanel").textContent).toBe("Open Finder.");
+      fireEvent.click(windows);
+      expect(screen.getByRole("tabpanel").textContent).toBe("Open Explorer.");
+      fireEvent.keyDown(windows, { key: "ArrowRight" });
+      expect(mac.getAttribute("aria-selected")).toBe("true");
+      expect(document.activeElement).toBe(mac);
+      fireEvent.keyDown(mac, { key: "ArrowLeft" });
+      expect(screen.getByRole("tabpanel").textContent).toBe("Open Explorer.");
     });
 
     it("renders text and attribute markup literally without creating HTML", () => {

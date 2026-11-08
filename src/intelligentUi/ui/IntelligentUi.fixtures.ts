@@ -5,7 +5,10 @@ const SOURCES = {
   Stack: "<stack><text>Capture useful ideas.</text><text>Return when you need them.</text></stack>",
   Row: '<row><card title="Capture"><text>Write the idea.</text></card><card title="Recall"><text>Find it again.</text></card></row>',
   Grid: '<grid columns="3"><card title="Notes"><text>Capture</text></card><card title="Links"><text>Connect</text></card><card title="Answers"><text>Recall</text></card></grid>',
-  Card: '<card title="Research" icon="search"><text>Keep sources beside your ideas.</text></card>',
+  Card: '<card title="Research" icon="search" description="Sources and quotes"><text>Keep sources beside your ideas.</text></card>',
+  Callout:
+    '<stack><callout tone="tip"><text>Link each new note to one you already have.</text></callout><callout tone="warning" title="Back up first"><text>Moving folders rewrites every link inside them.</text></callout></stack>',
+  Tabs: '<tabs><tab title="macOS"><steps><step title="Open Finder">Find the vault folder.</step><step title="Copy">Duplicate it to your backup drive.</step></steps></tab><tab title="Windows"><text>Open File Explorer and copy the vault folder.</text></tab></tabs>',
   Panel:
     "<panel><heading>Related ideas</heading><text>Look for connections across your notes.</text></panel>",
   Divider: "<stack><text>Before</text><divider/><text>After</text></stack>",
