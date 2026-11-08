@@ -105,9 +105,7 @@ describe("ConnectedConnectors", () => {
 
       expect(within(row("Notion")).getByText("Connected · Acme workspace")).toBeTruthy();
       expect(within(row("Granola")).getByText("Connected")).toBeTruthy();
-      expect(
-        within(row("Linear")).getByText("Needs login. Agents can't use Linear until you reconnect.")
-      ).toBeTruthy();
+      expect(within(row("Linear")).getByText("Needs login")).toBeTruthy();
       expect(
         within(row("Miro")).getByText(
           "Couldn't reach Miro just now. Copilot tries again in your next chat."

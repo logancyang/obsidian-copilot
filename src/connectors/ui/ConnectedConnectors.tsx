@@ -164,11 +164,7 @@ function ConnectedRow({
       </LoginButton>
     );
   } else if (connection.status === "needs-login") {
-    detail = (
-      <StatusLine tone="attention">
-        Needs login. Agents can&apos;t use {service.name} until you reconnect.
-      </StatusLine>
-    );
+    detail = <StatusLine tone="attention">Needs login</StatusLine>;
     action = (
       <LoginButton blockedBy={blockedBy} onClick={reconnect}>
         Reconnect

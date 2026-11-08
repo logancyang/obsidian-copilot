@@ -37,8 +37,8 @@ export function ConnectorsUpsell({
           Connectors is a preview for Supporters
         </div>
         <p className="tw-m-0">
-          Connect Notion, Linear, Jira, Todoist and dozens more once, and every agent can read and
-          update them from your chats.
+          Connect to Notion, Linear, Jira, Todoist and dozens more, and let every agent read and
+          update them from your chat.
         </p>
         <ul className="tw-m-0 tw-flex tw-flex-col tw-gap-1 tw-pl-5">
           <li>Log in on the service&apos;s own page. No config files, no terminal.</li>
