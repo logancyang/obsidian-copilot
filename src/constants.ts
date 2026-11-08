@@ -561,6 +561,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   configuredModels: [],
   backends: {},
   copilotPlusCatalog: { models: [], defaultEnabledIds: [] },
+  connectors: [],
 };
 
 export const EVENT_NAMES = {
