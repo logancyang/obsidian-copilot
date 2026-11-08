@@ -21,6 +21,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { SettingsSubPageLayout } from "@/settings/v2/components/ui/SettingsSubPageLayout";
 import { Check, ExternalLink, Search } from "lucide-react";
 import React, { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 
 const CATEGORY_OPTIONS: SelectOption[] = [
   { label: "All", value: "" },
@@ -67,7 +68,7 @@ export function BrowseConnectors({
             onChange={(event) =>
               setCategory(CONNECTOR_CATEGORIES.find((c) => c === event.target.value) ?? null)
             }
-            containerClassName="tw-w-auto tw-max-w-full"
+            containerClassName={cn("tw-w-auto tw-max-w-full")}
           />
         )
       }
