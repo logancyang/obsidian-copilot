@@ -34,6 +34,14 @@ describe("ChatTranscriptViewport", () => {
       expect(scrollToEnd).toHaveBeenCalledTimes(1);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 turns off browser scroll anchoring while following and keeps it while paused", () => {
+      const { rerender } = render(<ChatTranscriptViewport {...props()} />);
+      expect(screen.getByTestId("chat-messages").className).toContain("[overflow-anchor:none]");
+
+      rerender(<ChatTranscriptViewport {...props({ isScrollPaused: true })} />);
+      expect(screen.getByTestId("chat-messages").className).not.toContain("overflow-anchor");
+    });
+
     it("passes reader scrolling to the scroll state owner", () => {
       const onScroll = jest.fn();
       render(<ChatTranscriptViewport {...props({ onScroll })} />);

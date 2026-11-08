@@ -496,3 +496,70 @@ export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
+
+const STREAMED_REPLY = Array.from(
+  { length: 10 },
+  (_, index) =>
+    `**Step ${index + 1}.** I compared the meeting notes with the project plan and found that the launch checklist still lists the venue booking, the budget draft and the press kit as open, so I moved the venue booking to this week and flagged the budget draft for Finance.\n\n`
+).join("");
+const STREAM_CHUNK_CHARS = 54;
+const STREAM_INTERVAL_MS = 120;
+
+const StreamingReplyDemo: React.FC = () => {
+  const [received, setReceived] = useState(STREAM_CHUNK_CHARS);
+  const [run, setRun] = useState(0);
+  React.useEffect(() => {
+    const timer = window.setInterval(
+      () => setReceived((count) => Math.min(count + STREAM_CHUNK_CHARS, STREAMED_REPLY.length)),
+      STREAM_INTERVAL_MS
+    );
+    return () => window.clearInterval(timer);
+  }, [run]);
+  const streaming = received < STREAMED_REPLY.length;
+  const messages = useMemo<AgentChatMessage[]>(
+    () => [
+      { ...message, id: "earlier-request", sender: "user", message: "Review the project notes." },
+      {
+        ...message,
+        id: "earlier-response",
+        message: Array.from(
+          { length: 6 },
+          (_, index) => `Finding ${index + 1}: The notes clarify the next step for the project.`
+        ).join("\n\n"),
+      },
+      {
+        ...message,
+        id: "streaming-request",
+        sender: "user",
+        message: "Update the launch checklist.",
+      },
+      { ...message, id: `streaming-response-${run}`, message: STREAMED_REPLY.slice(0, received) },
+    ],
+    [received, run]
+  );
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-2">
+      <QueuedActionsDemo
+        {...actionRailArgs}
+        messages={messages}
+        pendingToolPermissions={[]}
+        pendingAskUserQuestions={[]}
+        isLoading={streaming}
+      />
+      <button
+        type="button"
+        disabled={streaming}
+        onClick={() => {
+          setReceived(STREAM_CHUNK_CHARS);
+          setRun((count) => count + 1);
+        }}
+      >
+        Replay
+      </button>
+    </div>
+  );
+};
+
+export const StreamingReplyFollowsEnd: StoryObj<AgentChatMessagesProps> = {
+  render: () => <StreamingReplyDemo />,
+};

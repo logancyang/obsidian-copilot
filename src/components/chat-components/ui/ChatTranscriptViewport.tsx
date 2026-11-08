@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { ArrowDown } from "lucide-react";
 import React from "react";
 
@@ -21,11 +22,15 @@ export function ChatTranscriptViewport({
 }: ChatTranscriptViewportProps) {
   return (
     <div className="tw-relative tw-flex tw-min-h-0 tw-flex-1 tw-overflow-hidden">
+      {/* Browser scroll anchoring pins the end a whole line per wrap, overriding the eased follow; it stays on while paused to hold the reader's place. https://github.com/Brevilabs/obsidian-copilot-private/issues/887 */}
       <div
         ref={scrollContainerRef}
         onScroll={onScroll}
         data-testid="chat-messages"
-        className="tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-overflow-x-hidden tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] [&_.markdown-rendered_table]:tw-block [&_.markdown-rendered_table]:tw-overflow-x-auto"
+        className={cn(
+          "tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-overflow-x-hidden tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] [&_.markdown-rendered_table]:tw-block [&_.markdown-rendered_table]:tw-overflow-x-auto",
+          !isScrollPaused && "[overflow-anchor:none]"
+        )}
       >
         <div ref={contentRef} className="tw-w-full">
           {children}

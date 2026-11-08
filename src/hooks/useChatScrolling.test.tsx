@@ -23,6 +23,15 @@ const userMessage = (id: string): ChatMessage => ({
   timestamp: null,
 });
 
+const growTo = (scrollHeight: number): void => {
+  geometry.scrollHeight = scrollHeight;
+  act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+};
+
+const advanceFrames = (count: number): void => {
+  act(() => jest.advanceTimersByTime(16 * count));
+};
+
 function ChatScrollHarness({ chatHistory }: { chatHistory: ChatMessage[] }) {
   const { scrollContainerCallbackRef, contentCallbackRef, onScroll, isScrollPaused, scrollToEnd } =
     useChatScrolling({ chatHistory });
@@ -68,16 +77,74 @@ describe("useChatScrolling", () => {
       geometry.scrollTop = 0;
       resizeCallbacks.length = 0;
       window.ResizeObserver = MockResizeObserver;
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 follows the growing response after the initial message space fills", () => {
       render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
       expect(geometry.scrollTop).toBe(100);
 
-      geometry.scrollHeight = 300;
-      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      growTo(300);
+      advanceFrames(60);
       expect(geometry.scrollTop).toBe(200);
       expect(screen.queryByRole("button", { name: "Scroll to end" })).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 glides a line of growth into view over several frames instead of jumping", () => {
+      render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+
+      growTo(222);
+      advanceFrames(1);
+      expect(geometry.scrollTop).toBeGreaterThan(100);
+      expect(geometry.scrollTop).toBeLessThan(110);
+
+      advanceFrames(60);
+      expect(geometry.scrollTop).toBe(122);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 jumps straight to the end when growth is taller than the viewport", () => {
+      render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+
+      growTo(350);
+      expect(geometry.scrollTop).toBe(250);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 jumps straight to the end when the reader prefers reduced motion", () => {
+      const matchMedia = window.matchMedia;
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: () => ({ matches: true }),
+      });
+      try {
+        render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+
+        growTo(222);
+        expect(geometry.scrollTop).toBe(122);
+      } finally {
+        Object.defineProperty(window, "matchMedia", { configurable: true, value: matchMedia });
+      }
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 stops gliding and pauses when the reader scrolls up mid-glide", () => {
+      render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+      growTo(260);
+      advanceFrames(2);
+
+      geometry.scrollTop = 60;
+      fireEvent.scroll(screen.getByTestId("transcript"));
+      advanceFrames(60);
+      expect(geometry.scrollTop).toBe(60);
+      expect(screen.getByRole("button", { name: "Scroll to end" })).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/887 opens a chat already at its end without gliding", () => {
+      geometry.scrollHeight = 180;
+      render(<ChatScrollHarness chatHistory={[userMessage("first")]} />);
+      expect(geometry.scrollTop).toBe(80);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 keeps the return control hidden when the chat is too short to scroll", () => {
@@ -102,8 +169,8 @@ describe("useChatScrolling", () => {
       geometry.scrollTop = 200;
       fireEvent.scroll(screen.getByTestId("transcript"));
       expect(screen.queryByRole("button", { name: "Scroll to end" })).toBeNull();
-      geometry.scrollHeight = 350;
-      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      growTo(350);
+      advanceFrames(60);
       expect(geometry.scrollTop).toBe(250);
     });
 
@@ -116,8 +183,8 @@ describe("useChatScrolling", () => {
       act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
       expect(screen.queryByRole("button", { name: "Scroll to end" })).toBeNull();
 
-      geometry.scrollHeight = 300;
-      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      growTo(300);
+      advanceFrames(60);
       expect(geometry.scrollTop).toBe(140);
     });
 
@@ -129,8 +196,8 @@ describe("useChatScrolling", () => {
       expect(geometry.scrollTop).toBe(100);
       expect(screen.queryByRole("button", { name: "Scroll to end" })).toBeNull();
 
-      geometry.scrollHeight = 260;
-      act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
+      growTo(260);
+      advanceFrames(60);
       expect(geometry.scrollTop).toBe(160);
     });
 
