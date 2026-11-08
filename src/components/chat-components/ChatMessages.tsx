@@ -2,6 +2,7 @@ import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadi
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
+import { useSmoothedText } from "@/hooks/useSmoothedText";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo } from "react";
@@ -44,6 +45,7 @@ const ChatMessages = memo(
       scrollToEnd,
       getMessageKey,
     } = useChatScrolling({ chatHistory });
+    const shownAiMessage = useSmoothedText(currentAiMessage, true);
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
       return (
@@ -86,7 +88,7 @@ const ChatMessages = memo(
                 message={{
                   id: streamingMessageId ?? undefined,
                   sender: "AI",
-                  message: currentAiMessage,
+                  message: shownAiMessage,
                   isVisible: true,
                   timestamp: null,
                 }}
