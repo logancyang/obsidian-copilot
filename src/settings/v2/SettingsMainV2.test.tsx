@@ -1,8 +1,6 @@
 import type CopilotPlugin from "@/main";
-import { openCopilotSettings } from "@/settings/openSettings";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { App } from "obsidian";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/settings/v2/components/BasicSettings", () => {
@@ -136,17 +134,6 @@ describe("SettingsMainV2", () => {
         screen.getByRole("tab", { name: "Skills: Some skills failed to load" })
       ).not.toBeNull();
       expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
-    });
-
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 switches to a tab Copilot asks for while settings are on screen", () => {
-      render(<SettingsMainV2 plugin={plugin} initialTab="basic" />);
-      const app = { setting: { open: jest.fn(), openTabById: jest.fn() } } as unknown as App;
-
-      act(() => openCopilotSettings(app, window, "connectors"));
-
-      expect(screen.getByRole("tab", { name: "Connectors" }).getAttribute("aria-selected")).toBe(
-        "true"
-      );
     });
 
     it("marks the Connectors tab with a red dot while a connector needs a login", () => {

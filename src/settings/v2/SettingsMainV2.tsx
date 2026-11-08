@@ -8,7 +8,6 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { ByokPanel, ModelManagementProvider } from "@/modelManagement";
 import { resetSettings } from "@/settings/model";
-import { useSelectRequestedCopilotSettingsTab } from "@/settings/openSettings";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
@@ -82,7 +81,6 @@ const tabs = COPILOT_SETTINGS_TAB_IDS.map((id) => ({
 
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
-  useSelectRequestedCopilotSettingsTab(setSelectedTab);
   const skillLoadErrorCount = useSkillLoadErrorCount();
   const connectorsSnapshot = useConnectorsSnapshot(usePlugin().connectionManager);
   const connectorsEnabled = useIsConnectorsEnabled();

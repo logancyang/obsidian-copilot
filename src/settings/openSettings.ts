@@ -1,10 +1,8 @@
 import type { CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { callMethod, isRecord, readProperty } from "@/utils/obsidianInternals";
 import type { App } from "obsidian";
-import { useEffect } from "react";
 
 let requestedCopilotSettingsTab: CopilotSettingsTabId | null = null;
-let selectTabOnScreen: ((tab: CopilotSettingsTabId) => void) | null = null;
 
 interface ObsidianSettingsController {
   open: () => void;
@@ -17,13 +15,6 @@ export function openCopilotSettings(
   tab: CopilotSettingsTabId
 ): void {
   const settings = (app as unknown as { setting: ObsidianSettingsController }).setting;
-  // Reopening Copilot's tab while it is on screen remounts it, which cancels a login the Connectors tab shows.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
-  if (selectTabOnScreen) {
-    settings.open();
-    selectTabOnScreen(tab);
-    return;
-  }
   requestedCopilotSettingsTab = tab;
   settings.open();
   // Opening settings consumes the request immediately when Copilot is already
@@ -49,17 +40,6 @@ export function openCorePluginSettings(app: App, pluginName: string): void {
   if (!isRecord(search)) return;
   search.value = pluginName;
   callMethod(search, "dispatchEvent", new Event("input"));
-}
-
-export function useSelectRequestedCopilotSettingsTab(
-  select: (tab: CopilotSettingsTabId) => void
-): void {
-  useEffect(() => {
-    selectTabOnScreen = select;
-    return () => {
-      selectTabOnScreen = null;
-    };
-  }, [select]);
 }
 
 export function consumeRequestedCopilotSettingsTab(): CopilotSettingsTabId {
