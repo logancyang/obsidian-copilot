@@ -6,6 +6,7 @@ import {
   ConnectorAuth,
   loginFailureMessage,
   type ConnectorLogin,
+  type ConnectorLoginTarget,
   type LoginOutcome,
 } from "@/connectors/oauth/connectorAuth";
 import {
@@ -25,7 +26,14 @@ const setRequestUrlImpl = (obsidian as unknown as { __setRequestUrlImpl: (impl: 
 const VAULT_ID = "abcd1234";
 const CONNECTION_ID = "conn-1";
 const KEYCHAIN_ID = `copilot-v${VAULT_ID}-connector-${CONNECTION_ID}`;
-const NOTION = { connectionId: CONNECTION_ID, serverUrl: FAKE_SERVER_URL, serviceName: "Notion" };
+const NOTION_LOGO_URL =
+  "https://images.brevilabs.com/newsletters/copilot-plugin/connectors/notion.png";
+const NOTION = {
+  connectionId: CONNECTION_ID,
+  serverUrl: FAKE_SERVER_URL,
+  serviceName: "Notion",
+  logoUrl: NOTION_LOGO_URL,
+};
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
@@ -83,15 +91,17 @@ function setUp(options: FakeOAuthServiceOptions = {}) {
   const browser = fakeBrowser();
   const connectorAuth = new ConnectorAuth({ keychain, openUrl: browser.open });
 
-  async function startLogin(): Promise<{ login: ConnectorLogin; authorizationUrl: URL }> {
+  async function startLogin(
+    target: ConnectorLoginTarget = NOTION
+  ): Promise<{ login: ConnectorLogin; authorizationUrl: URL }> {
     const opened = browser.nextUrl();
-    const login = connectorAuth.login(NOTION);
+    const login = connectorAuth.login(target);
     startedLogins.push(login);
     return { login, authorizationUrl: new URL(await opened) };
   }
 
-  async function connect(): Promise<PageVisit> {
-    const { login, authorizationUrl } = await startLogin();
+  async function connect(target: ConnectorLoginTarget = NOTION): Promise<PageVisit> {
+    const { login, authorizationUrl } = await startLogin(target);
     const page = await visit(service.approve(authorizationUrl.href));
     await expect(login.outcome).resolves.toEqual({ status: "connected" });
     return page;
@@ -141,7 +151,7 @@ describe("connectorAuth", () => {
         expect(stored.tokens.refresh_token).toMatch(/^refresh-/);
       });
 
-      it("shows '<Service> is connected to Copilot' with Copilot's brand mark in the browser after the login finishes", async () => {
+      it("shows '<Service> is connected to Copilot' with Copilot's brand mark and the service's CDN logo in the browser after the login finishes", async () => {
         const { connect } = setUp();
 
         const page = await connect();
@@ -150,6 +160,15 @@ describe("connectorAuth", () => {
         expect(page.body).toContain("Notion is connected to Copilot");
         expect(page.body).toContain("You can close this tab and go back to Obsidian.");
         expect(page.body).toContain(COPILOT_AGENT_ICON_PATH);
+        expect(page.body).toContain(`<div class="tile service"><img src="${NOTION_LOGO_URL}"`);
+      });
+
+      it("shows the service's initial in place of a logo when the service has no logo", async () => {
+        const { connect } = setUp();
+
+        const page = await connect({ ...NOTION, logoUrl: undefined });
+
+        expect(page.body).toContain('<div class="tile service">N</div>');
       });
 
       it("registers as 'Copilot for Obsidian' with its website, logo and loopback callback when the service has no client metadata document support", async () => {
