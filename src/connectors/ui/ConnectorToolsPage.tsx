@@ -8,6 +8,7 @@ import { humanizeToolName } from "@/lib/toolName";
 import { SettingsSubPageLayout } from "@/settings/v2/components/ui/SettingsSubPageLayout";
 import { CloudOff } from "lucide-react";
 import React, { useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 
 const SEARCH_THRESHOLD = 8;
 
@@ -124,7 +125,7 @@ function ToolGroup({ title, tools }: ToolGroupProps): React.ReactElement | null 
             <div className="tw-text-ui-small tw-font-semibold tw-text-normal">{tool.name}</div>
             {tool.description && (
               <div className="tw-text-ui-smaller tw-text-muted">
-                <ClampedContent collapsedClassName="tw-max-h-[2lh]">
+                <ClampedContent collapsedClassName={cn("tw-max-h-[2lh]")}>
                   {tool.description}
                 </ClampedContent>
               </div>
