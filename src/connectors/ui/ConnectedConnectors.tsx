@@ -20,8 +20,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronRight, Lock, MoreHorizontal, Plug, Plus, RotateCw, Unplug } from "lucide-react";
 import React, { useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 
-const LIST_CLASS = "tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-2 tw-p-0";
+const LIST_CLASS = cn("tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-2 tw-p-0");
 
 const STATUS_ORDER: Record<ConnectionStatus, number> = {
   "needs-login": 0,
