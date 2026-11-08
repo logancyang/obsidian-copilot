@@ -109,7 +109,6 @@ export const useChatScrolling = ({
   const scrollContainerCallbackRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (node === scrollContainerRef.current) return;
-      stopGlide();
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       scrollContainerRef.current = node;
@@ -128,7 +127,7 @@ export const useChatScrolling = ({
         resizeObserverRef.current = resizeObserver;
       }
     },
-    [stopGlide, resumeFollowing, followEnd]
+    [resumeFollowing, followEnd]
   );
 
   const contentCallbackRef = useCallback((node: HTMLDivElement | null) => {
