@@ -1,3 +1,5 @@
+import type { ChatStateHost } from "@/agentMode/session/chatExtension";
+import { offerFeedback } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentMcpServer, BackendId } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -72,10 +74,7 @@ export interface FeedbackDraft {
 
 export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off" | "unattributed";
 
-export type FeedbackOfferHandler = (
-  draft: FeedbackDraft,
-  callerSessionId: string | null
-) => FeedbackOfferResult;
+export type FindCallingChat = (callerSessionId: string | null) => ChatStateHost | null;
 
 const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.freeze({
   shown: "Shown to the user. Continue; don't mention it unless asked.",
@@ -98,7 +97,7 @@ export interface McpToolDefinition {
 export interface HostedTool {
   definition: McpToolDefinition;
   turnedOffText: string;
-  call: (args: unknown) => Promise<HostedToolResult>;
+  call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
 
 export interface ProvidedToolResult {
@@ -119,16 +118,24 @@ export interface ToolProvider {
   dispose(): Promise<void>;
 }
 
-interface TokenHolder {
-  onOffer: FeedbackOfferHandler;
+interface SessionHandlers {
+  findChat: FindCallingChat;
   listing: ToolListing;
 }
 
-type ServerTool = Omit<HostedTool, "call"> & Partial<Pick<HostedTool, "call">>;
-
-const SEND_FEEDBACK_HOSTED_TOOL: ServerTool = Object.freeze({
+const SEND_FEEDBACK_HOSTED_TOOL: HostedTool = Object.freeze({
   definition: SEND_FEEDBACK_TOOL,
   turnedOffText: OFFER_RESULT_TEXT.turned_off,
+  call: async (args: unknown, chat: ChatStateHost | null) => {
+    const draft = parseDraft(args);
+    if (!draft) {
+      return { text: "title, what_happened and repro must be non-empty strings.", isError: true };
+    }
+    return {
+      text: OFFER_RESULT_TEXT[chat ? offerFeedback(chat, draft) : "unattributed"],
+      isError: false,
+    };
+  },
 });
 
 type ToolSwitch = (toolName: string) => boolean;
@@ -136,8 +143,8 @@ type ToolSwitch = (toolName: string) => boolean;
 export interface CopilotMcpServer {
   connect(
     sessionKey: string,
-    onOffer: FeedbackOfferHandler,
-    backendId: BackendId
+    backendId: BackendId,
+    findChat: FindCallingChat
   ): Promise<AgentMcpServer>;
   disconnect(sessionKey: string): void;
   dispose(): void;
@@ -157,8 +164,8 @@ export function createCopilotMcpServer(
   tools: readonly HostedTool[],
   toolProvider?: ToolProvider
 ): CopilotMcpServer {
-  const hostedTools: readonly ServerTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
-  const holdersByToken = new Map<string, TokenHolder>();
+  const hostedTools: readonly HostedTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
+  const handlersByToken = new Map<string, SessionHandlers>();
   const tokensBySession = new Map<string, string>();
   let server: LoopbackServer | null = null;
   let disposed = false;
@@ -166,12 +173,12 @@ export function createCopilotMcpServer(
   return Object.freeze({
     async connect(
       sessionKey: string,
-      onOffer: FeedbackOfferHandler,
-      backendId: BackendId
+      backendId: BackendId,
+      findChat: FindCallingChat
     ): Promise<AgentMcpServer> {
       if (disposed) throw new Error("The Copilot MCP server is closed.");
       server ??= startLoopbackServer("Copilot MCP server", (request, response) =>
-        handleHttpRequest(request, response, holdersByToken, isToolOn, hostedTools, toolProvider)
+        handleHttpRequest(request, response, handlersByToken, isToolOn, hostedTools, toolProvider)
       );
       // Agents read the tool list once per session, so each new session first brings connected services up to date.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
@@ -187,7 +194,7 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      holdersByToken.set(token, { onOffer, listing: { sessionKey, backendId } });
+      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId } });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,
@@ -203,12 +210,12 @@ export function createCopilotMcpServer(
       const token = tokensBySession.get(sessionKey);
       if (!token) return;
       tokensBySession.delete(sessionKey);
-      holdersByToken.delete(token);
+      handlersByToken.delete(token);
       toolProvider?.forget(sessionKey);
     },
     dispose(): void {
       disposed = true;
-      holdersByToken.clear();
+      handlersByToken.clear();
       tokensBySession.clear();
       server?.close();
       server = null;
@@ -220,17 +227,17 @@ export function createCopilotMcpServer(
 async function handleHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
-  holdersByToken: ReadonlyMap<string, TokenHolder>,
+  handlersByToken: ReadonlyMap<string, SessionHandlers>,
   isToolOn: ToolSwitch,
-  hostedTools: readonly ServerTool[],
+  hostedTools: readonly HostedTool[],
   toolProvider: ToolProvider | undefined
 ): Promise<void> {
   if (request.url !== MCP_PATH) return writeJson(response, 404, { error: "Not found." });
   // Each session's token selects its own chat, so another vault, session or local page cannot raise a card in it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? "")?.[1];
-  const holder = token ? holdersByToken.get(token) : undefined;
-  if (!holder) return writeJson(response, 401, { error: "Unauthorized." });
+  const handlers = token ? handlersByToken.get(token) : undefined;
+  if (!handlers) return writeJson(response, 401, { error: "Unauthorized." });
   // Copilot never pushes server-initiated messages, so the optional SSE stream is declined.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   if (request.method !== "POST") return writeJson(response, 405, { error: "Method not allowed." });
@@ -251,15 +258,15 @@ async function handleHttpRequest(
   writeJson(response, 200, {
     jsonrpc: "2.0",
     id: message.id,
-    ...(await reply(message, holder, isToolOn, hostedTools, toolProvider)),
+    ...(await reply(message, handlers, isToolOn, hostedTools, toolProvider)),
   });
 }
 
 async function reply(
   message: JsonRpcRequest,
-  holder: TokenHolder,
+  handlers: SessionHandlers,
   isToolOn: ToolSwitch,
-  hostedTools: readonly ServerTool[],
+  hostedTools: readonly HostedTool[],
   toolProvider: ToolProvider | undefined
 ): Promise<JsonRpcReply> {
   switch (message.method) {
@@ -285,19 +292,13 @@ async function reply(
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
               .map((tool) => tool.definition),
-            ...(toolProvider?.tools(holder.listing) ?? []),
+            ...(toolProvider?.tools(handlers.listing) ?? []),
           ],
         },
       };
     case "tools/call":
       return {
-        result: await callTool(
-          message.params ?? {},
-          holder.onOffer,
-          isToolOn,
-          hostedTools,
-          toolProvider
-        ),
+        result: await callTool(message.params ?? {}, handlers, isToolOn, hostedTools, toolProvider),
       };
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
@@ -306,34 +307,35 @@ async function reply(
 
 async function callTool(
   params: Record<string, unknown>,
-  onOffer: FeedbackOfferHandler,
+  { findChat }: SessionHandlers,
   isToolOn: ToolSwitch,
-  hostedTools: readonly ServerTool[],
+  hostedTools: readonly HostedTool[],
   toolProvider: ToolProvider | undefined
 ) {
+  const { callerSessionId, args } = splitCaller(params.arguments);
   const tool = hostedTools.find((hosted) => hosted.definition.name === params.name);
   if (!tool) {
-    const provided = toolProvider?.call(String(params.name), params.arguments);
+    const provided = toolProvider?.call(String(params.name), args);
     return provided ? await provided : toolText(`Unknown tool: ${String(params.name)}`, true);
   }
   // Agents read tools/list once per session, so a tool switched off mid-session still gets called; answering without an error stops the agent from retrying it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
-  if (tool.call) {
-    const result = await tool.call(params.arguments);
-    const reply = toolText(result.text, result.isError);
-    return result.image
-      ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }
-      : reply;
-  }
-  const draft = parseDraft(params.arguments);
-  if (!draft) return toolText("title, what_happened and repro must be non-empty strings.", true);
-  return toolText(OFFER_RESULT_TEXT[onOffer(draft, callerSessionId(params.arguments))], false);
+  const result = await tool.call(args, findChat(callerSessionId));
+  const reply = toolText(result.text, result.isError);
+  return result.image
+    ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }
+    : reply;
 }
 
-function callerSessionId(args: unknown): string | null {
-  const value = (args as Record<string, unknown>)[CALLER_SESSION_ARGUMENT];
-  return typeof value === "string" && value ? value : null;
+// OpenCode stamps the calling session on every Copilot tool call, and a connected service must never receive that extra argument.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/672
+function splitCaller(args: unknown): { callerSessionId: string | null; args: unknown } {
+  if (!args || typeof args !== "object" || !(CALLER_SESSION_ARGUMENT in args)) {
+    return { callerSessionId: null, args };
+  }
+  const { [CALLER_SESSION_ARGUMENT]: value, ...rest } = args as Record<string, unknown>;
+  return { callerSessionId: typeof value === "string" && value ? value : null, args: rest };
 }
 
 function parseDraft(args: unknown): FeedbackDraft | null {

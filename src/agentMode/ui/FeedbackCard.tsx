@@ -1,7 +1,14 @@
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import {
+  dismissFeedbackOffer,
+  FEEDBACK_OFFER,
+  formatFeedbackNote,
+  markFeedbackReported,
+  type FeedbackOffer,
+} from "@/agentMode/session/feedback/feedbackOffer";
+import { defineChatCardSlot, NO_PLACED_CHAT_CARDS } from "@/agentMode/ui/chatCards";
+import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { Button } from "@/components/ui/button";
-import { USER_SENDER } from "@/constants";
+import { setSettings } from "@/settings/model";
 import { Check, MessageSquareWarning } from "lucide-react";
 import React from "react";
 
@@ -10,19 +17,6 @@ export interface FeedbackCardProps {
   onReview: () => void;
   onDismiss: () => void;
   onTurnOff: () => void;
-}
-
-export function findFeedbackCardIndex(
-  messages: ReadonlyArray<AgentChatMessage>,
-  offer: FeedbackOffer | null
-): number {
-  if (!offer || offer.status === "dismissed") return -1;
-  const start = messages.findIndex((message) => message.id === offer.afterUserMessageId);
-  if (start === -1) return messages.length - 1;
-  const nextUser = messages.findIndex(
-    (message, index) => index > start && message.sender === USER_SENDER
-  );
-  return nextUser === -1 ? messages.length - 1 : nextUser - 1;
 }
 
 export const FeedbackCard: React.FC<FeedbackCardProps> = ({
@@ -87,3 +81,35 @@ export const FeedbackCard: React.FC<FeedbackCardProps> = ({
     </div>
   );
 };
+
+export const feedbackCardSlot = defineChatCardSlot({
+  key: FEEDBACK_OFFER,
+  place: (offer) =>
+    offer && offer.status !== "dismissed"
+      ? [{ id: "offer", afterUserMessageId: offer.afterUserMessageId }]
+      : NO_PLACED_CHAT_CARDS,
+  render: (offer, _cardId, { plugin, chat }) =>
+    offer && (
+      <FeedbackCard
+        offer={offer}
+        onReview={() =>
+          openReportIssueModal(plugin, {
+            activeBackend: offer.evidence.backendId,
+            initialNote: formatFeedbackNote(offer),
+            preselectAllSources: true,
+            onReported: (report) =>
+              chat.updateChatState(FEEDBACK_OFFER, (current) =>
+                markFeedbackReported(current, report)
+              ),
+          })
+        }
+        onDismiss={() => chat.updateChatState(FEEDBACK_OFFER, dismissFeedbackOffer)}
+        onTurnOff={() => {
+          setSettings((cur) => ({
+            agentMode: { ...cur.agentMode, offerFeedbackCards: false },
+          }));
+          chat.updateChatState(FEEDBACK_OFFER, dismissFeedbackOffer);
+        }}
+      />
+    ),
+});
