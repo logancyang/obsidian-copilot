@@ -71,7 +71,7 @@ describe("chatCards", () => {
         { id: "c", after: "user-2" },
       ]);
 
-      const placed = placeChatCards(TRANSCRIPT, states, CTX, [NOTES_SLOT]);
+      const placed = placeChatCards(TRANSCRIPT, TRANSCRIPT, states, CTX, [NOTES_SLOT]);
 
       expect([...placed.keys()]).toEqual([1, 4]);
       render(<>{placed.get(4)}</>);
@@ -81,11 +81,25 @@ describe("chatCards", () => {
       ]);
     });
 
+    it("hands each slot the whole transcript to place by, while placing cards among the visible messages", () => {
+      const hidden = { ...message("user-2", "user"), isVisible: false };
+      const place = jest.fn(() => [{ id: "a", afterUserMessageId: "user-1" }]);
+      const slot = defineChatCardSlot({ key: NOTES, place, render: () => <div>card a</div> });
+      const visible = TRANSCRIPT.slice(0, 2);
+
+      const placed = placeChatCards(visible, [...visible, hidden], EMPTY_CHAT_STATES, CTX, [slot]);
+
+      expect(place).toHaveBeenCalledWith([], [...visible, hidden]);
+      expect([...placed.keys()]).toEqual([1]);
+    });
+
     it("places nothing for a slot whose state is still its initial one, or in an empty transcript", () => {
       const states = withChatState(EMPTY_CHAT_STATES, NOTES, [{ id: "a", after: "user-1" }]);
 
-      expect(placeChatCards(TRANSCRIPT, EMPTY_CHAT_STATES, CTX, [NOTES_SLOT]).size).toBe(0);
-      expect(placeChatCards([], states, CTX, [NOTES_SLOT]).size).toBe(0);
+      expect(
+        placeChatCards(TRANSCRIPT, TRANSCRIPT, EMPTY_CHAT_STATES, CTX, [NOTES_SLOT]).size
+      ).toBe(0);
+      expect(placeChatCards([], [], states, CTX, [NOTES_SLOT]).size).toBe(0);
     });
   });
 
@@ -93,7 +107,7 @@ describe("chatCards", () => {
     it("returns the slot unchanged and frozen", () => {
       expect(NOTES_SLOT.key).toBe(NOTES);
       expect(Object.isFrozen(NOTES_SLOT)).toBe(true);
-      expect(NOTES_SLOT.place([])).toEqual(NO_PLACED_CHAT_CARDS);
+      expect(NOTES_SLOT.place([], [])).toEqual(NO_PLACED_CHAT_CARDS);
     });
   });
 });

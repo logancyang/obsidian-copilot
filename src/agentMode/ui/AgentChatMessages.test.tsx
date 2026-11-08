@@ -11,6 +11,7 @@ import type {
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { EMPTY_CHAT_STATES, withChatState } from "@/agentMode/session/chatExtension";
+import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
 import { AI_SENDER } from "@/constants";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { logError } from "@/logger";
@@ -117,6 +118,10 @@ jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
   AskUserQuestionCard: ({ request }: { request: AskUserQuestionPrompt }) => (
     <div>Question {request.requestId}</div>
   ),
+}));
+
+jest.mock("@/connectors/ui/ConnectorChatCard", () => ({
+  ConnectorChatCard: ({ serviceId }: { serviceId: string }) => <div>Connect card {serviceId}</div>,
 }));
 
 jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
@@ -264,6 +269,31 @@ describe("AgentChatMessages", () => {
       });
 
       expect(screen.queryByTestId("agent-feedback-card")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 shows each connector card after the reply of the turn that asked for it, beside its feedback card, and hides dismissed ones", () => {
+      const chatStates = withChatState(
+        withChatState(EMPTY_CHAT_STATES, FEEDBACK_OFFER, OPEN_OFFER),
+        CONNECTOR_CARDS,
+        [
+          { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+          { serviceId: "linear", afterUserTurn: 2, dismissed: false, reported: null },
+          { serviceId: "todoist", afterUserTurn: 2, dismissed: true, reported: null },
+        ]
+      );
+
+      const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        chatStates,
+        plugin: { app: {}, manifest: { version: "4.1.0" }, connectionManager: {} } as never,
+      });
+
+      const text = container.textContent ?? "";
+      expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
+        text.indexOf("Connect card notion")
+      );
+      expect(text.indexOf("Connect card notion")).toBeLessThan(text.indexOf("next question"));
+      expect(text.indexOf("Next answer.")).toBeLessThan(text.indexOf("Connect card linear"));
+      expect(text).not.toContain("Connect card todoist");
     });
 
     it("forwards the active session conversation path to user messages https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {

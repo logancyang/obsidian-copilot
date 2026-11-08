@@ -4,9 +4,10 @@ import React, { useState } from "react";
 
 export interface ConnectorLogoProps {
   service: ConnectorCatalogEntry;
+  className?: string;
 }
 
-export function ConnectorLogo({ service }: ConnectorLogoProps): React.ReactElement {
+export function ConnectorLogo({ service, className }: ConnectorLogoProps): React.ReactElement {
   const [failedLogoUrl, setFailedLogoUrl] = useState<string>();
   const logoUrl = service.logoUrl === failedLogoUrl ? undefined : service.logoUrl;
   return (
@@ -16,7 +17,8 @@ export function ConnectorLogo({ service }: ConnectorLogoProps): React.ReactEleme
         "tw-flex tw-size-8 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md",
         logoUrl
           ? "tw-bg-white [.theme-dark_&]:tw-border [.theme-dark_&]:tw-border-solid [.theme-dark_&]:tw-border-border"
-          : "tw-border tw-border-solid tw-border-border tw-bg-primary-alt tw-text-ui-small tw-font-semibold tw-text-normal"
+          : "tw-border tw-border-solid tw-border-border tw-bg-primary-alt tw-text-ui-small tw-font-semibold tw-text-normal",
+        className
       )}
     >
       {logoUrl ? (
