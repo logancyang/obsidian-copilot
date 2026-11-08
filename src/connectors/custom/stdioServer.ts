@@ -1,7 +1,11 @@
-import { MCP_INITIALIZE_PARAMS } from "@/connectors/connectorTools";
+import { MCP_CLIENT_INFO } from "@/connectors/connectorTools";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { ResultSchema, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 
 type ChildProcess = import("node:child_process").ChildProcessWithoutNullStreams;
 
@@ -12,35 +16,72 @@ export interface StdioServerOptions {
   readonly cwd?: string;
 }
 
-interface PendingRequest {
-  resolve(result: Record<string, unknown>): void;
-  reject(error: Error): void;
-}
-
-interface JsonRpcReply {
-  id?: unknown;
-  method?: unknown;
-  result?: Record<string, unknown>;
-  error?: { message?: string };
-}
-
+// npx and uvx may download a server before it starts.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+export const START_TIMEOUT_MS = 120_000;
 const STOP_GRACE_MS = 3_000;
 const CMD_METACHARACTERS = /([()\][%!^"`<>&|;, *?])/g;
 const MAX_REASON_LENGTH = 200;
 
 export class StdioServer {
+  private readonly client = new Client(MCP_CLIENT_INFO);
+  private readonly transport: ChildProcessTransport;
+  private ready = false;
+
+  constructor(options: StdioServerOptions, onCrash: (reason: string) => void) {
+    this.transport = new ChildProcessTransport(options, (reason) => {
+      if (this.ready) onCrash(reason);
+    });
+  }
+
+  async start(): Promise<void> {
+    // npx and uvx download a server before it answers, which can outlast the SDK's 60-second default.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+    await this.withExitReason(() =>
+      this.client.connect(this.transport, { timeout: START_TIMEOUT_MS })
+    );
+    this.ready = true;
+  }
+
+  request(
+    method: string,
+    params: Record<string, unknown>,
+    options?: RequestOptions
+  ): Promise<Record<string, unknown>> {
+    return this.withExitReason(() =>
+      this.client.request({ method, params }, ResultSchema, options)
+    );
+  }
+
+  stop(): Promise<void> {
+    return this.transport.close();
+  }
+
+  private async withExitReason<T>(send: () => Promise<T>): Promise<T> {
+    try {
+      return await send();
+    } catch (error) {
+      // The SDK reports a server that exited as a closed connection, while its last stderr line says why.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+      const reason = this.transport.exitReason;
+      throw reason === null ? error : new Error(reason);
+    }
+  }
+}
+
+class ChildProcessTransport implements Transport {
+  onclose?: () => void;
+  onmessage?: (message: JSONRPCMessage) => void;
+  exitReason: string | null = null;
   private child: ChildProcess | null = null;
   private closed: Promise<void> = Promise.resolve();
-  private readonly pending = new Map<number, PendingRequest>();
-  private nextId = 0;
+  private readonly buffer = new ReadBuffer();
   private lastStderrLine = "";
-  private exitReason: string | null = null;
-  private ready = false;
   private stopping = false;
 
   constructor(
     private readonly options: StdioServerOptions,
-    private readonly onCrash: (reason: string) => void
+    private readonly onExit: (reason: string) => void
   ) {}
 
   async start(): Promise<void> {
@@ -70,8 +111,7 @@ export class StdioServer {
       }
     );
     this.child = child;
-    const buffer = new ReadBuffer();
-    child.stdout.on("data", (chunk: Buffer) => this.read(buffer, chunk));
+    child.stdout.on("data", (chunk: Buffer) => this.read(chunk));
     child.stderr.on("data", (chunk: Buffer) => {
       const line = chunk
         .toString("utf8")
@@ -101,24 +141,13 @@ export class StdioServer {
         reject(new Error(reason));
       });
     });
-    await this.request("initialize", MCP_INITIALIZE_PARAMS);
-    child.stdin.write(serializeMessage({ jsonrpc: "2.0", method: "notifications/initialized" }));
-    this.ready = true;
   }
 
-  request(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const child = this.child;
-    if (!child || this.exitReason !== null) {
-      return Promise.reject(new Error(this.exitReason ?? "The server isn't running."));
-    }
-    const id = ++this.nextId;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      child.stdin.write(serializeMessage({ jsonrpc: "2.0", id, method, params }));
-    });
+  async send(message: JSONRPCMessage): Promise<void> {
+    this.child?.stdin.write(serializeMessage(message));
   }
 
-  stop(): Promise<void> {
+  close(): Promise<void> {
     this.stopping = true;
     const child = this.child;
     if (child && this.exitReason === null) {
@@ -129,45 +158,32 @@ export class StdioServer {
     return this.closed;
   }
 
-  private read(buffer: ReadBuffer, chunk: Buffer): void {
+  private read(chunk: Buffer): void {
     try {
-      buffer.append(chunk);
+      this.buffer.append(chunk);
     } catch (error) {
       logWarn(`[Connectors] ${this.options.command} sent too much output at once`, error);
       return;
     }
     for (;;) {
-      let message: JsonRpcReply | null;
+      let message: JSONRPCMessage | null;
       try {
-        message = buffer.readMessage();
+        message = this.buffer.readMessage();
       } catch {
         // Some servers log to stdout, and those lines carry no message.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
         continue;
       }
       if (!message) return;
-      // A server may check that Copilot is still there before it answers a tool call, and MCP requires a reply to its ping.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
-      if (message.method === "ping") {
-        const reply = { jsonrpc: "2.0" as const, id: message.id as string | number, result: {} };
-        this.child?.stdin.write(serializeMessage(reply));
-        continue;
-      }
-      const pending = typeof message.id === "number" ? this.pending.get(message.id) : undefined;
-      if (!pending || message.method !== undefined) continue;
-      this.pending.delete(message.id as number);
-      if (message.error) pending.reject(new Error(message.error.message ?? "Unknown error"));
-      else pending.resolve(message.result ?? {});
+      this.onmessage?.(message);
     }
   }
 
   private finish(fallbackReason: string): void {
     if (this.exitReason !== null) return;
-    const reason = this.lastStderrLine || fallbackReason;
-    this.exitReason = reason;
-    for (const pending of this.pending.values()) pending.reject(new Error(reason));
-    this.pending.clear();
-    if (this.ready && !this.stopping) this.onCrash(reason);
+    this.exitReason = this.lastStderrLine || fallbackReason;
+    this.onclose?.();
+    if (!this.stopping) this.onExit(this.exitReason);
   }
 }
 

@@ -18,13 +18,15 @@ export const SUGGEST_CONNECTOR_TOOL_NAME = "suggest_connector";
 
 const NAME_HASH_LENGTH = 8;
 const SERVICE_TIMEOUT_MS = 10_000;
-const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
-
-export const MCP_INITIALIZE_PARAMS = Object.freeze({
-  protocolVersion: "2025-06-18",
-  capabilities: {},
-  clientInfo: { name: "Copilot for Obsidian", version: "1.0.0" },
+// The SDK otherwise fails every call after 60 seconds, too soon for a service export or search; one that reports progress keeps going.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+export const TOOL_CALL_OPTIONS: RequestOptions = Object.freeze({
+  timeout: 5 * 60_000,
+  resetTimeoutOnProgress: true,
+  onprogress: () => {},
 });
+
+export const MCP_CLIENT_INFO = Object.freeze({ name: "Copilot for Obsidian", version: "1.0.0" });
 
 export interface ConnectorToolDefinition {
   readonly name: string;
@@ -66,7 +68,11 @@ interface ServiceToolInfo {
 }
 
 export interface McpRequester {
-  request(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>>;
+  request(
+    method: string,
+    params: Record<string, unknown>,
+    options?: RequestOptions
+  ): Promise<Record<string, unknown>>;
 }
 
 export interface ListedTools {
@@ -284,9 +290,7 @@ export class ConnectorTools {
       const result = await loaded.session.request(
         "tools/call",
         { name: toolName, arguments: args ?? {} },
-        // The SDK otherwise fails every call after 60 seconds, too soon for a service export or search; one that reports progress keeps going.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-        { timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true, onprogress: () => {} }
+        TOOL_CALL_OPTIONS
       );
       return toToolResult(result);
     } catch (error) {
@@ -355,7 +359,7 @@ export class ServiceSession implements McpRequester {
 
   private connect(): Promise<Client> {
     if (this.client) return this.client;
-    const client = new Client(MCP_INITIALIZE_PARAMS.clientInfo);
+    const client = new Client(MCP_CLIENT_INFO);
     const transport = new StreamableHTTPClientTransport(new URL(this.url), {
       fetch: this.authorizedFetch,
     });

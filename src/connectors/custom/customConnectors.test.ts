@@ -542,6 +542,44 @@ describe("customConnectors", () => {
         expect(textOf(succeeded)).toBe("Rejected token acme-1");
       });
 
+      it(`waits 5 minutes for a custom tool call the server hasn't answered or reported progress on, like a catalog service's, then tells the agent it timed out: ${ISSUE}`, async () => {
+        const fake = setUp();
+        await fake.add(REMOTE_JSON);
+        jest.useFakeTimers();
+        fake.remote.holdsCalls = true;
+        let settled = false;
+
+        const calling = fake.custom.call("acme_search", {})!.finally(() => (settled = true));
+        await jest.advanceTimersByTimeAsync(5 * 60_000 - 1);
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+
+        await expect(calling).resolves.toEqual({
+          content: [
+            { type: "text", text: "Acme returned an error: MCP error -32001: Request timed out" },
+          ],
+          isError: true,
+        });
+      });
+
+      it(`keeps waiting past 5 minutes on a custom tool call while the server reports progress: ${ISSUE}`, async () => {
+        const fake = setUp();
+        await fake.add(REMOTE_JSON);
+        jest.useFakeTimers();
+        fake.remote.holdsCalls = true;
+
+        const calling = fake.custom.call("acme_search", {})!;
+        await jest.advanceTimersByTimeAsync(4 * 60_000);
+        fake.remote.heldCalls[0].reportProgress();
+        await jest.advanceTimersByTimeAsync(4 * 60_000);
+        fake.remote.heldCalls[0].finish();
+
+        await expect(calling).resolves.toEqual({
+          content: [{ type: "text", text: "ran search" }],
+          isError: false,
+        });
+      });
+
       it("moves a remote connector that stops answering to Couldn't reach", async () => {
         const fake = setUp();
         await fake.add(REMOTE_JSON);

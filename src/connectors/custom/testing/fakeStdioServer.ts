@@ -20,6 +20,9 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     return send({ id: waitingForPing, result: { content: [{ type: "text", text: "pinged" }] } });
   }
   if (message.id === undefined) return;
+  if (message.method === "initialize" && process.env.FAKE_SLOW_START_MARKER) {
+    return require("fs").writeFileSync(process.env.FAKE_SLOW_START_MARKER, "");
+  }
   if (message.method === "initialize") {
     return send({ id: message.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "fake", version: "1" } } });
   }

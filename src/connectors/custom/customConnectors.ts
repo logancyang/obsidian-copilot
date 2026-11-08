@@ -5,6 +5,7 @@ import {
   listTools,
   NeedsLoginError,
   ServiceSession,
+  TOOL_CALL_OPTIONS,
   toolText,
   type ConnectorToolDefinition,
   type ConnectorToolResult,
@@ -17,7 +18,11 @@ import {
   type CustomConnectorParse,
   type ParsedCustomConnector,
 } from "@/connectors/custom/customConnectorConfig";
-import { StdioServer, type StdioServerOptions } from "@/connectors/custom/stdioServer";
+import {
+  START_TIMEOUT_MS,
+  StdioServer,
+  type StdioServerOptions,
+} from "@/connectors/custom/stdioServer";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
 import { nodeFetch } from "@/connectors/nodeFetch";
 import { ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
@@ -87,9 +92,6 @@ interface Run {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
 const OFF_STORAGE_KEY = "copilot-custom-connectors-off";
 const CHAT_WAIT_MS = 10_000;
-// npx and uvx may download a server before it starts.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/862
-const START_TIMEOUT_MS = 120_000;
 const RESTART_DELAY_MS = 1_000;
 const MAX_RESTARTS = 3;
 const IDLE: CustomConnectorStatus = Object.freeze({ kind: "idle" });
@@ -309,10 +311,13 @@ export class CustomConnectors {
     const { name } = run.config;
     if (!run.session) return toolText(`${name} isn't running right now. Try again in a moment.`);
     try {
-      const result = await run.session.request("tools/call", {
-        name: toolName,
-        arguments: args ?? {},
-      });
+      const result = await run.session.request(
+        "tools/call",
+        { name: toolName, arguments: args ?? {} },
+        // A custom server's tool can run as long as a catalog service's, which outlasts the SDK's 60-second default.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+        TOOL_CALL_OPTIONS
+      );
       const toolResult = toToolResult(result);
       if (!toolResult.isError) return toolResult;
       // MCP servers report a failed tool as a result marked isError, and its text can echo the key like a thrown error's.
