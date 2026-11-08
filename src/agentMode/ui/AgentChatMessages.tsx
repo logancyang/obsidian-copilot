@@ -216,8 +216,15 @@ const AgentChatMessages = memo(
         : null;
 
     const chatCards = useMemo(
-      () => placeChatCards(visible, chatStates, { plugin, chat: chatBackend }, CHAT_CARD_SLOTS),
-      [visible, chatStates, plugin, chatBackend]
+      () =>
+        placeChatCards(
+          visible,
+          messages,
+          chatStates,
+          { plugin, chat: chatBackend },
+          CHAT_CARD_SLOTS
+        ),
+      [visible, messages, chatStates, plugin, chatBackend]
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);

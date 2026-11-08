@@ -21,7 +21,7 @@ export interface PlacedChatCard {
 
 export interface ChatCardSlot<S> {
   key: ChatStateKey<S>;
-  place(state: S): readonly PlacedChatCard[];
+  place(state: S, messages: ReadonlyArray<AgentChatMessage>): readonly PlacedChatCard[];
   render(state: S, cardId: string, ctx: ChatCardContext): React.ReactNode;
 }
 
@@ -44,6 +44,7 @@ export function findTrailingCardIndex(
 }
 
 export function placeChatCards(
+  visible: ReadonlyArray<AgentChatMessage>,
   messages: ReadonlyArray<AgentChatMessage>,
   states: ChatStates,
   ctx: ChatCardContext,
@@ -52,8 +53,8 @@ export function placeChatCards(
   const byIndex = new Map<number, React.ReactNode[]>();
   for (const slot of slots) {
     const state = readChatState(states, slot.key);
-    for (const card of slot.place(state)) {
-      const index = findTrailingCardIndex(messages, card.afterUserMessageId);
+    for (const card of slot.place(state, messages)) {
+      const index = findTrailingCardIndex(visible, card.afterUserMessageId);
       if (index === -1) continue;
       byIndex.set(index, [
         ...(byIndex.get(index) ?? []),

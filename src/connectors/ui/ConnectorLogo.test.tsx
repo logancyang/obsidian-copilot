@@ -34,6 +34,13 @@ describe("ConnectorLogo", () => {
       expect(container.textContent).toBe("A");
     });
 
+    it("lets a compact list shrink the tile with its own size class", () => {
+      const { container } = render(<ConnectorLogo service={APIFY} className="tw-size-6" />);
+
+      expect(container.firstElementChild?.className).toContain("tw-size-6");
+      expect(container.firstElementChild?.className).not.toContain("tw-size-8");
+    });
+
     it("shows the letter tile once the logo fails to load (https://github.com/Brevilabs/obsidian-copilot-private/issues/855)", () => {
       const { container } = render(<ConnectorLogo service={{ ...APIFY, logoUrl: APIFY_LOGO }} />);
 
