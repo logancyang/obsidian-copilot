@@ -52,8 +52,14 @@ export const AdvancedSettings: React.FC = () => {
     };
   }, []);
 
-  const keychainAvailable = KeychainService.getInstance().isAvailable();
-  const keychainAppearsEmpty = keychainAvailable && !hasPersistedSecrets(settings);
+  const keychain = KeychainService.getInstance();
+  const keychainAvailable = keychain.isAvailable();
+  // Provider keys live only in the Keychain behind a pointer; checking settings alone reported a working key as missing.
+  // https://github.com/logancyang/obsidian-copilot/issues/3000
+  const keychainAppearsEmpty =
+    keychainAvailable &&
+    !hasPersistedSecrets(settings) &&
+    !keychain.hasStoredProviderKey(settings.providers);
 
   const handleReportIssue = useCallback(() => {
     if (!isDesktopRuntime()) {

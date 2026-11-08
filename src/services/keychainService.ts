@@ -218,6 +218,12 @@ export class KeychainService {
     return this.storage.getSecret(id);
   }
 
+  hasStoredProviderKey(providers: Record<string, Provider>): boolean {
+    return Object.values(providers).some(
+      ({ apiKeyKeychainId }) => !!apiKeyKeychainId && !!this.storage.getSecret(apiKeyKeychainId)
+    );
+  }
+
   getModelSecret(scope: ModelScope, modelIdentity: string, field: ModelSecretField): string | null {
     const id = toModelKeychainId(this.vaultId, scope, modelIdentity, field);
     return this.storage.getSecret(id);

@@ -343,6 +343,46 @@ describe("keychainService", () => {
       });
     });
 
+    describe("hasStoredProviderKey()", () => {
+      it("reports a stored key when a provider's Keychain entry holds its key, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
+        const service = KeychainService.getInstance(
+          makeApp({ secretStorage: makeMapStorage({ "copilot-v1-provider-minimax": "sk-live" }) })
+        );
+
+        const hasKey = service.hasStoredProviderKey({
+          agent: makeProvider({ providerId: "agent" }),
+          minimax: makeProvider({
+            providerId: "minimax",
+            apiKeyKeychainId: "copilot-v1-provider-minimax",
+          }),
+        });
+
+        expect(hasKey).toBe(true);
+      });
+
+      it("reports no stored key when no provider points at a Keychain entry", () => {
+        const service = KeychainService.getInstance(makeApp({ secretStorage: makeMapStorage({}) }));
+
+        expect(service.hasStoredProviderKey({ agent: makeProvider() })).toBe(false);
+      });
+
+      it("reports no stored key when a synced pointer names an entry missing or emptied on this device", () => {
+        const service = KeychainService.getInstance(
+          makeApp({ secretStorage: makeMapStorage({ "copilot-v1-provider-cleared": "" }) })
+        );
+
+        const hasKey = service.hasStoredProviderKey({
+          synced: makeProvider({ providerId: "synced", apiKeyKeychainId: "copilot-v1-provider-x" }),
+          cleared: makeProvider({
+            providerId: "cleared",
+            apiKeyKeychainId: "copilot-v1-provider-cleared",
+          }),
+        });
+
+        expect(hasKey).toBe(false);
+      });
+    });
+
     describe("deleteSecret()", () => {
       it("removes the vault-namespaced entry for a settings key", () => {
         const secretStorage = makeSecretStorage();
