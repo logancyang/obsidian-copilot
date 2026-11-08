@@ -50,15 +50,14 @@ describe("streamingTextFade", () => {
         expect(animations.slice(-2).map((animation) => animation.currentTime)).toEqual([120, 0]);
       });
 
-      it(`wraps text across elements and leaves code, math and layout hosts untouched (${ISSUE})`, () => {
+      it(`wraps text across elements and leaves code and math untouched (${ISSUE})`, () => {
         const fade = new StreamingTextFade();
         const first = rendered(
-          '<p>Use <strong>bold</strong> and <code>code</code></p><span class="math">x</span><div data-ui-host><p>card</p></div>'
+          '<p>Use <strong>bold</strong> and <code>code</code></p><span class="math">x</span>'
         );
         fade.apply(first);
         expect(fadedText(first)).toEqual(["Use ", "bold", " and "]);
         expect(first.querySelector("code")?.innerHTML).toBe("code");
-        expect(first.querySelector("[data-ui-host]")?.innerHTML).toBe("<p>card</p>");
       });
 
       it(`stops wrapping once every fade has finished (${ISSUE})`, () => {
