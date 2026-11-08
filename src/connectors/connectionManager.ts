@@ -130,6 +130,7 @@ export class ConnectionManager {
       connectionId,
       serverUrl: service.serverUrl,
       serviceName: service.name,
+      logoUrl: service.logoUrl,
     });
     this.waitingLogin = Object.freeze({
       connectionId,

@@ -16,6 +16,7 @@ const NOTION: ConnectorCatalogEntry = {
   description: "Pages and databases",
   category: "Notes & docs",
   serverUrl: "https://mcp.notion.com/mcp",
+  logoUrl: "https://images.brevilabs.com/newsletters/copilot-plugin/connectors/notion.png",
 };
 const LINEAR: ConnectorCatalogEntry = {
   id: "linear",
@@ -171,7 +172,7 @@ describe("connectionManager", () => {
     });
 
     describe("connect()", () => {
-      it("waits for the browser with the login link and a cancel, without adding a connection yet", () => {
+      it("waits for the browser with the login link and a cancel, without adding a connection yet, and gives the login the service's name and logo", () => {
         const fake = setUp();
 
         void fake.manager.connect("notion");
@@ -185,6 +186,7 @@ describe("connectionManager", () => {
           connectionId: waitingLogin?.connectionId,
           serverUrl: NOTION.serverUrl,
           serviceName: "Notion",
+          logoUrl: NOTION.logoUrl,
         });
       });
 
