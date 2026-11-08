@@ -60,6 +60,15 @@ describe("streamingTextFade", () => {
         expect(first.querySelector("code")?.innerHTML).toBe("code");
       });
 
+      it(`keeps text whole when a completed Markdown span shortens the rendered text mid-fade (${ISSUE})`, () => {
+        const fade = new StreamingTextFade();
+        fade.apply(rendered("<p>**hello world </p>"));
+        fade.apply(rendered("<p><strong>hello world</strong> </p>"));
+        const next = rendered("<p><strong>hello world</strong> again </p>");
+        fade.apply(next);
+        expect(next.textContent).toBe("hello world again ");
+      });
+
       it(`stops wrapping once every fade has finished (${ISSUE})`, () => {
         const fade = new StreamingTextFade();
         fade.apply(rendered("<p>Done</p>"));

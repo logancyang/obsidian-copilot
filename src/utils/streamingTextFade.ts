@@ -34,11 +34,11 @@ export class StreamingTextFade {
     const now = performance.now();
     const nodes = fadeableTextNodes(container);
     const total = nodes.reduce((length, node) => length + node.data.length, 0);
+    this.ranges = this.ranges
+      .filter((range) => now - range.at < TEXT_FADE_MS && range.start < total)
+      .map((range) => ({ ...range, end: Math.min(range.end, total) }));
     if (total > this.seen) this.ranges.push({ start: this.seen, end: total, at: now });
     this.seen = total;
-    this.ranges = this.ranges.filter(
-      (range) => now - range.at < TEXT_FADE_MS && range.start < total
-    );
     if (!this.ranges.length || container.win.matchMedia("(prefers-reduced-motion: reduce)").matches)
       return;
     let offset = 0;

@@ -31,11 +31,14 @@ function countUnits(text: string, start: number, limit: number): number {
 export function useSmoothedText(text: string, streaming: boolean): string {
   const [shown, setShown] = useState(text);
   const shownRef = useRef(text);
+  const clock = useRef({ last: null as number | null, lastCommit: -Infinity, credit: 0 });
   const extending = streaming && text.startsWith(shown);
   useEffect(() => {
     if (!streaming || !text.startsWith(shownRef.current)) {
       shownRef.current = text;
       setShown(text);
+      clock.current.last = null;
+      clock.current.credit = 0;
       return;
     }
     const limit = revealLimit(text);
@@ -44,19 +47,21 @@ export function useSmoothedText(text: string, streaming: boolean): string {
       countUnits(text, shownRef.current.length, limit) / REVEAL_LAG_MS
     );
     let frame = 0;
-    let last: number | null = null;
-    let lastCommit = -Infinity;
-    let credit = 0;
     const tick = (now: number) => {
       const start = shownRef.current.length;
       const remaining = countUnits(text, start, limit);
-      if (remaining === 0) return;
-      credit += (now - (last ?? now - 16)) * rate;
-      last = now;
-      const units = Math.floor(credit);
-      if (units > 0 && (now - lastCommit >= REVEAL_COMMIT_MS || units >= remaining)) {
-        credit -= units;
-        lastCommit = now;
+      const pace = clock.current;
+      if (remaining === 0) {
+        pace.last = null;
+        pace.credit = 0;
+        return;
+      }
+      pace.credit += (now - (pace.last ?? now - 16)) * rate;
+      pace.last = now;
+      const units = Math.floor(pace.credit);
+      if (units > 0 && (now - pace.lastCommit >= REVEAL_COMMIT_MS || units >= remaining)) {
+        pace.credit -= units;
+        pace.lastCommit = now;
         shownRef.current = text.slice(0, advance(text, start, units, limit));
         setShown(shownRef.current);
       }

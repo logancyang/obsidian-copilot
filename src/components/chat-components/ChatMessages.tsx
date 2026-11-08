@@ -7,6 +7,9 @@ import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo } from "react";
 
+// The agent's reasoning marker is metadata the message parses, not reply text, so pacing it would hide the reasoning indicator. https://github.com/Brevilabs/obsidian-copilot-private/issues/886
+const LEADING_REASONING_MARKER = /^<!--AGENT_REASONING:\w+:\d+:.+?-->/;
+
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
   currentAiMessage: string;
@@ -45,7 +48,8 @@ const ChatMessages = memo(
       scrollToEnd,
       getMessageKey,
     } = useChatScrolling({ chatHistory });
-    const shownAiMessage = useSmoothedText(currentAiMessage, true);
+    const reasoningMarker = LEADING_REASONING_MARKER.exec(currentAiMessage)?.[0] ?? "";
+    const shownReply = useSmoothedText(currentAiMessage.slice(reasoningMarker.length), true);
 
     if (isChatEmpty(chatHistory, currentAiMessage)) {
       return (
@@ -88,7 +92,7 @@ const ChatMessages = memo(
                 message={{
                   id: streamingMessageId ?? undefined,
                   sender: "AI",
-                  message: shownAiMessage,
+                  message: reasoningMarker + shownReply,
                   isVisible: true,
                   timestamp: null,
                 }}

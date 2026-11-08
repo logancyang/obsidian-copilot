@@ -62,6 +62,23 @@ describe("useSmoothedText", () => {
       expect(renders).toBeLessThanOrEqual(Math.ceil(1000 / REVEAL_COMMIT_MS) + 1);
     });
 
+    it(`keeps the commit cap and the lag bound while new chunks arrive every frame (${ISSUE})`, () => {
+      const { result, rerender } = renderHook(({ text }) => useSmoothedText(text, true), {
+        initialProps: { text: "" },
+      });
+      const commits = new Set<string>();
+      let text = "";
+      for (let chunk = 0; chunk < 60; chunk++) {
+        text += words(10, chunk * 10);
+        rerender({ text });
+        advance(16);
+        commits.add(result.current);
+      }
+      expect(commits.size).toBeLessThanOrEqual(Math.ceil((60 * 16) / REVEAL_COMMIT_MS) + 1);
+      advance(REVEAL_LAG_MS + REVEAL_COMMIT_MS + 20);
+      expect(result.current).toBe(text);
+    });
+
     it(`holds an unfinished last word until a space arrives or streaming ends (${ISSUE})`, () => {
       const { result, rerender } = renderHook(
         ({ text, streaming }) => useSmoothedText(text, streaming),
