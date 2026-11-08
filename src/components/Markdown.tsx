@@ -2,6 +2,7 @@ import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { renderMarkdown } from "@/utils/renderMarkdown";
+import { StreamingTextFade } from "@/utils/streamingTextFade";
 import { Component } from "obsidian";
 import * as React from "react";
 
@@ -12,6 +13,7 @@ export interface MarkdownProps {
   runDataviewQueries?: boolean;
   sourcePath: string;
   text: string;
+  streaming?: boolean;
 }
 
 export function Markdown({
@@ -21,9 +23,12 @@ export function Markdown({
   runDataviewQueries = false,
   sourcePath,
   text,
+  streaming = false,
 }: MarkdownProps): React.ReactElement {
   const app = useApp();
   const targetRef = React.useRef<HTMLDivElement | null>(null);
+  const fadeRef = React.useRef<StreamingTextFade | null>(null);
+  if (streaming && !fadeRef.current) fadeRef.current = new StreamingTextFade();
 
   React.useEffect(() => {
     const target = targetRef.current;
@@ -36,7 +41,9 @@ export function Markdown({
     target.replaceChildren();
     void renderMarkdown(app, text, target, sourcePath, component, runDataviewQueries)
       .then(() => {
-        if (!cancelled) onRendered?.(target);
+        if (cancelled) return;
+        fadeRef.current?.apply(target);
+        onRendered?.(target);
       })
       .catch((error: unknown) => {
         if (cancelled) return;

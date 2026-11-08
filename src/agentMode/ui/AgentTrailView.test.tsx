@@ -10,8 +10,16 @@ import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { makeCommandTask, makeTask } from "@/agentMode/ui/testing/taskFixtures";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
-  AgentMarkdownText: ({ text, miyoPaths }: { text: string; miyoPaths?: string[] }) => (
-    <div data-testid="agent-md" data-miyo-paths={miyoPaths?.join("|")}>
+  AgentMarkdownText: ({
+    text,
+    miyoPaths,
+    streaming,
+  }: {
+    text: string;
+    miyoPaths?: string[];
+    streaming?: boolean;
+  }) => (
+    <div data-testid="agent-md" data-streaming={streaming} data-miyo-paths={miyoPaths?.join("|")}>
       {text}
     </div>
   ),
@@ -97,6 +105,16 @@ const LINT = toolCall("b1", {
 });
 
 describe("AgentTrail", () => {
+  it("ends the live text lifecycle when the turn stops (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", () => {
+    const parts = [text("Earlier"), text("Arriving")];
+    const view = renderTrail({ parts, isStreaming: true });
+    const live = screen.getAllByTestId("agent-md");
+    expect(live[live.length - 1].getAttribute("data-streaming")).toBe("true");
+    view.rerenderTrail({ parts, isStreaming: false });
+    expect(
+      screen.getAllByTestId("agent-md").every((el) => el.getAttribute("data-streaming") === "false")
+    ).toBe(true);
+  });
   let writeText: jest.Mock;
 
   beforeEach(() => {
