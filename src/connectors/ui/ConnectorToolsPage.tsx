@@ -4,7 +4,7 @@ import { ConnectorLogo } from "@/connectors/ui/ConnectorLogo";
 import { Button } from "@/components/ui/button";
 import { ClampedContent } from "@/components/ui/clamped-content";
 import { SearchBar } from "@/components/ui/SearchBar";
-import { humanizeToolName } from "@/lib/toolName";
+import { serviceToolName } from "@/lib/toolName";
 import { SettingsSubPageLayout } from "@/settings/v2/components/ui/SettingsSubPageLayout";
 import { CloudOff } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -84,20 +84,10 @@ function toReadableTool(tool: ServiceToolInfo, serviceName: string): ReadableToo
   const description = typeof tool.description === "string" ? tool.description.trim() : "";
   return {
     key: tool.name,
-    name: title?.trim() ?? nameInWords(tool.name, serviceName),
+    name: title?.trim() ?? serviceToolName(serviceName, tool.name),
     description: description.split(/\n\s*\n/)[0],
     readOnly: tool.annotations?.readOnlyHint === true,
   };
-}
-
-// Services such as Notion prefix every tool name with their own name, which the page title already gives.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/878
-function nameInWords(toolName: string, serviceName: string): string {
-  const words = humanizeToolName(toolName);
-  const prefix = `${serviceName.toLowerCase()} `;
-  return words.toLowerCase().startsWith(prefix)
-    ? humanizeToolName(words.slice(prefix.length))
-    : words;
 }
 
 interface ToolGroupProps {

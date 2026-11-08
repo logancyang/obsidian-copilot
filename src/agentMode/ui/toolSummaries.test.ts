@@ -562,6 +562,14 @@ describe("toolSummaries", () => {
       expect(copilotToolLabel(opencodeExecute(OPENCODE_NOTION_CALL))).toBe("Notion · Create page");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/878 drops the service's name from the front of a connector tool's name, as Settings does", () => {
+      const t = tool({
+        mcpServer: "obsidian-copilot",
+        vendorToolName: "notion_notion-create-pages",
+      });
+      expect(copilotToolLabel(t)).toBe("Notion · Create pages");
+    });
+
     it.each([
       ["called directly", tool({ mcpServer: "obsidian-copilot", vendorToolName: "send_feedback" })],
       [

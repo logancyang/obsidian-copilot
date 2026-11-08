@@ -6,7 +6,7 @@ import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
-import { humanizeToolName } from "@/lib/toolName";
+import { humanizeToolName, serviceToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
@@ -27,7 +27,7 @@ export function copilotToolLabel(part: ToolCallPart): string | null {
   if (!name) return null;
   const tool = describeConnectorTool(name);
   return tool
-    ? `${tool.serviceName} · ${humanizeToolName(tool.toolName)}`
+    ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
     : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
 }
 
