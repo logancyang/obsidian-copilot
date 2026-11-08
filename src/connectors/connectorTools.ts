@@ -50,10 +50,7 @@ interface JsonRpcReply {
 }
 
 export interface ConnectorToolsDeps {
-  manager: Pick<
-    ConnectionManager,
-    "getSnapshot" | "subscribe" | "checkStatus" | "accessToken" | "reportFailure"
-  >;
+  manager: Pick<ConnectionManager, "getSnapshot" | "subscribe" | "accessToken" | "reportFailure">;
   catalog: readonly ConnectorCatalogEntry[];
   isEnabled: () => boolean;
   subscribeToEnabledChange: (listener: () => void) => () => void;
@@ -76,22 +73,11 @@ export class ConnectorTools {
 
   async refresh(): Promise<void> {
     if (!this.deps.isEnabled()) return;
-    // A service that never answers would otherwise hold every new chat at its start.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-    await withTimeout(
-      () => this.deps.manager.checkStatus(),
-      SERVICE_TIMEOUT_MS,
-      "Checking connector logins"
-    );
     const { connections } = this.deps.manager.getSnapshot();
     for (const id of this.loaded.keys()) {
       if (!connections.some((connection) => connection.id === id)) this.loaded.delete(id);
     }
-    await Promise.all(
-      connections
-        .filter(({ id, status }) => status === "connected" && !this.loaded.has(id))
-        .map((connection) => this.load(connection))
-    );
+    await Promise.all(connections.map((connection) => this.load(connection)));
   }
 
   tools(listedBy?: { sessionKey: string; backendId: string }): readonly ConnectorToolDefinition[] {
@@ -167,11 +153,19 @@ export class ConnectorTools {
       this.deps.fetch ?? nodeFetch
     );
     try {
+      // A service or login server that never answers would otherwise hold every new chat at its start, or keep the healthy services' tools from it.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
       const tools = await withTimeout(
-        () => listTools(session),
+        async () => {
+          const { status } = await this.deps.manager.accessToken(connection.id);
+          return status === "connected" && !this.loaded.has(connection.id)
+            ? listTools(session)
+            : null;
+        },
         SERVICE_TIMEOUT_MS,
-        `Listing ${service.name} tools`
+        `Loading ${service.name} tools`
       );
+      if (!tools) return;
       const definitions = tools.map((tool) =>
         toDefinition(service, tool, this.deps.maxToolNameLength)
       );
@@ -184,7 +178,7 @@ export class ConnectorTools {
       });
     } catch (error) {
       logWarn(
-        `[Connectors] Couldn't list ${service.name} tools`,
+        `[Connectors] Couldn't load ${service.name} tools`,
         session.mask(err2String(error, true))
       );
       this.deps.manager.reportFailure(

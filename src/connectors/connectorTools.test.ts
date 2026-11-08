@@ -226,21 +226,29 @@ describe("connectorTools", () => {
         expect(fake.statusOf("c-notion")).toBe("unreachable");
       });
 
-      it(`${ISSUE} stops waiting for a login check that hasn't finished after 10 seconds, keeping the tools it already listed`, async () => {
-        const fake = setUp();
-        await fake.tools.refresh();
+      it(`${ISSUE} gives up on a login check that hasn't finished after 10 seconds, still listing the tools of every service whose login checked out`, async () => {
         jest.useFakeTimers();
-        jest.spyOn(fake.manager, "checkStatus").mockReturnValue(new Promise(() => {}));
+        const fake = setUp({
+          connections: [
+            { id: "c-notion", serviceId: "notion" },
+            { id: "c-atlassian", serviceId: "atlassian" },
+          ],
+        });
+        const checkLogin = fake.auth.accessToken.getMockImplementation()!;
+        fake.auth.accessToken.mockImplementation((connectionId, options) =>
+          connectionId === "c-atlassian" ? new Promise(() => {}) : checkLogin(connectionId, options)
+        );
 
         const refreshing = fake.tools.refresh();
-        const settled = expect(refreshing).rejects.toThrow("Checking connector logins");
         await jest.advanceTimersByTimeAsync(10_000);
-        await settled;
+        await refreshing;
 
         expect(fake.tools.tools().map(({ name }) => name)).toEqual([
           "notion_search_notes",
           "notion_create_note",
         ]);
+        expect(fake.statusOf("c-atlassian")).toBe("unreachable");
+        expect(fake.atlassian.requests).toEqual([]);
       });
 
       it("contacts no service while the connectors entitlement is off", async () => {
