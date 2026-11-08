@@ -1,7 +1,7 @@
 /**
  * @jest-environment node
  */
-import { cmdShellArgs, StdioServer } from "@/connectors/custom/stdioServer";
+import { cmdShellArgs, START_TIMEOUT_MS, StdioServer } from "@/connectors/custom/stdioServer";
 import {
   fakeStdioServer,
   fakeStdioServerBehindLauncher,
@@ -61,6 +61,39 @@ describe("stdioServer", () => {
           });
           await echo.stop();
         } finally {
+          fs.rmSync(dir, { recursive: true, force: true });
+        }
+      });
+
+      it(`waits START_TIMEOUT_MS, past the SDK's 60-second default, for a server that is still downloading before it answers the handshake: ${ISSUE}`, async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), "copilot-stdio-"));
+        const marker = path.join(dir, "initialize-received");
+        try {
+          const handshakeReceived = new Promise<void>((resolve) => {
+            const watcher = fs.watch(dir, () => {
+              watcher.close();
+              resolve();
+            });
+          });
+          jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate", "queueMicrotask"] });
+          const slow = server(fakeStdioServer({ FAKE_KEY: "k", FAKE_SLOW_START_MARKER: marker }));
+          let settled = false;
+
+          const starting = slow
+            .start()
+            .then(
+              () => "started",
+              (error: Error) => error.message
+            )
+            .finally(() => (settled = true));
+          await handshakeReceived;
+          await jest.advanceTimersByTimeAsync(START_TIMEOUT_MS - 1);
+          expect(settled).toBe(false);
+          await jest.advanceTimersByTimeAsync(1);
+
+          await expect(starting).resolves.toBe("MCP error -32001: Request timed out");
+        } finally {
+          jest.useRealTimers();
           fs.rmSync(dir, { recursive: true, force: true });
         }
       });
