@@ -34,6 +34,9 @@ export const nodeFetch: FetchLike = (url, init) =>
         resolve(new Response(NULL_BODY_STATUSES.has(status) ? null : body, { status, headers }));
       }
     );
+    // The MCP SDK closes a connector's client by aborting its requests, event streams a service holds open included.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+    init?.signal?.addEventListener("abort", () => request.destroy(), { once: true });
     request.on("error", (error) => reject(new ServiceUnreachableError(target.href, error)));
     request.end(typeof init?.body === "string" ? init.body : undefined);
   });

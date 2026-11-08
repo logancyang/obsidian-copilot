@@ -8,11 +8,19 @@ import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
 import { withTimeout } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
+import {
+  CallToolResultSchema,
+  ListToolsResultSchema,
+  type CallToolResult,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
 
-const MCP_PROTOCOL_VERSION = "2025-06-18";
 const NAME_HASH_LENGTH = 8;
 const SERVICE_TIMEOUT_MS = 10_000;
+const TOOL_CALL_TIMEOUT_MS = 5 * 60_000;
 
 interface ConnectorToolDefinition {
   readonly name: string;
@@ -28,25 +36,12 @@ export interface ConnectorToolResult {
 
 const EMPTY_TOOLS: readonly ConnectorToolDefinition[] = Object.freeze([]);
 
-interface ServiceToolInfo {
-  name: string;
-  description?: string;
-  inputSchema?: unknown;
-  annotations?: ConnectorToolDefinition["annotations"];
-}
-
 interface LoadedService {
   readonly connectionId: string;
   readonly service: ConnectorCatalogEntry;
   readonly session: ServiceSession;
   readonly toolNames: ReadonlyMap<string, string>;
   readonly definitions: readonly ConnectorToolDefinition[];
-}
-
-interface JsonRpcReply {
-  id?: unknown;
-  result?: Record<string, unknown>;
-  error?: { message?: string };
 }
 
 export interface ConnectorToolsDeps {
@@ -74,8 +69,10 @@ export class ConnectorTools {
   async refresh(): Promise<void> {
     if (!this.deps.isEnabled()) return;
     const { connections } = this.deps.manager.getSnapshot();
-    for (const id of this.loaded.keys()) {
-      if (!connections.some((connection) => connection.id === id)) this.loaded.delete(id);
+    for (const [id, { session }] of this.loaded) {
+      if (connections.some((connection) => connection.id === id)) continue;
+      this.loaded.delete(id);
+      void session.close();
     }
     await Promise.all(connections.map((connection) => this.load(connection)));
   }
@@ -97,6 +94,12 @@ export class ConnectorTools {
 
   forget(sessionKey: string): void {
     this.listings.delete(sessionKey);
+  }
+
+  async dispose(): Promise<void> {
+    const sessions = [...this.loaded.values()].map(({ session }) => session);
+    this.loaded.clear();
+    await Promise.all(sessions.map((session) => session.close()));
   }
 
   call(name: string, args: unknown): Promise<ConnectorToolResult> | null {
@@ -177,6 +180,7 @@ export class ConnectorTools {
         definitions,
       });
     } catch (error) {
+      void session.close();
       logWarn(
         `[Connectors] Couldn't load ${service.name} tools`,
         session.mask(err2String(error, true))
@@ -195,10 +199,18 @@ export class ConnectorTools {
   ): Promise<ConnectorToolResult> {
     const { name } = loaded.service;
     try {
-      const result = await loaded.session.request("tools/call", {
-        name: toolName,
-        arguments: args ?? {},
-      });
+      const result = await loaded.session.request((client) =>
+        client.request(
+          {
+            method: "tools/call",
+            params: { name: toolName, arguments: (args ?? {}) as Record<string, unknown> },
+          },
+          CallToolResultSchema,
+          // The SDK otherwise fails every call after 60 seconds, too soon for a service export or search; one that reports progress keeps going.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+          { timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true, onprogress: () => {} }
+        )
+      );
       return toToolResult(result);
     } catch (error) {
       if (error instanceof NeedsLoginError) {
@@ -221,10 +233,7 @@ export class ConnectorTools {
 }
 
 class ServiceSession {
-  private sessionId: string | null = null;
-  private protocolVersion = MCP_PROTOCOL_VERSION;
-  private initialized: Promise<void> | null = null;
-  private nextId = 0;
+  private client: Promise<Client> | null = null;
   private readonly sentTokens = new Set<string>();
 
   constructor(
@@ -233,17 +242,15 @@ class ServiceSession {
     private readonly fetch: FetchLike
   ) {}
 
-  async request(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  async request<T>(send: (client: Client) => Promise<T>): Promise<T> {
     try {
-      await this.initialize();
-      return await this.send(method, params);
+      return await send(await this.connect());
     } catch (error) {
       // A service may end its MCP session at any time, and the protocol has the client start a new one.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
       if (!(error instanceof SessionEndedError)) throw error;
-      this.initialized = null;
-      await this.initialize();
-      return this.send(method, params);
+      await this.close();
+      return send(await this.connect());
     }
   }
 
@@ -253,128 +260,84 @@ class ServiceSession {
     return maskSecretValues(text, [...this.sentTokens]);
   }
 
-  private initialize(): Promise<void> {
-    this.initialized ??= (async () => {
-      this.sessionId = null;
-      const result = await this.send("initialize", {
-        protocolVersion: MCP_PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: { name: "Copilot for Obsidian", version: "1.0.0" },
-      });
-      if (typeof result.protocolVersion === "string") this.protocolVersion = result.protocolVersion;
-      await this.send("notifications/initialized");
-    })().catch((error: unknown) => {
-      this.initialized = null;
-      throw error;
-    });
-    return this.initialized;
+  async close(): Promise<void> {
+    const client = this.client;
+    this.client = null;
+    await (await client?.catch(() => null))?.close();
   }
 
-  private async send(
-    method: string,
-    params?: Record<string, unknown>
-  ): Promise<Record<string, unknown>> {
-    const id = method.startsWith("notifications/") ? undefined : ++this.nextId;
-    const body = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-    let response = await this.post(body, false);
+  private connect(): Promise<Client> {
+    this.client ??= (async () => {
+      const client = new Client({ name: "Copilot for Obsidian", version: "1.0.0" });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(this.url), { fetch: this.authorizedFetch })
+      );
+      return client;
+    })().catch((error: unknown) => {
+      this.client = null;
+      throw error;
+    });
+    return this.client;
+  }
+
+  private readonly authorizedFetch: FetchLike = async (url, init) => {
+    let response = await this.send(url, init, false);
     // A service can revoke a token before its stated expiry, so a 401 earns one refreshed token.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-    if (response.status === 401) response = await this.post(body, true);
+    if (response.status === 401) {
+      await response.body?.cancel();
+      response = await this.send(url, init, true);
+    }
     if (response.status === 401) throw new NeedsLoginError();
-    if (response.status === 404 && this.sessionId) throw new SessionEndedError();
+    if (response.status === 404 && new Headers(init?.headers).has("mcp-session-id")) {
+      throw new SessionEndedError();
+    }
     if (response.status >= 500) {
       throw new ServiceUnreachableError(this.url, new Error(`HTTP ${response.status}`));
     }
-    if (!response.ok) throw new Error(`HTTP ${response.status} ${await response.text()}`);
-    this.sessionId = response.headers.get("mcp-session-id") ?? this.sessionId;
-    return id === undefined ? {} : readReply(response, id);
-  }
+    return response;
+  };
 
-  private async post(body: string, forceRefresh: boolean): Promise<Response> {
+  private async send(
+    url: string | URL,
+    init: RequestInit | undefined,
+    forceRefresh: boolean
+  ): Promise<Response> {
     const token = await this.accessToken(forceRefresh);
     if (token.status === "needs-login") throw new NeedsLoginError();
     if (token.status === "unreachable") throw new ServiceUnreachableError(this.url, token);
     this.sentTokens.add(token.accessToken);
-    return this.fetch(this.url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token.accessToken}`,
-        "mcp-protocol-version": this.protocolVersion,
-        ...(this.sessionId ? { "mcp-session-id": this.sessionId } : {}),
-      },
-      body,
-    });
+    const headers = new Headers(init?.headers);
+    headers.set("authorization", `Bearer ${token.accessToken}`);
+    return this.fetch(url, { ...init, headers });
   }
 }
 
-async function listTools(session: ServiceSession): Promise<ServiceToolInfo[]> {
-  const tools: ServiceToolInfo[] = [];
-  let cursor: unknown;
+async function listTools(session: ServiceSession): Promise<Tool[]> {
+  const tools: Tool[] = [];
+  let cursor: string | undefined;
   do {
-    const page = await session.request("tools/list", cursor === undefined ? {} : { cursor });
-    tools.push(...((page.tools as ServiceToolInfo[] | undefined) ?? []));
+    const page = await session.request((client) =>
+      client.request(
+        { method: "tools/list", params: cursor === undefined ? {} : { cursor } },
+        ListToolsResultSchema
+      )
+    );
+    tools.push(...page.tools);
     cursor = page.nextCursor;
-  } while (typeof cursor === "string");
+  } while (cursor !== undefined);
   return tools;
-}
-
-async function readReply(response: Response, id: number): Promise<Record<string, unknown>> {
-  const reply = response.headers.get("content-type")?.startsWith("text/event-stream")
-    ? await readStreamedReply(response, id)
-    : findReply(JSON.parse(await response.text()) as JsonRpcReply | JsonRpcReply[], id);
-  if (!reply) throw new Error("The service sent no reply.");
-  if (reply.error) throw new Error(reply.error.message ?? "Unknown error");
-  return reply.result ?? {};
-}
-
-// A service may keep a reply's event stream open after the reply, so events are read as they arrive.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-async function readStreamedReply(
-  response: Response,
-  id: number
-): Promise<JsonRpcReply | undefined> {
-  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const events = buffer.split(/\r?\n\r?\n/);
-      buffer = done ? "" : (events.pop() ?? "");
-      for (const event of events) {
-        const data = event
-          .split(/\r?\n/)
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trimStart())
-          .join("\n");
-        const reply = data
-          ? findReply(JSON.parse(data) as JsonRpcReply | JsonRpcReply[], id)
-          : undefined;
-        if (reply) return reply;
-      }
-      if (done) return undefined;
-    }
-  } finally {
-    void reader.cancel();
-  }
-}
-
-function findReply(message: JsonRpcReply | JsonRpcReply[], id: number): JsonRpcReply | undefined {
-  return [message].flat().find((candidate) => candidate.id === id);
 }
 
 function toDefinition(
   service: ConnectorCatalogEntry,
-  tool: ServiceToolInfo,
+  tool: Tool,
   maxNameLength: number
 ): ConnectorToolDefinition {
   return {
     name: agentToolName(`${service.id}_${tool.name}`, maxNameLength),
     description: tool.description ? `${service.name}: ${tool.description}` : service.name,
-    inputSchema: tool.inputSchema ?? { type: "object" },
+    inputSchema: tool.inputSchema,
     ...(tool.annotations ? { annotations: tool.annotations } : {}),
   };
 }
@@ -389,11 +352,11 @@ function agentToolName(name: string, maxLength: number): string {
   return `${name.slice(0, maxLength - NAME_HASH_LENGTH - 1)}_${hash}`;
 }
 
-function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
+function toToolResult(result: CallToolResult): ConnectorToolResult {
   return {
     content:
-      Array.isArray(result.content) && result.content.length > 0
-        ? (result.content as unknown[])
+      result.content.length > 0
+        ? result.content
         : [{ type: "text", text: JSON.stringify(result.structuredContent ?? {}) }],
     isError: result.isError === true,
   };

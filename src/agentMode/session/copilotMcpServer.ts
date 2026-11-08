@@ -116,6 +116,7 @@ export interface ToolProvider {
   tools(listedBy?: ToolListing): readonly McpToolDefinition[];
   call(name: string, args: unknown): Promise<ProvidedToolResult> | null;
   forget(sessionKey: string): void;
+  dispose(): Promise<void>;
 }
 
 interface TokenHolder {
@@ -211,6 +212,7 @@ export function createCopilotMcpServer(
       tokensBySession.clear();
       server?.close();
       server = null;
+      void toolProvider?.dispose();
     },
   });
 }

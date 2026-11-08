@@ -86,6 +86,7 @@ function connectorProvider(overrides: Partial<ToolProvider> = {}) {
     }),
     tools: jest.fn((_listedBy?: ToolListing) => listed),
     forget: jest.fn(),
+    dispose: jest.fn(async () => {}),
     call: jest.fn(
       (name: string): ReturnType<ToolProvider["call"]> =>
         name.startsWith("notion_")
@@ -167,6 +168,16 @@ describe("copilotMcpServer", () => {
         backendId: "codex",
       });
       expect(provider.forget).toHaveBeenCalledWith("session-a");
+    });
+
+    it(`${CONNECTORS_ISSUE} closes the connected services' connections when it is disposed`, () => {
+      server.dispose();
+      const provider = connectorProvider();
+      server = createCopilotMcpServer(() => true, [], provider);
+
+      server.dispose();
+
+      expect(provider.dispose).toHaveBeenCalledTimes(1);
     });
 
     it(`${CONNECTORS_ISSUE} still hands a session its server with Copilot's own tools when the connected services can't be refreshed`, async () => {

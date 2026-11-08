@@ -102,6 +102,23 @@ describe("nodeFetch", () => {
       await expect(service.closed).resolves.toBeUndefined();
     });
 
+    it(`${ISSUE} closes a connection the service keeps open once the caller aborts its signal`, async () => {
+      const service = await serve((_request, response) => {
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write("data: first\n\n");
+      });
+      stop = service.stop;
+      const controller = new AbortController();
+
+      await nodeFetch(`${service.origin}/mcp`, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      controller.abort();
+
+      await expect(service.closed).resolves.toBeUndefined();
+    });
+
     it(`${ISSUE} returns a redirect as it is instead of following it with the login token`, async () => {
       const service = await serve((request, response) => {
         response.writeHead(307, { location: "/elsewhere" });

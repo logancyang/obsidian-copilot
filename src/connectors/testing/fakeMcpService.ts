@@ -16,6 +16,7 @@ export interface FakeMcpRequest {
   sessionId: string | null;
   rpcMethod: string | null;
   params: Record<string, unknown> | undefined;
+  signal: AbortSignal | null;
 }
 
 type CallHandler = (name: string, args: unknown) => Record<string, unknown>;
@@ -43,6 +44,8 @@ export class FakeMcpService {
   hangs = false;
   failWithStatus: number | null = null;
   failBody = "Service error";
+  holdsCalls = false;
+  readonly heldCalls: Array<{ reportProgress(): void; finish(): void }> = [];
   private sessions = new Set<string>();
   private issuedSessions = 0;
 
@@ -62,6 +65,7 @@ export class FakeMcpService {
       sessionId,
       rpcMethod: message?.method ?? null,
       params: message?.params,
+      signal: init?.signal ?? null,
     });
     if (String(url) !== this.url) return new Response("Not found", { status: 404 });
     if (this.failWithStatus) return new Response(this.failBody, { status: this.failWithStatus });
@@ -75,7 +79,11 @@ export class FakeMcpService {
       this.sessions.add(issued);
       return this.reply(
         message.id,
-        { protocolVersion: "2025-06-18", capabilities: { tools: {} } },
+        {
+          protocolVersion: "2025-06-18",
+          capabilities: { tools: {} },
+          serverInfo: { name: "Fake MCP service", version: "1.0.0" },
+        },
         {
           "mcp-session-id": issued,
         }
@@ -98,6 +106,7 @@ export class FakeMcpService {
       if (!this.tools.some((tool) => tool.name === params.name)) {
         return this.reply(message.id, undefined, {}, { code: -32602, message: "Unknown tool" });
       }
+      if (this.holdsCalls) return this.hold(message.id, params);
       return this.reply(message.id, this.answer(String(params.name), params.arguments));
     }
     return this.reply(message.id, undefined, {}, { code: -32601, message: "Method not found" });
@@ -109,6 +118,39 @@ export class FakeMcpService {
 
   callsOf(rpcMethod: string): FakeMcpRequest[] {
     return this.requests.filter((request) => request.rpcMethod === rpcMethod);
+  }
+
+  private hold(id: number | undefined, params: Record<string, unknown>): Response {
+    const progressToken = (params._meta as { progressToken?: unknown } | undefined)?.progressToken;
+    const encoder = new TextEncoder();
+    const event = (message: unknown) =>
+      encoder.encode(`event: message\ndata: ${JSON.stringify(message)}\n\n`);
+    let progress = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => {
+        this.heldCalls.push({
+          reportProgress: () =>
+            controller.enqueue(
+              event({
+                jsonrpc: "2.0",
+                method: "notifications/progress",
+                params: { progressToken, progress: ++progress },
+              })
+            ),
+          finish: () => {
+            controller.enqueue(
+              event({
+                jsonrpc: "2.0",
+                id,
+                result: this.answer(String(params.name), params.arguments),
+              })
+            );
+            controller.close();
+          },
+        });
+      },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
   }
 
   private reply(

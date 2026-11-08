@@ -173,7 +173,7 @@ describe("connectorTools", () => {
         expect(fake.notion.callsOf("tools/list")).toHaveLength(1);
       });
 
-      it("drops a disconnected service's tools", async () => {
+      it("drops a disconnected service's tools and closes its connections", async () => {
         const fake = setUp();
         await fake.tools.refresh();
 
@@ -182,6 +182,7 @@ describe("connectorTools", () => {
 
         expect(fake.tools.tools()).toEqual([]);
         expect(fake.tools.call("notion_search_notes", {})).toBeNull();
+        expect(fake.notion.requests.every(({ signal }) => signal?.aborted)).toBe(true);
       });
 
       it("lists nothing for a service it couldn't reach and shows that service as couldn't reach", async () => {
@@ -285,7 +286,11 @@ describe("connectorTools", () => {
 
       it("reads every page of a service's tool list", async () => {
         const fake = setUp();
-        fake.notion.tools = [SEARCH_NOTES, CREATE_NOTE, { name: "delete_note" }];
+        fake.notion.tools = [
+          SEARCH_NOTES,
+          CREATE_NOTE,
+          { name: "delete_note", inputSchema: { type: "object" } },
+        ];
 
         await fake.tools.refresh();
 
@@ -308,12 +313,15 @@ describe("connectorTools", () => {
           "getConfluencePageDescendantsWithLabels",
         ];
         const fake = setUp({ connections: [{ id: "c-atlassian", serviceId: "atlassian" }] });
-        fake.atlassian.tools = longNames.map((name) => ({ name }));
+        fake.atlassian.tools = longNames.map((name) => ({ name, inputSchema: { type: "object" } }));
         await fake.tools.refresh();
         const names = fake.tools.tools().map(({ name }) => name);
 
         const again = setUp({ connections: [{ id: "c-atlassian", serviceId: "atlassian" }] });
-        again.atlassian.tools = longNames.map((name) => ({ name }));
+        again.atlassian.tools = longNames.map((name) => ({
+          name,
+          inputSchema: { type: "object" },
+        }));
         await again.tools.refresh();
 
         expect(names[0]).toBe("atlassian_getConfluencePageFooterComments");
@@ -322,7 +330,7 @@ describe("connectorTools", () => {
         for (const name of names) expect(`${AGENT_PREFIX}${name}`.length).toBeLessThanOrEqual(64);
         expect(again.tools.tools().map(({ name }) => name)).toEqual(names);
         await fake.tools.call(names[2], {});
-        expect(fake.atlassian.callsOf("tools/call")[0].params).toEqual({
+        expect(fake.atlassian.callsOf("tools/call")[0].params).toMatchObject({
           name: "getConfluencePageDescendantsWithLabels",
           arguments: {},
         });
@@ -363,6 +371,26 @@ describe("connectorTools", () => {
         await fake.manager.reconnect("c-notion");
 
         expect(listener).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("dispose()", () => {
+      it("closes every connected service's connections and stops offering their tools", async () => {
+        const fake = setUp({
+          connections: [
+            { id: "c-notion", serviceId: "notion" },
+            { id: "c-atlassian", serviceId: "atlassian" },
+          ],
+        });
+        fake.atlassian.tools = [{ name: "search", inputSchema: { type: "object" } }];
+        await fake.tools.refresh();
+
+        await fake.tools.dispose();
+
+        expect(fake.tools.tools()).toEqual([]);
+        const requests = [...fake.notion.requests, ...fake.atlassian.requests];
+        expect(requests.length).toBeGreaterThan(0);
+        expect(requests.every(({ signal }) => signal?.aborted)).toBe(true);
       });
     });
 
@@ -505,7 +533,9 @@ describe("connectorTools", () => {
         const result = await fake.tools.call("notion_search_notes", {});
 
         expect(result).toEqual({
-          content: [{ type: "text", text: "Notion returned an error: Unknown tool" }],
+          content: [
+            { type: "text", text: "Notion returned an error: MCP error -32602: Unknown tool" },
+          ],
           isError: true,
         });
         expect(fake.statusOf("c-notion")).toBe("connected");
@@ -519,7 +549,9 @@ describe("connectorTools", () => {
 
         const result = await fake.tools.call("notion_search_notes", {});
 
-        expect(textOf(result!)).toBe("Notion returned an error: HTTP 400 unknown token ***");
+        expect(textOf(result!)).toBe(
+          "Notion returned an error: Streamable HTTP error: Error POSTing to endpoint: unknown token ***"
+        );
       });
 
       it(`${ISSUE} starts a new service session and retries when the service has ended the old one`, async () => {
@@ -531,6 +563,44 @@ describe("connectorTools", () => {
 
         expect(textOf(result!)).toBe("ran search_notes");
         expect(fake.notion.callsOf("initialize")).toHaveLength(2);
+      });
+
+      it(`${ISSUE} waits 5 minutes for a call the service hasn't answered or reported progress on, then tells the agent it timed out`, async () => {
+        const fake = setUp();
+        await fake.tools.refresh();
+        jest.useFakeTimers();
+        fake.notion.holdsCalls = true;
+        let settled = false;
+
+        const calling = fake.tools.call("notion_search_notes", {})!.finally(() => (settled = true));
+        await jest.advanceTimersByTimeAsync(5 * 60_000 - 1);
+        expect(settled).toBe(false);
+        await jest.advanceTimersByTimeAsync(1);
+
+        await expect(calling).resolves.toEqual({
+          content: [
+            { type: "text", text: "Notion returned an error: MCP error -32001: Request timed out" },
+          ],
+          isError: true,
+        });
+      });
+
+      it(`${ISSUE} keeps waiting past 5 minutes on a call while the service reports progress`, async () => {
+        const fake = setUp();
+        await fake.tools.refresh();
+        jest.useFakeTimers();
+        fake.notion.holdsCalls = true;
+
+        const calling = fake.tools.call("notion_search_notes", {})!;
+        await jest.advanceTimersByTimeAsync(4 * 60_000);
+        fake.notion.heldCalls[0].reportProgress();
+        await jest.advanceTimersByTimeAsync(4 * 60_000);
+        fake.notion.heldCalls[0].finish();
+
+        await expect(calling).resolves.toEqual({
+          content: [{ type: "text", text: "ran search_notes" }],
+          isError: false,
+        });
       });
 
       it("returns a very large result whole, leaving its size to the agent", async () => {
