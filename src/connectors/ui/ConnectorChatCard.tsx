@@ -201,13 +201,14 @@ export function ConnectorChatCardView({
   );
 }
 
-const CARD =
-  "tw-mx-3 tw-my-2 tw-flex tw-items-center tw-rounded-md tw-border tw-border-solid tw-px-3.5 tw-py-3 tw-text-sm";
+const CARD = cn(
+  "tw-mx-3 tw-my-2 tw-flex tw-items-center tw-rounded-md tw-border tw-border-solid tw-px-3.5 tw-py-3 tw-text-sm"
+);
 
 const TONES = {
-  normal: "tw-border-border tw-bg-secondary",
-  accent: "tw-border-interactive-accent tw-bg-interactive-accent-hsl/10",
-  error: "tw-border-border tw-bg-modifier-error-rgb/10",
+  normal: cn("tw-border-border tw-bg-secondary"),
+  accent: cn("tw-border-interactive-accent tw-bg-interactive-accent-hsl/10"),
+  error: cn("tw-border-border tw-bg-modifier-error-rgb/10"),
 };
 
 interface CardProps {
