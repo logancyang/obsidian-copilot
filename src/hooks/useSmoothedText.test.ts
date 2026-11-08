@@ -86,6 +86,15 @@ describe("useSmoothedText", () => {
       expect(result.current).toBe("你好世界朋友们今天");
     });
 
+    it(`keeps spaced scripts such as Korean whole-word, holding an unfinished word (${ISSUE})`, () => {
+      const { result, rerender } = renderHook(({ text }) => useSmoothedText(text, true), {
+        initialProps: { text: "안녕하세요 " },
+      });
+      rerender({ text: "안녕하세요 오늘은 좋은 날" });
+      advance(500);
+      expect(result.current).toBe("안녕하세요 오늘은 좋은 ");
+    });
+
     it("shows the whole text at once when streaming ends or the text is replaced", () => {
       const { result, rerender } = renderHook(
         ({ text, streaming }) => useSmoothedText(text, streaming),

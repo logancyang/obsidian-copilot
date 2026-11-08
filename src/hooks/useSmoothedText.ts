@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export const REVEAL_LAG_MS = 150;
 export const REVEAL_COMMIT_MS = 50;
 const BASE_MS_PER_UNIT = 10;
-const UNSPACED = "\\u3040-\\u30ff\\u3400-\\u9fff\\uac00-\\ud7af\\uf900-\\ufaff";
+const UNSPACED = "\\u3040-\\u30ff\\u3400-\\u9fff\\uf900-\\ufaff";
 const UNIT = new RegExp(`[${UNSPACED}]|[^\\s${UNSPACED}]+\\s*|\\s+`, "g");
 const UNFINISHED_WORD = new RegExp(`[^\\s${UNSPACED}]+$`);
 
