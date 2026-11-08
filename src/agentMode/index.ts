@@ -59,6 +59,7 @@ import {
 } from "@/settings/builtinSkillPreferences";
 import { buildBuiltinSeedFs } from "./skills/builtin/miyoSearchSeed";
 import { trackTabStripShown } from "@/agentMode/ui/trackTabStripShown";
+import { FEEDBACK_OFFER_EXTENSION } from "@/agentMode/session/feedback/feedbackOffer";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -231,6 +232,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
+    chatExtensions: [FEEDBACK_OFFER_EXTENSION],
     copilotMcpServer: createCopilotMcpServer(
       (toolName) => isCopilotToolOn(toolName, getSettings(), app),
       [
