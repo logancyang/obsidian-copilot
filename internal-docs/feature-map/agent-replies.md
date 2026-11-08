@@ -18,7 +18,7 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-multi-agent: a message that mentions other agents shows `Agent answers` from each, then a summary.
 - reply-compaction: `Compacting conversation…`, then `Context compacted` with the token count before and after; when the context fills up, `Context is full, compacting…`, then `Context compacted automatically`.
 - reply-files-changed: a turn that edited notes ends with its [turn diffs](turn-diffs.md).
-- reply-layouts: replies containing a `copilot-ui` block show cards, steps and other layouts; saved or inserted blocks render in notes too.
+- reply-layouts: replies containing a `copilot-ui` block show cards, steps, callouts, tabs and other layouts; saved or inserted blocks render in notes too.
 - reply-actions: `Copy` and `Insert / Replace at cursor` under a finished reply.
 
 ## How to get to it
@@ -41,7 +41,7 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 - Multi-agent: with multi-agent access, mention another agent with `@` → Agents and send. `Agent answers` lists each agent's answer, then a summary.
 - Compaction: send `/compact`. `Compacting conversation…` shows, then `Context compacted · 41k → 12k tokens` (the numbers vary).
 - Files changed: ask the agent to edit a note. The reply ends with the changed file and its added and removed lines.
-- Layouts: open a reply containing a `copilot-ui` block. Its layout appears in the reply; save or insert it into a note and the layout appears in Reading view and Live Preview. Click into the block in Live Preview to edit its source.
+- Layouts: open a reply containing a `copilot-ui` block. Its layout appears in the reply; save or insert it into a note and the layout appears in Reading view and Live Preview. Click into the block in Live Preview to edit its source. In a block with tabs, click a tab or use the arrow keys to switch views.
 - Copy: choose `Copy` under a finished reply. The reply's text is on the clipboard.
 - Insert: place the cursor in a note and choose `Insert / Replace at cursor` under a finished reply. The reply's text is inserted at the cursor.
 
