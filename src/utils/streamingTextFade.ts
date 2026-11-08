@@ -1,4 +1,4 @@
-export const TEXT_FADE_MS = 400;
+export const TEXT_FADE_MS = 500;
 const UNTOUCHED = "pre, code, svg, .math, mjx-container";
 
 interface FadeRange {
