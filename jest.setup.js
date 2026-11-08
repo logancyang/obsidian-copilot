@@ -28,6 +28,14 @@ if (typeof window.matchMedia !== "function") {
   });
 }
 
+// jsdom has no Web Animations API, which layout fades use so re-parented hosts do not restart them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+if (typeof Element !== "undefined" && typeof Element.prototype.animate !== "function") {
+  Element.prototype.animate = function () {
+    return { cancel() {}, finished: Promise.resolve() };
+  };
+}
+
 // jsdom rejects `:focus-visible` and tracks no input modality, so tests treat every focus as keyboard focus.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/802
 if (typeof Element !== "undefined") {

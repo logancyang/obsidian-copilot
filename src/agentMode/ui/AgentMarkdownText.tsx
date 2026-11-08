@@ -27,6 +27,7 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({
         className="tw-p-1 tw-text-sm"
         sourcePath={sourcePath}
         text={shown}
+        streaming={streaming}
         onRendered={markFoundLinks}
         runDataviewQueries
       />
