@@ -360,13 +360,13 @@ describe("keychainService", () => {
         expect(hasKey).toBe(true);
       });
 
-      it("reports no stored key when no provider points at a Keychain entry", () => {
+      it("reports no stored key when no provider points at a Keychain entry, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
         const service = KeychainService.getInstance(makeApp({ secretStorage: makeMapStorage({}) }));
 
         expect(service.hasStoredProviderKey({ agent: makeProvider() })).toBe(false);
       });
 
-      it("reports no stored key when a synced pointer names an entry missing or emptied on this device", () => {
+      it("reports no stored key when a synced pointer names an entry missing or emptied on this device, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
         const service = KeychainService.getInstance(
           makeApp({ secretStorage: makeMapStorage({ "copilot-v1-provider-cleared": "" }) })
         );
