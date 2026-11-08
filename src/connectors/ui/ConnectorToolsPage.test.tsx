@@ -44,19 +44,19 @@ describe("ConnectorToolsPage", () => {
       expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it("groups the tools into read-only ones and ones that can make changes, each with its count", () => {
+    it("groups the tools under Read only and Write, with no count beside either heading", () => {
       renderPage();
 
-      expect(screen.getByRole("heading", { name: "Read only 5" })).toBeTruthy();
-      expect(toolNames(/^Read only/)).toEqual([
+      expect(screen.getByRole("heading", { name: "Read only" })).toBeTruthy();
+      expect(toolNames(/^Read only$/)).toEqual([
         "Search Notion and connected sources",
         "Fetch a page or database",
         "Get users",
         "Get comments",
         "Get teams",
       ]);
-      expect(screen.getByRole("heading", { name: "Can make changes 3" })).toBeTruthy();
-      expect(toolNames(/^Can make changes/)).toEqual(["Create pages", "Update page", "Move pages"]);
+      expect(screen.getByRole("heading", { name: "Write" })).toBeTruthy();
+      expect(toolNames(/^Write$/)).toEqual(["Create pages", "Update page", "Move pages"]);
     });
 
     it(`names a tool by its own title, then its annotation title, and otherwise turns its name into words: ${ISSUE}`, () => {
@@ -68,7 +68,7 @@ describe("ConnectorToolsPage", () => {
         ],
       });
 
-      expect(toolNames(/^Can make changes/)).toEqual([
+      expect(toolNames(/^Write$/)).toEqual([
         "Own title",
         "Annotation title",
         "Get confluence page",
@@ -85,7 +85,7 @@ describe("ConnectorToolsPage", () => {
         ],
       });
 
-      expect(toolNames(/^Can make changes/)).toEqual(["Search", "Google drive", "Google search"]);
+      expect(toolNames(/^Write$/)).toEqual(["Search", "Google drive", "Google search"]);
     });
 
     it(`shows only the first paragraph of a description, as plain text without its markdown rendered: ${ISSUE}`, () => {
@@ -106,8 +106,8 @@ describe("ConnectorToolsPage", () => {
     it("hides a group that has no tools", () => {
       renderPage({ tools: [{ name: "search", annotations: { readOnlyHint: true } }] });
 
-      expect(screen.getByRole("heading", { name: "Read only 1" })).toBeTruthy();
-      expect(screen.queryByRole("heading", { name: /^Can make changes/ })).toBeNull();
+      expect(screen.getByRole("heading", { name: "Read only" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: /^Write$/ })).toBeNull();
     });
 
     it(`clamps a description longer than two lines and expands it with Show more: ${ISSUE}`, () => {
@@ -145,16 +145,16 @@ describe("ConnectorToolsPage", () => {
         target: { value: "comment" },
       });
 
-      expect(screen.getByRole("heading", { name: "Read only 1" })).toBeTruthy();
-      expect(toolNames(/^Read only/)).toEqual(["Get comments"]);
-      expect(toolNames(/^Can make changes/)).toEqual(["Create comment"]);
+      expect(screen.getByRole("heading", { name: "Read only" })).toBeTruthy();
+      expect(toolNames(/^Read only$/)).toEqual(["Get comments"]);
+      expect(toolNames(/^Write$/)).toEqual(["Create comment"]);
 
       fireEvent.change(screen.getByPlaceholderText("Search tools"), {
         target: { value: "PARENT" },
       });
 
-      expect(screen.queryByRole("heading", { name: /^Read only/ })).toBeNull();
-      expect(toolNames(/^Can make changes/)).toEqual(["Create pages", "Move pages"]);
+      expect(screen.queryByRole("heading", { name: /^Read only$/ })).toBeNull();
+      expect(toolNames(/^Write$/)).toEqual(["Create pages", "Move pages"]);
     });
 
     it("says when no tool matches the search", () => {
@@ -195,7 +195,7 @@ describe("ConnectorToolsPage", () => {
         tools: [{ name: "search", description: { text: "odd" } } as unknown as ServiceToolInfo],
       });
 
-      expect(toolNames(/^Can make changes/)).toEqual(["Search"]);
+      expect(toolNames(/^Write$/)).toEqual(["Search"]);
     });
   });
 });

@@ -483,7 +483,7 @@ describe("ConnectorsSettings", () => {
       fireEvent.click(screen.getByRole("button", { name: "4 tools" }));
 
       expect(screen.getByRole("heading", { name: "Notion tools" })).toBeTruthy();
-      expect(screen.getByRole("heading", { name: "Read only 1" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Read only" })).toBeTruthy();
       expect(screen.getByText("Search issues")).toBeTruthy();
       expect(screen.queryByRole("heading", { name: "Connectors" })).toBeNull();
 

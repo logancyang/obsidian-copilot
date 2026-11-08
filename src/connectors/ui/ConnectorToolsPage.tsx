@@ -68,7 +68,7 @@ export function ConnectorToolsPage({
       ) : (
         <>
           <ToolGroup title="Read only" tools={found.filter(({ readOnly }) => readOnly)} />
-          <ToolGroup title="Can make changes" tools={found.filter(({ readOnly }) => !readOnly)} />
+          <ToolGroup title="Write" tools={found.filter(({ readOnly }) => !readOnly)} />
         </>
       )}
     </SettingsSubPageLayout>
@@ -114,7 +114,7 @@ function ToolGroup({ title, tools }: ToolGroupProps): React.ReactElement | null 
         aria-level={3}
         className="tw-text-ui-smaller tw-font-semibold tw-uppercase tw-tracking-wide tw-text-muted"
       >
-        {title} <span className="tw-font-normal">{tools.length}</span>
+        {title}
       </div>
       <ul className="tw-m-0 tw-list-none tw-p-0">
         {tools.map((tool) => (
@@ -145,7 +145,7 @@ interface UnreachableProps {
 function Unreachable({ serviceName, onTryAgain }: UnreachableProps): React.ReactElement {
   const [checking, setChecking] = useState(false);
   return (
-    <section className="tw-flex tw-flex-col tw-items-center tw-gap-2 tw-px-4 tw-py-10 tw-text-center">
+    <section className="tw-flex tw-min-h-full tw-flex-col tw-items-center tw-justify-center tw-gap-2 tw-px-4 tw-py-10 tw-text-center">
       <CloudOff aria-hidden="true" className="tw-size-6 tw-text-muted" />
       <div role="heading" aria-level={3} className="tw-text-base tw-font-semibold">
         Couldn&apos;t reach {serviceName}
