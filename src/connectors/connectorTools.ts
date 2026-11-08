@@ -10,13 +10,9 @@ import { withTimeout } from "@/utils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
-import {
-  CallToolResultSchema,
-  ListToolsResultSchema,
-  type CallToolResult,
-  type Tool,
-} from "@modelcontextprotocol/sdk/types.js";
+import { ResultSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const NAME_HASH_LENGTH = 8;
 const SERVICE_TIMEOUT_MS = 10_000;
@@ -35,6 +31,13 @@ export interface ConnectorToolResult {
 }
 
 const EMPTY_TOOLS: readonly ConnectorToolDefinition[] = Object.freeze([]);
+
+interface ServiceToolInfo {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  annotations?: ConnectorToolDefinition["annotations"];
+}
 
 interface LoadedService {
   readonly connectionId: string;
@@ -199,17 +202,12 @@ export class ConnectorTools {
   ): Promise<ConnectorToolResult> {
     const { name } = loaded.service;
     try {
-      const result = await loaded.session.request((client) =>
-        client.request(
-          {
-            method: "tools/call",
-            params: { name: toolName, arguments: (args ?? {}) as Record<string, unknown> },
-          },
-          CallToolResultSchema,
-          // The SDK otherwise fails every call after 60 seconds, too soon for a service export or search; one that reports progress keeps going.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-          { timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true, onprogress: () => {} }
-        )
+      const result = await loaded.session.request(
+        "tools/call",
+        { name: toolName, arguments: args ?? {} },
+        // The SDK otherwise fails every call after 60 seconds, too soon for a service export or search; one that reports progress keeps going.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+        { timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true, onprogress: () => {} }
       );
       return toToolResult(result);
     } catch (error) {
@@ -242,15 +240,21 @@ class ServiceSession {
     private readonly fetch: FetchLike
   ) {}
 
-  async request<T>(send: (client: Client) => Promise<T>): Promise<T> {
+  async request(
+    method: string,
+    params: Record<string, unknown>,
+    options?: RequestOptions
+  ): Promise<Record<string, unknown>> {
+    const send = async () =>
+      (await this.connect()).request({ method, params }, ResultSchema, options);
     try {
-      return await send(await this.connect());
+      return await send();
     } catch (error) {
       // A service may end its MCP session at any time, and the protocol has the client start a new one.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
       if (!(error instanceof SessionEndedError)) throw error;
       await this.close();
-      return send(await this.connect());
+      return send();
     }
   }
 
@@ -281,12 +285,12 @@ class ServiceSession {
   }
 
   private readonly authorizedFetch: FetchLike = async (url, init) => {
-    let response = await this.send(url, init, false);
+    let response = await this.fetchWithToken(url, init, false);
     // A service can revoke a token before its stated expiry, so a 401 earns one refreshed token.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
     if (response.status === 401) {
       await response.body?.cancel();
-      response = await this.send(url, init, true);
+      response = await this.fetchWithToken(url, init, true);
     }
     if (response.status === 401) throw new NeedsLoginError();
     if (response.status === 404 && new Headers(init?.headers).has("mcp-session-id")) {
@@ -295,10 +299,11 @@ class ServiceSession {
     if (response.status >= 500) {
       throw new ServiceUnreachableError(this.url, new Error(`HTTP ${response.status}`));
     }
+    if (!response.ok) throw new Error(`HTTP ${response.status} ${await response.text()}`);
     return response;
   };
 
-  private async send(
+  private async fetchWithToken(
     url: string | URL,
     init: RequestInit | undefined,
     forceRefresh: boolean
@@ -313,31 +318,26 @@ class ServiceSession {
   }
 }
 
-async function listTools(session: ServiceSession): Promise<Tool[]> {
-  const tools: Tool[] = [];
-  let cursor: string | undefined;
+async function listTools(session: ServiceSession): Promise<ServiceToolInfo[]> {
+  const tools: ServiceToolInfo[] = [];
+  let cursor: unknown;
   do {
-    const page = await session.request((client) =>
-      client.request(
-        { method: "tools/list", params: cursor === undefined ? {} : { cursor } },
-        ListToolsResultSchema
-      )
-    );
-    tools.push(...page.tools);
+    const page = await session.request("tools/list", cursor === undefined ? {} : { cursor });
+    tools.push(...((page.tools as ServiceToolInfo[] | undefined) ?? []));
     cursor = page.nextCursor;
-  } while (cursor !== undefined);
+  } while (typeof cursor === "string");
   return tools;
 }
 
 function toDefinition(
   service: ConnectorCatalogEntry,
-  tool: Tool,
+  tool: ServiceToolInfo,
   maxNameLength: number
 ): ConnectorToolDefinition {
   return {
     name: agentToolName(`${service.id}_${tool.name}`, maxNameLength),
     description: tool.description ? `${service.name}: ${tool.description}` : service.name,
-    inputSchema: tool.inputSchema,
+    inputSchema: tool.inputSchema ?? { type: "object" },
     ...(tool.annotations ? { annotations: tool.annotations } : {}),
   };
 }
@@ -352,11 +352,11 @@ function agentToolName(name: string, maxLength: number): string {
   return `${name.slice(0, maxLength - NAME_HASH_LENGTH - 1)}_${hash}`;
 }
 
-function toToolResult(result: CallToolResult): ConnectorToolResult {
+function toToolResult(result: Record<string, unknown>): ConnectorToolResult {
   return {
     content:
-      result.content.length > 0
-        ? result.content
+      Array.isArray(result.content) && result.content.length > 0
+        ? (result.content as unknown[])
         : [{ type: "text", text: JSON.stringify(result.structuredContent ?? {}) }],
     isError: result.isError === true,
   };

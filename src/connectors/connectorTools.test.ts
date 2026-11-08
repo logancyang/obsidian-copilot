@@ -286,11 +286,7 @@ describe("connectorTools", () => {
 
       it("reads every page of a service's tool list", async () => {
         const fake = setUp();
-        fake.notion.tools = [
-          SEARCH_NOTES,
-          CREATE_NOTE,
-          { name: "delete_note", inputSchema: { type: "object" } },
-        ];
+        fake.notion.tools = [SEARCH_NOTES, CREATE_NOTE, { name: "delete_note" }];
 
         await fake.tools.refresh();
 
@@ -313,15 +309,12 @@ describe("connectorTools", () => {
           "getConfluencePageDescendantsWithLabels",
         ];
         const fake = setUp({ connections: [{ id: "c-atlassian", serviceId: "atlassian" }] });
-        fake.atlassian.tools = longNames.map((name) => ({ name, inputSchema: { type: "object" } }));
+        fake.atlassian.tools = longNames.map((name) => ({ name }));
         await fake.tools.refresh();
         const names = fake.tools.tools().map(({ name }) => name);
 
         const again = setUp({ connections: [{ id: "c-atlassian", serviceId: "atlassian" }] });
-        again.atlassian.tools = longNames.map((name) => ({
-          name,
-          inputSchema: { type: "object" },
-        }));
+        again.atlassian.tools = longNames.map((name) => ({ name }));
         await again.tools.refresh();
 
         expect(names[0]).toBe("atlassian_getConfluencePageFooterComments");
@@ -549,9 +542,7 @@ describe("connectorTools", () => {
 
         const result = await fake.tools.call("notion_search_notes", {});
 
-        expect(textOf(result!)).toBe(
-          "Notion returned an error: Streamable HTTP error: Error POSTing to endpoint: unknown token ***"
-        );
+        expect(textOf(result!)).toBe("Notion returned an error: HTTP 400 unknown token ***");
       });
 
       it(`${ISSUE} starts a new service session and retries when the service has ended the old one`, async () => {
