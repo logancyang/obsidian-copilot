@@ -493,6 +493,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
                               activeProjectId === project.id &&
                               !chats.slice(0, shownCount).some((item) => activeChatIds.has(item.id))
                             }
+                            current={activeProjectId === project.id}
                             hiddenStatus={mostUrgentStatus(chats.slice(shownCount).map(statusOf))}
                             onToggle={() => onToggleProject(project.id)}
                             onNewChat={() => onOpenProject(project.id)}

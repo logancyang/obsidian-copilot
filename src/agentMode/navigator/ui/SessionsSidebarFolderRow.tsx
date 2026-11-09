@@ -16,6 +16,7 @@ interface SessionsSidebarFolderRowProps {
   project: ProjectConfig;
   expanded: boolean;
   active: boolean;
+  current: boolean;
   hiddenStatus: SessionStatus;
   onToggle: () => void;
   onNewChat: () => void;
@@ -27,6 +28,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
   project,
   expanded,
   active,
+  current,
   hiddenStatus,
   onToggle,
   onNewChat,
@@ -67,10 +69,15 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
       >
         <Folder className="tw-size-4 tw-shrink-0 tw-text-muted" />
         {/* A hidden chat's unseen result bolds the folder name, as it bolds a chat title.
-            https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/802
+            The name dims like a chat title unless the current chat is in the project or a hidden chat needs the user.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/890 */}
         <span
           className={cn(
-            "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
+            "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small",
+            current || hiddenStatus === "waiting" || hiddenStatus === "unread"
+              ? "tw-text-normal"
+              : "tw-text-muted",
             hiddenStatus === "unread" && "tw-font-semibold",
             revealed
               ? "[mask-image:linear-gradient(to_left,transparent_3.25rem,black_4.25rem)]"
