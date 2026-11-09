@@ -142,6 +142,7 @@ const NO_LICENSE_TEXT = failureText(missingLicenseFailure("publish"));
 type ToolResult = { text: string; isError: boolean };
 
 export interface OpenArtifactsTool {
+  stampCaller: boolean;
   definition: { readonly name: string };
   turnedOffText: string;
   call: (args: unknown) => Promise<ToolResult>;
@@ -176,6 +177,7 @@ export function createOpenArtifactsTools(deps: OpenArtifactsToolDeps): OpenArtif
     definition: { readonly name: string },
     run: (input: Record<string, unknown>, licenseKey: string) => Promise<ToolResult>
   ): OpenArtifactsTool => ({
+    stampCaller: true,
     definition,
     turnedOffText: NO_LICENSE_TEXT,
     call: async (args) => {

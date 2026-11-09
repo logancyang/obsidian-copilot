@@ -51,6 +51,18 @@ function rpc(id: number, method: string, params?: Record<string, unknown>) {
   return { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) };
 }
 
+const LISTED_FEEDBACK_TOOL = {
+  ...SEND_FEEDBACK_TOOL,
+  inputSchema: {
+    ...SEND_FEEDBACK_TOOL.inputSchema,
+    "x-copilot-stamp-caller": true,
+    properties: {
+      ...SEND_FEEDBACK_TOOL.inputSchema.properties,
+      caller_session_id: { type: "string" },
+    },
+  },
+};
+
 const COMPLAINT = {
   title: "Replied in Swedish to an English request",
   what_happened: "The agent answered 'hej' instead of English.",
@@ -75,6 +87,7 @@ const LOOKUP_DEFINITION = Object.freeze({ name: "lookup", inputSchema: { type: "
 
 function lookupTool(call: HostedTool["call"] = jest.fn()): HostedTool {
   return {
+    stampCaller: false,
     definition: LOOKUP_DEFINITION,
     turnedOffText: "lookup is off. Don't call it again.",
     call,
@@ -185,7 +198,7 @@ describe("copilotMcpServer", () => {
 
       expect(channel.readOnlyToolNames).toEqual(["send_feedback", "notion_search"]);
       expect(result.body).toMatchObject({
-        result: { tools: [SEND_FEEDBACK_TOOL, NOTION_SEARCH, NOTION_CREATE] },
+        result: { tools: [LISTED_FEEDBACK_TOOL, NOTION_SEARCH, NOTION_CREATE] },
       });
     });
 
@@ -209,7 +222,7 @@ describe("copilotMcpServer", () => {
       expect(result.body).toEqual({
         jsonrpc: "2.0",
         id: 2,
-        result: { tools: [SEND_FEEDBACK_TOOL, LOOKUP_DEFINITION, NOTION_SEARCH] },
+        result: { tools: [LISTED_FEEDBACK_TOOL, LOOKUP_DEFINITION, NOTION_SEARCH] },
       });
     });
 
@@ -305,7 +318,7 @@ describe("copilotMcpServer", () => {
       expect(result.body).toEqual({
         jsonrpc: "2.0",
         id: 2,
-        result: { tools: [SEND_FEEDBACK_TOOL] },
+        result: { tools: [LISTED_FEEDBACK_TOOL] },
       });
       expect(SEND_FEEDBACK_TOOL).toMatchObject({
         annotations: { readOnlyHint: true },
@@ -325,6 +338,41 @@ describe("copilotMcpServer", () => {
       expect(SEND_FEEDBACK_TOOL.inputSchema.required).not.toContain("caller_session_id");
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 advertises caller metadata for an arbitrary opted-in hosted tool while preserving its schema", async () => {
+      server.dispose();
+      const definition = {
+        name: "future_tool",
+        inputSchema: {
+          type: "object",
+          additionalProperties: false,
+          properties: { query: { type: "string" } },
+          required: ["query"],
+        },
+      };
+      const hosted = { ...lookupTool(), definition, stampCaller: true };
+      server = createCopilotMcpServer(() => true, [hosted]);
+      const channel = await server.connect("session-a", "opencode", NO_CHAT);
+
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toMatchObject({
+        result: {
+          tools: [
+            LISTED_FEEDBACK_TOOL,
+            {
+              name: "future_tool",
+              inputSchema: {
+                ...definition.inputSchema,
+                "x-copilot-stamp-caller": true,
+                properties: { query: { type: "string" }, caller_session_id: { type: "string" } },
+              },
+            },
+          ],
+        },
+      });
+      expect(definition.inputSchema.properties).toEqual({ query: { type: "string" } });
+    });
+
     it("lists a hosted tool beside send_feedback when both are on", async () => {
       server.dispose();
       server = createCopilotMcpServer(() => true, [lookupTool()]);
@@ -335,7 +383,7 @@ describe("copilotMcpServer", () => {
       expect(result.body).toEqual({
         jsonrpc: "2.0",
         id: 2,
-        result: { tools: [SEND_FEEDBACK_TOOL, LOOKUP_DEFINITION] },
+        result: { tools: [LISTED_FEEDBACK_TOOL, LOOKUP_DEFINITION] },
       });
     });
 

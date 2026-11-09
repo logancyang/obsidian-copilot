@@ -1,4 +1,3 @@
-import { CALLER_SESSION_ARGUMENT } from "@/agentMode/session/copilotMcpServer";
 import {
   defineChatExtension,
   type ChatStateHost,
@@ -61,13 +60,13 @@ export function createSuggestConnectorTool({
   isEnabled,
 }: SuggestConnectorToolDeps) {
   return Object.freeze({
+    stampCaller: true,
     definition: Object.freeze({
       name: SUGGEST_CONNECTOR_TOOL_NAME,
       description: `Show the user a card to connect a service when their request needs one that has no tools listed, or when a service's tool says its login expired. Nothing connects until they click. Services: ${catalog.map(({ name }) => name).join(", ")}.`,
       inputSchema: {
         type: "object",
         properties: {
-          [CALLER_SESSION_ARGUMENT]: { type: "string" },
           service: { type: "string", enum: catalog.map(({ id }) => id) },
         },
         required: ["service"],

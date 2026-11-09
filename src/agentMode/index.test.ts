@@ -203,6 +203,21 @@ describe("agentMode", () => {
       } as unknown as CopilotPlugin;
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 opts every hosted tool, including Miyo and the Obsidian CLI, into caller-session stamping", () => {
+      createAgentSessionManager({} as App, plugin);
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+
+      expect(hosted.map(({ definition }) => definition.name)).toEqual(
+        expect.arrayContaining([
+          "miyo_search",
+          "miyo_parse",
+          "obsidian_cli",
+          "openartifacts_publish",
+        ])
+      );
+      expect(hosted.every(({ stampCaller }) => stampCaller)).toBe(true);
+    });
+
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
       const manager = createAgentSessionManager({} as App, plugin);
 

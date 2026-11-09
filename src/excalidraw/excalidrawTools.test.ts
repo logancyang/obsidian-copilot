@@ -114,6 +114,14 @@ describe("excalidrawTools", () => {
   });
 
   describe("createExcalidrawTools()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 opts every Excalidraw tool into caller-session stamping", () => {
+      expect(createExcalidrawTools(() => null).map(({ stampCaller }) => stampCaller)).toEqual([
+        true,
+        true,
+        true,
+      ]);
+    });
+
     it("answers every tool with the turned-off text while the Excalidraw plugin is unavailable", async () => {
       for (const tool of Object.values(toolsFor(null))) {
         expect(await tool.call({ path: FLOW })).toEqual({

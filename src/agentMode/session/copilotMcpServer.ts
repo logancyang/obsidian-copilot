@@ -16,6 +16,8 @@ type ServerResponse = import("node:http").ServerResponse;
 export const COPILOT_MCP_SERVER_NAME = "obsidian-copilot";
 export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
 export const CALLER_SESSION_ARGUMENT = "caller_session_id";
+// OpenCode preserves MCP input schemas in its tool registry but drops MCP metadata, so the marker travels with the schema. https://github.com/logancyang/obsidian-copilot/issues/4229
+export const STAMP_CALLER_SCHEMA_PROPERTY = "x-copilot-stamp-caller";
 // Agents show a tool as mcp__obsidian-copilot__<name>, and some agents reject tool names over 64 characters.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
 export const MAX_PROVIDED_TOOL_NAME_LENGTH = 64 - `mcp__${COPILOT_MCP_SERVER_NAME}__`.length;
@@ -44,7 +46,6 @@ Write only facts from this session, in English except user_said. Quote the user 
   inputSchema: {
     type: "object",
     properties: {
-      [CALLER_SESSION_ARGUMENT]: { type: "string" },
       title: { type: "string", description: "One-line summary, under 80 characters." },
       what_happened: {
         type: "string",
@@ -95,8 +96,16 @@ export interface McpToolDefinition {
   readonly annotations?: { readonly readOnlyHint?: boolean };
 }
 
+interface HostedToolDefinition extends McpToolDefinition {
+  readonly inputSchema?: {
+    readonly properties?: Readonly<Record<string, unknown>>;
+    readonly [key: string]: unknown;
+  };
+}
+
 export interface HostedTool {
-  definition: McpToolDefinition;
+  stampCaller: boolean;
+  definition: HostedToolDefinition;
   turnedOffText: string;
   call: (args: unknown, chat: ChatStateHost | null) => Promise<HostedToolResult>;
 }
@@ -125,6 +134,7 @@ interface SessionHandlers {
 }
 
 const SEND_FEEDBACK_HOSTED_TOOL: HostedTool = Object.freeze({
+  stampCaller: true,
   definition: SEND_FEEDBACK_TOOL,
   turnedOffText: OFFER_RESULT_TEXT.turned_off,
   call: async (args: unknown, chat: ChatStateHost | null) => {
@@ -298,7 +308,7 @@ async function reply(
           tools: [
             ...hostedTools
               .filter((tool) => isToolOn(tool.definition.name))
-              .map((tool) => tool.definition),
+              .map(advertisedHostedTool),
             ...providedTools(hostedTools, toolProvider, handlers.listing),
           ],
         },
@@ -310,6 +320,23 @@ async function reply(
     default:
       return { error: { code: -32601, message: `Method not found: ${message.method}` } };
   }
+}
+
+// Stamped arguments must be accepted before OpenCode dispatches a tool, while connector schemas stay intact. https://github.com/logancyang/obsidian-copilot/issues/4229
+function advertisedHostedTool({ definition, stampCaller }: HostedTool): HostedToolDefinition {
+  if (!stampCaller) return definition;
+  return {
+    ...definition,
+    inputSchema: {
+      type: "object",
+      ...definition.inputSchema,
+      [STAMP_CALLER_SCHEMA_PROPERTY]: true,
+      properties: {
+        ...definition.inputSchema?.properties,
+        [CALLER_SESSION_ARGUMENT]: { type: "string" },
+      },
+    },
+  };
 }
 
 // A custom connector can name a tool like one of Copilot's own, and a call by that name always reaches Copilot's tool.
@@ -347,7 +374,7 @@ async function callTool(
     : reply;
 }
 
-// OpenCode stamps chat-card calls with their session, and tools must never receive that routing argument.
+// OpenCode stamps opted-in calls with their session, and tools must never receive that routing argument.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 function splitCaller(args: unknown): { callerSessionId: string | null; args: unknown } {
   if (!args || typeof args !== "object" || !(CALLER_SESSION_ARGUMENT in args)) {
