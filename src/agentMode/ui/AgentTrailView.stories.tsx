@@ -150,12 +150,8 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     toolKind: "other",
     copilotTools: {
       wrapper: "Execute",
-      calls: [
-        { name: "list_mcp_resources", server: "opencode", args: {} },
-        { name: "search", server: "opencode", args: { query: "connectors" } },
-        { name: "search", server: "notes", args: { query: "Orion" } },
-        { name: "notion_search", args: { query: "Orion" } },
-      ],
+      label: "OpenCode · List mcp resources, OpenCode · Search, notes · Search, Notion · Search",
+      calls: [{ name: "notion_search", args: { query: "Orion" } }],
     },
     output: [{ type: "text", text: "Found connected services and their available resources." }],
   }),

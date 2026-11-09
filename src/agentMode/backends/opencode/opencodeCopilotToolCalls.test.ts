@@ -18,6 +18,7 @@ describe("opencodeCopilotToolCalls", () => {
         )
       ).toEqual({
         wrapper: "Execute",
+        label: "obsidian-copilot · Everything echo",
         calls: [{ name: "everything_echo", args: { message: "MCP tools test" } }],
       });
     });
@@ -44,10 +45,10 @@ describe("opencodeCopilotToolCalls", () => {
         )
       ).toEqual({
         wrapper: "Execute",
+        label:
+          "obsidian-copilot · Everything echo, OpenCode · Fetch, other · Echo, obsidian-copilot · Everything get sum",
         calls: [
           { name: "everything_echo", args: { message: "alpha" } },
-          { name: "fetch", server: "opencode", args: { url: "https://example.com" } },
-          { name: "echo", server: "other", args: {} },
           { name: "everything_echo", args: { message: "beta" } },
           { name: "everything_get-sum", args: { a: 2, b: 3 } },
         ],
@@ -66,11 +67,25 @@ describe("opencodeCopilotToolCalls", () => {
         )
       ).toEqual({
         wrapper: "Execute",
-        calls: [
-          { name: "list_mcp_resources", server: "opencode", args: { server: "notes" } },
-          { name: "search", server: "opencode", args: { query: "connectors" } },
-          { name: "search", server: "notes", args: { query: "meeting" } },
-        ],
+        label: "OpenCode · List mcp resources, OpenCode · Search, notes · Search",
+        calls: [],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 excludes foreign feature-name collisions from canonical calls while retaining their display names", () => {
+      expect(
+        readOpencodeCopilotTools(
+          undefined,
+          output([
+            { tool: "other.excalidraw_write", input: { path: "foreign.md" } },
+            { tool: "obsidian-copilot.notion_search", input: { query: "Orion" } },
+            { tool: "opencode.search" },
+          ])
+        )
+      ).toEqual({
+        wrapper: "Execute",
+        calls: [{ name: "notion_search", args: { query: "Orion" } }],
+        label: "other · Excalidraw write, Notion · Search, OpenCode · Search",
       });
     });
 
@@ -94,6 +109,7 @@ describe("opencodeCopilotToolCalls", () => {
         );
         expect(result).toEqual({
           wrapper: "Execute",
+          label: "obsidian-copilot · Everything echo",
           calls: [{ name: "everything_echo", args: { message: "hello" } }],
         });
       }

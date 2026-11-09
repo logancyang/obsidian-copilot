@@ -35,9 +35,9 @@ describe("copilotToolCall", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 does not treat another server's identically named tool as a Copilot feature", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 does not match a display-only tool label as a canonical feature call", () => {
       const part = tool({
-        copilotTools: { calls: [{ name: "excalidraw_write", server: "other", args: {} }] },
+        copilotTools: { calls: [], label: "Other · Excalidraw write" },
       });
       expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
     });

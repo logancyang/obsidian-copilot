@@ -2,10 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
-import { describeConnectorTool } from "@/connectors/connectorTools";
+import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { formatDuration } from "@/lib/duration";
-import { humanizeToolName, serviceToolName } from "@/lib/toolName";
+import { humanizeToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
@@ -21,28 +20,10 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-export function copilotToolLabel(part: ToolCallPart): string | null {
-  // Known calls can be part of a larger execute block, so their list must not narrow its approval scope.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
-  const labels = part.copilotTools?.calls.map(({ name, server = COPILOT_MCP_SERVER_NAME }) => {
-    // Only Copilot's namespace contains connector aliases; other servers can reuse those names.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
-    const tool = server === COPILOT_MCP_SERVER_NAME ? describeConnectorTool(name) : undefined;
-    return tool
-      ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
-      : `${server === "opencode" ? "OpenCode" : server} · ${humanizeToolName(name)}`;
-  });
-  const label = [...new Set(labels)].join(", ");
-  if (!label) return null;
-  return part.copilotTools?.wrapper ? `${part.copilotTools.wrapper} · ${label}` : label;
-}
-
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
-  // Agents name a Copilot tool after Copilot's server and, for a connector, the service's id, which users don't know.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-  const copilotTool = copilotToolLabel(part);
-  if (copilotTool) return { ...base, collapsedLine: () => copilotTool };
+  const label = toolUseLabel(part.copilotTools);
+  if (label) return { ...base, collapsedLine: () => label };
   if (!part.mcpServer) return base;
   const server = part.mcpServer;
   return {
@@ -56,7 +37,7 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   // update retains the original tool kind or vendor name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
   if (part.userResponse) return USER_RESPONSE_SUMMARY;
-  if (isOpencodeTaskTool(part)) return TASK_SUMMARY;
+  if (isSubagentTask(part)) return TASK_SUMMARY;
   if (part.vendorToolName) {
     const v = VENDOR_SUMMARIES[part.vendorToolName];
     if (v) return v;
@@ -68,7 +49,7 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   return GENERIC_SUMMARY;
 }
 
-function isOpencodeTaskTool(part: ToolCallPart): boolean {
+function isSubagentTask(part: ToolCallPart): boolean {
   if (part.vendorToolName) return false;
   if (part.toolKind && part.toolKind !== "other") return false;
   const input = part.input as { subagent_type?: unknown } | null | undefined;
