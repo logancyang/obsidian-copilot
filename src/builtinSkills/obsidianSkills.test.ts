@@ -9,9 +9,9 @@ function skillMd(name: string): string {
 
 describe("obsidianSkills", () => {
   describe("OBSIDIAN_SKILLS", () => {
-    it("offers the three skills to every agent but defaults them to OpenCode, and Markdown and Bases also to Codex, the agents the eval showed they help (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
+    it("offers the three skills to every agent but defaults Markdown to every agent, Bases to Codex and OpenCode, and Canvas to OpenCode, the agents the eval showed they help; Claude broke Mermaid semicolons without Markdown (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.defaultPreference])).toEqual([
-        ["obsidian-markdown", { disabledAgents: ["claude"] }],
+        ["obsidian-markdown", undefined],
         ["obsidian-bases", { disabledAgents: ["claude"] }],
         ["json-canvas", { disabledAgents: ["claude", "codex"] }],
       ]);
@@ -22,7 +22,7 @@ describe("obsidianSkills", () => {
 
     it("bumps every skill whose guidance or description changed so existing vaults reseed it (https://github.com/Brevilabs/obsidian-copilot-private/issues/726, https://github.com/logancyang/obsidian-copilot/issues/3868, https://github.com/logancyang/obsidian-copilot/issues/3666, https://github.com/logancyang/obsidian-copilot/issues/3980)", () => {
       expect(OBSIDIAN_SKILLS.map((skill) => [skill.name, skill.version])).toEqual([
-        ["obsidian-markdown", 4],
+        ["obsidian-markdown", 5],
         ["obsidian-bases", 3],
         ["json-canvas", 3],
       ]);
@@ -107,6 +107,13 @@ describe("obsidianSkills", () => {
       expect(md).toContain(
         "(JavaScript <code>replace</code> turns <code>$$</code> into <code>$</code>)"
       );
+    });
+
+    it("writes a semicolon in a Mermaid message as #59; and loads before any Mermaid diagram, since a bare one ends the statement (https://github.com/logancyang/obsidian-copilot/issues/3868)", () => {
+      const md = skillMd("obsidian-markdown");
+      const { description } = parseSkillFile(md, "obsidian-markdown").frontmatter;
+      expect(description).toContain("before drawing a Mermaid diagram in a note or a reply");
+      expect(md).toContain("Copilot->>Vault: Write the TL#59;DR");
     });
 
     it("keeps example wikilinks inside code fences so installed skills add no unresolved links to the vault (https://github.com/Brevilabs/obsidian-copilot-private/issues/726)", () => {
