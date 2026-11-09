@@ -1,4 +1,5 @@
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
+import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { Button } from "@/components/ui/button";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -18,23 +19,27 @@ const BURSTS = [
 ];
 const BURST_INTERVAL_MS = 400;
 
-const StreamingReplyDemo: React.FC = () => {
+interface StreamingReplyDemoProps {
+  bursts?: string[];
+}
+
+const StreamingReplyDemo: React.FC<StreamingReplyDemoProps> = ({ bursts = BURSTS }) => {
   const app = useApp();
   const [received, setReceived] = React.useState(1);
   const [run, setRun] = React.useState(0);
   React.useEffect(() => {
     const timer = window.setInterval(
-      () => setReceived((count) => Math.min(count + 1, BURSTS.length)),
+      () => setReceived((count) => Math.min(count + 1, bursts.length)),
       BURST_INTERVAL_MS
     );
     return () => window.clearInterval(timer);
-  }, [run]);
-  const streaming = received < BURSTS.length;
+  }, [run, bursts]);
+  const streaming = received < bursts.length;
   return (
     <div className="tw-flex tw-flex-col tw-items-start tw-gap-2">
       <AgentMarkdownText
         app={app}
-        text={BURSTS.slice(0, received).join("")}
+        text={bursts.slice(0, received).join("")}
         streaming={streaming}
       />
       <Button
@@ -64,9 +69,34 @@ const meta = {
 export default meta;
 
 export const StreamingReply: StoryObj<AgentMarkdownTextProps> = {
-  render: StreamingReplyDemo,
+  render: () => <StreamingReplyDemo />,
 };
 
 export const FinishedReply: StoryObj<AgentMarkdownTextProps> = {
   render: FinishedReplyDemo,
+};
+
+const TABLE_BURSTS = [
+  "Project summary\n\n| Project | Last updated |\n",
+  "|---|---|\n| docs-site | Nov 9 |\n",
+  "| example-long-project-name | Nov",
+  " 5 |\n",
+  "| portal | Nov 1 |\n\n",
+  "All projects are up to date.",
+];
+
+export const StreamingTable: StoryObj<AgentMarkdownTextProps> = {
+  render: () => (
+    <div className="tw-flex tw-h-96 tw-flex-col">
+      <ChatTranscriptViewport
+        scrollContainerRef={() => undefined}
+        contentRef={() => undefined}
+        onScroll={() => undefined}
+        isScrollPaused={false}
+        scrollToEnd={() => undefined}
+      >
+        <StreamingReplyDemo bursts={TABLE_BURSTS} />
+      </ChatTranscriptViewport>
+    </div>
+  ),
 };

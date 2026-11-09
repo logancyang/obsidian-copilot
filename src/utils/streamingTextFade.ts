@@ -46,6 +46,8 @@ export class StreamingTextFade {
       const start = offset;
       const end = offset + node.data.length;
       offset = end;
+      // Wrapping structural whitespace splits chat table columns into separate layouts. https://github.com/logancyang/obsidian-copilot/issues/4225
+      if (!node.data.trim()) continue;
       const hits = this.ranges.filter((range) => range.start < end && range.end > start);
       if (!hits.length) continue;
       const fragment = createFragment();
