@@ -950,7 +950,9 @@ export class AgentSessionManager {
     }
     this.detachedFromTabIds.delete(session.internalId);
     this.lastActiveByScope.set(projectId, session.internalId);
-    if (projectId === this.activeProjectId) {
+    // A restart reselects the user's chat once every chat is rebuilt; a rebuilt chat taking the selection meanwhile would receive the user's next message.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+    if (projectId === this.activeProjectId && !this.restartingBackends.has(resolvedId)) {
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
@@ -2779,7 +2781,6 @@ export class AgentSessionManager {
       });
       if (resumed) {
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
-        this.setActiveSession(resumed.internalId);
         return resumed;
       }
     }
@@ -2812,13 +2813,14 @@ export class AgentSessionManager {
     this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     const retainedChatInputIds: string[] = [];
+    let selectionCleared = false;
+    let reselectId: string | null = null;
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       // A chat's first save can still be pending, and its note must exist before the note is read below.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
       for (const session of affected) await this.drainAutoSave(session);
       const activeSessionId = this.activeSessionId;
-      const activeProjectId = this.activeProjectId;
       // Every affected composer must stay owned across the gap, including tabs
       // outside the active scope, or the draft store prunes their unsent text.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
@@ -2846,6 +2848,12 @@ export class AgentSessionManager {
         retainedChatInputIds.push(replacement.chatInputId);
         this.retainedChatInputIds.add(replacement.chatInputId);
       }
+      // Closing the selected chat would select another agent's chat until the rebuild, and a message sent then runs there.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+      if (replacements.some((r) => r.internalId === activeSessionId)) {
+        this.activeSessionId = null;
+        selectionCleared = true;
+      }
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
@@ -2860,7 +2868,6 @@ export class AgentSessionManager {
         this.registerPreload(backendId, probe);
         if (replacements.length > 0 && !this.disposed) {
           await probe;
-          let selectedId = activeSessionId;
           for (const replacement of replacements) {
             const rebuilt = await this.rebuildReplacedSession(
               backendId,
@@ -2892,18 +2899,26 @@ export class AgentSessionManager {
             }
             rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
-            if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
-          }
-          if (selectedId) this.setActiveSession(selectedId);
-          else {
-            this.activeSessionId = null;
-            this.activeProjectId = activeProjectId;
+            if (replacement.internalId === activeSessionId) reselectId = rebuilt.internalId;
           }
         }
       }
     } finally {
       this.restartingBackends.delete(backendId);
       for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
+      // Only the restart that cleared the selection restores it, and only if nothing was selected since; a failed rebuild falls back to a neighbor so the tabs stay visible.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+      if (selectionCleared && this.activeSessionId === null) {
+        const scope = this.activeProjectId;
+        const next =
+          reselectId ??
+          pickScopeNeighbor(
+            this.getSessionIdsForScope(scope),
+            0,
+            this.lastActiveByScope.get(scope)
+          );
+        if (next) this.setActiveSession(next);
+      }
       this.notify();
     }
     const queued = this.pendingBackendRestarts.get(backendId);

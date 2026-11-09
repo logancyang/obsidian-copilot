@@ -429,6 +429,7 @@ interface ManagerOptions {
   app?: App;
   plugin?: unknown;
   descriptor?: BackendDescriptor;
+  otherDescriptors?: BackendDescriptor[];
   preloader?: Record<string, unknown>;
   persistence?: unknown;
   sessionIndex?: AgentSessionIndex;
@@ -440,7 +441,10 @@ interface ManagerOptions {
 const builtManagers: AgentSessionManager[] = [];
 
 function buildManager(options: ManagerOptions = {}): AgentSessionManager {
-  const descriptor = options.descriptor ?? buildDescriptor();
+  const descriptors = [
+    options.descriptor ?? buildDescriptor(),
+    ...(options.otherDescriptors ?? []),
+  ];
   const manager = new AgentSessionManager(
     options.app ?? buildApp(),
     (options.plugin ?? {
@@ -448,7 +452,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
     }) as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       permissionPrompter: jest.fn(),
-      resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+      resolveDescriptor: (id) => descriptors.find((descriptor) => descriptor.id === id),
       modelPreloader: {
         getCachedModelCatalog: jest.fn(() => null),
         getEffortCatalog: jest.fn(() => null),
@@ -3030,6 +3034,44 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()?.chatInputId).toBe(landing.chatInputId);
         expect(mgr.getActiveProjectId()).toBe(projectId);
       });
+
+      it("keeps the reloaded chat selected instead of another agent's open chat while its agent restarts (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const mgr = buildManager({ otherDescriptors: [buildDescriptor({ id: "codex" })] });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        const reloaded = await createWorkedSession(mgr, "opencode");
+        await mgr.noteSpawnConfigChanged("opencode", "custom connector added");
+        const selected: (string | null)[] = [];
+        mgr.subscribe(() => selected.push(mgr.getActiveSession()?.chatInputId ?? null));
+
+        await mgr.applyHeldConfigChange("opencode");
+
+        expect(selected).not.toContain(otherAgentChat.chatInputId);
+        expect(mgr.getActiveSession()?.chatInputId).toBe(reloaded.chatInputId);
+      });
+
+      it("selects the other agent's open chat when the reloaded chat fails to come back (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const failingRestart = {
+          ...makeMockBackendProcess(),
+          start: jest.fn(async () => {
+            throw new Error("spawn failed");
+          }),
+        };
+        const createBackendProcess = jest
+          .fn()
+          .mockReturnValueOnce(makeMockBackendProcess())
+          .mockReturnValue(failingRestart);
+        const mgr = buildManager({
+          descriptor: buildDescriptor({ createBackendProcess }),
+          otherDescriptors: [buildDescriptor({ id: "codex" })],
+        });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        await createWorkedSession(mgr, "opencode");
+        await mgr.noteSpawnConfigChanged("opencode", "custom connector added");
+
+        await expect(mgr.applyHeldConfigChange("opencode")).rejects.toThrow("spawn failed");
+
+        expect(mgr.getActiveSession()?.chatInputId).toBe(otherAgentChat.chatInputId);
+      });
     });
 
     describe("restartBackend()", () => {
@@ -3084,6 +3126,49 @@ describe("AgentSessionManager", () => {
 
         expect(mockBackendShutdown).toHaveBeenCalled();
         expect(preload).toHaveBeenCalledWith("opencode");
+      });
+
+      it("keeps the reloaded chat selected when another agent's restart begins during its restart and finishes last (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const gatedShutdown = () => {
+          let markStarted!: () => void;
+          let release!: () => void;
+          const started = new Promise<void>((resolve) => (markStarted = resolve));
+          const released = new Promise<void>((resolve) => (release = resolve));
+          const process = {
+            ...makeMockBackendProcess(),
+            shutdown: jest.fn(() => {
+              markStarted();
+              return released;
+            }),
+          };
+          const createBackendProcess = jest
+            .fn()
+            .mockReturnValueOnce(process)
+            .mockImplementation(() => makeMockBackendProcess());
+          return { started, release, createBackendProcess };
+        };
+        const opencode = gatedShutdown();
+        const codex = gatedShutdown();
+        const mgr = buildManager({
+          descriptor: buildDescriptor({ createBackendProcess: opencode.createBackendProcess }),
+          otherDescriptors: [
+            buildDescriptor({ id: "codex", createBackendProcess: codex.createBackendProcess }),
+          ],
+        });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        const reloaded = await createWorkedSession(mgr, "opencode");
+
+        const opencodeRestart = mgr.restartBackend("opencode", "skills changed");
+        await opencode.started;
+        const codexRestart = mgr.restartBackend("codex", "skills changed");
+        await codex.started;
+        opencode.release();
+        await opencodeRestart;
+        codex.release();
+        await codexRestart;
+
+        expect(mgr.getActiveSession()?.chatInputId).toBe(reloaded.chatInputId);
+        expect(mgr.getSessions().map((s) => s.chatInputId)).toContain(otherAgentChat.chatInputId);
       });
 
       it("re-probes before creating the replacement so the effort catalog is rebuilt", async () => {
@@ -4001,6 +4086,39 @@ describe("AgentSessionManager", () => {
         expect(mockBackendShutdown).toHaveBeenCalled();
         expect(preloader.preload).toHaveBeenCalledWith("opencode");
       });
+
+      it.each([
+        [
+          "resuming them",
+          {
+            loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+              sessionId,
+              state: { model: null, mode: null },
+            })),
+          },
+        ],
+        ["starting them fresh", {}],
+      ])(
+        "keeps another agent's selected chat selected while the changed agent rebuilds its chats by %s (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)",
+        async (_, backendOverrides) => {
+          const mgr = buildManager({
+            descriptor: buildDescriptor({
+              createBackendProcess: () => ({ ...makeMockBackendProcess(), ...backendOverrides }),
+            }),
+            otherDescriptors: [buildDescriptor({ id: "codex" })],
+          });
+          const rebuilt = await createWorkedSession(mgr, "opencode");
+          const selectedChat = await createWorkedSession(mgr, "codex");
+          const selected: (string | null)[] = [];
+          mgr.subscribe(() => selected.push(mgr.getActiveSession()?.chatInputId ?? null));
+
+          await mgr.onInstallStateChanged("opencode");
+
+          expect(mockBackendShutdown).toHaveBeenCalled();
+          expect(new Set(selected)).toEqual(new Set([selectedChat.chatInputId]));
+          expect(mgr.getSessions().map((s) => s.chatInputId)).toContain(rebuilt.chatInputId);
+        }
+      );
 
       it("tears down and drops the warm probe when the binary is no longer available", async () => {
         const { mgr, preloader, setInstallState } = buildInstallStateManager({
