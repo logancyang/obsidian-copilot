@@ -2814,6 +2814,7 @@ export class AgentSessionManager {
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     const retainedChatInputIds: string[] = [];
     let selectionCleared = false;
+    let reselectId: string | null = null;
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       // A chat's first save can still be pending, and its note must exist before the note is read below.
@@ -2867,7 +2868,6 @@ export class AgentSessionManager {
         this.registerPreload(backendId, probe);
         if (replacements.length > 0 && !this.disposed) {
           await probe;
-          let reselectId: string | null = null;
           for (const replacement of replacements) {
             const rebuilt = await this.rebuildReplacedSession(
               backendId,
@@ -2901,24 +2901,23 @@ export class AgentSessionManager {
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) reselectId = rebuilt.internalId;
           }
-          // An overlapping restart of another agent must not write back the selection it saw while this one was cleared.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
-          if (reselectId && this.activeSessionId === null) this.setActiveSession(reselectId);
         }
       }
     } finally {
       this.restartingBackends.delete(backendId);
       for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
-      // A rebuild that fails or never runs must not leave the surviving chats unselected and their tabs hidden.
+      // Only the restart that cleared the selection restores it, and only if nothing was selected since; a failed rebuild falls back to a neighbor so the tabs stay visible.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
       if (selectionCleared && this.activeSessionId === null) {
         const scope = this.activeProjectId;
-        const fallback = pickScopeNeighbor(
-          this.getSessionIdsForScope(scope),
-          0,
-          this.lastActiveByScope.get(scope)
-        );
-        if (fallback) this.setActiveSession(fallback);
+        const next =
+          reselectId ??
+          pickScopeNeighbor(
+            this.getSessionIdsForScope(scope),
+            0,
+            this.lastActiveByScope.get(scope)
+          );
+        if (next) this.setActiveSession(next);
       }
       this.notify();
     }
