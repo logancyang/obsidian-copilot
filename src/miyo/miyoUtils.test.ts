@@ -5,10 +5,10 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 }));
 
 const mockGetVaultBase = jest.fn();
-let mockFolderNotRegisteredListener: ((folderName: string) => void) | undefined;
+let mockFolderNotRegisteredListener: ((folderName: string | undefined) => void) | undefined;
 jest.mock("@/miyo/MiyoClient", () => ({
   ...jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient"),
-  subscribeToMiyoFolderNotRegistered: (listener: (folderName: string) => void) => {
+  subscribeToMiyoFolderNotRegistered: (listener: (folderName: string | undefined) => void) => {
     mockFolderNotRegisteredListener = listener;
     return () => {
       mockFolderNotRegisteredListener = undefined;
@@ -33,6 +33,7 @@ import {
   isMiyoParseActive,
   isMiyoSearchActive,
   refreshMiyoFolderName,
+  subscribeToMiyoFolderName,
   watchMiyoFolderName,
 } from "@/miyo/miyoUtils";
 import {
@@ -134,13 +135,75 @@ describe("miyoUtils", () => {
       expect(getMiyoFolderName(app)).toBe("Vault");
     });
 
-    it("rejects with the lookup's error and leaves the vault's name in use when Miyo cannot answer", async () => {
+    it("rejects with the lookup's error and keeps the last known name when Miyo cannot answer", async () => {
       await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
       const offline = miyoWithFolder(null);
       offline.getFolder.mockRejectedValue(new Error("offline"));
 
       await expect(refreshMiyoFolderName(app, offline)).rejects.toThrow("offline");
-      expect(getMiyoFolderName(app)).toBe("Vedas");
+      expect(getMiyoFolderName(app)).toBe("Notes");
+    });
+  });
+
+  describe("subscribeToMiyoFolderName()", () => {
+    const app = buildApp("Vedas");
+    const miyoWithFolder = (name: string | null) => ({
+      resolveBaseUrl: jest.fn().mockResolvedValue("http://127.0.0.1:8742"),
+      getFolder: jest.fn().mockResolvedValue(name === null ? null : { path: name }),
+    });
+
+    beforeEach(() => {
+      (Platform as { isMobile: boolean }).isMobile = false;
+      setSettings({ enableMiyo: true, miyoConnectionMode: "local", miyoServerUrl: "" });
+      mockGetVaultBase.mockReturnValue("/Users/me/Vedas");
+    });
+
+    afterEach(async () => {
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+      setSettings({ enableMiyo: false });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 tells subscribers each time a lookup changes the vault's Miyo folder name", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderName(listener);
+
+      await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
+      expect(listener).toHaveBeenCalledTimes(1);
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+      expect(listener).toHaveBeenCalledTimes(2);
+      unsubscribe();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 stays quiet while a lookup runs and when it confirms the name in use, so a request Miyo keeps rejecting cannot make Relevant Notes ask again in a loop", async () => {
+      await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderName(listener);
+
+      const lookup = refreshMiyoFolderName(app, miyoWithFolder("Notes"));
+      expect(getMiyoFolderName(app)).toBe("Notes");
+      await lookup;
+
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it("stays quiet when a lookup leaves the name as it was, as for a vault Miyo knows by its own name", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderName(listener);
+
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it("stops telling a subscriber once it unsubscribes", async () => {
+      const listener = jest.fn();
+      subscribeToMiyoFolderName(listener)();
+
+      await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -173,7 +236,7 @@ describe("miyoUtils", () => {
       expect(miyo.resolveBaseUrl).toHaveBeenCalledTimes(1);
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/3690 drops the old name and looks again on the new Miyo when the Miyo address changes, so the old Miyo's name never sorts the new one's results", async () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 looks again on the new Miyo when the Miyo address changes, so the old Miyo's name is replaced by the new one's answer", async () => {
       const miyo = miyoWithFolder("Notes");
       stopWatching = watchMiyoFolderName(app, miyo);
       await refreshMiyoFolderName(app, miyo);
@@ -181,7 +244,6 @@ describe("miyoUtils", () => {
 
       setSettings({ miyoConnectionMode: "remote", miyoServerUrl: "http://miyo.remote:8742" });
 
-      expect(getMiyoFolderName(app)).toBe("Vedas");
       expect(miyo.resolveBaseUrl).toHaveBeenCalledWith("http://miyo.remote:8742");
     });
 
@@ -205,6 +267,16 @@ describe("miyoUtils", () => {
       expect(miyo.resolveBaseUrl).not.toHaveBeenCalled();
 
       mockFolderNotRegisteredListener?.("Vedas");
+      expect(miyo.resolveBaseUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 looks again when Miyo rejects a request as an unknown folder without naming it, as Relevant Notes' chat retrieval does after a rename", () => {
+      const miyo = miyoWithFolder("Notes");
+      stopWatching = watchMiyoFolderName(app, miyo);
+      miyo.resolveBaseUrl.mockClear();
+
+      mockFolderNotRegisteredListener?.(undefined);
+
       expect(miyo.resolveBaseUrl).toHaveBeenCalledTimes(1);
     });
 

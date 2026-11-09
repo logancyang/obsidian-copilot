@@ -21,9 +21,17 @@ jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
 }));
 jest.mock("@/hooks/useActiveFile", () => ({ useActiveFile: () => ({ path: "active.md" }) }));
 /* eslint-enable @eslint-react/hooks-extra/no-unnecessary-use-prefix */
+let mockMiyoFolderName = "Vault";
+let mockMiyoFolderNameListener: (() => void) | undefined;
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoFolderName: () => "Vault",
-  getMiyoFilePath: (_app: unknown, path: string) => `Vault/${path}`,
+  getMiyoFolderName: () => mockMiyoFolderName,
+  getMiyoFilePath: (_app: unknown, path: string) => `${mockMiyoFolderName}/${path}`,
+  subscribeToMiyoFolderName: (listener: () => void) => {
+    mockMiyoFolderNameListener = listener;
+    return () => {
+      mockMiyoFolderNameListener = undefined;
+    };
+  },
 }));
 jest.mock("@/search/searchUtils", () => ({
   getMatchingPatterns: () => ({ inclusions: {}, exclusions: {} }),
@@ -66,6 +74,7 @@ describe("useChatRelevantNotesContext", () => {
     afterEach(() => {
       root.remove();
       mockActiveWebTab = null;
+      mockMiyoFolderName = "Vault";
       jest.restoreAllMocks();
     });
 
@@ -100,6 +109,34 @@ describe("useChatRelevantNotesContext", () => {
         });
       }
     );
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 rebuilds the selected chat's request under the vault's new Miyo folder name once a lookup changes it", () => {
+      renderHook(() =>
+        useChatRelevantNotesContext(
+          app,
+          root,
+          "embeddings-chat",
+          {
+            ...draft,
+            contextNotes: [new (TFile as unknown as new (path: string) => TFile)("notes/a.md")],
+          },
+          [],
+          undefined
+        )
+      );
+      act(() => {
+        root.dispatchEvent(new Event("pointerdown"));
+      });
+
+      act(() => {
+        mockMiyoFolderName = "Notes";
+        mockMiyoFolderNameListener?.();
+      });
+
+      expect(getChatRelevantNotesStore(app).getSnapshot()).toMatchObject({
+        request: { folder_name: "Notes", file_paths: ["Notes/project.md", "Notes/notes/a.md"] },
+      });
+    });
 
     it("updates the selected chat's retrieval draft when the composer text changes (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", () => {
       const { rerender } = renderHook(

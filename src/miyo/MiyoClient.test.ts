@@ -368,6 +368,25 @@ describe("MiyoClient", () => {
       unsubscribe();
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 tells subscribers without a name when chat-context retrieval rejects the vault as an unknown folder", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: { code: "unknown_folder", detail: "Vault is not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().recommend("http://127.0.0.1:8742", {
+          folder_name: "Vedas",
+          file_paths: ["Vedas/a.md"],
+        })
+      ).rejects.toMatchObject({ status: 400 });
+      expect(listener).toHaveBeenCalledWith(undefined);
+      unsubscribe();
+    });
+
     it("stays quiet for a 404 that is not about an unregistered folder", async () => {
       const listener = jest.fn();
       const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
