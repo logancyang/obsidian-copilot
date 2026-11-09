@@ -108,6 +108,7 @@ export const EveryGroupPopulated: StoryObj<SessionsSidebarPanelProps> = {
     items: everyGroupItems,
     projects,
     expandedProjectIds: new Set(["garden"]),
+    activeProjectId: "garden",
     activeChatIds: new Set(["chats/garden-1.md"]),
     openChatIds: new Set([
       "chats/garden-1.md",

@@ -297,6 +297,20 @@ describe("SessionsSidebarPanel", () => {
         expect(current()).toEqual(["Chat p1 1"]);
       });
 
+      it("brightens only the name of the project holding the current chat, even when that chat is shown inside it, for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
+        const items = projectChats("p1", 1);
+        renderPanel({
+          projects: projects(2),
+          items,
+          expandedProjectIds: new Set(["p1"]),
+          activeProjectId: "p1",
+          activeChatIds: new Set([items[0].id]),
+        });
+
+        expect(screen.getByText("Project 1").classList.contains("tw-text-normal")).toBe(true);
+        expect(screen.getByText("Project 2").classList.contains("tw-text-muted")).toBe(true);
+      });
+
       it("says an expanded project has no chats instead of leaving an empty gap for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
         renderPanel({ projects: projects(2), expandedProjectIds: new Set(["p1"]) });
 
