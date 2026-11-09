@@ -2,7 +2,7 @@
 
 # v4.0.19 - Connectors preview
 
-![Copilot Connectors: service logos linking to Copilot, the Connectors settings with Linear logging in and Notion connected, then Bring your work to your agents](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/connectors-hub-a3fb3a04.webp)
+[![Demo video: Obsidian Copilot 4.0.19: Connect Notion, Linear and More](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/connectors-hub-a3fb3a04.webp)](https://youtube.com/shorts/gDEfqUwzTm0)
 
 Connectors bring the work you do in other services into Copilot. Click **Connect** on a service such as Notion, Linear, Jira or Todoist. Claude Code, Codex and OpenCode can then read and update it from your chats. Copilot supports 36 services at launch. Connectors is a preview for Supporters on desktop.
 
