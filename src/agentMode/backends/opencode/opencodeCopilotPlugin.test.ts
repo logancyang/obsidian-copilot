@@ -56,16 +56,7 @@ const ENV_BLOCK_TRIMMED = [
 const WORKTREE_HINT =
   "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.";
 
-interface RegisteredTool {
-  id: string;
-  input?: Record<string, unknown>;
-}
-
-async function setUpPlugin(
-  plugin: LoadedPlugin,
-  directory = "/vault",
-  tools: RegisteredTool[] = []
-) {
+async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
   const hooks = new Map<string, Hook>();
   const providerHooks: ProviderHook[] = [];
   const toolHooks = new Map<string, ToolHook>();
@@ -84,10 +75,7 @@ async function setUpPlugin(
       transform: async (edit: (editor: { remove: (id: string) => void }) => void) =>
         edit({ remove: (id) => void skills.delete(id) }),
     },
-    tool: {
-      list: async () => tools,
-      hook: async (name: string, hook: ToolHook) => void toolHooks.set(name, hook),
-    },
+    tool: { hook: async (name: string, hook: ToolHook) => void toolHooks.set(name, hook) },
     location: { directory },
   });
   return { hooks, providerHooks, toolHooks, skills };
@@ -319,87 +307,23 @@ describe("opencodeCopilotPlugin", () => {
       });
     });
 
-    describe("Copilot tool caller", () => {
-      async function runBefore(event: Record<string, unknown>, stampCaller = false) {
-        const { toolHooks } = await setUpPlugin(plugin, "/vault", [
-          {
-            id: String(event.tool),
-            input: { "x-copilot-stamp-caller": stampCaller },
-          },
-        ]);
+    it.each([
+      ["obsidian-copilot_send_feedback", { title: "Failure" }],
+      ["obsidian-copilot_miyo_search", { query: "plans" }],
+      ["obsidian-copilot_openartifacts_publish", { title: "Page" }],
+      ["obsidian-copilot_strict_connector", {}],
+      ["obsidian-copilot_strict_connector", undefined],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4229 leaves %s arguments unchanged because session identity belongs in transport metadata",
+      async (tool, input) => {
+        const { toolHooks } = await setUpPlugin(plugin);
+        const event = { tool, input, sessionID: "ses_caller", id: "call-1" };
+
         await toolHooks.get("execute.before")!(event);
-        return event.input;
+
+        expect(event.input).toBe(input);
       }
-
-      it.each([
-        "obsidian-copilot_send_feedback",
-        "obsidian-copilot_suggest_connector",
-        "obsidian-copilot_miyo_search",
-        "obsidian-copilot_openartifacts_publish",
-        "future_namespace_future_tool",
-      ])(
-        "https://github.com/logancyang/obsidian-copilot/issues/4229 stamps opted-in tool %s, replacing any value the model wrote",
-        async (tool) => {
-          const input = await runBefore(
-            {
-              tool,
-              sessionID: "ses_caller",
-              id: "call-1",
-              input: { title: "t", caller_session_id: "ses_guessed" },
-            },
-            true
-          );
-
-          expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
-        }
-      );
-
-      it("https://github.com/logancyang/obsidian-copilot/issues/4229 stamps a newly registered opted-in tool without changing the plugin", async () => {
-        const tools: RegisteredTool[] = [];
-        const { toolHooks } = await setUpPlugin(plugin, "/vault", tools);
-        tools.push({ id: "brand_new_tool", input: { "x-copilot-stamp-caller": true } });
-        const event = { tool: "brand_new_tool", sessionID: "ses_new", id: "call-new", input: {} };
-
-        await toolHooks.get("execute.before")!(event);
-
-        expect(event.input).toEqual({ caller_session_id: "ses_new" });
-      });
-
-      it.each([undefined, {}, { query: "plans" }])(
-        "https://github.com/logancyang/obsidian-copilot/issues/4229 preserves connector arguments %p so strict schemas receive no caller metadata",
-        async (original) => {
-          const input = await runBefore({
-            tool: "obsidian-copilot_readwise_reader_list_tags",
-            sessionID: "ses_caller",
-            id: "call-1",
-            input: original,
-          });
-
-          expect(input).toBe(original);
-        }
-      );
-
-      it.each([
-        "other-server_send_feedback",
-        "obsidian-copilot_obsidian_cli",
-        "obsidian-copilot_send_feedback",
-        "obsidian-copilot_openartifacts_publish",
-      ])(
-        "https://github.com/logancyang/obsidian-copilot/issues/4229 leaves %s arguments untouched when its caller-stamping marker is false",
-        async (tool) => {
-          const original = { title: "t" };
-
-          const input = await runBefore({
-            tool,
-            sessionID: "ses_caller",
-            id: "call-1",
-            input: original,
-          });
-
-          expect(input).toBe(original);
-        }
-      );
-    });
+    );
   });
 
   describe("opencodeCopilotPluginDir()", () => {

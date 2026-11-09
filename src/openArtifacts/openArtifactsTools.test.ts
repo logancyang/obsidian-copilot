@@ -136,15 +136,6 @@ function harness(frontmatter: Record<string, unknown> = {}, licenseKey = KEY) {
 const json = (result: { text: string }) => JSON.parse(result.text) as Record<string, unknown>;
 
 describe("openArtifactsTools", () => {
-  describe("createOpenArtifactsTools()", () => {
-    it("https://github.com/logancyang/obsidian-copilot/issues/4229 opts every OpenArtifacts tool into caller-session stamping", () => {
-      const { publish, share, open, comments, unpublish } = harness();
-      expect(
-        [publish, share, open, comments, unpublish].map(({ stampCaller }) => stampCaller)
-      ).toEqual([true, true, true, true, true]);
-    });
-  });
-
   describe("tool definitions", () => {
     it(`${ISSUE} names five tools, none always loaded, whose annotations admit that they write`, () => {
       const tools = [

@@ -213,7 +213,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     (toolName) => isCopilotToolOn(toolName, getSettings(), app),
     [
       {
-        stampCaller: true,
         definition: MIYO_SEARCH_TOOL,
         turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT,
         call: (args) =>
@@ -224,7 +223,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           }),
       },
       {
-        stampCaller: true,
         definition: MIYO_PARSE_TOOL,
         turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
         call: createMiyoParse((path) =>
@@ -246,7 +244,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       }),
       ...createExcalidrawTools(() => getExcalidrawApi(app)),
       {
-        stampCaller: true,
         definition: OBSIDIAN_CLI_TOOL,
         turnedOffText: OBSIDIAN_CLI_TURNED_OFF_TEXT,
         call: createObsidianCliCall({

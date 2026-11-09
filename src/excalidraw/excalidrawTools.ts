@@ -236,7 +236,6 @@ export interface ExcalidrawToolResult {
 }
 
 export interface ExcalidrawTool {
-  stampCaller: boolean;
   definition: { readonly name: string };
   turnedOffText: string;
   call: (args: unknown) => Promise<ExcalidrawToolResult>;
@@ -273,12 +272,7 @@ export function createExcalidrawTools(
     definition: { readonly name: string },
     handler: Parameters<typeof run>[0]
   ): ExcalidrawTool =>
-    Object.freeze({
-      stampCaller: true,
-      definition,
-      turnedOffText: EXCALIDRAW_TURNED_OFF_TEXT,
-      call: run(handler),
-    });
+    Object.freeze({ definition, turnedOffText: EXCALIDRAW_TURNED_OFF_TEXT, call: run(handler) });
   // Excalidraw publishes a scene snapshot taken before an async step, so two writes to one drawing from parallel tool calls
   // or two chats would let the second drop the first's changes while both report success.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
