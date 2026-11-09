@@ -590,20 +590,20 @@ describe("AgentChatMessages", () => {
       {
         calls: "one Copilot tool",
         code: 'return await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });',
-        title: "Execute · Notion · Create page",
-        railText: "Permission execute-1",
+        title: "execute",
+        railText: "Permission execute-1 via execute",
       },
       {
         calls: "one Copilot tool with tools and fetch in an argument",
         code: 'return tools["obsidian-copilot"].notion_create_page({ title: "tools fetch" });',
-        title: "Execute · Notion · Create page",
-        railText: "Permission execute-1",
+        title: "execute",
+        railText: "Permission execute-1 via execute",
       },
       {
         calls: "several Copilot tools",
         code: 'return Promise.all([tools["obsidian-copilot"].notion_search({}), tools["obsidian-copilot"].notion_create_page({})]);',
-        title: "Execute · Notion · Search, Notion · Create page",
-        railText: "Permission execute-1",
+        title: "execute",
+        railText: "Permission execute-1 via execute",
       },
       {
         calls: "no tool",
@@ -612,7 +612,7 @@ describe("AgentChatMessages", () => {
         railText: "Permission execute-1 via execute",
       },
     ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 titles an OpenCode execute permission request whose code calls $calls as '$title'",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps an OpenCode permission generic without runtime metadata even when source mentions $calls as '$title'",
       ({ code, title, railText }) => {
         const toolTurn = assistantMessage("answer-1", 62_000, {
           parts: [

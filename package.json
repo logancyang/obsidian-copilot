@@ -131,7 +131,6 @@
     "fflate": "^0.8.3",
     "fuzzysort": "^3.1.0",
     "jotai": "^2.10.3",
-    "js-tokens": "9.0.1",
     "lexical": "^0.34.0",
     "lucide-react": "^0.462.0",
     "luxon": "^3.5.0",

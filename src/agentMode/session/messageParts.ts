@@ -90,7 +90,8 @@ export function mergeToolCallUpdate(
     mcpServer,
     copilotTools:
       directCopilotToolUse(mcpServer, vendorToolName, input) ??
-      (upd.rawInput !== undefined ? upd.copilotTools : base.copilotTools),
+      upd.copilotTools ??
+      (upd.rawInput !== undefined ? undefined : base.copilotTools),
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
     progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
   };

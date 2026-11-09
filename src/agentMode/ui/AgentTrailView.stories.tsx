@@ -125,7 +125,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       calls: [{ name: "linear_create_issue", args: { title: "Orion retro" } }],
     },
   }),
-  say("OpenCode keeps Execute and names the Copilot tool its code includes."),
+  say("OpenCode keeps Execute and names the Copilot tool reported by the runtime."),
   tool("opencode-notion-create", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -138,12 +138,12 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       calls: [
         {
           name: "notion_notion-create-pages",
-          code: 'tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
+          args: { title: "Orion" },
         },
       ],
     },
   }),
-  say("Code that calls several tools keeps Execute and names its recognized tools."),
+  say("An executed block names each connector tool reported by the runtime."),
   tool("opencode-notion-both", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -156,11 +156,11 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       calls: [
         {
           name: "notion_search",
-          code: 'tools["obsidian-copilot"].notion_search({ query: "Orion" })',
+          args: { query: "Orion" },
         },
         {
           name: "notion_create_page",
-          code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" })',
+          args: { title: "Orion" },
         },
       ],
     },
@@ -178,24 +178,18 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       calls: [
         {
           name: "notion_search",
-          code: 'tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
+          args: { query: "MCP tools test" },
         },
       ],
     },
   }),
-  say("An approval for a batch names the same execute scope and tools as its finished row."),
+  say("Before execution metadata arrives, an OpenCode approval keeps its Execute label."),
   tool("opencode-notion-pending", "execute", {
     vendorToolName: undefined,
     title: "execute",
     toolKind: "other",
     status: "pending",
-    copilotTools: {
-      wrapper: "Execute",
-      calls: [
-        { name: "notion_search", code: 'tools["obsidian-copilot"].notion_search({})' },
-        { name: "notion_create_page", code: 'tools["obsidian-copilot"].notion_create_page({})' },
-      ],
-    },
+    input: { code: 'return tools["obsidian-copilot"].notion_create_page({ title: "Orion" });' },
   }),
   say("Another server's tools keep the server's name."),
   tool("context7-docs", "query-docs", { mcpServer: "context7" }),

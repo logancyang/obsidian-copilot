@@ -438,6 +438,51 @@ describe("AcpBackendProcess", () => {
         expect(handler).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 forwards output metadata to the backend reader on a terminal update without input", async () => {
+        const uses = {
+          wrapper: "Execute",
+          calls: [{ name: "everything_echo", args: { message: "hello" } }],
+        };
+        const rawOutput = {
+          metadata: {
+            toolCalls: [
+              {
+                tool: "obsidian-copilot.everything_echo",
+                status: "completed",
+                input: { message: "hello" },
+              },
+            ],
+          },
+        };
+        const readCopilotTools = jest.fn((_input: unknown, output?: unknown) =>
+          output === rawOutput ? uses : null
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          { ...buildStubBackend(), readCopilotTools },
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const handler = jest.fn();
+        backend.registerSessionHandler("s1", handler);
+        await getVaultClient(backend).sessionUpdate({
+          sessionId: "s1",
+          update: {
+            sessionUpdate: "tool_call_update",
+            toolCallId: "executed",
+            status: "completed",
+            rawOutput,
+          },
+        } as unknown as Parameters<ReturnType<typeof getVaultClient>["sessionUpdate"]>[0]);
+        expect(readCopilotTools).toHaveBeenCalledWith(undefined, rawOutput);
+        expect(handler).toHaveBeenCalledWith(
+          expect.objectContaining({
+            update: expect.objectContaining({ toolCallId: "executed", copilotTools: uses }),
+          })
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 tags each tool call, live or replayed, with the Copilot tools the backend reads from its input", async () => {
         const uses = { calls: [{ name: "notion_search", args: {} }] };
         const readCopilotTools = jest.fn((input: unknown) =>

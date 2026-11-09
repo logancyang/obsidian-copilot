@@ -228,6 +228,19 @@ describe("messageParts", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 accepts executed tool metadata on a completion update without new input", () => {
+      const copilotTools = {
+        wrapper: "Execute",
+        calls: [{ name: "everything_echo", args: { message: "hello" } }],
+      };
+      const merged = mergeToolCallUpdate(existing, {
+        toolCallId: "t1",
+        status: "completed",
+        copilotTools,
+      });
+      expect(merged.kind === "tool_call" && merged.copilotTools).toBe(copilotTools);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 replaces a wrapped call's Copilot tools with the ones read from new input and keeps them when no input arrives", () => {
       const before = { calls: [{ name: "notion_search", code: "a" }] };
       const after = { calls: [{ name: "notion_search", code: "b" }] };
