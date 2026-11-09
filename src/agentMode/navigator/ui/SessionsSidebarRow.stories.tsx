@@ -12,7 +12,9 @@ const meta = {
   title: "Agent Mode/Sessions Sidebar Row",
   component: SessionsSidebarRow,
   args: {
-    item: sidebarChat("chats/plan.md", "Plan the fall product launch", 5),
+    item: sidebarChat("chats/plan.md", "Plan the fall product launch", 5, {
+      backendId: "claude",
+    }),
     status: "idle",
     active: false,
     isSessionOpen: false,
@@ -58,6 +60,14 @@ export const ActiveAndRunning: StoryObj<SessionsSidebarRowProps> = {
 
 export const PinnedWithProjectLabel: StoryObj<SessionsSidebarRowProps> = {
   args: { projectName: "Fall product launch", status: "unread" },
+};
+
+export const SessionOpenWithUnreadResult: StoryObj<SessionsSidebarRowProps> = {
+  args: { isSessionOpen: true, status: "unread" },
+};
+
+export const NoAgentRecorded: StoryObj<SessionsSidebarRowProps> = {
+  args: { item: sidebarChat("chats/old.md", "Imported chat from an older version", 900) },
 };
 
 export const LongTitle: StoryObj<SessionsSidebarRowProps> = {
