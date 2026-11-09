@@ -15,7 +15,11 @@ import {
   isNotificationSoundId,
 } from "@/utils/notificationSoundCatalog";
 import { SettingSection } from "@/components/ui/setting-section";
-import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import {
+  SettingTabStrip,
+  TabContent,
+  type TabItem as TabItemType,
+} from "@/components/ui/setting-tabs";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
 import { setSettings, useSettingsValue } from "@/settings/model";
@@ -103,16 +107,13 @@ export const AgentSettings: React.FC = () => {
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">
-        <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-          {tabs.map((tab) => (
-            <TabItem
-              key={tab.id}
-              tab={tab}
-              isSelected={selectedTabId === tab.id}
-              onClick={() => handleSelectTab(tab.id)}
-              variant="inline"
-            />
-          ))}
+        <div ref={tabStripRef}>
+          <SettingTabStrip
+            tabs={tabs}
+            selectedId={selectedTabId}
+            onSelect={handleSelectTab}
+            variant="inline"
+          />
         </div>
 
         {orderedDescriptors.map((descriptor) => (

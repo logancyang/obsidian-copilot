@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@/lib/story";
-import { Cog, Cpu, Plug, Sigma, Sparkle } from "lucide-react";
+import { Command, Cog, Cpu, Plug, ShieldCheck, Sigma, Sparkle, Wrench } from "lucide-react";
 import * as React from "react";
-import { TabContent, TabItem, type TabVariant } from "./setting-tabs";
+import { SettingTabStrip, TabContent, TabItem, type TabVariant } from "./setting-tabs";
 
 const TABS = [
   { id: "basic", label: "Basic", icon: <Cog className="tw-size-5" /> },
@@ -11,28 +11,48 @@ const TABS = [
 
 type TabItemProps = React.ComponentProps<typeof TabItem>;
 
-const Strip: React.FC<{ variant: TabVariant; labels?: string[] }> = ({ variant, labels }) => {
-  const tabs = labels ? labels.map((label, i) => ({ id: `t${i}`, label, icon: null })) : TABS;
-  const [selected, setSelected] = React.useState(tabs[0].id);
+const ALL_SETTINGS_TABS = [
+  { id: "basic", label: "Basic", icon: <Cog className="tw-size-5" /> },
+  { id: "byok", label: "BYOK", icon: <Cpu className="tw-size-5" /> },
+  { id: "miyo", label: "Miyo", icon: <Sigma className="tw-size-5" /> },
+  { id: "selfhost", label: "Self-Host", icon: <ShieldCheck className="tw-size-5" /> },
+  { id: "command", label: "Commands", icon: <Command className="tw-size-5" /> },
+  {
+    id: "skills",
+    label: "Skills",
+    icon: <Sparkle className="tw-size-5" />,
+    warningLabel: "Some skills failed to load",
+  },
+  {
+    id: "connectors",
+    label: "Connectors",
+    icon: <Plug className="tw-size-5" />,
+    warningLabel: "You have connectors that need your attention",
+    warningTone: "error" as const,
+  },
+  { id: "advanced", label: "Advanced", icon: <Wrench className="tw-size-5" /> },
+];
+
+interface StripProps {
+  variant: TabVariant;
+  tabs?: React.ComponentProps<typeof SettingTabStrip>["tabs"];
+  initialId?: string;
+}
+
+const Strip: React.FC<StripProps> = ({ variant, tabs = TABS, initialId = tabs[0].id }) => {
+  const [selected, setSelected] = React.useState(initialId);
   return (
     <div className="tw-flex tw-flex-col">
-      <div className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-        {tabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isSelected={selected === tab.id}
-            onClick={() => setSelected(tab.id)}
-            variant={variant}
-          />
-        ))}
-      </div>
+      <SettingTabStrip tabs={tabs} selectedId={selected} onSelect={setSelected} variant={variant} />
       <TabContent id={selected} isSelected variant={variant}>
         <div className="tw-rounded-md tw-bg-primary tw-p-4 tw-text-sm">Panel for {selected}</div>
       </TabContent>
     </div>
   );
 };
+
+const labelTabs = (labels: string[]) =>
+  labels.map((label, i) => ({ id: `t${i}`, label, icon: null }));
 
 const meta = {
   title: "UI/Setting Tabs",
@@ -108,8 +128,18 @@ export const ErrorDot: StoryObj<TabItemProps> = {
 export const LongLabels: StoryObj<TabItemProps> = {
   render: () => (
     <div className="tw-flex tw-flex-col tw-gap-4">
-      <Strip variant="page" labels={["OpenCode", "Claude", "Codex", "Quick Chat"]} />
-      <Strip variant="inline" labels={["OpenCode", "Claude", "Codex", "Quick Chat"]} />
+      <Strip variant="page" tabs={labelTabs(["OpenCode", "Claude", "Codex", "Quick Chat"])} />
+      <Strip variant="inline" tabs={labelTabs(["OpenCode", "Claude", "Codex", "Quick Chat"])} />
+    </div>
+  ),
+};
+
+export const OverflowMenu: StoryObj<TabItemProps> = {
+  render: () => (
+    <div className="tw-flex tw-flex-col tw-gap-4">
+      <Strip variant="page" tabs={ALL_SETTINGS_TABS} />
+      <Strip variant="page" tabs={ALL_SETTINGS_TABS} initialId="advanced" />
+      <Strip variant="inline" tabs={labelTabs(["OpenCode", "Claude", "Codex", "Quick Chat"])} />
     </div>
   ),
 };
