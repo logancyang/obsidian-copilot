@@ -297,6 +297,22 @@ describe("customConnectors", () => {
       });
     });
 
+    describe("storedValueNames()", () => {
+      it("names the values this device's keychain holds for a connector, never the values themselves", async () => {
+        const fake = setUp();
+        await fake.add(
+          JSON.stringify({
+            mcpServers: {
+              Echo: { command: "echo-server", env: { FAKE_KEY: "k-1", FAKE_STORE: "" } },
+            },
+          })
+        );
+
+        expect([...fake.custom.storedValueNames("echo")]).toEqual(["FAKE_KEY"]);
+        expect([...fake.custom.storedValueNames("missing")]).toEqual([]);
+      });
+    });
+
     describe("refresh()", () => {
       it(`shows "Add API key on this device" for a synced connector whose values this device lacks, and doesn't start it: ${ISSUE}`, async () => {
         const fake = setUp();
@@ -391,16 +407,13 @@ describe("customConnectors", () => {
         expect(loggedText()).not.toContain("sk-live");
       });
 
-      it(`shows "Couldn't reach" for a remote server that is down, without asking for attention: ${ISSUE}`, async () => {
+      it(`shows "Couldn't reach" for a remote server that is down, with the network error as its reason and without asking for attention: ${ISSUE}`, async () => {
         const fake = setUp();
         fake.remote.unreachable = true;
 
         await fake.add(REMOTE_JSON);
 
-        expect(fake.statusOf("acme")).toEqual({
-          kind: "unreachable",
-          reason: "Couldn't reach https://mcp.acme.test.",
-        });
+        expect(fake.statusOf("acme")).toEqual({ kind: "unreachable", reason: "offline" });
         expect(fake.custom.getSnapshot().needsAttention).toBe(false);
       });
 
@@ -588,7 +601,7 @@ describe("customConnectors", () => {
         const result = await fake.custom.call("acme_search", {});
 
         expect(result?.isError).toBe(true);
-        expect(fake.statusOf("acme")).toMatchObject({ kind: "unreachable" });
+        expect(fake.statusOf("acme")).toEqual({ kind: "unreachable", reason: "offline" });
       });
     });
 

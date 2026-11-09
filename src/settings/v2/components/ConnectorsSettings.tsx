@@ -5,10 +5,13 @@ import {
   ensureConnectorsEntitlement,
   useIsConnectorsEnabled,
 } from "@/connectors/connectorsEntitlement";
+import { editableConfigText, requireOneServer } from "@/connectors/custom/customConnectorConfig";
+import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import type { LoginOutcome } from "@/connectors/oauth/connectorAuth";
 import { BrowseConnectors, type BrowseConnectorsProps } from "@/connectors/ui/BrowseConnectors";
 import { ConnectedConnectors } from "@/connectors/ui/ConnectedConnectors";
 import { ConnectorsUpsell } from "@/connectors/ui/ConnectorsUpsell";
+import { CustomConnectorModal } from "@/connectors/ui/CustomConnectorModal";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { useApp } from "@/context";
@@ -18,26 +21,37 @@ import { navigateToPlusPage } from "@/plusUtils";
 import { err2String } from "@/utils";
 import { Notice } from "obsidian";
 import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useSyncExternalStore } from "react";
 import { DesktopOnlySettingsPanel } from "./DesktopOnlySettingsPanel";
 
 export const ConnectorsSettings: React.FC = () => {
-  const { connectionManager, connectorTools } = usePlugin();
-  if (!connectionManager || !connectorTools) {
+  const { connectionManager, connectorTools, customConnectors } = usePlugin();
+  if (!connectionManager || !connectorTools || !customConnectors) {
     return <DesktopOnlySettingsPanel message="Connectors are available on desktop." />;
   }
-  return <ConnectorsPanel manager={connectionManager} tools={connectorTools} />;
+  return (
+    <ConnectorsPanel manager={connectionManager} tools={connectorTools} custom={customConnectors} />
+  );
 };
 
 interface ConnectorsPanelProps {
   manager: ConnectionManager;
   tools: ConnectorTools;
+  custom: CustomConnectors;
 }
 
-function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactElement | null {
+function ConnectorsPanel({
+  manager,
+  tools,
+  custom,
+}: ConnectorsPanelProps): React.ReactElement | null {
   const app = useApp();
   const { setSelectedTab } = useTab();
   const snapshot = useConnectorsSnapshot(manager);
+  const { connectors: customConnectors } = useSyncExternalStore(
+    custom.subscribe,
+    custom.getSnapshot
+  );
   const enabled = useIsConnectorsEnabled();
   const subPage = useSettingsSubPage();
   const loginStartedHere = useRef<WaitingLogin | null>(null);
@@ -75,6 +89,48 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
     snapshot.connections.find(({ id }) => id === connectionId)?.serviceId ?? "";
   const connect = (serviceId: string) => runLogin(() => manager.connect(serviceId));
   const reconnect = (connectionId: string) => runLogin(() => manager.reconnect(connectionId));
+  const addCustom = async () => {
+    if (!(await ensureConnectorsEntitlement(app))) return;
+    new CustomConnectorModal(app, "Add custom connector", {
+      helper:
+        "Paste the MCP server config from its README. Values in env and headers stay in this device's keychain.",
+      submitLabel: "Add",
+      parse: (text) => custom.parse(text),
+      onSubmit: (_text, connectors) => custom.add(connectors),
+    }).open();
+  };
+  const customConfigOf = (id: string) =>
+    customConnectors.find(({ config }) => config.id === id)?.config;
+  const customActions = {
+    onEdit: (id: string) => {
+      const config = customConfigOf(id);
+      if (!config) return;
+      new CustomConnectorModal(app, `Edit ${config.name}`, {
+        helper: "Leave a value blank to keep the one stored on this device.",
+        initialText: editableConfigText(config),
+        storedValueNames: custom.storedValueNames(id),
+        submitLabel: "Save",
+        parse: (text) => requireOneServer(custom.parse(text)),
+        onSubmit: (text) => custom.edit(id, text),
+      }).open();
+    },
+    onTryAgain: () => void custom.refresh(),
+    onSetTurnedOff: (id: string, off: boolean) => custom.setTurnedOff(id, off),
+    onRemove: (id: string) => {
+      const config = customConfigOf(id);
+      if (!config) return;
+      new ConfirmModal(
+        app,
+        () => custom.remove(id),
+        `Agents lose access to ${config.name} on all your devices. You can add it again anytime.`,
+        `Remove ${config.name}?`,
+        "Remove",
+        "Cancel",
+        undefined,
+        "destructive"
+      ).open();
+    },
+  };
   const openBrowse = () => {
     manager.dismissFailedLogin();
     subPage.open(
@@ -84,6 +140,7 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
           manager.dismissFailedLogin();
           subPage.close();
         }}
+        onAddCustom={() => void addCustom()}
         onConnect={connect}
         onReconnect={reconnect}
       />
@@ -93,7 +150,10 @@ function ConnectorsPanel({ manager, tools }: ConnectorsPanelProps): React.ReactE
   return (
     <ConnectedConnectors
       snapshot={snapshot}
+      customConnectors={customConnectors}
       onBrowse={openBrowse}
+      onAddCustom={() => void addCustom()}
+      customActions={customActions}
       onConnect={connect}
       onReconnect={reconnect}
       onCheckAgain={(connectionId) => tools.checkAgain(connectionId)}

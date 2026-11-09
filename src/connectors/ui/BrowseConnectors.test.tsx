@@ -13,7 +13,12 @@ function snapshotOf(rest: Partial<ConnectorsSnapshot> = {}): ConnectorsSnapshot 
 }
 
 function renderBrowse(snapshot: ConnectorsSnapshot = snapshotOf()) {
-  const handlers = { onBack: jest.fn(), onConnect: jest.fn(), onReconnect: jest.fn() };
+  const handlers = {
+    onBack: jest.fn(),
+    onAddCustom: jest.fn(),
+    onConnect: jest.fn(),
+    onReconnect: jest.fn(),
+  };
   const props: BrowseConnectorsProps = { snapshot, ...handlers };
   render(<BrowseConnectors {...props} />);
   return handlers;
@@ -69,6 +74,16 @@ describe("BrowseConnectors", () => {
       const results = screen.getByRole("region", { name: "Browse connectors" });
       expect(results.contains(screen.getByRole("listitem", { name: "Notion" }))).toBe(true);
       expect(results.contains(request)).toBe(false);
+    });
+
+    it("ends the list with a way to request a connector or add a custom one", () => {
+      const { onAddCustom } = renderBrowse();
+
+      expect(screen.getByText(/Don't see your service\?/).textContent).toBe(
+        "Don't see your service? Request a connector or add a custom connector."
+      );
+      fireEvent.click(screen.getByRole("button", { name: "add a custom connector" }));
+      expect(onAddCustom).toHaveBeenCalledTimes(1);
     });
 
     it("goes back to the connected list from Back", () => {

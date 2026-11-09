@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import React, { useState } from "react";
 
 export interface ConnectorLogoProps {
-  service: ConnectorCatalogEntry;
+  service: Pick<ConnectorCatalogEntry, "name" | "logoUrl">;
   className?: string;
 }
 

@@ -59,6 +59,7 @@ const meta = {
   args: {
     snapshot: snapshotOf(),
     onBack: () => undefined,
+    onAddCustom: () => undefined,
     onConnect: () => undefined,
     onReconnect: () => undefined,
   },
