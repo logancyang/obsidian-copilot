@@ -119,7 +119,8 @@ export interface BackendDescriptor {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/748
   readonly stopTask?: boolean;
 
-  // A backend whose agent wraps calls to Copilot's tools in a tool of its own reads which Copilot tool each call runs.
+  // Codex and OpenCode don't call Copilot's tools directly: Codex passes the tool name as input to a generic MCP tool,
+  // and OpenCode puts the call inside JavaScript code. This reader pulls the Copilot tool name out of that input.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
   readonly copilotToolCalls?: CopilotToolCallReader;
 
