@@ -1,6 +1,6 @@
 import { CONNECTOR_SERVICES } from "@/connectors/catalog";
 import type { ConnectionManager, WaitingLogin } from "@/connectors/connectionManager";
-import type { ConnectorTools } from "@/connectors/connectorTools";
+import type { ConnectorTools, ServiceToolInfo } from "@/connectors/connectorTools";
 import {
   ensureConnectorsEntitlement,
   useIsConnectorsEnabled,
@@ -10,6 +10,10 @@ import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import type { LoginOutcome } from "@/connectors/oauth/connectorAuth";
 import { BrowseConnectors, type BrowseConnectorsProps } from "@/connectors/ui/BrowseConnectors";
 import { ConnectedConnectors } from "@/connectors/ui/ConnectedConnectors";
+import {
+  ConnectorToolsPage,
+  type ConnectorToolsPageProps,
+} from "@/connectors/ui/ConnectorToolsPage";
 import { ConnectorsUpsell } from "@/connectors/ui/ConnectorsUpsell";
 import { CustomConnectorModal } from "@/connectors/ui/CustomConnectorModal";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
@@ -52,9 +56,18 @@ function ConnectorsPanel({
     custom.subscribe,
     custom.getSnapshot
   );
+  const toolsByConnection = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const enabled = useIsConnectorsEnabled();
   const subPage = useSettingsSubPage();
   const loginStartedHere = useRef<WaitingLogin | null>(null);
+  const connectedIds = snapshot?.connections
+    .filter(({ status }) => status === "connected")
+    .map(({ id }) => id)
+    .join();
+
+  useEffect(() => {
+    if (enabled) void tools.loadConnected();
+  }, [tools, enabled, connectedIds]);
 
   useEffect(
     () => () => {
@@ -115,6 +128,23 @@ function ConnectorsPanel({
       }).open();
     },
     onTryAgain: () => void custom.refresh(),
+    onShowTools: (id: string) => {
+      const config = customConfigOf(id);
+      if (!config) return;
+      const toolsOf = () => {
+        const status = custom.getSnapshot().connectors.find((c) => c.config.id === id)?.status;
+        return status?.kind === "connected" ? status.tools : null;
+      };
+      subPage.open(
+        <LiveToolsPage
+          service={config}
+          subscribe={custom.subscribe}
+          readTools={toolsOf}
+          onTryAgain={() => custom.refresh()}
+          onBack={subPage.close}
+        />
+      );
+    },
     onSetTurnedOff: (id: string, off: boolean) => custom.setTurnedOff(id, off),
     onRemove: (id: string) => {
       const config = customConfigOf(id);
@@ -157,6 +187,28 @@ function ConnectorsPanel({
       onConnect={connect}
       onReconnect={reconnect}
       onCheckAgain={(connectionId) => tools.checkAgain(connectionId)}
+      toolsByConnection={toolsByConnection}
+      onShowTools={(connectionId) => {
+        const service = CONNECTOR_SERVICES.get(serviceIdOf(connectionId));
+        if (!service) return;
+        const toolsOf = () =>
+          manager.getSnapshot().connections.find(({ id }) => id === connectionId)?.status ===
+          "connected"
+            ? (tools.getSnapshot().get(connectionId) ?? null)
+            : null;
+        subPage.open(
+          <LiveToolsPage
+            service={service}
+            subscribe={(listener) => {
+              const unsubscribers = [manager.subscribe(listener), tools.subscribe(listener)];
+              return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+            }}
+            readTools={toolsOf}
+            onTryAgain={() => tools.checkAgain(connectionId)}
+            onBack={subPage.close}
+          />
+        );
+      }}
       onDisconnect={(connectionId) => {
         const service = CONNECTOR_SERVICES.get(serviceIdOf(connectionId));
         if (!service) return;
@@ -182,4 +234,13 @@ interface BrowsePageProps extends Omit<BrowseConnectorsProps, "snapshot"> {
 function BrowsePage({ manager, ...props }: BrowsePageProps): React.ReactElement | null {
   const snapshot = useConnectorsSnapshot(manager);
   return snapshot && <BrowseConnectors snapshot={snapshot} {...props} />;
+}
+
+interface LiveToolsPageProps extends Omit<ConnectorToolsPageProps, "tools"> {
+  subscribe: (listener: () => void) => () => void;
+  readTools: () => readonly ServiceToolInfo[] | null;
+}
+
+function LiveToolsPage({ subscribe, readTools, ...props }: LiveToolsPageProps): React.ReactElement {
+  return <ConnectorToolsPage tools={useSyncExternalStore(subscribe, readTools)} {...props} />;
 }

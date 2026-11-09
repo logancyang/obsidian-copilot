@@ -3,6 +3,7 @@ import type {
   ConnectorsSnapshot,
   WaitingLogin,
 } from "@/connectors/connectionManager";
+import type { ServiceToolInfo } from "@/connectors/connectorTools";
 import type { CustomConnectorState } from "@/connectors/custom/customConnectors";
 import {
   ConnectedConnectors,
@@ -36,6 +37,7 @@ function waitingFor(connectionId: string, serviceId: string): WaitingLogin {
 function renderList(props: Partial<ConnectedConnectorsProps> & { snapshot: ConnectorsSnapshot }) {
   const handlers = {
     customConnectors: [] as readonly CustomConnectorState[],
+    toolsByConnection: new Map() as ReadonlyMap<string, readonly ServiceToolInfo[]>,
     onBrowse: jest.fn(),
     onAddCustom: jest.fn(),
     customActions: {
@@ -43,11 +45,13 @@ function renderList(props: Partial<ConnectedConnectorsProps> & { snapshot: Conne
       onTryAgain: jest.fn(),
       onSetTurnedOff: jest.fn(),
       onRemove: jest.fn(),
+      onShowTools: jest.fn(),
     },
     onConnect: jest.fn(),
     onReconnect: jest.fn(),
     onCheckAgain: jest.fn(async () => {}),
     onDisconnect: jest.fn(),
+    onShowTools: jest.fn(),
   };
   const { rerender } = render(<ConnectedConnectors {...handlers} {...props} />);
   return {
@@ -63,7 +67,7 @@ const CUSTOM_NEEDS_KEY: CustomConnectorState = {
 };
 const CUSTOM_CONNECTED: CustomConnectorState = {
   config: { id: "echo", name: "Echo", command: "echo-server", args: [], envNames: [] },
-  status: { kind: "connected", toolCount: 2 },
+  status: { kind: "connected", tools: [{ name: "t1" }, { name: "t2" }] },
 };
 const CUSTOM_OFF: CustomConnectorState = {
   config: { id: "zeta", name: "Zeta", command: "zeta", args: [], envNames: [] },
@@ -179,6 +183,31 @@ describe("ConnectedConnectors", () => {
           "Couldn't reach Miro just now. Copilot tries again in your next chat."
         )
       ).toBeTruthy();
+    });
+
+    it("counts a connected service's tools once Copilot has listed them, and opens them from the count", () => {
+      const { onShowTools, customActions } = renderList({
+        snapshot: snapshotOf([
+          { id: "c1", serviceId: "notion", status: "connected", accountLabel: "Acme workspace" },
+          { id: "c4", serviceId: "granola", status: "connected" },
+          { id: "c3", serviceId: "miro", status: "unreachable" },
+        ]),
+        toolsByConnection: new Map([
+          ["c1", [{ name: "search" }, { name: "create_page" }]],
+          ["c3", [{ name: "board" }]],
+        ]),
+        customConnectors: [CUSTOM_CONNECTED],
+      });
+
+      expect(row("Notion").textContent).toContain("Connected · Acme workspace · 2 tools");
+      expect(within(row("Granola")).getByText("Connected")).toBeTruthy();
+      expect(within(row("Granola")).queryByRole("button", { name: /tool/ })).toBeNull();
+      expect(within(row("Miro")).queryByRole("button", { name: /tool/ })).toBeNull();
+
+      fireEvent.click(within(row("Notion")).getByRole("button", { name: "2 tools" }));
+      expect(onShowTools).toHaveBeenCalledWith("c1");
+      fireEvent.click(within(row("Echo")).getByRole("button", { name: "2 tools" }));
+      expect(customActions.onShowTools).toHaveBeenCalledWith("echo");
     });
 
     it("reconnects a connection that needs a login from its row", () => {

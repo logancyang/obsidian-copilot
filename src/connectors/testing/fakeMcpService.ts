@@ -3,6 +3,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 export interface FakeMcpTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;

@@ -18,6 +18,7 @@ import {
   useIsConnectorsEnabled,
 } from "@/connectors/connectorsEntitlement";
 import type { LoginOutcome } from "@/connectors/oauth/connectorAuth";
+import type { ServiceToolInfo } from "@/connectors/connectorTools";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { TabContent } from "@/components/ui/setting-tabs";
 import { AppContext } from "@/context";
@@ -46,6 +47,14 @@ const mockedEnsure = jest.mocked(ensureConnectorsEntitlement);
 const MockedConfirmModal = jest.mocked(ConfirmModal);
 const MockedCustomConnectorModal = jest.mocked(CustomConnectorModal);
 
+const TOOLS_PAGE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/878";
+const FOUR_TOOLS: ServiceToolInfo[] = [
+  { name: "search_issues", annotations: { readOnlyHint: true } },
+  { name: "create_issue" },
+  { name: "t3" },
+  { name: "t4" },
+];
+
 const GITHUB: CustomConnectorConfig = {
   id: "github",
   name: "GitHub",
@@ -55,10 +64,18 @@ const GITHUB: CustomConnectorConfig = {
 };
 
 function fakeCustomConnectors(connectors: CustomConnectorState[] = []) {
-  const snapshot: CustomConnectorsSnapshot = { connectors, needsAttention: false };
+  let snapshot: CustomConnectorsSnapshot = { connectors, needsAttention: false };
+  const listeners = new Set<() => void>();
   return {
-    subscribe: () => () => {},
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
     getSnapshot: () => snapshot,
+    setConnectors: (next: CustomConnectorState[]) => {
+      snapshot = { connectors: next, needsAttention: false };
+      listeners.forEach((listener) => listener());
+    },
     parse: jest.fn((text: string) => parseCustomConnectors(text, new Set())),
     add: jest.fn(),
     edit: jest.fn(),
@@ -106,6 +123,24 @@ function fakeManager(connections: ConnectionState[]) {
   };
 }
 
+function fakeConnectorTools(lists: Record<string, ServiceToolInfo[]> = {}) {
+  let snapshot: ReadonlyMap<string, readonly ServiceToolInfo[]> = new Map(Object.entries(lists));
+  const listeners = new Set<() => void>();
+  return {
+    checkAgain: jest.fn(async () => {}),
+    loadConnected: jest.fn(async () => {}),
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    getSnapshot: () => snapshot,
+    setLists: (next: Record<string, ServiceToolInfo[]>) => {
+      snapshot = new Map(Object.entries(next));
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+
 function waitingLogin(connectionId: string, serviceId: string, cancel: () => void): WaitingLogin {
   return { connectionId, serviceId, loginUrl: () => null, cancel };
 }
@@ -127,7 +162,7 @@ function SettingsTabs(): React.ReactElement {
 
 function renderSettings(
   manager: ReturnType<typeof fakeManager>["manager"] | undefined,
-  connectorTools = manager && { checkAgain: jest.fn(async () => {}) },
+  connectorTools = manager && fakeConnectorTools(),
   customConnectors = manager && fakeCustomConnectors()
 ) {
   const app = new App();
@@ -150,6 +185,7 @@ function renderSettings(
   );
 }
 
+const NOTION_CONNECTED: ConnectionState = { id: "c1", serviceId: "notion", status: "connected" };
 const LINEAR_NEEDS_LOGIN: ConnectionState = {
   id: "c2",
   serviceId: "linear",
@@ -269,7 +305,7 @@ describe("ConnectorsSettings", () => {
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/858 contacts an unreachable service again on Try again", () => {
       const { manager } = fakeManager([{ id: "c3", serviceId: "miro", status: "unreachable" }]);
-      const connectorTools = { checkAgain: jest.fn(async () => {}) };
+      const connectorTools = fakeConnectorTools();
       renderSettings(manager, connectorTools);
 
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -409,7 +445,7 @@ describe("ConnectorsSettings", () => {
 
     it("lists this device's custom connectors beside the services", () => {
       const custom = fakeCustomConnectors([
-        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+        { config: GITHUB, status: { kind: "connected", tools: FOUR_TOOLS } },
       ]);
       renderSettings(fakeManager([LINEAR_NEEDS_LOGIN]).manager, undefined, custom);
 
@@ -417,8 +453,72 @@ describe("ConnectorsSettings", () => {
         screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))
       ).toEqual(["Linear", "GitHub"]);
       expect(
-        within(screen.getByRole("listitem", { name: "GitHub" })).getByText("4 tools")
+        within(screen.getByRole("listitem", { name: "GitHub" })).getByRole("button", {
+          name: "4 tools",
+        })
       ).toBeTruthy();
+    });
+
+    it(`${TOOLS_PAGE_ISSUE} lists the connected services' tools when the tab opens, so their rows can count them`, () => {
+      const tools = fakeConnectorTools();
+      renderSettings(fakeManager([NOTION_CONNECTED]).manager, tools);
+
+      expect(tools.loadConnected).toHaveBeenCalledTimes(1);
+    });
+
+    it("lists no tools while the connectors entitlement is missing", () => {
+      mockedEnabled.mockReturnValue(false);
+      const tools = fakeConnectorTools();
+      renderSettings(fakeManager([NOTION_CONNECTED]).manager, tools);
+
+      expect(tools.loadConnected).not.toHaveBeenCalled();
+    });
+
+    it("opens a service's tools from its count as a settings sub-page, and Back returns to the list", () => {
+      renderSettings(
+        fakeManager([NOTION_CONNECTED]).manager,
+        fakeConnectorTools({ c1: FOUR_TOOLS })
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "4 tools" }));
+
+      expect(screen.getByRole("heading", { name: "Notion tools" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Read only" })).toBeTruthy();
+      expect(screen.getByText("Search issues")).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Connectors" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+      expect(screen.getByRole("heading", { name: "Connectors" })).toBeTruthy();
+    });
+
+    it(`${TOOLS_PAGE_ISSUE} turns an open tools page into couldn't reach once the service's tools are gone, and checks the service again from Try again`, () => {
+      const tools = fakeConnectorTools({ c1: FOUR_TOOLS });
+      renderSettings(fakeManager([NOTION_CONNECTED]).manager, tools);
+      fireEvent.click(screen.getByRole("button", { name: "4 tools" }));
+
+      act(() => tools.setLists({}));
+
+      expect(screen.getByRole("heading", { name: "Couldn't reach Notion" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(tools.checkAgain).toHaveBeenCalledWith("c1");
+    });
+
+    it(`${TOOLS_PAGE_ISSUE} opens a custom connector's tools, says it couldn't be reached once it stops answering, and starts it again from Try again`, () => {
+      const custom = fakeCustomConnectors([
+        { config: GITHUB, status: { kind: "connected", tools: FOUR_TOOLS } },
+      ]);
+      renderSettings(fakeManager([]).manager, undefined, custom);
+      fireEvent.click(screen.getByRole("button", { name: "4 tools" }));
+      expect(screen.getByRole("heading", { name: "GitHub tools" })).toBeTruthy();
+      expect(screen.getByText("Create issue")).toBeTruthy();
+
+      act(() =>
+        custom.setConnectors([{ config: GITHUB, status: { kind: "unreachable", reason: "x" } }])
+      );
+
+      expect(screen.getByRole("heading", { name: "Couldn't reach GitHub" })).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(custom.refresh).toHaveBeenCalledTimes(1);
     });
 
     it("opens the Add custom connector dialog after checking the entitlement, and adds the servers it previews", async () => {
@@ -498,7 +598,7 @@ describe("ConnectorsSettings", () => {
 
     it("turns a custom connector off on this device from its menu", async () => {
       const custom = fakeCustomConnectors([
-        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+        { config: GITHUB, status: { kind: "connected", tools: FOUR_TOOLS } },
       ]);
       renderSettings(fakeManager([]).manager, undefined, custom);
 
@@ -513,7 +613,7 @@ describe("ConnectorsSettings", () => {
 
     it("removes a custom connector only after the user confirms its dialog", async () => {
       const custom = fakeCustomConnectors([
-        { config: GITHUB, status: { kind: "connected", toolCount: 4 } },
+        { config: GITHUB, status: { kind: "connected", tools: FOUR_TOOLS } },
       ]);
       renderSettings(fakeManager([]).manager, undefined, custom);
 

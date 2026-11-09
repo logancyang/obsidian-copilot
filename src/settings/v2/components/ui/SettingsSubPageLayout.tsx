@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import React from "react";
 
 export interface SettingsSubPageLayoutProps {
-  title: string;
+  title: React.ReactNode;
   titleAction?: React.ReactNode;
   description?: React.ReactNode;
   toolbar?: React.ReactNode;
