@@ -54,12 +54,16 @@ function card(serviceId: string, overrides: Partial<ConnectorCard> = {}): Connec
 
 describe("connectorCards", () => {
   describe("createSuggestConnectorTool()", () => {
-    it("offers a read-only, always-loaded tool that names only catalog services and takes one of their ids", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 offers a read-only, always-loaded tool accepting a catalog service id and optional caller session", () => {
       const { definition } = toolWith();
 
       expect(definition.name).toBe("suggest_connector");
       expect(definition.description).toContain("Notion, ");
       expect(definition.description).not.toMatch(/MCP/);
+      expect(definition.inputSchema.properties).toMatchObject({
+        caller_session_id: { type: "string" },
+      });
+      expect(definition.inputSchema.required).not.toContain("caller_session_id");
       expect(definition.inputSchema.properties.service.enum).toEqual(
         CONNECTOR_CATALOG.map(({ id }) => id)
       );

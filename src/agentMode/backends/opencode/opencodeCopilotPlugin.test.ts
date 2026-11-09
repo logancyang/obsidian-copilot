@@ -314,7 +314,7 @@ describe("opencodeCopilotPlugin", () => {
         return event.input;
       }
 
-      it.each(["obsidian-copilot_send_feedback", "obsidian-copilot_obsidian_cli"])(
+      it.each(["obsidian-copilot_send_feedback", "obsidian-copilot_suggest_connector"])(
         "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a %s call, replacing any value the model wrote",
         async (tool) => {
           const input = await runBefore({
@@ -328,18 +328,35 @@ describe("opencodeCopilotPlugin", () => {
         }
       );
 
-      it("leaves other servers' tools' input untouched", async () => {
-        const original = { title: "t" };
+      it.each([undefined, {}, { query: "plans" }])(
+        "https://github.com/logancyang/obsidian-copilot/issues/4229 preserves connector arguments %p so strict schemas receive no caller metadata",
+        async (original) => {
+          const input = await runBefore({
+            tool: "obsidian-copilot_readwise_reader_list_tags",
+            sessionID: "ses_caller",
+            id: "call-1",
+            input: original,
+          });
 
-        const input = await runBefore({
-          tool: "other-server_send_feedback",
-          sessionID: "ses_caller",
-          id: "call-1",
-          input: original,
-        });
+          expect(input).toBe(original);
+        }
+      );
 
-        expect(input).toBe(original);
-      });
+      it.each(["other-server_send_feedback", "obsidian-copilot_obsidian_cli"])(
+        "https://github.com/logancyang/obsidian-copilot/issues/4229 leaves %s arguments untouched because the tool needs no chat attribution",
+        async (tool) => {
+          const original = { title: "t" };
+
+          const input = await runBefore({
+            tool,
+            sessionID: "ses_caller",
+            id: "call-1",
+            input: original,
+          });
+
+          expect(input).toBe(original);
+        }
+      );
     });
   });
 

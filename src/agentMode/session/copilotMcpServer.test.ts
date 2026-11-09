@@ -313,6 +313,18 @@ describe("copilotMcpServer", () => {
       });
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 advertises the optional caller session accepted by feedback calls", async () => {
+      const channel = await server.connect("session-a", "opencode", NO_CHAT);
+      const result = await post(channel, rpc(2, "tools/list"));
+
+      expect(result.body).toMatchObject({
+        result: {
+          tools: [{ inputSchema: { properties: { caller_session_id: { type: "string" } } } }],
+        },
+      });
+      expect(SEND_FEEDBACK_TOOL.inputSchema.required).not.toContain("caller_session_id");
+    });
+
     it("lists a hosted tool beside send_feedback when both are on", async () => {
       server.dispose();
       server = createCopilotMcpServer(() => true, [lookupTool()]);

@@ -1,7 +1,9 @@
 import {
   CALLER_SESSION_ARGUMENT,
   COPILOT_MCP_SERVER_NAME,
+  SEND_FEEDBACK_TOOL_NAME,
 } from "@/agentMode/session/copilotMcpServer";
+import { SUGGEST_CONNECTOR_TOOL_NAME } from "@/connectors/connectorTools";
 import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { opencodeManagedDataDir } from "./OpencodeBinaryManager";
@@ -18,7 +20,7 @@ export const COPILOT_PLUS_STEP_FAILURE_POLICY = `Write at most 200 lines per wri
 // It also reads each file an edit, write or patch is about to change and returns that text with
 // the tool's result, because OpenCode names the file only milliseconds before writing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
-// It stamps the calling session on every Copilot tool call, because every chat in a folder shares
+// It stamps the calling session on card-producing tool calls, because every chat in a folder shares
 // one MCP connection and the call itself does not say which chat made it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 export const OPENCODE_COPILOT_PLUGIN_SOURCE = `"use strict";
@@ -99,7 +101,8 @@ function captureOriginals(ctx) {
 }
 
 function stampCaller(event) {
-  if (!event.tool.startsWith(${JSON.stringify(`${COPILOT_MCP_SERVER_NAME}_`)})) return;
+  // Connector schemas reject caller metadata; only chat cards need session attribution. https://github.com/logancyang/obsidian-copilot/issues/4229
+  if (!${JSON.stringify([SEND_FEEDBACK_TOOL_NAME, SUGGEST_CONNECTOR_TOOL_NAME].map((name) => `${COPILOT_MCP_SERVER_NAME}_${name}`))}.includes(event.tool)) return;
   event.input = { ...event.input, ${JSON.stringify(CALLER_SESSION_ARGUMENT)}: event.sessionID };
 }
 

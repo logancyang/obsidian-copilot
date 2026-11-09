@@ -44,6 +44,7 @@ Write only facts from this session, in English except user_said. Quote the user 
   inputSchema: {
     type: "object",
     properties: {
+      [CALLER_SESSION_ARGUMENT]: { type: "string" },
       title: { type: "string", description: "One-line summary, under 80 characters." },
       what_happened: {
         type: "string",
@@ -346,7 +347,7 @@ async function callTool(
     : reply;
 }
 
-// OpenCode stamps the calling session on every Copilot tool call, and a connected service must never receive that extra argument.
+// OpenCode stamps chat-card calls with their session, and tools must never receive that routing argument.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 function splitCaller(args: unknown): { callerSessionId: string | null; args: unknown } {
   if (!args || typeof args !== "object" || !(CALLER_SESSION_ARGUMENT in args)) {
