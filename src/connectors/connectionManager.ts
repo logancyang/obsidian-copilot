@@ -79,7 +79,14 @@ export class ConnectionManager {
   connect(serviceId: string): Promise<LoginOutcome> {
     const service = this.services.get(serviceId);
     if (!service) throw new Error(`No connector for ${serviceId}.`);
-    return this.login(crypto.randomUUID(), service, true);
+    const taken = new Set(getSettings().connectors.map(({ id }) => id));
+    // Readable IDs identify credentials during manual Keychain cleanup; suffixes keep separate logins apart.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/892
+    for (let n = 1; ; n++) {
+      const suffix = n === 1 ? "" : `-${n}`;
+      const id = service.id.slice(0, 36 - suffix.length).replace(/-$/, "") + suffix;
+      if (!taken.has(id)) return this.login(id, service, true);
+    }
   }
 
   reconnect(connectionId: string): Promise<LoginOutcome> {

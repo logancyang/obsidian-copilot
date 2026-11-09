@@ -51,7 +51,7 @@ Disconnecting signs Copilot out of the service where the service supports it, an
 
 ## Logins and devices
 
-Logins stay in this device's keychain. Copilot never sees your password.
+Logins stay in this device's keychain. Copilot never sees your password. Keychain entries include the connector's name, such as `connector-notion`, so you can identify them when cleaning up. Multiple connections use a numbered suffix.
 
 Your list of connectors follows a synced vault, but each device logs in on its own. On another device, a synced service shows **Needs login** until you click **Reconnect** there.
 
