@@ -37,6 +37,7 @@ export interface ConnectorLoginTarget {
   serverUrl: string;
   serviceName: string;
   logoUrl?: string;
+  useDynamicClientRegistration?: boolean;
 }
 
 export type LoginFailureReason = "cancelled-on-service" | "timed-out" | "rejected" | "unreachable";
@@ -239,7 +240,10 @@ function startLogin(
     get redirectUrl() {
       return redirectUrl;
     },
-    clientMetadataUrl: COPILOT_OAUTH_CLIENT_METADATA_URL,
+    // Services that reject URL client IDs need registration even when they advertise metadata support: https://github.com/NangoHQ/nango/issues/7142
+    clientMetadataUrl: target.useDynamicClientRegistration
+      ? undefined
+      : COPILOT_OAUTH_CLIENT_METADATA_URL,
     get clientMetadata() {
       return {
         client_name: CLIENT_NAME,

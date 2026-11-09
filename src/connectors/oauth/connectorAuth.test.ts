@@ -206,6 +206,40 @@ describe("connectorAuth", () => {
         });
       });
 
+      it("https://github.com/NangoHQ/nango/issues/7142 registers the actual callback and connects with the issued client ID when dynamic registration is selected despite advertised metadata support", async () => {
+        const { service, startLogin, storedLogin, connectorAuth } = setUp({
+          supportsClientMetadataDocuments: true,
+          publishesRevocation: true,
+        });
+
+        const { login, authorizationUrl } = await startLogin({
+          ...NOTION,
+          useDynamicClientRegistration: true,
+        });
+
+        expect(service.registrations).toEqual([
+          expect.objectContaining({
+            redirect_uris: [authorizationUrl.searchParams.get("redirect_uri")],
+          }),
+        ]);
+        expect(authorizationUrl.searchParams.get("client_id")).toMatch(/^client-/);
+        await visit(service.approve(authorizationUrl.href));
+        await expect(login.outcome).resolves.toEqual({ status: "connected" });
+        expect(storedLogin().client.client_id).toBe(authorizationUrl.searchParams.get("client_id"));
+
+        const accessToken = storedLogin().tokens.access_token;
+        const refreshed = await connectorAuth.accessToken(CONNECTION_ID, { forceRefresh: true });
+        expect(refreshed).toEqual({
+          status: "connected",
+          accessToken: storedLogin().tokens.access_token,
+        });
+        expect(storedLogin().tokens.access_token).not.toBe(accessToken);
+        const refreshToken = storedLogin().tokens.refresh_token;
+        await connectorAuth.disconnect(CONNECTION_ID);
+        expect(service.revokedTokens).toEqual([refreshToken]);
+        expect(connectorAuth.hasLogin(CONNECTION_ID)).toBe(false);
+      });
+
       it("keeps a client secret the service issues with the registration and authenticates the code exchange with it", async () => {
         const { service, connect, storedLogin } = setUp({ issuesClientSecret: true });
 
