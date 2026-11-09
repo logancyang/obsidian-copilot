@@ -145,7 +145,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       ],
     },
   }),
-  say("Code that calls several tools keeps OpenCode's execute name."),
+  say("Completed code that calls several tools names each tool."),
   tool("opencode-notion-both", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -163,6 +163,24 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
         {
           name: "notion_create_page",
           code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" })',
+        },
+      ],
+    },
+  }),
+  say("A word in a tool's arguments does not hide its completed name."),
+  tool("opencode-notion-string", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    input: {
+      code: 'return tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
+    },
+    copilotTools: {
+      runs: null,
+      calls: [
+        {
+          name: "notion_search",
+          code: 'tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
         },
       ],
     },

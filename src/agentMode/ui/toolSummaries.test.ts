@@ -178,12 +178,14 @@ describe("toolSummaries", () => {
       }
     );
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names an OpenCode execute row after the one Copilot tool its code calls, and keeps 'Execute' when the code calls several", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names every distinct Copilot tool in a completed OpenCode row", () => {
       const single = opencodeExecute(OPENCODE_NOTION_CALL);
       const several = opencodeExecute(OPENCODE_TWO_CALLS);
 
       expect(lookupToolSummary(single).collapsedLine(single, CTX)).toBe("Notion · Create page");
-      expect(lookupToolSummary(several).collapsedLine(several, CTX)).toBe("Execute");
+      expect(lookupToolSummary(several).collapsedLine(several, CTX)).toBe(
+        "Notion · Search, Notion · Create page"
+      );
     });
 
     it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
@@ -553,6 +555,38 @@ describe("toolSummaries", () => {
   });
 
   describe("copilotToolLabel()", () => {
+    it.each(["tools", "fetch"])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names a completed tool when its argument contains %s",
+      (word) => {
+        const part = opencodeExecute(
+          `return tools["obsidian-copilot"].notion_search({ query: "${word}" });`
+        );
+        expect(copilotToolLabel(part)).toBe("Notion · Search");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 lists repeated completed calls only once, in first-call order", () => {
+      const part = opencodeExecute(
+        'await tools["obsidian-copilot"].notion_search({ query: "Orion" });\n' +
+          'await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\n' +
+          'return tools["obsidian-copilot"].notion_search({ query: "Orion" });'
+      );
+      expect(copilotToolLabel(part)).toBe("Notion · Search, Notion · Create page");
+    });
+
+    it.each(["pending", "in_progress", "failed", "cancelled"] as const)(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps the conservative batch label while a call is %s",
+      (status) => {
+        expect(copilotToolLabel({ ...opencodeExecute(OPENCODE_TWO_CALLS), status })).toBeNull();
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps a single known tool named while awaiting approval", () => {
+      expect(
+        copilotToolLabel({ ...opencodeExecute(OPENCODE_NOTION_CALL), status: "pending" })
+      ).toBe("Notion · Create page");
+    });
+
     it("names the service and the readable tool of a Copilot connector call", () => {
       const t = tool({ mcpServer: "obsidian-copilot", vendorToolName: "linear_create_issue" });
       expect(copilotToolLabel(t)).toBe("Linear · Create issue");
@@ -586,7 +620,7 @@ describe("toolSummaries", () => {
     it.each([
       ["another server's tool", tool({ mcpServer: "notion", vendorToolName: "notion_search" })],
       ["a native tool", tool({ vendorToolName: "Read" })],
-      ["OpenCode execute code calling two Copilot tools", opencodeExecute(OPENCODE_TWO_CALLS)],
+      ["OpenCode execute code without an MCP call", opencodeExecute("return 1 + 1;")],
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 returns null for %s",
       (_name, t) => {

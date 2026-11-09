@@ -23,12 +23,23 @@ export interface ToolSummary {
 }
 
 export function copilotToolLabel(part: ToolCallPart): string | null {
-  const name = copilotToolName(part);
-  if (!name) return null;
-  const tool = describeConnectorTool(name);
-  return tool
-    ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
-    : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
+  // Completed rows can name the recorded calls without narrowing what an approval of execute covers.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+  const names =
+    part.status === "completed" && part.copilotTools
+      ? [...new Set(part.copilotTools.calls.map((call) => call.name))]
+      : [copilotToolName(part)];
+  return (
+    names
+      .filter((name): name is string => !!name)
+      .map((name) => {
+        const tool = describeConnectorTool(name);
+        return tool
+          ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
+          : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
+      })
+      .join(", ") || null
+  );
 }
 
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
