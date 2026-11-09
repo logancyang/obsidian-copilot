@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { TFile, TFolder } from "obsidian";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { FileText, Wrench, Folder, Globe, Image, Bot } from "lucide-react";
+import { FileText, Wrench, Folder, Globe, Paperclip, Bot } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
@@ -13,7 +13,7 @@ export type AtMentionCategory =
   | "activeNote"
   | "webTabs"
   | "activeWebTab"
-  | "images";
+  | "files";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
@@ -74,11 +74,11 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
     icon: <Folder className="tw-size-4" />,
   },
   {
-    key: "images",
-    title: "Images",
-    subtitle: "Attach image files",
-    category: "images",
-    icon: <Image className="tw-size-4" />,
+    key: "files",
+    title: "Files",
+    subtitle: "Attach files from your computer",
+    category: "files",
+    icon: <Paperclip className="tw-size-4" />,
     isAction: true,
   },
 ];

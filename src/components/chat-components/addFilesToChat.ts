@@ -3,10 +3,16 @@ import { logError } from "@/logger";
 import { getVaultBase, toVaultRelative } from "@/utils/vaultPath";
 import { App, Notice, TFile } from "obsidian";
 
-export interface ChatFileTargets {
+export interface AddFilesToChatOptions {
   onAddImage: (files: File[]) => void;
   setContextNotes: (update: (prev: TFile[]) => TFile[]) => void;
+  acceptAnyFileType?: boolean;
 }
+
+export const CONTEXT_FILE_ACCEPT = [
+  "image/*",
+  ...ALLOWED_NOTE_CONTEXT_EXTENSIONS.map((extension) => `.${extension}`),
+].join(",");
 
 function getOsPath(file: File): string | null {
   try {
@@ -40,10 +46,16 @@ function getExtension(name: string): string {
   return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
 }
 
-async function resolveContextFile(app: App, file: File): Promise<TFile | null> {
+async function resolveContextFile(
+  app: App,
+  file: File,
+  acceptAnyFileType: boolean
+): Promise<TFile | null> {
   const vaultFile = findVaultFile(app, file);
   const extension = vaultFile?.extension ?? getExtension(file.name);
-  if (!ALLOWED_NOTE_CONTEXT_EXTENSIONS.includes(extension)) {
+  // Agent Chat sends only the path and the agent opens the file with its own tools, so any type works.
+  // https://github.com/logancyang/obsidian-copilot/issues/4043
+  if (!acceptAnyFileType && !ALLOWED_NOTE_CONTEXT_EXTENSIONS.includes(extension)) {
     new Notice(
       `Can't attach ${file.name}: chat accepts images and ${ALLOWED_NOTE_CONTEXT_EXTENSIONS.join(", ")} files.`
     );
@@ -57,17 +69,17 @@ async function resolveContextFile(app: App, file: File): Promise<TFile | null> {
 export async function addFilesToChat(
   app: App,
   files: File[],
-  targets: ChatFileTargets
+  options: AddFilesToChatOptions
 ): Promise<void> {
   const images = files.filter((file) => file.type.startsWith("image/"));
-  if (images.length > 0) targets.onAddImage(images);
+  if (images.length > 0) options.onAddImage(images);
 
   for (const file of files) {
     if (images.includes(file)) continue;
     try {
-      const contextFile = await resolveContextFile(app, file);
+      const contextFile = await resolveContextFile(app, file, options.acceptAnyFileType ?? false);
       if (!contextFile) continue;
-      targets.setContextNotes((prev) =>
+      options.setContextNotes((prev) =>
         prev.some((note) => note.path === contextFile.path) ? prev : [...prev, contextFile]
       );
     } catch (error) {

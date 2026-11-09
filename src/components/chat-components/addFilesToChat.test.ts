@@ -130,7 +130,7 @@ describe("addFilesToChat", () => {
       expect(targets.notes()).toEqual(["attachments/report.pdf"]);
     });
 
-    it("names a file type chat cannot take as context in a notice and copies nothing", async () => {
+    it("names a file type Copilot Chat cannot read in a notice and copies nothing", async () => {
       const { app, created } = makeApp();
       const targets = makeTargets();
 
@@ -139,6 +139,31 @@ describe("addFilesToChat", () => {
       expect(created).toEqual([]);
       expect(targets.notes()).toEqual([]);
       expect((Notice as unknown as jest.Mock).mock.calls[0][0]).toContain("brief.docx");
+    });
+
+    it("copies and attaches a file of any type when any type is accepted, as in Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
+      const { app, created } = makeApp();
+      const targets = makeTargets();
+
+      await addFilesToChat(app, [makeFile("brief.docx", "application/msword")], {
+        ...targets,
+        acceptAnyFileType: true,
+      });
+
+      expect(created.map((entry) => entry.path)).toEqual(["attachments/brief.docx"]);
+      expect(targets.notes()).toEqual(["attachments/brief.docx"]);
+      expect(Notice).not.toHaveBeenCalled();
+    });
+
+    it("attaches a vault file of any type by its vault path when any type is accepted", async () => {
+      const { app, created } = makeApp(["Data/sales.csv"]);
+      const targets = makeTargets();
+      const sales = makeFile("sales.csv", "text/csv", "/Users/me/Vault/Data/sales.csv");
+
+      await addFilesToChat(app, [sales], { ...targets, acceptAnyFileType: true });
+
+      expect(created).toEqual([]);
+      expect(targets.notes()).toEqual(["Data/sales.csv"]);
     });
 
     it("shows a notice naming the file when copying it into the vault fails, and still attaches the rest", async () => {

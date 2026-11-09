@@ -14,7 +14,7 @@ Clicking a PDF page citation in a chat opens the target page at its top while ke
 
 ## Add context to Agent Chat
 
-Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web tabs**, or **Images**. Web tabs come from Copilot's desktop Web Viewer.
+Select **+** beside the Agent Chat composer to open **Add context**. Depending on what is open, you can add the **Active Note**, other **Notes**, **Folders**, the **Active Web Tab**, other **Web tabs**, or **Files** from your computer. Web tabs come from Copilot's desktop Web Viewer.
 
 You can also select the Copilot icon in a note's header. Agent Chat opens with that specific note attached to the current draft. The attachment stays with the draft if you switch notes before sending.
 
@@ -24,6 +24,7 @@ You can also add context while typing:
 - Type `@` to browse the available context categories.
 - Choose a folder to insert its path as `{Folder/path}`.
 - Paste or drag an image into the composer. The selected model must support images.
+- Drag any other file into the composer to attach it. A file from outside the vault is copied to the folder set in **Settings → Files and links → Default location for new attachments**.
 
 Context badges above the composer show what will be sent with the next message. Select the **x** on a badge to remove it. After the message is sent, one-turn attachments are cleared.
 
@@ -75,7 +76,7 @@ One-turn attachments remain one-turn attachments inside a Project. Start a new P
 
 ## Context in Quick Chat
 
-Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or image. You can also type `[[Note title]]` for a note.
+Quick Chat has a separate composer and context state. It can attach the active note and, on desktop, the active Web Viewer tab. Use **Add context** for a note, folder, web tab, or file. Quick Chat accepts images and Markdown, canvas, base, and PDF files. You can also type `[[Note title]]` for a note.
 
 Editing a sent Quick Chat message keeps its original attachments. Switching the active note or changing the composer attachments does not add them to the edited message.
 

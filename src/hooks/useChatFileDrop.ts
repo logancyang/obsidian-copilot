@@ -10,6 +10,7 @@ export interface UseChatFileDropProps {
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   containerRef: RefObject<HTMLElement>;
+  acceptAnyFileType?: boolean;
 }
 
 export interface UseChatFileDropReturn {
@@ -52,7 +53,15 @@ function getImageMimeType(extension: string): string {
 }
 
 export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropReturn {
-  const { app, contextNotes, setContextNotes, selectedImages, onAddImage, containerRef } = props;
+  const {
+    app,
+    contextNotes,
+    setContextNotes,
+    selectedImages,
+    onAddImage,
+    containerRef,
+    acceptAnyFileType = false,
+  } = props;
   const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
@@ -151,7 +160,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
               type: getImageMimeType(file.extension),
             });
             onAddImage([imageFile]);
-          } else if (isAllowedFileForNoteContext(file)) {
+          } else if (acceptAnyFileType || isAllowedFileForNoteContext(file)) {
             const isDuplicate = contextNotes.some((note) => note.path === file.path);
             if (isDuplicate) {
               new Notice("This note is already in the context");
@@ -169,7 +178,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         const files = fileItems
           .map((item) => item.getAsFile())
           .filter((file): file is File => file !== null);
-        await addFilesToChat(app, files, { onAddImage, setContextNotes });
+        await addFilesToChat(app, files, { onAddImage, setContextNotes, acceptAnyFileType });
       }
     };
 
@@ -190,7 +199,15 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       container.removeEventListener("drop", handleDropEvent);
       container.removeEventListener("drop", handleDropCaptureCleanup, true);
     };
-  }, [app, contextNotes, selectedImages, onAddImage, setContextNotes, containerRef]);
+  }, [
+    app,
+    contextNotes,
+    selectedImages,
+    onAddImage,
+    setContextNotes,
+    containerRef,
+    acceptAnyFileType,
+  ]);
 
   return { isDragActive };
 }
