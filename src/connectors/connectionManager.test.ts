@@ -199,6 +199,32 @@ describe("connectionManager", () => {
     });
 
     describe("connect()", () => {
+      it("uses the connector name as its connection and Keychain ID (https://github.com/Brevilabs/obsidian-copilot-private/issues/892)", async () => {
+        const fake = setUp();
+
+        expect(await connectNotion(fake)).toBe("notion");
+        expect(getSettings().connectors).toEqual([{ id: "notion", serviceId: "notion" }]);
+      });
+
+      it("adds a numeric suffix when the connector name is already taken (https://github.com/Brevilabs/obsidian-copilot-private/issues/892)", async () => {
+        const fake = setUp({
+          connections: [
+            { id: "notion", serviceId: "notion" },
+            { id: "notion-2", serviceId: "notion" },
+          ],
+        });
+        const outcome = fake.manager.connect("notion");
+
+        expect(fake.pendingLogin()?.target.connectionId).toBe("notion-3");
+        fake.finishLogin({ status: "connected" });
+        await outcome;
+        expect(getSettings().connectors.map(({ id }) => id)).toEqual([
+          "notion",
+          "notion-2",
+          "notion-3",
+        ]);
+      });
+
       it("waits for the browser with the login link and a cancel, without adding a connection yet, and gives the login the service's name and logo", () => {
         const fake = setUp();
 
