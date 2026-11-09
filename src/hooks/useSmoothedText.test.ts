@@ -145,6 +145,13 @@ describe("useSmoothedText", () => {
       expect(renderHook(() => useSmoothedText(example, true)).result.current).toBe(example);
     });
 
+    it(`treats a Mermaid block in a blockquote as finished once the blockquote ends (${DIAGRAM_ISSUE})`, () => {
+      const quoted = "> ```mermaid\n> graph TD\n> A --> B\n";
+      expect(renderHook(() => useSmoothedText(quoted, true)).result.current).toBe("");
+      const after = quoted + "\nOutside explanation. ";
+      expect(renderHook(() => useSmoothedText(after, true)).result.current).toBe(after);
+    });
+
     it("shows the whole text at once when streaming ends or the text is replaced", () => {
       const { result, rerender } = renderHook(
         ({ text, streaming }) => useSmoothedText(text, streaming),

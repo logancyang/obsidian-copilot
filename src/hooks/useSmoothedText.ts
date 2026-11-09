@@ -11,16 +11,21 @@ function revealLimit(text: string): number {
   return text.length - (UNFINISHED_WORD.exec(text)?.[0].length ?? 0);
 }
 
+const CONTAINER = /^[\t >]*/;
 const FENCE = /^[\t >]*(`{3,}|~{3,})(.*)$/;
 
-// Half-written Mermaid code alternates between partial charts and parse errors on every update, so the reply jumps; show each chart only once its fence closes. https://github.com/Brevilabs/obsidian-copilot-private/issues/888
+// Half-written Mermaid code alternates between partial charts and parse errors on every update, so the reply jumps; show each chart only once its fence closes, or its blockquote ends. https://github.com/Brevilabs/obsidian-copilot-private/issues/888
 function withoutOpenDiagram(text: string): string {
-  let open: { marker: string; start: number; diagram: boolean } | null = null;
+  let open: { marker: string; start: number; diagram: boolean; depth: number } | null = null;
   let offset = 0;
   for (const line of text.split("\n")) {
+    const prefix = CONTAINER.exec(line)?.[0] ?? "";
+    const depth = prefix.split(">").length - 1;
+    const settled = prefix.length < line.length || offset + line.length < text.length;
+    if (open && depth < open.depth && settled) open = null;
     const fence = FENCE.exec(line);
     if (fence && !open) {
-      open = { marker: fence[1], start: offset, diagram: fence[2].trim() === "mermaid" };
+      open = { marker: fence[1], start: offset, diagram: fence[2].trim() === "mermaid", depth };
     } else if (
       fence &&
       open &&
