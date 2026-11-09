@@ -4,6 +4,7 @@ import { createRequire } from "module";
 import wasmPlugin from "./wasmPlugin.mjs";
 import nodeModuleShim, { nodeBuiltinExternals } from "./nodeModuleShim.mjs";
 import svgrPlugin from "./svgrPlugin.mjs";
+import mcpAjvStub from "./mcpAjvStub.mjs";
 
 const patchRendererUnsafeUnref = createRequire(import.meta.url)(
   "./scripts/patchRendererUnsafeUnref.js"
@@ -78,7 +79,7 @@ const context = await esbuild.context({
   sourcemap: prod ? false : "inline",
   treeShaking: true,
   outfile: "main.js",
-  plugins: [nodeModuleShim, svgrPlugin, wasmPlugin, patchRendererUnsafeUnref, bundleSizeGuard],
+  plugins: [nodeModuleShim, mcpAjvStub, svgrPlugin, wasmPlugin, patchRendererUnsafeUnref, bundleSizeGuard],
   define: {
     global: "window",
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',

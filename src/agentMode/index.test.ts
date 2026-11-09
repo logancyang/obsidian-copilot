@@ -90,12 +90,24 @@ jest.mock("./ui/ReportIssueModal", () => ({}));
 jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
+jest.mock("@/connectors/connectorTools", () => ({
+  ConnectorTools: jest.fn(() => ({
+    subscribeToToolSetChange: (listener: ToolSetListener) => {
+      mockToolSetListeners.push(listener);
+      return () => {};
+    },
+  })),
+}));
+jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
+jest.mock("@/plusUtils", () => ({ subscribeToEntitlementChange: jest.fn() }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
 const RELOAD_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/475";
 type SettingsSubscriber = (prev: CopilotSettings, next: CopilotSettings) => void;
 const mockSettingsSubscribers: SettingsSubscriber[] = [];
+type ToolSetListener = (affectsBackend: (backendId: string) => boolean) => void;
+const mockToolSetListeners: ToolSetListener[] = [];
 let mockSettings: CopilotSettings;
 let mockRuntime: BuiltinSkillRuntime;
 const mockStates: Record<string, InstallState> = {};
@@ -587,6 +599,23 @@ describe("agentMode", () => {
         "claude",
         "env overrides changed"
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 offers a reload to each agent the connector change affects, so its open chats can pick up the new tools", () => {
+      mockToolSetListeners.length = 0;
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectionManager: {},
+        } as unknown as CopilotPlugin
+      );
+
+      mockToolSetListeners.forEach((listener) => listener((backendId) => backendId === "opencode"));
+
+      expect(mockManager.noteSpawnConfigChanged.mock.calls).toEqual([
+        ["opencode", "connectors changed"],
+      ]);
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

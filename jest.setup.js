@@ -1,5 +1,9 @@
-import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
+
+// Node's own Response bodies reject polyfilled stream classes, which the MCP SDK client pipes them through, so only jsdom suites get the polyfill.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- a static import can't be conditional
+if (typeof ReadableStream === "undefined") require("web-streams-polyfill/dist/polyfill.min.js");
 
 // Node-environment suites (real loopback HTTP and Web Crypto) run plugin code that schedules timers on `window`.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
