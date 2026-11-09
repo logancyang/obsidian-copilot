@@ -11,6 +11,30 @@ function revealLimit(text: string): number {
   return text.length - (UNFINISHED_WORD.exec(text)?.[0].length ?? 0);
 }
 
+const FENCE = /^[\t >]*(`{3,}|~{3,})(.*)$/;
+
+// Half-written Mermaid code alternates between partial charts and parse errors on every update, so the reply jumps; show each chart only once its fence closes. https://github.com/Brevilabs/obsidian-copilot-private/issues/888
+function withoutOpenDiagram(text: string): string {
+  let open: { marker: string; start: number; diagram: boolean } | null = null;
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    const fence = FENCE.exec(line);
+    if (fence && !open) {
+      open = { marker: fence[1], start: offset, diagram: fence[2].trim() === "mermaid" };
+    } else if (
+      fence &&
+      open &&
+      fence[1][0] === open.marker[0] &&
+      fence[1].length >= open.marker.length &&
+      !fence[2].trim()
+    ) {
+      open = null;
+    }
+    offset += line.length + 1;
+  }
+  return open?.diagram ? text.slice(0, open.start) : text;
+}
+
 function advance(text: string, start: number, units: number, limit: number): number {
   const unit = new RegExp(UNIT.source, "g");
   unit.lastIndex = start;
@@ -70,5 +94,5 @@ export function useSmoothedText(text: string, streaming: boolean): string {
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
   }, [text, streaming]);
-  return extending ? shown : text;
+  return streaming ? withoutOpenDiagram(extending ? shown : text) : text;
 }

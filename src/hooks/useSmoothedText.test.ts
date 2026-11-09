@@ -2,6 +2,8 @@ import { REVEAL_COMMIT_MS, REVEAL_LAG_MS, useSmoothedText } from "@/hooks/useSmo
 import { act, renderHook } from "@testing-library/react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/886";
+const DIAGRAM_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/888";
+const CHART = "```mermaid\nflowchart LR\n  A --> B\n```\n";
 const words = (count: number, from = 0) =>
   Array.from({ length: count }, (_, index) => `word${from + index} `).join("");
 const advance = (ms: number) => act(() => jest.advanceTimersByTime(ms));
@@ -110,6 +112,37 @@ describe("useSmoothedText", () => {
       rerender({ text: "안녕하세요 오늘은 좋은 날" });
       advance(500);
       expect(result.current).toBe("안녕하세요 오늘은 좋은 ");
+    });
+
+    it(`withholds a Mermaid block until its closing fence arrives (${DIAGRAM_ISSUE})`, () => {
+      const intro = "Here is the flow:\n\n";
+      const { result, rerender } = renderHook(({ text }) => useSmoothedText(text, true), {
+        initialProps: { text: intro + CHART.slice(0, 30) },
+      });
+      expect(result.current).toBe(intro);
+      rerender({ text: intro + CHART + "\nDone. " });
+      for (let elapsed = 0; elapsed < 500; elapsed += 10) {
+        advance(10);
+        expect(result.current === intro || result.current.startsWith(intro + CHART)).toBe(true);
+      }
+      expect(result.current).toBe(intro + CHART + "\nDone. ");
+    });
+
+    it(`shows a withheld Mermaid block once streaming ends, even unclosed (${DIAGRAM_ISSUE})`, () => {
+      const partial = "Flow:\n\n" + CHART.slice(0, 30);
+      const { result, rerender } = renderHook(
+        ({ text, streaming }) => useSmoothedText(text, streaming),
+        { initialProps: { text: partial, streaming: true } }
+      );
+      rerender({ text: partial, streaming: false });
+      expect(result.current).toBe(partial);
+    });
+
+    it(`keeps streaming other code blocks and Mermaid examples inside longer fences (${DIAGRAM_ISSUE})`, () => {
+      const code = "Run:\n\n```ts\nconst a = 1;\n";
+      expect(renderHook(() => useSmoothedText(code, true)).result.current).toBe(code);
+      const example = "Syntax:\n\n````markdown\n" + CHART + "````\n\nAfter ";
+      expect(renderHook(() => useSmoothedText(example, true)).result.current).toBe(example);
     });
 
     it("shows the whole text at once when streaming ends or the text is replaced", () => {
