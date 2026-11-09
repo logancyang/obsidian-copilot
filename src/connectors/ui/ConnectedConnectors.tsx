@@ -32,7 +32,7 @@ const STATUS_ORDER: Record<ConnectionStatus, number> = {
 
 export interface ConnectedConnectorsProps {
   snapshot: ConnectorsSnapshot;
-  onBrowse?: () => void;
+  onBrowse: () => void;
   onConnect: (serviceId: string) => void;
   onReconnect: (connectionId: string) => void;
   onCheckAgain: (connectionId: string) => Promise<void>;
@@ -76,12 +76,10 @@ export function ConnectedConnectors({
           </div>
           <p className="tw-m-0 tw-text-sm tw-text-muted">Connect agents with external services.</p>
         </div>
-        {onBrowse && (
-          <Button className="tw-max-w-full" onClick={onBrowse}>
-            <Plus className="tw-size-4" />
-            <span className="tw-truncate">Browse connectors</span>
-          </Button>
-        )}
+        <Button className="tw-max-w-full" onClick={onBrowse}>
+          <Plus className="tw-size-4" />
+          <span className="tw-truncate">Browse connectors</span>
+        </Button>
       </div>
       <ul className={LIST_CLASS}>
         {firstLogin}
@@ -254,7 +252,7 @@ function ConnectedRow({
 }
 
 interface ConnectorsEmptyStateProps {
-  onBrowse?: () => void;
+  onBrowse: () => void;
 }
 
 function ConnectorsEmptyState({ onBrowse }: ConnectorsEmptyStateProps): React.ReactElement {
@@ -273,12 +271,10 @@ function ConnectorsEmptyState({ onBrowse }: ConnectorsEmptyStateProps): React.Re
         Let Claude, Codex and OpenCode read and update Notion, Linear, Jira, Todoist and more. Log
         in once and every agent can use it.
       </p>
-      {onBrowse && (
-        <Button className="tw-mt-2" onClick={onBrowse}>
-          Browse connectors
-          <ChevronRight className="tw-size-4" />
-        </Button>
-      )}
+      <Button className="tw-mt-2" onClick={onBrowse}>
+        Browse connectors
+        <ChevronRight className="tw-size-4" />
+      </Button>
       <p className="tw-m-0 tw-mt-1 tw-flex tw-items-center tw-gap-1.5 tw-text-ui-smaller tw-text-muted">
         <Lock aria-hidden="true" className="tw-size-3" />
         Logins stay in this device&apos;s keychain. Copilot never sees your password.
