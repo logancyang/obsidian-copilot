@@ -12,7 +12,7 @@ describe("copilotToolCalls", () => {
   describe("directCopilotToolUse()", () => {
     it("says a call on Copilot's server runs its tool with its input as arguments", () => {
       expect(directCopilotToolUse("obsidian-copilot", "notion_search", { query: "Orion" })).toEqual(
-        { runs: "notion_search", calls: [{ name: "notion_search", args: { query: "Orion" } }] }
+        { calls: [{ name: "notion_search", args: { query: "Orion" } }] }
       );
     });
 

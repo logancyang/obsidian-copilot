@@ -1,5 +1,5 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { codeStringField, copilotToolCall, copilotToolName } from "@/agentMode/ui/copilotToolCall";
+import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
 
 function tool(overrides: Partial<ToolCallPart>): ToolCallPart {
   return { kind: "tool_call", id: "x", title: "tool", status: "completed", ...overrides };
@@ -7,7 +7,6 @@ function tool(overrides: Partial<ToolCallPart>): ToolCallPart {
 
 const WRITE_THEN_RENDER = tool({
   copilotTools: {
-    runs: null,
     calls: [
       { name: "excalidraw_write", code: 'tools["obsidian-copilot"].excalidraw_write({});' },
       { name: "excalidraw_render", code: 'tools["obsidian-copilot"].excalidraw_render({});' },
@@ -20,7 +19,6 @@ describe("copilotToolCall", () => {
     it("returns the call to the named tool with its arguments", () => {
       const part = tool({
         copilotTools: {
-          runs: "excalidraw_write",
           calls: [{ name: "excalidraw_write", args: { path: "a.excalidraw.md" } }],
         },
       });
@@ -42,7 +40,6 @@ describe("copilotToolCall", () => {
         "a call to another Copilot tool",
         tool({
           copilotTools: {
-            runs: "excalidraw_render",
             calls: [{ name: "excalidraw_render", args: {} }],
           },
         }),
@@ -53,22 +50,6 @@ describe("copilotToolCall", () => {
       ],
     ])("returns null for %s", (_name, part) => {
       expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
-    });
-  });
-
-  describe("copilotToolName()", () => {
-    it("returns the Copilot tool the call runs", () => {
-      const part = tool({
-        copilotTools: { runs: "notion_search", calls: [{ name: "notion_search", args: {} }] },
-      });
-      expect(copilotToolName(part)).toBe("notion_search");
-    });
-
-    it.each([
-      ["code whose approval may cover more than one tool", WRITE_THEN_RENDER],
-      ["a call to no Copilot tool", tool({ vendorToolName: "Read" })],
-    ])("returns null for %s", (_name, part) => {
-      expect(copilotToolName(part)).toBeNull();
     });
   });
 

@@ -83,13 +83,12 @@ describe("messageParts", () => {
       });
 
       expect(part.kind === "tool_call" && part.copilotTools).toEqual({
-        runs: "notion_search",
         calls: [{ name: "notion_search", args: { query: "Orion" } }],
       });
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps the Copilot tools a backend read from a call it wraps", () => {
-      const copilotTools = { runs: null, calls: [{ name: "notion_search", code: "x" }] };
+      const copilotTools = { calls: [{ name: "notion_search", code: "x" }] };
       const part = toolCallToPart({ toolCallId: "t1", title: "execute", copilotTools });
 
       expect(part.kind === "tool_call" && part.copilotTools).toBe(copilotTools);
@@ -225,14 +224,26 @@ describe("messageParts", () => {
       const merged = mergeToolCallUpdate(call, { toolCallId: "t1", rawInput: { query: "Orion" } });
 
       expect(merged.kind === "tool_call" && merged.copilotTools).toEqual({
-        runs: "notion_search",
         calls: [{ name: "notion_search", args: { query: "Orion" } }],
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 accepts executed tool metadata on a completion update without new input", () => {
+      const copilotTools = {
+        wrapper: "Execute",
+        calls: [{ name: "everything_echo", args: { message: "hello" } }],
+      };
+      const merged = mergeToolCallUpdate(existing, {
+        toolCallId: "t1",
+        status: "completed",
+        copilotTools,
+      });
+      expect(merged.kind === "tool_call" && merged.copilotTools).toBe(copilotTools);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 replaces a wrapped call's Copilot tools with the ones read from new input and keeps them when no input arrives", () => {
-      const before = { runs: "notion_search", calls: [{ name: "notion_search", code: "a" }] };
-      const after = { runs: null, calls: [{ name: "notion_search", code: "b" }] };
+      const before = { calls: [{ name: "notion_search", code: "a" }] };
+      const after = { calls: [{ name: "notion_search", code: "b" }] };
       const call = { ...existing, copilotTools: before };
 
       const kept = mergeToolCallUpdate(call, { toolCallId: "t1", status: "completed" });
