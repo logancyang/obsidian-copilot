@@ -1,6 +1,6 @@
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 
-export type CopilotToolCall = { name: string } & (
+export type CopilotToolCall = { name: string; server?: string } & (
   | { args: Record<string, unknown> }
   | { code: string }
 );

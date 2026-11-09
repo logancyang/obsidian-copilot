@@ -293,7 +293,7 @@ While the Excalidraw plugin (2.29 or later) is enabled, Claude Code, Codex, and 
 
 ## Outside services
 
-Connect services such as Notion, Linear, and Todoist under **Settings → Copilot → Connectors**, and Claude Code, Codex, and OpenCode can use them in your chats. See [Connectors](connectors.md).
+Connect services such as Notion, Linear, and Todoist under **Settings → Copilot → Connectors**, and Claude Code, Codex, and OpenCode can use them in your chats. See [Connectors](connectors.md). OpenCode’s completed tool steps name the tools inside each Execute block, including connector discovery and tools from other servers. Expand the activity summary to see them.
 
 ## Applying a settings change
 

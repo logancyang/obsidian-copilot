@@ -13,13 +13,21 @@ export function readOpencodeCopilotTools(
 ): CopilotToolUse | null {
   const metadata = toolInputRecord(toolInputRecord(rawOutput).metadata);
   if (!Array.isArray(metadata.toolCalls)) return null;
-  const prefix = `${COPILOT_MCP_SERVER_NAME}.`;
   const calls: CopilotToolCall[] = [];
   for (const entry of metadata.toolCalls) {
     const record = toolInputRecord(entry);
-    if (typeof record.tool !== "string" || !record.tool.startsWith(prefix)) continue;
-    const name = record.tool.slice(prefix.length);
-    if (name) calls.push({ name, args: toolInputRecord(record.input) });
+    if (typeof record.tool !== "string" || !record.tool) continue;
+    // Resource discovery and other tools outside Copilot still need visible names in execute batches.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+    const separator = record.tool.indexOf(".");
+    const server = separator < 0 ? "opencode" : record.tool.slice(0, separator);
+    const name = separator < 0 ? record.tool : record.tool.slice(separator + 1);
+    if (!name) continue;
+    calls.push({
+      name,
+      ...(server === COPILOT_MCP_SERVER_NAME ? {} : { server }),
+      args: toolInputRecord(record.input),
+    });
   }
   return calls.length > 0 ? { wrapper: "Execute", calls } : null;
 }

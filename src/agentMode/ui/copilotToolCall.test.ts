@@ -35,6 +35,13 @@ describe("copilotToolCall", () => {
       });
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 does not treat another server's identically named tool as a Copilot feature", () => {
+      const part = tool({
+        copilotTools: { calls: [{ name: "excalidraw_write", server: "other", args: {} }] },
+      });
+      expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
+    });
+
     it.each([
       [
         "a call to another Copilot tool",

@@ -143,6 +143,22 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       ],
     },
   }),
+  say("OpenCode resource discovery and other servers remain visible alongside connector calls."),
+  tool("opencode-discover-resources", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    copilotTools: {
+      wrapper: "Execute",
+      calls: [
+        { name: "list_mcp_resources", server: "opencode", args: {} },
+        { name: "search", server: "opencode", args: { query: "connectors" } },
+        { name: "search", server: "notes", args: { query: "Orion" } },
+        { name: "notion_search", args: { query: "Orion" } },
+      ],
+    },
+    output: [{ type: "text", text: "Found connected services and their available resources." }],
+  }),
   say("An executed block names each connector tool reported by the runtime."),
   tool("opencode-notion-both", "execute", {
     vendorToolName: undefined,

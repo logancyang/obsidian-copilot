@@ -24,15 +24,15 @@ export interface ToolSummary {
 export function copilotToolLabel(part: ToolCallPart): string | null {
   // Known calls can be part of a larger execute block, so their list must not narrow its approval scope.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
-  const names = [...new Set(part.copilotTools?.calls.map((call) => call.name))];
-  const label = names
-    .map((name) => {
-      const tool = describeConnectorTool(name);
-      return tool
-        ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
-        : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
-    })
-    .join(", ");
+  const labels = part.copilotTools?.calls.map(({ name, server = COPILOT_MCP_SERVER_NAME }) => {
+    // Only Copilot's namespace contains connector aliases; other servers can reuse those names.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+    const tool = server === COPILOT_MCP_SERVER_NAME ? describeConnectorTool(name) : undefined;
+    return tool
+      ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
+      : `${server === "opencode" ? "OpenCode" : server} · ${humanizeToolName(name)}`;
+  });
+  const label = [...new Set(labels)].join(", ");
   if (!label) return null;
   return part.copilotTools?.wrapper ? `${part.copilotTools.wrapper} · ${label}` : label;
 }

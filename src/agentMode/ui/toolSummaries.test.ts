@@ -1,3 +1,4 @@
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
 import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
 import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import {
@@ -562,6 +563,25 @@ describe("toolSummaries", () => {
   });
 
   describe("copilotToolLabel()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names resource discovery and preserves identically named tools from different servers", () => {
+      const part = tool({ title: "execute", input: {} });
+      part.copilotTools =
+        readOpencodeCopilotTools(undefined, {
+          metadata: {
+            toolCalls: [
+              { tool: "opencode.list_mcp_resources" },
+              { tool: "search" },
+              { tool: "notes.search" },
+              { tool: "obsidian-copilot.notion_search" },
+              { tool: "notes.search" },
+            ],
+          },
+        }) ?? undefined;
+      expect(copilotToolLabel(part)).toBe(
+        "Execute · OpenCode · List mcp resources, OpenCode · Search, notes · Search, Notion · Search"
+      );
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 reads saved tool metadata from before wrapper labels were recorded", () => {
       const legacy = { runs: null, calls: [{ name: "notion_search", code: "old source" }] };
       expect(copilotToolLabel(tool({ copilotTools: legacy }))).toBe("Notion · Search");

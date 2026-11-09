@@ -22,7 +22,7 @@ describe("opencodeCopilotToolCalls", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 preserves actual call order, repeated calls and failed attempts while ignoring other namespaces", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 preserves actual call order, repeated calls and failed attempts including other namespaces", () => {
       expect(
         readOpencodeCopilotTools(
           undefined,
@@ -46,8 +46,30 @@ describe("opencodeCopilotToolCalls", () => {
         wrapper: "Execute",
         calls: [
           { name: "everything_echo", args: { message: "alpha" } },
+          { name: "fetch", server: "opencode", args: { url: "https://example.com" } },
+          { name: "echo", server: "other", args: {} },
           { name: "everything_echo", args: { message: "beta" } },
           { name: "everything_get-sum", args: { a: 2, b: 3 } },
+        ],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names resource discovery and search even without a Copilot call", () => {
+      expect(
+        readOpencodeCopilotTools(
+          undefined,
+          output([
+            { tool: "opencode.list_mcp_resources", input: { server: "notes" } },
+            { tool: "search", input: { query: "connectors" } },
+            { tool: "notes.search", input: { query: "meeting" } },
+          ])
+        )
+      ).toEqual({
+        wrapper: "Execute",
+        calls: [
+          { name: "list_mcp_resources", server: "opencode", args: { server: "notes" } },
+          { name: "search", server: "opencode", args: { query: "connectors" } },
+          { name: "search", server: "notes", args: { query: "meeting" } },
         ],
       });
     });
@@ -95,7 +117,7 @@ describe("opencodeCopilotToolCalls", () => {
       output(null),
       output("not a list"),
       output([]),
-      output([null, {}, { tool: 42 }, { tool: "obsidian-copilot." }, { tool: "other.echo" }]),
+      output([null, {}, { tool: 42 }, { tool: "obsidian-copilot." }]),
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 returns no recognized calls for absent or unusable execution metadata: %j",
       (rawOutput) => {
