@@ -150,6 +150,7 @@ export class ConnectionManager {
       serverUrl: service.serverUrl,
       serviceName: service.name,
       logoUrl: service.logoUrl,
+      useDynamicClientRegistration: service.useDynamicClientRegistration,
     });
     this.waitingLogin = Object.freeze({
       connectionId,

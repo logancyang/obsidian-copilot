@@ -13,6 +13,8 @@ Connectors is a preview for Supporters and works on desktop only. Without Suppor
 
 If no browser window opens, click **Copy the login link** and open it yourself. You can log in to one service at a time; click **Cancel** to stop a login. Leaving **Settings → Copilot → Connectors** also cancels a login you started there. If the login doesn't finish, the row says why; click **Try again**.
 
+If Airtable shows "invalid client_id or mismatched redirect_uri", update Copilot and start a new login with **Connect** or **Reconnect**.
+
 New chats can use the service right away. A chat that is already open shows **settings changed** with **Reload**; click **Reload** to give that chat the service. See [Applying a settings change](agent-mode-and-tools.md#applying-a-settings-change).
 
 ## See what agents can do with a service
