@@ -207,11 +207,69 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
     refreshSystemPromptAffected();
   };
+  const { connectionManager, connectorTools } = plugin;
+  const connectorsOn = () => isConnectorsEnabled() === true;
+  const copilotMcpServer = createCopilotMcpServer(
+    (toolName) => isCopilotToolOn(toolName, getSettings(), app),
+    [
+      {
+        definition: MIYO_SEARCH_TOOL,
+        turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT,
+        call: (args) =>
+          runMiyoSearch(args, {
+            client: new MiyoClient(),
+            getSettings,
+            getVaultName: () => getMiyoFolderName(app),
+          }),
+      },
+      {
+        definition: MIYO_PARSE_TOOL,
+        turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
+        call: createMiyoParse((path) =>
+          parseWithMiyo(path, {
+            client: new MiyoClient(),
+            getSettings,
+            getVaultName: () => getMiyoFolderName(app),
+            getVaultBase: () => getVaultBase(app),
+          })
+        ),
+      },
+      ...createOpenArtifactsTools({
+        app,
+        client: new OpenArtifactsClient(),
+        publisher: plugin.openArtifactsPublisher,
+        getLicenseKey: () => getSettings().plusLicenseKey.trim(),
+        getVaultBase: () => getVaultBase(app),
+        openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
+      }),
+      ...createExcalidrawTools(() => getExcalidrawApi(app)),
+      {
+        definition: OBSIDIAN_CLI_TOOL,
+        turnedOffText: OBSIDIAN_CLI_TURNED_OFF_TEXT,
+        call: createObsidianCliCall({
+          getVaultName: () => app.vault.getName(),
+          hostPluginId: plugin.manifest.id,
+          run: runInRunningObsidian,
+        }),
+      },
+      ...(connectionManager
+        ? [
+            createSuggestConnectorTool({
+              catalog: CONNECTOR_CATALOG,
+              getSnapshot: connectionManager.getSnapshot,
+              isEnabled: connectorsOn,
+            }),
+          ]
+        : []),
+    ],
+    connectorTools
+  );
   const preloader = new AgentModelPreloader(
     app,
     plugin,
     (id) => backendRegistry[id],
-    beforeBackendStart
+    beforeBackendStart,
+    copilotMcpServer
   );
   const persistenceManager = new AgentChatPersistenceManager(app);
   const vaultId = getVaultId(app);
@@ -223,8 +281,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   );
   const sessionIndex = new AgentSessionIndex(createNodeFileStorage(), indexPath);
   let managerRef: AgentSessionManager | null = null;
-  const { connectionManager, connectorTools } = plugin;
-  const connectorsOn = () => isConnectorsEnabled() === true;
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null,
     (id) => managerRef?.isReadOnlyFanoutSession(id) ?? false
@@ -253,61 +309,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           ]
         : []),
     ],
-    copilotMcpServer: createCopilotMcpServer(
-      (toolName) => isCopilotToolOn(toolName, getSettings(), app),
-      [
-        {
-          definition: MIYO_SEARCH_TOOL,
-          turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT,
-          call: (args) =>
-            runMiyoSearch(args, {
-              client: new MiyoClient(),
-              getSettings,
-              getVaultName: () => getMiyoFolderName(app),
-            }),
-        },
-        {
-          definition: MIYO_PARSE_TOOL,
-          turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
-          call: createMiyoParse((path) =>
-            parseWithMiyo(path, {
-              client: new MiyoClient(),
-              getSettings,
-              getVaultName: () => getMiyoFolderName(app),
-              getVaultBase: () => getVaultBase(app),
-            })
-          ),
-        },
-        ...createOpenArtifactsTools({
-          app,
-          client: new OpenArtifactsClient(),
-          publisher: plugin.openArtifactsPublisher,
-          getLicenseKey: () => getSettings().plusLicenseKey.trim(),
-          getVaultBase: () => getVaultBase(app),
-          openInBrowser: (url) => window.open(url, "_blank", "noopener,noreferrer"),
-        }),
-        ...createExcalidrawTools(() => getExcalidrawApi(app)),
-        {
-          definition: OBSIDIAN_CLI_TOOL,
-          turnedOffText: OBSIDIAN_CLI_TURNED_OFF_TEXT,
-          call: createObsidianCliCall({
-            getVaultName: () => app.vault.getName(),
-            hostPluginId: plugin.manifest.id,
-            run: runInRunningObsidian,
-          }),
-        },
-        ...(connectionManager
-          ? [
-              createSuggestConnectorTool({
-                catalog: CONNECTOR_CATALOG,
-                getSnapshot: connectionManager.getSnapshot,
-                isEnabled: connectorsOn,
-              }),
-            ]
-          : []),
-      ],
-      connectorTools
-    ),
+    copilotMcpServer,
   });
   managerRef = manager;
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.

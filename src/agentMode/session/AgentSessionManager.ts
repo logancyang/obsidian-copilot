@@ -2656,6 +2656,7 @@ export class AgentSessionManager {
         app: this.app,
         clientVersion: this.plugin.manifest.version,
         descriptor,
+        copilotMcpServer: this.opts.copilotMcpServer,
       });
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
