@@ -153,17 +153,6 @@ interface StripMeasurements {
   widths: Readonly<Record<string, number>>;
 }
 
-function sameMeasurements(a: StripMeasurements, b: StripMeasurements): boolean {
-  const aIds = Object.keys(a.widths);
-  return (
-    a.available === b.available &&
-    a.gap === b.gap &&
-    a.overflowWidth === b.overflowWidth &&
-    aIds.length === Object.keys(b.widths).length &&
-    aIds.every((id) => a.widths[id] === b.widths[id])
-  );
-}
-
 const OFF_STRIP_CLASS = "tw-invisible tw-absolute tw-left-0 tw-top-0";
 
 interface SettingTabStripProps<Id extends string> {
@@ -194,13 +183,12 @@ export function SettingTabStrip<Id extends string>({
       tabRefs.current.forEach((el, id) => {
         widths[id] = el.getBoundingClientRect().width;
       });
-      const next: StripMeasurements = {
+      setMeasurements({
         available: strip.getBoundingClientRect().width,
         gap: parseFloat(strip.win.getComputedStyle(strip).columnGap) || 0,
         overflowWidth: overflowRef.current?.getBoundingClientRect().width ?? 0,
         widths,
-      };
-      setMeasurements((prev) => (prev && sameMeasurements(prev, next) ? prev : next));
+      });
     };
 
     measure();
