@@ -8,7 +8,7 @@ import { AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { logError, logInfo, logWarn } from "@/logger";
-import { filterChatHistoryFiles } from "@/utils/chatHistoryUtils";
+import { filterChatHistoryFiles, formatChatNoteMessage } from "@/utils/chatHistoryUtils";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { ChatMessage, MessageContext } from "@/types/message";
@@ -250,7 +250,7 @@ export class ChatPersistenceManager {
           }
         }
 
-        let content = `**${message.sender}**: ${messageText}`;
+        let content = formatChatNoteMessage(message.sender, messageText);
 
         if (message.context) {
           const contextParts: string[] = [];
