@@ -2820,7 +2820,6 @@ export class AgentSessionManager {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
       for (const session of affected) await this.drainAutoSave(session);
       const activeSessionId = this.activeSessionId;
-      const activeProjectId = this.activeProjectId;
       // Every affected composer must stay owned across the gap, including tabs
       // outside the active scope, or the draft store prunes their unsent text.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
@@ -2868,7 +2867,7 @@ export class AgentSessionManager {
         this.registerPreload(backendId, probe);
         if (replacements.length > 0 && !this.disposed) {
           await probe;
-          let selectedId = activeSessionId;
+          let reselectId: string | null = null;
           for (const replacement of replacements) {
             const rebuilt = await this.rebuildReplacedSession(
               backendId,
@@ -2900,13 +2899,11 @@ export class AgentSessionManager {
             }
             rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
-            if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
+            if (replacement.internalId === activeSessionId) reselectId = rebuilt.internalId;
           }
-          if (selectedId) this.setActiveSession(selectedId);
-          else {
-            this.activeSessionId = null;
-            this.activeProjectId = activeProjectId;
-          }
+          // An overlapping restart of another agent must not write back the selection it saw while this one was cleared.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+          if (reselectId && this.activeSessionId === null) this.setActiveSession(reselectId);
         }
       }
     } finally {

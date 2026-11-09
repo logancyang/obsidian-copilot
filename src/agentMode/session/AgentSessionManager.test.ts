@@ -3128,6 +3128,49 @@ describe("AgentSessionManager", () => {
         expect(preload).toHaveBeenCalledWith("opencode");
       });
 
+      it("keeps the reloaded chat selected when another agent's restart begins during its restart and finishes last (https://github.com/Brevilabs/obsidian-copilot-private/issues/877)", async () => {
+        const gatedShutdown = () => {
+          let markStarted!: () => void;
+          let release!: () => void;
+          const started = new Promise<void>((resolve) => (markStarted = resolve));
+          const released = new Promise<void>((resolve) => (release = resolve));
+          const process = {
+            ...makeMockBackendProcess(),
+            shutdown: jest.fn(() => {
+              markStarted();
+              return released;
+            }),
+          };
+          const createBackendProcess = jest
+            .fn()
+            .mockReturnValueOnce(process)
+            .mockImplementation(() => makeMockBackendProcess());
+          return { started, release, createBackendProcess };
+        };
+        const opencode = gatedShutdown();
+        const codex = gatedShutdown();
+        const mgr = buildManager({
+          descriptor: buildDescriptor({ createBackendProcess: opencode.createBackendProcess }),
+          otherDescriptors: [
+            buildDescriptor({ id: "codex", createBackendProcess: codex.createBackendProcess }),
+          ],
+        });
+        const otherAgentChat = await createWorkedSession(mgr, "codex");
+        const reloaded = await createWorkedSession(mgr, "opencode");
+
+        const opencodeRestart = mgr.restartBackend("opencode", "skills changed");
+        await opencode.started;
+        const codexRestart = mgr.restartBackend("codex", "skills changed");
+        await codex.started;
+        opencode.release();
+        await opencodeRestart;
+        codex.release();
+        await codexRestart;
+
+        expect(mgr.getActiveSession()?.chatInputId).toBe(reloaded.chatInputId);
+        expect(mgr.getSessions().map((s) => s.chatInputId)).toContain(otherAgentChat.chatInputId);
+      });
+
       it("re-probes before creating the replacement so the effort catalog is rebuilt", async () => {
         const preload = jest.fn(async () => undefined);
         const mgr = buildManager({ preloader: { preload } });
