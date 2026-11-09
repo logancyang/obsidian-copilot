@@ -10,7 +10,6 @@ describe("codexCopilotToolCalls", () => {
           arguments: { path: "a.excalidraw.md" },
         })
       ).toEqual({
-        runs: "excalidraw_write",
         calls: [{ name: "excalidraw_write", args: { path: "a.excalidraw.md" } }],
       });
     });
@@ -18,7 +17,7 @@ describe("codexCopilotToolCalls", () => {
     it("reads empty arguments for a call that sent none", () => {
       expect(
         readCodexCopilotTools({ server: "obsidian-copilot", tool: "excalidraw_read" })
-      ).toEqual({ runs: "excalidraw_read", calls: [{ name: "excalidraw_read", args: {} }] });
+      ).toEqual({ calls: [{ name: "excalidraw_read", args: {} }] });
     });
 
     it.each([

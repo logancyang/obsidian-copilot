@@ -5,10 +5,6 @@ export function copilotToolCall(part: ToolCallPart, toolName: string): CopilotTo
   return part.copilotTools?.calls.find((call) => call.name === toolName) ?? null;
 }
 
-export function copilotToolName(part: ToolCallPart): string | null {
-  return part.copilotTools?.runs ?? null;
-}
-
 export function codeStringField(code: string, field: string): string | null {
   const literal = new RegExp(
     `\\b${field}["']?:\\s*(?:"((?:[^"\\\\]|\\\\.)*)"|'((?:[^'\\\\]|\\\\.)*)')`

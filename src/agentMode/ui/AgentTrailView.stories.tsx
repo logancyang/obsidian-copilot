@@ -107,7 +107,6 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     mcpServer: "obsidian-copilot",
     input: { query: "Orion" },
     copilotTools: {
-      runs: "notion_notion-search",
       calls: [{ name: "notion_notion-search", args: { query: "Orion" } }],
     },
     output: [{ type: "text", text: "Orion kickoff plan" }],
@@ -123,11 +122,10 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       arguments: { title: "Orion retro" },
     },
     copilotTools: {
-      runs: "linear_create_issue",
       calls: [{ name: "linear_create_issue", args: { title: "Orion retro" } }],
     },
   }),
-  say("OpenCode's execute code that calls one Copilot tool is named after that tool."),
+  say("OpenCode keeps Execute and names the Copilot tool its code includes."),
   tool("opencode-notion-create", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -136,7 +134,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       code: 'const res = await tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
     },
     copilotTools: {
-      runs: "notion_notion-create-pages",
+      wrapper: "Execute",
       calls: [
         {
           name: "notion_notion-create-pages",
@@ -145,7 +143,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       ],
     },
   }),
-  say("Completed code that calls several tools names each tool."),
+  say("Code that calls several tools keeps Execute and names its recognized tools."),
   tool("opencode-notion-both", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -154,7 +152,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       code: 'return Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "Orion" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "Orion" }),\n]);',
     },
     copilotTools: {
-      runs: null,
+      wrapper: "Execute",
       calls: [
         {
           name: "notion_search",
@@ -167,7 +165,7 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       ],
     },
   }),
-  say("A word in a tool's arguments does not hide its completed name."),
+  say("A word in a tool's arguments does not hide its name."),
   tool("opencode-notion-string", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -176,12 +174,26 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       code: 'return tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
     },
     copilotTools: {
-      runs: null,
+      wrapper: "Execute",
       calls: [
         {
           name: "notion_search",
           code: 'tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
         },
+      ],
+    },
+  }),
+  say("An approval for a batch names the same execute scope and tools as its finished row."),
+  tool("opencode-notion-pending", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    status: "pending",
+    copilotTools: {
+      wrapper: "Execute",
+      calls: [
+        { name: "notion_search", code: 'tools["obsidian-copilot"].notion_search({})' },
+        { name: "notion_create_page", code: 'tools["obsidian-copilot"].notion_create_page({})' },
       ],
     },
   }),

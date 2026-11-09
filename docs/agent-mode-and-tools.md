@@ -95,7 +95,7 @@ An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • /
 
 Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
 
-Completed OpenCode steps name the connector tools Copilot recognizes, such as **Notion · Search**. A step that calls several tools lists each distinct tool once. Steps with no recognized tool keep the **Execute** label.
+OpenCode steps and approval cards keep **Execute** and list the connector tools Copilot recognizes, such as **Execute · Notion · Search**. A block that calls several tools lists each distinct tool once. The label follows the same rule before and after execution. Steps with no recognized tool keep the **Execute** label.
 
 Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
 

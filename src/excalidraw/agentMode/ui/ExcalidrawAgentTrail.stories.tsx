@@ -27,7 +27,7 @@ const excalidraw = (
   tool(id, name, {
     mcpServer: "obsidian-copilot",
     input,
-    copilotTools: { runs: name, calls: [{ name, args: input }] },
+    copilotTools: { calls: [{ name, args: input }] },
     ...overrides,
   });
 

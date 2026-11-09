@@ -86,7 +86,7 @@ export const OpencodeCopilotTool: StoryObj<ToolPermissionCardProps> = {
       ...request,
       toolCall: {
         ...request.toolCall,
-        title: "Fake Remote · Remember",
+        title: "Execute · Fake Remote · Remember",
         kind: "other",
         rawInput: {
           code: 'const res = await tools["obsidian-copilot"].fakeremote_remember({ fact: "Orion ships Friday" });\nreturn res;',

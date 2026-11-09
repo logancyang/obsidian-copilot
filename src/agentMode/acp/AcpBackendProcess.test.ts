@@ -439,7 +439,7 @@ describe("AcpBackendProcess", () => {
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 tags each tool call, live or replayed, with the Copilot tools the backend reads from its input", async () => {
-        const uses = { runs: "notion_search", calls: [{ name: "notion_search", args: {} }] };
+        const uses = { calls: [{ name: "notion_search", args: {} }] };
         const readCopilotTools = jest.fn((input: unknown) =>
           (input as { code?: string }).code === "copilot" ? uses : null
         );
