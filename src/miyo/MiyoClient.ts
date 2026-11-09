@@ -89,6 +89,8 @@ export interface MiyoSearchResponse {
   results: MiyoSearchResult[];
 }
 
+export const RELATED_CONTEXT_MAX_FILE_PATHS = 100;
+
 export interface RelatedContextRequest {
   folder_name: string;
   messages?: Array<{ role: "user" | "assistant"; content: string }>;
