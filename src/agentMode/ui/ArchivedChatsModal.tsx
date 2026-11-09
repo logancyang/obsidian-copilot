@@ -1,4 +1,4 @@
-import { backendRegistry } from "@/agentMode/backends/registry";
+import { chatBackendIcon } from "@/agentMode/ui/chatBackendIcon";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
@@ -9,7 +9,7 @@ import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
 import { logError } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { ArchiveRestore, MessageCircle } from "lucide-react";
+import { ArchiveRestore } from "lucide-react";
 import { App, Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
 
@@ -134,7 +134,7 @@ export function ArchivedChatsList({
       .map<ArchivedRow>((item) => ({
         key: `chat:${item.id}`,
         title: item.title,
-        Icon: (item.backendId && backendRegistry[item.backendId]?.Icon) || MessageCircle,
+        Icon: chatBackendIcon(item),
         archivedAtMs: item.archivedAt ?? item.lastAccessedAt.getTime(),
         unarchive: () => onUnarchive(item.id),
         open: () => onOpen(item.id),

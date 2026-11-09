@@ -72,6 +72,7 @@ import {
   resetPersistenceState,
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
+import { watchMiyoFolderName } from "@/miyo/miyoUtils";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import {
   checkIsPaidUser,
@@ -326,6 +327,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
     }
     if (!this.pluginLifecycleActive) return;
 
+    this.register(watchMiyoFolderName(this.app));
     this.register(
       startReleaseUpdateCheck(
         this.app,

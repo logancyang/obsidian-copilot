@@ -262,7 +262,7 @@ Custom Skills and built-in Obsidian Skills are free. Active Plus access adds clo
 
 The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in skills** to route those requests through Copilot instead.
 
-The Obsidian Skills (`obsidian-markdown`, `obsidian-bases`, and `json-canvas`) start turned on for OpenCode in new installs, and `obsidian-markdown` and `obsidian-bases` also for Codex. Turn them on for other agents in **Built-in skills**.
+In new installs, `obsidian-markdown` starts turned on for every agent, `obsidian-bases` for Codex and OpenCode, and `json-canvas` for OpenCode. Turn them on for other agents in **Built-in skills**.
 
 While **Miyo document processing** is on, which is the default, agents read PDF and EPUB files through Copilot's Miyo parse tool, which asks the connected Miyo to parse them and does not need Plus access. The tool is available only while Miyo is connected. With a remote Miyo server, files in the vault parse on that server, and files outside the vault can't be parsed. If Miyo cannot parse a file, the agent tells you and reads the file with its own tools. With **Miyo document processing** off, agents read documents with their own tools.
 

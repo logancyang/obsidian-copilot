@@ -3,9 +3,21 @@ import {
   isMiyoAvailableForCapability,
   refreshMiyoStatus,
 } from "@/miyo/miyoStatusStore";
-import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
-import type { MiyoFolderEntry } from "@/miyo/MiyoClient";
-import { CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
+import { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
+import { logWarn } from "@/logger";
+import {
+  MiyoClient,
+  type MiyoFolderEntry,
+  subscribeToMiyoFolderNotRegistered,
+} from "@/miyo/MiyoClient";
+import {
+  CopilotSettings,
+  getSettings,
+  normalizeMiyoFolderNames,
+  subscribeToSettingsChange,
+} from "@/settings/model";
+import { err2String } from "@/utils";
+import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
 export { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
@@ -94,8 +106,72 @@ export function getExtraSearchFolderOptions(
   return options;
 }
 
+let miyoFolderName: string | undefined;
+let miyoFolderLookup = 0;
+const miyoFolderNameListeners = new Set<() => void>();
+
 export function getMiyoFolderName(app: App): string {
-  return app.vault.getName();
+  return miyoFolderName ?? app.vault.getName();
+}
+
+export function subscribeToMiyoFolderName(listener: () => void): () => void {
+  miyoFolderNameListeners.add(listener);
+  return () => {
+    miyoFolderNameListeners.delete(listener);
+  };
+}
+
+// Relevant Notes can ask while the name is being looked up, so it must hear when the answer changes the name.
+// https://github.com/logancyang/obsidian-copilot/issues/3690
+function setMiyoFolderName(app: App, name: string | undefined): void {
+  const previous = getMiyoFolderName(app);
+  miyoFolderName = name;
+  if (getMiyoFolderName(app) !== previous)
+    miyoFolderNameListeners.forEach((listener) => listener());
+}
+
+// Miyo names a folder after its directory unless the user picks another name, so the vault is looked up by its
+// absolute path; a Miyo with no folder there, such as one on another computer, knows the vault by its name. The
+// last known name stays until Miyo answers, because announcing a stand-in made every rejected request look up again.
+// https://github.com/logancyang/obsidian-copilot/issues/3690
+export async function refreshMiyoFolderName(
+  app: App,
+  client: Pick<MiyoClient, "resolveBaseUrl" | "getFolder">
+): Promise<void> {
+  const lookup = ++miyoFolderLookup;
+  const settings = getSettings();
+  const vaultBase = getVaultBase(app);
+  if (!vaultBase || !shouldUseMiyo(settings)) return;
+  const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
+  const folder = await client.getFolder(baseUrl, vaultBase);
+  if (lookup === miyoFolderLookup) setMiyoFolderName(app, folder?.path);
+}
+
+export function watchMiyoFolderName(
+  app: App,
+  client: Pick<MiyoClient, "resolveBaseUrl" | "getFolder"> = new MiyoClient()
+): () => void {
+  const refresh = () => {
+    refreshMiyoFolderName(app, client).catch((error) =>
+      logWarn(`Could not look up the vault's Miyo folder: ${err2String(error)}`)
+    );
+  };
+  refresh();
+  const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
+    if (
+      shouldUseMiyo(prev) !== shouldUseMiyo(next) ||
+      getMiyoCustomUrl(prev) !== getMiyoCustomUrl(next)
+    ) {
+      refresh();
+    }
+  });
+  const unsubscribeFolder = subscribeToMiyoFolderNotRegistered((folderName) => {
+    if (folderName === undefined || folderName === getMiyoFolderName(app)) refresh();
+  });
+  return () => {
+    unsubscribeSettings();
+    unsubscribeFolder();
+  };
 }
 
 export function getMiyoFilePath(app: App, vaultRelativePath: string): string {

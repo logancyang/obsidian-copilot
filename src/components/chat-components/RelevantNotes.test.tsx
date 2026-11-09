@@ -76,6 +76,23 @@ jest.mock("@/miyo/miyoIndex", () => ({
   },
 }));
 
+let mockMiyoFolderName: string | undefined;
+let mockMiyoFolderNameListener: (() => void) | undefined;
+jest.mock("@/miyo/miyoUtils", () => {
+  const actual = jest.requireActual<typeof import("@/miyo/miyoUtils")>("@/miyo/miyoUtils");
+  return {
+    ...actual,
+    getMiyoFolderName: (app: Parameters<typeof actual.getMiyoFolderName>[0]) =>
+      mockMiyoFolderName ?? actual.getMiyoFolderName(app),
+    subscribeToMiyoFolderName: (listener: () => void) => {
+      mockMiyoFolderNameListener = listener;
+      return () => {
+        if (mockMiyoFolderNameListener === listener) mockMiyoFolderNameListener = undefined;
+      };
+    },
+  };
+});
+
 jest.mock("@/settings/model", () => ({
   useSettingsValue: () => mockSettings,
   updateSetting: (...args: unknown[]) => {
@@ -155,6 +172,7 @@ describe("RelevantNotes", () => {
   afterEach(() => {
     jest.restoreAllMocks();
     (Platform as { isMobile: boolean }).isMobile = false;
+    mockMiyoFolderName = undefined;
   });
 
   describe("RelevantNotes()", () => {
@@ -409,6 +427,31 @@ describe("RelevantNotes", () => {
       expect(await screen.findByText("This note isn't indexed in Miyo")).toBeTruthy();
 
       act(() => indexChangedListener?.());
+
+      expect(await screen.findByText("Target")).toBeTruthy();
+      expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 asks again when a lookup changes the vault's Miyo folder name, so an answer for the old name does not stay on screen", async () => {
+      mockFindRelevantNotes
+        .mockResolvedValueOnce({ notes: [], status: "unavailable" })
+        .mockResolvedValueOnce({
+          notes: [
+            {
+              note: { path: "Target.md", title: "Target" },
+              metadata: { score: 0.9, hasOutgoingLinks: false, hasBacklinks: false },
+            },
+          ],
+          status: "matches",
+        });
+
+      render(<RelevantNotes onAddToChat={jest.fn()} />);
+      await waitFor(() => expect(mockFindRelevantNotes).toHaveBeenCalledTimes(1));
+
+      act(() => {
+        mockMiyoFolderName = "Notes";
+        mockMiyoFolderNameListener?.();
+      });
 
       expect(await screen.findByText("Target")).toBeTruthy();
       expect(mockFindRelevantNotes).toHaveBeenCalledTimes(2);

@@ -5,12 +5,13 @@ import {
   type RecentChatActions,
 } from "@/agentMode/ui/RecentChatMenu";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
+import { chatBackendIcon } from "@/agentMode/ui/chatBackendIcon";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { Archive, CircleAlert, LoaderCircle, Pin, PinOff } from "lucide-react";
+import { Archive, Bell, CircleHelp, LoaderCircle, Pin, PinOff } from "lucide-react";
 import React, { useState } from "react";
 
 export type SessionStatus = "idle" | "running" | "waiting" | "unread";
@@ -72,10 +73,15 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
     case "waiting":
       return (
         <span role="img" aria-label="Waiting for permission" className="tw-flex tw-shrink-0">
-          <CircleAlert className="tw-size-3.5 tw-text-warning" />
+          <CircleHelp className="tw-size-3.5 tw-text-error" />
         </span>
       );
     case "unread":
+      return (
+        <span role="img" aria-label="Unread result" className="tw-flex tw-shrink-0">
+          <Bell className="tw-size-3.5 tw-text-accent" />
+        </span>
+      );
     case "idle":
       return isSessionOpen ? (
         <span
@@ -99,6 +105,8 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
+  const needsAttention = status === "waiting" || status === "unread";
+  const BackendIcon = chatBackendIcon(item);
   return (
     <div
       className={cn(
@@ -129,20 +137,21 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         <span
           className={cn(
             "tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+            active || needsAttention ? "tw-text-normal" : "tw-text-muted",
             menuOpen
               ? "[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
               : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
           )}
         >
-          {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "running".
-              https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+          <span aria-hidden="true" className="tw-flex tw-shrink-0">
+            <BackendIcon className="tw-size-3.5" />
+          </span>
+          {/* A chat that needs the user reads like unread mail, a bright bold title, while every other chat but the
+              current one dims. https://github.com/Brevilabs/obsidian-copilot-private/issues/890 */}
           <RecentChatTitle
             title={item.title}
-            className={cn(status === "unread" && "tw-font-semibold")}
+            className={cn("tw-text-inherit", needsAttention && "tw-font-semibold")}
           />
-          {status === "unread" && (
-            <span role="img" aria-label="Unread result" className="tw-sr-only" />
-          )}
           {projectName && <RecentChatProjectBadge name={projectName} />}
         </span>
         {/* Titles start flush with the panel and the status sits at the right end; a long title ellipsizes before it.

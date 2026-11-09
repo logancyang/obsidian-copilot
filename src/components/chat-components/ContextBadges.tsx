@@ -152,8 +152,6 @@ export function ContextActiveWebTabBadge({
 
 export function ContextNoteBadge({ note, onRemove, onClick }: ContextNoteBadgeProps) {
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
-  const isPdf = note.extension === "pdf";
-  const isCanvas = note.extension === "canvas";
 
   return (
     <ContextBadgeWrapper
@@ -165,8 +163,9 @@ export function ContextNoteBadge({ note, onRemove, onClick }: ContextNoteBadgePr
       <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
         {note.basename}
       </TruncatedText>
-      {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
-      {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
+      {note.extension !== "md" && (
+        <span className="tw-text-xs tw-text-faint">{note.extension}</span>
+      )}
     </ContextBadgeWrapper>
   );
 }

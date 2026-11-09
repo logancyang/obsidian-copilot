@@ -2,6 +2,7 @@ import React from "react";
 import {
   ContextActiveNoteBadge,
   ContextActiveWebTabBadge,
+  ContextNoteBadge,
   ContextSelectedTextBadge,
 } from "./ContextBadges";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -126,4 +127,33 @@ export const WebSelectionWithActiveWebTab: StoryObj<Props> = {
     selectedTextContexts: [webSelection],
     activeWebTab: { url: webSelection.url, title: webSelection.title, isActive: true },
   },
+};
+
+function attachedFile(path: string): TFile {
+  const file: unknown = Object.create(TFile.prototype);
+  if (!(file instanceof TFile)) throw new Error("Expected a TFile fixture");
+  const name = path.split("/").pop() ?? path;
+  const dot = name.lastIndexOf(".");
+  return Object.assign(file, {
+    path,
+    basename: name.slice(0, dot),
+    extension: name.slice(dot + 1),
+  });
+}
+
+const attachedFiles = [
+  "Research notes.md",
+  "attachments/report.pdf",
+  "attachments/sales q3.csv",
+  "attachments/brief.docx",
+].map(attachedFile);
+
+export const AttachedFileTypes: StoryObj<Props> = {
+  render: () => (
+    <div className="tw-flex tw-flex-wrap tw-gap-1">
+      {attachedFiles.map((file) => (
+        <ContextNoteBadge key={file.path} note={file} onRemove={() => undefined} />
+      ))}
+    </div>
+  ),
 };

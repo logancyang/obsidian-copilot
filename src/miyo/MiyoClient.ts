@@ -27,6 +27,17 @@ export class MiyoRequestError extends Error {
   }
 }
 
+const folderNotRegisteredListeners = new Set<(folderName: string | undefined) => void>();
+
+export function subscribeToMiyoFolderNotRegistered(
+  listener: (folderName: string | undefined) => void
+): () => void {
+  folderNotRegisteredListeners.add(listener);
+  return () => {
+    folderNotRegisteredListeners.delete(listener);
+  };
+}
+
 export interface MiyoFolderEntry {
   path: string;
   origin?: "user" | "chat_sync";
@@ -440,6 +451,20 @@ export class MiyoClient {
     });
   }
 
+  public async getFolder(baseUrl: string, path: string): Promise<MiyoFolderEntry | null> {
+    try {
+      return await this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+        method: "GET",
+        query: { path },
+      });
+    } catch (error) {
+      // A Miyo on another computer has no folder at this computer's vault path, which is an answer rather than a failure.
+      // https://github.com/logancyang/obsidian-copilot/issues/3690
+      if (error instanceof MiyoRequestError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   public async fileStatus(baseUrl: string, filePath: string): Promise<MiyoFileStatusResponse> {
     return this.requestJson<MiyoFileStatusResponse>(baseUrl, "/v0/folder/file-status", {
       method: "GET",
@@ -533,6 +558,16 @@ export class MiyoClient {
         ? "Chat-context retrieval failed"
         : errorPayload?.detail || response.text || errorPayload?.error || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
+      // A folder renamed in Miyo while Copilot runs is rejected under its old name until the name is looked up again;
+      // chat-context retrieval rejects it as an unknown folder without naming it.
+      // https://github.com/logancyang/obsidian-copilot/issues/3690
+      const unregisteredFolder =
+        response.status === 404
+          ? /^Folder not registered: (.+)$/.exec(errorPayload?.detail ?? "")?.[1]
+          : undefined;
+      if (unregisteredFolder !== undefined || errorPayload?.code === "unknown_folder") {
+        folderNotRegisteredListeners.forEach((listener) => listener(unregisteredFolder));
+      }
       // Relevant Notes must distinguish an unindexed source from a service
       // outage without parsing human-readable error messages.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280

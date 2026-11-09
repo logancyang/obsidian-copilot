@@ -4,7 +4,8 @@ import { type ProjectConfig } from "@/aiParams";
 import { useSelectedTextContexts } from "@/selection/selectionStore";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { useActiveFile } from "@/hooks/useActiveFile";
-import { getMiyoFilePath, getMiyoFolderName } from "@/miyo/miyoUtils";
+import { getMiyoFilePath } from "@/miyo/miyoUtils";
+import { useMiyoFolderName } from "@/miyo/useMiyoFolderName";
 import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
@@ -23,6 +24,7 @@ export function useChatRelevantNotesContext(
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
+  const miyoFolderName = useMiyoFolderName(app);
   const selections = useSelectedTextContexts();
   // New chats include the web tab by default, which is not an attachment until a page is open.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
@@ -56,7 +58,7 @@ export function useChatRelevantNotesContext(
     ...(draft.includeActiveNote && activeFile ? [activeFile] : []),
   ];
   const snapshot = {
-    folder_name: getMiyoFolderName(app),
+    folder_name: miyoFolderName,
     messages: [
       ...history
         .filter(
