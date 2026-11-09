@@ -155,7 +155,7 @@ function Tabs(props: NodeProps) {
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-3">
       <div
         role="tablist"
-        className="tw-flex tw-w-fit tw-max-w-full tw-gap-1 tw-overflow-x-auto tw-rounded-lg tw-bg-secondary tw-p-1"
+        className="tw-flex tw-w-fit tw-max-w-full tw-gap-1 tw-overflow-x-auto tw-rounded-lg tw-bg-modifier-hover tw-p-1"
       >
         {tabs.map((tab, index) => (
           <div
@@ -198,7 +198,7 @@ function Steps(props: NodeProps) {
       {steps.map((node, index) => (
         <div role="listitem" key={index} className="tw-flex tw-min-w-0 tw-gap-3">
           <div aria-hidden="true" className="tw-flex tw-flex-col tw-items-center">
-            <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-ui-smaller tw-font-medium tw-text-muted">
+            <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-text-ui-smaller tw-font-medium tw-text-muted">
               {node.props.icon ? <Icon name={String(node.props.icon)} decorative /> : index + 1}
             </span>
             {index < steps.length - 1 && (
@@ -362,7 +362,7 @@ function Primitive(props: NodeProps) {
       return <Children {...props} />;
     case "panel":
       return (
-        <div className="tw-min-w-0 tw-rounded-lg tw-bg-secondary tw-p-4">
+        <div className="tw-min-w-0 tw-rounded-lg tw-bg-modifier-hover tw-p-4">
           <InBoxContext.Provider value>
             <Children {...props} />
           </InBoxContext.Provider>
@@ -403,7 +403,7 @@ export function IntelligentUi({ result, source, sourcePath }: IntelligentUiProps
   // Rejected blocks retain their entire body, including malformed markup and fence text. https://github.com/Brevilabs/obsidian-copilot-private/issues/881
   if (result.status === "error")
     return (
-      <div className="tw-min-w-0 tw-space-y-3">
+      <div className="tw-my-[var(--p-spacing)] tw-min-w-0 tw-space-y-3">
         <div role="status" className="tw-m-0 tw-text-sm tw-text-muted">
           This layout could not be displayed. Original source:
         </div>
@@ -413,7 +413,7 @@ export function IntelligentUi({ result, source, sourcePath }: IntelligentUiProps
       </div>
     );
   return (
-    <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-3 tw-break-words tw-text-normal">
+    <div className="tw-my-[var(--p-spacing)] tw-flex tw-min-w-0 tw-flex-col tw-gap-3 tw-break-words tw-text-normal">
       {result.nodes.map((node, index) => (
         <Primitive key={index} node={node} sourcePath={sourcePath} />
       ))}
