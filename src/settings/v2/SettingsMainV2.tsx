@@ -1,7 +1,11 @@
 import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 import { Button } from "@/components/ui/button";
 import { MiyoLogo } from "@/miyo/ui/MiyoLogo";
-import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import {
+  SettingTabStrip,
+  TabContent,
+  type TabItem as TabItemType,
+} from "@/components/ui/setting-tabs";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
@@ -89,28 +93,23 @@ const SettingsContent: React.FC = () => {
 
   return (
     <div className="tw-flex tw-flex-col">
-      <div className="tw-flex tw-flex-wrap tw-rounded-lg">
-        {tabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={{
-              ...tab,
-              // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-              // The tab strip stays mounted while inactive panels do not, so
-              // load failures remain visible from every settings section.
-              warningLabel:
-                tab.id === "skills" && skillLoadErrorCount > 0
-                  ? "Some skills failed to load"
-                  : tab.id === "connectors" && connectorsNeedAttention
-                    ? "You have connectors that need your attention"
-                    : undefined,
-              warningTone: tab.id === "connectors" ? "error" : "warning",
-            }}
-            isSelected={selectedTab === tab.id}
-            onClick={() => setSelectedTab(tab.id)}
-          />
-        ))}
-      </div>
+      <SettingTabStrip
+        tabs={tabs.map((tab) => ({
+          ...tab,
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+          // The tab strip stays mounted while inactive panels do not, so
+          // load failures remain visible from every settings section.
+          warningLabel:
+            tab.id === "skills" && skillLoadErrorCount > 0
+              ? "Some skills failed to load"
+              : tab.id === "connectors" && connectorsNeedAttention
+                ? "You have connectors that need your attention"
+                : undefined,
+          warningTone: tab.id === "connectors" ? "error" : "warning",
+        }))}
+        selectedId={selectedTab}
+        onSelect={setSelectedTab}
+      />
       <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>

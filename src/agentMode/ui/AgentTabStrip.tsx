@@ -1,5 +1,6 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
 import { TruncatedText } from "@/components/TruncatedText";
+import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -27,55 +28,7 @@ interface Props {
 const TAB_GAP_PX = 4;
 const TAB_WIDTH_PX = 128;
 const PLUS_BUTTON_PX = 28 + TAB_GAP_PX;
-const OVERFLOW_BUTTON_PX = 28 + TAB_GAP_PX;
-
-export function computeVisibleCount(stripWidth: number, sessionCount: number): number {
-  if (sessionCount === 0) return 0;
-
-  const fits = (limitPx: number): number => {
-    if (limitPx < TAB_WIDTH_PX) return 0;
-    return Math.min(sessionCount, Math.floor((limitPx + TAB_GAP_PX) / (TAB_WIDTH_PX + TAB_GAP_PX)));
-  };
-
-  const noOverflowBudget = stripWidth - PLUS_BUTTON_PX;
-  const noOverflowCount = fits(noOverflowBudget);
-  if (noOverflowCount >= sessionCount) return sessionCount;
-
-  const withOverflowBudget = noOverflowBudget - OVERFLOW_BUTTON_PX;
-  return Math.max(1, fits(withOverflowBudget));
-}
-
-interface PartitionInput<T extends { internalId: string }> {
-  sessions: readonly T[];
-  visibleCount: number;
-  activeId: string | null;
-}
-
-interface Partition<T> {
-  visibleSessions: T[];
-  overflowSessions: T[];
-}
-
-export function partitionSessions<T extends { internalId: string }>({
-  sessions,
-  visibleCount,
-  activeId,
-}: PartitionInput<T>): Partition<T> {
-  if (sessions.length === 0) return { visibleSessions: [], overflowSessions: [] };
-  const visible = sessions.slice(0, visibleCount);
-  const overflow = sessions.slice(visibleCount);
-  if (activeId && overflow.some((s) => s.internalId === activeId)) {
-    const activeFromOverflow = overflow.find((s) => s.internalId === activeId)!;
-    const otherOverflow = overflow.filter((s) => s.internalId !== activeId);
-    const displaced = visible[visible.length - 1];
-    const swappedVisible = [...visible.slice(0, -1), activeFromOverflow];
-    return {
-      visibleSessions: swappedVisible,
-      overflowSessions: displaced ? [displaced, ...otherOverflow] : otherOverflow,
-    };
-  }
-  return { visibleSessions: visible, overflowSessions: overflow };
-}
+const OVERFLOW_BUTTON_PX = 28;
 
 function useSessionDisplay(session: AgentSession) {
   const [, setTick] = React.useState(0);
@@ -132,15 +85,19 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
     return () => ro.disconnect();
   }, [sessionCount, isHidden]);
 
-  const visibleCount = React.useMemo(
-    () => computeVisibleCount(stripWidth, sessionCount),
-    [stripWidth, sessionCount]
-  );
-
-  const { visibleSessions, overflowSessions } = React.useMemo(
-    () => partitionSessions({ sessions, visibleCount, activeId }),
-    [sessions, visibleCount, activeId]
-  );
+  const { visibleSessions, overflowSessions } = React.useMemo(() => {
+    const visibleIndices = computeVisibleTabIndices({
+      widths: sessions.map(() => TAB_WIDTH_PX),
+      selectedIndex: sessions.findIndex((session) => session.internalId === activeId),
+      available: stripWidth - PLUS_BUTTON_PX,
+      gap: TAB_GAP_PX,
+      overflowWidth: OVERFLOW_BUTTON_PX,
+    });
+    return {
+      visibleSessions: visibleIndices.map((i) => sessions[i]),
+      overflowSessions: sessions.filter((_, i) => !visibleIndices.includes(i)),
+    };
+  }, [sessions, stripWidth, activeId]);
 
   const handleNew = React.useCallback(() => {
     if (manager.getIsStarting()) return;

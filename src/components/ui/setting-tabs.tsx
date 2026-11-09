@@ -1,5 +1,14 @@
-import React from "react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { cn } from "@/lib/utils";
+import { MoreHorizontal } from "lucide-react";
+import React from "react";
 
 export interface TabItem {
   icon: React.ReactNode;
@@ -86,18 +95,175 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, vari
       </span>
       {/* https://github.com/Brevilabs/obsidian-copilot-private/issues/166 The Skills panel is unmounted while inactive, so the tab carries the marker. */}
       {tab.warningLabel && (
-        <span
-          aria-hidden="true"
-          title={tab.warningLabel}
-          className={cn(
-            "tw-pointer-events-none tw-absolute tw-right-1 tw-top-1 tw-size-1.5 tw-rounded-full",
-            tab.warningTone === "error" ? "tw-bg-modifier-error" : "tw-bg-warning"
-          )}
-        />
+        <WarningDot tab={tab} className="tw-pointer-events-none tw-absolute tw-right-1 tw-top-1" />
       )}
     </div>
   );
 };
+
+const WarningDot: React.FC<{ tab: TabItem; className?: string }> = ({ tab, className }) => (
+  <span
+    aria-hidden="true"
+    title={tab.warningLabel}
+    className={cn(
+      "tw-size-1.5 tw-shrink-0 tw-rounded-full",
+      tab.warningTone === "error" ? "tw-bg-modifier-error" : "tw-bg-warning",
+      className
+    )}
+  />
+);
+
+interface StripMeasurements {
+  available: number;
+  gap: number;
+  overflowWidth: number;
+  widths: Readonly<Record<string, number>>;
+}
+
+const OFF_STRIP_CLASS = "tw-invisible tw-absolute tw-left-0 tw-top-0";
+
+interface SettingTabStripProps<Id extends string> {
+  tabs: readonly (TabItem & { id: Id })[];
+  selectedId: Id;
+  onSelect: (id: Id) => void;
+  variant?: TabVariant;
+}
+
+export function SettingTabStrip<Id extends string>({
+  tabs,
+  selectedId,
+  onSelect,
+  variant = "page",
+}: SettingTabStripProps<Id>): JSX.Element {
+  const stripRef = React.useRef<HTMLDivElement>(null);
+  const overflowRef = React.useRef<HTMLDivElement>(null);
+  const tabRefs = React.useRef(new Map<string, HTMLDivElement>());
+  const [measurements, setMeasurements] = React.useState<StripMeasurements | null>(null);
+  const tabIdsKey = tabs.map((tab) => tab.id).join("\n");
+
+  React.useLayoutEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+
+    const measure = () => {
+      const widths: Record<string, number> = {};
+      tabRefs.current.forEach((el, id) => {
+        widths[id] = el.getBoundingClientRect().width;
+      });
+      setMeasurements({
+        available: strip.getBoundingClientRect().width,
+        gap: parseFloat(strip.win.getComputedStyle(strip).columnGap) || 0,
+        overflowWidth: overflowRef.current?.getBoundingClientRect().width ?? 0,
+        widths,
+      });
+    };
+
+    measure();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(strip);
+    tabRefs.current.forEach((el) => ro.observe(el));
+    if (overflowRef.current) ro.observe(overflowRef.current);
+    return () => ro.disconnect();
+  }, [tabIdsKey]);
+
+  const visibleIndices = measurements
+    ? computeVisibleTabIndices({
+        widths: tabs.map((tab) => measurements.widths[tab.id] ?? 0),
+        selectedIndex: tabs.findIndex((tab) => tab.id === selectedId),
+        available: measurements.available,
+        gap: measurements.gap,
+        overflowWidth: measurements.overflowWidth,
+      })
+    : tabs.map((_, i) => i);
+  const visibleTabs = visibleIndices.map((i) => tabs[i]);
+  const overflowTabs = tabs.filter((tab) => !visibleTabs.includes(tab));
+
+  return (
+    <div
+      ref={stripRef}
+      role="tablist"
+      className={cn("tw-relative tw-flex tw-min-w-0", variant === "inline" && "tw-gap-1")}
+    >
+      {[...visibleTabs, ...overflowTabs].map((tab) => {
+        const inOverflow = overflowTabs.includes(tab);
+        return (
+          <div
+            key={tab.id}
+            ref={(el) => {
+              if (el) tabRefs.current.set(tab.id, el);
+              else tabRefs.current.delete(tab.id);
+            }}
+            aria-hidden={inOverflow || undefined}
+            className={cn("tw-shrink-0", inOverflow && OFF_STRIP_CLASS)}
+          >
+            <TabItem
+              tab={tab}
+              isSelected={tab.id === selectedId}
+              onClick={() => onSelect(tab.id)}
+              variant={variant}
+            />
+          </div>
+        );
+      })}
+      <div
+        ref={overflowRef}
+        aria-hidden={overflowTabs.length === 0 || undefined}
+        className={cn("tw-shrink-0", overflowTabs.length === 0 && OFF_STRIP_CLASS)}
+      >
+        <TabOverflowMenu tabs={overflowTabs} onSelect={onSelect} />
+      </div>
+    </div>
+  );
+}
+
+interface TabOverflowMenuProps<Id extends string> {
+  tabs: readonly (TabItem & { id: Id })[];
+  onSelect: (id: Id) => void;
+}
+
+function TabOverflowMenu<Id extends string>({
+  tabs,
+  onSelect,
+}: TabOverflowMenuProps<Id>): JSX.Element {
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/166 A warning on a tab hidden in the menu must stay visible from every settings section.
+  const flaggedTab =
+    tabs.find((tab) => tab.warningLabel && tab.warningTone === "error") ??
+    tabs.find((tab) => tab.warningLabel);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost2"
+          size="icon"
+          className="tw-relative tw-size-8"
+          aria-label={`Show ${tabs.length} more tab${tabs.length === 1 ? "" : "s"}`}
+        >
+          <MoreHorizontal className="tw-size-4" />
+          {flaggedTab && (
+            <WarningDot
+              tab={flaggedTab}
+              className="tw-pointer-events-none tw-absolute tw-right-1 tw-top-1"
+            />
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {tabs.map((tab) => (
+          <DropdownMenuItem
+            key={tab.id}
+            aria-label={tab.warningLabel ? `${tab.label}: ${tab.warningLabel}` : tab.label}
+            onSelect={() => onSelect(tab.id)}
+          >
+            <span className="tw-min-w-0 tw-flex-1 tw-truncate">{tab.label}</span>
+            {tab.warningLabel && <WarningDot tab={tab} />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 interface TabContentProps {
   id: string;
