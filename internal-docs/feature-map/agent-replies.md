@@ -5,6 +5,7 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 ## Sub-features
 
 - reply-stream: the reply's text appears as the agent writes it.
+- reply-tables: streamed Markdown tables keep their headers and body columns aligned; wide tables scroll horizontally inside the reply.
 - reply-duration: `Agent is working` with a timer while the turn runs, then `Worked for <time>`.
 - reply-reasoning: `Reasoning...` while the agent thinks, then `Thought for <time>`; expand it to read the reasoning.
 - reply-activity: the agent's tool calls collapse into a one-line summary, such as `Ran 2 commands, read 1 file`; expand it to see each step.
@@ -25,6 +26,7 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 ## Driving it
 
 - Stream and duration: send a short question. `Agent is working` shows with a timer, the reply's text appears, then `Worked for <time>`.
+- Tables: ask for a Markdown table with short headers and long cell values. During streaming and after completion, headers align with their columns. In a narrow pane, a wide table scrolls horizontally without widening the reply.
 - Reasoning: ask a question the agent thinks about. `Reasoning...` shows, then `Thought for <time>`; expand it to read the reasoning.
 - Activity: ask the agent to run two shell commands. A summary such as `Ran 2 commands` shows; expand it to list each command.
 - Plan: ask an agent with a plan tool to plan two steps and follow them. A `Plan` checklist shows each step's progress.
