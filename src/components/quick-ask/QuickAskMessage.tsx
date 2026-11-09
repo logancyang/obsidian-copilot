@@ -6,6 +6,7 @@ import { getErrorMessage, type ReplaceInvalidReason } from "@/editor/replaceGuar
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
+import { withoutDataview } from "@/utils/renderMarkdown";
 import type { QuickAskMessage } from "./types";
 
 interface QuickAskMessageProps {
@@ -53,7 +54,12 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
 
       try {
         const preprocessed = preprocessAIResponse(message.content);
-        await MarkdownRenderer.renderMarkdown(preprocessed, targetEl, sourcePath, plugin);
+        await MarkdownRenderer.renderMarkdown(
+          preprocessed,
+          targetEl,
+          withoutDataview(sourcePath),
+          plugin
+        );
       } catch (error) {
         logError("Failed to render markdown:", error);
 

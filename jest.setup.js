@@ -1,5 +1,14 @@
-import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
+
+// Node's own Response bodies reject polyfilled stream classes, which the MCP SDK client pipes them through, so only jsdom suites get the polyfill.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- a static import can't be conditional
+if (typeof ReadableStream === "undefined") require("web-streams-polyfill/dist/polyfill.min.js");
+
+// Node-environment suites (real loopback HTTP and Web Crypto) run plugin code that schedules timers on `window`.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/23
+// eslint-disable-next-line obsidianmd/no-global-this -- jest's node environment has no window to use instead
+if (typeof window === "undefined") global.window = global;
 
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;
@@ -21,6 +30,14 @@ if (typeof window.matchMedia !== "function") {
       };
     },
   });
+}
+
+// jsdom has no Web Animations API, which layout fades use so re-parented hosts do not restart them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+if (typeof Element !== "undefined" && typeof Element.prototype.animate !== "function") {
+  Element.prototype.animate = function () {
+    return { cancel() {}, finished: Promise.resolve() };
+  };
 }
 
 // jsdom rejects `:focus-visible` and tracks no input modality, so tests treat every focus as keyboard focus.

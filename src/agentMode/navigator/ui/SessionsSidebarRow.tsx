@@ -65,7 +65,7 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
   switch (status) {
     case "running":
       return (
-        <span role="img" aria-label="Running" className="tw-flex tw-shrink-0">
+        <span role="img" aria-label="Responding" className="tw-flex tw-shrink-0">
           <LoaderCircle className="tw-size-3.5 tw-animate-spin tw-text-accent" />
         </span>
       );
@@ -80,7 +80,7 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
       return isSessionOpen ? (
         <span
           role="img"
-          aria-label="Session open"
+          aria-label="Running"
           className="tw-size-2 tw-shrink-0 tw-rounded-full tw-bg-change-inserted"
         />
       ) : null;
@@ -134,7 +134,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
               : "group-focus-within:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)] group-hover:[mask-image:linear-gradient(to_left,transparent_3rem,black_4rem)]"
           )}
         >
-          {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "session open".
+          {/* An unseen result reads like unread mail, a bold title, so the one status dot keeps meaning "running".
               https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
           <RecentChatTitle
             title={item.title}

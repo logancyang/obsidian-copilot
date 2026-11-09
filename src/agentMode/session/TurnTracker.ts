@@ -1,5 +1,5 @@
 import { AI_SENDER } from "@/constants";
-import { logWarn } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import type { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import type { FileCaptures } from "@/agentMode/session/turnFileChanges";
 import type {
@@ -58,6 +58,10 @@ interface StopDrain {
 }
 
 const EMPTY_QUEUED_PROMPTS: readonly QueuedPrompt[] = Object.freeze([]);
+
+function logReplyCloseFailure(err: unknown): void {
+  logError(`[AgentMode] could not finish closing the reply`, err);
+}
 
 export class TurnTracker {
   private placeholderId: string | null = null;
@@ -265,9 +269,9 @@ export class TurnTracker {
     for (const id of stoppedIds) this.pendingPrompts.delete(id);
     for (const messageId of this.currentMessageIds) this.cancelledMessageIds.add(messageId);
     this.currentMessageIds = new Set();
-    void this.finalizeReply("cancelled").then(() => {
-      for (const prompt of stopped) prompt.settle({ stopReason: "cancelled" });
-    });
+    // Stop gives the chat back even when closing the reply throws or its file capture never ends. https://github.com/logancyang/obsidian-copilot/issues/4081
+    for (const prompt of stopped) prompt.settle({ stopReason: "cancelled" });
+    void this.finalizeReply("cancelled").catch(logReplyCloseFailure);
     this.settledStream = null;
   }
 
@@ -350,7 +354,12 @@ export class TurnTracker {
       }
       return settle();
     }
-    void this.finalizeReply(end.stopReason, end.turnDiff).then(settle);
+    // An agent can end its own turn, as Codex does when a permission is declined, and the chat must say so instead of going quiet. https://github.com/logancyang/obsidian-copilot/issues/4062
+    if (end.stopReason === "cancelled" && this.placeholderId) {
+      this.deps.store.markCancelledByAgent(this.placeholderId);
+    }
+    // A turn whose reply fails to close still ends, or the chat stays running with nothing left to stop. https://github.com/logancyang/obsidian-copilot/issues/4081
+    void this.finalizeReply(end.stopReason, end.turnDiff).catch(logReplyCloseFailure).then(settle);
   }
 
   failReply(err: unknown): void {

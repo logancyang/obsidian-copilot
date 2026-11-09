@@ -1,6 +1,7 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
+import type { ChatExtension } from "@/agentMode/session/chatExtension";
+import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -166,7 +167,6 @@ export interface ArchivedChat {
 }
 
 export interface ReplaceSessionOptions {
-  preserveChatInput?: boolean;
   seedSelection?: ModelSelection;
 }
 
@@ -179,6 +179,7 @@ export interface AgentSessionManagerOptions {
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
 export class AgentSessionManager {
@@ -235,6 +236,9 @@ export class AgentSessionManager {
   private readonly promptedChatInputIds = new Set<string>();
   private readonly closingSessions = new Map<string, Promise<void>>();
   private lastShownSessionId: string | null = null;
+  // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+  private tabStripShown = false;
   /**
    * `backendId:baseModelId` pairs already warned about; the read runs on every session create.
    * https://github.com/Brevilabs/obsidian-copilot-private/issues/474
@@ -573,9 +577,17 @@ export class AgentSessionManager {
     );
   }
 
+  setTabStripShown(shown: boolean): void {
+    if (shown === this.tabStripShown) return;
+    this.tabStripShown = shown;
+    if (shown || this.disposed) return;
+    for (const id of Array.from(this.sessions.keys())) this.closeSessionIfLeft(id);
+  }
+
   private closeSessionIfLeft(id: string): void {
     const session = this.sessions.get(id);
     if (!session || id === this.activeSessionId || this.keepsSessionWhenLeft(session)) return;
+    if (this.tabStripShown && !this.detachedFromTabIds.has(id)) return;
     // A starting chat has no agent session to release yet, so it closes once it has started.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     if (session.getStatus() === "starting") {
@@ -918,6 +930,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -1702,23 +1715,37 @@ export class AgentSessionManager {
   ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     const replaced = this.sessions.get(oldId);
-    const replacedProjectId = replaced?.projectId ?? this.activeProjectId;
-    const chatInputId = options.preserveChatInput ? replaced?.chatInputId : undefined;
     const created = await this.createSession(
       backendId,
-      replacedProjectId,
+      replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
-      chatInputId
+      replaced?.chatInputId
     );
-    if (oldIdx >= 0) {
-      this.moveMapEntry(this.sessions, created.internalId, oldIdx);
-      this.moveMapEntry(this.chatUIStates, created.internalId, oldIdx);
-      this.notify();
-    }
+    this.moveIntoTabSlot(created.internalId, oldIdx);
     void this.closeSession(oldId).catch((e) =>
       logWarn(`[AgentMode] closeSession during replaceSessionInPlace failed`, e)
     );
     return created;
+  }
+
+  async startNewChatInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
+    const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
+    const created = await this.createSession(
+      backendId,
+      this.sessions.get(oldId)?.projectId ?? this.activeProjectId
+    );
+    this.moveIntoTabSlot(created.internalId, oldIdx);
+    // The chat New chat replaces leaves its tab as closing the tab would: a chat the user worked in keeps running, reachable from Recent chats.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/849
+    this.detachSessionFromTab(oldId);
+    return created;
+  }
+
+  private moveIntoTabSlot(id: string, slot: number): void {
+    if (slot < 0) return;
+    this.moveMapEntry(this.sessions, id, slot);
+    this.moveMapEntry(this.chatUIStates, id, slot);
+    this.notify();
   }
 
   private moveMapEntry<V>(map: Map<string, V>, key: string, targetIdx: number): void {
@@ -1840,13 +1867,18 @@ export class AgentSessionManager {
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
-    const offer: FeedbackOfferHandler = shared
-      ? (draft, callerSessionId) =>
-          this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
-          "unattributed"
-      : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
+    const findChat: FindCallingChat = (callerSessionId) =>
+      (shared
+        ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
+        : this.sessions.get(internalId)) ?? null;
     try {
-      return [await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer)];
+      return [
+        await server.connect(
+          shared ? `${descriptor.id}:${cwd}` : internalId,
+          descriptor.id,
+          findChat
+        ),
+      ];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
@@ -2107,7 +2139,7 @@ export class AgentSessionManager {
     chatInputId?: string,
     seedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
-    // A Close chat that fails leaves its session live, so reopening waits for the close before deciding whether to reuse it.
+    // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
     await this.untilChatClosed(backendId, sessionId);
     const existing = this.findLiveSession(backendId, sessionId);
@@ -2193,6 +2225,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2623,6 +2656,7 @@ export class AgentSessionManager {
         app: this.app,
         clientVersion: this.plugin.manifest.version,
         descriptor,
+        copilotMcpServer: this.opts.copilotMcpServer,
       });
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
@@ -2802,6 +2836,9 @@ export class AgentSessionManager {
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            // A card that just connected a service is why the user reloads, and its outcome is still owed to the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            chatStates: session.getReloadableChatStates(),
             notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
@@ -2853,6 +2890,7 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
               rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
+            rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }

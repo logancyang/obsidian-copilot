@@ -1,0 +1,40 @@
+# Agent setup
+
+Choosing and installing an agent, signing in, and its defaults: the `Select your agent` panel in Agent Chat and the Agents section of Copilot settings.
+
+## Sub-features
+
+- setup-select: when the default agent cannot start and no chat is open, Agent Chat shows `Select your agent`: each agent with a line on what it runs, a `Recommended` or status badge such as `Installed`, `Update required`, or `Sign in required`, then `Start chat` or `Configure`.
+- setup-status: each agent's tab in Settings shows its status, such as `Ready`, the path it runs from, which service it sends requests to, and `Configure`.
+- setup-configure: `Configure <agent>` sets up the installation. OpenCode and Codex offer `Managed by Copilot` (`Download & install`, `Update`, `Reinstall & use managed`, `Uninstall`) or `My own installation` (`Auto-detect`, `Apply`); Claude offers `Auto-detect` and the `Install Claude Code` command.
+- setup-sign-in: under Authentication, `Sign in with your browser` or `Sign in using a terminal instead`; once signed in, `Signed in as <account>` and `Sign out`.
+- setup-default-agent: Settings `Default agent` picks the agent new chats start with; picking another agent's model in a chat, or `Start chat` in `Select your agent`, also changes it.
+- setup-default-model: each agent's `Default model` and `Default effort`.
+- setup-models: each agent's model list switches models on or off, with `Search <agent> models…`; only switched-on models show in `Default model` and in the chat's model picker.
+- setup-agent-options: per-agent options, such as Claude's `Auto mode permissions` (`Auto`, `Accept edits`, `Bypass permissions`) and `Show extended thinking`, and each agent's `Environment variables` with `Add variable`.
+- setup-notification: `Notification` plays a `Sound` (Piano key, Marimba, Bell, Doorbell) when an agent finishes a turn.
+
+## How to get to it
+
+- Settings → Copilot → Basic → Agents: `Default agent` and `Notification`, then a tab per agent (OpenCode, Claude, Codex) with its status, `Configure`, defaults, models, and options.
+- Agent Chat shows `Select your agent` when the default agent cannot start and no chat is open.
+- `Install <agent>`, `Configure <agent>`, `Update`, and `Sign in` on a [status card](status-and-error-cards.md).
+
+## Driving it
+
+- Select: set `Default agent` to an agent that is not set up and close every chat tab. Agent Chat shows `Select your agent` with OpenCode (`Recommended`), Claude (`Installed`), and Codex. With the agent that is not set up picked, it reads "<agent> isn't set up on this machine yet." and offers `Configure`.
+- Start: pick Claude and choose `Start chat`. A new chat opens on Claude, and `Default agent` in Settings reads Claude.
+- Status: open Settings → Claude. It shows `Ready`, the path to `claude`, "Sends requests to: Anthropic", and `Configure`.
+- Configure, managed agent: in `Select your agent`, pick Codex and choose `Configure`. `Configure Codex` shows its status, `Managed by Copilot` with Platform, Version, Location, and its install action. `My own installation` shows `Auto-detect` and `Apply`. `Done` closes it.
+- Configure, Claude: in Settings → Claude, choose `Configure`. `Configure Claude` shows `Auto-detect`, `Install Claude Code` with its npm command, and Authentication.
+- Sign in: in `Configure Claude`, Authentication reads `Signed in` and "Signed in as <account> (<plan>)." with `Sign out`. Signed out, it offers `Sign in with your browser` and `Sign in using a terminal instead`.
+- Default model and effort: in Settings → Claude, set `Default model` to Sonnet 5.5 and `Default effort` to low, then choose `New chat`. The chat's `Model · effort` reads `Sonnet 5.5 · low`.
+- Models: switch on Haiku 5.5 in Claude's model list. `Default model` and the chat's `Model · effort` now list Haiku 5.5.
+- Options: in Settings → Claude, `Auto mode permissions` lists `Auto`, `Accept edits`, and `Bypass permissions`. Under `Environment variables`, `Add variable` adds a name and value row.
+- Notification: turn on `Notification`. A `Sound` choice appears with Piano key, Marimba, Bell, and Doorbell; picking one plays it.
+
+## Gotchas
+
+- `Default model` and `Default effort` also change chats that are already open, on their next turn.
+- An agent's installation and its `Environment variables` are kept per computer. The same vault on another computer shows the agent as not set up until it is set up there.
+- A managed agent is installed once per computer and shared by every vault. `Uninstall` removes it for all of them.

@@ -9,6 +9,10 @@ function trimBaseUrl(baseUrl: string | undefined): string | undefined {
   return trimmed || undefined;
 }
 
+export function normalizeBaseUrl(baseUrl: string | undefined): string {
+  return (baseUrl ?? "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
 export function googleHostBaseUrl(baseUrl: string | undefined): string | undefined {
   const trimmed = trimBaseUrl(baseUrl);
   if (!trimmed) return undefined;

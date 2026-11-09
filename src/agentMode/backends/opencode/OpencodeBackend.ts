@@ -1,6 +1,7 @@
 import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
+import { readOpencodeCopilotTools } from "./opencodeCopilotToolCalls";
 import { ChatModelProviders } from "@/constants";
 import { logInfo } from "@/logger";
 import type { App } from "obsidian";
@@ -8,6 +9,7 @@ import { getSettings } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
 import { providerNeedsResolvedApiKey } from "@/modelManagement";
 import { isCatalogProviderDefaultEndpoint, opencodeSdkBaseUrl } from "@/utils/providerBaseUrl";
+import { agentShellPath } from "@/utils/loginShellPath";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
@@ -24,6 +26,7 @@ import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusU
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 import type { Config } from "@opencode/schema/config";
 import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
+import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
@@ -53,11 +56,13 @@ export interface OpencodeModelDeps {
   clientVersion?: string;
   getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
+  readCopilotReadOnlyToolNames?: () => Promise<ReadonlyArray<string>>;
 }
 
 export class OpencodeBackend implements AcpBackend {
   readonly id = "opencode" as const;
   readonly displayName = "opencode";
+  readonly readCopilotTools = readOpencodeCopilotTools;
 
   readonly #deps: OpencodeModelDeps;
 
@@ -165,6 +170,7 @@ export class OpencodeBackend implements AcpBackend {
       cwd: ctx.vaultBasePath,
       env: {
         ...process.env,
+        PATH: await agentShellPath(),
         ...builtinSkillEnv,
         // OpenCode's level filters its file log and stderr together, and its
         // server logs request-failure causes at INFO, so WARN hid every cause.
@@ -261,6 +267,9 @@ export async function buildOpencodeConfig(
       models = {};
       modelsByProvider[mapping.id] = models;
       providers[mapping.id] = {
+        // OpenCode prefers a provider's env var (DEEPSEEK_API_KEY) over this key, so a stale one fails every turn.
+        // https://github.com/logancyang/obsidian-copilot/issues/3837
+        env: apiKey ? [] : undefined,
         package: hasCatalogIdentity ? undefined : "aisdk:@ai-sdk/openai-compatible",
         name: hasCatalogIdentity ? undefined : entry.provider.displayName,
         settings: {
@@ -289,12 +298,12 @@ export async function buildOpencodeConfig(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/557
     const levels = info.reasoning ? (info.reasoningEfforts ?? []) : [];
     models[info.id] = {
-      // An injected Plus model falls back to OpenCode's 200k default without its published context.
+      // A model OpenCode's catalog does not know falls back to its 200k default without the
+      // context Copilot Plus publishes or the user's endpoint reports.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/644
+      // https://github.com/logancyang/obsidian-copilot/issues/3840
       limit:
-        origin.kind === "copilot-plus" && info.limits?.context
-          ? { context: info.limits.context }
-          : undefined,
+        !hasCatalogIdentity && info.limits?.context ? { context: info.limits.context } : undefined,
       capabilities: declaresCapabilities
         ? {
             tools: info.toolCall ?? true,
@@ -338,6 +347,7 @@ export async function buildOpencodeConfig(
   const selfHost = s.enableSelfHostMode === true;
   if (selfHost) permissions.push(...NATIVE_WEB_DENIES);
 
+  const readOnlyCopilotTools = (await deps.readCopilotReadOnlyToolNames?.()) ?? [];
   const skillManagerReady = SkillManager.hasInstance();
   const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id, deps.app);
 
@@ -398,6 +408,18 @@ export async function buildOpencodeConfig(
           // this out to keep its top-level deny decisive.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
           ...(selfHost ? [] : [{ action: "websearch", resource: "*", effect: "ask" } as const]),
+          // OpenCode runs MCP tools without asking, even from its execute tool, so the ask-first
+          // agent asks before every Copilot tool not marked read-only, as Claude and Codex do.
+          // Its action for a tool is `<server>_<tool>` with other characters than [A-Za-z0-9_-] as `_`.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+          { action: `${COPILOT_MCP_SERVER_NAME}_*`, resource: "*", effect: "ask" },
+          ...readOnlyCopilotTools.map(
+            (name): PermissionRule => ({
+              action: `${COPILOT_MCP_SERVER_NAME}_${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+              resource: "*",
+              effect: "allow",
+            })
+          ),
         ],
       },
     },

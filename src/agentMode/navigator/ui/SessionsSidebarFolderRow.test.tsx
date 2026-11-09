@@ -73,7 +73,7 @@ describe("SessionsSidebarFolderRow", () => {
     });
 
     it.each([
-      ["running", "Running"],
+      ["running", "Responding"],
       ["waiting", "Waiting for permission"],
       ["unread", "Unread result"],
     ] as const)(

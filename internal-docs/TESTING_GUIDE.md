@@ -208,12 +208,38 @@ Check that:
 
 ### Failure modes to recognise
 
-| Symptom                                                   | Cause                                                                                                    | Fix                                             |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `Vault not found.`                                        | Typo in `vault=<name>` (case-sensitive, matches the vault name shown in `vaults verbose`)                | Run `$OBS vaults verbose` to list known vaults  |
-| Command exits 0 with empty stdout, `eval` returns nothing | The named vault is registered but no renderer is open _yet_ — Obsidian is launching it. Retry after 1–2s | `sleep 2 && retry`, then verify                 |
-| Default vault keeps changing between commands             | You omitted `vault=<name>` — focus moved                                                                 | Always pass the flag, never rely on the default |
-| Screenshot shows a different vault than expected          | Same — captured the focused renderer, not the targeted one                                               | Re-take with `vault=<name>` explicit            |
+| Symptom                                                   | Cause                                                                                                    | Fix                                                            |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `Vault not found.`                                        | Typo in `vault=<name>` (case-sensitive, matches the vault name shown in `vaults verbose`)                | Run `$OBS vaults verbose` to list known vaults                 |
+| Command exits 0 with empty stdout, `eval` returns nothing | The named vault is registered but no renderer is open _yet_ — Obsidian is launching it. Retry after 1–2s | `sleep 2 && retry`, then verify                                |
+| Default vault keeps changing between commands             | You omitted `vault=<name>` — focus moved                                                                 | Always pass the flag, never rely on the default                |
+| Screenshot shows a different vault than expected          | Same — captured the focused renderer, not the targeted one                                               | Re-take with `vault=<name>` explicit                           |
+| CLI calls hang with no output, even `vaults`              | A vault window failed to load on a dangling plugin symlink                                               | [Recover it](#recover-a-vault-stuck-on-a-dangling-plugin-link) |
+
+### Recover a vault stuck on a dangling plugin link
+
+Deleting a worktree leaves any vault's `copilot-component-gallery` link pointing
+nowhere. That vault's window then fails with "ENOENT … plugins/copilot-component-gallery",
+and CLI calls to it, or with no `vault=`, hang. Calls to a healthy vault still
+work. Recover without asking:
+
+1. Wrap CLI calls in `timeout 30`. Stop only your own hung calls.
+2. Delete dangling plugin links in every registered vault. Live links belong to
+   other sessions; this leaves them.
+
+   ```bash
+   node -e 'const c=require(require("os").homedir()+"/Library/Application Support/obsidian/obsidian.json");for(const v of Object.values(c.vaults))console.log(v.path)' |
+     while IFS= read -r v; do find "$v/.obsidian/plugins" -maxdepth 1 -type l ! -exec test -e {} \; -print -delete 2>/dev/null; done
+   ```
+
+3. Reload the broken window from a healthy vault, then confirm
+   `$OBS vault=<broken> eval code="app.vault.getName()"` answers.
+
+   ```bash
+   timeout 30 $OBS vault=<healthy> eval code="require('@electron/remote').BrowserWindow.getAllWindows().filter(w=>w.getTitle().startsWith('<broken> - ')).forEach(w=>w.webContents.reload()); 'ok'"
+   ```
+
+If no vault answers, ask the user to click **Reload app** in the broken window.
 
 ## 1. Setup once per session
 
@@ -337,7 +363,14 @@ climbing past N iterations, the feature is leaking.
 ## 4. Interacting with the UI (clicks, typing)
 
 There is no first-class "click selector" or "type into input" CLI command.
-Two real options:
+Two real options are below. Two things trip runs before either:
+
+- Row and tab actions, such as `Shut down` and `Close tab`, render only on hover or
+  keyboard focus. Hover or focus the row or tab first.
+- The test vault opens Settings in a popout window, which `dev:screenshot` and
+  `dev:cdp` cannot reach. Run
+  `app.vault.setConfig("settingsPopoutWindow", false)` before driving Settings,
+  such as entering a license, and set it back afterwards.
 
 ### 4a. `eval` — synthetic JS events (fast, easy, slightly fake)
 
@@ -432,6 +465,11 @@ checks fail across realms — a popout window has its own `HTMLElement`,
 `MouseEvent`, etc. constructors. Inside `eval`, use
 `element.instanceOf(HTMLElement)` / `event.instanceOf(MouseEvent)` if you need
 cross-realm type checks.
+
+## 4d. Driving Agent Mode
+
+- Never choose `Upload & open issue` in Report an issue: it uploads to
+  Brevilabs. Stop at the review screen and choose `Cancel`.
 
 ## 5. Vault data setup
 

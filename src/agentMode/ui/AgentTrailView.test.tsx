@@ -10,8 +10,16 @@ import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { makeCommandTask, makeTask } from "@/agentMode/ui/testing/taskFixtures";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
-  AgentMarkdownText: ({ text, miyoPaths }: { text: string; miyoPaths?: string[] }) => (
-    <div data-testid="agent-md" data-miyo-paths={miyoPaths?.join("|")}>
+  AgentMarkdownText: ({
+    text,
+    miyoPaths,
+    streaming,
+  }: {
+    text: string;
+    miyoPaths?: string[];
+    streaming?: boolean;
+  }) => (
+    <div data-testid="agent-md" data-streaming={streaming} data-miyo-paths={miyoPaths?.join("|")}>
       {text}
     </div>
   ),
@@ -97,6 +105,16 @@ const LINT = toolCall("b1", {
 });
 
 describe("AgentTrail", () => {
+  it("ends the live text lifecycle when the turn stops (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", () => {
+    const parts = [text("Earlier"), text("Arriving")];
+    const view = renderTrail({ parts, isStreaming: true });
+    const live = screen.getAllByTestId("agent-md");
+    expect(live[live.length - 1].getAttribute("data-streaming")).toBe("true");
+    view.rerenderTrail({ parts, isStreaming: false });
+    expect(
+      screen.getAllByTestId("agent-md").every((el) => el.getAttribute("data-streaming") === "false")
+    ).toBe(true);
+  });
   let writeText: jest.Mock;
 
   beforeEach(() => {
@@ -375,6 +393,27 @@ describe("AgentTrail", () => {
 
     rerenderTrail({ turnStopReason: "cancelled" });
     expect(screen.getAllByTestId("agent-md")).toHaveLength(1);
+  });
+
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says the agent ended its turn after a declined permission, so a reply the agent cancelled does not look frozen", () => {
+    renderTrail({
+      parts: [text("I'll ask before running it."), toolCall("x1", { status: "failed" })],
+      turnStopReason: "cancelled",
+      agentCancelCause: "permission_declined",
+    });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "I'll ask before running it.",
+      "**Stopped:** the agent ended its turn after you declined a permission. Send a message to tell it what to do next.",
+    ]);
+  });
+
+  it("https://github.com/logancyang/obsidian-copilot/issues/4062 says only that the agent ended its turn when no permission was declined, even before any text or tool activity", () => {
+    renderTrail({ parts: [], turnStopReason: "cancelled", agentCancelCause: "unspecified" });
+
+    expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
+      "**Stopped:** the agent ended its turn early. Send a message to continue.",
+    ]);
   });
 
   it("uses one aligned folding header for reasoning and every tool-card family", () => {

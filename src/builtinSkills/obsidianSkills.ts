@@ -6,7 +6,7 @@ export const OBSIDIAN_SKILLS_UPSTREAM_REVISION = "a1dc48e68138490d522c04cbf58222
 // Codex building Bases views. https://github.com/Brevilabs/obsidian-copilot-private/issues/726
 const OPENCODE_ONLY = { disabledAgents: ["claude", "codex"] };
 const FORMAT_SKILL_VERSION = 3;
-const MARKDOWN_SKILL_VERSION = 4;
+const MARKDOWN_SKILL_VERSION = 5;
 
 const UPSTREAM_LICENSE = String.raw`MIT License
 
@@ -33,7 +33,7 @@ SOFTWARE.
 
 const OBSIDIAN_MARKDOWN_SKILL_MD = String.raw`---
 name: obsidian-markdown
-description: Create and edit Obsidian-specific Markdown in .md notes, including wikilinks, block IDs (^id) with block and list embeds, heading embeds, callouts, properties and frontmatter, tags, aliases, and comments. Load before adding or changing any of these in a note, such as linking or embedding a paragraph, list or section, or setting a note's properties.
+description: Create and edit Obsidian-specific Markdown in .md notes, including wikilinks, block IDs (^id) with block and list embeds, heading embeds, callouts, properties and frontmatter, tags, aliases, comments, and Mermaid diagrams. Load before adding or changing any of these in a note, such as linking or embedding a paragraph, list or section, or setting a note's properties, and before drawing a Mermaid diagram in a note or a reply.
 license: MIT
 metadata:
   copilot-enabled-agents: claude, codex, opencode
@@ -128,6 +128,16 @@ separate lines.
 | Name | Formula |
 | --- | --- |
 | Absolute value | $\lvert x \rvert$ |
+~~~
+
+## Render-safe Mermaid
+
+Mermaid ends a statement at <code>;</code>, so a semicolon in a message or label
+breaks the diagram. Write it as <code>#59;</code>:
+
+~~~markdown
+sequenceDiagram
+  Copilot->>Vault: Write the TL#59;DR
 ~~~
 
 ## Attribution
@@ -625,9 +635,6 @@ const LICENSE_FILE = { path: "LICENSE", content: UPSTREAM_LICENSE } as const;
 const OBSIDIAN_MARKDOWN: BuiltinSkill = {
   name: "obsidian-markdown",
   version: MARKDOWN_SKILL_VERSION,
-  // Claude passed every render-safety eval case without this skill, so it stays off for Claude only.
-  // https://github.com/logancyang/obsidian-copilot/issues/3868
-  defaultPreference: { disabledAgents: ["claude"] },
   skillMd: OBSIDIAN_MARKDOWN_SKILL_MD,
   files: [
     { path: "references/CALLOUTS.md", content: MARKDOWN_CALLOUTS_REFERENCE },

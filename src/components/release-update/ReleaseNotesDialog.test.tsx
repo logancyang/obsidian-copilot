@@ -135,7 +135,8 @@ describe("ReleaseNotesDialog", () => {
         RELEASE_BODY,
         expect.any(HTMLElement),
         "",
-        expect.anything()
+        expect.anything(),
+        false
       );
     });
 

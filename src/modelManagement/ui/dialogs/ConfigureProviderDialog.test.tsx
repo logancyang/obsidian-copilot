@@ -14,6 +14,7 @@ const mockBulkSet = jest.fn().mockResolvedValue([]);
 const mockEnableModel = jest.fn().mockResolvedValue(undefined);
 const mockRemoveRefs = jest.fn().mockResolvedValue(undefined);
 const mockGetProvider = jest.fn();
+const mockGetProviderByBaseUrl = jest.fn();
 
 jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real `useModelManagement` hook; the name must match the export
@@ -31,6 +32,7 @@ jest.mock("@/modelManagement/ui/ModelManagementContext", () => ({
     coordinator: { removeProvider: jest.fn() },
     catalogService: {
       getProvider: mockGetProvider,
+      getProviderByBaseUrl: mockGetProviderByBaseUrl,
       ensureLoaded: jest.fn().mockResolvedValue(undefined),
       onChange: jest.fn().mockReturnValue(() => {}),
     },
@@ -390,6 +392,62 @@ describe("ConfigureProviderDialog", () => {
       await waitFor(() => expect(onClose).toHaveBeenCalled());
     });
 
+    it("saves a model of a custom endpoint that a catalog provider serves with that provider's catalog metadata, so its image input is known (https://github.com/logancyang/obsidian-copilot/issues/4107)", async () => {
+      const qwenInfo = {
+        id: "qwen3.8-max",
+        displayName: "Qwen3.8 Max",
+        modalities: { input: ["text", "image"], output: ["text"] },
+      };
+      mockGetProviderByBaseUrl.mockImplementation((baseUrl: string) =>
+        baseUrl === "https://dashscope.aliyuncs.com/compatible-mode/v1"
+          ? {
+              id: "alibaba-cn",
+              displayName: "Alibaba (China)",
+              providerType: "openai-compatible",
+              defaultBaseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+              models: { "qwen3.8-max": qwenInfo },
+            }
+          : undefined
+      );
+      render(
+        <ConfigureProviderForm
+          state={{ mode: "new", source: CUSTOM_OPENAI_DEFINITION }}
+          onClose={jest.fn()}
+        />
+      );
+      fireEvent.change(screen.getByText("Base URL").parentElement!.querySelector("input")!, {
+        target: { value: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+      });
+      manualAddId("qwen3.8-max");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
+      expect(mockSetupProvider).toHaveBeenCalledWith(
+        expect.objectContaining({ catalogProviderId: undefined, models: [qwenInfo] })
+      );
+    });
+
+    it("saves a discovered model with the context window its endpoint reports (https://github.com/logancyang/obsidian-copilot/issues/3840)", async () => {
+      mockListProviderModels.mockResolvedValue({
+        ok: true,
+        modelIds: ["qwen3-coder"],
+        contextWindows: { "qwen3-coder": 262144 },
+      });
+      render(
+        <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={jest.fn()} />
+      );
+      await waitFor(() => expect(screen.getByTestId("model-row-qwen3-coder")).toBeTruthy());
+      fireEvent.click(rowCheckbox("qwen3-coder"));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
+      expect(mockSetupProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          models: [{ id: "qwen3-coder", displayName: "qwen3-coder", limits: { context: 262144 } }],
+        })
+      );
+    });
+
     it("disables Save for a custom endpoint until a Base URL is entered (https://github.com/logancyang/obsidian-copilot/issues/2895)", () => {
       render(
         <ConfigureProviderForm
@@ -505,6 +563,52 @@ describe("ConfigureProviderDialog", () => {
         "https://proxy.example/v1",
         expect.objectContaining({ apiKey: "saved-secret" })
       );
+    });
+
+    it("adds the endpoint-reported context window to a saved custom model that has none when its provider is saved again (https://github.com/logancyang/obsidian-copilot/issues/3840)", async () => {
+      mockListProviderModels.mockResolvedValue({
+        ok: true,
+        modelIds: ["work-model"],
+        contextWindows: { "work-model": 262144 },
+      });
+      const onClose = jest.fn();
+      render(
+        <ConfigureProviderForm state={{ mode: "edit", providerId: "p-custom" }} onClose={onClose} />
+      );
+      await waitFor(() => expect(mockListProviderModels).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(within(screen.getByTestId("model-row-work-model")).getByText(/262/)).toBeTruthy()
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(mockBulkSet).toHaveBeenCalledWith("p-custom", [
+        { id: "work-model", displayName: "Work model", limits: { context: 262144 } },
+      ]);
+    });
+
+    it("does not save a context window reported by the previous Base URL after the Base URL changes (https://github.com/logancyang/obsidian-copilot/issues/3840)", async () => {
+      mockListProviderModels.mockResolvedValue({
+        ok: true,
+        modelIds: ["work-model"],
+        contextWindows: { "work-model": 262144 },
+      });
+      const onClose = jest.fn();
+      render(
+        <ConfigureProviderForm state={{ mode: "edit", providerId: "p-custom" }} onClose={onClose} />
+      );
+      await waitFor(() =>
+        expect(within(screen.getByTestId("model-row-work-model")).getByText(/262/)).toBeTruthy()
+      );
+      const baseUrlInput = screen.getByText("Base URL").parentElement?.querySelector("input");
+      expect(baseUrlInput).not.toBeNull();
+      fireEvent.change(baseUrlInput!, { target: { value: "https://other.example/v1" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalled());
+      expect(mockBulkSet).toHaveBeenCalledWith("p-custom", [
+        { id: "work-model", displayName: "Work model" },
+      ]);
     });
 
     it("reports a CORS-only change as saved only after it is persisted (https://github.com/logancyang/obsidian-copilot/issues/3147) (https://github.com/logancyang/obsidian-copilot-preview/issues/313)", async () => {

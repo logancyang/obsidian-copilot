@@ -26,18 +26,9 @@ import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
 import { getVaultBase } from "@/utils/vaultPath";
+import { getScrollableParent } from "@/utils/dom/scrollableParent";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
-
-function getScrollableParent(el: HTMLElement): HTMLElement | null {
-  let node: HTMLElement | null = el.parentElement;
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll") return node;
-    node = node.parentElement;
-  }
-  return null;
-}
 
 export const AgentSettings: React.FC = () => {
   const settings = useSettingsValue();

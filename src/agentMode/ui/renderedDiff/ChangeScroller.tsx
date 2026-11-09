@@ -70,6 +70,10 @@ export function useChangeNavigation(): ChangeNavigation {
   // which cannot scroll up to the anchor, would hand the position back to an earlier change.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
   const jumpedTo = React.useRef<number | null>(null);
+  // The diff opens on its first change and holds it there while late rendering shifts the note, until the
+  // reader scrolls or navigates.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/848
+  const holdingFirst = React.useRef(true);
 
   React.useLayoutEffect(() => {
     const scroller = scrollerRef.current;
@@ -80,6 +84,11 @@ export function useChangeNavigation(): ChangeNavigation {
     const measure = (): void => {
       const next = measureChanges(scroller, content);
       setLayout(next);
+      const first = next.ticks[0];
+      if (holdingFirst.current && first && !isInView(scroller, first)) {
+        jumpedTo.current = scrollToTick(scroller, first);
+        setCurrent(0);
+      }
       if (currentRef.current !== null && currentRef.current >= next.ticks.length) {
         setCurrent(next.ticks.length > 0 ? next.ticks.length - 1 : null);
       }
@@ -105,8 +114,8 @@ export function useChangeNavigation(): ChangeNavigation {
     (index: number) => {
       const scroller = scrollerRef.current;
       if (!scroller) return;
-      scroller.scrollTop = layout.ticks[index].top - scroller.clientHeight * JUMP_ANCHOR;
-      jumpedTo.current = scroller.scrollTop;
+      holdingFirst.current = false;
+      jumpedTo.current = scrollToTick(scroller, layout.ticks[index]);
       setCurrent(index);
       if (scroller.doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       for (const mark of layout.ticks[index].marks) mark.animate(FLASH_KEYFRAMES, FLASH_TIMING);
@@ -130,6 +139,7 @@ export function useChangeNavigation(): ChangeNavigation {
     const scroller = scrollerRef.current;
     if (!scroller || scroller.scrollTop === jumpedTo.current) return;
     jumpedTo.current = null;
+    holdingFirst.current = false;
     setCurrent(reachedIndex(scroller, layout.ticks));
   }, [layout, setCurrent]);
 
@@ -137,6 +147,17 @@ export function useChangeNavigation(): ChangeNavigation {
   // between a total and a position; the first step then goes to that change rather than past it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/709
   return { scrollerRef, contentRef, layout, current: current ?? 0, goTo, step, syncToScroll };
+}
+
+function scrollToTick(scroller: HTMLElement, tick: ChangeTick): number {
+  scroller.scrollTop = tick.top - scroller.clientHeight * JUMP_ANCHOR;
+  return scroller.scrollTop;
+}
+
+function isInView(scroller: HTMLElement, tick: ChangeTick): boolean {
+  return (
+    tick.top >= scroller.scrollTop && tick.bottom <= scroller.scrollTop + scroller.clientHeight
+  );
 }
 
 function reachedIndex(scroller: HTMLElement, ticks: readonly ChangeTick[]): number | null {

@@ -58,6 +58,12 @@ import {
   type ModelManagementApi,
 } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
+import { CONNECTOR_CATALOG } from "@/connectors/catalog";
+import { ConnectionManager } from "@/connectors/connectionManager";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { ConnectorTools } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
+import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -70,6 +76,7 @@ import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/pro
 import {
   checkIsPaidUser,
   ENTITLEMENT_REFRESH_INTERVAL_MS,
+  subscribeToEntitlementChange,
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import {
@@ -99,6 +106,7 @@ import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
 import { getDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { getElectronShell } from "@/utils/electronShell";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { installRendererEventsShim } from "@/utils/rendererEventsShim";
 import { ContextProcessor } from "@/contextProcessor";
@@ -170,6 +178,9 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  connectionManager?: ConnectionManager;
+  connectorTools?: ConnectorTools;
+  customConnectors?: CustomConnectors;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -380,6 +391,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           registerTurnDiffCommands,
           acpFrameSink,
           createAgentSessionManager,
+          MAX_PROVIDED_TOOL_NAME_LENGTH,
           setFrameSinkVaultBasePath,
           SkillManager,
         },
@@ -399,6 +411,43 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // A log left permissive by an older build is only reachable here when
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
+
+      const customConnectors = new CustomConnectors({
+        keychain: KeychainService.getInstance(),
+        deviceStorage: {
+          load: (key) => this.app.loadLocalStorage(key),
+          save: (key, value) => this.app.saveLocalStorage(key, value),
+        },
+        catalogIds: CONNECTOR_CATALOG.map(({ id }) => id),
+        isEnabled: () => isConnectorsEnabled() === true,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        cwd: adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined,
+      });
+      this.customConnectors = customConnectors;
+      this.register(() => customConnectors.dispose());
+      const connectionManager = new ConnectionManager({
+        auth: new ConnectorAuth({
+          keychain: KeychainService.getInstance(),
+          openUrl: (url) => {
+            getElectronShell()
+              ?.openExternal?.(url)
+              .catch((error) => logError("[Connectors] could not open the system browser:", error));
+          },
+        }),
+        catalog: CONNECTOR_CATALOG,
+        custom: customConnectors,
+      });
+      this.connectionManager = connectionManager;
+      this.connectorTools = new ConnectorTools({
+        manager: connectionManager,
+        catalog: CONNECTOR_CATALOG,
+        isEnabled: () => isConnectorsEnabled() === true,
+        subscribeToEnabledChange: subscribeToEntitlementChange,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        custom: customConnectors,
+      });
+      this.register(() => connectionManager.dispose());
+      void connectionManager.checkStatus();
 
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       this.skills = SkillManager.getInstance();
