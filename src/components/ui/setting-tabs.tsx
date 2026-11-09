@@ -6,6 +6,7 @@ export interface TabItem {
   label: string;
   id: string;
   warningLabel?: string;
+  warningTone?: "warning" | "error";
 }
 
 export type TabVariant = "page" | "inline";
@@ -88,7 +89,10 @@ export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, vari
         <span
           aria-hidden="true"
           title={tab.warningLabel}
-          className="tw-pointer-events-none tw-absolute tw-right-1 tw-top-1 tw-size-1.5 tw-rounded-full tw-bg-warning"
+          className={cn(
+            "tw-pointer-events-none tw-absolute tw-right-1 tw-top-1 tw-size-1.5 tw-rounded-full",
+            tab.warningTone === "error" ? "tw-bg-modifier-error" : "tw-bg-warning"
+          )}
         />
       )}
     </div>

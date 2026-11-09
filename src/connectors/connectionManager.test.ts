@@ -455,6 +455,34 @@ describe("connectionManager", () => {
       });
     });
 
+    describe("dismissFailedLogin()", () => {
+      it("clears the reason a login didn't finish once the user leaves the page that showed it", async () => {
+        const fake = setUp();
+        const outcome = fake.manager.connect("notion");
+        fake.finishLogin({ status: "failed", reason: "timed-out" });
+        await outcome;
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.dismissFailedLogin();
+
+        expect(fake.manager.getSnapshot().failedLogin).toBeNull();
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves the snapshot untouched when no login failed", () => {
+        const fake = setUp();
+        const before = fake.manager.getSnapshot();
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.dismissFailedLogin();
+
+        expect(fake.manager.getSnapshot()).toBe(before);
+        expect(listener).not.toHaveBeenCalled();
+      });
+    });
+
     describe("dispose()", () => {
       it("cancels a waiting login and stops notifying subscribers", async () => {
         const fake = setUp();

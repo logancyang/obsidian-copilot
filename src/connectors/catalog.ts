@@ -286,3 +286,7 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
 export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze(
   CATALOG_ENTRIES.map((entry) => ({ ...entry, logoUrl: `${LOGO_BASE_URL}/${entry.id}.png` }))
 );
+
+export const CONNECTOR_SERVICES: ReadonlyMap<string, ConnectorCatalogEntry> = new Map(
+  CONNECTOR_CATALOG.map((service) => [service.id, service])
+);
