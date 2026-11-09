@@ -101,9 +101,10 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const settings = getSettings();
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      const folderName = settings.miyoSearchAll
-        ? undefined
-        : await resolveMiyoFolderName(this.app, this.client, baseUrl);
+      // Unrestricted results still map back to vault paths by folder name, so resolve it for this Miyo even when the search spans every folder.
+      // https://github.com/logancyang/obsidian-copilot/issues/3690
+      const vaultFolderName = await resolveMiyoFolderName(this.app, this.client, baseUrl);
+      const folderName = settings.miyoSearchAll ? undefined : vaultFolderName;
       // Extra folders widen only the Current vault scope; Unrestricted already spans every folder.
       // https://github.com/logancyang/obsidian-copilot/issues/3508
       const extraFolders =
