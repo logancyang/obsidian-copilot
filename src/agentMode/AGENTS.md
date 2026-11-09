@@ -109,6 +109,11 @@ Then in either case:
 - "A tool call that gets its own card in the agent trail" → a `ToolCardKind`
   (`ui/activityGroups.ts`) in the tool's feature module, listed in
   `ui/toolCardKinds.tsx`
+- "A feature's state on a chat, or a card it shows after a turn" → a
+  `ChatStateKey` and `ChatExtension` (`session/chatExtension.ts`) plus a
+  `ChatCardSlot` (`ui/chatCards.tsx`) in the feature's module; list the
+  extension in `index.ts` and the slot in `ui/chatCardSlots.ts`. Never add
+  feature methods to `AgentSession`, `AgentChatBackend` or `AgentChatMessages`.
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs

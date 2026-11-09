@@ -19,6 +19,7 @@ import {
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
+import { defineChatExtension, type ChatStateKey } from "./chatExtension";
 import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
@@ -237,6 +238,8 @@ function makeDescriptorWireWithoutEffort(): BackendDescriptor {
     },
   } as unknown as BackendDescriptor;
 }
+
+const COUNTER: ChatStateKey<number> = Object.freeze({ id: "counter", initial: 0 });
 
 function makeSession(
   mock: MockBackend,
@@ -1422,6 +1425,23 @@ describe("AgentSession", () => {
     });
 
     describe("sendPrompt()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 hands a failed reply's error to each chat extension with the chat, and keeps the state it returns", async () => {
+        const mock = makeMockBackend();
+        mock.prompt.mockRejectedValue(new Error("model not supported: gemini-4"));
+        const onTurnFailed = jest.fn((count: number) => count + 1);
+        const session = makeSession(mock, {
+          chatExtensions: [defineChatExtension({ key: COUNTER, onTurnFailed })],
+        });
+
+        await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
+
+        expect(onTurnFailed).toHaveBeenCalledWith(0, session, {
+          errorText: "model not supported: gemini-4",
+          error: expect.any(Error),
+        });
+        expect(session.readChatState(COUNTER)).toBe(1);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 refuses to run a turn, and says why, while the agent is on a model the user has not enabled", async () => {
         const mock = makeMockBackend();
         const agent = fakeCatalogAgent(mock, catalogState([PLUS_FLASH, PARETO], PLUS_FLASH));
@@ -6167,214 +6187,59 @@ describe("AgentSession", () => {
       });
     });
 
-    describe("getFeedbackOffer()", () => {
-      it("starts with no feedback card", () => {
-        expect(makeSession(makeMockBackend()).getFeedbackOffer()).toBeNull();
-      });
-
-      describe("after a failed reply", () => {
-        const failedSession = (
-          offerFeedbackCards: boolean,
-          error: Error = new Error("model not supported: gemini-4")
-        ) => {
-          jest.mocked(getSettings).mockReturnValue({ agentMode: { offerFeedbackCards } } as never);
-          const mock = makeMockBackend();
-          mock.prompt.mockRejectedValue(error);
-          return makeSession(mock, { backendId: "opencode" });
-        };
-
-        afterEach(() => {
-          jest.mocked(getSettings).mockReturnValue({ agentMode: {} } as never);
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 opens a card with the error, anchored to the message whose reply failed", async () => {
-          const session = failedSession(true);
-
-          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
-
-          const userMessageId = session.store
-            .getDisplayMessages()
-            .find((message) => message.sender === USER_SENDER)?.id;
-          expect(session.getFeedbackOffer()).toEqual({
-            trigger: "turn_error",
-            draft: {
-              title: "Agent Chat reply failed on opencode",
-              whatHappened: "model not supported: gemini-4",
-              userSaid: "",
-              repro: "",
-            },
-            evidence: expect.objectContaining({ backendId: "opencode", sessionId: "acp-1" }),
-            afterUserMessageId: userMessageId,
-            status: "open",
-          });
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the backend files the failure as a provider quota", async () => {
-          const session = failedSession(
-            true,
-            Object.assign(new Error("Internal error: Free usage limit reached."), {
-              code: -32603,
-              data: { service: "session", errorName: "provider.quota" },
-            })
-          );
-
-          await expect(session.sendPrompt("hi").turn).rejects.toThrow("usage limit");
-
-          expect(session.getFeedbackOffer()).toBeNull();
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/831 shows no card when the reply fails because the user is not signed in", async () => {
-          const session = failedSession(
-            true,
-            new AuthRequiredError("You're not signed in to Claude.")
-          );
-
-          await expect(session.sendPrompt("hi").turn).rejects.toThrow("not signed in");
-
-          expect(session.getFeedbackOffer()).toBeNull();
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", async () => {
-          const session = failedSession(false);
-
-          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
-
-          expect(session.getFeedbackOffer()).toBeNull();
-        });
-
-        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps the session's one card when a later reply fails", async () => {
-          const session = failedSession(true);
-          await expect(session.sendPrompt("hi").turn).rejects.toThrow("model not supported");
-          session.dismissFeedbackOffer();
-          const first = session.getFeedbackOffer();
-
-          await expect(session.sendPrompt("again").turn).rejects.toThrow("model not supported");
-
-          expect(session.getFeedbackOffer()).toBe(first);
-        });
-      });
-    });
-
-    describe("offerFeedback()", () => {
-      const DRAFT = {
-        title: "Replied in Swedish to an English request",
-        whatHappened: "The agent answered 'hej'.",
-        userSaid: "Why do you switch to a different language?",
-        repro: "1. Ask in English.",
-      };
-
-      const sessionWithTranscript = () => {
-        const session = makeSession(makeMockBackend(), {
-          backendId: "codex",
-          initialState: sonnetAndGpt5State(),
-        });
+    describe("getDisplayMessages()", () => {
+      it("returns the transcript the chat shows", () => {
+        const session = makeSession(makeMockBackend());
         session.loadDisplayMessages([
           { id: "u1", sender: USER_SENDER, message: "hej", isVisible: true, timestamp: null },
-          { id: "a1", sender: AI_SENDER, message: "hej", isVisible: true, timestamp: null },
-          { id: "u2", sender: USER_SENDER, message: "why?", isVisible: true, timestamp: null },
         ]);
-        return session;
-      };
 
-      it("opens a card with the draft, session evidence and the latest user message as its anchor", () => {
-        const session = sessionWithTranscript();
-        const onMessagesChanged = jest.fn();
-        subscribeTo(session, { onMessagesChanged });
-
-        expect(session.offerFeedback(DRAFT)).toBe("shown");
-
-        expect(onMessagesChanged).toHaveBeenCalled();
-        expect(session.getFeedbackOffer()).toEqual({
-          trigger: "agent",
-          draft: DRAFT,
-          evidence: {
-            backendId: "codex",
-            model: "anthropic/sonnet",
-            sessionId: "acp-1",
-            raisedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-          },
-          afterUserMessageId: "u2",
-          status: "open",
-        });
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 refuses a second card in the same session whether the first is open, dismissed or sent", () => {
-        const session = sessionWithTranscript();
-        session.offerFeedback(DRAFT);
-        const first = session.getFeedbackOffer();
-
-        expect(session.offerFeedback({ ...DRAFT, title: "Another problem" })).toBe(
-          "already_offered"
-        );
-        session.dismissFeedbackOffer();
-        expect(session.offerFeedback(DRAFT)).toBe("already_offered");
-        expect(session.getFeedbackOffer()?.draft).toBe(first?.draft);
-      });
-
-      it("anchors to nothing when the session has no user message yet", () => {
-        const session = makeSession(makeMockBackend());
-        session.offerFeedback(DRAFT);
-        expect(session.getFeedbackOffer()?.afterUserMessageId).toBeNull();
+        expect(session.getDisplayMessages().map(({ id }) => id)).toEqual(["u1"]);
       });
     });
 
-    describe("dismissFeedbackOffer()", () => {
-      const DRAFT = { title: "t", whatHappened: "w", userSaid: "", repro: "r" };
+    describe("readChatState()", () => {
+      it("returns a feature's initial state until the feature stores one", () => {
+        expect(makeSession(makeMockBackend()).readChatState(COUNTER)).toBe(0);
+      });
+    });
 
-      it("marks an open card dismissed and notifies, without any other effect", () => {
-        const mock = makeMockBackend();
-        const session = makeSession(mock);
-        session.offerFeedback(DRAFT);
+    describe("updateChatState()", () => {
+      it("stores the new state, hands the change the session as its chat, and notifies", () => {
+        const session = makeSession(makeMockBackend());
         const onMessagesChanged = jest.fn();
         subscribeTo(session, { onMessagesChanged });
+        const change = jest.fn((count: number) => count + 1);
 
-        session.dismissFeedbackOffer();
+        session.updateChatState(COUNTER, change);
 
-        expect(session.getFeedbackOffer()?.status).toBe("dismissed");
+        expect(session.readChatState(COUNTER)).toBe(1);
+        expect(change).toHaveBeenCalledWith(0, session);
         expect(onMessagesChanged).toHaveBeenCalledTimes(1);
-        expect(mock.prompt).not.toHaveBeenCalled();
       });
 
-      it("leaves a sent card and a missing card unchanged", () => {
+      it("neither stores nor notifies when the change returns the same state", () => {
         const session = makeSession(makeMockBackend());
-        session.dismissFeedbackOffer();
-        expect(session.getFeedbackOffer()).toBeNull();
+        const before = session.getChatStates();
+        const onMessagesChanged = jest.fn();
+        subscribeTo(session, { onMessagesChanged });
 
-        session.offerFeedback(DRAFT);
-        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
-        session.dismissFeedbackOffer();
-        expect(session.getFeedbackOffer()?.status).toBe("reported");
+        session.updateChatState(COUNTER, (count) => count);
+
+        expect(session.getChatStates()).toBe(before);
+        expect(onMessagesChanged).not.toHaveBeenCalled();
       });
     });
 
-    describe("markFeedbackReported()", () => {
-      it("records the report ID and issue link on the card", () => {
+    describe("getChatStates()", () => {
+      it("returns a new snapshot after each change, so the chat view re-renders, and the same one otherwise", () => {
         const session = makeSession(makeMockBackend());
-        session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
+        const empty = session.getChatStates();
 
-        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
+        session.updateChatState(COUNTER, (count) => count + 1);
 
-        expect(session.getFeedbackOffer()).toMatchObject({
-          status: "reported",
-          report: { reportId: "r1", issueUrl: "https://example.com" },
-        });
-      });
-
-      it("ignores a report when no card was offered", () => {
-        const session = makeSession(makeMockBackend());
-        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
-        expect(session.getFeedbackOffer()).toBeNull();
-      });
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps a dismissed card dismissed when its upload lands afterwards", () => {
-        const session = makeSession(makeMockBackend());
-        session.offerFeedback({ title: "t", whatHappened: "w", userSaid: "", repro: "r" });
-        session.dismissFeedbackOffer();
-
-        session.markFeedbackReported({ reportId: "r1", issueUrl: "https://example.com" });
-
-        expect(session.getFeedbackOffer()).toMatchObject({ status: "dismissed" });
-        expect(session.getFeedbackOffer()?.report).toBeUndefined();
+        expect(session.getChatStates()).not.toBe(empty);
+        expect(session.getChatStates()).toBe(session.getChatStates());
       });
     });
 

@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
@@ -44,7 +44,7 @@ import {
   showMultiAgentUpgradePrompt,
 } from "@/agentMode/session/fanout/multiAgentEntitlement";
 import type { App, DataAdapter } from "obsidian";
-import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
   editTargetPaths,
@@ -104,13 +104,19 @@ import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
-import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
-import { isProviderSideFailure } from "@/agentMode/session/feedback/providerSideFailure";
-import type {
-  FeedbackEvidence,
-  FeedbackOffer,
-  FeedbackOfferTrigger,
-} from "@/agentMode/session/feedback/feedbackOffer";
+import type { FeedbackEvidence } from "@/agentMode/session/feedback/feedbackOffer";
+import {
+  EMPTY_CHAT_EXTENSIONS,
+  EMPTY_CHAT_STATES,
+  readChatState,
+  withChatState,
+  type ChatExtension,
+  type ChatStateHost,
+  type ChatStateKey,
+  type ChatStates,
+  type ChatView,
+  type TurnFailure,
+} from "@/agentMode/session/chatExtension";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -214,6 +220,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   getApp?: () => App;
   getProjectContextBlock?: () => string;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -230,9 +237,10 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
-export class AgentSession {
+export class AgentSession implements ChatStateHost, ChatView {
   readonly store = new AgentMessageStore();
   readonly internalId: string;
   readonly chatInputId: string;
@@ -281,7 +289,8 @@ export class AgentSession {
   });
   private readonly requests: InteractiveRequests;
   private readonly usageTracker: UsageTracker;
-  private feedbackOffer: FeedbackOffer | null = null;
+  private chatStates: ChatStates = EMPTY_CHAT_STATES;
+  private readonly chatExtensions: readonly ChatExtension<unknown>[];
 
   private needsAttention = false;
   private notifyScheduled = false;
@@ -315,7 +324,7 @@ export class AgentSession {
       captureFileChanges: (files, messageId, turnDiff) =>
         this.finalizeFileChanges(files, this.store, messageId, turnDiff),
       onTurnCompleted: () => void this.pollSessionTitle(),
-      onTurnFailed: (errorText, error) => this.offerTurnErrorReport(errorText, error),
+      onTurnFailed: (errorText, error) => this.applyTurnFailure({ errorText, error }),
     });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
@@ -326,6 +335,7 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
+    this.chatExtensions = opts.chatExtensions ?? EMPTY_CHAT_EXTENSIONS;
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     this.requests = new InteractiveRequests({
@@ -1128,59 +1138,31 @@ export class AgentSession {
     };
   }
 
-  getFeedbackOffer(): FeedbackOffer | null {
-    return this.feedbackOffer;
+  getDisplayMessages(): readonly AgentChatMessage[] {
+    return this.store.getDisplayMessages();
   }
 
-  // One card per session, whatever became of it, so a frustrated user is never nagged.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
-    if (this.feedbackOffer) return "already_offered";
-    this.feedbackOffer = this.openFeedbackOffer("agent", draft);
-    this.notifyMessages();
-    return "shown";
+  getChatStates(): ChatStates {
+    return this.chatStates;
   }
 
-  // A failed reply leaves no agent turn to raise the card, so the session raises it with the error.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
-  private offerTurnErrorReport(errorText: string, error: unknown): void {
-    if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
-    // A missing sign-in is the user's account state, and the error already points at the Sign in button.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/831
-    if (error instanceof AuthRequiredError || isProviderSideFailure(error, errorText)) return;
-    this.feedbackOffer = this.openFeedbackOffer("turn_error", {
-      title: `Agent Chat reply failed on ${this.backendId}`,
-      whatHappened: errorText,
-      userSaid: "",
-      repro: "",
-    });
+  readChatState<S>(key: ChatStateKey<S>): S {
+    return readChatState(this.chatStates, key);
   }
 
-  private openFeedbackOffer(trigger: FeedbackOfferTrigger, draft: FeedbackDraft): FeedbackOffer {
-    const userMessages = this.store
-      .getDisplayMessages()
-      .filter((message) => message.sender === USER_SENDER);
-    return {
-      trigger,
-      draft,
-      evidence: this.getReportEvidence(),
-      afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
-      status: "open",
-    };
-  }
-
-  dismissFeedbackOffer(): void {
-    if (this.feedbackOffer?.status !== "open") return;
-    this.feedbackOffer = { ...this.feedbackOffer, status: "dismissed" };
+  updateChatState<S>(key: ChatStateKey<S>, change: (state: S, chat: ChatView) => S): void {
+    const next = withChatState(this.chatStates, key, change(this.readChatState(key), this));
+    if (next === this.chatStates) return;
+    this.chatStates = next;
     this.notifyMessages();
   }
 
-  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
-    // An upload can land after the user closed the dialog and dismissed the card, which must stay dismissed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-    if (this.feedbackOffer?.status !== "open") return;
-    this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
-    this.notifyMessages();
+  private applyTurnFailure(failure: TurnFailure): void {
+    for (const extension of this.chatExtensions) {
+      if (!extension.onTurnFailed) continue;
+      const state = extension.onTurnFailed(this.readChatState(extension.key), this, failure);
+      this.chatStates = withChatState(this.chatStates, extension.key, state);
+    }
   }
 
   getSessionUsage(): SessionUsage | null {

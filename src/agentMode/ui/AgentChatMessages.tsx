@@ -2,10 +2,10 @@ import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
-import { FeedbackCard, findFeedbackCardIndex } from "@/agentMode/ui/FeedbackCard";
-import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
-import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
-import { setSettings } from "@/settings/model";
+import { placeChatCards } from "@/agentMode/ui/chatCards";
+import { CHAT_CARD_SLOTS } from "@/agentMode/ui/chatCardSlots";
+import type { ChatStates } from "@/agentMode/session/chatExtension";
+import type CopilotPlugin from "@/main";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
@@ -25,21 +25,21 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
-import { App, Plugin } from "obsidian";
+import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
 
 const EMPTY_PARTS = Object.freeze([]) as unknown as AgentMessagePart[];
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
-  plugin: Pick<Plugin, "app" | "manifest">;
+  plugin: CopilotPlugin;
   sourcePath?: string;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
-  feedbackOffer: FeedbackOffer | null;
+  chatStates: ChatStates;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -174,7 +174,7 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
-    feedbackOffer,
+    chatStates,
   }: AgentChatMessagesProps) => {
     const { app } = plugin;
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
@@ -215,33 +215,9 @@ const AgentChatMessages = memo(
         ? `permission:${pendingPermission.toolCall.toolCallId}`
         : null;
 
-    const feedbackCardIndex = useMemo(
-      () => findFeedbackCardIndex(visible, feedbackOffer),
-      [visible, feedbackOffer]
-    );
-    const feedbackCard = useMemo(
-      () =>
-        feedbackOffer ? (
-          <FeedbackCard
-            offer={feedbackOffer}
-            onReview={() =>
-              openReportIssueModal(plugin, {
-                activeBackend: feedbackOffer.evidence.backendId,
-                initialNote: formatFeedbackNote(feedbackOffer),
-                preselectAllSources: true,
-                onReported: (report) => chatBackend.markFeedbackReported(report),
-              })
-            }
-            onDismiss={() => chatBackend.dismissFeedbackOffer()}
-            onTurnOff={() => {
-              setSettings((cur) => ({
-                agentMode: { ...cur.agentMode, offerFeedbackCards: false },
-              }));
-              chatBackend.dismissFeedbackOffer();
-            }}
-          />
-        ) : null,
-      [feedbackOffer, plugin, chatBackend]
+    const chatCards = useMemo(
+      () => placeChatCards(visible, chatStates, { plugin, chat: chatBackend }, CHAT_CARD_SLOTS),
+      [visible, chatStates, plugin, chatBackend]
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
@@ -269,7 +245,7 @@ const AgentChatMessages = memo(
                   message.sender !== USER_SENDER && message.id === latestAssistant?.id
                 }
                 isStreaming={message.id === streamingMessageId}
-                trailingCard={index === feedbackCardIndex ? feedbackCard : undefined}
+                trailingCard={chatCards.get(index)}
               />
             );
           })}

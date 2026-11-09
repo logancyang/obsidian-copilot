@@ -117,7 +117,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
-    feedbackOffer,
+    chatStates,
     queuedPrompts,
     tasks,
     isReplyRunning,
@@ -809,7 +809,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         pendingAskUserQuestions={pendingAskUserQuestions}
                         chatBackend={backend}
                         isLoading={isLoading}
-                        feedbackOffer={feedbackOffer}
+                        chatStates={chatStates}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

@@ -7,7 +7,7 @@ import type {
   PermissionPrompt,
   QueuedPrompt,
 } from "@/agentMode/session/types";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { EMPTY_CHAT_STATES, type ChatStates } from "@/agentMode/session/chatExtension";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { act, render, renderHook } from "@testing-library/react";
@@ -23,7 +23,7 @@ interface FakeBackendState {
   currentTodoList?: AgentTodoListEntry[] | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
-  feedbackOffer?: FeedbackOffer | null;
+  chatStates?: ChatStates;
   queuedPrompts?: readonly QueuedPrompt[];
   tasks?: readonly AgentTask[];
 }
@@ -39,7 +39,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     currentTodoList: initial.currentTodoList ?? null,
     pendingToolPermissions: initial.pendingToolPermissions ?? [],
     pendingAskUserQuestions: initial.pendingAskUserQuestions ?? [],
-    feedbackOffer: initial.feedbackOffer ?? null,
+    chatStates: initial.chatStates ?? EMPTY_CHAT_STATES,
     queuedPrompts: initial.queuedPrompts ?? [],
     tasks: initial.tasks ?? [],
   };
@@ -59,7 +59,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     getCurrentTodoList: () => state.currentTodoList ?? null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
-    getFeedbackOffer: () => state.feedbackOffer ?? null,
+    getChatStates: () => state.chatStates ?? EMPTY_CHAT_STATES,
     getQueuedPrompts: () => state.queuedPrompts ?? [],
     getTasks: () => state.tasks ?? [],
   } as unknown as AgentChatBackend;
@@ -113,18 +113,18 @@ describe("useAgentChatRuntimeState", () => {
       expect(result.current.isTurnInFlight).toBe(false);
     });
 
-    it("picks up a feedback card the moment the backend offers it", () => {
+    it("picks up a feature's chat state the moment the backend changes it", () => {
       const fake = makeFakeBackend();
       const { result } = renderHook(() => useAgentChatRuntimeState(fake.backend));
-      expect(result.current.feedbackOffer).toBeNull();
-      const offer = { status: "open" } as FeedbackOffer;
+      expect(result.current.chatStates).toBe(EMPTY_CHAT_STATES);
+      const states: ChatStates = new Map([["feedback-offer", { status: "open" }]]);
 
       act(() => {
-        fake.state.feedbackOffer = offer;
+        fake.state.chatStates = states;
         fake.emit();
       });
 
-      expect(result.current.feedbackOffer).toBe(offer);
+      expect(result.current.chatStates).toBe(states);
     });
 
     it("re-syncs every field when the backend notifies", () => {

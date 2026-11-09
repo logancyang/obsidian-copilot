@@ -1,8 +1,21 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
-import { FeedbackCard, findFeedbackCardIndex } from "./FeedbackCard";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import { FeedbackCard, feedbackCardSlot } from "./FeedbackCard";
+import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { fakeChat } from "@/agentMode/session/testing/fakeChat";
+import type CopilotPlugin from "@/main";
+
+const mockOpenReportIssueModal = jest.fn();
+jest.mock("@/agentMode/ui/ReportIssueModal", () => ({
+  openReportIssueModal: (...args: unknown[]) => mockOpenReportIssueModal(...args),
+}));
+const mockSetSettings = jest.fn();
+jest.mock("@/settings/model", () => ({
+  ...jest.requireActual<Record<string, unknown>>("@/settings/model"),
+  setSettings: (...args: unknown[]) => mockSetSettings(...args),
+}));
+
+const PLUGIN = { manifest: { version: "4.1.0" } } as unknown as CopilotPlugin;
 
 const OPEN_OFFER: FeedbackOffer = {
   trigger: "agent",
@@ -17,51 +30,13 @@ const OPEN_OFFER: FeedbackOffer = {
   status: "open",
 };
 
-function message(id: string, sender: "user" | "AI"): AgentChatMessage {
-  return { id, sender, message: id, timestamp: null, isVisible: true };
-}
-
-const TRANSCRIPT = [
-  message("user-1", "user"),
-  message("ai-1", "AI"),
-  message("user-2", "user"),
-  message("ai-2a", "AI"),
-  message("ai-2b", "AI"),
-  message("user-3", "user"),
-  message("ai-3", "AI"),
-];
-
 function renderCard(offer: FeedbackOffer = OPEN_OFFER) {
   const props = { offer, onReview: jest.fn(), onDismiss: jest.fn(), onTurnOff: jest.fn() };
   render(<FeedbackCard {...props} />);
   return props;
 }
 
-jest.mock("@/constants", () => ({ USER_SENDER: "user" }));
-
 describe("FeedbackCard", () => {
-  describe("findFeedbackCardIndex()", () => {
-    it("places the card after the last reply of the turn that raised it", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT, OPEN_OFFER)).toBe(4);
-    });
-
-    it("places the card at the end while the raising turn is still the latest", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT.slice(0, 5), OPEN_OFFER)).toBe(4);
-    });
-
-    it("places the card at the end when the raising message is no longer in the transcript", () => {
-      expect(
-        findFeedbackCardIndex(TRANSCRIPT.slice(0, 2), { ...OPEN_OFFER, afterUserMessageId: null })
-      ).toBe(1);
-    });
-
-    it("hides the card when there is no offer, it was dismissed, or there are no messages", () => {
-      expect(findFeedbackCardIndex(TRANSCRIPT, null)).toBe(-1);
-      expect(findFeedbackCardIndex(TRANSCRIPT, { ...OPEN_OFFER, status: "dismissed" })).toBe(-1);
-      expect(findFeedbackCardIndex([], OPEN_OFFER)).toBe(-1);
-    });
-  });
-
   describe("FeedbackCard()", () => {
     it("shows the drafted title and the user's own words with review, dismiss and opt-out actions", () => {
       renderCard();
@@ -104,6 +79,81 @@ describe("FeedbackCard", () => {
         "https://github.com/x/y/issues/new"
       );
       expect(screen.queryByRole("button")).toBeNull();
+    });
+  });
+
+  describe("feedbackCardSlot", () => {
+    describe("place()", () => {
+      it("places an open or sent card after the turn that raised it", () => {
+        expect(feedbackCardSlot.place(OPEN_OFFER)).toEqual([
+          { id: "offer", afterUserMessageId: "user-2" },
+        ]);
+        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "reported" })).toHaveLength(1);
+      });
+
+      it("places nothing when there is no offer or it was dismissed", () => {
+        expect(feedbackCardSlot.place(null)).toEqual([]);
+        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "dismissed" })).toEqual([]);
+      });
+    });
+
+    describe("render()", () => {
+      function renderSlot() {
+        const chat = fakeChat();
+        chat.updateChatState(FEEDBACK_OFFER, () => OPEN_OFFER);
+        render(<>{feedbackCardSlot.render(OPEN_OFFER, "offer", { plugin: PLUGIN, chat })}</>);
+        return chat;
+      }
+
+      beforeEach(() => {
+        mockOpenReportIssueModal.mockClear();
+        mockSetSettings.mockClear();
+      });
+
+      it("opens the report dialog prefilled from the card with every source checked, and records the sent report on the chat's card", () => {
+        const chat = renderSlot();
+
+        fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
+
+        expect(mockOpenReportIssueModal).toHaveBeenCalledWith(PLUGIN, {
+          activeBackend: "codex",
+          initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
+          preselectAllSources: true,
+          onReported: expect.any(Function),
+        });
+        const { onReported } = mockOpenReportIssueModal.mock.calls[0][1] as {
+          onReported: (report: { reportId: string; issueUrl: string }) => void;
+        };
+        onReported({ reportId: "r1", issueUrl: "https://example.com" });
+        expect(chat.readChatState(FEEDBACK_OFFER)).toMatchObject({
+          status: "reported",
+          report: { reportId: "r1", issueUrl: "https://example.com" },
+        });
+      });
+
+      it("dismisses the chat's card without opening the report dialog", () => {
+        const chat = renderSlot();
+
+        fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+        expect(chat.readChatState(FEEDBACK_OFFER)?.status).toBe("dismissed");
+        expect(mockOpenReportIssueModal).not.toHaveBeenCalled();
+      });
+
+      it("turns feedback cards off and dismisses this one when the user opts out", () => {
+        const chat = renderSlot();
+
+        fireEvent.click(screen.getByRole("button", { name: "Don't offer again" }));
+
+        const update = mockSetSettings.mock.calls[0][0] as (cur: {
+          agentMode: Record<string, unknown>;
+        }) => { agentMode: Record<string, unknown> };
+        expect(update({ agentMode: { debugFullFrames: true } }).agentMode).toEqual({
+          debugFullFrames: true,
+          offerFeedbackCards: false,
+        });
+        expect(chat.readChatState(FEEDBACK_OFFER)?.status).toBe("dismissed");
+      });
     });
   });
 });
