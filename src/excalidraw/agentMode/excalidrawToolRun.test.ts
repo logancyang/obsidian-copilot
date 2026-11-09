@@ -10,7 +10,7 @@ const CREATE = { path: PATH, elements: [{ id: "a", type: "rectangle" }] };
 const EDIT = { path: PATH, operations: [{ op: "delete", ids: ["a"] }] };
 
 function ingested(part: ToolCallPart): ToolCallPart {
-  const copilotTools = readCodexCopilotTools(part.input) ?? readOpencodeCopilotTools(part.input);
+  const copilotTools = readCodexCopilotTools(part.input);
   return copilotTools ? { ...part, copilotTools } : part;
 }
 
@@ -25,7 +25,7 @@ function codexCall(tool: string, args: Record<string, unknown>): ToolCallPart {
   });
 }
 
-function opencodeCall(code: string): ToolCallPart {
+function opencodeCall(code: string, name = "excalidraw_write"): ToolCallPart {
   return ingested({
     kind: "tool_call",
     id: "opencode",
@@ -33,16 +33,28 @@ function opencodeCall(code: string): ToolCallPart {
     status: "completed",
     toolKind: "other",
     input: { code },
+    copilotTools: { calls: [{ name, code }] },
   });
 }
 
 describe("excalidrawToolRun", () => {
   describe("excalidrawToolRun()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 reads the concrete path and operation from native OpenCode metadata", () => {
+      const part = {
+        ...opencodeCall("return write(args);"),
+        copilotTools:
+          readOpencodeCopilotTools(undefined, {
+            metadata: { toolCalls: [{ tool: "obsidian-copilot.excalidraw_write", input: EDIT }] },
+          }) ?? undefined,
+      };
+      expect(excalidrawToolRun(part)).toEqual({ action: "edit", status: "completed", path: PATH });
+    });
+
     it.each([
       ["Claude", excalidrawToolCall("excalidraw_write", CREATE)],
       ["Codex", codexCall("excalidraw_write", CREATE)],
       [
-        "OpenCode",
+        "saved OpenCode",
         opencodeCall(
           `return tools["obsidian-copilot"].excalidraw_write({ path: "${PATH}", elements: [] });`
         ),
@@ -59,7 +71,7 @@ describe("excalidrawToolRun", () => {
       ["Claude", excalidrawToolCall("excalidraw_write", EDIT)],
       ["Codex", codexCall("excalidraw_write", EDIT)],
       [
-        "OpenCode",
+        "saved OpenCode",
         opencodeCall(
           `return tools["obsidian-copilot"].excalidraw_write({ path: '${PATH}', operations: [] });`
         ),
@@ -68,14 +80,14 @@ describe("excalidrawToolRun", () => {
       expect(excalidrawToolRun(part)).toEqual({ action: "edit", status: "completed", path: PATH });
     });
 
-    it("reads an OpenCode write that passes its operations by shorthand as an edit", () => {
+    it("reads a saved OpenCode write that passes its operations by shorthand as an edit", () => {
       const part = opencodeCall(
         `const operations = [];\nreturn tools["obsidian-copilot"].excalidraw_write({ path: "${PATH}", operations });`
       );
       expect(excalidrawToolRun(part)?.action).toBe("edit");
     });
 
-    it("reads an OpenCode write whose path and labels mention operations as a new drawing", () => {
+    it("reads a saved OpenCode write whose path and labels mention operations as a new drawing", () => {
       const part = opencodeCall(
         `return tools["obsidian-copilot"].excalidraw_write({ path: "operations.excalidraw.md", elements: [{ type: "text", text: "operations: []" }] });`
       );
@@ -86,8 +98,11 @@ describe("excalidrawToolRun", () => {
       ["Claude", excalidrawToolCall("excalidraw_read", { path: PATH })],
       ["Codex", codexCall("excalidraw_read", { path: PATH })],
       [
-        "OpenCode",
-        opencodeCall(`return tools["obsidian-copilot"].excalidraw_read({ path: "${PATH}" });`),
+        "saved OpenCode",
+        opencodeCall(
+          `return tools["obsidian-copilot"].excalidraw_read({ path: "${PATH}" });`,
+          "excalidraw_read"
+        ),
       ],
     ])("reads a %s excalidraw_read call as a read of its drawing", (_name, part) => {
       expect(excalidrawToolRun(part)).toEqual({ action: "read", status: "completed", path: PATH });
@@ -102,7 +117,10 @@ describe("excalidrawToolRun", () => {
       ["a call without a path", excalidrawToolCall("excalidraw_write", { elements: [] })],
       [
         "OpenCode code whose path is a variable",
-        opencodeCall('return tools["obsidian-copilot"].excalidraw_read({ path: p });'),
+        opencodeCall(
+          'return tools["obsidian-copilot"].excalidraw_read({ path: p });',
+          "excalidraw_read"
+        ),
       ],
     ])("reports no path for %s", (_name, part) => {
       expect(excalidrawToolRun(part)?.path).toBeNull();

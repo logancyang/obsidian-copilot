@@ -6,7 +6,7 @@ export type CopilotToolCall = { name: string } & (
 );
 
 export interface CopilotToolUse {
-  runs: string | null;
+  wrapper?: string;
   calls: readonly CopilotToolCall[];
 }
 
@@ -20,5 +20,5 @@ export function directCopilotToolUse(
   input: unknown
 ): CopilotToolUse | undefined {
   if (mcpServer !== COPILOT_MCP_SERVER_NAME || !toolName) return undefined;
-  return { runs: toolName, calls: [{ name: toolName, args: toolInputRecord(input) }] };
+  return { calls: [{ name: toolName, args: toolInputRecord(input) }] };
 }
