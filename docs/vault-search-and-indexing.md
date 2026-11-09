@@ -104,7 +104,7 @@ Links and backlinks do not create rows in any of these empty states. Copilot's o
 
 The **Live** switch makes Relevant Notes follow the last editor or Agent Chat you focused. The source label shows the note name or **Agent chat context**. Clicking inside Relevant Notes preserves that source. The switch is on by default and your choice is remembered.
 
-For chat, suggestions use the conversation, your unsent draft, selected text, and notes attached to the chat. In a Project chat, the Project's saved context does not feed suggestions. Suggestions update after a 500 ms typing pause, attachment changes, and completed agent responses. Previous results stay visible while a refresh runs. An empty composer still uses conversation history; a completely empty chat uses the active note.
+For chat, suggestions use the conversation, your unsent draft, selected text, and notes attached to the chat. A Project chat also uses the Project's linked notes and folders until you type or send a message. Suggestions update after a 500 ms typing pause, attachment changes, and completed agent responses. Previous results stay visible while a refresh runs. An empty composer still uses conversation history; a completely empty chat uses the active note.
 
 **Add** includes a suggested note in the chat context and refreshes suggestions. Full attached notes are excluded from results. Selecting an excerpt alone leaves its source note eligible. Miyo looks up existing indexed attachments; this feature does not upload or index their contents. Skipped attachments produce a notice. If none of the chat context is usable, the pane explains that instead of switching to an unrelated note.
 

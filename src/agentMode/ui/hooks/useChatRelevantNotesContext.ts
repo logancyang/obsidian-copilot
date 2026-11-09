@@ -1,5 +1,6 @@
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { AgentInputDraftControls } from "@/agentMode/ui/hooks/useAgentInputDrafts";
+import { type ProjectConfig } from "@/aiParams";
 import { useSelectedTextContexts } from "@/selection/selectionStore";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { useActiveFile } from "@/hooks/useActiveFile";
@@ -10,15 +11,19 @@ import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
-import { App, MarkdownView } from "obsidian";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { App, MarkdownView, type TFile } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
+
+const NO_FILES: readonly TFile[] = Object.freeze([]);
 
 export function useChatRelevantNotesContext(
   app: App,
   root: HTMLElement | null,
   id: string,
   draft: AgentInputDraftControls,
-  messages: AgentChatMessage[]
+  messages: AgentChatMessage[],
+  project?: ProjectConfig
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
@@ -38,35 +43,51 @@ export function useChatRelevantNotesContext(
   const contexts = [...history, ...queued].flatMap((message) =>
     message.context ? [message.context] : []
   );
+  const conversation = [
+    ...history
+      .filter(
+        (message) =>
+          message.isVisible &&
+          !message.isErrorMessage &&
+          (message.sender === "user" || message.sender === "AI")
+      )
+      .map((message) => ({
+        role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
+        content: message.parts
+          ? message.parts
+              .filter((part) => part.kind === "text")
+              .map((part) => part.text)
+              .join("\n")
+          : message.message,
+      }))
+      .filter((message) => message.content.trim()),
+    ...queued
+      .filter((message) => message.rawInput.trim())
+      .map((message) => ({ role: "user" as const, content: message.rawInput })),
+  ];
+  // Project files would drown out what the user writes, so they only seed a project chat that
+  // has no text yet.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
+  const projectSource =
+    project && !draft.input.trim() && conversation.length === 0 ? project.contextSource : undefined;
+  const projectFiles = useMemo(() => {
+    if (!projectSource) return NO_FILES;
+    const { inclusions, exclusions } = getMatchingPatterns({ ...projectSource, isProject: true });
+    return inclusions
+      ? app.vault
+          .getFiles()
+          .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+      : NO_FILES;
+  }, [app, projectSource]);
   const files = [
     ...contexts.flatMap((context) => context.notes),
     ...draft.contextNotes,
     ...(draft.includeActiveNote && activeFile ? [activeFile] : []),
+    ...projectFiles,
   ];
   const snapshot = {
     folder_name: miyoFolderName,
-    messages: [
-      ...history
-        .filter(
-          (message) =>
-            message.isVisible &&
-            !message.isErrorMessage &&
-            (message.sender === "user" || message.sender === "AI")
-        )
-        .map((message) => ({
-          role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
-          content: message.parts
-            ? message.parts
-                .filter((part) => part.kind === "text")
-                .map((part) => part.text)
-                .join("\n")
-            : message.message,
-        }))
-        .filter((message) => message.content.trim()),
-      ...queued
-        .filter((message) => message.rawInput.trim())
-        .map((message) => ({ role: "user" as const, content: message.rawInput })),
-    ],
+    messages: conversation,
     draft: draft.input,
     excerpts: [...contexts.flatMap((context) => context.selectedTextContexts ?? []), ...selections]
       .map((selection) => selection.content)

@@ -332,7 +332,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (next.value !== value) onChange(next.value);
   }, [modePickerOverride]);
 
-  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages);
+  useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
 
   const { isDragActive } = useChatFileDrop({
     app,
