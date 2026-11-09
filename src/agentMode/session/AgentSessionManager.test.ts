@@ -12,6 +12,7 @@ import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
 import type { FindCallingChat } from "./copilotMcpServer";
 import { FEEDBACK_OFFER_EXTENSION } from "./feedback/feedbackOffer";
+import { EMPTY_CHAT_STATES } from "./chatExtension";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -246,6 +247,8 @@ function makeMockSession(overrides: {
     }),
     seedSessionUsage: jest.fn(),
     resendSavedHistoryOnNextTurn: jest.fn(),
+    getReloadableChatStates: jest.fn(() => EMPTY_CHAT_STATES),
+    restoreChatStates: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -3102,6 +3105,17 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(first);
         expect(mgr.getActiveSession()?.chatInputId).toBe(chatInputId);
         expect(mgr.drafts.get(chatInputId)?.input).toBe("half-written question");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 gives the replacement the replaced chat's reloadable feature state, so a card connected before Reload still reports to the agent", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const states = new Map([["connector-cards", []]]);
+        jest.mocked(first.getReloadableChatStates).mockReturnValue(states);
+
+        await mgr.restartBackend("opencode", "connectors changed");
+
+        expect(mgr.getActiveSession()?.restoreChatStates).toHaveBeenCalledWith(states);
       });
 
       it("reports the replaced chat input as live while no session owns it (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {
