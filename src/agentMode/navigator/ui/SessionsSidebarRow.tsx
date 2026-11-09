@@ -147,7 +147,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
             <BackendIcon className="tw-size-3.5" />
           </span>
           {/* A chat that needs the user reads like unread mail, a bright bold title, while every other chat but the
-              current one dims. https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
+              current one dims. https://github.com/Brevilabs/obsidian-copilot-private/issues/890 */}
           <RecentChatTitle
             title={item.title}
             className={cn("tw-text-inherit", needsAttention && "tw-font-semibold")}

@@ -97,7 +97,7 @@ describe("SessionsSidebarRow", () => {
       expect(screen.queryByLabelText("Running")).toBeNull();
     });
 
-    it("swaps the green Running dot for a bell in the spinner's accent color and bolds the title of a chat with an unseen result for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("swaps the green Running dot for a bell in the spinner's accent color and bolds the title of a chat with an unseen result for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ isSessionOpen: true, status: "unread" });
 
       const row = screen.getByRole("button", { name: /Plan the fall launch/ });
@@ -108,7 +108,7 @@ describe("SessionsSidebarRow", () => {
       expect(within(row).getByText("Plan the fall launch").className).toContain("tw-font-semibold");
     });
 
-    it("marks a chat waiting for permission with a red circled question mark for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("marks a chat waiting for permission with a red circled question mark for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ status: "waiting" });
 
       const icon = screen.getByLabelText("Waiting for permission").querySelector("svg")!;
@@ -116,7 +116,7 @@ describe("SessionsSidebarRow", () => {
       expect(icon.getAttribute("class")).toContain("tw-text-error");
     });
 
-    it("shows the Unread result bell on a chat whose agent has stopped for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows the Unread result bell on a chat whose agent has stopped for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ isSessionOpen: false, status: "unread" });
 
       expect(screen.getByLabelText("Unread result")).toBeTruthy();
@@ -128,7 +128,7 @@ describe("SessionsSidebarRow", () => {
       expect(screen.getByText("Plan the fall launch").className).not.toContain("tw-font-semibold");
     });
 
-    it("shows the logo of the chat's agent before its title for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows the logo of the chat's agent before its title for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({
         item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, { backendId: "codex" }),
       });
@@ -142,14 +142,14 @@ describe("SessionsSidebarRow", () => {
       ).toBeTruthy();
     });
 
-    it("shows a generic chat icon before the title of a chat with no agent for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows a generic chat icon before the title of a chat with no agent for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow();
 
       const row = screen.getByRole("button", { name: "Plan the fall launch" });
       expect(row.querySelector("svg")!.getAttribute("class")).toContain("lucide-message-circle");
     });
 
-    it("dims a seen chat that is not the current one to the group-label color for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("dims a seen chat that is not the current one to the group-label color for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ isSessionOpen: true });
 
       const title = screen.getByText("Plan the fall launch");
@@ -157,7 +157,7 @@ describe("SessionsSidebarRow", () => {
       expect(title.className).toContain("tw-text-inherit");
     });
 
-    it("shows the current chat in the normal text color for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("shows the current chat in the normal text color for https://github.com/Brevilabs/obsidian-copilot-private/issues/890", () => {
       renderRow({ active: true });
 
       const title = screen.getByText("Plan the fall launch");
@@ -166,7 +166,7 @@ describe("SessionsSidebarRow", () => {
     });
 
     it.each(["waiting", "unread"] as const)(
-      "shows a %s chat with a bright bold title for https://github.com/Brevilabs/obsidian-copilot-private/issues/801",
+      "shows a %s chat with a bright bold title for https://github.com/Brevilabs/obsidian-copilot-private/issues/890",
       (status) => {
         renderRow({ status });
 
