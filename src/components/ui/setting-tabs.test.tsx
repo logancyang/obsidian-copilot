@@ -28,6 +28,25 @@ describe("setting-tabs", () => {
       expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
     });
 
+    it("shows the warning dot in the error color when the tab carries an error-toned warning", () => {
+      render(
+        <TabItem
+          {...baseProps}
+          tab={{
+            id: "connectors",
+            label: "Connectors",
+            icon: null,
+            warningLabel: "You have connectors that need your attention",
+            warningTone: "error",
+          }}
+        />
+      );
+
+      expect(screen.getByTitle("You have connectors that need your attention").className).toContain(
+        "tw-bg-modifier-error"
+      );
+    });
+
     it("does not show a warning dot when the tab has no warning", () => {
       render(<TabItem {...baseProps} tab={{ id: "skills", label: "Skills", icon: null }} />);
 

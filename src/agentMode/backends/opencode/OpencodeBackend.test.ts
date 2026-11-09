@@ -214,6 +214,7 @@ const COPILOT_BUILD_ASKS = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "edit", resource: "*", effect: "ask" },
   { action: "websearch", resource: "*", effect: "ask" },
+  { action: "obsidian-copilot_*", resource: "*", effect: "ask" },
 ];
 
 describe("OpencodeBackend", () => {
@@ -965,11 +966,25 @@ describe("OpencodeBackend", () => {
       ]);
     });
 
-    it("configures copilot-build as a primary agent that asks before shell, edit, and web search", async () => {
+    it("configures copilot-build as a primary agent that asks before shell, edit, web search, and Copilot's MCP tools", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
       expect(cfg.agents["copilot-build"].mode).toBe("primary");
       expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 lets the ask-first agent run Copilot's read-only MCP tools, named as OpenCode names them, without asking, while Auto runs every tool", async () => {
+      const cfg = await buildOpencodeConfig(getSettings(), {
+        ...NO_MODELS_DEPS,
+        readCopilotReadOnlyToolNames: async () => ["send_feedback", "drive_files.list"],
+      });
+
+      expect(cfg.agents["copilot-build"].permissions).toEqual([
+        ...COPILOT_BUILD_ASKS,
+        { action: "obsidian-copilot_send_feedback", resource: "*", effect: "allow" },
+        { action: "obsidian-copilot_drive_files_list", resource: "*", effect: "allow" },
+      ]);
+      expect(cfg.agents.build.permissions).toBeUndefined();
     });
 
     it("gives both agents the shared product prompt, byte for byte", async () => {

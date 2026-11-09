@@ -15,6 +15,7 @@ import {
   type FakeOAuthServiceOptions,
 } from "@/connectors/oauth/testing/fakeOAuthService";
 import { get as httpGet } from "node:http";
+import { logWarn } from "@/logger";
 import * as obsidian from "obsidian";
 import type { RequestUrlParam } from "obsidian";
 
@@ -467,6 +468,22 @@ describe("connectorAuth", () => {
 
         expect(result).toEqual({ status: "needs-login" });
         expect(keychain.secrets.has(KEYCHAIN_ID)).toBe(false);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 logs *** in place of the login's tokens when the service's refresh error echoes them", async () => {
+        const { service, connectorAuth, connect, storedLogin } = setUp();
+        await connect();
+        const { refresh_token: refreshToken = "" } = storedLogin().tokens;
+        service.refreshFailsEchoingRequest = true;
+        jest.mocked(logWarn).mockClear();
+
+        await expect(
+          connectorAuth.accessToken(CONNECTION_ID, { forceRefresh: true })
+        ).resolves.toEqual({ status: "unreachable" });
+
+        const logged = jest.mocked(logWarn).mock.calls.flat().map(String).join("\n");
+        expect(logged).toContain("refresh_token=***");
+        expect(logged).not.toContain(refreshToken);
       });
 
       it("returns needs-login when this device has no login for the connection", async () => {

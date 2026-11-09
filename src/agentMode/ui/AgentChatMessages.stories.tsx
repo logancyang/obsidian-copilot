@@ -6,6 +6,8 @@ import type {
   SessionId,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import type { ChatStates } from "@/agentMode/session/chatExtension";
+import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -65,6 +67,12 @@ const tallQuestion: AskUserQuestionPrompt = {
   ],
 };
 
+const NO_CHAT_STATES: ChatStates = new Map();
+
+function chatStatesWithOffer(offer: FeedbackOffer): ChatStates {
+  return new Map([["feedback-offer", offer]]);
+}
+
 const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
   const app = useApp();
   const [pendingToolPermissions, setPendingToolPermissions] = useState(
@@ -95,7 +103,7 @@ const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
       <div className="tw-h-96 tw-overflow-hidden">
         <AgentChatMessages
           {...props}
-          plugin={{ app, manifest: props.plugin.manifest }}
+          plugin={{ ...props.plugin, app } as AgentChatMessagesProps["plugin"]}
           pendingToolPermissions={pendingToolPermissions}
           pendingAskUserQuestions={pendingAskUserQuestions}
           chatBackend={chatBackend}
@@ -107,16 +115,13 @@ const QueuedActionsDemo: React.FC<AgentChatMessagesProps> = (props) => {
 
 const actionRailArgs: AgentChatMessagesProps = {
   messages: [message],
-  plugin: {
-    app: {} as AgentChatMessagesProps["plugin"]["app"],
-    manifest: { version: "4.1.0" } as AgentChatMessagesProps["plugin"]["manifest"],
-  },
+  plugin: { manifest: { version: "4.1.0" } } as AgentChatMessagesProps["plugin"],
   currentPlan: null,
   pendingToolPermissions: permissions,
   pendingAskUserQuestions: questions,
   chatBackend: {} as AgentChatBackend,
   isLoading: true,
-  feedbackOffer: null,
+  chatStates: NO_CHAT_STATES,
 };
 
 const meta = {
@@ -475,7 +480,7 @@ export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
         ],
       },
     ],
-    feedbackOffer: {
+    chatStates: chatStatesWithOffer({
       trigger: "agent",
       draft: {
         title: "Deleted a section when asked to tidy a note",
@@ -491,7 +496,7 @@ export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
       },
       afterUserMessageId: "complaint",
       status: "open",
-    },
+    }),
     isLoading: false,
   },
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,

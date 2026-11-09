@@ -4,6 +4,7 @@ import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
 export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
@@ -226,6 +227,7 @@ export interface ToolCallSnapshot {
   locations?: Array<{ path: string; line?: number | null }>;
   vendorToolName?: string;
   mcpServer?: string;
+  copilotTools?: CopilotToolUse;
   parentToolCallId?: string;
   progress?: AgentToolProgress;
   isPlanProposal?: boolean;
@@ -242,6 +244,7 @@ export interface ToolCallDelta {
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
   mcpServer?: string;
+  copilotTools?: CopilotToolUse;
   parentToolCallId?: string;
   progress?: AgentToolProgress;
   isPlanProposal?: boolean;
@@ -535,6 +538,7 @@ export type AgentMessagePart =
       locations?: { path: string; line?: number }[];
       vendorToolName?: string;
       mcpServer?: string;
+      copilotTools?: CopilotToolUse;
       parentToolCallId?: string;
       progress?: AgentToolProgress;
     }

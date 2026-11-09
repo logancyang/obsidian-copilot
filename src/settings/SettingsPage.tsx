@@ -3,11 +3,13 @@ import CopilotPlugin from "@/main";
 import { consumeRequestedCopilotSettingsTab } from "@/settings/openSettings";
 import { App, PluginSettingTab } from "obsidian";
 import React from "react";
+import type { Root } from "react-dom/client";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
+  private root: Root | null = null;
 
   constructor(app: App, plugin: CopilotPlugin) {
     super(app, plugin);
@@ -20,6 +22,7 @@ export class CopilotSettingTab extends PluginSettingTab {
 
   display(): void {
     const { containerEl } = this;
+    this.unmountSettings();
     containerEl.empty();
     // Copilot registers its settings tab before it finishes starting in the background, so the
     // tab must not render settings that have not loaded yet.
@@ -38,10 +41,21 @@ export class CopilotSettingTab extends PluginSettingTab {
     // A settings sub-page fills the scroller's height, which a box in between would hide from it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/874
     const div = containerEl.createDiv({ cls: "tw-contents" });
-    const sections = createPluginRoot(div, this.app);
-
-    sections.render(
+    this.root = createPluginRoot(div, this.app);
+    this.root.render(
       <SettingsMainV2 plugin={this.plugin} initialTab={consumeRequestedCopilotSettingsTab()} />
     );
+  }
+
+  hide(): void {
+    // Closing settings must unmount it, so the Connectors tab cancels a login nobody can see any more.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/858
+    this.unmountSettings();
+    super.hide();
+  }
+
+  private unmountSettings(): void {
+    this.root?.unmount();
+    this.root = null;
   }
 }
