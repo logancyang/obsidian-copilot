@@ -85,15 +85,15 @@ describe("FeedbackCard", () => {
   describe("feedbackCardSlot", () => {
     describe("place()", () => {
       it("places an open or sent card after the turn that raised it", () => {
-        expect(feedbackCardSlot.place(OPEN_OFFER)).toEqual([
+        expect(feedbackCardSlot.place(OPEN_OFFER, [])).toEqual([
           { id: "offer", afterUserMessageId: "user-2" },
         ]);
-        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "reported" })).toHaveLength(1);
+        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "reported" }, [])).toHaveLength(1);
       });
 
       it("places nothing when there is no offer or it was dismissed", () => {
-        expect(feedbackCardSlot.place(null)).toEqual([]);
-        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "dismissed" })).toEqual([]);
+        expect(feedbackCardSlot.place(null, [])).toEqual([]);
+        expect(feedbackCardSlot.place({ ...OPEN_OFFER, status: "dismissed" }, [])).toEqual([]);
       });
     });
 

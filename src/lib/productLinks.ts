@@ -25,6 +25,7 @@ export type ProductUtmMedium =
   | "navigator_dialog"
   | "navigator_blocked_view"
   | "connectors_settings"
+  | "connectors_chat"
   | "skill_no_license"
   | "skill_license_invalid"
   | "openartifacts_private_sharing"
