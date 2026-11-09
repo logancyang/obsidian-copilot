@@ -362,25 +362,43 @@ describe("copilotMcpServer", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands a hosted tool the chat found by the caller session an agent stamped on the call, and keeps the stamp out of its arguments", async () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 attributes a hosted call using OpenCode request metadata without adding a tool argument", async () => {
       const call = jest.fn().mockResolvedValue({ text: "ok", isError: false });
       server.dispose();
       server = createCopilotMcpServer(() => true, [lookupTool(call)]);
       const chat = fakeChat();
       const findChat = jest.fn(() => chat);
-      const channel = await server.connect("opencode:/vault", "claude", findChat);
+      const channel = await server.connect("opencode:/vault", "opencode", findChat);
 
       await post(
         channel,
         rpc(3, "tools/call", {
           name: "lookup",
-          arguments: { query: "sourdough", caller_session_id: "ses_caller" },
+          arguments: { query: "sourdough" },
+          _meta: { "ai.opencode/sessionID": "ses_caller" },
         })
       );
 
       expect(findChat).toHaveBeenCalledWith("ses_caller");
       expect(call).toHaveBeenCalledWith({ query: "sourdough" }, chat);
     });
+
+    it.each([undefined, {}, { "ai.opencode/sessionID": "" }, { "ai.opencode/sessionID": 42 }])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4229 ignores a model-written caller argument when transport metadata %p has no valid session",
+      async (_meta) => {
+        const call = jest.fn().mockResolvedValue({ text: "ok", isError: false });
+        server.dispose();
+        server = createCopilotMcpServer(() => true, [lookupTool(call)]);
+        const findChat = jest.fn(() => null);
+        const channel = await server.connect("opencode:/vault", "opencode", findChat);
+        const args = { query: "plans", caller_session_id: "ses_guessed" };
+
+        await post(channel, rpc(3, "tools/call", { name: "lookup", arguments: args, _meta }));
+
+        expect(findChat).toHaveBeenCalledWith(null);
+        expect(call).toHaveBeenCalledWith(args, null);
+      }
+    );
 
     it("hands a hosted tool no chat when the call can't be traced to one", async () => {
       const call = jest.fn().mockResolvedValue({ text: "ok", isError: false });
@@ -393,21 +411,25 @@ describe("copilotMcpServer", () => {
       expect(call).toHaveBeenCalledWith({}, null);
     });
 
-    it(`https://github.com/Brevilabs/obsidian-copilot-private/issues/672 keeps the caller stamp out of a connected service's tool arguments`, async () => {
+    it(`https://github.com/logancyang/obsidian-copilot/issues/4229 preserves connector arguments including a service-owned caller_session_id while keeping transport metadata separate`, async () => {
       server.dispose();
       const provider = connectorProvider();
       server = createCopilotMcpServer(() => true, [], provider);
-      const channel = await server.connect("opencode:/vault", "claude", NO_CHAT);
+      const channel = await server.connect("opencode:/vault", "opencode", NO_CHAT);
 
       await post(
         channel,
         rpc(3, "tools/call", {
           name: "notion_search",
-          arguments: { query: "plans", caller_session_id: "ses_caller" },
+          arguments: { query: "plans", caller_session_id: "service-owned" },
+          _meta: { "ai.opencode/sessionID": "ses_caller" },
         })
       );
 
-      expect(provider.call).toHaveBeenCalledWith("notion_search", { query: "plans" });
+      expect(provider.call).toHaveBeenCalledWith("notion_search", {
+        query: "plans",
+        caller_session_id: "service-owned",
+      });
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/787 returns a hosted tool's image after its text", async () => {
@@ -540,7 +562,7 @@ describe("copilotMcpServer", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 tells the agent nothing was shown when a send_feedback call can't be traced to a chat", async () => {
-      const channel = await server.connect("opencode:/vault", "claude", NO_CHAT);
+      const channel = await server.connect("opencode:/vault", "opencode", NO_CHAT);
 
       const result = await post(
         channel,
@@ -603,16 +625,17 @@ describe("copilotMcpServer", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 raises the card in the chat found by the caller session an agent stamped on the call, and keeps the stamp out of the draft", async () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4229 attributes feedback using transport metadata even when a model supplies a different caller argument", async () => {
       const chat = fakeChat();
       const findChat = jest.fn(() => chat);
-      const channel = await server.connect("opencode:/vault", "claude", findChat);
+      const channel = await server.connect("opencode:/vault", "opencode", findChat);
 
       await post(
         channel,
         rpc(6, "tools/call", {
           name: "send_feedback",
-          arguments: { ...COMPLAINT, caller_session_id: "ses_caller" },
+          arguments: { ...COMPLAINT, caller_session_id: "ses_guessed" },
+          _meta: { "ai.opencode/sessionID": "ses_caller" },
         })
       );
 
@@ -708,9 +731,9 @@ describe("copilotMcpServer", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 hands a reconnected key its existing token and sends its calls to the newest chat lookup", async () => {
       const replaced = fakeChat();
       const current = fakeChat();
-      const first = await server.connect("opencode:/vault", "claude", () => replaced);
+      const first = await server.connect("opencode:/vault", "opencode", () => replaced);
 
-      const again = await server.connect("opencode:/vault", "claude", () => current);
+      const again = await server.connect("opencode:/vault", "opencode", () => current);
       await post(first, rpc(1, "tools/call", { name: "send_feedback", arguments: COMPLAINT }));
 
       expect(again).toEqual(first);

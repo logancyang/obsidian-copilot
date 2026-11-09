@@ -15,7 +15,6 @@ type ServerResponse = import("node:http").ServerResponse;
 
 export const COPILOT_MCP_SERVER_NAME = "obsidian-copilot";
 export const SEND_FEEDBACK_TOOL_NAME = "send_feedback";
-export const CALLER_SESSION_ARGUMENT = "caller_session_id";
 // Agents show a tool as mcp__obsidian-copilot__<name>, and some agents reject tool names over 64 characters.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
 export const MAX_PROVIDED_TOOL_NAME_LENGTH = 64 - `mcp__${COPILOT_MCP_SERVER_NAME}__`.length;
@@ -330,7 +329,7 @@ async function callTool(
   hostedTools: readonly HostedTool[],
   toolProvider: ToolProvider | undefined
 ) {
-  const { callerSessionId, args } = splitCaller(params.arguments);
+  const args = params.arguments;
   const tool = hostedTools.find((hosted) => hosted.definition.name === params.name);
   if (!tool) {
     const provided = toolProvider?.call(String(params.name), args);
@@ -339,21 +338,18 @@ async function callTool(
   // Agents read tools/list once per session, so a tool switched off mid-session still gets called; answering without an error stops the agent from retrying it.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/733
   if (!isToolOn(tool.definition.name)) return toolText(tool.turnedOffText, false);
-  const result = await tool.call(args, findChat(callerSessionId));
+  // OpenCode already sends the real session outside tool arguments, so strict schemas need no routing parameter. https://github.com/logancyang/obsidian-copilot/issues/4229
+  const callerSessionId = (params._meta as Record<string, unknown> | undefined)?.[
+    "ai.opencode/sessionID"
+  ];
+  const result = await tool.call(
+    args,
+    findChat(typeof callerSessionId === "string" && callerSessionId ? callerSessionId : null)
+  );
   const reply = toolText(result.text, result.isError);
   return result.image
     ? { ...reply, content: [...reply.content, { type: "image", ...result.image }] }
     : reply;
-}
-
-// OpenCode stamps the calling session on every Copilot tool call, and a connected service must never receive that extra argument.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-function splitCaller(args: unknown): { callerSessionId: string | null; args: unknown } {
-  if (!args || typeof args !== "object" || !(CALLER_SESSION_ARGUMENT in args)) {
-    return { callerSessionId: null, args };
-  }
-  const { [CALLER_SESSION_ARGUMENT]: value, ...rest } = args as Record<string, unknown>;
-  return { callerSessionId: typeof value === "string" && value ? value : null, args: rest };
 }
 
 function parseDraft(args: unknown): FeedbackDraft | null {
