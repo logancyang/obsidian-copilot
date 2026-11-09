@@ -1,4 +1,6 @@
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import { makeTask } from "@/agentMode/ui/testing/taskFixtures";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
@@ -9,7 +11,9 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import { EMPTY_CHAT_STATES, withChatState } from "@/agentMode/session/chatExtension";
+import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
 import { AI_SENDER } from "@/constants";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { logError } from "@/logger";
@@ -104,7 +108,7 @@ jest.mock("@/agentMode/ui/ToolPermissionCard", () => ({
     toolName?: string;
     requester?: string;
   }) => (
-    <div>
+    <div title={request.toolCall.title}>
       Permission {request.toolCall.toolCallId}
       {toolName ? ` via ${toolName}` : ""}
       {requester ? ` from ${requester}` : ""}
@@ -118,15 +122,8 @@ jest.mock("@/agentMode/ui/AskUserQuestionCard", () => ({
   ),
 }));
 
-const mockOpenReportIssueModal = jest.fn();
-jest.mock("@/agentMode/ui/ReportIssueModal", () => ({
-  openReportIssueModal: (...args: unknown[]) => mockOpenReportIssueModal(...args),
-}));
-
-const mockSetSettings = jest.fn();
-jest.mock("@/settings/model", () => ({
-  ...jest.requireActual<Record<string, unknown>>("@/settings/model"),
-  setSettings: (...args: unknown[]) => mockSetSettings(...args),
+jest.mock("@/connectors/ui/ConnectorChatCard", () => ({
+  ConnectorChatCard: ({ serviceId }: { serviceId: string }) => <div>Connect card {serviceId}</div>,
 }));
 
 jest.mock("@/agentMode/ui/PlanProposalCard", () => ({
@@ -160,11 +157,10 @@ function assistantMessage(
 const chatBackend = {
   resolveToolPermission: jest.fn(),
   resolveAskUserQuestion: jest.fn(),
-  dismissFeedbackOffer: jest.fn(),
-  markFeedbackReported: jest.fn(),
+  updateChatState: jest.fn(),
 } as unknown as AgentChatBackend;
 
-const FEEDBACK_OFFER: FeedbackOffer = {
+const OPEN_OFFER: FeedbackOffer = {
   trigger: "agent",
   draft: {
     title: "Replied in Swedish to an English request",
@@ -218,13 +214,13 @@ function renderMessages(
 ) {
   const props: AgentChatMessagesProps = {
     messages,
-    plugin: { app: {} as never, manifest: { version: "4.1.0" } as never },
+    plugin: { app: {}, manifest: { version: "4.1.0" } } as never,
     currentPlan: null,
     pendingToolPermissions: [],
     pendingAskUserQuestions: [],
     chatBackend,
     isLoading,
-    feedbackOffer: null,
+    chatStates: EMPTY_CHAT_STATES,
     ...overrides,
   };
   return { ...render(<AgentChatMessages {...props} />), props };
@@ -253,7 +249,7 @@ describe("AgentChatMessages", () => {
 
     it("shows the feedback card right after the reply of the turn that raised it", () => {
       const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
-        feedbackOffer: FEEDBACK_OFFER,
+        chatStates: withChatState(EMPTY_CHAT_STATES, FEEDBACK_OFFER, OPEN_OFFER),
       });
 
       const text = container.textContent ?? "";
@@ -268,60 +264,38 @@ describe("AgentChatMessages", () => {
 
     it("hides a dismissed feedback card", () => {
       renderMessages(FEEDBACK_TRANSCRIPT, false, {
-        feedbackOffer: { ...FEEDBACK_OFFER, status: "dismissed" },
+        chatStates: withChatState(EMPTY_CHAT_STATES, FEEDBACK_OFFER, {
+          ...OPEN_OFFER,
+          status: "dismissed",
+        }),
       });
 
       expect(screen.queryByTestId("agent-feedback-card")).toBeNull();
     });
 
-    it("opens the report dialog prefilled from the card with every source checked, and records the sent report", () => {
-      mockOpenReportIssueModal.mockClear();
-      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
-      fireEvent.click(screen.getByRole("button", { name: "Review & report" }));
-
-      expect(mockOpenReportIssueModal).toHaveBeenCalledWith(
-        expect.objectContaining({ manifest: { version: "4.1.0" } }),
-        {
-          activeBackend: "codex",
-          initialNote: expect.stringMatching(/^Replied in Swedish to an English request\n/),
-          preselectAllSources: true,
-          onReported: expect.any(Function),
-        }
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 shows each connector card after the reply of the turn that asked for it, beside its feedback card, and hides dismissed ones", () => {
+      const chatStates = withChatState(
+        withChatState(EMPTY_CHAT_STATES, FEEDBACK_OFFER, OPEN_OFFER),
+        CONNECTOR_CARDS,
+        [
+          { serviceId: "notion", afterUserTurn: 1, dismissed: false, reported: null },
+          { serviceId: "linear", afterUserTurn: 2, dismissed: false, reported: null },
+          { serviceId: "todoist", afterUserTurn: 2, dismissed: true, reported: null },
+        ]
       );
-      const { onReported } = mockOpenReportIssueModal.mock.calls[0][1] as {
-        onReported: (report: { reportId: string; issueUrl: string }) => void;
-      };
-      onReported({ reportId: "r1", issueUrl: "https://example.com" });
-      expect(chatBackend.markFeedbackReported).toHaveBeenCalledWith({
-        reportId: "r1",
-        issueUrl: "https://example.com",
+
+      const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
+        chatStates,
+        plugin: { app: {}, manifest: { version: "4.1.0" }, connectionManager: {} } as never,
       });
-    });
 
-    it("dismisses the card without opening the report dialog", () => {
-      mockOpenReportIssueModal.mockClear();
-      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
-
-      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-
-      expect(chatBackend.dismissFeedbackOffer).toHaveBeenCalled();
-      expect(mockOpenReportIssueModal).not.toHaveBeenCalled();
-    });
-
-    it("turns feedback cards off and dismisses this one when the user opts out", () => {
-      mockSetSettings.mockClear();
-      renderMessages(FEEDBACK_TRANSCRIPT, false, { feedbackOffer: FEEDBACK_OFFER });
-
-      fireEvent.click(screen.getByRole("button", { name: "Don't offer again" }));
-
-      const update = mockSetSettings.mock.calls[0][0] as (cur: {
-        agentMode: Record<string, unknown>;
-      }) => { agentMode: Record<string, unknown> };
-      expect(update({ agentMode: { debugFullFrames: true } }).agentMode).toEqual({
-        debugFullFrames: true,
-        offerFeedbackCards: false,
-      });
-      expect(chatBackend.dismissFeedbackOffer).toHaveBeenCalled();
+      const text = container.textContent ?? "";
+      expect(text.indexOf("Report this to the Copilot team?")).toBeLessThan(
+        text.indexOf("Connect card notion")
+      );
+      expect(text.indexOf("Connect card notion")).toBeLessThan(text.indexOf("next question"));
+      expect(text.indexOf("Next answer.")).toBeLessThan(text.indexOf("Connect card linear"));
+      expect(text).not.toContain("Connect card todoist");
     });
 
     it("forwards the active session conversation path to user messages https://github.com/Brevilabs/obsidian-copilot-private/issues/539", () => {
@@ -513,7 +487,7 @@ describe("AgentChatMessages", () => {
           }),
         ],
         false,
-        { plugin: { app, manifest: { version: "4.1.0" } as never } }
+        { plugin: { app, manifest: { version: "4.1.0" } } as never }
       );
 
       fireEvent.click(screen.getByRole("button", { name: "notes/diff-demo/alpha.md" }));
@@ -588,6 +562,77 @@ describe("AgentChatMessages", () => {
       );
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 names a connector tool's permission request by its service and readable tool name", () => {
+      const toolTurn = assistantMessage("answer-1", 62_000, {
+        parts: [
+          {
+            kind: "tool_call",
+            id: "create-1",
+            title: "notion_create_page",
+            status: "pending",
+            mcpServer: "obsidian-copilot",
+            vendorToolName: "notion_create_page",
+            copilotTools: directCopilotToolUse("obsidian-copilot", "notion_create_page", {}),
+          },
+        ] as AgentChatMessage["parts"],
+      });
+      const request = permission("create-1");
+      request.toolCall.title = "notion_create_page";
+
+      renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+
+      const rail = screen.getByRole("region", { name: "Pending agent actions" });
+      expect(rail.textContent).toBe("Permission create-1");
+      expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
+    });
+
+    it.each([
+      {
+        calls: "one Copilot tool",
+        code: 'return await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });',
+        title: "Notion · Create page",
+        railText: "Permission execute-1",
+      },
+      {
+        calls: "several Copilot tools",
+        code: 'return Promise.all([tools["obsidian-copilot"].notion_search({}), tools["obsidian-copilot"].notion_create_page({})]);',
+        title: "execute",
+        railText: "Permission execute-1 via execute",
+      },
+      {
+        calls: "no tool",
+        code: 'return search({ query: "notion" });',
+        title: "execute",
+        railText: "Permission execute-1 via execute",
+      },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title'",
+      ({ code, title, railText }) => {
+        const toolTurn = assistantMessage("answer-1", 62_000, {
+          parts: [
+            {
+              kind: "tool_call",
+              id: "execute-1",
+              title: "execute",
+              status: "in_progress",
+              toolKind: "other",
+              input: { code },
+              copilotTools: readOpencodeCopilotTools({ code }) ?? undefined,
+            },
+          ] as AgentChatMessage["parts"],
+        });
+        const request = permission("execute-1");
+        request.toolCall.title = "execute";
+        request.toolCall.rawInput = { code };
+
+        renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+
+        const rail = screen.getByRole("region", { name: "Pending agent actions" });
+        expect(rail.textContent).toBe(railText);
+        expect(screen.getByTitle(title)).toBeTruthy();
+      }
+    );
+
     it("labels a permission request with the task that asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
       const request = { ...permission("sub-bash"), requester: { taskId: "task-1" } };
 
@@ -595,13 +640,13 @@ describe("AgentChatMessages", () => {
         <AgentTasksProvider tasks={[makeTask()]} openTask={jest.fn()}>
           <AgentChatMessages
             messages={[]}
-            plugin={{ app: {} as never, manifest: { version: "4.1.0" } as never }}
+            plugin={{ app: {}, manifest: { version: "4.1.0" } } as never}
             currentPlan={null}
             pendingToolPermissions={[request]}
             pendingAskUserQuestions={[]}
             chatBackend={chatBackend}
             isLoading={false}
-            feedbackOffer={null}
+            chatStates={EMPTY_CHAT_STATES}
           />
         </AgentTasksProvider>
       );

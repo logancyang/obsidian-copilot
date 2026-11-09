@@ -287,7 +287,7 @@ export class AcpBackendProcess implements BackendProcess {
             this.todoToolCallIdsFor(sessionId),
             this.compactionTriggerFor(sessionId)
           ))
-            handler(event);
+            handler(this.withCopilotTools(event));
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
         }
@@ -776,7 +776,17 @@ export class AcpBackendProcess implements BackendProcess {
       this.todoToolCallIdsFor(sessionId),
       this.compactionTriggerFor(sessionId)
     ))
-      handler(this.withBackendContextWindow(event));
+      handler(this.withBackendContextWindow(this.withCopilotTools(event)));
+  }
+
+  private withCopilotTools(event: SessionEvent): SessionEvent {
+    const update = event.update;
+    if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
+      return event;
+    }
+    if (update.rawInput === undefined || !this.backend.readCopilotTools) return event;
+    const copilotTools = this.backend.readCopilotTools(update.rawInput);
+    return copilotTools ? { ...event, update: { ...update, copilotTools } } : event;
   }
 
   private withBackendContextWindow(event: SessionEvent): SessionEvent {

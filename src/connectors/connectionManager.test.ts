@@ -141,6 +141,33 @@ describe("connectionManager", () => {
         expect(manager.getSnapshot().connections).toEqual([]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 needs attention while a custom connector does, and tells subscribers when that changes", () => {
+        setSettings({ connectors: [] });
+        let customSnapshot = { connectors: [], needsAttention: false };
+        const customListeners = new Set<() => void>();
+        const manager = new ConnectionManager({
+          auth: fakeAuth().auth,
+          catalog: [NOTION],
+          custom: {
+            subscribe: (listener) => {
+              customListeners.add(listener);
+              return () => customListeners.delete(listener);
+            },
+            getSnapshot: () => customSnapshot,
+          },
+        });
+        managers.push(manager);
+        const listener = jest.fn();
+        manager.subscribe(listener);
+        expect(manager.getSnapshot().needsAttention).toBe(false);
+
+        customSnapshot = { connectors: [], needsAttention: true };
+        customListeners.forEach((notify) => notify());
+
+        expect(manager.getSnapshot().needsAttention).toBe(true);
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
       it("returns the same snapshot until something changes, so React does not re-render", async () => {
         const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
         fake.logins.add("c1");
@@ -356,6 +383,34 @@ describe("connectionManager", () => {
       });
     });
 
+    describe("reportFailure()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 moves a connected service to couldn't reach or needs login when a tool call fails, and tells subscribers", async () => {
+        const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
+        fake.logins.add("c1");
+        await fake.manager.accessToken("c1");
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.reportFailure("c1", "unreachable");
+        expect(statusOf(fake.manager, "c1")).toBe("unreachable");
+        fake.manager.reportFailure("c1", "needs-login");
+
+        expect(statusOf(fake.manager, "c1")).toBe("needs-login");
+        expect(fake.manager.getSnapshot().needsAttention).toBe(true);
+        expect(listener).toHaveBeenCalledTimes(2);
+      });
+
+      it("leaves the snapshot alone when the connection already has that status", async () => {
+        const fake = setUp({ connections: [{ id: "c1", serviceId: "notion" }] });
+        await fake.manager.accessToken("c1");
+        const before = fake.manager.getSnapshot();
+
+        fake.manager.reportFailure("c1", "needs-login");
+
+        expect(fake.manager.getSnapshot()).toBe(before);
+      });
+    });
+
     describe("checkStatus()", () => {
       it("checks every connection's login, as on Obsidian start and when a chat starts", async () => {
         const fake = setUp({
@@ -424,6 +479,34 @@ describe("connectionManager", () => {
 
         expect(fake.auth.login).not.toHaveBeenCalled();
         expect(getSettings().connectors).toEqual([]);
+      });
+    });
+
+    describe("dismissFailedLogin()", () => {
+      it("clears the reason a login didn't finish once the user leaves the page that showed it", async () => {
+        const fake = setUp();
+        const outcome = fake.manager.connect("notion");
+        fake.finishLogin({ status: "failed", reason: "timed-out" });
+        await outcome;
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.dismissFailedLogin();
+
+        expect(fake.manager.getSnapshot().failedLogin).toBeNull();
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves the snapshot untouched when no login failed", () => {
+        const fake = setUp();
+        const before = fake.manager.getSnapshot();
+        const listener = jest.fn();
+        fake.manager.subscribe(listener);
+
+        fake.manager.dismissFailedLogin();
+
+        expect(fake.manager.getSnapshot()).toBe(before);
+        expect(listener).not.toHaveBeenCalled();
       });
     });
 

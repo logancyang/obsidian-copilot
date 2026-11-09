@@ -307,25 +307,28 @@ describe("opencodeCopilotPlugin", () => {
       });
     });
 
-    describe("send_feedback caller", () => {
+    describe("Copilot tool caller", () => {
       async function runBefore(event: Record<string, unknown>) {
         const { toolHooks } = await setUpPlugin(plugin);
         await toolHooks.get("execute.before")!(event);
         return event.input;
       }
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a send_feedback call, replacing any value the model wrote", async () => {
-        const input = await runBefore({
-          tool: "obsidian-copilot_send_feedback",
-          sessionID: "ses_caller",
-          id: "call-1",
-          input: { title: "t", caller_session_id: "ses_guessed" },
-        });
+      it.each(["obsidian-copilot_send_feedback", "obsidian-copilot_obsidian_cli"])(
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a %s call, replacing any value the model wrote",
+        async (tool) => {
+          const input = await runBefore({
+            tool,
+            sessionID: "ses_caller",
+            id: "call-1",
+            input: { title: "t", caller_session_id: "ses_guessed" },
+          });
 
-        expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
-      });
+          expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
+        }
+      );
 
-      it("leaves other tools' input untouched", async () => {
+      it("leaves other servers' tools' input untouched", async () => {
         const original = { title: "t" };
 
         const input = await runBefore({

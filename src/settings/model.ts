@@ -5,6 +5,10 @@ import { v4 as uuidv4 } from "uuid";
 
 import type { CopilotMode, ModelSelection } from "@/agentMode";
 import type { ConnectorConnection } from "@/connectors/connectionManager";
+import {
+  isCustomConnectorConfig,
+  type CustomConnectorConfig,
+} from "@/connectors/custom/customConnectorConfig";
 import { ChainType } from "@/chainType";
 import type {
   BackendConfig,
@@ -158,6 +162,7 @@ export interface CopilotSettings {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/319
   copilotPlusCatalog: PersistedCopilotPlusCatalog;
   connectors: ConnectorConnection[];
+  customConnectors: CustomConnectorConfig[];
 }
 
 export type SelfHostSearchProvider = "firecrawl" | "perplexity" | "parallel" | "exa";
@@ -218,6 +223,7 @@ const EMPTY_PROVIDERS = Object.freeze({}) as unknown as Record<string, Provider>
 const EMPTY_CONFIGURED_MODELS = Object.freeze([]) as unknown as ConfiguredModel[];
 const EMPTY_BACKENDS = Object.freeze({}) as unknown as Partial<Record<BackendType, BackendConfig>>;
 const EMPTY_CONNECTORS = Object.freeze([]) as unknown as ConnectorConnection[];
+const EMPTY_CUSTOM_CONNECTORS = Object.freeze([]) as unknown as CustomConnectorConfig[];
 const EMPTY_COPILOT_PLUS_CATALOG = Object.freeze({
   models: Object.freeze([]),
   defaultEnabledIds: Object.freeze([]),
@@ -419,6 +425,9 @@ export function resetSettings(): void {
     // Each connection's login lives in the keychain, so dropping the list would strand it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/856
     connectors: current.connectors,
+    // Each custom connector's values live in the keychain, so dropping the list would strand them.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+    customConnectors: current.customConnectors,
   };
   setSettings(resetValues);
 }
@@ -749,6 +758,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       )
     : [];
   sanitizedSettings.connectors = connectors.length > 0 ? connectors : EMPTY_CONNECTORS;
+  // Absent on every data.json written before custom connectors, and arbitrary on a synced or hand-edited one.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+  const customConnectors = Array.isArray(sanitizedSettings.customConnectors)
+    ? sanitizedSettings.customConnectors.filter(isCustomConnectorConfig)
+    : [];
+  sanitizedSettings.customConnectors =
+    customConnectors.length > 0 ? customConnectors : EMPTY_CUSTOM_CONNECTORS;
 
   return sanitizedSettings;
 }

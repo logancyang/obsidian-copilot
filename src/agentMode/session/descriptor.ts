@@ -4,6 +4,7 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { CopilotMcpServer } from "@/agentMode/session/copilotMcpServer";
 import type {
   BackendConfigOption,
   BackendId,
@@ -134,6 +135,7 @@ export interface BackendDescriptor {
     app: App;
     clientVersion: string;
     descriptor: BackendDescriptor;
+    copilotMcpServer?: CopilotMcpServer;
   }): BackendProcess;
 
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;

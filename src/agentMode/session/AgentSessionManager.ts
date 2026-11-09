@@ -1,6 +1,7 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
+import type { ChatExtension } from "@/agentMode/session/chatExtension";
+import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -178,6 +179,7 @@ export interface AgentSessionManagerOptions {
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
 export class AgentSessionManager {
@@ -928,6 +930,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -1864,13 +1867,18 @@ export class AgentSessionManager {
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
-    const offer: FeedbackOfferHandler = shared
-      ? (draft, callerSessionId) =>
-          this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
-          "unattributed"
-      : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
+    const findChat: FindCallingChat = (callerSessionId) =>
+      (shared
+        ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
+        : this.sessions.get(internalId)) ?? null;
     try {
-      return [await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer)];
+      return [
+        await server.connect(
+          shared ? `${descriptor.id}:${cwd}` : internalId,
+          descriptor.id,
+          findChat
+        ),
+      ];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
@@ -2217,6 +2225,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2647,6 +2656,7 @@ export class AgentSessionManager {
         app: this.app,
         clientVersion: this.plugin.manifest.version,
         descriptor,
+        copilotMcpServer: this.opts.copilotMcpServer,
       });
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
@@ -2826,6 +2836,9 @@ export class AgentSessionManager {
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            // A card that just connected a service is why the user reloads, and its outcome is still owed to the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            chatStates: session.getReloadableChatStates(),
             notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
@@ -2877,6 +2890,7 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
               rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
+            rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
             if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
           }

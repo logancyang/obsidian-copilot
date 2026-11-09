@@ -50,6 +50,14 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [agent-setup](agent-setup.md): choose and install an agent, sign in, default model and effort.
 - [report-issue](report-issue.md): the Report an issue flow.
 
+## Connectors
+
+- [connectors-tab](connectors-tab.md): the Connectors tab in settings: connected services, their status, login, Reconnect, Disconnect.
+- [browse-connectors](browse-connectors.md): every service Copilot can connect, with search, categories, and Connect.
+- [custom-connectors](custom-connectors.md): servers added from a pasted config, their status, Edit, Turn off, Remove.
+- [connector-tools-page](connector-tools-page.md): one service's tools, grouped Read only and Write, with search.
+- [connector-cards](connector-cards.md): Connect and Reconnect cards the agent shows in the conversation.
+
 ## Multi-surface journeys
 
 - [multi-surface-journeys](multi-surface-journeys.md): flows that cross features, added when testing the features one at a time misses a real problem.

@@ -59,6 +59,7 @@ module.exports = {
       inherit: colors.inherit,
       current: colors.current,
       transparent: colors.transparent,
+      white: colors.white,
       primary: "var(--background-primary)",
       "primary-alt": "var(--background-primary-alt)",
       secondary: "var(--background-secondary)",
