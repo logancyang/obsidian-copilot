@@ -104,7 +104,7 @@ function partEnd(text: string, offset: number): number {
 export interface MiyoParseDeps {
   client: Pick<MiyoClient, "resolveBaseUrl" | "parseDoc">;
   getSettings: () => CopilotSettings;
-  getVaultName: (baseUrl: string) => Promise<string>;
+  getVaultName: () => string;
   getVaultBase: () => string | null;
 }
 
@@ -117,7 +117,7 @@ export async function parseWithMiyo(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/740
   const { text } = await client.parseDoc(
     baseUrl,
-    await getVaultName(baseUrl),
+    getVaultName(),
     toVaultRelative(path, getVaultBase())
   );
   return text;

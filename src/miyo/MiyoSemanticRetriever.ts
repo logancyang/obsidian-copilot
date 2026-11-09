@@ -11,9 +11,9 @@ import {
 } from "@/miyo/MiyoClient";
 import {
   getMiyoCustomUrl,
+  getMiyoFolderName,
   getVaultRelativeMiyoPath,
   isCurrentVaultMiyoPath,
-  resolveMiyoFolderName,
 } from "@/miyo/miyoUtils";
 import {
   MIYO_SEARCH_CANDIDATE_LIMIT,
@@ -99,18 +99,15 @@ export class MiyoSemanticRetriever extends BaseRetriever {
 
   private async searchMiyo(query: string): Promise<Document[]> {
     const settings = getSettings();
+    const folderName = settings.miyoSearchAll ? undefined : getMiyoFolderName(this.app);
+    // Extra folders widen only the Current vault scope; Unrestricted already spans every folder.
+    // https://github.com/logancyang/obsidian-copilot/issues/3508
+    const extraFolders =
+      folderName === undefined
+        ? []
+        : settings.miyoExtraSearchFolders.filter((name) => name !== folderName);
     try {
       const baseUrl = await this.client.resolveBaseUrl(getMiyoCustomUrl(getSettings()));
-      // Unrestricted results still map back to vault paths by folder name, so resolve it for this Miyo even when the search spans every folder.
-      // https://github.com/logancyang/obsidian-copilot/issues/3690
-      const vaultFolderName = await resolveMiyoFolderName(this.app, this.client, baseUrl);
-      const folderName = settings.miyoSearchAll ? undefined : vaultFolderName;
-      // Extra folders widen only the Current vault scope; Unrestricted already spans every folder.
-      // https://github.com/logancyang/obsidian-copilot/issues/3508
-      const extraFolders =
-        folderName === undefined
-          ? []
-          : settings.miyoExtraSearchFolders.filter((name) => name !== folderName);
       // Always fetch Miyo's full exposed candidate pool. Copilot no longer
       // defines Miyo's exclusion scope beyond initial registration, so it
       // cannot know whether a ranked prefix is content its local QA filter is
@@ -160,7 +157,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       // Only a folder-scoped request proves anything about this vault. An
       // unrestricted search omits the folder, so its 404 describes the route,
       // not the registration, and must not send the user to register again.
-      if (!settings.miyoSearchAll && error instanceof MiyoRequestError && error.status === 404) {
+      if (folderName !== undefined && error instanceof MiyoRequestError && error.status === 404) {
         throw new Error(
           "This vault is not registered with Miyo. Register it in Miyo, then retry vault search.",
           { cause: error }

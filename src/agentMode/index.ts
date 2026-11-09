@@ -2,7 +2,7 @@ import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { isMiyoParseActive, isMiyoSearchActive, resolveMiyoFolderName } from "@/miyo/miyoUtils";
+import { getMiyoFolderName, isMiyoParseActive, isMiyoSearchActive } from "@/miyo/miyoUtils";
 import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
@@ -215,27 +215,24 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       {
         definition: MIYO_SEARCH_TOOL,
         turnedOffText: MIYO_SEARCH_TURNED_OFF_TEXT,
-        call: (args) => {
-          const client = new MiyoClient();
-          return runMiyoSearch(args, {
-            client,
+        call: (args) =>
+          runMiyoSearch(args, {
+            client: new MiyoClient(),
             getSettings,
-            getVaultName: (baseUrl) => resolveMiyoFolderName(app, client, baseUrl),
-          });
-        },
+            getVaultName: () => getMiyoFolderName(app),
+          }),
       },
       {
         definition: MIYO_PARSE_TOOL,
         turnedOffText: MIYO_PARSE_TURNED_OFF_TEXT,
-        call: createMiyoParse((path) => {
-          const client = new MiyoClient();
-          return parseWithMiyo(path, {
-            client,
+        call: createMiyoParse((path) =>
+          parseWithMiyo(path, {
+            client: new MiyoClient(),
             getSettings,
-            getVaultName: (baseUrl) => resolveMiyoFolderName(app, client, baseUrl),
+            getVaultName: () => getMiyoFolderName(app),
             getVaultBase: () => getVaultBase(app),
-          });
-        }),
+          })
+        ),
       },
       ...createOpenArtifactsTools({
         app,

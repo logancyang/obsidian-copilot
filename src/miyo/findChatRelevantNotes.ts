@@ -1,9 +1,5 @@
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
-import {
-  getMiyoCustomUrl,
-  getVaultRelativeMiyoPath,
-  resolveMiyoFolderName,
-} from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { ChatRelevantNotesContext } from "@/search/chatRelevantNotesContext";
 import type { RelevantNotesResult } from "@/miyo/findRelevantNotes";
 import { getSettings } from "@/settings/model";
@@ -34,19 +30,8 @@ export async function findChatRelevantNotes(
       8000,
       "Miyo endpoint resolution"
     );
-    const folderName = await withTimeout(
-      () => resolveMiyoFolderName(app, client, baseUrl),
-      8000,
-      "Miyo folder lookup"
-    );
-    // The context names files under the vault's name from before the lookup, which Miyo may know by another name.
-    // https://github.com/logancyang/obsidian-copilot/issues/3690
-    const filePaths = request.file_paths?.map(
-      (path) => `${folderName}${path.slice(request.folder_name.length)}`
-    );
     const response = await withTimeout(
-      () =>
-        client.recommend(baseUrl, { ...request, folder_name: folderName, file_paths: filePaths }),
+      () => client.recommend(baseUrl, request),
       8000,
       "Miyo chat related search"
     );
@@ -58,7 +43,7 @@ export async function findChatRelevantNotes(
         !(file instanceof TFile) ||
         file.extension !== "md" ||
         !Number.isFinite(score) ||
-        filePaths?.includes(path)
+        request.file_paths?.includes(path)
       )
         return [];
       return [

@@ -1,5 +1,10 @@
 import { logInfo, logError } from "@/logger";
-import { MiyoClient, MiyoRequestError, type MiyoSearchResult } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoRequestError,
+  type MiyoSearchResult,
+  subscribeToMiyoFolderNotRegistered,
+} from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
@@ -340,6 +345,50 @@ describe("MiyoClient", () => {
       await expect(
         new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas")
       ).rejects.toMatchObject({ status: 503 });
+    });
+  });
+
+  describe("subscribeToMiyoFolderNotRegistered()", () => {
+    const rejectScanWith = (detail: string) =>
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail },
+        text: "",
+      } as RequestUrlResponse);
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 tells subscribers which folder name Miyo rejected as not registered, and the request still rejects", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      rejectScanWith("Folder not registered: Vedas");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).toHaveBeenCalledWith("Vedas");
+      unsubscribe();
+    });
+
+    it("stays quiet for a 404 that is not about an unregistered folder", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      rejectScanWith("No indexed context for source file");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it("stops telling a subscriber once it unsubscribes", async () => {
+      const listener = jest.fn();
+      subscribeToMiyoFolderNotRegistered(listener)();
+      rejectScanWith("Folder not registered: Vedas");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 

@@ -36,7 +36,7 @@ function setup(
         miyoServerUrl: "",
         ...settings,
       }) as CopilotSettings,
-    getVaultName: jest.fn().mockResolvedValue(vaultName),
+    getVaultName: () => vaultName,
   };
   return { client, deps };
 }
@@ -113,25 +113,6 @@ describe("miyoSearchTool", () => {
         ],
         count: 2,
       });
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3690 searches the vault under the folder name the connected Miyo gives it and strips that name from its notes' paths", async () => {
-      const { client, deps } = setup(
-        {},
-        { vaultName: "Notes", chunks: [chunk({ path: "Notes/daily/Today.md" })] }
-      );
-
-      const result = await runMiyoSearch({ query: "today" }, deps);
-
-      expect(deps.getVaultName).toHaveBeenCalledWith(BASE_URL);
-      expect(client.search).toHaveBeenCalledWith(BASE_URL, "Notes", "today", 1000, {
-        variants: [],
-        paths: [],
-        folderNames: undefined,
-      });
-      expect(JSON.parse(result.text).results).toEqual([
-        { path: "daily/Today.md", content: "body of Notes/daily/Today.md" },
-      ]);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 names the active vault's notes by vault-relative path and gives notes from other Miyo folders their folder apart", async () => {

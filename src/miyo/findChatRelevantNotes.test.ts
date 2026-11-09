@@ -2,11 +2,9 @@ import { findChatRelevantNotes } from "@/miyo/findChatRelevantNotes";
 import { MiyoClient, MiyoRequestError } from "@/miyo/MiyoClient";
 import { App, TFile } from "obsidian";
 jest.mock("@/settings/model", () => ({ getSettings: () => ({ plusLicenseKey: "key" }) }));
-const mockResolveMiyoFolderName = jest.fn();
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoCustomUrl: () => "url",
-  getVaultRelativeMiyoPath: (_app: unknown, path: string) => path.replace(/^(Vault|Notes)\//, ""),
-  resolveMiyoFolderName: (...args: unknown[]): unknown => mockResolveMiyoFolderName(...args),
+  getVaultRelativeMiyoPath: (_app: unknown, path: string) => path.replace(/^Vault\//, ""),
 }));
 jest.mock("@/miyo/MiyoClient", () => {
   const actual = jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient");
@@ -27,7 +25,6 @@ describe("findChatRelevantNotes", () => {
     } as unknown as App;
     beforeEach(() => {
       search.mockReset();
-      mockResolveMiyoFolderName.mockResolvedValue("Vault");
       (MiyoClient as unknown as jest.Mock).mockImplementation(() => ({
         resolveBaseUrl: async () => "url",
         recommend: search,
@@ -56,30 +53,6 @@ describe("findChatRelevantNotes", () => {
       expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
       expect(result.notes[0].metadata.score).toBe(0.6);
       expect(result.details?.skippedAttachments).toBe(2);
-    });
-    it("https://github.com/logancyang/obsidian-copilot/issues/3690 asks Miyo under the folder name it resolves for the vault, renaming the context's files and still excluding them", async () => {
-      mockResolveMiyoFolderName.mockResolvedValue("Notes");
-      search.mockResolvedValue({
-        status: "ok",
-        results: [
-          { path: "Notes/a.md", score: 0.9 },
-          { path: "Notes/b.md", score: 0.6 },
-        ],
-        skipped_files: [],
-      });
-
-      const result = await findChatRelevantNotes(app, {
-        id: "a",
-        request: { folder_name: "Vault", draft: "topic", file_paths: ["Vault/a.md"] },
-        skippedAttachments: 0,
-      });
-
-      expect(search).toHaveBeenCalledWith("url", {
-        folder_name: "Notes",
-        draft: "topic",
-        file_paths: ["Notes/a.md"],
-      });
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["b.md"]);
     });
     it("keeps unsupported-only context unavailable without a request (https://github.com/Brevilabs/obsidian-copilot-private/issues/383)", async () => {
       const result = await findChatRelevantNotes(app, {

@@ -23,9 +23,6 @@ jest.mock("@/settings/model", () => ({
 const mockResolveBaseUrl = jest.fn();
 const mockSearchRelated = jest.fn();
 const mockFileStatus = jest.fn();
-const mockGetFolder = jest.fn();
-
-jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/Users/me/vault" }));
 
 jest.mock("@/miyo/MiyoClient", () => {
   const actual = jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient");
@@ -35,7 +32,6 @@ jest.mock("@/miyo/MiyoClient", () => {
       resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args) as unknown,
       searchRelated: (...args: unknown[]) => mockSearchRelated(...args) as unknown,
       fileStatus: (...args: unknown[]) => mockFileStatus(...args) as unknown,
-      getFolder: (...args: unknown[]) => mockGetFolder(...args) as unknown,
     })),
   };
 });
@@ -77,12 +73,10 @@ describe("findRelevantNotes", () => {
       mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
       mockSearchRelated.mockResolvedValue({ results: [] });
       mockFileStatus.mockResolvedValue({ status: "pending" });
-      mockGetFolder.mockResolvedValue(null);
       mockedMiyoClient.mockImplementation(() => ({
         resolveBaseUrl: mockResolveBaseUrl,
         searchRelated: mockSearchRelated,
         fileStatus: mockFileStatus,
-        getFolder: mockGetFolder,
       }));
 
       const paths = [
@@ -122,20 +116,6 @@ describe("findRelevantNotes", () => {
         folderName: "vault",
         limit: 20,
       });
-    });
-
-    it("https://github.com/logancyang/obsidian-copilot/issues/3690 asks Miyo under the folder name it gives the vault's path and maps its results back to vault paths", async () => {
-      mockGetFolder.mockResolvedValue({ path: "Notes" });
-      mockSearchRelated.mockResolvedValue({ results: [{ path: "Notes/alpha.md", score: 0.5 }] });
-
-      const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
-
-      expect(mockGetFolder).toHaveBeenCalledWith("http://127.0.0.1:8742", "/Users/me/vault");
-      expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "Notes/source.md", {
-        folderName: "Notes",
-        limit: 20,
-      });
-      expect(result.notes.map((entry) => entry.note.path)).toEqual(["alpha.md"]);
     });
 
     it("uses the first finite score and ignores malformed Miyo results (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", async () => {
@@ -472,7 +452,6 @@ describe("findRelevantNotes", () => {
             requestAuthorizationIdentities.push(clientAuthSnapshot.plusLicenseKey);
             return mockFileStatus(...args) as unknown;
           },
-          getFolder: mockGetFolder,
         };
       });
       mockSearchRelated.mockRejectedValue(new MiyoRequestError(404, ""));

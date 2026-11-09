@@ -27,6 +27,17 @@ export class MiyoRequestError extends Error {
   }
 }
 
+const folderNotRegisteredListeners = new Set<(folderName: string) => void>();
+
+export function subscribeToMiyoFolderNotRegistered(
+  listener: (folderName: string) => void
+): () => void {
+  folderNotRegisteredListeners.add(listener);
+  return () => {
+    folderNotRegisteredListeners.delete(listener);
+  };
+}
+
 export interface MiyoFolderEntry {
   path: string;
   origin?: "user" | "chat_sync";
@@ -547,6 +558,15 @@ export class MiyoClient {
         ? "Chat-context retrieval failed"
         : errorPayload?.detail || response.text || errorPayload?.error || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
+      // A folder renamed in Miyo while Copilot runs is rejected under its old name until the name is looked up again.
+      // https://github.com/logancyang/obsidian-copilot/issues/3690
+      const unregisteredFolder =
+        response.status === 404
+          ? /^Folder not registered: (.+)$/.exec(errorPayload?.detail ?? "")?.[1]
+          : undefined;
+      if (unregisteredFolder !== undefined) {
+        folderNotRegisteredListeners.forEach((listener) => listener(unregisteredFolder));
+      }
       // Relevant Notes must distinguish an unindexed source from a service
       // outage without parsing human-readable error messages.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/280

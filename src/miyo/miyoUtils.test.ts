@@ -5,12 +5,22 @@ jest.mock("@/miyo/miyoStatusStore", () => ({
 }));
 
 const mockGetVaultBase = jest.fn();
+let mockFolderNotRegisteredListener: ((folderName: string) => void) | undefined;
+jest.mock("@/miyo/MiyoClient", () => ({
+  ...jest.requireActual<typeof import("@/miyo/MiyoClient")>("@/miyo/MiyoClient"),
+  subscribeToMiyoFolderNotRegistered: (listener: (folderName: string) => void) => {
+    mockFolderNotRegisteredListener = listener;
+    return () => {
+      mockFolderNotRegisteredListener = undefined;
+    };
+  },
+}));
 jest.mock("@/utils/vaultPath", () => ({
   getVaultBase: (...args: unknown[]): unknown => mockGetVaultBase(...args),
 }));
 
 import { Platform, type App } from "obsidian";
-import type { CopilotSettings } from "@/settings/model";
+import { type CopilotSettings, setSettings } from "@/settings/model";
 import {
   canProcessDocumentsWithMiyo,
   getExtraSearchFolderOptions,
@@ -22,7 +32,8 @@ import {
   isLocalMiyoUrl,
   isMiyoParseActive,
   isMiyoSearchActive,
-  resolveMiyoFolderName,
+  refreshMiyoFolderName,
+  watchMiyoFolderName,
 } from "@/miyo/miyoUtils";
 import {
   getMiyoStatusSnapshot,
@@ -56,50 +67,156 @@ describe("miyoUtils", () => {
     });
   });
 
-  describe("resolveMiyoFolderName()", () => {
+  describe("refreshMiyoFolderName()", () => {
     const BASE_URL = "http://127.0.0.1:8742";
     const app = buildApp("Vedas");
-    const folderAt = (name: string | null) => ({
+    const miyoWithFolder = (name: string | null) => ({
+      resolveBaseUrl: jest.fn().mockResolvedValue(BASE_URL),
       getFolder: jest.fn().mockResolvedValue(name === null ? null : { path: name }),
     });
 
     beforeEach(() => {
+      (Platform as { isMobile: boolean }).isMobile = false;
+      setSettings({ enableMiyo: true, miyoConnectionMode: "local", miyoServerUrl: "" });
       mockGetVaultBase.mockReturnValue("/Users/me/Vedas");
     });
 
     afterEach(async () => {
-      await resolveMiyoFolderName(app, folderAt(null), BASE_URL);
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+      setSettings({ enableMiyo: false });
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3690 looks the vault up by its absolute path and makes Miyo's name for it the vault's Miyo folder name", async () => {
-      const client = folderAt("Notes");
+      const miyo = miyoWithFolder("Notes");
 
-      expect(await resolveMiyoFolderName(app, client, BASE_URL)).toBe("Notes");
-      expect(client.getFolder).toHaveBeenCalledWith(BASE_URL, "/Users/me/Vedas");
+      await refreshMiyoFolderName(app, miyo);
+
+      expect(miyo.getFolder).toHaveBeenCalledWith(BASE_URL, "/Users/me/Vedas");
       expect(getMiyoFolderName(app)).toBe("Notes");
       expect(getMiyoFilePath(app, "daily/today.md")).toBe("Notes/daily/today.md");
       expect(getVaultRelativeMiyoPath(app, "Notes/daily/today.md")).toBe("daily/today.md");
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/3690 falls back to the vault's name when Miyo has no folder at the vault's path, as on another computer", async () => {
-      await resolveMiyoFolderName(app, folderAt("Notes"), BASE_URL);
+      await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
 
-      expect(await resolveMiyoFolderName(app, folderAt(null), BASE_URL)).toBe("Vedas");
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+
       expect(getMiyoFolderName(app)).toBe("Vedas");
     });
 
-    it("uses the vault's name without asking Miyo when the vault has no absolute path", async () => {
+    it("uses the vault's name without asking Miyo when Miyo is off or the vault has no absolute path", async () => {
+      const miyo = miyoWithFolder("Notes");
+      setSettings({ enableMiyo: false });
+      await refreshMiyoFolderName(app, miyo);
+      setSettings({ enableMiyo: true });
       mockGetVaultBase.mockReturnValue(null);
-      const client = folderAt("Notes");
+      await refreshMiyoFolderName(app, miyo);
 
-      expect(await resolveMiyoFolderName(app, client, BASE_URL)).toBe("Vedas");
-      expect(client.getFolder).not.toHaveBeenCalled();
+      expect(miyo.getFolder).not.toHaveBeenCalled();
+      expect(getMiyoFolderName(app)).toBe("Vedas");
     });
 
-    it("rejects with the lookup's error when Miyo cannot answer, so the caller reports Miyo as unavailable", async () => {
-      const failing = { getFolder: jest.fn().mockRejectedValue(new Error("offline")) };
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 keeps the newest lookup's answer when an older one, such as against a Miyo the user just left, finishes last", async () => {
+      let answerOldLookup: (folder: { path: string }) => void = () => {};
+      const oldMiyo = miyoWithFolder(null);
+      oldMiyo.getFolder.mockReturnValue(
+        new Promise((resolve) => {
+          answerOldLookup = resolve;
+        })
+      );
+      const oldLookup = refreshMiyoFolderName(app, oldMiyo);
+      await refreshMiyoFolderName(app, miyoWithFolder("Vault"));
 
-      await expect(resolveMiyoFolderName(app, failing, BASE_URL)).rejects.toThrow("offline");
+      answerOldLookup({ path: "Notes" });
+      await oldLookup;
+
+      expect(getMiyoFolderName(app)).toBe("Vault");
+    });
+
+    it("rejects with the lookup's error and leaves the vault's name in use when Miyo cannot answer", async () => {
+      await refreshMiyoFolderName(app, miyoWithFolder("Notes"));
+      const offline = miyoWithFolder(null);
+      offline.getFolder.mockRejectedValue(new Error("offline"));
+
+      await expect(refreshMiyoFolderName(app, offline)).rejects.toThrow("offline");
+      expect(getMiyoFolderName(app)).toBe("Vedas");
+    });
+  });
+
+  describe("watchMiyoFolderName()", () => {
+    const BASE_URL = "http://127.0.0.1:8742";
+    const app = buildApp("Vedas");
+    const miyoWithFolder = (name: string | null) => ({
+      resolveBaseUrl: jest.fn().mockResolvedValue(BASE_URL),
+      getFolder: jest.fn().mockResolvedValue(name === null ? null : { path: name }),
+    });
+    let stopWatching: () => void = () => {};
+
+    beforeEach(() => {
+      (Platform as { isMobile: boolean }).isMobile = false;
+      setSettings({ enableMiyo: true, miyoConnectionMode: "local", miyoServerUrl: "" });
+      mockGetVaultBase.mockReturnValue("/Users/me/Vedas");
+    });
+
+    afterEach(async () => {
+      stopWatching();
+      await refreshMiyoFolderName(app, miyoWithFolder(null));
+      setSettings({ enableMiyo: false });
+    });
+
+    it("looks the vault's folder up as soon as it starts watching", () => {
+      const miyo = miyoWithFolder("Notes");
+
+      stopWatching = watchMiyoFolderName(app, miyo);
+
+      expect(miyo.resolveBaseUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 drops the old name and looks again on the new Miyo when the Miyo address changes, so the old Miyo's name never sorts the new one's results", async () => {
+      const miyo = miyoWithFolder("Notes");
+      stopWatching = watchMiyoFolderName(app, miyo);
+      await refreshMiyoFolderName(app, miyo);
+      miyo.resolveBaseUrl.mockClear();
+
+      setSettings({ miyoConnectionMode: "remote", miyoServerUrl: "http://miyo.remote:8742" });
+
+      expect(getMiyoFolderName(app)).toBe("Vedas");
+      expect(miyo.resolveBaseUrl).toHaveBeenCalledWith("http://miyo.remote:8742");
+    });
+
+    it("ignores settings changes that leave Miyo's switch and address alone", () => {
+      const miyo = miyoWithFolder("Notes");
+      stopWatching = watchMiyoFolderName(app, miyo);
+      miyo.resolveBaseUrl.mockClear();
+
+      setSettings({ debug: true });
+
+      expect(miyo.resolveBaseUrl).not.toHaveBeenCalled();
+      setSettings({ debug: false });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 looks again when Miyo rejects the vault's folder name, as after the folder is renamed in Miyo, and not when it rejects another folder", () => {
+      const miyo = miyoWithFolder("Notes");
+      stopWatching = watchMiyoFolderName(app, miyo);
+      miyo.resolveBaseUrl.mockClear();
+
+      mockFolderNotRegisteredListener?.("Research");
+      expect(miyo.resolveBaseUrl).not.toHaveBeenCalled();
+
+      mockFolderNotRegisteredListener?.("Vedas");
+      expect(miyo.resolveBaseUrl).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops looking again once watching stops", () => {
+      const miyo = miyoWithFolder("Notes");
+      watchMiyoFolderName(app, miyo)();
+      miyo.resolveBaseUrl.mockClear();
+
+      setSettings({ miyoConnectionMode: "remote", miyoServerUrl: "http://miyo.remote:8742" });
+      mockFolderNotRegisteredListener?.("Vedas");
+
+      expect(miyo.resolveBaseUrl).not.toHaveBeenCalled();
     });
   });
 

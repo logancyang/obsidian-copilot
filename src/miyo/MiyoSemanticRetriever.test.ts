@@ -6,7 +6,6 @@ import { getSettings } from "@/settings/model";
 
 const mockResolveBaseUrl = jest.fn();
 const mockSearch = jest.fn();
-const mockGetFolder = jest.fn();
 
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
@@ -20,10 +19,8 @@ jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({
     resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args) as unknown,
     search: (...args: unknown[]) => mockSearch(...args) as unknown,
-    getFolder: (...args: unknown[]) => mockGetFolder(...args) as unknown,
   })),
 }));
-jest.mock("@/utils/vaultPath", () => ({ getVaultBase: () => "/Users/me/vault" }));
 
 function makeApp(getAbstractFileByPath: (path: string) => TFile | null = () => null): App {
   return {
@@ -58,7 +55,6 @@ describe("MiyoSemanticRetriever", () => {
     mockSearch.mockReset();
     mockSettings();
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
-    mockGetFolder.mockResolvedValue(null);
   });
 
   describe("MiyoSemanticRetriever", () => {
@@ -126,43 +122,6 @@ describe("MiyoSemanticRetriever", () => {
           1000,
           { filters: [{ field: "mtime", gte: startTime, lte: endTime }] }
         );
-      });
-
-      it("https://github.com/logancyang/obsidian-copilot/issues/3690 searches the vault under the folder name Miyo gives its path and returns vault-relative paths", async () => {
-        mockGetFolder.mockResolvedValue({ path: "Notes" });
-        mockSearch.mockResolvedValue({
-          results: [{ id: "a", score: 0.9, path: "Notes/notes/a.md", chunk_index: 0 }],
-        });
-
-        const documents = await createRetriever().getRelevantDocuments("query");
-
-        expect(mockGetFolder).toHaveBeenCalledWith("http://miyo.local", "/Users/me/vault");
-        expect(mockSearch).toHaveBeenCalledWith("http://miyo.local", "Notes", "query", 1000, {});
-        expect(documents[0].metadata.path).toBe("notes/a.md");
-        expect(documents[0].metadata.fromCurrentVault).toBe(true);
-      });
-
-      it("https://github.com/logancyang/obsidian-copilot/issues/3690 recognizes this vault's unrestricted results by the folder name the current Miyo gives it, not one an earlier Miyo gave it", async () => {
-        mockGetFolder.mockResolvedValue({ path: "Notes" });
-        mockSearch.mockResolvedValue({ results: [] });
-        await createRetriever().getRelevantDocuments("query");
-
-        mockSettings({ miyoSearchAll: true });
-        mockGetFolder.mockResolvedValue(null);
-        mockSearch.mockResolvedValue({
-          results: [{ id: "a", score: 0.9, path: "/vault/notes/a.md", chunk_index: 0 }],
-        });
-        const documents = await createRetriever().getRelevantDocuments("query");
-
-        expect(mockSearch).toHaveBeenLastCalledWith(
-          "http://miyo.local",
-          undefined,
-          "query",
-          1000,
-          {}
-        );
-        expect(documents[0].metadata.path).toBe("notes/a.md");
-        expect(documents[0].metadata.fromCurrentVault).toBe(true);
       });
 
       it("requests Miyo's full candidate pool even with no local QA rules, because Copilot cannot know the server's exclusion scope (https://github.com/Brevilabs/obsidian-copilot-private/issues/284)", async () => {

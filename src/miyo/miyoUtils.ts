@@ -3,9 +3,20 @@ import {
   isMiyoAvailableForCapability,
   refreshMiyoStatus,
 } from "@/miyo/miyoStatusStore";
-import { shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
-import type { MiyoClient, MiyoFolderEntry } from "@/miyo/MiyoClient";
-import { CopilotSettings, getSettings, normalizeMiyoFolderNames } from "@/settings/model";
+import { getMiyoCustomUrl, shouldUseMiyo } from "@/miyo/miyoRuntimePolicy";
+import { logWarn } from "@/logger";
+import {
+  MiyoClient,
+  type MiyoFolderEntry,
+  subscribeToMiyoFolderNotRegistered,
+} from "@/miyo/MiyoClient";
+import {
+  CopilotSettings,
+  getSettings,
+  normalizeMiyoFolderNames,
+  subscribeToSettingsChange,
+} from "@/settings/model";
+import { err2String } from "@/utils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
 
@@ -95,25 +106,55 @@ export function getExtraSearchFolderOptions(
   return options;
 }
 
-let resolvedMiyoFolderName: string | undefined;
+let miyoFolderName: string | undefined;
+let miyoFolderLookup = 0;
 
 export function getMiyoFolderName(app: App): string {
-  return resolvedMiyoFolderName ?? app.vault.getName();
+  return miyoFolderName ?? app.vault.getName();
 }
 
 // Miyo names a folder after its directory unless the user picks another name, so the vault is looked up by its
 // absolute path; a Miyo with no folder there, such as one on another computer, knows the vault by its name.
 // https://github.com/logancyang/obsidian-copilot/issues/3690
-export async function resolveMiyoFolderName(
+export async function refreshMiyoFolderName(
   app: App,
-  client: Pick<MiyoClient, "getFolder">,
-  baseUrl: string
-): Promise<string> {
+  client: Pick<MiyoClient, "resolveBaseUrl" | "getFolder">
+): Promise<void> {
+  const lookup = ++miyoFolderLookup;
+  miyoFolderName = undefined;
+  const settings = getSettings();
   const vaultBase = getVaultBase(app);
-  resolvedMiyoFolderName = vaultBase
-    ? (await client.getFolder(baseUrl, vaultBase))?.path
-    : undefined;
-  return getMiyoFolderName(app);
+  if (!vaultBase || !shouldUseMiyo(settings)) return;
+  const baseUrl = await client.resolveBaseUrl(getMiyoCustomUrl(settings));
+  const folder = await client.getFolder(baseUrl, vaultBase);
+  if (lookup === miyoFolderLookup) miyoFolderName = folder?.path;
+}
+
+export function watchMiyoFolderName(
+  app: App,
+  client: Pick<MiyoClient, "resolveBaseUrl" | "getFolder"> = new MiyoClient()
+): () => void {
+  const refresh = () => {
+    refreshMiyoFolderName(app, client).catch((error) =>
+      logWarn(`Could not look up the vault's Miyo folder: ${err2String(error)}`)
+    );
+  };
+  refresh();
+  const unsubscribeSettings = subscribeToSettingsChange((prev, next) => {
+    if (
+      shouldUseMiyo(prev) !== shouldUseMiyo(next) ||
+      getMiyoCustomUrl(prev) !== getMiyoCustomUrl(next)
+    ) {
+      refresh();
+    }
+  });
+  const unsubscribeFolder = subscribeToMiyoFolderNotRegistered((folderName) => {
+    if (folderName === getMiyoFolderName(app)) refresh();
+  });
+  return () => {
+    unsubscribeSettings();
+    unsubscribeFolder();
+  };
 }
 
 export function getMiyoFilePath(app: App, vaultRelativePath: string): string {
