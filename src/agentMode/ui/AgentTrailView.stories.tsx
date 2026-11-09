@@ -2,11 +2,6 @@ import { useApp } from "@/context";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
-import {
-  CopilotToolCallsProvider,
-  NO_COPILOT_TOOL_CALLS,
-  type CopilotToolCallReader,
-} from "@/agentMode/ui/copilotToolCall";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
@@ -109,6 +104,10 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
   tool("notion-search", "notion_search", {
     mcpServer: "obsidian-copilot",
     input: { query: "Orion" },
+    copilotTools: {
+      runs: "notion_search",
+      calls: [{ name: "notion_search", args: { query: "Orion" } }],
+    },
     output: [{ type: "text", text: "Orion kickoff plan" }],
   }),
   say("Codex names the same call through Copilot's server."),
@@ -121,6 +120,10 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       tool: "linear_create_issue",
       arguments: { title: "Orion retro" },
     },
+    copilotTools: {
+      runs: "linear_create_issue",
+      calls: [{ name: "linear_create_issue", args: { title: "Orion retro" } }],
+    },
   }),
   say("OpenCode's execute code that calls one Copilot tool is named after that tool."),
   tool("opencode-notion-create", "execute", {
@@ -129,6 +132,15 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     toolKind: "other",
     input: {
       code: 'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;',
+    },
+    copilotTools: {
+      runs: "notion_create_page",
+      calls: [
+        {
+          name: "notion_create_page",
+          code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;',
+        },
+      ],
     },
   }),
   say("Code that calls several tools keeps OpenCode's execute name."),
@@ -139,20 +151,23 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     input: {
       code: 'return Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "Orion" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "Orion" }),\n]);',
     },
+    copilotTools: {
+      runs: null,
+      calls: [
+        {
+          name: "notion_search",
+          code: 'tools["obsidian-copilot"].notion_search({ query: "Orion" })',
+        },
+        {
+          name: "notion_create_page",
+          code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" })',
+        },
+      ],
+    },
   }),
   say("Another server's tools keep the server's name."),
   tool("context7-docs", "query-docs", { mcpServer: "context7" }),
 ];
-
-const CONNECTOR_TOOL_NAMES: Readonly<Record<string, string>> = {
-  "linear-create": "linear_create_issue",
-  "opencode-notion-create": "notion_create_page",
-};
-
-const CONNECTOR_TOOL_READER: CopilotToolCallReader = {
-  call: () => null,
-  toolName: (part) => CONNECTOR_TOOL_NAMES[part.id] ?? null,
-};
 
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
@@ -171,31 +186,27 @@ const TrailDemo: React.FC<{
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
   stopReason?: StopReason;
-  copilotToolCalls?: CopilotToolCallReader;
 }> = ({
   parts,
   isStreaming = false,
   showCompletedDuration = true,
   fileChanges,
   stopReason = "end_turn",
-  copilotToolCalls = NO_COPILOT_TOOL_CALLS,
 }) => {
   const app = useApp();
   return (
-    <CopilotToolCallsProvider value={copilotToolCalls}>
-      <TooltipProvider>
-        <AgentTrail
-          parts={parts}
-          isStreaming={isStreaming}
-          turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
-          turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
-          timestamp="2026/08/07 20:31:10"
-          app={app}
-          turnStopReason={isStreaming ? undefined : stopReason}
-          fileChanges={fileChanges}
-        />
-      </TooltipProvider>
-    </CopilotToolCallsProvider>
+    <TooltipProvider>
+      <AgentTrail
+        parts={parts}
+        isStreaming={isStreaming}
+        turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
+        turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
+        timestamp="2026/08/07 20:31:10"
+        app={app}
+        turnStopReason={isStreaming ? undefined : stopReason}
+        fileChanges={fileChanges}
+      />
+    </TooltipProvider>
   );
 };
 
@@ -223,7 +234,7 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
 };
 
 export const ConnectorTools: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={CONNECTOR_TOOLS} copilotToolCalls={CONNECTOR_TOOL_READER} />,
+  render: () => <TrailDemo parts={CONNECTOR_TOOLS} />,
 };
 
 export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {

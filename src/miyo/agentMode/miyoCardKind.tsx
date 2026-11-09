@@ -7,10 +7,9 @@ import { openVaultPath } from "@/utils/openVaultPath";
 export const miyoCardKind: ToolCardKind = {
   // A grouped Miyo search would be hidden behind "Ran N commands".
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/718
-  place: (part, { copilotToolCalls }) =>
-    miyoSearchRun(part, copilotToolCalls) ? { joinKey: null } : null,
-  render: ([search], { app, open, onToggle, copilotToolCalls }) => {
-    const run = miyoSearchRun(search, copilotToolCalls);
+  place: (part) => (miyoSearchRun(part) ? { joinKey: null } : null),
+  render: ([search], { app, open, onToggle }) => {
+    const run = miyoSearchRun(search);
     return run ? (
       <MiyoSearchCard
         {...run}

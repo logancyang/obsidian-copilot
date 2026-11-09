@@ -9,7 +9,6 @@ import type CopilotPlugin from "@/main";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { copilotToolLabel } from "@/agentMode/ui/toolSummaries";
-import { useCopilotToolCalls } from "@/agentMode/ui/copilotToolCall";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
@@ -204,10 +203,7 @@ const AgentChatMessages = memo(
           : undefined,
       [messages, pendingPermission]
     );
-    const copilotToolCalls = useCopilotToolCalls();
-    const pendingCopilotTool = pendingToolCall
-      ? copilotToolLabel(pendingToolCall, copilotToolCalls)
-      : null;
+    const pendingCopilotTool = pendingToolCall ? copilotToolLabel(pendingToolCall) : null;
     // A connector tool's request names it by the service's id, which users don't know.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
     // OpenCode's request names only its `execute` wrapper, which hides the Copilot tool about to run.

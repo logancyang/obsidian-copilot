@@ -14,7 +14,6 @@ import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
-import { CopilotToolCallsProvider, NO_COPILOT_TOOL_CALLS } from "@/agentMode/ui/copilotToolCall";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
 import { RunningTasksIndicator } from "@/agentMode/ui/RunningTasksIndicator";
 import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
@@ -780,80 +779,76 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     }
                   />
                 ) : (
-                  <CopilotToolCallsProvider
-                    value={descriptor.copilotToolCalls ?? NO_COPILOT_TOOL_CALLS}
-                  >
-                    <AgentTasksProvider tasks={tasks} openTask={handleOpenTask}>
-                      {detailTask ? (
-                        <TaskDetailView
-                          task={detailTask}
-                          status={taskDisplayStatus(detailTask, pendingToolPermissions)}
-                          messages={backend.getTaskMessages(detailTask.toolCallId)}
-                          app={app}
-                          onBack={handleCloseTask}
-                          chatAwaitsAnswer={
-                            pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0
-                          }
-                        />
-                      ) : null}
-                      {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
-                      <div
-                        className={cn(
-                          "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
-                          detailTask && "tw-invisible tw-absolute tw-inset-0"
-                        )}
-                      >
-                        <AgentChatMessages
-                          sourcePath={activeSourcePath}
-                          key={sessionId}
-                          messages={messages}
-                          plugin={plugin}
-                          currentPlan={currentPlan}
-                          pendingToolPermissions={pendingToolPermissions}
-                          pendingAskUserQuestions={pendingAskUserQuestions}
-                          chatBackend={backend}
-                          isLoading={isLoading}
-                          chatStates={chatStates}
-                        />
-                        {queuedMessagesNode}
-                        <AgentChatControls
-                          onCopyChatLink={
-                            activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
-                          }
-                          getChatBookmarkState={
-                            activeSession?.hasUserVisibleMessages()
-                              ? getActiveChatBookmarkState
-                              : undefined
-                          }
-                          onSetChatBookmarked={handleSetActiveChatBookmarked}
-                          onOpenChatNote={handleOpenChatNote}
-                          onReportError={handleReportError}
-                          onNewChat={handleNewChat}
-                          onSaveAsNote={handleSaveAsNote}
-                          chatHistoryItems={chatHistoryItems}
-                          onLoadHistory={handleLoadChatHistory}
-                          onLoadChat={handleLoadChat}
-                          onUpdateChatTitle={handleUpdateChatTitle}
-                          onDeleteChat={handleDeleteChat}
-                          onCloseSession={handleCloseSession}
-                          openChatIds={openChatIds}
-                          runningChatIds={runningChatIds}
-                          onOpenSourceFile={handleOpenSourceFile}
-                          usageMeter={<AgentContextMeter backend={backend} />}
-                          tasksIndicator={
-                            <RunningTasksIndicator
-                              tasks={tasks}
-                              permissions={pendingToolPermissions}
-                              onOpenTask={handleOpenTask}
-                              onStopTask={backend.canStopTasks() ? handleStopTask : undefined}
-                              container={rootEl}
-                            />
-                          }
-                        />
-                        {composerNode}
-                      </div>
-                    </AgentTasksProvider>
-                  </CopilotToolCallsProvider>
+                  <AgentTasksProvider tasks={tasks} openTask={handleOpenTask}>
+                    {detailTask ? (
+                      <TaskDetailView
+                        task={detailTask}
+                        status={taskDisplayStatus(detailTask, pendingToolPermissions)}
+                        messages={backend.getTaskMessages(detailTask.toolCallId)}
+                        app={app}
+                        onBack={handleCloseTask}
+                        chatAwaitsAnswer={
+                          pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0
+                        }
+                      />
+                    ) : null}
+                    {/* The chat stays laid out, invisible, under a task's view: hiding it with display none collapses its scroller, which then jumps to the end on Back. https://github.com/Brevilabs/obsidian-copilot-private/issues/749 */}
+                    <div
+                      className={cn(
+                        "tw-flex tw-min-h-0 tw-flex-1 tw-flex-col",
+                        detailTask && "tw-invisible tw-absolute tw-inset-0"
+                      )}
+                    >
+                      <AgentChatMessages
+                        sourcePath={activeSourcePath}
+                        key={sessionId}
+                        messages={messages}
+                        plugin={plugin}
+                        currentPlan={currentPlan}
+                        pendingToolPermissions={pendingToolPermissions}
+                        pendingAskUserQuestions={pendingAskUserQuestions}
+                        chatBackend={backend}
+                        isLoading={isLoading}
+                        chatStates={chatStates}
+                      />
+                      {queuedMessagesNode}
+                      <AgentChatControls
+                        onCopyChatLink={
+                          activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
+                        }
+                        getChatBookmarkState={
+                          activeSession?.hasUserVisibleMessages()
+                            ? getActiveChatBookmarkState
+                            : undefined
+                        }
+                        onSetChatBookmarked={handleSetActiveChatBookmarked}
+                        onOpenChatNote={handleOpenChatNote}
+                        onReportError={handleReportError}
+                        onNewChat={handleNewChat}
+                        onSaveAsNote={handleSaveAsNote}
+                        chatHistoryItems={chatHistoryItems}
+                        onLoadHistory={handleLoadChatHistory}
+                        onLoadChat={handleLoadChat}
+                        onUpdateChatTitle={handleUpdateChatTitle}
+                        onDeleteChat={handleDeleteChat}
+                        onCloseSession={handleCloseSession}
+                        openChatIds={openChatIds}
+                        runningChatIds={runningChatIds}
+                        onOpenSourceFile={handleOpenSourceFile}
+                        usageMeter={<AgentContextMeter backend={backend} />}
+                        tasksIndicator={
+                          <RunningTasksIndicator
+                            tasks={tasks}
+                            permissions={pendingToolPermissions}
+                            onOpenTask={handleOpenTask}
+                            onStopTask={backend.canStopTasks() ? handleStopTask : undefined}
+                            container={rootEl}
+                          />
+                        }
+                      />
+                      {composerNode}
+                    </div>
+                  </AgentTasksProvider>
                 )}
               </div>
             </div>

@@ -1,71 +1,74 @@
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import {
-  codeStringField,
-  copilotToolCall,
-  copilotToolName,
-  NO_COPILOT_TOOL_CALLS,
-  type CopilotToolCallReader,
-} from "@/agentMode/ui/copilotToolCall";
+import { codeStringField, copilotToolCall, copilotToolName } from "@/agentMode/ui/copilotToolCall";
 
 function tool(overrides: Partial<ToolCallPart>): ToolCallPart {
   return { kind: "tool_call", id: "x", title: "tool", status: "completed", ...overrides };
 }
 
-const READER: CopilotToolCallReader = {
-  call: (part, toolName) =>
-    part.title === "wrapper" && toolName === "excalidraw_read" ? { code: "wrapped" } : null,
-  toolName: (part) => (part.title === "wrapper" ? "notion_search" : null),
-};
+const WRITE_THEN_RENDER = tool({
+  copilotTools: {
+    runs: null,
+    calls: [
+      { name: "excalidraw_write", code: 'tools["obsidian-copilot"].excalidraw_write({});' },
+      { name: "excalidraw_render", code: 'tools["obsidian-copilot"].excalidraw_render({});' },
+    ],
+  },
+});
 
 describe("copilotToolCall", () => {
   describe("copilotToolCall()", () => {
-    it("returns the arguments of a call the adapter tagged as the named tool on Copilot's server", () => {
+    it("returns the call to the named tool with its arguments", () => {
       const part = tool({
-        mcpServer: "obsidian-copilot",
-        vendorToolName: "excalidraw_write",
-        input: { path: "a.excalidraw.md" },
+        copilotTools: {
+          runs: "excalidraw_write",
+          calls: [{ name: "excalidraw_write", args: { path: "a.excalidraw.md" } }],
+        },
       });
-      expect(copilotToolCall(part, "excalidraw_write", READER)).toEqual({
+      expect(copilotToolCall(part, "excalidraw_write")).toEqual({
+        name: "excalidraw_write",
         args: { path: "a.excalidraw.md" },
       });
     });
 
-    it("reads a call the adapter did not tag through the backend's reader", () => {
-      expect(copilotToolCall(tool({ title: "wrapper" }), "excalidraw_read", READER)).toEqual({
-        code: "wrapped",
+    it("finds the named tool among the calls of code that calls several tools", () => {
+      expect(copilotToolCall(WRITE_THEN_RENDER, "excalidraw_render")).toEqual({
+        name: "excalidraw_render",
+        code: 'tools["obsidian-copilot"].excalidraw_render({});',
       });
     });
 
     it.each([
       [
-        "the same tool name on another server",
-        tool({ mcpServer: "other", vendorToolName: "excalidraw_write", input: {} }),
+        "a call to another Copilot tool",
+        tool({
+          copilotTools: {
+            runs: "excalidraw_render",
+            calls: [{ name: "excalidraw_render", args: {} }],
+          },
+        }),
       ],
       [
-        "another tool tagged on Copilot's server",
-        tool({ mcpServer: "obsidian-copilot", vendorToolName: "excalidraw_render", input: {} }),
+        "a call to no Copilot tool",
+        tool({ mcpServer: "other", vendorToolName: "excalidraw_write" }),
       ],
-      ["an untagged call the backend's reader does not recognize", tool({ input: undefined })],
     ])("returns null for %s", (_name, part) => {
-      expect(copilotToolCall(part, "excalidraw_write", READER)).toBeNull();
+      expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
     });
   });
 
   describe("copilotToolName()", () => {
-    it("returns the tool name of a call the adapter tagged on Copilot's server", () => {
-      const part = tool({ mcpServer: "obsidian-copilot", vendorToolName: "notion_search" });
-      expect(copilotToolName(part, NO_COPILOT_TOOL_CALLS)).toBe("notion_search");
-    });
-
-    it("names an untagged call through the backend's reader", () => {
-      expect(copilotToolName(tool({ title: "wrapper" }), READER)).toBe("notion_search");
+    it("returns the Copilot tool the call runs", () => {
+      const part = tool({
+        copilotTools: { runs: "notion_search", calls: [{ name: "notion_search", args: {} }] },
+      });
+      expect(copilotToolName(part)).toBe("notion_search");
     });
 
     it.each([
-      ["a call on another server", tool({ mcpServer: "other", vendorToolName: "notion_search" })],
-      ["a native tool", tool({ vendorToolName: "Read" })],
+      ["code whose approval may cover more than one tool", WRITE_THEN_RENDER],
+      ["a call to no Copilot tool", tool({ vendorToolName: "Read" })],
     ])("returns null for %s", (_name, part) => {
-      expect(copilotToolName(part, READER)).toBeNull();
+      expect(copilotToolName(part)).toBeNull();
     });
   });
 

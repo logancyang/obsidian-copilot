@@ -1,4 +1,6 @@
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import { makeTask } from "@/agentMode/ui/testing/taskFixtures";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
@@ -9,12 +11,6 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
-import { opencodeCopilotToolCalls } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
-import {
-  CopilotToolCallsProvider,
-  NO_COPILOT_TOOL_CALLS,
-  type CopilotToolCallReader,
-} from "@/agentMode/ui/copilotToolCall";
 import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { EMPTY_CHAT_STATES, withChatState } from "@/agentMode/session/chatExtension";
 import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
@@ -214,8 +210,7 @@ function plan(id: string): CurrentPlan {
 function renderMessages(
   messages: AgentChatMessage[],
   isLoading: boolean,
-  overrides: Partial<AgentChatMessagesProps> = {},
-  copilotToolCalls: CopilotToolCallReader = NO_COPILOT_TOOL_CALLS
+  overrides: Partial<AgentChatMessagesProps> = {}
 ) {
   const props: AgentChatMessagesProps = {
     messages,
@@ -228,10 +223,7 @@ function renderMessages(
     chatStates: EMPTY_CHAT_STATES,
     ...overrides,
   };
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <CopilotToolCallsProvider value={copilotToolCalls}>{children}</CopilotToolCallsProvider>
-  );
-  return { ...render(<AgentChatMessages {...props} />, { wrapper }), props };
+  return { ...render(<AgentChatMessages {...props} />), props };
 }
 
 describe("AgentChatMessages", () => {
@@ -580,6 +572,7 @@ describe("AgentChatMessages", () => {
             status: "pending",
             mcpServer: "obsidian-copilot",
             vendorToolName: "notion_create_page",
+            copilotTools: directCopilotToolUse("obsidian-copilot", "notion_create_page", {}),
           },
         ] as AgentChatMessage["parts"],
       });
@@ -613,7 +606,7 @@ describe("AgentChatMessages", () => {
         railText: "Permission execute-1 via execute",
       },
     ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title' when the chat runs on OpenCode",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title'",
       ({ code, title, railText }) => {
         const toolTurn = assistantMessage("answer-1", 62_000, {
           parts: [
@@ -624,6 +617,7 @@ describe("AgentChatMessages", () => {
               status: "in_progress",
               toolKind: "other",
               input: { code },
+              copilotTools: readOpencodeCopilotTools({ code }) ?? undefined,
             },
           ] as AgentChatMessage["parts"],
         });
@@ -631,12 +625,7 @@ describe("AgentChatMessages", () => {
         request.toolCall.title = "execute";
         request.toolCall.rawInput = { code };
 
-        renderMessages(
-          [toolTurn],
-          true,
-          { pendingToolPermissions: [request] },
-          opencodeCopilotToolCalls
-        );
+        renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
 
         const rail = screen.getByRole("region", { name: "Pending agent actions" });
         expect(rail.textContent).toBe(railText);

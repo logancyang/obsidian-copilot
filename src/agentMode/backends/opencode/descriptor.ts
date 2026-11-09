@@ -29,7 +29,6 @@ import {
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import { opencodeCopilotPluginDir } from "./opencodeCopilotPlugin";
-import { opencodeCopilotToolCalls } from "./opencodeCopilotToolCalls";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
@@ -77,7 +76,6 @@ export { detectOpencodeCliPath } from "./opencodeCliDetector";
 
 export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
-  copilotToolCalls: opencodeCopilotToolCalls,
   displayName: "OpenCode",
   Icon: OpencodeLogo,
   selfHostable: true,

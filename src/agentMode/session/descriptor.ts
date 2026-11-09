@@ -5,7 +5,6 @@ import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { CopilotMcpServer } from "@/agentMode/session/copilotMcpServer";
-import type { CopilotToolCallReader } from "@/agentMode/session/copilotToolCalls";
 import type {
   BackendConfigOption,
   BackendId,
@@ -118,11 +117,6 @@ export interface BackendDescriptor {
   // A backend that can end one background task on its own offers a stop control on each running task, leaving the main agent and other tasks running.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/748
   readonly stopTask?: boolean;
-
-  // Codex and OpenCode don't call Copilot's tools directly: Codex passes the tool name as input to a generic MCP tool,
-  // and OpenCode puts the call inside JavaScript code. This reader pulls the Copilot tool name out of that input.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-  readonly copilotToolCalls?: CopilotToolCallReader;
 
   getInstallState(settings: CopilotSettings): InstallState;
 

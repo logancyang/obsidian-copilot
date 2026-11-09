@@ -1,4 +1,6 @@
-import { codexCopilotToolCalls } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import {
   copilotToolLabel,
   displayTargetFromPath,
@@ -7,25 +9,32 @@ import {
   extractSubAgentReturnText,
 } from "@/agentMode/ui/toolSummaries";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { NO_COPILOT_TOOL_CALLS, type CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 
 const CTX = { vaultBase: "/Users/me/vault" };
 
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
-  return {
+  const part: ToolCallPart = {
     kind: "tool_call",
     id: "x",
     title: "tool",
     status: "completed",
     ...overrides,
   };
+  const copilotTools =
+    directCopilotToolUse(part.mcpServer, part.vendorToolName, part.input) ??
+    readCodexCopilotTools(part.input) ??
+    readOpencodeCopilotTools(part.input);
+  return copilotTools ? { ...part, copilotTools } : part;
 }
 
-function readerNaming(toolName: string): CopilotToolCallReader {
-  return { call: () => null, toolName: () => toolName };
+function opencodeExecute(code: string): ToolCallPart {
+  return tool({ title: "execute", toolKind: "other", input: { code } });
 }
 
-const WRAPPED_CALL = tool({ title: "execute", toolKind: "other" });
+const OPENCODE_NOTION_CALL =
+  'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;';
+const OPENCODE_TWO_CALLS =
+  'const [a, b] = await Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "a" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "b" }),\n]);\nreturn { a, b };';
 
 describe("toolSummaries", () => {
   describe("lookupToolSummary()", () => {
@@ -35,7 +44,7 @@ describe("toolSummaries", () => {
         title: "read music-theory.md",
         output: [{ type: "text", text: "hello world".repeat(100) }],
       });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX)).toMatch(/^Read /);
       expect(s.outcome(t)).toMatch(/tokens$/);
     });
@@ -46,9 +55,7 @@ describe("toolSummaries", () => {
         title: "read",
         locations: [{ path: "/Users/me/vault/notes/music-theory.md" }],
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Read notes/music-theory.md"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/music-theory.md");
     });
 
     it("hides parent directories outside the vault without changing the navigation target", () => {
@@ -57,7 +64,7 @@ describe("toolSummaries", () => {
         title: "read",
         locations: [{ path: "/etc/passwd" }],
       });
-      const summary = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const summary = lookupToolSummary(t);
       expect(summary.collapsedLine(t, CTX)).toBe("Read …/passwd");
       expect(summary.targetPath?.(t, CTX)).toBe("/etc/passwd");
     });
@@ -68,13 +75,9 @@ describe("toolSummaries", () => {
         title: "Read",
         input: { filePath: "/Users/me/private/draft.md" },
       });
-      expect(
-        lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, { vaultBase: null })
-      ).toBe("Read …/draft.md");
+      expect(lookupToolSummary(t).collapsedLine(t, { vaultBase: null })).toBe("Read …/draft.md");
       const windows = { ...t, input: { filePath: "C:\\Users\\me\\private\\draft.md" } };
-      expect(lookupToolSummary(windows, NO_COPILOT_TOOL_CALLS).collapsedLine(windows, CTX)).toBe(
-        "Read …/draft.md"
-      );
+      expect(lookupToolSummary(windows).collapsedLine(windows, CTX)).toBe("Read …/draft.md");
     });
 
     it("recognizes opencode task tool by data shape", () => {
@@ -87,7 +90,7 @@ describe("toolSummaries", () => {
           prompt: "...",
         },
       });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX)).toBe('research-agent · "find jazz voicings"');
     });
 
@@ -102,11 +105,11 @@ describe("toolSummaries", () => {
           prompt: "Explore the codebase…",
         },
       });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX)).toBe(
         'Explore · "Map user-facing features of obsidian-copilot"'
       );
-      const taskEquiv = lookupToolSummary({ ...t, vendorToolName: "Task" }, NO_COPILOT_TOOL_CALLS);
+      const taskEquiv = lookupToolSummary({ ...t, vendorToolName: "Task" });
       expect(s).toBe(taskEquiv);
     });
 
@@ -117,26 +120,24 @@ describe("toolSummaries", () => {
         title: "LS Daily",
         input: { path: "Daily" },
       });
-      expect(lookupToolSummary(list, NO_COPILOT_TOOL_CALLS).collapsedLine(list, CTX)).toBe(
-        "Listed Daily"
-      );
+      expect(lookupToolSummary(list).collapsedLine(list, CTX)).toBe("Listed Daily");
     });
 
     it("falls back to ACP toolKind when vendor is missing", () => {
       const t = tool({ toolKind: "edit", title: "wrote thing" });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX)).toBe("Edited files");
     });
 
     it("falls back to generic when both vendor and toolKind are unknown", () => {
       const t = tool({ title: "weirdtool" });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX)).toBe("Weirdtool");
     });
 
     it("humanizes a generic tool name instead of rendering '…'", () => {
       const t = tool({ vendorToolName: "do_thing", title: "do_thing" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe("Do thing");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Do thing");
     });
 
     it("renders an MCP tool as 'server · Tool name'", () => {
@@ -145,9 +146,7 @@ describe("toolSummaries", () => {
         title: "query-docs",
         mcpServer: "context7",
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "context7 · Query docs"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("context7 · Query docs");
     });
 
     it.each([
@@ -159,7 +158,6 @@ describe("toolSummaries", () => {
           mcpServer: "obsidian-copilot",
           toolKind: "other",
         }),
-        NO_COPILOT_TOOL_CALLS,
       ],
       [
         "Codex",
@@ -172,25 +170,20 @@ describe("toolSummaries", () => {
             arguments: { query: "Orion" },
           },
         }),
-        codexCopilotToolCalls,
       ],
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/857 renders a %s connector tool as 'Service · Tool name' instead of Copilot's server and the raw tool name",
-      (_backend, t, reader) => {
-        expect(lookupToolSummary(t, reader).collapsedLine(t, CTX)).toBe("Notion · Search pages");
+      (_backend, t) => {
+        expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Notion · Search pages");
       }
     );
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names a wrapped row after the Copilot tool the backend's reader finds, and keeps the wrapper's name when it finds none", () => {
-      expect(
-        lookupToolSummary(WRAPPED_CALL, readerNaming("notion_create_page")).collapsedLine(
-          WRAPPED_CALL,
-          CTX
-        )
-      ).toBe("Notion · Create page");
-      expect(
-        lookupToolSummary(WRAPPED_CALL, NO_COPILOT_TOOL_CALLS).collapsedLine(WRAPPED_CALL, CTX)
-      ).toBe("Execute");
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names an OpenCode execute row after the one Copilot tool its code calls, and keeps 'Execute' when the code calls several", () => {
+      const single = opencodeExecute(OPENCODE_NOTION_CALL);
+      const several = opencodeExecute(OPENCODE_TWO_CALLS);
+
+      expect(lookupToolSummary(single).collapsedLine(single, CTX)).toBe("Notion · Create page");
+      expect(lookupToolSummary(several).collapsedLine(several, CTX)).toBe("Execute");
     });
 
     it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
@@ -200,21 +193,17 @@ describe("toolSummaries", () => {
         mcpServer: "srv",
         locations: [{ path: "/Users/me/vault/notes/x.md" }],
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "srv · Read notes/x.md"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
     });
 
     it("shows an ACP backend's friendly multi-word title verbatim", () => {
       const t = tool({ title: "Querying the database" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Querying the database"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Querying the database");
     });
 
     it("falls back to 'Tool call' when there is no tool identity", () => {
       const t = tool({ title: "" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe("Tool call");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Tool call");
     });
 
     it("summarizes live subagent progress and omits stale descriptions after completion", () => {
@@ -233,10 +222,10 @@ describe("toolSummaries", () => {
         progress: { ...running.progress, toolUses: 19, durationMs: 66_000 },
       });
 
-      expect(lookupToolSummary(running, NO_COPILOT_TOOL_CALLS).outcome(running)).toBe(
+      expect(lookupToolSummary(running).outcome(running)).toBe(
         "Running Count markdown files and subfolders · 3 tools · 9s"
       );
-      expect(lookupToolSummary(done, NO_COPILOT_TOOL_CALLS).outcome(done)).toBe("19 tools · 1m 6s");
+      expect(lookupToolSummary(done).outcome(done)).toBe("19 tools · 1m 6s");
     });
 
     it("summarizes AskUserQuestion with the question header", () => {
@@ -248,9 +237,7 @@ describe("toolSummaries", () => {
           questions: [{ header: "Pick a backend", question: "Which backend?", options: [] }],
         },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        'Asked: "Pick a backend"'
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe('Asked: "Pick a backend"');
     });
 
     it("falls back to the question text (present tense while in flight) when there is no header", () => {
@@ -260,16 +247,12 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { questions: [{ question: "Which backend?", options: [] }] },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        'Asking: "Which backend?"'
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe('Asking: "Which backend?"');
     });
 
     it("uses a generic AskUserQuestion line before input has streamed in", () => {
       const t = tool({ vendorToolName: "AskUserQuestion", title: "AskUserQuestion" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Asked a question"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Asked a question");
     });
 
     it("names the invoked skill from input.skill", () => {
@@ -279,9 +262,7 @@ describe("toolSummaries", () => {
         status: "completed",
         input: { skill: "copilot-read-pdf", args: "notes/foo.pdf — read chapter one" },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Ran skill copilot-read-pdf"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Ran skill copilot-read-pdf");
     });
 
     it("renders the skill in present tense while in flight", () => {
@@ -291,14 +272,12 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { skill: "copilot-read-pdf" },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Running skill copilot-read-pdf"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Running skill copilot-read-pdf");
     });
 
     it("falls back to a generic skill line before input has streamed in", () => {
       const t = tool({ vendorToolName: "Skill", title: "Skill", status: "completed" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe("Ran a skill");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Ran a skill");
     });
 
     it("surfaces the skill args in the expanded card", () => {
@@ -308,14 +287,12 @@ describe("toolSummaries", () => {
         status: "completed",
         input: { skill: "copilot-read-pdf", args: "notes/foo.pdf — read chapter one" },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).expandedDetails?.(t)).toBe(
-        "notes/foo.pdf — read chapter one"
-      );
+      expect(lookupToolSummary(t).expandedDetails?.(t)).toBe("notes/foo.pdf — read chapter one");
     });
 
     it("hides the duplicated vendor name while Read input is still streaming", () => {
       const t = tool({ vendorToolName: "Read", title: "Read", status: "in_progress" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe("Reading …");
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Reading …");
     });
 
     it("uses Editing while Edit is in flight and Edited when it completes", () => {
@@ -325,13 +302,9 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { file_path: "/Users/me/vault/draft.md" },
       });
-      expect(lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS).collapsedLine(inflight, CTX)).toBe(
-        "Editing draft.md"
-      );
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Editing draft.md");
       const done = tool({ ...inflight, status: "completed" });
-      expect(lookupToolSummary(done, NO_COPILOT_TOOL_CALLS).collapsedLine(done, CTX)).toBe(
-        "Edited draft.md"
-      );
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Edited draft.md");
     });
 
     it("says Didn't edit when a Claude Edit fails or is denied (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -341,9 +314,7 @@ describe("toolSummaries", () => {
         status: "failed",
         input: { file_path: "/Users/me/vault/plan.md" },
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit plan.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
     });
 
     it("says Didn't edit when a Claude Write is denied with no diff, since its whole-file content cannot tell a create from an overwrite (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -355,9 +326,7 @@ describe("toolSummaries", () => {
         input: { file_path: "/Users/me/vault/notes.md", content: "# Notes\n" },
         output: [{ type: "text", text: "User declined" }],
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit notes.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit notes.md");
     });
 
     it("says Didn't edit when an OpenCode write of full content fails with no diff (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -367,9 +336,7 @@ describe("toolSummaries", () => {
         status: "failed",
         input: { filePath: "/Users/me/vault/notes.md", content: "# Notes\n" },
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit notes.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit notes.md");
     });
 
     it("says Didn't create when a Codex diff adds a new file and fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -381,9 +348,7 @@ describe("toolSummaries", () => {
           { type: "diff", path: "/Users/me/vault/notes.md", oldText: null, newText: "# Notes" },
         ],
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't create notes.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't create notes.md");
     });
 
     it("says Didn't edit when a Write replacing existing text fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -394,9 +359,7 @@ describe("toolSummaries", () => {
         input: { file_path: "/Users/me/vault/plan.md" },
         output: [{ type: "diff", path: "/Users/me/vault/plan.md", oldText: "old", newText: "new" }],
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit plan.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
     });
 
     it("says Didn't edit for a failed Codex multi-file edit (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -409,9 +372,7 @@ describe("toolSummaries", () => {
           { type: "diff", path: "src/b.ts", oldText: "b", newText: "B" },
         ],
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit 2 files"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit 2 files");
     });
 
     it("says Didn't edit for a failed OpenCode edit (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -421,9 +382,7 @@ describe("toolSummaries", () => {
         status: "failed",
         input: { filePath: "/Users/me/vault/plan.md" },
       });
-      expect(lookupToolSummary(failed, NO_COPILOT_TOOL_CALLS).collapsedLine(failed, CTX)).toBe(
-        "Didn't edit plan.md"
-      );
+      expect(lookupToolSummary(failed).collapsedLine(failed, CTX)).toBe("Didn't edit plan.md");
     });
 
     it("uses Deleting, Deleted and Didn't delete across the delete lifecycle (https://github.com/Brevilabs/obsidian-copilot-private/issues/691)", () => {
@@ -433,7 +392,7 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { filePath: "/Users/me/vault/old.md" },
       });
-      const summary = lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS);
+      const summary = lookupToolSummary(inflight);
       expect(summary.collapsedLine(inflight, CTX)).toBe("Deleting old.md");
       expect(summary.collapsedLine({ ...inflight, status: "completed" }, CTX)).toBe(
         "Deleted old.md"
@@ -449,17 +408,13 @@ describe("toolSummaries", () => {
         status: "failed",
         input: { command: "npm test" },
       });
-      expect(lookupToolSummary(bash, NO_COPILOT_TOOL_CALLS).collapsedLine(bash, CTX)).toBe(
-        "Ran `npm test`"
-      );
+      expect(lookupToolSummary(bash).collapsedLine(bash, CTX)).toBe("Ran `npm test`");
       const read = tool({
         vendorToolName: "Read",
         status: "failed",
         input: { file_path: "/Users/me/vault/plan.md" },
       });
-      expect(lookupToolSummary(read, NO_COPILOT_TOOL_CALLS).collapsedLine(read, CTX)).toBe(
-        "Read plan.md"
-      );
+      expect(lookupToolSummary(read).collapsedLine(read, CTX)).toBe("Read plan.md");
     });
 
     it("uses a single Codex diff path as the edit target", () => {
@@ -475,7 +430,7 @@ describe("toolSummaries", () => {
           },
         ],
       });
-      const summary = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const summary = lookupToolSummary(t);
 
       expect(summary.collapsedLine(t, CTX)).toBe("Edited src/agentMode/ui/toolSummaries.ts");
       expect(summary.targetPath?.(t, CTX)).toBe("src/agentMode/ui/toolSummaries.ts");
@@ -498,7 +453,7 @@ describe("toolSummaries", () => {
           { type: "diff", path: "src/b.ts", oldText: null, newText: "B" },
         ],
       });
-      const summary = lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS);
+      const summary = lookupToolSummary(inflight);
 
       expect(summary.collapsedLine(inflight, CTX)).toBe("Editing 2 files");
       const done = { ...inflight, status: "completed" as const };
@@ -513,9 +468,7 @@ describe("toolSummaries", () => {
         input: { filePath: "/Users/me/vault/draft.md" },
       });
 
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Edited draft.md"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Edited draft.md");
     });
 
     it("uses Fetching while WebFetch is in flight and Fetched when it completes", () => {
@@ -525,13 +478,11 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { url: "https://example.com" },
       });
-      expect(lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS).collapsedLine(inflight, CTX)).toBe(
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe(
         "Fetching https://example.com"
       );
       const done = tool({ ...inflight, status: "completed" });
-      expect(lookupToolSummary(done, NO_COPILOT_TOOL_CALLS).collapsedLine(done, CTX)).toBe(
-        "Fetched https://example.com"
-      );
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Fetched https://example.com");
     });
 
     it("uses Running while Bash is in flight and Ran when it completes", () => {
@@ -541,13 +492,9 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { command: "git status" },
       });
-      expect(lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS).collapsedLine(inflight, CTX)).toBe(
-        "Running `git status`"
-      );
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Running `git status`");
       const done = tool({ ...inflight, status: "completed" });
-      expect(lookupToolSummary(done, NO_COPILOT_TOOL_CALLS).collapsedLine(done, CTX)).toBe(
-        "Ran `git status`"
-      );
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Ran `git status`");
     });
 
     it("shows a Bash description verbatim because it already starts with its own verb", () => {
@@ -556,13 +503,9 @@ describe("toolSummaries", () => {
         status: "in_progress",
         input: { command: "git status", description: "Check working tree" },
       });
-      expect(lookupToolSummary(inflight, NO_COPILOT_TOOL_CALLS).collapsedLine(inflight, CTX)).toBe(
-        "Check working tree"
-      );
+      expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Check working tree");
       const done = tool({ ...inflight, status: "completed" });
-      expect(lookupToolSummary(done, NO_COPILOT_TOOL_CALLS).collapsedLine(done, CTX)).toBe(
-        "Check working tree"
-      );
+      expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Check working tree");
     });
 
     it("shows an execute-kind description verbatim for any agent that sends one", () => {
@@ -571,16 +514,14 @@ describe("toolSummaries", () => {
         status: "completed",
         input: { command: "date", description: "Show current date and time" },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).collapsedLine(t, CTX)).toBe(
-        "Show current date and time"
-      );
+      expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Show current date and time");
     });
 
     it("expands a Bash call to its full untruncated command", () => {
       const longCmd =
         "cd ~/Developer/obsidian-copilot && rg --multiline 'foo bar baz' src/**/*.ts | head -50";
       const t = tool({ vendorToolName: "Bash", input: { command: longCmd } });
-      const s = lookupToolSummary(t, NO_COPILOT_TOOL_CALLS);
+      const s = lookupToolSummary(t);
       expect(s.collapsedLine(t, CTX).length).toBeLessThan(longCmd.length);
       expect(s.expandedDetails?.(t)).toBe(longCmd);
     });
@@ -590,60 +531,60 @@ describe("toolSummaries", () => {
         vendorToolName: "Bash",
         input: { command: "git status", description: "Check working tree" },
       });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).expandedDetails?.(t)).toBe(
-        "# Check working tree\ngit status"
-      );
+      expect(lookupToolSummary(t).expandedDetails?.(t)).toBe("# Check working tree\ngit status");
     });
 
     it("expands a Bash call without a command to nothing", () => {
       const t = tool({ vendorToolName: "Bash", input: { description: "Run something" } });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).expandedDetails?.(t)).toBeNull();
+      expect(lookupToolSummary(t).expandedDetails?.(t)).toBeNull();
     });
 
     it("expands a Bash call without input to nothing", () => {
       const t = tool({ vendorToolName: "Bash" });
-      expect(lookupToolSummary(t, NO_COPILOT_TOOL_CALLS).expandedDetails?.(t)).toBeNull();
+      expect(lookupToolSummary(t).expandedDetails?.(t)).toBeNull();
     });
 
     it("offers no expanded details for Read and Edit calls", () => {
       const read = tool({ vendorToolName: "Read", title: "read" });
-      expect(lookupToolSummary(read, NO_COPILOT_TOOL_CALLS).expandedDetails).toBeUndefined();
+      expect(lookupToolSummary(read).expandedDetails).toBeUndefined();
       const edit = tool({ vendorToolName: "Edit", title: "edit" });
-      expect(lookupToolSummary(edit, NO_COPILOT_TOOL_CALLS).expandedDetails).toBeUndefined();
+      expect(lookupToolSummary(edit).expandedDetails).toBeUndefined();
     });
   });
 
   describe("copilotToolLabel()", () => {
     it("names the service and the readable tool of a Copilot connector call", () => {
       const t = tool({ mcpServer: "obsidian-copilot", vendorToolName: "linear_create_issue" });
-      expect(copilotToolLabel(t, NO_COPILOT_TOOL_CALLS)).toBe("Linear · Create issue");
+      expect(copilotToolLabel(t)).toBe("Linear · Create issue");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names the connector tool the backend's reader finds in a wrapped call", () => {
-      expect(copilotToolLabel(WRAPPED_CALL, readerNaming("notion_create_page"))).toBe(
-        "Notion · Create page"
-      );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names the connector tool that OpenCode execute code calls once", () => {
+      expect(copilotToolLabel(opencodeExecute(OPENCODE_NOTION_CALL))).toBe("Notion · Create page");
     });
 
     it.each([
-      ["called directly", tool({ mcpServer: "obsidian-copilot", vendorToolName: "obsidian_cli" })],
-      ["found in a wrapped call", WRAPPED_CALL],
+      ["called directly", tool({ mcpServer: "obsidian-copilot", vendorToolName: "send_feedback" })],
+      [
+        "called once from OpenCode execute code",
+        opencodeExecute('return await tools["obsidian-copilot"].send_feedback({ text: "hi" });'),
+      ],
     ])(
       "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names one of Copilot's own tools %s as Copilot's server and the readable tool",
       (_how, t) => {
-        expect(copilotToolLabel(t, readerNaming("obsidian_cli"))).toBe(
-          "obsidian-copilot · Obsidian cli"
-        );
+        expect(copilotToolLabel(t)).toBe("obsidian-copilot · Send feedback");
       }
     );
 
     it.each([
       ["another server's tool", tool({ mcpServer: "notion", vendorToolName: "notion_search" })],
       ["a native tool", tool({ vendorToolName: "Read" })],
-      ["a wrapped call the backend's reader does not name", WRAPPED_CALL],
-    ])("returns null for %s", (_name, t) => {
-      expect(copilotToolLabel(t, NO_COPILOT_TOOL_CALLS)).toBeNull();
-    });
+      ["OpenCode execute code calling two Copilot tools", opencodeExecute(OPENCODE_TWO_CALLS)],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 returns null for %s",
+      (_name, t) => {
+        expect(copilotToolLabel(t)).toBeNull();
+      }
+    );
   });
 
   describe("displayTargetFromPath()", () => {

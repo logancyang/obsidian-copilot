@@ -1,4 +1,3 @@
-import { NO_COPILOT_TOOL_CALLS } from "@/agentMode/ui/copilotToolCall";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import type { ActivityGroupNode, ActivityMember } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep } from "@/agentMode/ui/activityLiveStep";
@@ -208,7 +207,7 @@ const LiveEdgeDemo: React.FC = () => {
         open={false}
         onToggle={() => undefined}
         renderMember={renderMember}
-        liveStep={activityLiveStep(members, isStreaming, NO_COPILOT_TOOL_CALLS)}
+        liveStep={activityLiveStep(members, isStreaming)}
       />
       <Button
         variant="secondary"

@@ -34,6 +34,7 @@ const miyoSearch = (overrides: ToolCallOverrides = {}, query = MIYO_QUERY): Agen
   mcpServer: "obsidian-copilot",
   vendorToolName: "miyo_search",
   input: { query },
+  copilotTools: { runs: "miyo_search", calls: [{ name: "miyo_search", args: { query } }] },
   ...overrides,
 });
 

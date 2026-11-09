@@ -1,4 +1,3 @@
-import { NO_COPILOT_TOOL_CALLS } from "@/agentMode/ui/copilotToolCall";
 import {
   foldActivityGroups,
   summarizeActivity,
@@ -83,10 +82,7 @@ describe("activityGroups", () => {
         render: () => null,
       };
       const fold = (nodes: RenderNode[]) =>
-        foldActivityGroups(nodes, { tasks: null, copilotToolCalls: NO_COPILOT_TOOL_CALLS }, [
-          NOTE_CARD,
-          SEARCH_CARD,
-        ]);
+        foldActivityGroups(nodes, { tasks: null }, [NOTE_CARD, SEARCH_CARD]);
       const onNote = (id: string, note?: string) =>
         action(id, { vendorToolName: "note_tool", input: { note } });
       const cardAt = (nodes: GroupedTrailNode[], index: number) => {
@@ -266,10 +262,7 @@ describe("activityGroups", () => {
           action("launch", { vendorToolName: "Bash" }),
           action("c", { vendorToolName: "Bash" }),
         ],
-        {
-          tasks: { tasks: [makeCommandTask({ toolCallId: "launch" })], openTask: jest.fn() },
-          copilotToolCalls: NO_COPILOT_TOOL_CALLS,
-        }
+        { tasks: { tasks: [makeCommandTask({ toolCallId: "launch" })], openTask: jest.fn() } }
       );
       expect(types(grouped)).toEqual(["activityGroup", "toolCard", "action"]);
     });

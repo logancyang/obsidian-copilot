@@ -1,4 +1,5 @@
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { MiyoNote } from "@/miyo/agentMode/miyoSearchRun";
 import { MIYO_SEARCH_TOOL_NAME } from "@/miyo/miyoSearchTool";
@@ -28,6 +29,7 @@ export function miyoSearchCall({
     mcpServer: COPILOT_MCP_SERVER_NAME,
     vendorToolName: MIYO_SEARCH_TOOL_NAME,
     input: { query },
+    copilotTools: directCopilotToolUse(COPILOT_MCP_SERVER_NAME, MIYO_SEARCH_TOOL_NAME, { query }),
     output: [{ type: "text", text }],
   };
 }

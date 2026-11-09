@@ -1,4 +1,3 @@
-import { NO_COPILOT_TOOL_CALLS } from "@/agentMode/ui/copilotToolCall";
 import type { ActivityMember } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep, isReasoningActive } from "@/agentMode/ui/activityLiveStep";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
@@ -33,9 +32,7 @@ describe("activityLiveStep", () => {
 
   describe("activityLiveStep()", () => {
     it("names the reasoning in flight when the group's trailing member is a thought", () => {
-      expect(activityLiveStep([action("a"), REASONING], true, NO_COPILOT_TOOL_CALLS)).toBe(
-        "Reasoning"
-      );
+      expect(activityLiveStep([action("a"), REASONING], true)).toBe("Reasoning");
     });
 
     it("labels the unfinished tool call with the tool's own collapsed line", () => {
@@ -45,7 +42,7 @@ describe("activityLiveStep", () => {
         action("b", { vendorToolName: "Bash", status: "in_progress", input: { command: "npm t" } }),
       ];
 
-      expect(activityLiveStep(members, true, NO_COPILOT_TOOL_CALLS)).toBe("Running `npm t`");
+      expect(activityLiveStep(members, true)).toBe("Running `npm t`");
     });
 
     it("prefers the latest unsettled call when parallel calls resolve out of order", () => {
@@ -55,14 +52,14 @@ describe("activityLiveStep", () => {
         action("c", { vendorToolName: "Bash", input: { command: "npm run c" } }),
       ];
 
-      expect(activityLiveStep(members, true, NO_COPILOT_TOOL_CALLS)).toBe("Running `npm run b`");
+      expect(activityLiveStep(members, true)).toBe("Running `npm run b`");
     });
 
     it("goes quiet once the group has nothing left in flight", () => {
       const settled = [action("a", { vendorToolName: "Read" }), action("b", { status: "failed" })];
 
-      expect(activityLiveStep(settled, true, NO_COPILOT_TOOL_CALLS)).toBeNull();
-      expect(activityLiveStep([], true, NO_COPILOT_TOOL_CALLS)).toBeNull();
+      expect(activityLiveStep(settled, true)).toBeNull();
+      expect(activityLiveStep([], true)).toBeNull();
     });
 
     it("shows nothing at all once the trail has stopped streaming", () => {
@@ -71,7 +68,7 @@ describe("activityLiveStep", () => {
         REASONING,
       ];
 
-      expect(activityLiveStep(members, false, NO_COPILOT_TOOL_CALLS)).toBeNull();
+      expect(activityLiveStep(members, false)).toBeNull();
     });
 
     it("shortens the label's vault path through the supplied context", () => {
@@ -83,7 +80,7 @@ describe("activityLiveStep", () => {
         }),
       ];
 
-      expect(activityLiveStep(members, true, NO_COPILOT_TOOL_CALLS, { vaultBase: "/vault" })).toBe(
+      expect(activityLiveStep(members, true, { vaultBase: "/vault" })).toBe(
         "Reading Notes/Inbox.md"
       );
     });

@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { copilotToolName, type CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
+import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
@@ -21,8 +21,8 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-export function copilotToolLabel(part: ToolCallPart, reader: CopilotToolCallReader): string | null {
-  const name = copilotToolName(part, reader);
+export function copilotToolLabel(part: ToolCallPart): string | null {
+  const name = copilotToolName(part);
   if (!name) return null;
   const tool = describeConnectorTool(name);
   return tool
@@ -30,11 +30,11 @@ export function copilotToolLabel(part: ToolCallPart, reader: CopilotToolCallRead
     : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
 }
 
-export function lookupToolSummary(part: ToolCallPart, reader: CopilotToolCallReader): ToolSummary {
+export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
   // Agents name a Copilot tool after Copilot's server and, for a connector, the service's id, which users don't know.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-  const copilotTool = copilotToolLabel(part, reader);
+  const copilotTool = copilotToolLabel(part);
   if (copilotTool) return { ...base, collapsedLine: () => copilotTool };
   if (!part.mcpServer) return base;
   const server = part.mcpServer;

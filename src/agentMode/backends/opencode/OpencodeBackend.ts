@@ -1,6 +1,7 @@
 import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
+import { readOpencodeCopilotTools } from "./opencodeCopilotToolCalls";
 import { ChatModelProviders } from "@/constants";
 import { logInfo } from "@/logger";
 import type { App } from "obsidian";
@@ -61,6 +62,7 @@ export interface OpencodeModelDeps {
 export class OpencodeBackend implements AcpBackend {
   readonly id = "opencode" as const;
   readonly displayName = "opencode";
+  readonly readCopilotTools = readOpencodeCopilotTools;
 
   readonly #deps: OpencodeModelDeps;
 

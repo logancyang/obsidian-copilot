@@ -1,10 +1,6 @@
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import {
-  codeStringField,
-  copilotToolCall,
-  type CopilotToolCallReader,
-} from "@/agentMode/ui/copilotToolCall";
+import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
 import {
   EXCALIDRAW_READ_TOOL,
   EXCALIDRAW_RENDER_TOOL,
@@ -27,13 +23,10 @@ export interface ExcalidrawDrawingSummary {
   failed: number;
 }
 
-export function excalidrawToolRun(
-  part: ToolCallPart,
-  reader: CopilotToolCallReader
-): ExcalidrawToolRun | null {
-  const read = copilotToolCall(part, EXCALIDRAW_READ_TOOL.name, reader);
-  const write = read ? null : copilotToolCall(part, EXCALIDRAW_WRITE_TOOL.name, reader);
-  const call = read ?? write ?? copilotToolCall(part, EXCALIDRAW_RENDER_TOOL.name, reader);
+export function excalidrawToolRun(part: ToolCallPart): ExcalidrawToolRun | null {
+  const read = copilotToolCall(part, EXCALIDRAW_READ_TOOL.name);
+  const write = read ? null : copilotToolCall(part, EXCALIDRAW_WRITE_TOOL.name);
+  const call = read ?? write ?? copilotToolCall(part, EXCALIDRAW_RENDER_TOOL.name);
   if (!call) return null;
   // A call made after Excalidraw was turned off completes without drawing anything, so it keeps the ordinary row that
   // shows the tool's explanation. https://github.com/Brevilabs/obsidian-copilot-private/issues/787
@@ -56,11 +49,8 @@ export function excalidrawToolRun(
 
 const CARD_ACTION_STRENGTH: readonly ExcalidrawToolAction[] = ["create", "edit", "read"];
 
-export function summarizeDrawing(
-  parts: readonly ToolCallPart[],
-  reader: CopilotToolCallReader
-): ExcalidrawDrawingSummary {
-  const runs = parts.flatMap((part) => excalidrawToolRun(part, reader) ?? []);
+export function summarizeDrawing(parts: readonly ToolCallPart[]): ExcalidrawDrawingSummary {
+  const runs = parts.flatMap((part) => excalidrawToolRun(part) ?? []);
   const status = runs.some((run) => run.status === "pending" || run.status === "in_progress")
     ? "in_progress"
     : runs.some((run) => run.status === "completed")
