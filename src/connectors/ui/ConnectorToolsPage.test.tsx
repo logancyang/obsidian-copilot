@@ -157,6 +157,28 @@ describe("ConnectorToolsPage", () => {
       expect(toolNames(/^Write$/)).toEqual(["Create pages", "Move pages"]);
     });
 
+    it(`keeps an active search clearable when the list shrinks to 8 tools or fewer: ${ISSUE}`, () => {
+      const handlers = { onTryAgain: jest.fn(async () => {}), onBack: jest.fn() };
+      const { rerender } = render(
+        <ConnectorToolsPage service={{ name: "Notion" }} tools={NOTION_TOOLS} {...handlers} />
+      );
+      fireEvent.change(screen.getByPlaceholderText("Search tools"), {
+        target: { value: "calendar" },
+      });
+
+      rerender(
+        <ConnectorToolsPage
+          service={{ name: "Notion" }}
+          tools={NOTION_TOOLS.slice(0, 8)}
+          {...handlers}
+        />
+      );
+      fireEvent.change(screen.getByPlaceholderText("Search tools"), { target: { value: "" } });
+
+      expect(screen.queryByPlaceholderText("Search tools")).toBeNull();
+      expect(screen.queryAllByRole("listitem")).toHaveLength(8);
+    });
+
     it("says when no tool matches the search", () => {
       renderPage({ tools: NOTION_TOOLS });
 

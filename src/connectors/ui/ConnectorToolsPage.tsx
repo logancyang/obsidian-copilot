@@ -54,7 +54,9 @@ export function ConnectorToolsPage({
       description={`What agents can do with ${service.name}.`}
       onBack={onBack}
       toolbar={
-        readable.length > SEARCH_THRESHOLD && (
+        // A list can shrink under an active search when its service restarts, and a hidden search would leave its filter stuck.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
+        (readable.length > SEARCH_THRESHOLD || query !== "") && (
           <SearchBar value={query} onChange={setQuery} placeholder="Search tools" />
         )
       }

@@ -126,18 +126,14 @@ export class ConnectorTools {
   async refresh(): Promise<void> {
     if (!this.deps.isEnabled()) return;
     const custom = this.deps.custom?.refresh();
-    await Promise.all([this.loadConnected(), custom]);
+    await Promise.all([this.loadAll(() => true), custom]);
   }
 
-  // Settings counts each connected service's tools, which nothing lists before a chat starts.
+  // Settings counts each connected service's tools, which nothing lists before a chat starts, and leaves a service it can't reach for Check again, since checking its login alone would show it connected.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/878
   async loadConnected(): Promise<void> {
     if (!this.deps.isEnabled()) return;
-    const { connections } = this.deps.manager.getSnapshot();
-    const gone = [...this.loaded].filter(([id]) => !connections.some((c) => c.id === id));
-    if (gone.length > 0) this.updateLoaded(() => gone.forEach(([id]) => this.loaded.delete(id)));
-    gone.forEach(([, { session }]) => void session.close());
-    await Promise.all(connections.map((connection) => this.load(connection)));
+    await this.loadAll(({ id, status }) => status === "connected" && !this.loaded.has(id));
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -225,6 +221,14 @@ export class ConnectorTools {
       ...(this.deps.custom ? [this.deps.custom.subscribe(onChange)] : []),
     ];
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }
+
+  private async loadAll(shouldLoad: (connection: ConnectionState) => boolean): Promise<void> {
+    const { connections } = this.deps.manager.getSnapshot();
+    const gone = [...this.loaded].filter(([id]) => !connections.some((c) => c.id === id));
+    if (gone.length > 0) this.updateLoaded(() => gone.forEach(([id]) => this.loaded.delete(id)));
+    gone.forEach(([, { session }]) => void session.close());
+    await Promise.all(connections.filter(shouldLoad).map((connection) => this.load(connection)));
   }
 
   private updateLoaded(update: () => void): void {

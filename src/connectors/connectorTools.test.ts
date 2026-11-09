@@ -360,6 +360,18 @@ describe("connectorTools", () => {
         expect(fake.tools.getSnapshot().get("c-notion")).toHaveLength(2);
       });
 
+      it(`${TOOLS_PAGE_ISSUE} keeps a listed service that has since become unreachable as couldn't reach, without contacting it, until Check again`, async () => {
+        const fake = setUp();
+        await fake.tools.loadConnected();
+        fake.manager.reportFailure("c-notion", "unreachable");
+        const requests = fake.notion.requests.length;
+
+        await fake.tools.loadConnected();
+
+        expect(fake.statusOf("c-notion")).toBe("unreachable");
+        expect(fake.notion.requests).toHaveLength(requests);
+      });
+
       it("drops a disconnected service's tools", async () => {
         const fake = setUp();
         await fake.tools.loadConnected();
