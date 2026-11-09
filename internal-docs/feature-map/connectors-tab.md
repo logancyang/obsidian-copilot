@@ -36,6 +36,7 @@ The Connectors tab in Copilot settings: the services the user connected, each wi
 
 - Leaving the Connectors tab cancels a login started there.
 - Only one login runs at a time, across Settings and the chat's [connector cards](connector-cards.md).
+- Keychain entries use the connector name, with a numeric suffix for additional connections.
 - The list of connected services follows a synced vault, but each device logs in on its own: on another device a synced service reads `Needs login` until it is reconnected there.
 - A service that could not be reached keeps `Couldn't reach` until `Try again` or the next chat checks it, even while the tab stays open.
 - A chat that is already open gets a newly connected or disconnected service only after `Reload` on its `<agent> settings changed` [card](status-and-error-cards.md).
