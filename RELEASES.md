@@ -24,6 +24,7 @@ This release also lets you drop any file into Agent Chat. Replies are now easier
 - Long Agent Chats scroll smoothly. ([#4092](https://github.com/logancyang/obsidian-copilot/pull/4092), @zeroliu)
 - Long commands wrap in the permission card. You can also select and copy its text. ([#4144](https://github.com/logancyang/obsidian-copilot/pull/4144), @zeroliu)
 - OpenCode uses the context window your custom provider's endpoint reports for each model. ([#4090](https://github.com/logancyang/obsidian-copilot/pull/4090), @zeroliu)
+- OpenCode steps that run your connectors and other MCP tools show each tool's name instead of only **Execute**. ([#4231](https://github.com/logancyang/obsidian-copilot/pull/4231), @zeroliu)
 
 ## 🛠️ Bug Fixes
 
