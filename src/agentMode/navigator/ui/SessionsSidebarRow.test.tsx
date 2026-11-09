@@ -97,13 +97,21 @@ describe("SessionsSidebarRow", () => {
       expect(screen.queryByLabelText("Running")).toBeNull();
     });
 
-    it("bolds the title of a chat with an unseen result and keeps the Running dot for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+    it("swaps the green Running dot for a bell in the spinner's accent color and bolds the title of a chat with an unseen result for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderRow({ isSessionOpen: true, status: "unread" });
 
       const row = screen.getByRole("button", { name: /Plan the fall launch/ });
-      expect(within(row).getByLabelText("Unread result")).toBeTruthy();
+      const bell = within(row).getByLabelText("Unread result").querySelector("svg")!;
+      expect(bell.getAttribute("class")).toContain("lucide-bell");
+      expect(bell.getAttribute("class")).toContain("tw-text-accent");
+      expect(within(row).queryByLabelText("Running")).toBeNull();
       expect(within(row).getByText("Plan the fall launch").className).toContain("tw-font-semibold");
-      expect(within(row).getByLabelText("Running")).toBeTruthy();
+    });
+
+    it("shows the Unread result bell on a chat whose agent has stopped for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: false, status: "unread" });
+
+      expect(screen.getByLabelText("Unread result")).toBeTruthy();
     });
 
     it("shows a seen chat's title at normal weight for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
@@ -111,6 +119,54 @@ describe("SessionsSidebarRow", () => {
 
       expect(screen.getByText("Plan the fall launch").className).not.toContain("tw-font-semibold");
     });
+
+    it("shows the logo of the chat's agent before its title for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({
+        item: sidebarChat("chats/plan.md", "Plan the fall launch", 5, { backendId: "codex" }),
+      });
+
+      const row = screen.getByRole("button", { name: "Plan the fall launch" });
+      const logo = row.querySelector("svg")!;
+      expect(logo.getAttribute("class")).not.toContain("lucide-message-circle");
+      expect(
+        logo.compareDocumentPosition(within(row).getByText("Plan the fall launch")) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+
+    it("shows a generic chat icon before the title of a chat with no agent for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow();
+
+      const row = screen.getByRole("button", { name: "Plan the fall launch" });
+      expect(row.querySelector("svg")!.getAttribute("class")).toContain("lucide-message-circle");
+    });
+
+    it("dims a seen chat that is not the current one to the group-label color for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ isSessionOpen: true });
+
+      const title = screen.getByText("Plan the fall launch");
+      expect(title.parentElement!.className).toContain("tw-text-muted");
+      expect(title.className).toContain("tw-text-inherit");
+    });
+
+    it("shows the current chat in the normal text color for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ active: true });
+
+      const title = screen.getByText("Plan the fall launch");
+      expect(title.parentElement!.className).toContain("tw-text-normal");
+      expect(title.className).not.toContain("tw-font-semibold");
+    });
+
+    it.each(["waiting", "unread"] as const)(
+      "shows a %s chat with a bright bold title for https://github.com/Brevilabs/obsidian-copilot-private/issues/801",
+      (status) => {
+        renderRow({ status });
+
+        const title = screen.getByText("Plan the fall launch");
+        expect(title.parentElement!.className).toContain("tw-text-normal");
+        expect(title.className).toContain("tw-font-semibold");
+      }
+    );
 
     it("places the status at the row's right end, after the title, for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderRow({ isSessionOpen: true, status: "waiting" });

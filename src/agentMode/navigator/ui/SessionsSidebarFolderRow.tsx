@@ -79,9 +79,6 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
         >
           {project.name}
         </span>
-        {hiddenStatus === "unread" && (
-          <span role="img" aria-label="Unread result" className="tw-sr-only" />
-        )}
         {/* The bubbled status sits at the right end, in line with chat statuses; hovering lays the actions and the
             chevron over it, hidden otherwise so the list reads clean, and the name fades under them instead of reflowing.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/802 */}
@@ -91,7 +88,7 @@ export const SessionsSidebarFolderRow: React.FC<SessionsSidebarFolderRowProps> =
             hoverHidden
           )}
         >
-          {hiddenStatus !== "unread" && <SessionStatusIcon status={hiddenStatus} />}
+          <SessionStatusIcon status={hiddenStatus} />
         </span>
         <ChevronRight
           className={cn(
