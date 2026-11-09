@@ -8,7 +8,7 @@ import type { ChatStates } from "@/agentMode/session/chatExtension";
 import type CopilotPlugin from "@/main";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { connectorToolLabel } from "@/agentMode/ui/toolSummaries";
+import { copilotToolLabel } from "@/agentMode/ui/toolSummaries";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
@@ -203,18 +203,20 @@ const AgentChatMessages = memo(
           : undefined,
       [messages, pendingPermission]
     );
-    const pendingConnectorTool = pendingToolCall ? connectorToolLabel(pendingToolCall) : null;
+    const pendingCopilotTool = pendingToolCall ? copilotToolLabel(pendingToolCall) : null;
     // A connector tool's request names it by the service's id, which users don't know.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+    // OpenCode's request names only its `execute` wrapper, which hides the Copilot tool about to run.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/872
     const pendingRequest = useMemo(
       () =>
-        pendingPermission && pendingConnectorTool
+        pendingPermission && pendingCopilotTool
           ? {
               ...pendingPermission,
-              toolCall: { ...pendingPermission.toolCall, title: pendingConnectorTool },
+              toolCall: { ...pendingPermission.toolCall, title: pendingCopilotTool },
             }
           : pendingPermission,
-      [pendingPermission, pendingConnectorTool]
+      [pendingPermission, pendingCopilotTool]
     );
     const tasks = useAgentTasks();
     const pendingRequester =
@@ -295,7 +297,7 @@ const AgentChatMessages = memo(
               ) : pendingRequest ? (
                 <ToolPermissionCard
                   request={pendingRequest}
-                  toolName={pendingConnectorTool ? undefined : pendingToolCall?.title}
+                  toolName={pendingCopilotTool ? undefined : pendingToolCall?.title}
                   requester={pendingRequester}
                   onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
                 />

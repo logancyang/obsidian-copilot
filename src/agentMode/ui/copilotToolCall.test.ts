@@ -5,96 +5,68 @@ function tool(overrides: Partial<ToolCallPart>): ToolCallPart {
   return { kind: "tool_call", id: "x", title: "tool", status: "completed", ...overrides };
 }
 
+const WRITE_THEN_RENDER = tool({
+  copilotTools: {
+    runs: null,
+    calls: [
+      { name: "excalidraw_write", code: 'tools["obsidian-copilot"].excalidraw_write({});' },
+      { name: "excalidraw_render", code: 'tools["obsidian-copilot"].excalidraw_render({});' },
+    ],
+  },
+});
+
 describe("copilotToolCall", () => {
   describe("copilotToolCall()", () => {
-    it("returns the arguments of a Claude call to the named tool on Copilot's server", () => {
+    it("returns the call to the named tool with its arguments", () => {
       const part = tool({
-        mcpServer: "obsidian-copilot",
-        vendorToolName: "excalidraw_write",
-        input: { path: "a.excalidraw.md" },
+        copilotTools: {
+          runs: "excalidraw_write",
+          calls: [{ name: "excalidraw_write", args: { path: "a.excalidraw.md" } }],
+        },
       });
       expect(copilotToolCall(part, "excalidraw_write")).toEqual({
+        name: "excalidraw_write",
         args: { path: "a.excalidraw.md" },
       });
     });
 
-    it("returns the nested arguments of a Codex call to the named tool on Copilot's server", () => {
-      const part = tool({
-        input: {
-          server: "obsidian-copilot",
-          tool: "excalidraw_write",
-          arguments: { path: "a.excalidraw.md" },
-        },
-      });
-      expect(copilotToolCall(part, "excalidraw_write")).toEqual({
-        args: { path: "a.excalidraw.md" },
-      });
-    });
-
-    it("returns empty arguments for a Codex call that sent none", () => {
-      const part = tool({ input: { server: "obsidian-copilot", tool: "excalidraw_read" } });
-      expect(copilotToolCall(part, "excalidraw_read")).toEqual({ args: {} });
-    });
-
-    it("returns the OpenCode code from the named tool's call onward", () => {
-      const part = tool({
-        input: {
-          code: 'const a = 1;\nreturn tools["obsidian-copilot"].excalidraw_read({ path: "a.md" });',
-        },
-      });
-      expect(copilotToolCall(part, "excalidraw_read")).toEqual({
-        code: 'tools["obsidian-copilot"].excalidraw_read({ path: "a.md" });',
+    it("finds the named tool among the calls of code that calls several tools", () => {
+      expect(copilotToolCall(WRITE_THEN_RENDER, "excalidraw_render")).toEqual({
+        name: "excalidraw_render",
+        code: 'tools["obsidian-copilot"].excalidraw_render({});',
       });
     });
 
     it.each([
       [
-        "the same tool name on another server",
-        tool({ mcpServer: "other", vendorToolName: "excalidraw_write", input: {} }),
+        "a call to another Copilot tool",
+        tool({
+          copilotTools: {
+            runs: "excalidraw_render",
+            calls: [{ name: "excalidraw_render", args: {} }],
+          },
+        }),
       ],
       [
-        "another Copilot tool",
-        tool({ mcpServer: "obsidian-copilot", vendorToolName: "excalidraw_render", input: {} }),
+        "a call to no Copilot tool",
+        tool({ mcpServer: "other", vendorToolName: "excalidraw_write" }),
       ],
-      [
-        "a Codex call to another tool",
-        tool({ input: { server: "obsidian-copilot", tool: "excalidraw_render", arguments: {} } }),
-      ],
-      [
-        "OpenCode code that only mentions the tool",
-        tool({ input: { code: "// excalidraw_write" } }),
-      ],
-      ["a call without input", tool({ input: undefined })],
     ])("returns null for %s", (_name, part) => {
       expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
     });
   });
 
   describe("copilotToolName()", () => {
-    it("returns the tool name of a Claude call on Copilot's server", () => {
-      const part = tool({ mcpServer: "obsidian-copilot", vendorToolName: "notion_search" });
-      expect(copilotToolName(part)).toBe("notion_search");
-    });
-
-    it("returns the tool name of a Codex call on Copilot's server", () => {
+    it("returns the Copilot tool the call runs", () => {
       const part = tool({
-        title: "mcp.obsidian-copilot.notion_search",
-        input: { server: "obsidian-copilot", tool: "notion_search", arguments: {} },
+        copilotTools: { runs: "notion_search", calls: [{ name: "notion_search", args: {} }] },
       });
       expect(copilotToolName(part)).toBe("notion_search");
     });
 
     it.each([
-      ["a call on another server", tool({ mcpServer: "other", vendorToolName: "notion_search" })],
-      [
-        "a Codex call on another server",
-        tool({ input: { server: "other", tool: "notion_search" } }),
-      ],
-      [
-        "OpenCode code, which may call several tools",
-        tool({ input: { code: 'return tools["obsidian-copilot"].notion_search({});' } }),
-      ],
-      ["a native tool", tool({ vendorToolName: "Read" })],
+      ["code whose approval may cover more than one tool", WRITE_THEN_RENDER],
+      ["a call to no Copilot tool", tool({ vendorToolName: "Read" })],
     ])("returns null for %s", (_name, part) => {
       expect(copilotToolName(part)).toBeNull();
     });

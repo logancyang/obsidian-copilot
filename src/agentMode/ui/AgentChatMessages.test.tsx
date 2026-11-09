@@ -1,4 +1,6 @@
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import { makeTask } from "@/agentMode/ui/testing/taskFixtures";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
@@ -570,6 +572,7 @@ describe("AgentChatMessages", () => {
             status: "pending",
             mcpServer: "obsidian-copilot",
             vendorToolName: "notion_create_page",
+            copilotTools: directCopilotToolUse("obsidian-copilot", "notion_create_page", {}),
           },
         ] as AgentChatMessage["parts"],
       });
@@ -582,6 +585,53 @@ describe("AgentChatMessages", () => {
       expect(rail.textContent).toBe("Permission create-1");
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
     });
+
+    it.each([
+      {
+        calls: "one Copilot tool",
+        code: 'return await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });',
+        title: "Notion · Create page",
+        railText: "Permission execute-1",
+      },
+      {
+        calls: "several Copilot tools",
+        code: 'return Promise.all([tools["obsidian-copilot"].notion_search({}), tools["obsidian-copilot"].notion_create_page({})]);',
+        title: "execute",
+        railText: "Permission execute-1 via execute",
+      },
+      {
+        calls: "no tool",
+        code: 'return search({ query: "notion" });',
+        title: "execute",
+        railText: "Permission execute-1 via execute",
+      },
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title'",
+      ({ code, title, railText }) => {
+        const toolTurn = assistantMessage("answer-1", 62_000, {
+          parts: [
+            {
+              kind: "tool_call",
+              id: "execute-1",
+              title: "execute",
+              status: "in_progress",
+              toolKind: "other",
+              input: { code },
+              copilotTools: readOpencodeCopilotTools({ code }) ?? undefined,
+            },
+          ] as AgentChatMessage["parts"],
+        });
+        const request = permission("execute-1");
+        request.toolCall.title = "execute";
+        request.toolCall.rawInput = { code };
+
+        renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+
+        const rail = screen.getByRole("region", { name: "Pending agent actions" });
+        expect(rail.textContent).toBe(railText);
+        expect(screen.getByTitle(title)).toBeTruthy();
+      }
+    );
 
     it("labels a permission request with the task that asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
       const request = { ...permission("sub-bash"), requester: { taskId: "task-1" } };
