@@ -24,7 +24,7 @@ function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   return copilotTools ? { ...part, copilotTools } : part;
 }
 
-function opencodeExecute(...names: string[]): ToolCallPart {
+function savedWrappedTools(...names: string[]): ToolCallPart {
   return tool({
     title: "execute",
     toolKind: "other",
@@ -37,20 +37,11 @@ function opencodeExecute(...names: string[]): ToolCallPart {
   });
 }
 
-const OPENCODE_NOTION_CALL = "notion_create_page";
-const OPENCODE_TWO_CALLS = ["notion_search", "notion_create_page"];
+const SAVED_NOTION_CALL = "notion_create_page";
+const SAVED_TWO_CALLS = ["notion_search", "notion_create_page"];
 
 describe("toolSummaries", () => {
   describe("lookupToolSummary()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 displays normalized labels without interpreting server or tool names", () => {
-      const part = tool({
-        copilotTools: { wrapper: "Run", label: "Resource discovery, Search, Notes", calls: [] },
-      });
-      expect(lookupToolSummary(part).collapsedLine(part)).toBe(
-        "Run · Resource discovery, Search, Notes"
-      );
-    });
-
     it("uses Read entry when vendorToolName is Read", () => {
       const t = tool({
         vendorToolName: "Read",
@@ -192,8 +183,8 @@ describe("toolSummaries", () => {
     );
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names every distinct Copilot tool in a completed OpenCode row", () => {
-      const single = opencodeExecute(OPENCODE_NOTION_CALL);
-      const several = opencodeExecute(...OPENCODE_TWO_CALLS);
+      const single = savedWrappedTools(SAVED_NOTION_CALL);
+      const several = savedWrappedTools(...SAVED_TWO_CALLS);
 
       expect(lookupToolSummary(single).collapsedLine(single, CTX)).toBe(
         "Execute · Notion · Create page"

@@ -586,58 +586,31 @@ describe("AgentChatMessages", () => {
       expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
     });
 
-    it.each([
-      {
-        calls: "one Copilot tool",
-        code: 'return await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });',
-        title: "execute",
-        railText: "Permission execute-1 via execute",
-      },
-      {
-        calls: "one Copilot tool with tools and fetch in an argument",
-        code: 'return tools["obsidian-copilot"].notion_create_page({ title: "tools fetch" });',
-        title: "execute",
-        railText: "Permission execute-1 via execute",
-      },
-      {
-        calls: "several Copilot tools",
-        code: 'return Promise.all([tools["obsidian-copilot"].notion_search({}), tools["obsidian-copilot"].notion_create_page({})]);',
-        title: "execute",
-        railText: "Permission execute-1 via execute",
-      },
-      {
-        calls: "no tool",
-        code: 'return search({ query: "notion" });',
-        title: "execute",
-        railText: "Permission execute-1 via execute",
-      },
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps an OpenCode permission generic without runtime metadata even when source mentions $calls as '$title'",
-      ({ code, title, railText }) => {
-        const toolTurn = assistantMessage("answer-1", 62_000, {
-          parts: [
-            {
-              kind: "tool_call",
-              id: "execute-1",
-              title: "execute",
-              status: "in_progress",
-              toolKind: "other",
-              input: { code },
-              copilotTools: readOpencodeCopilotTools({ code }) ?? undefined,
-            },
-          ] as AgentChatMessage["parts"],
-        });
-        const request = permission("execute-1");
-        request.toolCall.title = "execute";
-        request.toolCall.rawInput = { code };
-
-        renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
-
-        const rail = screen.getByRole("region", { name: "Pending agent actions" });
-        expect(rail.textContent).toBe(railText);
-        expect(screen.getByTitle(title)).toBeTruthy();
-      }
-    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names a direct OpenCode MCP permission after its connector tool", () => {
+      const name = "obsidian-copilot_notion_create_page";
+      const args = { title: "Orion" };
+      const toolTurn = assistantMessage("answer-1", 62_000, {
+        parts: [
+          {
+            kind: "tool_call",
+            id: "direct-1",
+            title: name,
+            status: "in_progress",
+            toolKind: "other",
+            input: args,
+            copilotTools: readOpencodeCopilotTools(args, name) ?? undefined,
+          },
+        ],
+      });
+      const request = permission("direct-1");
+      request.toolCall.title = name;
+      request.toolCall.rawInput = args;
+      renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+      expect(screen.getByRole("region", { name: "Pending agent actions" }).textContent).toBe(
+        "Permission direct-1"
+      );
+      expect(screen.getByTitle("Notion · Create page")).toBeTruthy();
+    });
 
     it("labels a permission request with the task that asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/749)", () => {
       const request = { ...permission("sub-bash"), requester: { taskId: "task-1" } };

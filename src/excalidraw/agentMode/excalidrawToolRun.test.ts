@@ -39,13 +39,11 @@ function opencodeCall(code: string, name = "excalidraw_write"): ToolCallPart {
 
 describe("excalidrawToolRun", () => {
   describe("excalidrawToolRun()", () => {
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 reads the concrete path and operation from native OpenCode metadata", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 reads the concrete path and operation from a direct OpenCode call", () => {
       const part = {
         ...opencodeCall("return write(args);"),
         copilotTools:
-          readOpencodeCopilotTools(undefined, {
-            metadata: { toolCalls: [{ tool: "obsidian-copilot.excalidraw_write", input: EDIT }] },
-          }) ?? undefined,
+          readOpencodeCopilotTools(EDIT, "obsidian-copilot_excalidraw_write") ?? undefined,
       };
       expect(excalidrawToolRun(part)).toEqual({ action: "edit", status: "completed", path: PATH });
     });

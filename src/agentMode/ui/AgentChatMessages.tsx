@@ -206,8 +206,6 @@ const AgentChatMessages = memo(
     const pendingCopilotTool = toolUseLabel(pendingToolCall?.copilotTools);
     // A connector tool's request names it by the service's id, which users don't know.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-    // OpenCode's request names only its `execute` wrapper, which hides the Copilot tool about to run.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/872
     const pendingRequest = useMemo(
       () =>
         pendingPermission && pendingCopilotTool

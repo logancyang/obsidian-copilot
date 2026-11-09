@@ -35,13 +35,6 @@ describe("copilotToolCall", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 does not match a display-only tool label as a canonical feature call", () => {
-      const part = tool({
-        copilotTools: { calls: [], label: "Other · Excalidraw write" },
-      });
-      expect(copilotToolCall(part, "excalidraw_write")).toBeNull();
-    });
-
     it.each([
       [
         "a call to another Copilot tool",

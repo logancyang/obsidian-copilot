@@ -9,7 +9,6 @@ export type CopilotToolCall = { name: string } & (
 
 export interface CopilotToolUse {
   wrapper?: string;
-  label?: string;
   calls: readonly CopilotToolCall[];
 }
 
@@ -26,7 +25,7 @@ export function directCopilotToolUse(
   return { calls: [{ name: toolName, args: toolInputRecord(input) }] };
 }
 
-export function copilotToolNameLabel(name: string): string {
+function copilotToolNameLabel(name: string): string {
   const tool = describeConnectorTool(name);
   return tool
     ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
@@ -34,10 +33,7 @@ export function copilotToolNameLabel(name: string): string {
 }
 
 export function toolUseLabel(use: CopilotToolUse | undefined): string | null {
-  // Saved chats from before display labels were normalized still carry canonical Copilot calls.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
-  const label =
-    use?.label ?? [...new Set(use?.calls.map(({ name }) => copilotToolNameLabel(name)))].join(", ");
+  const label = [...new Set(use?.calls.map(({ name }) => copilotToolNameLabel(name)))].join(", ");
   if (!label) return null;
   return use?.wrapper ? `${use.wrapper} · ${label}` : label;
 }

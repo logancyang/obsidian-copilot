@@ -1,5 +1,4 @@
 import {
-  copilotToolNameLabel,
   toolUseLabel,
   directCopilotToolUse,
   toolInputRecord,
@@ -29,20 +28,10 @@ describe("copilotToolCalls", () => {
       expect(directCopilotToolUse(server, tool, {})).toBeUndefined();
     });
   });
-  describe("copilotToolNameLabel()", () => {
-    it("names a connector tool by its service without repeating the service prefix (https://github.com/Brevilabs/obsidian-copilot-private/issues/875)", () => {
-      expect(copilotToolNameLabel("notion_notion-create-pages")).toBe("Notion · Create pages");
-    });
-
-    it("names a built-in tool by its owning server and readable tool name (https://github.com/Brevilabs/obsidian-copilot-private/issues/875)", () => {
-      expect(copilotToolNameLabel("send_feedback")).toBe("obsidian-copilot · Send feedback");
-    });
-  });
-
   describe("toolUseLabel()", () => {
-    it("uses an adapter's normalized display label independently of its canonical feature calls (https://github.com/Brevilabs/obsidian-copilot-private/issues/875)", () => {
-      expect(toolUseLabel({ label: "External service · Read", calls: [], wrapper: "Run" })).toBe(
-        "Run · External service · Read"
+    it("names a direct connector tool without repeating the service prefix (https://github.com/Brevilabs/obsidian-copilot-private/issues/875)", () => {
+      expect(toolUseLabel({ calls: [{ name: "notion_notion-create-pages", args: {} }] })).toBe(
+        "Notion · Create pages"
       );
     });
 

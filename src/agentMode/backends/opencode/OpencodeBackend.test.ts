@@ -1304,6 +1304,31 @@ describe("OpencodeBackend", () => {
         }
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps the MCP integration plugin in a custom configuration without duplicating it", async () => {
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-direct-config-"));
+        const pluginDir = path.join(root, "copilot");
+        try {
+          for (const plugins of [["custom-plugin"], ["custom-plugin", pluginDir]]) {
+            setOpencodeSettings({
+              binaryPath: "/path/to/opencode",
+              envOverrides: {
+                OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "custom", plugins }),
+              },
+            });
+            const desc = await new OpencodeBackend({
+              ...NO_MODELS_DEPS,
+              getCopilotPluginDir: () => pluginDir,
+            }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+            expect(JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string)).toEqual({
+              model: "custom",
+              plugins: ["custom-plugin", pluginDir],
+            });
+          }
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 starts OpenCode with its full prompt when the plugin cannot be written", async () => {
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
         const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-backend-"));

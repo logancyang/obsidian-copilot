@@ -776,27 +776,16 @@ export class AcpBackendProcess implements BackendProcess {
       this.todoToolCallIdsFor(sessionId),
       this.compactionTriggerFor(sessionId)
     ))
-      handler(
-        this.withBackendContextWindow(
-          this.withCopilotTools(
-            event,
-            "rawOutput" in update.update ? update.update.rawOutput : undefined
-          )
-        )
-      );
+      handler(this.withBackendContextWindow(this.withCopilotTools(event)));
   }
 
-  private withCopilotTools(event: SessionEvent, rawOutput?: unknown): SessionEvent {
+  private withCopilotTools(event: SessionEvent): SessionEvent {
     const update = event.update;
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
       return event;
     }
-    if (
-      !this.backend.readCopilotTools ||
-      (update.rawInput === undefined && rawOutput === undefined)
-    )
-      return event;
-    const copilotTools = this.backend.readCopilotTools(update.rawInput, rawOutput);
+    if (!this.backend.readCopilotTools || update.rawInput === undefined) return event;
+    const copilotTools = this.backend.readCopilotTools(update.rawInput, update.title);
     return copilotTools ? { ...event, update: { ...update, copilotTools } } : event;
   }
 

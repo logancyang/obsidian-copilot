@@ -14,6 +14,7 @@ export const COPILOT_PLUS_STEP_FAILURE_POLICY = `Write at most 200 lines per wri
 // It also reads each file an edit, write or patch is about to change and returns that text with
 // the tool's result, because OpenCode names the file only milliseconds before writing it.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/687
+// MCP tools need independent names and approvals instead of an execute wrapper. https://github.com/Brevilabs/obsidian-copilot-private/issues/875
 export const OPENCODE_COPILOT_PLUGIN_SOURCE = `"use strict";
 const fs = require("fs");
 const path = require("path");
@@ -98,6 +99,11 @@ function addPlusStepFailurePolicy(event) {
 module.exports = {
   id: "copilot",
   setup: async (ctx) => {
+    await ctx.mcp.transform((editor) => {
+      for (const [name] of editor.list()) {
+        editor.update(name, (server) => { server.codemode = false; });
+      }
+    });
     for (const hook of ["context", "compaction", "generate"]) {
       await ctx.session.hook(hook, trimRequest);
     }
@@ -134,7 +140,7 @@ export async function installOpencodeCopilotPlugin(pluginDir: string): Promise<s
     return pluginDir;
   } catch (error) {
     logWarn(
-      `[AgentMode] could not write Copilot's OpenCode plugin to ${pluginDir}; OpenCode keeps its full prompt and turn diffs lose write-time originals.`,
+      `[AgentMode] could not write Copilot's OpenCode plugin to ${pluginDir}; MCP tools may stay wrapped, OpenCode keeps its full prompt, and turn diffs lose write-time originals.`,
       error
     );
     return undefined;
