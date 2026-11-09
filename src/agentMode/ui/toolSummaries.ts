@@ -2,7 +2,11 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
+import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
+import { humanizeToolName, serviceToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
@@ -18,8 +22,21 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
+export function copilotToolLabel(part: ToolCallPart): string | null {
+  const name = copilotToolName(part);
+  if (!name) return null;
+  const tool = describeConnectorTool(name);
+  return tool
+    ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
+    : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
+}
+
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
+  // Agents name a Copilot tool after Copilot's server and, for a connector, the service's id, which users don't know.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+  const copilotTool = copilotToolLabel(part);
+  if (copilotTool) return { ...base, collapsedLine: () => copilotTool };
   if (!part.mcpServer) return base;
   const server = part.mcpServer;
   return {
@@ -61,16 +78,6 @@ function targetFromTitle(part: ToolCallPart): string {
   if (!t) return "…";
   if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
   return t;
-}
-
-function humanizeToolName(name: string): string {
-  const words = name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .toLowerCase();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
 function genericToolLabel(part: ToolCallPart): string {

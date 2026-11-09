@@ -717,6 +717,27 @@ describe("model", () => {
       expect(out.connectors).toEqual([kept]);
     });
 
+    it("loads a data.json written before custom connectors, or with a non-list value, as no custom connectors, and drops malformed entries (https://github.com/Brevilabs/obsidian-copilot-private/issues/862)", () => {
+      const kept = { id: "echo", name: "Echo", command: "npx", args: ["echo"], envNames: ["KEY"] };
+
+      const missing = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: undefined,
+      } as unknown as CopilotSettings);
+      const wrongType = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: { echo: kept },
+      } as unknown as CopilotSettings);
+      const mixed = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        customConnectors: [null, { id: "Bad Id", name: "x", command: "x" }, kept],
+      } as unknown as CopilotSettings);
+
+      expect(missing.customConnectors).toEqual([]);
+      expect(wrongType.customConnectors).toEqual([]);
+      expect(mixed.customConnectors).toEqual([kept]);
+    });
+
     it("keeps a well-formed cached Copilot Plus lineup", () => {
       const copilotPlusCatalog = {
         models: [{ id: "glm-5.2", displayName: "GLM-5.2" }],
@@ -1058,6 +1079,17 @@ describe("model", () => {
       resetSettings();
 
       expect(settingsStore.get(settingsAtom).connectors).toEqual(connectors);
+    });
+
+    it("preserves the custom connector list, whose values stay in the keychain (https://github.com/Brevilabs/obsidian-copilot-private/issues/862)", () => {
+      const customConnectors = [
+        { id: "acme", name: "Acme", url: "https://acme.test/mcp", headerNames: ["X-Key"] },
+      ];
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, customConnectors });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).customConnectors).toEqual(customConnectors);
     });
 
     it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {

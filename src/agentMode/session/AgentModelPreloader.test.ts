@@ -2,6 +2,7 @@ import { App, FileSystemAdapter } from "obsidian";
 import { waitFor } from "@testing-library/react";
 import type CopilotPlugin from "@/main";
 import { AgentModelPreloader } from "./AgentModelPreloader";
+import type { CopilotMcpServer } from "./copilotMcpServer";
 import type {
   BackendDescriptor,
   BackendProcess,
@@ -138,6 +139,24 @@ function pushCatalog(procHandle: MockProcHandle, state: BackendState): void {
 
 describe("AgentModelPreloader", () => {
   describe("preload()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 starts the probe with Copilot's MCP server, so the process it hands to a chat knows which Copilot tools are read-only", async () => {
+      const { descriptor } = buildDescriptor(() => makeMockProc());
+      const copilotMcpServer = {} as CopilotMcpServer;
+      const preloader = new AgentModelPreloader(
+        buildApp(),
+        buildPlugin(),
+        () => descriptor,
+        undefined,
+        copilotMcpServer
+      );
+
+      await preloader.preload("claude-sdk");
+
+      expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
+        expect.objectContaining({ copilotMcpServer })
+      );
+    });
+
     it("retains the probe subprocess after a successful preload and hands it to the manager", async () => {
       const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
       const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);

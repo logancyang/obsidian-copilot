@@ -1,4 +1,5 @@
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
+import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import type {
   AccessTokenResult,
   ConnectorAuth,
@@ -47,6 +48,7 @@ export type ConnectorAuthPort = Pick<
 export interface ConnectionManagerDeps {
   auth: ConnectorAuthPort;
   catalog: readonly ConnectorCatalogEntry[];
+  custom?: Pick<CustomConnectors, "subscribe" | "getSnapshot">;
 }
 
 const EMPTY_CONNECTIONS: readonly ConnectionState[] = Object.freeze([]);
@@ -62,6 +64,9 @@ export class ConnectionManager {
   constructor(private readonly deps: ConnectionManagerDeps) {
     this.services = new Map(deps.catalog.map((service) => [service.id, service]));
     this.snapshot = this.buildSnapshot();
+    // A custom connector that couldn't start or lacks its key raises the same banner and settings dot as a catalog login.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+    deps.custom?.subscribe(() => this.publish());
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -105,11 +110,18 @@ export class ConnectionManager {
     options?: { forceRefresh?: boolean }
   ): Promise<AccessTokenResult> {
     const result = await this.deps.auth.accessToken(connectionId, options);
-    if (this.statuses.get(connectionId) !== result.status) {
-      this.statuses.set(connectionId, result.status);
-      this.publish();
-    }
+    this.setStatus(connectionId, result.status);
     return result;
+  }
+
+  reportFailure(connectionId: string, status: Exclude<ConnectionStatus, "connected">): void {
+    this.setStatus(connectionId, status);
+  }
+
+  dismissFailedLogin(): void {
+    if (!this.failedLogin) return;
+    this.failedLogin = null;
+    this.publish();
   }
 
   async checkStatus(): Promise<void> {
@@ -162,6 +174,12 @@ export class ConnectionManager {
     });
   }
 
+  private setStatus(connectionId: string, status: ConnectionStatus): void {
+    if (this.statuses.get(connectionId) === status) return;
+    this.statuses.set(connectionId, status);
+    this.publish();
+  }
+
   private publish(): void {
     this.snapshot = this.buildSnapshot();
     for (const listener of this.listeners) listener();
@@ -184,7 +202,9 @@ export class ConnectionManager {
       connections: connections.length > 0 ? Object.freeze(connections) : EMPTY_CONNECTIONS,
       waitingLogin: this.waitingLogin,
       failedLogin: this.failedLogin,
-      needsAttention: connections.some(({ status }) => status === "needs-login"),
+      needsAttention:
+        connections.some(({ status }) => status === "needs-login") ||
+        this.deps.custom?.getSnapshot().needsAttention === true,
     });
   }
 }

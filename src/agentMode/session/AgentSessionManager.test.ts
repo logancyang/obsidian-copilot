@@ -10,6 +10,9 @@ import { playNotificationSound } from "@/utils/notificationSound";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { AgentSessionIndex } from "./AgentSessionIndex";
 import { AgentSessionManager } from "./AgentSessionManager";
+import type { FindCallingChat } from "./copilotMcpServer";
+import { FEEDBACK_OFFER_EXTENSION } from "./feedback/feedbackOffer";
+import { EMPTY_CHAT_STATES } from "./chatExtension";
 import { GLOBAL_SCOPE } from "./scope";
 import {
   getSettings as mockedGetSettings,
@@ -244,7 +247,8 @@ function makeMockSession(overrides: {
     }),
     seedSessionUsage: jest.fn(),
     resendSavedHistoryOnNextTurn: jest.fn(),
-    offerFeedback: jest.fn(() => "shown"),
+    getReloadableChatStates: jest.fn(() => EMPTY_CHAT_STATES),
+    restoreChatStates: jest.fn(),
     getSessionUsage: () => null,
     subscribe: (l: Parameters<typeof listeners.add>[0]) => {
       listeners.add(l);
@@ -430,6 +434,7 @@ interface ManagerOptions {
   sessionIndex?: AgentSessionIndex;
   beforeBackendStart?: ManagerDeps["beforeBackendStart"];
   copilotMcpServer?: ManagerDeps["copilotMcpServer"];
+  chatExtensions?: ManagerDeps["chatExtensions"];
 }
 
 const builtManagers: AgentSessionManager[] = [];
@@ -460,6 +465,7 @@ function buildManager(options: ManagerOptions = {}): AgentSessionManager {
       sessionIndex: options.sessionIndex,
       beforeBackendStart: options.beforeBackendStart,
       copilotMcpServer: options.copilotMcpServer,
+      chatExtensions: options.chatExtensions,
     }
   );
   builtManagers.push(manager);
@@ -477,12 +483,11 @@ function buildCopilotMcpServer({
 }: { connect?: jest.Mock } = {}) {
   return {
     connect,
+    readOnlyToolNames: jest.fn(async () => []),
     disconnect: jest.fn(),
     dispose: jest.fn(),
   };
 }
-
-const FEEDBACK_DRAFT = { title: "t", whatHappened: "w", userSaid: "u", repro: "r" };
 
 function seedProjects(...ids: string[]): void {
   seedProjectRecords(ids.map((id) => ({ id })));
@@ -1008,7 +1013,19 @@ describe("AgentSessionManager", () => {
         expect(refreshLatestVersion).toHaveBeenCalledTimes(2);
       });
 
-      it("attaches the Copilot MCP server to a new session and routes its cards to that session", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 starts the backend with Copilot's MCP server, so an agent with fixed permission rules knows which Copilot tools are read-only", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const descriptor = buildDescriptor();
+        const mgr = buildManager({ copilotMcpServer, descriptor });
+
+        await mgr.createSession();
+
+        expect(descriptor.createBackendProcess).toHaveBeenCalledWith(
+          expect.objectContaining({ copilotMcpServer })
+        );
+      });
+
+      it("attaches the Copilot MCP server to a new session and finds that session as the chat behind its calls", async () => {
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({ copilotMcpServer });
 
@@ -1016,14 +1033,25 @@ describe("AgentSessionManager", () => {
 
         expect(copilotMcpServer.connect).toHaveBeenCalledWith(
           session.internalId,
+          session.backendId,
           expect.any(Function)
         );
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
         );
-        const onOffer = copilotMcpServer.connect.mock.calls[0][1] as (draft: unknown) => string;
-        expect(onOffer(FEEDBACK_DRAFT)).toBe("shown");
-        expect(session.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
+        const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
+        expect(findChat(null)).toBe(session);
+      });
+
+      it("hands every new chat the chat extensions it was given", async () => {
+        const chatExtensions = [FEEDBACK_OFFER_EXTENSION];
+        const mgr = buildManager({ chatExtensions });
+
+        await mgr.createSession();
+
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({ chatExtensions })
+        );
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 gives a folder's chats one feedback key when the agent shares MCP servers across sessions", async () => {
@@ -1041,43 +1069,34 @@ describe("AgentSessionManager", () => {
         expect(keys[0]).toBe(keys[1]);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows a shared connection's card in the chat whose backend session the agent stamped on the call", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 finds the chat whose backend session the agent stamped on a shared connection's call", async () => {
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({
           copilotMcpServer,
           descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
         });
         const caller = await mgr.createSession();
-        const newest = await mgr.createSession();
-        const onOffer = copilotMcpServer.connect.mock.calls[1][1] as (
-          draft: unknown,
-          callerSessionId: string | null
-        ) => string;
+        await mgr.createSession();
+        const findChat = copilotMcpServer.connect.mock.calls[1][2] as FindCallingChat;
 
-        expect(onOffer(FEEDBACK_DRAFT, caller.getBackendSessionId())).toBe("shown");
-        expect(caller.offerFeedback).toHaveBeenCalledWith(FEEDBACK_DRAFT);
-        expect(newest.offerFeedback).not.toHaveBeenCalled();
+        expect(findChat(caller.getBackendSessionId())).toBe(caller);
       });
 
       it.each([
         ["carries no caller session", null],
         ["names a session outside the folder's chats", "backend-elsewhere"],
       ])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 shows no card when a shared connection's call %s",
+        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 finds no chat when a shared connection's call %s",
         async (_label, callerSessionId) => {
           const copilotMcpServer = buildCopilotMcpServer();
           const mgr = buildManager({
             copilotMcpServer,
             descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
           });
-          const session = await mgr.createSession();
-          const onOffer = copilotMcpServer.connect.mock.calls[0][1] as (
-            draft: unknown,
-            callerSessionId: string | null
-          ) => string;
+          await mgr.createSession();
+          const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
 
-          expect(onOffer(FEEDBACK_DRAFT, callerSessionId)).toBe("unattributed");
-          expect(session.offerFeedback).not.toHaveBeenCalled();
+          expect(findChat(callerSessionId)).toBeNull();
         }
       );
 
@@ -3099,6 +3118,17 @@ describe("AgentSessionManager", () => {
         expect(mgr.getActiveSession()).not.toBe(first);
         expect(mgr.getActiveSession()?.chatInputId).toBe(chatInputId);
         expect(mgr.drafts.get(chatInputId)?.input).toBe("half-written question");
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 gives the replacement the replaced chat's reloadable feature state, so a card connected before Reload still reports to the agent", async () => {
+        const mgr = buildManager();
+        const first = await mgr.createSession();
+        const states = new Map([["connector-cards", []]]);
+        jest.mocked(first.getReloadableChatStates).mockReturnValue(states);
+
+        await mgr.restartBackend("opencode", "connectors changed");
+
+        expect(mgr.getActiveSession()?.restoreChatStates).toHaveBeenCalledWith(states);
       });
 
       it("reports the replaced chat input as live while no session owns it (https://github.com/Brevilabs/obsidian-copilot-private/issues/473)", async () => {

@@ -60,6 +60,9 @@ import {
 import { KeychainService } from "@/services/keychainService";
 import { CONNECTOR_CATALOG } from "@/connectors/catalog";
 import { ConnectionManager } from "@/connectors/connectionManager";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { ConnectorTools } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
@@ -73,6 +76,7 @@ import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/pro
 import {
   checkIsPaidUser,
   ENTITLEMENT_REFRESH_INTERVAL_MS,
+  subscribeToEntitlementChange,
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import {
@@ -175,6 +179,8 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
   connectionManager?: ConnectionManager;
+  connectorTools?: ConnectorTools;
+  customConnectors?: CustomConnectors;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -385,6 +391,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           registerTurnDiffCommands,
           acpFrameSink,
           createAgentSessionManager,
+          MAX_PROVIDED_TOOL_NAME_LENGTH,
           setFrameSinkVaultBasePath,
           SkillManager,
         },
@@ -405,6 +412,19 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
 
+      const customConnectors = new CustomConnectors({
+        keychain: KeychainService.getInstance(),
+        deviceStorage: {
+          load: (key) => this.app.loadLocalStorage(key),
+          save: (key, value) => this.app.saveLocalStorage(key, value),
+        },
+        catalogIds: CONNECTOR_CATALOG.map(({ id }) => id),
+        isEnabled: () => isConnectorsEnabled() === true,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        cwd: adapter instanceof FileSystemAdapter ? adapter.getBasePath() : undefined,
+      });
+      this.customConnectors = customConnectors;
+      this.register(() => customConnectors.dispose());
       const connectionManager = new ConnectionManager({
         auth: new ConnectorAuth({
           keychain: KeychainService.getInstance(),
@@ -415,8 +435,17 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           },
         }),
         catalog: CONNECTOR_CATALOG,
+        custom: customConnectors,
       });
       this.connectionManager = connectionManager;
+      this.connectorTools = new ConnectorTools({
+        manager: connectionManager,
+        catalog: CONNECTOR_CATALOG,
+        isEnabled: () => isConnectorsEnabled() === true,
+        subscribeToEnabledChange: subscribeToEntitlementChange,
+        maxToolNameLength: MAX_PROVIDED_TOOL_NAME_LENGTH,
+        custom: customConnectors,
+      });
       this.register(() => connectionManager.dispose());
       void connectionManager.checkStatus();
 

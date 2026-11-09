@@ -146,6 +146,7 @@ Copilot is a product of Brevilabs LLC and is not affiliated with Obsidian. Visit
 - An account and payment are required for paid access.
 - Preview features ship inside the official release and require a Believer or Supporter license. Without one, they show a hint that links to the pricing page.
 - Hosted models and cloud-backed features require network access.
+- Connectors (desktop) talk to the services you connect, and Copilot loads those services' logos from images.brevilabs.com, Brevilabs' image CDN. Logo requests carry no note content.
 - **Privacy and data handling:**
   - **Free use:** Messages and note context go to the LLM provider, local endpoint, or CLI agent you configure. Brevilabs does not receive them unless you invoke a Brevilabs-hosted feature, or upload a diagnostic report yourself.
   - **Paid hosted services:** Brevilabs's backend and its vetted enterprise model providers process the full request. Hosted features receive the inputs they need, such as search queries, URLs, and files used by Quick Chat tools, or the web and YouTube links saved as Agent project context. The privacy policy says request content is processed transiently, not retained, and not used for training.
