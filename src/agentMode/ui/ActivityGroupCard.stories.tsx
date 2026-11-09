@@ -244,7 +244,7 @@ export const ImageReads: StoryObj<ActivityGroupCardProps> = {
       ) : null,
   },
   render: function ImageReadStory(args) {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(args.open ?? false);
     return (
       <ActivityGroupCard
         {...meta.args}
@@ -254,4 +254,9 @@ export const ImageReads: StoryObj<ActivityGroupCardProps> = {
       />
     );
   },
+};
+
+export const ExpandedImageReads: StoryObj<ActivityGroupCardProps> = {
+  ...ImageReads,
+  args: { ...ImageReads.args, open: true },
 };

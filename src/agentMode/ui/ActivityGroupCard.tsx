@@ -1,4 +1,3 @@
-import { ToolImagePreviews } from "@/agentMode/ui/ToolImagePreviews";
 import React from "react";
 import { Layers, Loader2, type LucideIcon } from "lucide-react";
 import {
@@ -46,29 +45,7 @@ export const ActivityGroupCard: React.FC<ActivityGroupCardProps> = ({
           ) : null}
         </>
       }
-      secondary={
-        !open &&
-        (liveStep ||
-          group.members.some(
-            (member) =>
-              member.type === "action" &&
-              member.part.output?.some((output) => output.type === "image")
-          )) ? (
-          <>
-            {liveStep}
-            {/* Keep image reads visible even when the activity details are collapsed. https://github.com/logancyang/obsidian-copilot/issues/4227 */}
-            {group.members.map((member) =>
-              member.type === "action" ? (
-                <ToolImagePreviews
-                  key={member.part.id}
-                  outputs={member.part.output}
-                  label={member.part.title}
-                />
-              ) : null
-            )}
-          </>
-        ) : undefined
-      }
+      secondary={!open ? liveStep : undefined}
       expandable
       open={open}
       onToggle={onToggle}
