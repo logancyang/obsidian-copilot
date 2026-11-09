@@ -1,3 +1,4 @@
+import { ActionCard } from "@/agentMode/ui/ActionCard";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import type { ActivityGroupNode, ActivityMember } from "@/agentMode/ui/activityGroups";
 import { activityLiveStep } from "@/agentMode/ui/activityLiveStep";
@@ -221,3 +222,36 @@ const LiveEdgeDemo: React.FC = () => {
 };
 
 export const LiveEdge: StoryObj<ActivityGroupCardProps> = { render: LiveEdgeDemo };
+
+export const ImageReads: StoryObj<ActivityGroupCardProps> = {
+  args: {
+    group: group([
+      action("Read architecture.svg", {
+        vendorToolName: "Read",
+        input: { file_path: "architecture.svg" },
+        output: [
+          {
+            type: "image",
+            mimeType: "image/svg+xml",
+            data: "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNDAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjE2MCIgZmlsbD0iI2VkZjJmNyIvPjxyZWN0IHg9IjIwIiB5PSI1MCIgd2lkdGg9Ijc1IiBoZWlnaHQ9IjYwIiByeD0iOCIgZmlsbD0iIzYzNWJmZiIvPjxwYXRoIGQ9Ik05NSA4MGg1MCIgc3Ryb2tlPSIjNjQ3NDhiIiBzdHJva2Utd2lkdGg9IjQiLz48cmVjdCB4PSIxNDUiIHk9IjUwIiB3aWR0aD0iNzUiIGhlaWdodD0iNjAiIHJ4PSI4IiBmaWxsPSIjMTRiOGE2Ii8+PC9zdmc+",
+          },
+        ],
+      }),
+    ]),
+    renderMember: (member, key) =>
+      member.type === "action" ? (
+        <ActionCard key={key} part={member.part} open={false} onToggle={() => undefined} />
+      ) : null,
+  },
+  render: function ImageReadStory(args) {
+    const [open, setOpen] = useState(false);
+    return (
+      <ActivityGroupCard
+        {...meta.args}
+        {...args}
+        open={open}
+        onToggle={() => setOpen((previous) => !previous)}
+      />
+    );
+  },
+};

@@ -35,6 +35,15 @@ function renderCard(props: Partial<React.ComponentProps<typeof ActivityGroupCard
 
 describe("ActivityGroupCard", () => {
   describe("ActivityGroupCard()", () => {
+    it("shows returned images beneath a collapsed group https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
+      renderCard({
+        group: group([
+          action("image", { output: [{ type: "image", mimeType: "image/png", data: "AQID" }] }),
+        ]),
+      });
+      expect(screen.getByRole("img").getAttribute("src")).toBe("data:image/png;base64,AQID");
+    });
+
     it("summarizes every family in the run plus the measured thinking time", () => {
       renderCard({
         group: group([

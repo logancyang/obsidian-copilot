@@ -93,7 +93,7 @@ Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** 
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
-Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
+Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step. When a tool returns an image, a small thumbnail appears beneath the activity row so you can see what the agent viewed. Expand the row to see each image with its tool call.
 
 Copilot checks for updates in the background when the plugin loads, including when Obsidian starts. If a newer version is available, a notice offers **View release notes** once per release. This is remembered separately from dismissing the Agent Chat home banner. You can keep using or close Obsidian while the check runs. Copilot reads the version from the published release’s manifest, and Settings and Agent Chat share that check.
 
