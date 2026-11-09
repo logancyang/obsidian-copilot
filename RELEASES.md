@@ -1,5 +1,50 @@
 # Release Notes
 
+# v4.0.19 - Connectors preview
+
+![Copilot Connectors: service logos linking to Copilot, the Connectors settings with Linear logging in and Notion connected, then Bring your work to your agents](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/connectors-hub-a3fb3a04.webp)
+
+Connectors bring the work you do in other services into Copilot. Click **Connect** on a service such as Notion, Linear, Jira or Todoist. Claude Code, Codex and OpenCode can then read and update it from your chats. Copilot supports 36 services at launch. Connectors is a preview for Supporters on desktop.
+
+This release also lets you drop any file into Agent Chat. Replies are now easier to read as they stream in. The Copilot Navigator makes it easier to see which chat needs you.
+
+## ✨ Enhancements
+
+- Connect any of 36 services from **Settings → Copilot → Connectors → Browse connectors**, including Notion, Linear, Atlassian (Jira and Confluence), Todoist, Granola, Readwise, Airtable and Stripe. ([#4118](https://github.com/logancyang/obsidian-copilot/pull/4118), [#4119](https://github.com/logancyang/obsidian-copilot/pull/4119), [#4120](https://github.com/logancyang/obsidian-copilot/pull/4120), [#4121](https://github.com/logancyang/obsidian-copilot/pull/4121), [#4124](https://github.com/logancyang/obsidian-copilot/pull/4124), [#4125](https://github.com/logancyang/obsidian-copilot/pull/4125), [#4126](https://github.com/logancyang/obsidian-copilot/pull/4126), [#4129](https://github.com/logancyang/obsidian-copilot/pull/4129), [#4130](https://github.com/logancyang/obsidian-copilot/pull/4130), [#4173](https://github.com/logancyang/obsidian-copilot/pull/4173), @zeroliu)
+  ![Copilot settings with Linear connected and its 70 tools, Browse connectors listing services such as Airtable, Atlassian and Canva, and a Connect Notion card under an agent's reply in a chat](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/connectors-2a928041.png)
+- If you run a local MCP server or use a service that isn't in **Browse connectors**, click **Add custom connector** and paste its config to give every agent its tools. ([#4145](https://github.com/logancyang/obsidian-copilot/pull/4145), [#4146](https://github.com/logancyang/obsidian-copilot/pull/4146), [#4147](https://github.com/logancyang/obsidian-copilot/pull/4147), @zeroliu)
+- Replies are easier to read as they stream in, with each new word fading in smoothly. ([#4202](https://github.com/logancyang/obsidian-copilot/pull/4202), @zeroliu)
+  ![A Codex reply in Agent Chat streaming in word by word, with new words fading in](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/streaming-abaf82c2.gif)
+- The Copilot Navigator makes it easier to see which chat needs your attention. ([#4216](https://github.com/logancyang/obsidian-copilot/pull/4216), [#4223](https://github.com/logancyang/obsidian-copilot/pull/4223), @zeroliu)
+  ![Copilot Navigator with dimmed projects, a Claude chat waiting for permission, an OpenCode chat with a new result, and the current Codex chat, each row showing its agent's logo](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/navigator-32a11784.png)
+- Drop any file, such as a PDF or CSV, into Agent Chat for the agent to read. You can also pick one from **Add context → Files**. Files from outside the vault are copied to your attachment folder. ([#4084](https://github.com/logancyang/obsidian-copilot/pull/4084), @zeroliu)
+- Agents draw Mermaid diagrams more reliably. A chart in a reply appears once it is fully drawn. ([#4212](https://github.com/logancyang/obsidian-copilot/pull/4212), [#4210](https://github.com/logancyang/obsidian-copilot/pull/4210), @zeroliu)
+- Copilot settings tabs stay on one row in a narrow window, with the rest in a **…** menu. ([#4222](https://github.com/logancyang/obsidian-copilot/pull/4222), @zeroliu)
+- An agent's diff tab opens on its first change. ([#4106](https://github.com/logancyang/obsidian-copilot/pull/4106), @zeroliu)
+- Long Agent Chats scroll smoothly. ([#4092](https://github.com/logancyang/obsidian-copilot/pull/4092), @zeroliu)
+- Long commands wrap in the permission card. You can also select and copy its text. ([#4144](https://github.com/logancyang/obsidian-copilot/pull/4144), @zeroliu)
+- OpenCode uses the context window your custom provider's endpoint reports for each model. ([#4090](https://github.com/logancyang/obsidian-copilot/pull/4090), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- Copilot detects the commands and agents you installed more reliably. ([#4149](https://github.com/logancyang/obsidian-copilot/pull/4149), [#4158](https://github.com/logancyang/obsidian-copilot/pull/4158), @zeroliu)
+- Claude chats strictly follow the permission mode the **Mode** picker shows. ([#4157](https://github.com/logancyang/obsidian-copilot/pull/4157), @zeroliu)
+- **Stop** gives the chat back right away. ([#4159](https://github.com/logancyang/obsidian-copilot/pull/4159), @zeroliu)
+- Clicking **Reload** in a chat keeps that chat selected while its agent restarts, so your next message goes to it. ([#4172](https://github.com/logancyang/obsidian-copilot/pull/4172), @zeroliu)
+- Agent Chat on OpenCode uses the key you verified on the BYOK tab. It also sends images to vision models on custom providers such as DashScope. ([#4148](https://github.com/logancyang/obsidian-copilot/pull/4148), [#4152](https://github.com/logancyang/obsidian-copilot/pull/4152), @zeroliu)
+- Miyo search, Relevant Notes and document reading work when Miyo indexes your vault under a different name. ([#4085](https://github.com/logancyang/obsidian-copilot/pull/4085), @zeroliu)
+- Resumed Claude subagents show as finished when they end. ([#4154](https://github.com/logancyang/obsidian-copilot/pull/4154), @zeroliu)
+- Code in Copilot replies stays as written when Dataview is on. ([#4083](https://github.com/logancyang/obsidian-copilot/pull/4083), @zeroliu)
+- Saved chat notes keep replies that start with a chart, heading, list or table intact. ([#4211](https://github.com/logancyang/obsidian-copilot/pull/4211), @zeroliu)
+- A renamed chat shows its new title in **Recent chats** right away. ([#4088](https://github.com/logancyang/obsidian-copilot/pull/4088), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.18 - Copilot Navigator preview, selections from drawings, PDFs and diffs, revoke agent changes
 
 [![Demo video: Obsidian Copilot 4.0.18: Navigator, Selections, Revoke](https://images.brevilabs.com/newsletters/copilot-releases/4.0.18/navigator-lift-d8d13b92.webp)](https://youtube.com/shorts/K4c38ZDOMrI)
