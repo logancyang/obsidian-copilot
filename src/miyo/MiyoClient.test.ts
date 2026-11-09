@@ -1,5 +1,10 @@
 import { logInfo, logError } from "@/logger";
-import { MiyoClient, MiyoRequestError, type MiyoSearchResult } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoRequestError,
+  type MiyoSearchResult,
+  subscribeToMiyoFolderNotRegistered,
+} from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
@@ -295,6 +300,114 @@ describe("MiyoClient", () => {
           body: undefined,
         })
       );
+    });
+  });
+
+  describe("getFolder()", () => {
+    it("returns the folder Miyo registered at a path, whose path field is the folder's name", async () => {
+      const folder = { path: "Notes", absolute_path: "/Users/me/Vedas", origin: "user" };
+      mockedRequestUrl.mockResolvedValue({
+        status: 200,
+        json: folder,
+        text: "",
+      } as RequestUrlResponse);
+
+      const response = await new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas");
+
+      expect(response).toEqual(folder);
+      expect(mockedRequestUrl).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "http://127.0.0.1:8742/v0/folder?path=%2FUsers%2Fme%2FVedas",
+          method: "GET",
+        })
+      );
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 returns null when Miyo has no folder at the path", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail: "Folder not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas")
+      ).resolves.toBeNull();
+    });
+
+    it("throws any other Miyo failure", async () => {
+      mockedRequestUrl.mockResolvedValue({
+        status: 503,
+        json: { detail: "Service unavailable" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().getFolder("http://127.0.0.1:8742", "/Users/me/Vedas")
+      ).rejects.toMatchObject({ status: 503 });
+    });
+  });
+
+  describe("subscribeToMiyoFolderNotRegistered()", () => {
+    const rejectScanWith = (detail: string) =>
+      mockedRequestUrl.mockResolvedValue({
+        status: 404,
+        json: { detail },
+        text: "",
+      } as RequestUrlResponse);
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 tells subscribers which folder name Miyo rejected as not registered, and the request still rejects", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      rejectScanWith("Folder not registered: Vedas");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).toHaveBeenCalledWith("Vedas");
+      unsubscribe();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3690 tells subscribers without a name when chat-context retrieval rejects the vault as an unknown folder", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      mockedRequestUrl.mockResolvedValue({
+        status: 400,
+        json: { code: "unknown_folder", detail: "Vault is not registered" },
+        text: "",
+      } as RequestUrlResponse);
+
+      await expect(
+        new MiyoClient().recommend("http://127.0.0.1:8742", {
+          folder_name: "Vedas",
+          file_paths: ["Vedas/a.md"],
+        })
+      ).rejects.toMatchObject({ status: 400 });
+      expect(listener).toHaveBeenCalledWith(undefined);
+      unsubscribe();
+    });
+
+    it("stays quiet for a 404 that is not about an unregistered folder", async () => {
+      const listener = jest.fn();
+      const unsubscribe = subscribeToMiyoFolderNotRegistered(listener);
+      rejectScanWith("No indexed context for source file");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).not.toHaveBeenCalled();
+      unsubscribe();
+    });
+
+    it("stops telling a subscriber once it unsubscribes", async () => {
+      const listener = jest.fn();
+      subscribeToMiyoFolderNotRegistered(listener)();
+      rejectScanWith("Folder not registered: Vedas");
+
+      await expect(
+        new MiyoClient().scanFolder("http://127.0.0.1:8742", "Vedas")
+      ).rejects.toMatchObject({ status: 404 });
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 

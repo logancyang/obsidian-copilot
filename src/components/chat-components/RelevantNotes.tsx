@@ -24,6 +24,7 @@ import {
   type RelevantNoteEntry,
 } from "@/miyo/findRelevantNotes";
 import { onMiyoIndexChanged } from "@/miyo/miyoIndex";
+import { useMiyoFolderName } from "@/miyo/useMiyoFolderName";
 import { openCopilotSettings } from "@/settings/openSettings";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { sha256 } from "@/utils/hash";
@@ -102,6 +103,7 @@ function useRelevantNotes({
   liveUpdateEnabled,
 }: UseRelevantNotesOptions) {
   const app = useApp();
+  const miyoFolderName = useMiyoFolderName(app);
   const [settledRequest, setSettledRequest] = useState<SettledRelevantNotesRequest | null>(null);
   const [requery, setRequery] = useState<RelevantNotesRequery>(INITIAL_REQUERY);
   const activeFile = useActiveFile();
@@ -127,6 +129,7 @@ function useRelevantNotes({
       ? JSON.stringify([
           activeFilePath,
           miyoServerUrl,
+          miyoFolderName,
           miyoBackendAvailable,
           miyoCredentialIdentity,
           requery.restart,
