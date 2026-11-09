@@ -1,4 +1,4 @@
-import { backendRegistry } from "@/agentMode/backends/registry";
+import { chatBackendIcon } from "@/agentMode/ui/chatBackendIcon";
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import {
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { formatCompactRelativeTime } from "@/utils/formatRelativeTime";
 import { sortByStrategy, type SortStrategy } from "@/utils/recentUsageManager";
-import { Archive, FileText, LoaderCircle, MessageCircle, Pin, PinOff, Power } from "lucide-react";
+import { Archive, FileText, LoaderCircle, Pin, PinOff, Power } from "lucide-react";
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useIncrementalPaging } from "@/hooks/useIncrementalPaging";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -46,12 +46,6 @@ interface GlobalRecentChatsSectionProps {
   projectNamesById?: Readonly<Record<string, string>>;
   sortStrategy?: SortStrategy;
   className?: string;
-}
-
-function resolveChatIcon(
-  item: ChatHistoryItem
-): React.ComponentType<{ className?: string }> | undefined {
-  return item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 }
 
 // Upstream `getChatHistoryItems()` returns vault-scan order. Apply the saved
@@ -123,7 +117,7 @@ const RecentChatRow = memo(function RecentChatRow({
   hasAttention,
 }: RecentChatRowProps): React.ReactElement {
   const { onOpenSourceFile, onCloseSession, onSetChatPinned } = actions;
-  const Icon = resolveChatIcon(item) ?? MessageCircle;
+  const Icon = chatBackendIcon(item);
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
 
