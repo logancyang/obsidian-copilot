@@ -1,5 +1,10 @@
 /* eslint-disable obsidianmd/no-tfile-tfolder-cast -- test fixtures; not real TFiles */
-import { extractChatTitle, fileToHistoryItem, parseChatTimestamp } from "@/utils/chatHistoryUtils";
+import {
+  extractChatTitle,
+  fileToHistoryItem,
+  parseChatTimestamp,
+  formatChatNoteMessage,
+} from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import type { App, TFile } from "obsidian";
 
@@ -105,6 +110,26 @@ describe("chatHistoryUtils", () => {
         "Write a poem"
       );
     });
+  });
+
+  describe("formatChatNoteMessage()", () => {
+    it("writes a message that starts with text on the sender's line", () => {
+      expect(formatChatNoteMessage("ai", "Here is the plan.")).toBe("**ai**: Here is the plan.");
+    });
+
+    it.each([
+      ["a code fence", "```mermaid\nflowchart LR\n  A --> B\n```"],
+      ["a heading", "## Callouts\nUse them."],
+      ["a list", "- one\n- two"],
+      ["a numbered list", "1. one\n2. two"],
+      ["a quote", "> [!note] Tip"],
+      ["a table", "| a | b |\n| --- | --- |"],
+    ])(
+      `starts a message that opens with %s on its own paragraph so the block renders (${"https://github.com/Brevilabs/obsidian-copilot-private/issues/889"})`,
+      (_, body) => {
+        expect(formatChatNoteMessage("ai", body)).toBe(`**ai**: \n\n${body}`);
+      }
+    );
   });
 
   describe("parseChatTimestamp()", () => {

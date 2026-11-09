@@ -27,12 +27,17 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
 8. **`src/miyo/agentMode/`** — Miyo's pieces of the agent trail. It may import
    `ui/` and `session/`, and only `ui/` imports it, so the rest of `src/miyo`
    stays free of Agent Mode.
-9. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
-   components, hooks, and stories. It may import `ui/` and `session/`; only
-   `ui/` and the Agent Mode entry (`index.ts`) import it, so removing the
-   Navigator means deleting the folder and those imports. Code whose purpose
-   is the Navigator belongs here; generic helpers it uses belong in shared
-   modules even when the Navigator is their only caller.
+9. **`src/connectors/agentMode/`** — Connectors' pieces of the chat: the
+   `suggest_connector` tool, its chat state and extension, and its card slot.
+   It may import `ui/` and `session/`; only `ui/` and the Agent Mode entry
+   (`index.ts`) import it, so the rest of `src/connectors` stays free of Agent
+   Mode.
+10. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
+    components, hooks, and stories. It may import `ui/` and `session/`; only
+    `ui/` and the Agent Mode entry (`index.ts`) import it, so removing the
+    Navigator means deleting the folder and those imports. Code whose purpose
+    is the Navigator belongs here; generic helpers it uses belong in shared
+    modules even when the Navigator is their only caller.
 
 ## Why two adapters under one session
 
@@ -109,6 +114,11 @@ Then in either case:
 - "A tool call that gets its own card in the agent trail" → a `ToolCardKind`
   (`ui/activityGroups.ts`) in the tool's feature module, listed in
   `ui/toolCardKinds.tsx`
+- "A feature's state on a chat, or a card it shows after a turn" → a
+  `ChatStateKey` and `ChatExtension` (`session/chatExtension.ts`) plus a
+  `ChatCardSlot` (`ui/chatCards.tsx`) in the feature's module; list the
+  extension in `index.ts` and the slot in `ui/chatCardSlots.ts`. Never add
+  feature methods to `AgentSession`, `AgentChatBackend` or `AgentChatMessages`.
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs

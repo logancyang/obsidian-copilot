@@ -1,4 +1,5 @@
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
 export function excalidrawToolCall(
@@ -6,7 +7,7 @@ export function excalidrawToolCall(
   input: Record<string, unknown> = { path: "Drawings/Release plan.excalidraw.md" },
   overrides: Partial<ToolCallPart> = {}
 ): ToolCallPart {
-  return {
+  const part: ToolCallPart = {
     kind: "tool_call",
     id: tool,
     title: tool,
@@ -16,5 +17,10 @@ export function excalidrawToolCall(
     vendorToolName: tool,
     input,
     ...overrides,
+  };
+  return {
+    ...part,
+    copilotTools:
+      part.copilotTools ?? directCopilotToolUse(part.mcpServer, part.vendorToolName, part.input),
   };
 }

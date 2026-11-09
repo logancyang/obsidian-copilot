@@ -260,6 +260,19 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[1].message).toBe("hi back");
     });
 
+    it("saves a reply that starts with a code fence so the note renders it and it loads back unchanged (https://github.com/Brevilabs/obsidian-copilot-private/issues/889)", async () => {
+      const reply = "```mermaid\nflowchart LR\n  A --> B\n```\n\nThat is the flow.";
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "Draw it"), makeMessage(AI_SENDER, reply)],
+        "claude"
+      );
+
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain("**ai**: \n\n```mermaid\n");
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages.map((m) => m.message)).toEqual(["Draw it", reply]);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 writes the chat title to the note's topic, the one title the chat lists read", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         label: "My chat",

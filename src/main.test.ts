@@ -75,8 +75,11 @@ jest.mock("@/agentMode", () => ({
   registerTurnDiffCommands: jest.fn(),
   acpFrameSink: { narrowLegacyLogs: jest.fn(async () => undefined) },
   createAgentSessionManager: jest.fn(() => ({})),
+  MAX_PROVIDED_TOOL_NAME_LENGTH: 41,
 }));
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
+jest.mock("@/connectors/connectionManager");
+jest.mock("@/connectors/custom/customConnectors");
 
 import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -121,6 +124,9 @@ import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { disposeNotificationSound } from "@/utils/notificationSound";
 import { findChatFileByDeepLinkId } from "@/utils/chatDeepLink";
 import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
+import { ConnectionManager } from "@/connectors/connectionManager";
+import { ConnectorTools } from "@/connectors/connectorTools";
+import { CustomConnectors } from "@/connectors/custom/customConnectors";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -677,6 +683,57 @@ describe("main", () => {
         expect(startActiveWebTabTracking).toHaveBeenCalledWith(plugin.app, {
           preserveOnViewTypes: [CHAT_VIEWTYPE, CHAT_AGENT_VIEWTYPE],
         });
+      });
+
+      it("starts the connection manager and its connector tools on desktop, checks connector logins once, and disposes the manager with the plugin", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const manager = jest.mocked(ConnectionManager).mock.instances[0];
+        expect(plugin.connectionManager).toBe(manager);
+        expect(plugin.connectorTools).toBeInstanceOf(ConnectorTools);
+        expect(manager.checkStatus).toHaveBeenCalledTimes(1);
+        expect(manager.dispose).not.toHaveBeenCalled();
+        for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
+        expect(manager.dispose).toHaveBeenCalledTimes(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 gives the plugin custom connectors on desktop and stops their servers when the plugin unloads", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const custom = jest.mocked(CustomConnectors).mock.instances[0];
+        expect(plugin.customConnectors).toBe(custom);
+        expect(jest.mocked(ConnectionManager).mock.calls[0][0].custom).toBe(custom);
+        expect(custom.dispose).not.toHaveBeenCalled();
+        for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
+        expect(custom.dispose).toHaveBeenCalledTimes(1);
+      });
+
+      it("starts no connection manager on mobile, where connector logins cannot run", async () => {
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        expect(ConnectionManager).not.toHaveBeenCalled();
+        expect(plugin.connectionManager).toBeUndefined();
+        expect(plugin.connectorTools).toBeUndefined();
+        expect(plugin.customConnectors).toBeUndefined();
       });
 
       it.each([

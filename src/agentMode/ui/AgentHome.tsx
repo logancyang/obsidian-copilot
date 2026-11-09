@@ -9,6 +9,7 @@ import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentCo
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
@@ -116,7 +117,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
-    feedbackOffer,
+    chatStates,
     queuedPrompts,
     tasks,
     isReplyRunning,
@@ -742,6 +743,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 }
               >
                 <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+                <ConnectorsAttentionBanner manager={plugin.connectionManager} />
                 {isLanding ? (
                   <AgentLandingStack
                     hero={hero}
@@ -807,7 +809,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         pendingAskUserQuestions={pendingAskUserQuestions}
                         chatBackend={backend}
                         isLoading={isLoading}
-                        feedbackOffer={feedbackOffer}
+                        chatStates={chatStates}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

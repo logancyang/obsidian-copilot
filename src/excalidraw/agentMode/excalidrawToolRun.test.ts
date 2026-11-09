@@ -1,3 +1,5 @@
+import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { excalidrawToolRun, summarizeDrawing } from "@/excalidraw/agentMode/excalidrawToolRun";
 import { excalidrawToolCall } from "@/excalidraw/agentMode/testing/excalidrawToolCall";
@@ -7,26 +9,31 @@ const PATH = "Incidents/Investigation playbook.excalidraw.md";
 const CREATE = { path: PATH, elements: [{ id: "a", type: "rectangle" }] };
 const EDIT = { path: PATH, operations: [{ op: "delete", ids: ["a"] }] };
 
+function ingested(part: ToolCallPart): ToolCallPart {
+  const copilotTools = readCodexCopilotTools(part.input) ?? readOpencodeCopilotTools(part.input);
+  return copilotTools ? { ...part, copilotTools } : part;
+}
+
 function codexCall(tool: string, args: Record<string, unknown>): ToolCallPart {
-  return {
+  return ingested({
     kind: "tool_call",
     id: "codex",
     title: `mcp.obsidian-copilot.${tool}`,
     status: "completed",
     toolKind: "execute",
     input: { server: "obsidian-copilot", tool, arguments: args },
-  };
+  });
 }
 
 function opencodeCall(code: string): ToolCallPart {
-  return {
+  return ingested({
     kind: "tool_call",
     id: "opencode",
     title: "execute",
     status: "completed",
     toolKind: "other",
     input: { code },
-  };
+  });
 }
 
 describe("excalidrawToolRun", () => {

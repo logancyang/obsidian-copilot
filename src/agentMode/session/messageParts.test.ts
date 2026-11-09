@@ -72,6 +72,28 @@ describe("messageParts", () => {
           "\n\n[Display trimmed: 5 more characters. The agent received the full output.]",
       });
     });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 says a direct call on Copilot's server runs its tool with its input as arguments", () => {
+      const part = toolCallToPart({
+        toolCallId: "t1",
+        title: "notion_search",
+        rawInput: { query: "Orion" },
+        mcpServer: "obsidian-copilot",
+        vendorToolName: "notion_search",
+      });
+
+      expect(part.kind === "tool_call" && part.copilotTools).toEqual({
+        runs: "notion_search",
+        calls: [{ name: "notion_search", args: { query: "Orion" } }],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps the Copilot tools a backend read from a call it wraps", () => {
+      const copilotTools = { runs: null, calls: [{ name: "notion_search", code: "x" }] };
+      const part = toolCallToPart({ toolCallId: "t1", title: "execute", copilotTools });
+
+      expect(part.kind === "tool_call" && part.copilotTools).toBe(copilotTools);
+    });
   });
 
   describe("tryReadExitPlanModeCall()", () => {
@@ -196,6 +218,34 @@ describe("messageParts", () => {
         toolKind: "edit",
         status: "pending",
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads a direct Copilot call's arguments from the latest input", () => {
+      const call = { ...existing, mcpServer: "obsidian-copilot", vendorToolName: "notion_search" };
+      const merged = mergeToolCallUpdate(call, { toolCallId: "t1", rawInput: { query: "Orion" } });
+
+      expect(merged.kind === "tool_call" && merged.copilotTools).toEqual({
+        runs: "notion_search",
+        calls: [{ name: "notion_search", args: { query: "Orion" } }],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 replaces a wrapped call's Copilot tools with the ones read from new input and keeps them when no input arrives", () => {
+      const before = { runs: "notion_search", calls: [{ name: "notion_search", code: "a" }] };
+      const after = { runs: null, calls: [{ name: "notion_search", code: "b" }] };
+      const call = { ...existing, copilotTools: before };
+
+      const kept = mergeToolCallUpdate(call, { toolCallId: "t1", status: "completed" });
+      const replaced = mergeToolCallUpdate(call, {
+        toolCallId: "t1",
+        rawInput: { code: "b" },
+        copilotTools: after,
+      });
+      const cleared = mergeToolCallUpdate(call, { toolCallId: "t1", rawInput: { code: "c" } });
+
+      expect(kept.kind === "tool_call" && kept.copilotTools).toBe(before);
+      expect(replaced.kind === "tool_call" && replaced.copilotTools).toBe(after);
+      expect(cleared.kind === "tool_call" && cleared.copilotTools).toBeUndefined();
     });
   });
 

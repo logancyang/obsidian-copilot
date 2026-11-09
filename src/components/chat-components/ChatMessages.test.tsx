@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import ChatMessages, { isChatEmpty } from "@/components/chat-components/ChatMessages";
 import { ChatMessage } from "@/types/message";
 
@@ -17,8 +17,10 @@ jest.mock("@/hooks/useChatScrolling", () => ({
 }));
 jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   __esModule: true,
-  default: ({ sourcePath }: { sourcePath: string }) => (
-    <div data-testid="message-source">{sourcePath}</div>
+  default: ({ sourcePath, message }: { sourcePath: string; message: ChatMessage }) => (
+    <div data-testid="message-source" data-text={message.message}>
+      {sourcePath}
+    </div>
   ),
 }));
 
@@ -53,6 +55,57 @@ describe("ChatMessages", () => {
         />
       );
       expect(screen.getByTestId("message-source").textContent).toBe("chat/Conversation.md");
+    });
+
+    it("paces a streamed burst into the reply word by word instead of showing it at once https://github.com/Brevilabs/obsidian-copilot-private/issues/886", () => {
+      jest.useFakeTimers();
+      const burst = "First " + "steady word ".repeat(40);
+      const view = (currentAiMessage: string) => (
+        <ChatMessages
+          chatHistory={[]}
+          currentAiMessage={currentAiMessage}
+          app={{} as never}
+          onRegenerate={() => undefined}
+          onEdit={() => undefined}
+          onDelete={() => undefined}
+        />
+      );
+      const { rerender } = render(view("First "));
+      const shown = () => screen.getByTestId("message-source").dataset.text ?? "";
+      expect(shown()).toBe("First ");
+      rerender(view(burst));
+      act(() => jest.advanceTimersByTime(20));
+      expect(shown().length).toBeGreaterThan("First ".length);
+      expect(shown().length).toBeLessThan(burst.length);
+      act(() => jest.advanceTimersByTime(300));
+      expect(shown()).toBe(burst);
+      jest.useRealTimers();
+    });
+
+    it("keeps the agent reasoning marker whole while pacing only the reply after it https://github.com/Brevilabs/obsidian-copilot-private/issues/886", () => {
+      jest.useFakeTimers();
+      const marker = '<!--AGENT_REASONING:reasoning:0:["Gathering my thoughts"]-->';
+      const reply = "\n\nFirst " + "steady word ".repeat(40);
+      const view = (currentAiMessage: string) => (
+        <ChatMessages
+          chatHistory={[]}
+          currentAiMessage={currentAiMessage}
+          app={{} as never}
+          onRegenerate={() => undefined}
+          onEdit={() => undefined}
+          onDelete={() => undefined}
+        />
+      );
+      const { rerender } = render(view(""));
+      const shown = () => screen.getByTestId("message-source").dataset.text ?? "";
+      rerender(view(marker));
+      act(() => jest.advanceTimersByTime(500));
+      expect(shown()).toBe(marker);
+      rerender(view(marker + reply));
+      act(() => jest.advanceTimersByTime(20));
+      expect(shown().startsWith(marker + "\n\nFirst ")).toBe(true);
+      expect(shown().length).toBeLessThan((marker + reply).length);
+      jest.useRealTimers();
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/277 shows a return control above a paused transcript and resumes following on click", () => {
