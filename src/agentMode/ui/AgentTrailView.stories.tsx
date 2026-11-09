@@ -100,13 +100,15 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
 ];
 
 const CONNECTOR_TOOLS: AgentMessagePart[] = [
-  say("A connector tool is named by its service and its readable tool name."),
-  tool("notion-search", "notion_search", {
+  say(
+    "A connector tool is named by its service and its readable tool name, without the service's own prefix."
+  ),
+  tool("notion-search", "notion_notion-search", {
     mcpServer: "obsidian-copilot",
     input: { query: "Orion" },
     copilotTools: {
-      runs: "notion_search",
-      calls: [{ name: "notion_search", args: { query: "Orion" } }],
+      runs: "notion_notion-search",
+      calls: [{ name: "notion_notion-search", args: { query: "Orion" } }],
     },
     output: [{ type: "text", text: "Orion kickoff plan" }],
   }),
@@ -131,14 +133,14 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     title: "execute",
     toolKind: "other",
     input: {
-      code: 'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;',
+      code: 'const res = await tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
     },
     copilotTools: {
-      runs: "notion_create_page",
+      runs: "notion_notion-create-pages",
       calls: [
         {
-          name: "notion_create_page",
-          code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;',
+          name: "notion_notion-create-pages",
+          code: 'tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
         },
       ],
     },
