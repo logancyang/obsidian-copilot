@@ -9,6 +9,12 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { opencodeCopilotToolCalls } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import {
+  CopilotToolCallsProvider,
+  NO_COPILOT_TOOL_CALLS,
+  type CopilotToolCallReader,
+} from "@/agentMode/ui/copilotToolCall";
 import { FEEDBACK_OFFER, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import { EMPTY_CHAT_STATES, withChatState } from "@/agentMode/session/chatExtension";
 import { CONNECTOR_CARDS } from "@/connectors/agentMode/connectorCards";
@@ -208,7 +214,8 @@ function plan(id: string): CurrentPlan {
 function renderMessages(
   messages: AgentChatMessage[],
   isLoading: boolean,
-  overrides: Partial<AgentChatMessagesProps> = {}
+  overrides: Partial<AgentChatMessagesProps> = {},
+  copilotToolCalls: CopilotToolCallReader = NO_COPILOT_TOOL_CALLS
 ) {
   const props: AgentChatMessagesProps = {
     messages,
@@ -221,7 +228,10 @@ function renderMessages(
     chatStates: EMPTY_CHAT_STATES,
     ...overrides,
   };
-  return { ...render(<AgentChatMessages {...props} />), props };
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <CopilotToolCallsProvider value={copilotToolCalls}>{children}</CopilotToolCallsProvider>
+  );
+  return { ...render(<AgentChatMessages {...props} />, { wrapper }), props };
 }
 
 describe("AgentChatMessages", () => {
@@ -603,7 +613,7 @@ describe("AgentChatMessages", () => {
         railText: "Permission execute-1 via execute",
       },
     ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title'",
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 titles an OpenCode execute permission request whose code calls $calls as '$title' when the chat runs on OpenCode",
       ({ code, title, railText }) => {
         const toolTurn = assistantMessage("answer-1", 62_000, {
           parts: [
@@ -621,7 +631,12 @@ describe("AgentChatMessages", () => {
         request.toolCall.title = "execute";
         request.toolCall.rawInput = { code };
 
-        renderMessages([toolTurn], true, { pendingToolPermissions: [request] });
+        renderMessages(
+          [toolTurn],
+          true,
+          { pendingToolPermissions: [request] },
+          opencodeCopilotToolCalls
+        );
 
         const rail = screen.getByRole("region", { name: "Pending agent actions" });
         expect(rail.textContent).toBe(railText);

@@ -1,5 +1,8 @@
+import { codexCopilotToolCalls } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { opencodeCopilotToolCalls } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import type { CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
@@ -12,8 +15,15 @@ function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   };
 }
 
+const EVERY_BACKEND: CopilotToolCallReader = {
+  call: (part, toolName) =>
+    codexCopilotToolCalls.call(part, toolName) ?? opencodeCopilotToolCalls.call(part, toolName),
+  toolName: (part) =>
+    codexCopilotToolCalls.toolName(part) ?? opencodeCopilotToolCalls.toolName(part),
+};
+
 describe("miyoSearchRun", () => {
-  describe("miyoSearchRun()", () => {
+  describe("miyoSearchRun(, EVERY_BACKEND)", () => {
     const miyoJson = (paths: string[]) =>
       JSON.stringify({
         results: paths.map((path) => ({ path, content: "…" })),
@@ -63,7 +73,7 @@ describe("miyoSearchRun", () => {
     it.each(backends)(
       "reads the query and the found notes from a completed %s miyo_search call (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
       (_name, call) => {
-        expect(miyoSearchRun(call(stdout(miyoJson(NOTES))))).toEqual({
+        expect(miyoSearchRun(call(stdout(miyoJson(NOTES))), EVERY_BACKEND)).toEqual({
           status: "completed",
           query: "hiking trip",
           notes: NOTES.map((path) => ({ path })),
@@ -76,13 +86,13 @@ describe("miyoSearchRun", () => {
       const t = opencodeCall(
         stdout(JSON.stringify({ results: [{ path: "a.md" }], count: 1 }, null, 2))
       );
-      expect(miyoSearchRun(t)?.notes).toEqual([{ path: "a.md" }]);
+      expect(miyoSearchRun(t, EVERY_BACKEND)?.notes).toEqual([{ path: "a.md" }]);
     });
 
     it.each(backends)(
       "shows a %s call with no result yet as running with its query and no notes",
       (_name, call) => {
-        expect(miyoSearchRun(call({ status: "in_progress" }))).toEqual({
+        expect(miyoSearchRun(call({ status: "in_progress" }), EVERY_BACKEND)).toEqual({
           status: "in_progress",
           query: "hiking trip",
           notes: null,
@@ -94,13 +104,13 @@ describe("miyoSearchRun", () => {
     it.each(backends)(
       "reports no notes for a completed %s call whose search matched nothing",
       (_name, call) => {
-        expect(miyoSearchRun(call(stdout(miyoJson([]))))?.notes).toEqual([]);
+        expect(miyoSearchRun(call(stdout(miyoJson([]))), EVERY_BACKEND)?.notes).toEqual([]);
       }
     );
 
     it("lists each note once when a result lists it more than once", () => {
       const t = claudeCall(stdout(miyoJson(["a.md", "a.md", "b.md"])));
-      expect(miyoSearchRun(t)?.notes).toEqual([{ path: "a.md" }, { path: "b.md" }]);
+      expect(miyoSearchRun(t, EVERY_BACKEND)?.notes).toEqual([{ path: "a.md" }, { path: "b.md" }]);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps the Miyo folder of a note outside the vault apart from a vault note at the same path", () => {
@@ -112,7 +122,7 @@ describe("miyoSearchRun", () => {
         ],
         count: 3,
       });
-      expect(miyoSearchRun(claudeCall(stdout(text)))?.notes).toEqual([
+      expect(miyoSearchRun(claudeCall(stdout(text)), EVERY_BACKEND)?.notes).toEqual([
         { path: "Research/Sleep.md" },
         { folder: "Research", path: "Interview.md" },
         { folder: "Reading Notes", path: "Research/Sleep.md" },
@@ -122,7 +132,7 @@ describe("miyoSearchRun", () => {
     it.each(backends)(
       "reports a failed %s call with the error text the tool returned",
       (_name, call) => {
-        expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }))).toEqual({
+        expect(miyoSearchRun(call({ status: "failed", ...stdout(DOWN) }), EVERY_BACKEND)).toEqual({
           status: "failed",
           query: "hiking trip",
           notes: null,
@@ -133,11 +143,13 @@ describe("miyoSearchRun", () => {
 
     it("reports the whole failure text when it has no Details part (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
       const text = "query must be a non-empty string.";
-      expect(miyoSearchRun(claudeCall({ status: "failed", ...stdout(text) }))?.error).toBe(text);
+      expect(
+        miyoSearchRun(claudeCall({ status: "failed", ...stdout(text) }), EVERY_BACKEND)?.error
+      ).toBe(text);
     });
 
     it("reports a failed call without output as failed with no error text", () => {
-      expect(miyoSearchRun(codexCall({ status: "failed" }))).toMatchObject({
+      expect(miyoSearchRun(codexCall({ status: "failed" }), EVERY_BACKEND)).toMatchObject({
         status: "failed",
         error: null,
       });
@@ -145,7 +157,7 @@ describe("miyoSearchRun", () => {
 
     it("keeps an OpenCode call completed when its code returned something other than the raw result list (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)", () => {
       const t = opencodeCall(stdout(JSON.stringify({ len: 1200, count: 3 }, null, 2)));
-      expect(miyoSearchRun(t)).toEqual({
+      expect(miyoSearchRun(t, EVERY_BACKEND)).toEqual({
         status: "completed",
         query: "hiking trip",
         notes: null,
@@ -154,7 +166,7 @@ describe("miyoSearchRun", () => {
     });
 
     it("reports a completed call with no output as completed with unknown notes", () => {
-      expect(miyoSearchRun(codexCall())).toMatchObject({
+      expect(miyoSearchRun(codexCall(), EVERY_BACKEND)).toMatchObject({
         status: "completed",
         notes: null,
         error: null,
@@ -174,7 +186,7 @@ describe("miyoSearchRun", () => {
         }),
       ],
     ])("shows the card without a query for %s", (_name, call) => {
-      expect(miyoSearchRun(call)?.query).toBeNull();
+      expect(miyoSearchRun(call, EVERY_BACKEND)?.query).toBeNull();
     });
 
     it("reads an OpenCode query written with escapes and single-quoted tool access", () => {
@@ -183,7 +195,7 @@ describe("miyoSearchRun", () => {
           code: 'return tools[\'obsidian-copilot\'].miyo_search({ "query": "say \\"hi\\"" });',
         },
       });
-      expect(miyoSearchRun(t)?.query).toBe('say "hi"');
+      expect(miyoSearchRun(t, EVERY_BACKEND)?.query).toBe('say "hi"');
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads an OpenCode query written as a single-quoted literal", () => {
@@ -192,7 +204,7 @@ describe("miyoSearchRun", () => {
           code: `return tools["obsidian-copilot"].miyo_search({ query: 'Sam\\'s "standing" desk' });`,
         },
       });
-      expect(miyoSearchRun(t)?.query).toBe('Sam\'s "standing" desk');
+      expect(miyoSearchRun(t, EVERY_BACKEND)?.query).toBe('Sam\'s "standing" desk');
     });
 
     it.each([
@@ -212,7 +224,7 @@ describe("miyoSearchRun", () => {
       ],
       ["a call without input", tool({ input: undefined })],
     ])("returns null for %s", (_name, call) => {
-      expect(miyoSearchRun(call)).toBeNull();
+      expect(miyoSearchRun(call, EVERY_BACKEND)).toBeNull();
     });
 
     it.each([
@@ -235,12 +247,12 @@ describe("miyoSearchRun", () => {
     ])(
       "returns null for %s saved by an earlier Copilot version so it renders as an ordinary row (https://github.com/Brevilabs/obsidian-copilot-private/issues/735)",
       (_name, call) => {
-        expect(miyoSearchRun(call)).toBeNull();
+        expect(miyoSearchRun(call, EVERY_BACKEND)).toBeNull();
       }
     );
   });
 
-  describe("miyoResultPaths()", () => {
+  describe("miyoResultPaths(, EVERY_BACKEND)", () => {
     const search = (call: Partial<ToolCallPart>, paths: string[]) =>
       tool({
         mcpServer: "obsidian-copilot",
@@ -258,7 +270,7 @@ describe("miyoSearchRun", () => {
         { kind: "text", text: "Checking more." },
         search({}, ["v/notes/B.md", "v/notes/C.md"]),
       ];
-      expect([...new Set(miyoResultPaths(parts))]).toEqual([
+      expect([...new Set(miyoResultPaths(parts, EVERY_BACKEND))]).toEqual([
         "v/notes/A.md",
         "v/notes/B.md",
         "v/notes/C.md",
@@ -285,7 +297,11 @@ describe("miyoSearchRun", () => {
           ["v/opencode.md"]
         ),
       ];
-      expect(miyoResultPaths(parts)).toEqual(["v/claude.md", "v/codex.md", "v/opencode.md"]);
+      expect(miyoResultPaths(parts, EVERY_BACKEND)).toEqual([
+        "v/claude.md",
+        "v/codex.md",
+        "v/opencode.md",
+      ]);
     });
 
     it("ignores other tool calls, failed searches and searches with no readable output", () => {
@@ -295,7 +311,7 @@ describe("miyoSearchRun", () => {
         search({ output: undefined }, []),
         { kind: "text", text: "Nothing found." },
       ];
-      expect(miyoResultPaths(parts)).toEqual([]);
+      expect(miyoResultPaths(parts, EVERY_BACKEND)).toEqual([]);
     });
   });
 });

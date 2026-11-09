@@ -1,6 +1,10 @@
 import type { AgentMessagePart, AgentToolStatus } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { codeStringField, copilotToolCall } from "@/agentMode/ui/copilotToolCall";
+import {
+  codeStringField,
+  copilotToolCall,
+  type CopilotToolCallReader,
+} from "@/agentMode/ui/copilotToolCall";
 import { MIYO_SEARCH_TOOL_NAME } from "@/miyo/miyoSearchTool";
 
 export const EMPTY_MIYO_PATHS: readonly string[] = Object.freeze([]);
@@ -21,8 +25,11 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function miyoSearchQuery(part: ToolCallPart): string | null | undefined {
-  const call = copilotToolCall(part, MIYO_SEARCH_TOOL_NAME);
+function miyoSearchQuery(
+  part: ToolCallPart,
+  reader: CopilotToolCallReader
+): string | null | undefined {
+  const call = copilotToolCall(part, MIYO_SEARCH_TOOL_NAME, reader);
   if (!call) return undefined;
   return "args" in call ? stringOrNull(call.args.query) : codeStringField(call.code, "query");
 }
@@ -47,8 +54,11 @@ function miyoNotes(text: string): MiyoNote[] | null {
   }
 }
 
-export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
-  const query = miyoSearchQuery(part);
+export function miyoSearchRun(
+  part: ToolCallPart,
+  reader: CopilotToolCallReader
+): MiyoSearchRun | null {
+  const query = miyoSearchQuery(part, reader);
   if (query === undefined) return null;
   const text = (part.output ?? []).flatMap((o) => (o.type === "text" ? [o.text] : [])).join("");
   return {
@@ -62,10 +72,13 @@ export function miyoSearchRun(part: ToolCallPart): MiyoSearchRun | null {
 
 // Only notes without a folder are in the active vault, so only their paths can match a link in the answer.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-export function miyoResultPaths(parts: readonly AgentMessagePart[]): readonly string[] {
+export function miyoResultPaths(
+  parts: readonly AgentMessagePart[],
+  reader: CopilotToolCallReader
+): readonly string[] {
   const paths = parts.flatMap((part) =>
     part.kind === "tool_call"
-      ? (miyoSearchRun(part)?.notes ?? []).flatMap((note) =>
+      ? (miyoSearchRun(part, reader)?.notes ?? []).flatMap((note) =>
           note.folder === undefined ? [note.path] : []
         )
       : []

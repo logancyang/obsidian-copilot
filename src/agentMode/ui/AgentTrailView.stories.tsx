@@ -2,6 +2,11 @@ import { useApp } from "@/context";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import type { AgentMessagePart, StopReason, TurnFileChange } from "@/agentMode/session/types";
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import {
+  CopilotToolCallsProvider,
+  NO_COPILOT_TOOL_CALLS,
+  type CopilotToolCallReader,
+} from "@/agentMode/ui/copilotToolCall";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
@@ -139,6 +144,16 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
   tool("context7-docs", "query-docs", { mcpServer: "context7" }),
 ];
 
+const CONNECTOR_TOOL_NAMES: Readonly<Record<string, string>> = {
+  "linear-create": "linear_create_issue",
+  "opencode-notion-create": "notion_create_page",
+};
+
+const CONNECTOR_TOOL_READER: CopilotToolCallReader = {
+  call: () => null,
+  toolName: (part) => CONNECTOR_TOOL_NAMES[part.id] ?? null,
+};
+
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
 const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
@@ -156,27 +171,31 @@ const TrailDemo: React.FC<{
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
   stopReason?: StopReason;
+  copilotToolCalls?: CopilotToolCallReader;
 }> = ({
   parts,
   isStreaming = false,
   showCompletedDuration = true,
   fileChanges,
   stopReason = "end_turn",
+  copilotToolCalls = NO_COPILOT_TOOL_CALLS,
 }) => {
   const app = useApp();
   return (
-    <TooltipProvider>
-      <AgentTrail
-        parts={parts}
-        isStreaming={isStreaming}
-        turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
-        turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
-        timestamp="2026/08/07 20:31:10"
-        app={app}
-        turnStopReason={isStreaming ? undefined : stopReason}
-        fileChanges={fileChanges}
-      />
-    </TooltipProvider>
+    <CopilotToolCallsProvider value={copilotToolCalls}>
+      <TooltipProvider>
+        <AgentTrail
+          parts={parts}
+          isStreaming={isStreaming}
+          turnStartedAtMs={isStreaming ? Date.now() - 138_000 : undefined}
+          turnDurationMs={!isStreaming && showCompletedDuration ? 138_000 : undefined}
+          timestamp="2026/08/07 20:31:10"
+          app={app}
+          turnStopReason={isStreaming ? undefined : stopReason}
+          fileChanges={fileChanges}
+        />
+      </TooltipProvider>
+    </CopilotToolCallsProvider>
   );
 };
 
@@ -204,7 +223,7 @@ export const FailedFileChanges: StoryObj<AgentTrailProps> = {
 };
 
 export const ConnectorTools: StoryObj<AgentTrailProps> = {
-  render: () => <TrailDemo parts={CONNECTOR_TOOLS} />,
+  render: () => <TrailDemo parts={CONNECTOR_TOOLS} copilotToolCalls={CONNECTOR_TOOL_READER} />,
 };
 
 export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {

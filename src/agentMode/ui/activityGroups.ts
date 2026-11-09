@@ -2,6 +2,7 @@ import type React from "react";
 import type { App } from "obsidian";
 import type { RenderNode, ThoughtPart, ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentTasksContextValue } from "@/agentMode/ui/AgentTasksContext";
+import { NO_COPILOT_TOOL_CALLS, type CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 import { TOOL_CARD_KINDS } from "@/agentMode/ui/toolCardKinds";
 import { pluralize } from "@/agentMode/ui/toolSummaries";
 import { formatDuration } from "@/lib/duration";
@@ -18,6 +19,7 @@ export interface ActivityGroupNode {
 
 export interface ToolCardContext {
   tasks: AgentTasksContextValue | null;
+  copilotToolCalls: CopilotToolCallReader;
 }
 
 export interface ToolCardRenderContext extends ToolCardContext {
@@ -46,7 +48,10 @@ export type GroupedTrailNode = RenderNode | ActivityGroupNode | ToolCardNode;
 
 const EMPTY_GROUPED_TRAIL = Object.freeze([]) as unknown as GroupedTrailNode[];
 
-const NO_TOOL_CARD_CONTEXT: ToolCardContext = Object.freeze({ tasks: null });
+const NO_TOOL_CARD_CONTEXT: ToolCardContext = Object.freeze({
+  tasks: null,
+  copilotToolCalls: NO_COPILOT_TOOL_CALLS,
+});
 
 function placeToolCard(
   part: ToolCallPart,

@@ -3,6 +3,7 @@ import { CircleStop, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { displayTargetFromPath, lookupToolSummary } from "@/agentMode/ui/toolSummaries";
+import { useCopilotToolCalls } from "@/agentMode/ui/copilotToolCall";
 import { renderDiff } from "@/agentMode/ui/diffRender";
 import { getVaultBase } from "@/utils/vaultPath";
 import { openLinkClickProps, openVaultPath } from "@/utils/openVaultPath";
@@ -17,7 +18,7 @@ interface ActionCardProps {
 
 export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) => {
   const app = useApp();
-  const summary = lookupToolSummary(part);
+  const summary = lookupToolSummary(part, useCopilotToolCalls());
   const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
   const Icon = summary.icon;
   const line = summary.collapsedLine(part, summaryCtx);

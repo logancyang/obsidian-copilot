@@ -1,36 +1,41 @@
+import { createContext, useContext } from "react";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import {
+  toolInputRecord,
+  type CopilotToolCall,
+  type CopilotToolCallReader,
+} from "@/agentMode/session/copilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
-export type CopilotToolCall = { args: Record<string, unknown> } | { code: string };
+export type { CopilotToolCall, CopilotToolCallReader };
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+export const NO_COPILOT_TOOL_CALLS: CopilotToolCallReader = Object.freeze({
+  call: () => null,
+  toolName: () => null,
+});
+
+const CopilotToolCallsContext = createContext<CopilotToolCallReader>(NO_COPILOT_TOOL_CALLS);
+
+export const CopilotToolCallsProvider = CopilotToolCallsContext.Provider;
+
+export function useCopilotToolCalls(): CopilotToolCallReader {
+  return useContext(CopilotToolCallsContext);
 }
 
-// Claude names the call by server and tool, Codex nests the arguments under `server`/`tool`, and
-// OpenCode runs it as JavaScript inside its `execute` tool, so its arguments are only code.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
-export function copilotToolCall(part: ToolCallPart, toolName: string): CopilotToolCall | null {
-  const input = asRecord(part.input);
-  if (part.mcpServer === COPILOT_MCP_SERVER_NAME && part.vendorToolName === toolName) {
-    return { args: input };
+export function copilotToolCall(
+  part: ToolCallPart,
+  toolName: string,
+  reader: CopilotToolCallReader
+): CopilotToolCall | null {
+  if (part.mcpServer === COPILOT_MCP_SERVER_NAME) {
+    return part.vendorToolName === toolName ? { args: toolInputRecord(part.input) } : null;
   }
-  if (input.server === COPILOT_MCP_SERVER_NAME && input.tool === toolName) {
-    return { args: asRecord(input.arguments) };
-  }
-  const code = typeof input.code === "string" ? input.code : "";
-  const call = new RegExp(`tools\\[["']${COPILOT_MCP_SERVER_NAME}["']\\]\\.${toolName}\\(`).exec(
-    code
-  );
-  return call ? { code: code.slice(call.index) } : null;
+  return reader.call(part, toolName);
 }
 
-export function copilotToolName(part: ToolCallPart): string | null {
+export function copilotToolName(part: ToolCallPart, reader: CopilotToolCallReader): string | null {
   if (part.mcpServer === COPILOT_MCP_SERVER_NAME) return part.vendorToolName ?? null;
-  const input = asRecord(part.input);
-  return input.server === COPILOT_MCP_SERVER_NAME && typeof input.tool === "string"
-    ? input.tool
-    : null;
+  return reader.toolName(part);
 }
 
 export function codeStringField(code: string, field: string): string | null {

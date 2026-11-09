@@ -5,16 +5,16 @@ import { ExcalidrawToolCard } from "@/excalidraw/agentMode/ui/ExcalidrawToolCard
 import { openVaultPath } from "@/utils/openVaultPath";
 
 export const excalidrawCardKind: ToolCardKind = {
-  place: (part) => {
-    const run = excalidrawToolRun(part);
+  place: (part, { copilotToolCalls }) => {
+    const run = excalidrawToolRun(part, copilotToolCalls);
     // One card per drawing between two messages, so an agent's write-render-fix loop reads as one change; a call
     // whose path is unknown may target any drawing, so it never joins a card.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/787
     return run && { joinKey: run.path };
   },
-  render: (members, { app, open, onToggle, renderCall }) => (
+  render: (members, { app, open, onToggle, renderCall, copilotToolCalls }) => (
     <ExcalidrawToolCard
-      {...summarizeDrawing(members)}
+      {...summarizeDrawing(members, copilotToolCalls)}
       onOpenDrawing={(path, pane) => openVaultPath(app, path, { pane })}
       open={open}
       onToggle={onToggle}

@@ -5,6 +5,7 @@ import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { CopilotMcpServer } from "@/agentMode/session/copilotMcpServer";
+import type { CopilotToolCallReader } from "@/agentMode/session/copilotToolCalls";
 import type {
   BackendConfigOption,
   BackendId,
@@ -117,6 +118,10 @@ export interface BackendDescriptor {
   // A backend that can end one background task on its own offers a stop control on each running task, leaving the main agent and other tasks running.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/748
   readonly stopTask?: boolean;
+
+  // A backend whose agent wraps calls to Copilot's tools in a tool of its own reads which Copilot tool each call runs.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/735
+  readonly copilotToolCalls?: CopilotToolCallReader;
 
   getInstallState(settings: CopilotSettings): InstallState;
 

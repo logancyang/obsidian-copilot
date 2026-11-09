@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
+import { copilotToolName, type CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
@@ -21,35 +21,20 @@ export interface ToolSummary {
   targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
-const CODE_EXTERNAL_ACCESS = /\b(?:tools|fetch)\b/g;
-const CODE_COPILOT_TOOL_CALL = new RegExp(
-  `\\btools\\[["']${COPILOT_MCP_SERVER_NAME}["']\\](?:\\.(\\w+)|\\[["']([\\w-]+)["']\\])\\s*\\(`
-);
-
-// OpenCode names every Copilot tool call `execute` and sends the tool only inside its code, and its approval may be
-// for any tool or `fetch` that code reaches, even through an alias of `tools`. So only code that names `tools` or
-// `fetch` once, in a direct Copilot tool call, is named after that tool; any other code keeps OpenCode's name.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/872
-function opencodeCopilotToolName(part: ToolCallPart): string | null {
-  const code = (part.input as { code?: unknown } | null | undefined)?.code;
-  if (typeof code !== "string" || code.match(CODE_EXTERNAL_ACCESS)?.length !== 1) return null;
-  const call = CODE_COPILOT_TOOL_CALL.exec(code);
-  return call ? (call[1] ?? call[2]) : null;
+export function copilotToolLabel(part: ToolCallPart, reader: CopilotToolCallReader): string | null {
+  const name = copilotToolName(part, reader);
+  if (!name) return null;
+  const tool = describeConnectorTool(name);
+  return tool
+    ? `${tool.serviceName} · ${humanizeToolName(tool.toolName)}`
+    : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
 }
 
-export function copilotToolLabel(part: ToolCallPart): string | null {
-  const codeTool = opencodeCopilotToolName(part);
-  const name = copilotToolName(part) ?? codeTool;
-  const tool = name ? describeConnectorTool(name) : null;
-  if (tool) return `${tool.serviceName} · ${humanizeToolName(tool.toolName)}`;
-  return codeTool ? `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(codeTool)}` : null;
-}
-
-export function lookupToolSummary(part: ToolCallPart): ToolSummary {
+export function lookupToolSummary(part: ToolCallPart, reader: CopilotToolCallReader): ToolSummary {
   const base = selectToolSummary(part);
-  // Agents name a connector tool after Copilot's server and the service's id, which users don't know.
+  // Agents name a Copilot tool after Copilot's server and, for a connector, the service's id, which users don't know.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
-  const copilotTool = copilotToolLabel(part);
+  const copilotTool = copilotToolLabel(part, reader);
   if (copilotTool) return { ...base, collapsedLine: () => copilotTool };
   if (!part.mcpServer) return base;
   const server = part.mcpServer;

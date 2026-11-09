@@ -1,4 +1,5 @@
 import type { ActivityMember } from "@/agentMode/ui/activityGroups";
+import type { CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 import { lookupToolSummary, type ToolSummaryContext } from "@/agentMode/ui/toolSummaries";
 
 const REASONING_LABEL = "Reasoning";
@@ -18,6 +19,7 @@ export function isReasoningActive(members: ActivityMember[], atLiveEdge: boolean
 export function activityLiveStep(
   members: ActivityMember[],
   atLiveEdge: boolean,
+  reader: CopilotToolCallReader,
   ctx?: ToolSummaryContext
 ): string | null {
   if (!atLiveEdge) return null;
@@ -27,7 +29,7 @@ export function activityLiveStep(
     if (member.type !== "action") continue;
     const status = member.part.status;
     if (status === "pending" || status === "in_progress") {
-      return lookupToolSummary(member.part).collapsedLine(member.part, ctx);
+      return lookupToolSummary(member.part, reader).collapsedLine(member.part, ctx);
     }
   }
   return null;

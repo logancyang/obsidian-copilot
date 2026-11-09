@@ -12,6 +12,7 @@ import {
   type CopilotSettings,
 } from "@/settings/model";
 import { CodexBackend } from "./CodexBackend";
+import { codexCopilotToolCalls } from "./codexCopilotToolCalls";
 import { CodexInstallModal } from "./CodexInstallModal";
 import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
@@ -89,6 +90,7 @@ const codexWire: ModelWireCodec = {
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   auth: codexAuth,
+  copilotToolCalls: codexCopilotToolCalls,
   displayName: "Codex",
   Icon: CodexLogo,
   selfHostable: false,

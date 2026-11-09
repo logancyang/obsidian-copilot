@@ -27,6 +27,7 @@ import { useThinkingClock } from "@/agentMode/ui/useThinkingClock";
 import { useTrailExpansion, type TrailExpansion } from "@/agentMode/ui/useTrailExpansion";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import { useAgentTasks, type AgentTasksContextValue } from "@/agentMode/ui/AgentTasksContext";
+import { useCopilotToolCalls, type CopilotToolCallReader } from "@/agentMode/ui/copilotToolCall";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { getVaultBase } from "@/utils/vaultPath";
 import { App } from "obsidian";
@@ -143,6 +144,7 @@ interface TrailContext {
   summaryCtx: ToolSummaryContext;
   miyoPaths: readonly string[];
   tasks: AgentTasksContextValue | null;
+  copilotToolCalls: CopilotToolCallReader;
 }
 
 const LinearTrail: React.FC<{
@@ -152,14 +154,16 @@ const LinearTrail: React.FC<{
 }> = ({ parts, isStreaming, app }) => {
   const expansion = useTrailExpansion();
   const tasks = useAgentTasks();
+  const copilotToolCalls = useCopilotToolCalls();
   const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
   const ctx: TrailContext = {
     app,
     lastPart: parts.length > 0 ? parts[parts.length - 1] : undefined,
     expansion,
     summaryCtx,
-    miyoPaths: miyoResultPaths(parts),
+    miyoPaths: miyoResultPaths(parts, copilotToolCalls),
     tasks,
+    copilotToolCalls,
   };
   const nodes = foldActivityGroups(buildAgentTrail(parts), ctx);
   return (
@@ -197,6 +201,7 @@ function renderNode(
           {node.kind.render(node.members, {
             app: ctx.app,
             tasks: ctx.tasks,
+            copilotToolCalls: ctx.copilotToolCalls,
             open: ctx.expansion.isOpen(expansionId),
             onToggle: () => ctx.expansion.toggle(expansionId),
             renderCall: (part) =>
@@ -310,7 +315,12 @@ const ActivityGroupRow: React.FC<ActivityGroupRowProps> = ({ group, atLiveEdge, 
           trailId
         )
       }
-      liveStep={activityLiveStep(group.members, groupAtLiveEdge, ctx.summaryCtx)}
+      liveStep={activityLiveStep(
+        group.members,
+        groupAtLiveEdge,
+        ctx.copilotToolCalls,
+        ctx.summaryCtx
+      )}
     />
   );
 };

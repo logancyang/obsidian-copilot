@@ -10,6 +10,7 @@ import {
   extractSubAgentReturnText,
   lookupToolSummary,
 } from "@/agentMode/ui/toolSummaries";
+import { useCopilotToolCalls } from "@/agentMode/ui/copilotToolCall";
 import { AgentActivityCard } from "@/components/chat-components/AgentActivityCard";
 
 interface SubAgentCardProps {
@@ -29,7 +30,7 @@ export const SubAgentCard: React.FC<SubAgentCardProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
-  const summary = lookupToolSummary(parent);
+  const summary = lookupToolSummary(parent, useCopilotToolCalls());
   const Icon = summary.icon;
   const line = summary.collapsedLine(parent);
   const outcome = summary.outcome(parent);

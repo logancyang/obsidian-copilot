@@ -10,6 +10,7 @@ import type {
   SessionUpdateHandler,
 } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
+import { NO_COPILOT_TOOL_CALLS } from "@/agentMode/ui/copilotToolCall";
 import type { ChatStateKey } from "@/agentMode/session/chatExtension";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -133,7 +134,9 @@ describe("AgentChatUIState", () => {
           .find((item) => item.kind === "tool_call" && item.id === "plan-review-tool");
         expect(part?.kind).toBe("tool_call");
         if (part?.kind === "tool_call") {
-          expect(lookupToolSummary(part).collapsedLine(part, { vaultBase: null })).toBe(expected);
+          expect(
+            lookupToolSummary(part, NO_COPILOT_TOOL_CALLS).collapsedLine(part, { vaultBase: null })
+          ).toBe(expected);
         }
         review.finishFirstTurn();
         await review.firstTurn;
@@ -232,9 +235,9 @@ describe("AgentChatUIState", () => {
         .find((item) => item.kind === "tool_call" && item.id === "question-one");
       expect(part?.kind).toBe("tool_call");
       if (part?.kind === "tool_call") {
-        expect(lookupToolSummary(part).collapsedLine(part, { vaultBase: null })).toBe(
-          "Answered: Checklist"
-        );
+        expect(
+          lookupToolSummary(part, NO_COPILOT_TOOL_CALLS).collapsedLine(part, { vaultBase: null })
+        ).toBe("Answered: Checklist");
       }
       review.finishFirstTurn();
       await review.firstTurn;
