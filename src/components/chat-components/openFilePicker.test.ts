@@ -1,7 +1,7 @@
-import { openImagePicker } from "./openImagePicker";
+import { openFilePicker } from "./openFilePicker";
 
-describe("openImagePicker", () => {
-  describe("openImagePicker()", () => {
+describe("openFilePicker", () => {
+  describe("openFilePicker()", () => {
     let clickSpy: jest.SpyInstance;
     beforeEach(() => {
       (window as unknown as { activeDocument: Document }).activeDocument = window.document;
@@ -18,18 +18,23 @@ describe("openImagePicker", () => {
       return input as HTMLInputElement;
     };
 
-    it("appends a configured file input to the DOM and clicks it", () => {
-      openImagePicker(activeDocument, { onFiles: jest.fn() });
+    it("appends a multi-select file input limited to the given types to the DOM and clicks it", () => {
+      openFilePicker(activeDocument, { accept: "image/*,.pdf", onFiles: jest.fn() });
       const input = pickerInput();
-      expect(input.accept).toBe("image/*");
+      expect(input.accept).toBe("image/*,.pdf");
       expect(input.multiple).toBe(true);
       expect(clickSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets the dialog pick any file type when no types are given", () => {
+      openFilePicker(activeDocument, { onFiles: jest.fn() });
+      expect(pickerInput().hasAttribute("accept")).toBe(false);
     });
 
     it("on cancel: removes the input and calls onSettle, never onFiles", () => {
       const onFiles = jest.fn();
       const onSettle = jest.fn();
-      openImagePicker(activeDocument, { onFiles, onSettle });
+      openFilePicker(activeDocument, { onFiles, onSettle });
       const input = pickerInput();
 
       input.dispatchEvent(new Event("cancel"));
@@ -42,7 +47,7 @@ describe("openImagePicker", () => {
     it("on change: forwards files, removes the input, and calls onSettle", () => {
       const onFiles = jest.fn();
       const onSettle = jest.fn();
-      openImagePicker(activeDocument, { onFiles, onSettle });
+      openFilePicker(activeDocument, { onFiles, onSettle });
       const input = pickerInput();
 
       input.dispatchEvent(new Event("change"));
@@ -54,7 +59,7 @@ describe("openImagePicker", () => {
     });
 
     it("works without an onSettle handler", () => {
-      openImagePicker(activeDocument, { onFiles: jest.fn() });
+      openFilePicker(activeDocument, { onFiles: jest.fn() });
       const input = pickerInput();
       expect(() => input.dispatchEvent(new Event("cancel"))).not.toThrow();
       expect(activeDocument.body.contains(input)).toBe(false);

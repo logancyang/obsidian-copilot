@@ -1,7 +1,11 @@
 import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ContextSelectedTextBadge } from "@/components/chat-components/ContextBadges";
+import {
+  ContextNoteBadge,
+  ContextSelectedTextBadge,
+} from "@/components/chat-components/ContextBadges";
 import type { SelectedTextContext } from "@/types/message";
+import { TFile } from "obsidian";
 
 jest.mock("@/components/TruncatedText", () => ({
   TruncatedText: ({
@@ -36,6 +40,34 @@ const web: SelectedTextContext = {
 };
 
 describe("ContextBadges", () => {
+  describe("ContextNoteBadge()", () => {
+    const renderBadge = (path: string) =>
+      render(
+        <ContextNoteBadge
+          note={new (TFile as unknown as new (path: string) => TFile)(path)}
+          onRemove={jest.fn()}
+        />
+      );
+
+    it.each([
+      ["attachments/report.pdf", "report", "pdf"],
+      ["attachments/sales q3.csv", "sales q3", "csv"],
+    ])("labels %s by its name and its file type", (path, name, type) => {
+      renderBadge(path);
+
+      expect(screen.getByTestId("label").textContent).toBe(name);
+      expect(screen.getByText(type)).toBeTruthy();
+      expect(screen.getByRole("tooltip").textContent).toBe(path);
+    });
+
+    it("labels a Markdown note by its name alone", () => {
+      renderBadge("Research/plan.md");
+
+      expect(screen.getByTestId("label").textContent).toBe("plan");
+      expect(screen.queryByText("md")).toBeNull();
+    });
+  });
+
   describe("ContextSelectedTextBadge()", () => {
     it.each([
       { source: note, content: "Interview findings", label: "Interview findings" },

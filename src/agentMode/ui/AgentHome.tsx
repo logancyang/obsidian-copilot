@@ -341,6 +341,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     selectedImages: draft.images,
     onAddImage: draft.addImages,
     containerRef: chatContainerRef,
+    acceptAnyFileType: true,
   });
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
