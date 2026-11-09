@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 import { isNativeChatId } from "@/utils/nativeChatId";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
-import { Archive, Bell, CircleAlert, LoaderCircle, Pin, PinOff } from "lucide-react";
+import { Archive, Bell, CircleHelp, LoaderCircle, Pin, PinOff } from "lucide-react";
 import React, { useState } from "react";
 
 export type SessionStatus = "idle" | "running" | "waiting" | "unread";
@@ -73,7 +73,7 @@ export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?
     case "waiting":
       return (
         <span role="img" aria-label="Waiting for permission" className="tw-flex tw-shrink-0">
-          <CircleAlert className="tw-size-3.5 tw-text-warning" />
+          <CircleHelp className="tw-size-3.5 tw-text-error" />
         </span>
       );
     case "unread":

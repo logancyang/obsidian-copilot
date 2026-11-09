@@ -108,6 +108,14 @@ describe("SessionsSidebarRow", () => {
       expect(within(row).getByText("Plan the fall launch").className).toContain("tw-font-semibold");
     });
 
+    it("marks a chat waiting for permission with a red circled question mark for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
+      renderRow({ status: "waiting" });
+
+      const icon = screen.getByLabelText("Waiting for permission").querySelector("svg")!;
+      expect(icon.getAttribute("class")).toContain("lucide-circle-help");
+      expect(icon.getAttribute("class")).toContain("tw-text-error");
+    });
+
     it("shows the Unread result bell on a chat whose agent has stopped for https://github.com/Brevilabs/obsidian-copilot-private/issues/801", () => {
       renderRow({ isSessionOpen: false, status: "unread" });
 
