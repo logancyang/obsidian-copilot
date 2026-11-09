@@ -26,6 +26,7 @@ The Connectors tab in Copilot settings: the services the user connected, each wi
 - List: connect a service from [Browse connectors](browse-connectors.md) and choose `Back`. Its row reads `Connected · <N> tools` under the `Connectors` heading.
 - Tool count: choose the tool count on a connected row. The service's tools page opens.
 - Login: choose `Reconnect` from a row's `More actions`. The row reads "Waiting for you to log in in your browser…"; `Copy the login link` puts the link on the clipboard and reads `Copied`. Choose `Cancel`; the row returns to its status.
+- Login failed: choose `Reconnect`, then deny access on the service's page. The row reads "Login was cancelled on <service>'s page." with `Try again`.
 - Login blocked: while one login waits, hover another row's `Reconnect`. It is disabled with "Finish or cancel the <service> login first".
 - Needs login: revoke Copilot's access on the service's own site, then start a chat that uses it. The row reads `Needs login` with `Reconnect`, and the tab's name shows its warning.
 - Couldn't reach: with a connected service's server down, start a chat. The row reads "Couldn't reach <service> just now." with `Try again`; `Try again` stays disabled until the check ends, and the row reads `Connected` once the service answers.

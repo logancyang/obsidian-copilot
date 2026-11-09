@@ -22,6 +22,7 @@ Cards the agent shows below its reply when the request needs a service that is n
 - Connect: with Todoist not connected, ask "list my Todoist tasks". The reply ends with `Connect Todoist`. Choose `Connect`, log in in the browser, and return: the card reads "Todoist connected. Every agent can use it now." Choose `Reload` on the `<agent> settings changed` [card](status-and-error-cards.md) and send the request again; the agent lists the tasks.
 - Not now: on a `Connect <service>` card, choose `Not now`. The card goes away and nothing connects.
 - Waiting: choose `Connect`, then `Cancel` before logging in. The card returns to `Connect <service>`.
+- Login failed: choose `Connect`, then deny access on the service's page. The card reads "Login was cancelled on <service>'s page." with `Try again`.
 - Expired: revoke Copilot's access on a connected service's own site, then ask the agent to use it. The reply ends with `Your <service> login expired`; choose `Reconnect` and log in.
 - Unreachable: with a connected service's server down, ask the agent to use it. The card reads `Couldn't reach <service>` with no button.
 - Upsell: without a Supporter license, ask for a service that is not connected. `Connect <service> with Connectors` shows `See plans`.
