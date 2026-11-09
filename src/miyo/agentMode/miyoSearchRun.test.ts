@@ -1,15 +1,26 @@
+import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 
+function ingested(part: ToolCallPart): ToolCallPart {
+  const copilotTools =
+    directCopilotToolUse(part.mcpServer, part.vendorToolName, part.input) ??
+    readCodexCopilotTools(part.input) ??
+    readOpencodeCopilotTools(part.input);
+  return copilotTools ? { ...part, copilotTools } : part;
+}
+
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
-  return {
+  return ingested({
     kind: "tool_call",
     id: "x",
     title: "tool",
     status: "completed",
     ...overrides,
-  };
+  });
 }
 
 describe("miyoSearchRun", () => {

@@ -1,9 +1,38 @@
 import type CopilotPlugin from "@/main";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
-jest.mock("@/settings/v2/components/BasicSettings", () => ({ BasicSettings: () => null }));
+jest.mock("@/settings/v2/components/BasicSettings", () => {
+  const { useState } = jest.requireActual<typeof import("react")>("react");
+  const { useSettingsSubPage } = jest.requireActual<typeof import("@/settings/v2/SettingsSubPage")>(
+    "@/settings/v2/SettingsSubPage"
+  );
+  const MockBasicSettings = () => {
+    const { open, close } = useSettingsSubPage();
+    const [agentTab, setAgentTab] = useState("OpenCode");
+    return (
+      <div>
+        <button type="button" onClick={() => setAgentTab("Claude")}>
+          Agent tab: {agentTab}
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            open(
+              <button type="button" onClick={close}>
+                Back
+              </button>
+            )
+          }
+        >
+          Edit approved rules
+        </button>
+      </div>
+    );
+  };
+  return { BasicSettings: MockBasicSettings };
+});
 jest.mock("@/miyo/settings/MiyoSettings", () => ({
   MiyoSettings: () => <div>Miyo settings content</div>,
 }));
@@ -34,6 +63,14 @@ jest.mock("@/hooks/useLatestVersion", () => ({
   useLatestVersion: () => ({ latestVersion: mockLatestVersion, hasUpdate: mockHasUpdate }),
 }));
 jest.mock("@/utils/desktopRuntime", () => ({ isDesktopRuntime: () => true }));
+jest.mock("@/settings/v2/components/ConnectorsSettings", () => ({
+  ConnectorsSettings: () => null,
+}));
+let mockConnectorsEnabled: boolean | undefined = true;
+jest.mock("@/connectors/connectorsEntitlement", () => ({
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; the name must match the export
+  useIsConnectorsEnabled: () => mockConnectorsEnabled,
+}));
 
 const plugin = {
   app: {},
@@ -41,12 +78,21 @@ const plugin = {
   skills: { refresh: mockSkillManagerRefresh },
 } as unknown as CopilotPlugin;
 
+function withConnectorsNeedingAttention(needsAttention: boolean): CopilotPlugin {
+  const snapshot = { connections: [], waitingLogin: null, failedLogin: null, needsAttention };
+  return {
+    ...plugin,
+    connectionManager: { subscribe: () => () => {}, getSnapshot: () => snapshot },
+  } as unknown as CopilotPlugin;
+}
+
 describe("SettingsMainV2", () => {
   describe("SettingsMainV2()", () => {
     beforeEach(() => {
       mockSkillLoadErrorCount = 0;
       mockLatestVersion = null;
       mockHasUpdate = false;
+      mockConnectorsEnabled = true;
       mockSkillManagerRefresh.mockClear();
     });
 
@@ -72,6 +118,7 @@ describe("SettingsMainV2", () => {
         "BYOK",
         "Miyo",
         "Skills",
+        "Connectors",
         "Commands",
         "Self-Host",
         "Advanced",
@@ -89,10 +136,56 @@ describe("SettingsMainV2", () => {
       expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
     });
 
+    it("marks the Connectors tab with a red dot while a connector needs a login", () => {
+      render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(true)} />);
+
+      expect(
+        screen.getByRole("tab", {
+          name: "Connectors: You have connectors that need your attention",
+        })
+      ).not.toBeNull();
+    });
+
+    it("leaves the Connectors tab unmarked when no connector needs attention or connectors are desktop-only", () => {
+      const { unmount } = render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(false)} />);
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
+      unmount();
+
+      render(<SettingsMainV2 plugin={plugin} />);
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
+    });
+
+    it("leaves the Connectors tab unmarked for a user without the connectors preview, who sees the upsell there", () => {
+      mockConnectorsEnabled = false;
+
+      render(<SettingsMainV2 plugin={withConnectorsNeedingAttention(true)} />);
+
+      expect(screen.getByRole("tab", { name: "Connectors" })).not.toBeNull();
+    });
+
     it("refreshes hidden Agent repairs when Settings reopens for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       render(<SettingsMainV2 plugin={plugin} />);
 
       await waitFor(() => expect(mockSkillManagerRefresh).toHaveBeenCalledTimes(1));
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 replaces the header, tab strip and tab content with a page a section opens, and Back restores the same tab with its state", () => {
+      render(<SettingsMainV2 plugin={plugin} />);
+      fireEvent.click(screen.getByRole("button", { name: "Agent tab: OpenCode" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit approved rules" }));
+
+      expect(screen.getByRole("button", { name: "Back" })).not.toBeNull();
+      expect(screen.queryByRole("heading", { name: /Copilot settings/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset settings" })).toBeNull();
+      expect(screen.queryAllByRole("tab")).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: "Agent tab: Claude" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(screen.getByRole("heading", { name: /Copilot settings/ })).not.toBeNull();
+      expect(screen.getByRole("tab", { name: "Basic" }).getAttribute("aria-selected")).toBe("true");
+      expect(screen.getByRole("button", { name: "Agent tab: Claude" })).not.toBeNull();
     });
 
     it("opens on a requested tab (https://github.com/Brevilabs/obsidian-copilot-private/issues/280)", () => {

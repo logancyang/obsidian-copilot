@@ -190,6 +190,11 @@ export class InteractiveRequests {
     const entry = this.pendingToolResolvers.get(toolCallId);
     if (!entry) return;
     this.pendingToolResolvers.delete(toolCallId);
+    const kind = entry.request.options.find((o) => o.optionId === optionId)?.kind;
+    const replyId = this.deps.getReplyId();
+    if (replyId && kind && PERMISSION_REJECT_KINDS.includes(kind)) {
+      this.deps.store.markPermissionDeclined(replyId);
+    }
     entry.resolve({ outcome: { outcome: "selected", optionId } });
     this.deps.recomputeStatus();
     this.deps.notifyMessages();

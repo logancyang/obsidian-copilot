@@ -80,6 +80,22 @@ export const WebSearchQuery: StoryObj<ToolPermissionCardProps> = {
   },
 };
 
+export const OpencodeCopilotTool: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Fake Remote · Remember",
+        kind: "other",
+        rawInput: {
+          code: 'const res = await tools["obsidian-copilot"].fakeremote_remember({ fact: "Orion ships Friday" });\nreturn res;',
+        },
+      },
+    },
+  },
+};
+
 const codexCommand =
   'python3 -c \'from pathlib import Path; p = Path("/Users/me/Vault/launch-brief.md"); p.write_text("Review on Friday")\'';
 
@@ -124,6 +140,23 @@ export const SubagentRequester: StoryObj<ToolPermissionCardProps> = {
         title: "Bash: wc -w Projects/Launch brief.md",
         kind: "execute",
         rawInput: { command: "wc -w 'Projects/Launch brief.md'" },
+      },
+    },
+  },
+};
+
+const longCommand =
+  "cd /Users/me/Documents/Obsidian/Research-Vault/Projects/2026-launch && mv 'Drafts/launch-brief-final-final-v3.md' 'Archive/2026/launch-brief-final-final-v3.md' && ls";
+
+export const LongCommandDetails: StoryObj<ToolPermissionCardProps> = {
+  args: {
+    request: {
+      ...request,
+      toolCall: {
+        ...request.toolCall,
+        title: "Move the final launch brief into the archive",
+        kind: "execute",
+        rawInput: { command: longCommand, cwd: "/Users/me/Documents/Obsidian/Research-Vault" },
       },
     },
   },

@@ -23,7 +23,13 @@ const excalidraw = (
   name: string,
   input: Record<string, unknown>,
   overrides: ToolCallOverrides = {}
-): AgentMessagePart => tool(id, name, { mcpServer: "obsidian-copilot", input, ...overrides });
+): AgentMessagePart =>
+  tool(id, name, {
+    mcpServer: "obsidian-copilot",
+    input,
+    copilotTools: { runs: name, calls: [{ name, args: input }] },
+    ...overrides,
+  });
 
 const say = (text: string): AgentMessagePart => ({ kind: "text", text });
 

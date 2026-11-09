@@ -39,6 +39,7 @@ import { ChatMessage } from "@/types/message";
 import { extractYoutubeVideoId, insertAtCursor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { renderMarkdown } from "@/utils/renderMarkdown";
+import { StreamingTextFade } from "@/utils/streamingTextFade";
 import { App, Component, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
@@ -314,6 +315,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   }, [parsedReasoningBlock]);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
+  const textFades = useRef(new Map<number, StreamingTextFade>());
   const isUnmountingRef = useRef<boolean>(false);
   const messageId = useRef(
     message.id ||
@@ -581,7 +583,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         textDivs.forEach((div) => div.remove());
 
         let currentIndex = 0;
-        parsedMessage.segments.forEach((segment) => {
+        parsedMessage.segments.forEach((segment, segmentIndex) => {
           if (segment.type === "text" && segment.content.trim()) {
             const insertBefore = contentRef.current!.children[currentIndex];
 
@@ -593,8 +595,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               contentRef.current!.appendChild(textDiv);
             }
 
+            if (isStreaming && !textFades.current.has(segmentIndex))
+              textFades.current.set(segmentIndex, new StreamingTextFade());
             void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
-              .then(() => normalizeFootnoteRendering(textDiv))
+              .then(() => {
+                normalizeFootnoteRendering(textDiv);
+                textFades.current.get(segmentIndex)?.apply(textDiv);
+              })
               .catch((err: unknown) => logError("renderMarkdown failed", err));
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {

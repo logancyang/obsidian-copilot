@@ -230,6 +230,39 @@ describe("AgentMessageStore", () => {
     });
   });
 
+  describe("markPermissionDeclined()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4062 makes a later agent cancellation of the reply name the declined permission as its cause", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.markPermissionDeclined(id);
+      store.markCancelledByAgent(id);
+
+      expect(store.getMessage(id)?.agentCancelCause).toBe("permission_declined");
+    });
+
+    it("leaves a reply that the agent never cancels without a cancel cause", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.markPermissionDeclined(id);
+      store.markTurnComplete(id, "end_turn", 1_000);
+
+      expect(store.getMessage(id)?.agentCancelCause).toBeUndefined();
+    });
+  });
+
+  describe("markCancelledByAgent()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/4062 records an unspecified cause on a reply the agent cancelled without a declined permission", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.markCancelledByAgent(id);
+
+      expect(store.getMessage(id)?.agentCancelCause).toBe("unspecified");
+    });
+  });
+
   describe("upsertAgentPart()", () => {
     it("appends a new tool call by its id", () => {
       const store = new AgentMessageStore();

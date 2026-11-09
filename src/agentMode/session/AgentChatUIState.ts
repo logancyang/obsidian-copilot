@@ -17,7 +17,7 @@ import type {
   SessionUsage,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
+import type { ChatStateKey, ChatStates, ChatView } from "@/agentMode/session/chatExtension";
 
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
@@ -199,16 +199,16 @@ export class AgentChatUIState implements AgentChatBackend {
     return this.session.getCurrentTodoList();
   }
 
-  getFeedbackOffer(): FeedbackOffer | null {
-    return this.session.getFeedbackOffer();
+  getChatStates(): ChatStates {
+    return this.session.getChatStates();
   }
 
-  dismissFeedbackOffer(): void {
-    this.session.dismissFeedbackOffer();
+  readChatState<S>(key: ChatStateKey<S>): S {
+    return this.session.readChatState(key);
   }
 
-  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
-    this.session.markFeedbackReported(report);
+  updateChatState<S>(key: ChatStateKey<S>, change: (state: S, chat: ChatView) => S): void {
+    this.session.updateChatState(key, change);
   }
 
   getSessionUsage(): SessionUsage | null {

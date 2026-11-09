@@ -12,11 +12,14 @@ jest.mock("obsidian", () => ({
         this.replaceChildren();
       },
     });
+    hide(): void {
+      this.containerEl.empty();
+    }
   },
 }));
 jest.mock("@/settings/v2/SettingsMainV2", () => ({ __esModule: true, default: () => null }));
 jest.mock("@/utils/react/createPluginRoot", () => ({
-  createPluginRoot: jest.fn(() => ({ render: jest.fn() })),
+  createPluginRoot: jest.fn(() => ({ render: jest.fn(), unmount: jest.fn() })),
 }));
 
 function createTab(started: boolean) {
@@ -60,6 +63,16 @@ describe("SettingsPage", () => {
         expect(createPluginRoot).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/874 mounts the settings in a wrapper that takes no box, so a settings sub-page can fill the height of Obsidian's settings scroller", () => {
+        const { tab } = createTab(true);
+
+        tab.display();
+
+        const [root] = jest.mocked(createPluginRoot).mock.calls[0];
+        expect(root.parentNode).toBe(tab.containerEl);
+        expect((root as HTMLElement).className).toBe("tw-contents");
+      });
+
       it("shows that Copilot is starting instead of settings that have not loaded yet https://github.com/logancyang/obsidian-copilot/issues/3518", () => {
         const { tab } = createTab(false);
 
@@ -87,6 +100,29 @@ describe("SettingsPage", () => {
         await start();
 
         expect(createPluginRoot).not.toHaveBeenCalled();
+      });
+
+      it("replaces the settings rendered by an earlier display() instead of leaving them running", () => {
+        const { tab } = createTab(true);
+        tab.display();
+        const first = jest.mocked(createPluginRoot).mock.results[0].value as { unmount: jest.Mock };
+
+        tab.display();
+
+        expect(first.unmount).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("hide()", () => {
+      it("unmounts the settings when the settings window closes, so a connector login that finishes later is announced https://github.com/Brevilabs/obsidian-copilot-private/issues/858", () => {
+        const { tab } = createTab(true);
+        tab.display();
+        const root = jest.mocked(createPluginRoot).mock.results[0].value as { unmount: jest.Mock };
+
+        tab.hide();
+
+        expect(root.unmount).toHaveBeenCalledTimes(1);
+        expect(tab.containerEl.childElementCount).toBe(0);
       });
     });
   });

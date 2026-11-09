@@ -52,6 +52,7 @@ interface FakeFile {
 
 function makeApp() {
   const files = new Map<string, FakeFile>();
+  const cacheListeners = new Set<(file: FakeFile) => void>();
   return {
     files,
     vault: {
@@ -101,7 +102,16 @@ function makeApp() {
       },
     },
     metadataCache: {
-      getFileCache: jest.fn(() => undefined),
+      getFileCache: jest.fn((_file: FakeFile): unknown => undefined),
+      listeners: cacheListeners,
+      on: (_name: "changed", listener: (file: FakeFile) => void) => {
+        cacheListeners.add(listener);
+        return listener;
+      },
+      offref: (ref: (file: FakeFile) => void) => cacheListeners.delete(ref),
+      trigger: (_name: "changed", file: FakeFile) => {
+        for (const listener of Array.from(cacheListeners)) listener(file);
+      },
     },
     fileManager: {
       processFrontMatter: jest.fn(
@@ -248,6 +258,19 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[0].message).toBe("hello world");
       expect(loaded.messages[1].sender).toBe(AI_SENDER);
       expect(loaded.messages[1].message).toBe("hi back");
+    });
+
+    it("saves a reply that starts with a code fence so the note renders it and it loads back unchanged (https://github.com/Brevilabs/obsidian-copilot-private/issues/889)", async () => {
+      const reply = "```mermaid\nflowchart LR\n  A --> B\n```\n\nThat is the flow.";
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "Draw it"), makeMessage(AI_SENDER, reply)],
+        "claude"
+      );
+
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain("**ai**: \n\n```mermaid\n");
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages.map((m) => m.message)).toEqual(["Draw it", reply]);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/815 writes the chat title to the note's topic, the one title the chat lists read", async () => {
@@ -463,7 +486,7 @@ describe("AgentChatPersistenceManager", () => {
       note.contents = note.contents!.replace("tags:", 'topic: "New"\ntags:');
       app.metadataCache.getFileCache.mockReturnValue({
         frontmatter: { topic: "Old" },
-      } as never);
+      });
 
       await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         existingPath: first!.path,
@@ -500,6 +523,40 @@ describe("AgentChatPersistenceManager", () => {
       expect(contents).toContain('sessionId: "new-session"\n');
       expect(contents).not.toContain("old-session");
       expect(contents).not.toContain("Old agent");
+    });
+  });
+
+  describe("updateTopic()", () => {
+    it("writes the trimmed title to the note's topic once Obsidian holds it", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      app.metadataCache.getFileCache.mockReturnValue({ frontmatter: { topic: "Quarterly plan" } });
+
+      await manager.updateTopic(saved!.path, "  Quarterly plan  ");
+
+      expect(app.files.get(saved!.path)!.contents).toContain("topic: Quarterly plan\n");
+    });
+
+    it("waits for Obsidian to re-read the renamed note so Recent Chats lists the new title https://github.com/logancyang/obsidian-copilot/issues/3555", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const file = app.files.get(saved!.path)!;
+      let cachedTopic = "Old title";
+      let reportStaleRead!: () => void;
+      const staleRead = new Promise<string>((resolve) => {
+        reportStaleRead = () => resolve("read the stale cache");
+      });
+      app.metadataCache.getFileCache.mockImplementation(() => {
+        if (cachedTopic === "Old title") reportStaleRead();
+        return { frontmatter: { topic: cachedTopic } };
+      });
+
+      const renaming = manager.updateTopic(saved!.path, "New title");
+      const first = await Promise.race([staleRead, renaming.then(() => "resolved early")]);
+      cachedTopic = "New title";
+      app.metadataCache.trigger("changed", file);
+      await renaming;
+
+      expect(first).toBe("read the stale cache");
+      expect(app.metadataCache.listeners.size).toBe(0);
     });
   });
 

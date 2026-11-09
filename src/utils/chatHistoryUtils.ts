@@ -166,3 +166,10 @@ export function getChatDisplayText(app: App, file: TFile): string {
   const formattedDateTime = formatDateTime(date);
   return `${title} - ${formattedDateTime.display}`;
 }
+
+const BLOCK_START = /^ {0,3}(?:`{3}|~{3}|#{1,6}(?:\s|$)|[-*+](?:\s|$)|\d{1,9}[.)](?:\s|$)|>|\|)/;
+
+// A reply whose first line is a Markdown block (a fence, heading or list) stops being one after the sender label, so it gets its own paragraph; the label keeps its trailing space so every loader still recognizes it. https://github.com/Brevilabs/obsidian-copilot-private/issues/889
+export function formatChatNoteMessage(sender: string, body: string): string {
+  return BLOCK_START.test(body) ? `**${sender}**: \n\n${body}` : `**${sender}**: ${body}`;
+}

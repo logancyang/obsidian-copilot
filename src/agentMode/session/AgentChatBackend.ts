@@ -1,5 +1,5 @@
+import type { ChatStateHost, ChatStates } from "@/agentMode/session/chatExtension";
 import type { MessageContext } from "@/types/message";
-import type { FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
@@ -17,7 +17,7 @@ import type {
   SessionUsage,
 } from "./types";
 
-export interface AgentChatBackend {
+export interface AgentChatBackend extends ChatStateHost {
   subscribe(listener: () => void): () => void;
   sendMessage(
     text: string,
@@ -73,9 +73,5 @@ export interface AgentChatBackend {
 
   resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void;
 
-  getFeedbackOffer(): FeedbackOffer | null;
-
-  dismissFeedbackOffer(): void;
-
-  markFeedbackReported(report: { reportId: string; issueUrl: string }): void;
+  getChatStates(): ChatStates;
 }

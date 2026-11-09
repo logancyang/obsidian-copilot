@@ -97,7 +97,9 @@ describe("ChangeScroller", () => {
     jest.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
       this: HTMLElement
     ) {
-      return rect(Number(this.dataset.top ?? 0), Number(this.dataset.height ?? 0));
+      if (this.dataset.top === undefined) return rect(0, 0);
+      const scrolled = this.closest<HTMLElement>(".markdown-preview-view")?.scrollTop ?? 0;
+      return rect(Number(this.dataset.top) - scrolled, Number(this.dataset.height ?? 0));
     });
     const computedStyle = window.getComputedStyle.bind(window);
     jest.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
@@ -390,10 +392,56 @@ describe("ChangeScroller", () => {
       });
 
       press("Next");
-      press("Next");
       fireEvent.scroll(scroller());
 
       expect(currentChange()).toBe("2");
+    });
+
+    it("opens on a first change below the fold, scrolled to the upper third, so the first step moves on to the second (https://github.com/Brevilabs/obsidian-copilot-private/issues/848)", () => {
+      render(
+        <Harness>
+          <Mark change="inserted" top={900} height={40} />
+          <Mark change="inserted" top={1400} height={40} />
+        </Harness>
+      );
+      expect([currentChange(), scroller().scrollTop]).toEqual(["1", 900 - ANCHOR]);
+
+      press("Next");
+
+      expect([currentChange(), scroller().scrollTop]).toEqual(["2", 1400 - ANCHOR]);
+    });
+
+    it("keeps the first change in view while late rendering pushes it down, until the reader scrolls (https://github.com/Brevilabs/obsidian-copilot-private/issues/848)", () => {
+      render(
+        <Harness>
+          <Mark change="inserted" top={900} height={40} />
+        </Harness>
+      );
+
+      markAt(900).dataset.top = "1300";
+      act(() => resize?.(content()));
+      expect(scroller().scrollTop).toBe(1300 - ANCHOR);
+
+      scroller().scrollTop = 0;
+      fireEvent.scroll(scroller());
+      markAt(1300).dataset.top = "1500";
+      act(() => resize?.(content()));
+      expect(scroller().scrollTop).toBe(0);
+    });
+
+    it("stops following the first change once the reader steps to another one (https://github.com/Brevilabs/obsidian-copilot-private/issues/848)", () => {
+      render(
+        <Harness>
+          <Mark change="inserted" top={900} height={40} />
+          <Mark change="inserted" top={1400} height={40} />
+        </Harness>
+      );
+
+      press("Next");
+      markAt(900).dataset.top = "1000";
+      act(() => resize?.(content()));
+
+      expect([currentChange(), scroller().scrollTop]).toEqual(["2", 1400 - ANCHOR]);
     });
 
     it("flashes every mark of the change it jumps to, starting at the highlight and fading back", () => {

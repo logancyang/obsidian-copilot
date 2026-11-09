@@ -18,6 +18,7 @@ import { PenLine } from "lucide-react";
 import { App, Component, MarkdownRenderer, Notice, MarkdownView, Scope } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
+import { withoutDataview } from "@/utils/renderMarkdown";
 import { Root } from "react-dom/client";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { CustomCommand } from "@/commands/type";
@@ -111,7 +112,12 @@ export function CustomCommandChatModalContent({
     const comp = obsidianComponentRef.current;
     if (!comp) return;
     const preprocessed = preprocessAIResponse(content);
-    await MarkdownRenderer.renderMarkdown(preprocessed, el, filePathSnapshotRef.current, comp);
+    await MarkdownRenderer.renderMarkdown(
+      preprocessed,
+      el,
+      withoutDataview(filePathSnapshotRef.current),
+      comp
+    );
   }, []);
 
   const [finalText, setFinalText] = useState<string>("");

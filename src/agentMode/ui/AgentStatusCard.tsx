@@ -10,7 +10,7 @@ type AgentStatusTone = "neutral" | "warning" | "error";
 
 interface AgentStatusButtonAction {
   label: string;
-  onClick: () => void;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   href?: never;
 }
