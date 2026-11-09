@@ -64,9 +64,8 @@ export class InteractiveRequests {
       rawInput: request.toolCall.rawInput,
       isPlanProposal: request.toolCall.isPlanProposal,
     });
-    if (exitPlan) {
-      this.publishGatedPlan(toolCallId, exitPlan);
-    }
+    // Claude can exit plan mode with no plan text; without a card the pending decision locks the chat input, Stop included. https://github.com/Brevilabs/obsidian-copilot-private/issues/893
+    this.publishGatedPlan(toolCallId, exitPlan ?? { plan: "" });
     return new Promise<PermissionDecision>((resolve) => {
       this.pendingPlanResolvers.set(toolCallId, { request, resolve });
       this.deps.recomputeStatus();

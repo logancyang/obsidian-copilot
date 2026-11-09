@@ -38,3 +38,7 @@ const meta = {
 export default meta;
 
 export const Pending: StoryObj<PlanProposalCardProps> = {};
+
+export const PendingWithoutPlanText: StoryObj<PlanProposalCardProps> = {
+  args: { plan: { ...plan, title: "Plan proposal", body: "" } },
+};

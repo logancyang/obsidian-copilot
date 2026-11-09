@@ -72,6 +72,25 @@ describe("InteractiveRequests", () => {
         await decisionPromise;
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/893 publishes an untitled gated plan when ExitPlanMode carries no plan text, so the user can still approve or reject it", async () => {
+        const { requests } = makeRequests();
+
+        const decisionPromise = requests.handlePlanProposalPermission(
+          planPermissionRequest("tc-plan-without-text", {})
+        );
+
+        const plan = requests.getCurrentPlan();
+        expect(plan?.title).toBe("Plan proposal");
+        expect(plan?.body).toBe("");
+        expect(plan?.decision).toBe("pending");
+        expect(plan?.pendingToolCallId).toBe("tc-plan-without-text");
+
+        requests.resolvePlanProposalPermission("tc-plan-without-text", false);
+        await expect(decisionPromise).resolves.toEqual({
+          outcome: { outcome: "selected", optionId: "reject_once" },
+        });
+      });
+
       it("holds the request as pending, then recomputes the status and notifies the transcript", () => {
         const { requests, recomputeStatus, notifyMessages } = makeRequests();
 
