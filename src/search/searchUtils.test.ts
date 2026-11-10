@@ -209,6 +209,17 @@ describe("searchUtils", () => {
       expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
+    it("indexes notes with inline nested tags selected by the project tag picker — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const file = createTestFile("notes/press.md");
+      (utils.getTagsFromNote as jest.Mock).mockImplementation(
+        (_app, _file, frontmatterOnly = true) => (frontmatterOnly ? [] : ["Launch/Press"])
+      );
+
+      expect(shouldIndexFile(window.app, file, { tagPatterns: ["#launch"] }, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, { tagPatterns: ["#laun"] }, null)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, { tagPatterns: ["#launch"] })).toBe(false);
+    });
+
     it("skips a note carrying an excluded tag", () => {
       const file = createTestFile("notes/tagged.md");
       mockGetAbstractFileByPath.mockReturnValue(file);

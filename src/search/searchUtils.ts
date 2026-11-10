@@ -231,10 +231,10 @@ export function createPatternSettingsValue({
 function matchFilePathWithTags(app: App, file: TFile, tagPatterns: string[]): boolean {
   if (tagPatterns.length === 0) return false;
 
-  const tags = getTagsFromNote(app, file);
-  return tagPatterns.some((pattern) =>
-    tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
-  );
+  // Project tag choices include inline tags, so every consumer must resolve those same notes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+  const tags = getTagsFromNote(app, file, false);
+  return tagPatterns.some((pattern) => tags.some((tag) => matchesTag(tag, pattern)));
 }
 
 function matchFilePathWithProperties(app: App, file: TFile, propertyPatterns: string[]): boolean {
@@ -351,19 +351,20 @@ export function getPropertyPattern(key: string, value?: string): string {
   return value ? `[${key}:${value}]` : `[${key}:]`;
 }
 
+// All tag consumers follow Obsidian's case-insensitive matching, including nested tags.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+function matchesTag(noteTag: string, pattern: string): boolean {
+  const tag = stripHash(noteTag).toLowerCase();
+  const expected = stripHash(pattern).toLowerCase();
+  return tag === expected || tag.startsWith(`${expected}/`);
+}
+
 export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
-  const tag = tagPattern.toLowerCase();
-  // A linked tag lists what Obsidian's own tag search finds: any case, plus every tag nested under it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
-  const matches = (noteTag: string): boolean => {
-    const normalized = noteTag.toLowerCase();
-    return normalized === tag || normalized.startsWith(`${tag}/`);
-  };
   return app.vault
     .getMarkdownFiles()
     .filter((file) => {
       const cache = app.metadataCache.getFileCache(file);
-      return cache !== null && (getAllTags(cache) ?? []).some(matches);
+      return cache !== null && (getAllTags(cache) ?? []).some((tag) => matchesTag(tag, tagPattern));
     })
     .sort((a, b) => a.path.localeCompare(b.path));
 }
