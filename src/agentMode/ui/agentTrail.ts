@@ -36,7 +36,7 @@ export function surfaceUnansweredThought(
   let last = parts.length - 1;
   while (last >= 0 && isBlankText(parts[last])) last--;
   const thought = parts[last];
-  if (thought?.kind !== "thought" || thought.text.trim().length === 0) return parts;
+  if (thought?.kind !== "thought") return parts;
   for (let i = last - 1; i >= 0 && parts[i].kind !== "tool_call"; i--) {
     if (parts[i].kind === "text" && !isBlankText(parts[i])) return parts;
   }

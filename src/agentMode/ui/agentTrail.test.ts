@@ -309,10 +309,5 @@ describe("agentTrail", () => {
       const endsOnTool: AgentMessagePart[] = [thought("edit it"), tool("a")];
       expect(surfaceUnansweredThought(endsOnTool, "end_turn")).toBe(endsOnTool);
     });
-
-    it("keeps a blank final thought as reasoning", () => {
-      const parts: AgentMessagePart[] = [thought("  ")];
-      expect(surfaceUnansweredThought(parts, "end_turn")).toBe(parts);
-    });
   });
 });
