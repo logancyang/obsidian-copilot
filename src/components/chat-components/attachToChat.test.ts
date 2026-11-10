@@ -24,6 +24,8 @@ function makeApp() {
   const created: { path: string; data: ArrayBuffer }[] = [];
   const app = {
     vault: {
+      adapter: { exists: async () => false, mkdir: jest.fn(async () => {}) },
+      getAbstractFileByPath: () => null,
       readBinary: jest.fn(async (file: TFile) => new TextEncoder().encode(file.path).buffer),
       createBinary: jest.fn(async (path: string, data: ArrayBuffer) => {
         created.push({ path, data });
@@ -96,6 +98,24 @@ describe("attachToChat", () => {
       expect(new TextDecoder().decode(created[0].data)).toBe("report.pdf");
       expect(targets.notes()).toEqual(["attachments/report.pdf"]);
       expect(notices()).toEqual(["Copied report.pdf into attachments/"]);
+    });
+
+    it("copies a file from the computer into the project's sources folder instead of the attachment folder inside a project, and names that folder in the notice (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app, created, fileManager } = makeApp();
+      const targets = makeTargets();
+
+      await attachToChat(
+        app,
+        split({ outsideFiles: [outsideFile("report.pdf", "application/pdf")] }),
+        { ...targets.options, projectFolderPath: "copilot/projects/Q4 Launch" }
+      );
+
+      expect(created.map((entry) => entry.path)).toEqual([
+        "copilot/projects/Q4 Launch/sources/report.pdf",
+      ]);
+      expect(fileManager.getAvailablePathForAttachment).not.toHaveBeenCalled();
+      expect(targets.notes()).toEqual(["copilot/projects/Q4 Launch/sources/report.pdf"]);
+      expect(notices()).toEqual(["Copied report.pdf into copilot/projects/Q4 Launch/sources/"]);
     });
 
     it("names every file copied from one drop in a single notice (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {

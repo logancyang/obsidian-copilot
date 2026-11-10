@@ -136,6 +136,7 @@ export interface ChatInputProps {
   };
 
   isAgentMode?: boolean;
+  projectFolderPath?: string;
 
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
 
@@ -196,6 +197,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     onEditCancel,
     initialContext,
     isAgentMode = false,
+    projectFolderPath,
     agentBrands = EMPTY_AGENT_MENTION_BRANDS,
     cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
     onMentionedAgentsChange,
@@ -434,6 +436,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onAddImage,
               setContextNotes,
               acceptAnyFileType: isAgentMode,
+              projectFolderPath,
             }),
           // Cancelling the dialog leaves the pane unresponsive unless focus returns to the composer.
           // https://github.com/logancyang/obsidian-copilot-preview/issues/119

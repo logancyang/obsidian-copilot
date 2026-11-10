@@ -43,7 +43,11 @@ function makeApp({ draggable = null }: { draggable?: unknown } = {}) {
   const createBinary = jest.fn(async (path: string) => vaultFile(path));
   const app = {
     dragManager: { draggable },
-    vault: { adapter: {}, createBinary, getAbstractFileByPath: () => null },
+    vault: {
+      adapter: { exists: async () => false, mkdir: async () => {} },
+      createBinary,
+      getAbstractFileByPath: () => null,
+    },
     fileManager: { getAvailablePathForAttachment: async (name: string) => `attachments/${name}` },
     workspace: { getActiveFile: () => null },
   } as unknown as App;
@@ -53,11 +57,12 @@ function makeApp({ draggable = null }: { draggable?: unknown } = {}) {
 interface HarnessProps {
   app: App;
   setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
+  projectFolderPath?: string;
 }
 
 const ignoreContextNotes = jest.fn();
 
-function Harness({ app, setContextNotes = ignoreContextNotes }: HarnessProps) {
+function Harness({ app, setContextNotes = ignoreContextNotes, projectFolderPath }: HarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
@@ -67,6 +72,7 @@ function Harness({ app, setContextNotes = ignoreContextNotes }: HarnessProps) {
     selectedImages: [],
     onAddImage: jest.fn(),
     containerRef,
+    projectFolderPath,
   });
 
   useEffect(() => {
@@ -85,11 +91,13 @@ function Harness({ app, setContextNotes = ignoreContextNotes }: HarnessProps) {
   );
 }
 
-function renderAndCaptureAttached(app: App) {
+function renderAndCaptureAttached(app: App, projectFolderPath?: string) {
   const attached = new Promise<TFile[]>((resolve) => {
     const setContextNotes: HarnessProps["setContextNotes"] = (update) =>
       resolve(typeof update === "function" ? update([]) : update);
-    render(<Harness app={app} setContextNotes={setContextNotes} />);
+    render(
+      <Harness app={app} setContextNotes={setContextNotes} projectFolderPath={projectFolderPath} />
+    );
   });
   return attached;
 }
@@ -136,6 +144,26 @@ describe("useChatFileDrop", () => {
 
       await expect(attached).resolves.toEqual([vaultFile("attachments/report.pdf")]);
       expect(createBinary).toHaveBeenCalledWith("attachments/report.pdf", expect.any(ArrayBuffer));
+    });
+
+    it("copies a file dropped on a project's chat input into that project's sources folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app, createBinary } = makeApp();
+      const attached = renderAndCaptureAttached(app, "copilot/projects/Q4 Launch");
+      const report = new File(["data"], "report.pdf", { type: "application/pdf" });
+      report.arrayBuffer = () => Promise.resolve(new ArrayBuffer(4));
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["Files"],
+        files: [report],
+      });
+
+      await expect(attached).resolves.toEqual([
+        vaultFile("copilot/projects/Q4 Launch/sources/report.pdf"),
+      ]);
+      expect(createBinary).toHaveBeenCalledWith(
+        "copilot/projects/Q4 Launch/sources/report.pdf",
+        expect.any(ArrayBuffer)
+      );
     });
 
     it("clears the overlay when a drop lands in an inner zone that stops bubbling", () => {

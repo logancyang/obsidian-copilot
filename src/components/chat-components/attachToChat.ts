@@ -1,5 +1,6 @@
 import { ALLOWED_NOTE_CONTEXT_EXTENSIONS } from "@/constants";
 import { logError } from "@/logger";
+import { copyIntoProjectSources } from "@/projects/projectLinks";
 import type { VaultSplit } from "@/utils/splitByVault";
 import { App, Notice, TFile, TFolder } from "obsidian";
 
@@ -9,6 +10,7 @@ export interface AttachToChatOptions {
   onAddImage: (files: File[]) => void;
   setContextNotes: (update: (prev: TFile[]) => TFile[]) => void;
   acceptAnyFileType?: boolean;
+  projectFolderPath?: string;
 }
 
 export const CONTEXT_FILE_ACCEPT = [
@@ -28,7 +30,13 @@ async function readVaultImage(app: App, file: TFile): Promise<File> {
   return new File([await app.vault.readBinary(file)], file.name, { type });
 }
 
-async function copyIntoVault(app: App, file: File): Promise<TFile> {
+async function copyIntoVault(app: App, file: File, projectFolderPath?: string): Promise<TFile> {
+  // Inside a project, a file from the computer is kept with the project's sources instead of the attachment folder.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
+  if (projectFolderPath) {
+    const [copy] = await copyIntoProjectSources(app, projectFolderPath, [file]);
+    return copy;
+  }
   const path = await app.fileManager.getAvailablePathForAttachment(
     file.name,
     app.workspace.getActiveFile()?.path
@@ -70,9 +78,10 @@ async function attachFile(
     );
     return;
   }
-  // A file from outside the vault reaches the agent only as a vault path, so it is copied to the attachment folder first.
+  // A file from outside the vault reaches the agent only as a vault path, so it is copied into the vault first.
   // https://github.com/logancyang/obsidian-copilot/issues/4043
-  const note = file instanceof TFile ? file : await copyIntoVault(app, file);
+  const note =
+    file instanceof TFile ? file : await copyIntoVault(app, file, options.projectFolderPath);
   if (note !== file) copies.push(note);
   if (options.contextNotes.some((existing) => existing.path === note.path)) {
     new Notice("This note is already in the context");

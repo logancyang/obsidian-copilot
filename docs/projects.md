@@ -51,7 +51,7 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 - Drag a file from your computer onto the **Files** tab to copy it into the Project's `sources/` folder. A notice names the copy. If a file with that name is already there, the copy gets a number added to its name. A file that is already in your vault is linked instead of copied.
 - Folders from your computer can't be added. Move the folder into your vault, or drop the files you need.
 
-Linking never moves a vault file. Dropping on the message box adds the item to that message only.
+Linking never moves a vault file. Dropping on the message box adds the item to that message only. A file from your computer is copied into `sources/` first, and a notice names it.
 
 ### See what a chat changed
 
