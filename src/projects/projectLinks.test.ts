@@ -1,7 +1,14 @@
 import type { ProjectConfig } from "@/aiParams";
-import { getProjectLinks, linkProjectItems, unlinkProjectPattern } from "@/projects/projectLinks";
+import {
+  copyIntoProjectSources,
+  getDraggedVaultItems,
+  getProjectLinks,
+  linkProjectItems,
+  splitOutsideDrop,
+  unlinkProjectPattern,
+} from "@/projects/projectLinks";
 import { getCachedProjectRecordById, updateCachedProjectRecords } from "@/projects/state";
-import { App, TFile, TFolder } from "obsidian";
+import { App, TAbstractFile, TFile, TFolder } from "obsidian";
 
 const mockUpdateProject = jest.fn();
 
@@ -53,6 +60,10 @@ function saveToCache(_projectId: string, next: ProjectConfig) {
   return Promise.resolve(record);
 }
 
+function appWithDraggable(draggable: unknown): App {
+  return { dragManager: { draggable } } as unknown as App;
+}
+
 beforeEach(() => {
   mockUpdateProject.mockReset().mockImplementation(saveToCache);
   seedProject({});
@@ -98,6 +109,39 @@ describe("projectLinks", () => {
       expect(none).toEqual({ folders: [], notes: [] });
       expect(getProjectLinks(projectWith([]))).toBe(none);
       expect(getProjectLinks(projectWith(["#launch"]))).toBe(none);
+    });
+  });
+
+  describe("getDraggedVaultItems()", () => {
+    it("returns the folder Obsidian is dragging as its own object, so a nested folder keeps its full path — https://github.com/logancyang/obsidian-copilot/issues/3089", () => {
+      const nested = makeFolder("Clients/Northwind/Research");
+
+      expect(getDraggedVaultItems(appWithDraggable({ type: "folder", file: nested }))).toEqual([
+        nested,
+      ]);
+    });
+
+    it("returns every item of a multi-item drag from the file explorer", () => {
+      const note = makeFile("Meetings/Q3 retro.md");
+      const folder = makeFolder("Research/Pricing");
+
+      expect(
+        getDraggedVaultItems(appWithDraggable({ type: "files", files: [note, folder] }))
+      ).toEqual([note, folder]);
+    });
+
+    it("returns the note a link drag carries", () => {
+      const note = makeFile("Meetings/Q3 retro.md");
+
+      expect(
+        getDraggedVaultItems(appWithDraggable({ type: "link", linktext: "Q3 retro", file: note }))
+      ).toEqual([note]);
+    });
+
+    it("returns nothing when Obsidian is not dragging a vault item, as for a file from the computer", () => {
+      expect(getDraggedVaultItems(appWithDraggable(null))).toEqual([]);
+      expect(getDraggedVaultItems(appWithDraggable({ type: "link", linktext: "x" }))).toEqual([]);
+      expect(getDraggedVaultItems({} as App)).toEqual([]);
     });
   });
 
@@ -197,6 +241,118 @@ describe("projectLinks", () => {
       await expect(unlinkProjectPattern({} as App, "q4", "Research/Pricing")).resolves.toBe(false);
 
       expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("splitOutsideDrop()", () => {
+    function droppedFile(name: string): File {
+      return { name } as File;
+    }
+
+    function entry(isDirectory: boolean): DataTransferItem {
+      return {
+        kind: "file",
+        webkitGetAsEntry: () => ({ isDirectory }),
+      } as unknown as DataTransferItem;
+    }
+
+    it("keeps every dropped file when the drop carries no folders", () => {
+      const notes = droppedFile("notes.pdf");
+      const data = droppedFile("data.csv");
+
+      expect(
+        splitOutsideDrop({ files: [notes, data], items: [entry(false), entry(false)] })
+      ).toEqual({ files: [notes, data], folderNames: [] });
+      expect(splitOutsideDrop({ files: [notes] })).toEqual({ files: [notes], folderNames: [] });
+    });
+
+    it("sets folders from outside the vault aside by name and keeps the files dropped with them — https://github.com/Brevilabs/obsidian-copilot-private/issues/897", () => {
+      const notes = droppedFile("notes.pdf");
+
+      expect(
+        splitOutsideDrop({
+          files: [droppedFile("my-codebase"), notes],
+          items: [entry(true), entry(false)],
+        })
+      ).toEqual({ files: [notes], folderNames: ["my-codebase"] });
+    });
+  });
+
+  describe("copyIntoProjectSources()", () => {
+    function makeVault(existingPaths: string[]) {
+      const paths = new Set(existingPaths);
+      const written = new Map<string, ArrayBuffer>();
+      const vault = {
+        getAbstractFileByPath: (path: string): TAbstractFile | null =>
+          paths.has(path) ? makeFolder(path) : null,
+        adapter: {
+          exists: async (path: string) => paths.has(path),
+          mkdir: async (path: string) => void paths.add(path),
+        },
+        createBinary: async (path: string, data: ArrayBuffer) => {
+          if (paths.has(path)) throw new Error(`File already exists: ${path}`);
+          paths.add(path);
+          written.set(path, data);
+          return makeFile(path);
+        },
+      };
+      return { app: { vault } as unknown as App, paths, written };
+    }
+
+    function droppedFile(name: string, bytes: number[]): File {
+      const data = new Uint8Array(bytes).buffer;
+      return { name, arrayBuffer: async () => data } as unknown as File;
+    }
+
+    it("copies a file from the computer into the project's sources folder, creating the folder", async () => {
+      const { app, paths, written } = makeVault([]);
+
+      const copies = await copyIntoProjectSources(app, PROJECT_FOLDER, [
+        droppedFile("board-notes.pdf", [37, 80, 68, 70]),
+      ]);
+
+      expect(copies.map((file) => file.path)).toEqual([
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+      ]);
+      expect(paths.has(`${PROJECT_FOLDER}/sources`)).toBe(true);
+      expect([
+        ...new Uint8Array(written.get(`${PROJECT_FOLDER}/sources/board-notes.pdf`)!),
+      ]).toEqual([37, 80, 68, 70]);
+    });
+
+    it("adds a number to the name instead of overwriting a file already in sources (https://github.com/Brevilabs/obsidian-copilot-private/issues/461)", async () => {
+      const { app, written } = makeVault([
+        `${PROJECT_FOLDER}/sources`,
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+        `${PROJECT_FOLDER}/sources/board-notes 1.pdf`,
+      ]);
+
+      const copies = await copyIntoProjectSources(app, PROJECT_FOLDER, [
+        droppedFile("board-notes.pdf", [1]),
+        droppedFile("README", [2]),
+        droppedFile("README", [3]),
+      ]);
+
+      expect(copies.map((file) => file.path)).toEqual([
+        `${PROJECT_FOLDER}/sources/board-notes 2.pdf`,
+        `${PROJECT_FOLDER}/sources/README`,
+        `${PROJECT_FOLDER}/sources/README 1`,
+      ]);
+      expect(written.has(`${PROJECT_FOLDER}/sources/board-notes.pdf`)).toBe(false);
+    });
+
+    it("gives each of two overlapping drops of the same file name its own copy (https://github.com/Brevilabs/obsidian-copilot-private/issues/461)", async () => {
+      const { app } = makeVault([`${PROJECT_FOLDER}/sources`]);
+
+      const [first, second] = await Promise.all([
+        copyIntoProjectSources(app, PROJECT_FOLDER, [droppedFile("board-notes.pdf", [1])]),
+        copyIntoProjectSources(app, PROJECT_FOLDER, [droppedFile("board-notes.pdf", [2])]),
+      ]);
+
+      expect([...first, ...second].map((file) => file.path)).toEqual([
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+        `${PROJECT_FOLDER}/sources/board-notes 1.pdf`,
+      ]);
     });
   });
 });

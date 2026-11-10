@@ -1,4 +1,5 @@
 import {
+  FilesDropOverlay,
   LinkedSection,
   type LinkedProjectRow,
   ProjectFilesPanel,
@@ -136,11 +137,11 @@ const LINKED_ROWS: LinkedProjectRow[] = [
   ),
 ];
 
-function renderWithLinked(rows: LinkedProjectRow[]) {
+function renderWithLinked(rows: LinkedProjectRow[], isDragOver: boolean) {
   function FilesWithLinked(props: ProjectFolderSectionProps): React.ReactElement {
     return (
       <div className="tw-h-96 tw-max-h-96 tw-min-h-0 tw-overflow-y-auto tw-rounded-md tw-border tw-border-solid tw-border-border">
-        <div className="tw-flex tw-h-full tw-min-h-full tw-flex-col tw-pb-1">
+        <div className="tw-relative tw-flex tw-h-full tw-min-h-full tw-flex-col tw-pb-1">
           <ProjectFilesPanel onLink={() => {}}>
             <ProjectFolderSection {...props} />
             <LinkedSection
@@ -152,6 +153,7 @@ function renderWithLinked(rows: LinkedProjectRow[]) {
               onDragFile={() => {}}
             />
           </ProjectFilesPanel>
+          {isDragOver && <FilesDropOverlay />}
         </div>
       </div>
     );
@@ -161,12 +163,17 @@ function renderWithLinked(rows: LinkedProjectRow[]) {
 
 export const LinkedEmpty: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-  render: renderWithLinked([]),
+  render: renderWithLinked([], false),
 };
 
 export const LinkedPopulated: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-  render: renderWithLinked(LINKED_ROWS),
+  render: renderWithLinked(LINKED_ROWS, false),
+};
+
+export const LinkedDragOver: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS, true),
 };
 
 const LONG_LINKED_ROWS: LinkedProjectRow[] = Array.from({ length: 24 }, (_, index) =>
@@ -183,5 +190,5 @@ const LONG_LINKED_ROWS: LinkedProjectRow[] = Array.from({ length: 24 }, (_, inde
 
 export const LinkedLong: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
-  render: renderWithLinked(LONG_LINKED_ROWS),
+  render: renderWithLinked(LONG_LINKED_ROWS, false),
 };

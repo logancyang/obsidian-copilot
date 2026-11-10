@@ -40,3 +40,4 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 
 - Picking another agent's model in `Model · effort` replaces the chat in the tab with a new chat on that agent, and that agent becomes the default for new chats.
 - While the agent works, Escape in the chat input stops the reply even when a draft is typed.
+- Drops follow the vault rule in [projects](projects.md): a file from outside the vault is copied to the attachment folder before it is attached, and a folder from outside the vault is not added.
