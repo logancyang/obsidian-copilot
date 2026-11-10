@@ -13,7 +13,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-edit: `Edit project` opens the project's name, description, `Project instructions`, and context sources.
 - project-files: `Project files` in the project info lists `AGENTS.md` and the files in the project folder to open, and `Outputs`.
 - project-folder: the home's `Files` view shows `Project folder` and an expandable folder tree; choose a file to open it.
-- project-context: the Files view's `Linked` section lists linked notes and folders. `Link context` → `Files` or `Folders` opens a picker; `Unlink` removes a link without deleting the original.
+- project-context: the Files view's `Linked` section lists linked notes, folders, tags, and web or YouTube links. `Link context` offers `Files`, `Folders`, `Tags`, and `Link`; `Unlink` removes a link without deleting notes.
 
 - project-files-drop: the project's `Files` tab links vault notes and folders dropped on it, copies files dropped from outside the vault into the project's `sources/` folder, and refuses folders from outside the vault with a notice.
 
@@ -35,6 +35,8 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Folder tree: on the project home, expand `outputs` and its nested folders, then choose a generated file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
 - Files: in the project info, choose `AGENTS.md`. The project's `AGENTS.md` opens as a note.
 - Context: choose `Link context` → `Files` and select a note outside the project folder. It appears under `Linked` with its parent folder. Choose `Folders`, select a nested folder, and expand its row to browse its contents.
+- Tag: choose `Link context` → `Tags` and pick a tag. Its row shows the matching-note count. Expand it to open matching notes; tag or untag a note and the list and count update.
+- Link: choose `Link context` → `Link`, type or paste a web or YouTube address, and select it. Its row appears under Linked; choosing the row opens the address in the browser.
 - Unlink: hover a linked row and choose `Unlink`. Its link disappears; the original note or folder stays in the vault.
 - Drop: drag a nested vault folder over `Files`. The area highlights with `Link files to this project`; dropping it adds it under `Linked`. Drop a PDF from Finder: a copy appears in `sources/`. Drop a folder from Finder: a notice refuses it, and nothing is copied or linked. Cancel a drag with Escape: the highlight disappears.
 
@@ -51,3 +53,4 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - `Link context` stays below the scrolling Project folder and Linked list. A missing linked item stays listed as `Not found` so it can still be unlinked.
 - One drop rule covers the `Files` tab and the [chat input](chat-input.md): Copilot works with what is in the vault. A vault note or folder is linked to the project on the `Files` tab and attached to the message on the chat input. A file from outside the vault is copied in, into the project's `sources/` folder or the attachment folder. A folder from outside the vault is never copied or linked by a drop.
 - `Recent chats` accepts no drops. Dropping an item already in the project shows `Already in this project`. Copies of external files get numbered names when needed; existing files are not overwritten.
+- Linked tags include nested tags. Linking a page does not fetch a snapshot or a YouTube transcript.

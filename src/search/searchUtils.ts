@@ -7,7 +7,7 @@ import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getPropertyValuesFromNote, getTagsFromNote, noteHasProperty, stripHash } from "@/utils";
 import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
-import { App, TFile } from "obsidian";
+import { App, getAllTags, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -231,10 +231,10 @@ export function createPatternSettingsValue({
 function matchFilePathWithTags(app: App, file: TFile, tagPatterns: string[]): boolean {
   if (tagPatterns.length === 0) return false;
 
-  const tags = getTagsFromNote(app, file);
-  return tagPatterns.some((pattern) =>
-    tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
-  );
+  // Project tag choices include inline tags, so every consumer must resolve those same notes.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+  const tags = getTagsFromNote(app, file, false);
+  return tagPatterns.some((pattern) => tags.some((tag) => matchesTag(tag, pattern)));
 }
 
 function matchFilePathWithProperties(app: App, file: TFile, propertyPatterns: string[]): boolean {
@@ -349,6 +349,24 @@ export function getTagPattern(tag: string): string {
 
 export function getPropertyPattern(key: string, value?: string): string {
   return value ? `[${key}:${value}]` : `[${key}:]`;
+}
+
+// All tag consumers follow Obsidian's case-insensitive matching, including nested tags.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+function matchesTag(noteTag: string, pattern: string): boolean {
+  const tag = stripHash(noteTag).toLowerCase();
+  const expected = stripHash(pattern).toLowerCase();
+  return tag === expected || tag.startsWith(`${expected}/`);
+}
+
+export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => {
+      const cache = app.metadataCache.getFileCache(file);
+      return cache !== null && (getAllTags(cache) ?? []).some((tag) => matchesTag(tag, tagPattern));
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export function getFilePattern(file: TFile): string {
