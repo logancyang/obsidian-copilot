@@ -5,10 +5,18 @@ import {
 } from "@/agentMode/session/toolImageThumbnails";
 import type { AgentToolCallOutput } from "@/agentMode/session/types";
 
-const CHART: ToolImage = { mimeType: "image/png", data: "Q0hBUlQtZnVsbC1zaXpl" };
-const DIAGRAM: ToolImage = { mimeType: "image/png", data: "RElBR1JBTS1mdWxsLXNpemU=" };
-const SCREENSHOT: ToolImage = { mimeType: "image/jpeg", data: "U0NSRUVOU0hPVC1mdWxs" };
-const CHART_THUMB: ToolImage = { mimeType: "image/webp", data: "dGh1bWItY2hhcnQ=" };
+const CHART: ToolImage = { type: "image", mimeType: "image/png", data: "Q0hBUlQtZnVsbC1zaXpl" };
+const DIAGRAM: ToolImage = {
+  type: "image",
+  mimeType: "image/png",
+  data: "RElBR1JBTS1mdWxsLXNpemU=",
+};
+const SCREENSHOT: ToolImage = {
+  type: "image",
+  mimeType: "image/jpeg",
+  data: "U0NSRUVOU0hPVC1mdWxs",
+};
+const CHART_THUMB: ToolImage = { type: "image", mimeType: "image/webp", data: "dGh1bWItY2hhcnQ=" };
 
 interface PendingShrink {
   image: ToolImage;
@@ -43,10 +51,6 @@ function settleRecorder() {
   return { settled, onSettle, next };
 }
 
-function image(source: ToolImage): AgentToolCallOutput {
-  return { type: "image", ...source };
-}
-
 describe("toolImageThumbnails", () => {
   describe("ToolImageThumbnails", () => {
     describe("stage()", () => {
@@ -63,7 +67,7 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const thumbnails = new ToolImageThumbnails(shrink, () => undefined);
 
-        const staged = thumbnails.stage([{ type: "text", text: "Chart read" }, image(CHART)]);
+        const staged = thumbnails.stage([{ type: "text", text: "Chart read" }, CHART]);
 
         expect(staged[0]).toEqual({ type: "text", text: "Chart read" });
         expect(staged[1]).toMatchObject({ type: "image_pending" });
@@ -75,7 +79,7 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
-        const [placeholder] = thumbnails.stage([image(CHART)]);
+        const [placeholder] = thumbnails.stage([CHART]);
         const settledOnce = recorder.next();
 
         started[0].resolve(CHART_THUMB);
@@ -91,8 +95,8 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const thumbnails = new ToolImageThumbnails(shrink, () => undefined);
 
-        const first = thumbnails.stage([image(CHART)]);
-        const repeat = thumbnails.stage([image({ ...CHART })]);
+        const first = thumbnails.stage([CHART]);
+        const repeat = thumbnails.stage([{ ...CHART }]);
 
         expect(repeat).toEqual(first);
         expect(started).toHaveLength(1);
@@ -102,12 +106,12 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
-        thumbnails.stage([image(CHART)]);
+        thumbnails.stage([CHART]);
         const settledOnce = recorder.next();
         started[0].resolve(CHART_THUMB);
         await settledOnce;
 
-        expect(thumbnails.stage([image(CHART)])).toEqual([image(CHART_THUMB)]);
+        expect(thumbnails.stage([CHART])).toEqual([CHART_THUMB]);
         expect(started).toHaveLength(1);
       });
 
@@ -115,12 +119,12 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
-        thumbnails.stage([image(CHART)]);
+        thumbnails.stage([CHART]);
         const settledOnce = recorder.next();
         started[0].resolve(CHART_THUMB);
         await settledOnce;
 
-        expect(thumbnails.stage([image(CHART_THUMB)])).toEqual([image(CHART_THUMB)]);
+        expect(thumbnails.stage([CHART_THUMB])).toEqual([CHART_THUMB]);
         expect(started).toHaveLength(1);
       });
 
@@ -128,14 +132,14 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
-        thumbnails.stage([image(SCREENSHOT)]);
+        thumbnails.stage([SCREENSHOT]);
         const settledOnce = recorder.next();
 
         started[0].reject(new Error("decode failed"));
         await settledOnce;
 
         expect(recorder.settled[0].thumbnail).toBeNull();
-        expect(thumbnails.stage([{ type: "text", text: "Read" }, image(SCREENSHOT)])).toEqual([
+        expect(thumbnails.stage([{ type: "text", text: "Read" }, SCREENSHOT])).toEqual([
           { type: "text", text: "Read" },
         ]);
       });
@@ -145,7 +149,7 @@ describe("toolImageThumbnails", () => {
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
 
-        thumbnails.stage([image(CHART), image(DIAGRAM), image(SCREENSHOT)]);
+        thumbnails.stage([CHART, DIAGRAM, SCREENSHOT]);
         expect(started.map((s) => s.image)).toEqual([CHART, DIAGRAM]);
 
         const settledOnce = recorder.next();
@@ -161,7 +165,7 @@ describe("toolImageThumbnails", () => {
         const { shrink, started } = controlledShrinker();
         const recorder = settleRecorder();
         const thumbnails = new ToolImageThumbnails(shrink, recorder.onSettle);
-        thumbnails.stage([image(CHART), image(DIAGRAM), image(SCREENSHOT)]);
+        thumbnails.stage([CHART, DIAGRAM, SCREENSHOT]);
 
         thumbnails.dispose();
         started[0].resolve(CHART_THUMB);
@@ -212,7 +216,11 @@ describe("toolImageThumbnails", () => {
     });
 
     it("redraws a large image within 160 pixels, keeping its aspect ratio, as WebP https://github.com/logancyang/obsidian-copilot/issues/4248", async () => {
-      const thumbnail = await shrinkToolImage({ mimeType: "image/png", data: "A".repeat(4000) });
+      const thumbnail = await shrinkToolImage({
+        type: "image",
+        mimeType: "image/png",
+        data: "A".repeat(4000),
+      });
 
       expect(drawn).toEqual({ width: 160, height: 100 });
       expect(thumbnail.mimeType).toBe("image/webp");
@@ -221,7 +229,7 @@ describe("toolImageThumbnails", () => {
 
     it("keeps the original when the WebP would not be smaller", async () => {
       encodedBytes = 3000;
-      const tiny = { mimeType: "image/png", data: "iVBORw0K" };
+      const tiny: ToolImage = { type: "image", mimeType: "image/png", data: "iVBORw0K" };
 
       expect(await shrinkToolImage(tiny)).toEqual(tiny);
     });

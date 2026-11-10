@@ -1692,11 +1692,10 @@ export class AgentSession implements ChatStateHost, ChatView {
   }
 
   private settleToolImage(key: string, thumbnail: ToolImage | null): void {
-    const output = thumbnail ? ({ type: "image", ...thumbnail } as const) : null;
-    if (this.store.settleToolImage(key, output)) this.scheduleNotifyMessages();
+    if (this.store.settleToolImage(key, thumbnail)) this.scheduleNotifyMessages();
     let tasksChanged = false;
     for (const store of this.taskContent.values()) {
-      tasksChanged = store.settleToolImage(key, output) || tasksChanged;
+      tasksChanged = store.settleToolImage(key, thumbnail) || tasksChanged;
     }
     if (tasksChanged) this.notifyTasks();
   }

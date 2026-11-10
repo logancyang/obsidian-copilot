@@ -1,11 +1,9 @@
 import type { AgentToolCallOutput } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
+import { md5 } from "@/utils/hash";
 
-export interface ToolImage {
-  mimeType: string;
-  data: string;
-}
+export type ToolImage = Extract<AgentToolCallOutput, { type: "image" }>;
 
 export type ShrinkToolImage = (image: ToolImage) => Promise<ToolImage>;
 
@@ -21,11 +19,13 @@ export async function shrinkToolImage(image: ToolImage): Promise<ToolImage> {
       Math.max(1, Math.round(bitmap.width * scale)),
       Math.max(1, Math.round(bitmap.height * scale))
     );
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("2D canvas is unavailable");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const blob = await canvas.convertToBlob({ type: "image/webp", quality: 0.8 });
-    const thumbnail = { mimeType: blob.type, data: arrayBufferToBase64(await blob.arrayBuffer()) };
+    const thumbnail: ToolImage = {
+      type: "image",
+      mimeType: blob.type,
+      data: arrayBufferToBase64(await blob.arrayBuffer()),
+    };
     return thumbnail.data.length < image.data.length ? thumbnail : image;
   } finally {
     bitmap.close();
@@ -33,11 +33,7 @@ export async function shrinkToolImage(image: ToolImage): Promise<ToolImage> {
 }
 
 function imageKey(image: ToolImage): string {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < image.data.length; i++) {
-    hash = Math.imul(hash ^ image.data.charCodeAt(i), 0x01000193);
-  }
-  return `${image.mimeType}:${image.data.length}:${(hash >>> 0).toString(36)}`;
+  return `${image.mimeType}:${md5(image.data)}`;
 }
 
 export class ToolImageThumbnails {
@@ -59,9 +55,9 @@ export class ToolImageThumbnails {
       const key = imageKey(output);
       const thumbnail = this.finished.get(key);
       if (thumbnail === null) return [];
-      if (thumbnail) return [{ type: "image", ...thumbnail }];
+      if (thumbnail) return [thumbnail];
       if (!this.waiting.has(key)) {
-        this.waiting.set(key, { mimeType: output.mimeType, data: output.data });
+        this.waiting.set(key, output);
         this.queue.push(key);
         this.startNext();
       }

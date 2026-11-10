@@ -25,6 +25,7 @@ import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
+import type { ToolImage } from "@/agentMode/session/toolImageThumbnails";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentChatMessage,
@@ -2668,10 +2669,8 @@ describe("AgentSession", () => {
       it("keeps only a shrunk thumbnail of an image a tool returns, never the full-size image https://github.com/logancyang/obsidian-copilot/issues/4248", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
-        let finishShrink!: (thumbnail: { mimeType: string; data: string }) => void;
-        const shrinking = new Promise<{ mimeType: string; data: string }>(
-          (resolve) => (finishShrink = resolve)
-        );
+        let finishShrink!: (thumbnail: ToolImage) => void;
+        const shrinking = new Promise<ToolImage>((resolve) => (finishShrink = resolve));
         const session = makeSession(mock, { shrinkToolImage: () => shrinking });
         const { turn } = session.sendPrompt("check the chart");
 
@@ -2691,7 +2690,7 @@ describe("AgentSession", () => {
           output: [{ type: "image_pending" }],
         });
 
-        finishShrink({ mimeType: "image/webp", data: "VEhVTUI=" });
+        finishShrink({ type: "image", mimeType: "image/webp", data: "VEhVTUI=" });
         await shrinking;
         expect(aiMessage(session)?.parts?.[0]).toMatchObject({
           output: [{ type: "image", mimeType: "image/webp", data: "VEhVTUI=" }],
