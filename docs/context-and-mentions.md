@@ -24,7 +24,7 @@ You can also add context while typing:
 - Type `@` to browse the available context categories.
 - Choose a folder to insert its path as `{Folder/path}`.
 - Paste or drag an image into the composer. The selected model must support images.
-- Drag any other file into the composer to attach it. A file from outside the vault is copied to the folder set in **Settings → Files and links → Default location for new attachments**.
+- Drag any other file into the composer to attach it. A file from outside the vault is copied to the folder set in **Settings → Files and links → Default location for new attachments**, or into the Project's `sources/` folder when you are in a [Project](projects.md), and one notice lists the copies and their folder.
 
 Context badges above the composer show what will be sent with the next message. Select the **x** on a badge to remove it. After the message is sent, one-turn attachments are cleared.
 

@@ -1043,6 +1043,24 @@ describe("ProjectFilesView", () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
+    it("links the vault note and copies the computer file when one drop carries both, instead of dropping either — https://github.com/Brevilabs/obsidian-copilot-private/issues/898", async () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault);
+      const pdf = { name: "board-notes.pdf", arrayBuffer: async () => new ArrayBuffer(4) };
+
+      vault.setDraggable({ type: "file", file: retro });
+      fireEvent.drop(dropZone(), { dataTransfer: { types: ["Files"], files: [pdf] } });
+
+      await waitFor(() => expect(savedPatterns()).toEqual(["[[Q3 retro]]"]));
+      await waitFor(() =>
+        expect(noticeMessages()).toContain("Copied board-notes.pdf into sources/")
+      );
+      expect(vault.createBinary).toHaveBeenCalledWith(
+        `${PROJECT_FOLDER}/sources/board-notes.pdf`,
+        expect.any(ArrayBuffer)
+      );
+    });
+
     it("refuses a folder dropped from the computer with a notice and copies nothing — https://github.com/Brevilabs/obsidian-copilot-private/issues/897", async () => {
       const { vault } = linkedFixture();
       renderView(vault);

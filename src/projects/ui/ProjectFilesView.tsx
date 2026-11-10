@@ -15,17 +15,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
 import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
+import { splitByVault } from "@/utils/splitByVault";
 import type { UrlItem } from "@/lib/url-tag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { PROJECT_SOURCES_FOLDER_NAME } from "@/projects/constants";
 import {
   copyIntoProjectSources,
-  getDraggedVaultItems,
   getProjectLinks,
   linkProjectItems,
   type ProjectLinks,
-  splitOutsideDrop,
   linkProjectPattern,
   linkProjectUrl,
   unlinkProjectPattern,
@@ -765,18 +764,17 @@ export function ProjectFilesView({
     event.preventDefault();
     event.stopPropagation();
     setIsDragOver(false);
-    const items = getDraggedVaultItems(app);
-    if (items.length > 0) return linkItems(items);
-    const { files, folderNames } = splitOutsideDrop(event.dataTransfer);
-    if (folderNames.length > 0) {
+    const { vaultItems, outsideFiles, outsideFolderNames } = splitByVault(app, event.dataTransfer);
+    if (vaultItems.length > 0) linkItems(vaultItems);
+    if (outsideFolderNames.length > 0) {
       // Outside folders are usually large or live, so a drop never copies or links one; linking stays an explicit action.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/897
       new Notice(
-        `Folders from outside the vault can't be added: ${folderNames.join(", ")}. Move the folder into your vault, or drop the files you need.`
+        `Folders from outside the vault can't be added: ${outsideFolderNames.join(", ")}. Move the folder into your vault, or drop the files you need.`
       );
     }
-    if (files.length === 0) return;
-    copyIntoProjectSources(app, folderPath, files)
+    if (outsideFiles.length === 0) return;
+    copyIntoProjectSources(app, folderPath, outsideFiles)
       .then((copies) => {
         const names = copies.map((copy) => copy.name).join(", ");
         new Notice(`Copied ${names} into ${PROJECT_SOURCES_FOLDER_NAME}/`);

@@ -32,7 +32,8 @@ import {
 } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
-import { addFilesToChat, CONTEXT_FILE_ACCEPT } from "./addFilesToChat";
+import { attachToChat, CONTEXT_FILE_ACCEPT } from "./attachToChat";
+import { splitByVault } from "@/utils/splitByVault";
 import { openFilePicker } from "./openFilePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
@@ -135,6 +136,7 @@ export interface ChatInputProps {
   };
 
   isAgentMode?: boolean;
+  projectFolderPath?: string;
 
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
 
@@ -195,6 +197,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     onEditCancel,
     initialContext,
     isAgentMode = false,
+    projectFolderPath,
     agentBrands = EMPTY_AGENT_MENTION_BRANDS,
     cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
     onMentionedAgentsChange,
@@ -427,10 +430,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         openFilePicker(doc, {
           accept: isAgentMode ? undefined : CONTEXT_FILE_ACCEPT,
           onFiles: (files) =>
-            void addFilesToChat(app, files, {
+            void attachToChat(app, splitByVault(app, { files }), {
+              contextNotes,
+              selectedImages,
               onAddImage,
               setContextNotes,
               acceptAnyFileType: isAgentMode,
+              projectFolderPath,
             }),
           // Cancelling the dialog leaves the pane unresponsive unless focus returns to the composer.
           // https://github.com/logancyang/obsidian-copilot-preview/issues/119

@@ -1,11 +1,9 @@
 import type { ProjectConfig } from "@/aiParams";
 import {
   copyIntoProjectSources,
-  getDraggedVaultItems,
   getProjectLinkPatterns,
   getProjectLinks,
   linkProjectItems,
-  splitOutsideDrop,
   linkProjectPattern,
   linkProjectUrl,
   unlinkProjectPattern,
@@ -63,10 +61,6 @@ function saveToCache(_projectId: string, next: ProjectConfig) {
   const record = getCachedProjectRecordById(next.id)!;
   updateCachedProjectRecords([{ ...record, project: next }]);
   return Promise.resolve(record);
-}
-
-function appWithDraggable(draggable: unknown): App {
-  return { dragManager: { draggable } } as unknown as App;
 }
 
 beforeEach(() => {
@@ -140,39 +134,6 @@ describe("projectLinks", () => {
       expect(none).toEqual({ folders: [], notes: [], tags: [], properties: [], urls: [] });
       expect(getProjectLinks(projectWith([]))).toBe(none);
       expect(getProjectLinks(projectWith(["*.pdf"]))).toBe(none);
-    });
-  });
-
-  describe("getDraggedVaultItems()", () => {
-    it("returns the folder Obsidian is dragging as its own object, so a nested folder keeps its full path — https://github.com/logancyang/obsidian-copilot/issues/3089", () => {
-      const nested = makeFolder("Clients/Northwind/Research");
-
-      expect(getDraggedVaultItems(appWithDraggable({ type: "folder", file: nested }))).toEqual([
-        nested,
-      ]);
-    });
-
-    it("returns every item of a multi-item drag from the file explorer", () => {
-      const note = makeFile("Meetings/Q3 retro.md");
-      const folder = makeFolder("Research/Pricing");
-
-      expect(
-        getDraggedVaultItems(appWithDraggable({ type: "files", files: [note, folder] }))
-      ).toEqual([note, folder]);
-    });
-
-    it("returns the note a link drag carries", () => {
-      const note = makeFile("Meetings/Q3 retro.md");
-
-      expect(
-        getDraggedVaultItems(appWithDraggable({ type: "link", linktext: "Q3 retro", file: note }))
-      ).toEqual([note]);
-    });
-
-    it("returns nothing when Obsidian is not dragging a vault item, as for a file from the computer", () => {
-      expect(getDraggedVaultItems(appWithDraggable(null))).toEqual([]);
-      expect(getDraggedVaultItems(appWithDraggable({ type: "link", linktext: "x" }))).toEqual([]);
-      expect(getDraggedVaultItems({} as App)).toEqual([]);
     });
   });
 
@@ -414,40 +375,6 @@ describe("projectLinks", () => {
     it("returns null for a project with nothing linked or no project", () => {
       expect(getProjectLinkPatterns(projectWith([]))).toBeNull();
       expect(getProjectLinkPatterns(undefined)).toBeNull();
-    });
-  });
-
-  describe("splitOutsideDrop()", () => {
-    function droppedFile(name: string): File {
-      return { name } as File;
-    }
-
-    function entry(isDirectory: boolean): DataTransferItem {
-      return {
-        kind: "file",
-        webkitGetAsEntry: () => ({ isDirectory }),
-      } as unknown as DataTransferItem;
-    }
-
-    it("keeps every dropped file when the drop carries no folders", () => {
-      const notes = droppedFile("notes.pdf");
-      const data = droppedFile("data.csv");
-
-      expect(
-        splitOutsideDrop({ files: [notes, data], items: [entry(false), entry(false)] })
-      ).toEqual({ files: [notes, data], folderNames: [] });
-      expect(splitOutsideDrop({ files: [notes] })).toEqual({ files: [notes], folderNames: [] });
-    });
-
-    it("sets folders from outside the vault aside by name and keeps the files dropped with them — https://github.com/Brevilabs/obsidian-copilot-private/issues/897", () => {
-      const notes = droppedFile("notes.pdf");
-
-      expect(
-        splitOutsideDrop({
-          files: [droppedFile("my-codebase"), notes],
-          items: [entry(true), entry(false)],
-        })
-      ).toEqual({ files: [notes], folderNames: ["my-codebase"] });
     });
   });
 

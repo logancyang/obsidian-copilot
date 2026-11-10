@@ -48,10 +48,10 @@ A Project opens on its **Files** tab, beside **Recent chats**. When the Project 
 - A linked property, such as `status: active`, works the same way: it shows how many notes have that value and lists them when selected.
 - Select a linked web page or YouTube video to open it in your browser.
 - Select **Unlink** on a linked item to remove it from the Project. The note, folder, tag, or property stays in your vault.
-- Drag a file from your computer onto the **Files** tab to copy it into the Project's `sources/` folder. If a file with that name is already there, the copy gets a number added to its name.
+- Drag a file from your computer onto the **Files** tab to copy it into the Project's `sources/` folder. A notice names the copy. If a file with that name is already there, the copy gets a number added to its name. A file that is already in your vault is linked instead of copied.
 - Folders from your computer can't be added. Move the folder into your vault, or drop the files you need.
 
-Linking never moves a vault file. Dropping on the message box adds the item to that message only.
+Linking never moves a vault file. Dropping on the message box adds the item to that message only. A file from your computer is copied into `sources/` first, and a notice names it.
 
 ### See what a chat changed
 

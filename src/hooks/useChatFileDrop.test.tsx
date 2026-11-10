@@ -1,36 +1,68 @@
-import { canAttachFileToChat, useChatFileDrop } from "@/hooks/useChatFileDrop";
+import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
 import { TFile, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
-interface FakeItem {
-  kind: "string" | "file";
-  file?: File;
+interface FakeDrag {
+  types?: string[];
+  files?: File[];
 }
 
-function makeDataTransfer(items: FakeItem[]) {
+function makeDataTransfer({ types = [], files = [] }: FakeDrag, isDispatching: () => boolean) {
+  const items = files.map(() => ({
+    kind: "file",
+    webkitGetAsEntry: () => ({ isDirectory: false }),
+  }));
   return {
-    types: [] as string[],
+    types,
     dropEffect: "",
-    items: items.map((item) => ({ kind: item.kind, getAsFile: () => item.file ?? null })),
+    get items() {
+      return isDispatching() ? items : [];
+    },
+    get files() {
+      return isDispatching() ? files : [];
+    },
   };
 }
 
-function dispatchDrag(type: "dragOver" | "drop", target: HTMLElement, items: FakeItem[]): void {
+function dispatchDrag(type: "dragOver" | "drop", target: HTMLElement, drag: FakeDrag): void {
   const event = createEvent[type](target, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: makeDataTransfer(items) });
+  let dispatching = true;
+  Object.defineProperty(event, "dataTransfer", {
+    value: makeDataTransfer(drag, () => dispatching),
+  });
   fireEvent(target, event);
+  dispatching = false;
+}
+
+function vaultFile(path: string): TFile {
+  return new (TFile as unknown as new (path: string) => TFile)(path);
+}
+
+function makeApp({ draggable = null }: { draggable?: unknown } = {}) {
+  const createBinary = jest.fn(async (path: string) => vaultFile(path));
+  const app = {
+    dragManager: { draggable },
+    vault: {
+      adapter: { exists: async () => false, mkdir: async () => {} },
+      createBinary,
+      getAbstractFileByPath: () => null,
+    },
+    fileManager: { getAvailablePathForAttachment: async (name: string) => `attachments/${name}` },
+    workspace: { getActiveFile: () => null },
+  } as unknown as App;
+  return { app, createBinary };
 }
 
 interface HarnessProps {
   app: App;
   setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
-  acceptAnyFileType?: boolean;
+  projectFolderPath?: string;
 }
 
 const ignoreContextNotes = jest.fn();
 
-function Harness({ app, setContextNotes = ignoreContextNotes, acceptAnyFileType }: HarnessProps) {
+function Harness({ app, setContextNotes = ignoreContextNotes, projectFolderPath }: HarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
@@ -40,7 +72,7 @@ function Harness({ app, setContextNotes = ignoreContextNotes, acceptAnyFileType 
     selectedImages: [],
     onAddImage: jest.fn(),
     containerRef,
-    acceptAnyFileType,
+    projectFolderPath,
   });
 
   useEffect(() => {
@@ -59,73 +91,90 @@ function Harness({ app, setContextNotes = ignoreContextNotes, acceptAnyFileType 
   );
 }
 
-describe("useChatFileDrop", () => {
-  describe("canAttachFileToChat()", () => {
-    const fileAt = (path: string) => new (TFile as unknown as new (path: string) => TFile)(path);
-
-    it("accepts notes, canvases, bases, PDFs and images that a composer drop attaches", () => {
-      const paths = ["a.md", "b.canvas", "c.base", "d.pdf", "e.png", "f.jpg", "g.webp"];
-
-      expect(paths.filter((path) => canAttachFileToChat(fileAt(path)))).toEqual(paths);
-    });
-
-    it("rejects CSV, text and source files that a composer drop reports as unsupported", () => {
-      expect(
-        ["data.csv", "notes.txt", "script.py"].some((path) => canAttachFileToChat(fileAt(path)))
-      ).toBe(false);
-    });
+function renderAndCaptureAttached(app: App, projectFolderPath?: string) {
+  const attached = new Promise<TFile[]>((resolve) => {
+    const setContextNotes: HarnessProps["setContextNotes"] = (update) =>
+      resolve(typeof update === "function" ? update([]) : update);
+    render(
+      <Harness app={app} setContextNotes={setContextNotes} projectFolderPath={projectFolderPath} />
+    );
   });
+  return attached;
+}
 
+describe("useChatFileDrop", () => {
   describe("useChatFileDrop()", () => {
+    it("attaches a note dragged from Obsidian's file explorer without copying it into the vault", async () => {
+      const note = vaultFile("Notes/Welcome.md");
+      const { app, createBinary } = makeApp({ draggable: { type: "file", file: note } });
+      const attached = renderAndCaptureAttached(app);
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["text/plain", "text/uri-list"],
+      });
+
+      await expect(attached).resolves.toEqual([note]);
+      expect(createBinary).not.toHaveBeenCalled();
+    });
+
+    it("attaches a note dragged from a Copilot row such as Relevant Notes, without showing the drop overlay", async () => {
+      const note = vaultFile("Notes/Welcome.md");
+      const { app } = makeApp({ draggable: { type: "link", linktext: "Welcome", file: note } });
+      const attached = renderAndCaptureAttached(app);
+      const overlay = document.querySelector<HTMLElement>("[data-testid=overlay]")!;
+      const drag = { types: ["copilot/internal-drag", "text/plain"] };
+
+      dispatchDrag("dragOver", overlay, drag);
+      expect(overlay.textContent).toBe("idle");
+      dispatchDrag("drop", overlay, drag);
+
+      await expect(attached).resolves.toEqual([note]);
+    });
+
+    it("copies and attaches a file dropped with its name as text, as WeChat sends it, reading the file before the drop event ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app, createBinary } = makeApp();
+      const attached = renderAndCaptureAttached(app);
+      const report = new File(["data"], "report.pdf", { type: "application/pdf" });
+      report.arrayBuffer = () => Promise.resolve(new ArrayBuffer(4));
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["text/plain", "Files"],
+        files: [report],
+      });
+
+      await expect(attached).resolves.toEqual([vaultFile("attachments/report.pdf")]);
+      expect(createBinary).toHaveBeenCalledWith("attachments/report.pdf", expect.any(ArrayBuffer));
+    });
+
+    it("copies a file dropped on a project's chat input into that project's sources folder (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app, createBinary } = makeApp();
+      const attached = renderAndCaptureAttached(app, "copilot/projects/Q4 Launch");
+      const report = new File(["data"], "report.pdf", { type: "application/pdf" });
+      report.arrayBuffer = () => Promise.resolve(new ArrayBuffer(4));
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["Files"],
+        files: [report],
+      });
+
+      await expect(attached).resolves.toEqual([
+        vaultFile("copilot/projects/Q4 Launch/sources/report.pdf"),
+      ]);
+      expect(createBinary).toHaveBeenCalledWith(
+        "copilot/projects/Q4 Launch/sources/report.pdf",
+        expect.any(ArrayBuffer)
+      );
+    });
+
     it("clears the overlay when a drop lands in an inner zone that stops bubbling", () => {
-      const { getByTestId } = render(<Harness app={{} as App} />);
+      const { getByTestId } = render(<Harness app={makeApp().app} />);
       const overlay = getByTestId("overlay");
 
-      dispatchDrag("dragOver", getByTestId("overlay"), [{ kind: "file" }]);
+      dispatchDrag("dragOver", overlay, { types: ["Files"], files: [new File([], "a.pdf")] });
       expect(overlay.textContent).toBe("active");
 
-      dispatchDrag("drop", getByTestId("inner-zone"), [{ kind: "file" }]);
+      dispatchDrag("drop", getByTestId("inner-zone"), { types: ["Files"] });
       expect(overlay.textContent).toBe("idle");
-    });
-
-    function dropExternalFile(name: string, type: string, acceptAnyFileType?: boolean) {
-      const copied = new (TFile as unknown as new (path: string) => TFile)(`attachments/${name}`);
-      const app = {
-        vault: { adapter: {}, createBinary: jest.fn().mockResolvedValue(copied) },
-        fileManager: {
-          getAvailablePathForAttachment: jest.fn().mockResolvedValue(`attachments/${name}`),
-        },
-        workspace: { getActiveFile: () => null },
-      } as unknown as App;
-      let setContextNotes: HarnessProps["setContextNotes"];
-      const attached = new Promise<TFile[]>((resolve) => {
-        setContextNotes = (update) => resolve(typeof update === "function" ? update([]) : update);
-      });
-      const file = new File(["data"], name, { type });
-      file.arrayBuffer = () => Promise.resolve(new ArrayBuffer(4));
-      const { getByTestId } = render(
-        <Harness
-          app={app}
-          setContextNotes={setContextNotes}
-          acceptAnyFileType={acceptAnyFileType}
-        />
-      );
-
-      dispatchDrag("drop", getByTestId("overlay"), [{ kind: "file", file }]);
-
-      return { attached, copied };
-    }
-
-    it("attaches a PDF dropped from outside the vault as context once it is copied into the vault (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
-      const { attached, copied } = dropExternalFile("report.pdf", "application/pdf");
-
-      await expect(attached).resolves.toEqual([copied]);
-    });
-
-    it("attaches a dropped file of any type when any type is accepted, as in Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
-      const { attached, copied } = dropExternalFile("brief.docx", "application/msword", true);
-
-      await expect(attached).resolves.toEqual([copied]);
     });
   });
 });
