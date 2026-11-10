@@ -13,7 +13,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-edit: `Edit project` opens the project's name, description, `Project instructions`, and context sources.
 - project-files: `Project files` in the project info lists `AGENTS.md` and the files in the project folder to open, and `Outputs`.
 - project-folder: the home's `Files` view shows `Project folder` and an expandable folder tree; choose a file to open it.
-- project-context: `Context sources` in `Project settings` offers `URL` and `Manage context` for editing the project's saved context.
+- project-context: the Files view's `Linked` section lists linked notes and folders. `Link context` → `Files` or `Folders` opens a picker; `Unlink` removes a link without deleting the original.
 
 ## How to get to it
 
@@ -32,7 +32,8 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Info: inside a project chat, choose `Project info for <project>`. A panel shows the project name, then `Progress` when the agent has a plan, then `Project files`.
 - Folder tree: on the project home, expand `outputs` and its nested folders, then choose a generated file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
 - Files: in the project info, choose `AGENTS.md`. The project's `AGENTS.md` opens as a note.
-- Context: choose `Project settings`, then use `URL` or `Manage context` under `Context sources`. The saved context is available to chats in the project.
+- Context: choose `Link context` → `Files` and select a note outside the project folder. It appears under `Linked` with its parent folder. Choose `Folders`, select a nested folder, and expand its row to browse its contents.
+- Unlink: hover a linked row and choose `Unlink`. Its link disappears; the original note or folder stays in the vault.
 - Edit: hover a project in `Projects` and choose `Edit project`. The `Edit project` dialog shows `Project name`, `Description`, `Project instructions`, and `Context sources`.
 - Reveal: choose `Reveal in vault`. The file explorer opens with the project's folder selected.
 - Archive: choose `Archive`. The project leaves `Projects` and the count drops; it is listed under `View archived` in Recent chats.
@@ -43,3 +44,4 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - `Project instructions` in `Edit project` and the project's `AGENTS.md` are the same text; editing either changes both.
 - Files appears alone without a tab bar when the project has no chats or the [Copilot Navigator](copilot-navigator.md) is open. Otherwise the home offers `Files` and `Recent chats`, with Files selected.
 - The folder tree shows `AGENTS.md` when present, but hides the project's configuration note and dotfiles. Folders appear before files, sorted by name.
+- `Link context` stays below the scrolling Project folder and Linked list. A missing linked item stays listed as `Not found` so it can still be unlinked.
