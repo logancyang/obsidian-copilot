@@ -183,7 +183,9 @@ function Invoke-Relay($endpoint, $body) {
     $code = [int]$resp.StatusCode
     $out = Read-Utf8Body $resp
   } catch {
-    # A non-2xx makes Invoke-WebRequest throw; recover the response to map status.
+    # Transport failures otherwise lose their cause before reaching the agent activity log.
+    # https://github.com/logancyang/obsidian-copilot/issues/4177
+    [Console]::Error.WriteLine(('{0}: {1}' -f $_.Exception.GetType().FullName, $_.Exception.Message))
     $r = $null
     try { $r = $_.Exception.Response } catch {}
     if (-not $r) { Die "Could not reach the Copilot relay. $RELAY_FAILED_FALLBACK" 1 }
@@ -233,7 +235,7 @@ function relaySkill(opts: {
   const [argKey, argPlaceholder] = opts.arg;
   const cmdFile = opts.scriptFile.replace(/\.sh$/, ".cmd");
   const ps1File = opts.scriptFile.replace(/\.sh$/, ".ps1");
-  const version = 10;
+  const version = 11;
   // Self-host search crosses back into the Obsidian renderer so API keys never enter the
   // agent process.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/165
@@ -266,6 +268,9 @@ fi
   try {
     $response = Invoke-WebRequest -UseBasicParsing -Uri $SELF_HOST_URL -Method POST -Headers @{ Authorization = "Bearer $SELF_HOST_TOKEN" } -ContentType 'text/plain; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($ARG))
   } catch {
+    # Transport failures otherwise lose their cause before reaching the agent activity log.
+    # https://github.com/logancyang/obsidian-copilot/issues/4177
+    [Console]::Error.WriteLine(('{0}: {1}' -f $_.Exception.GetType().FullName, $_.Exception.Message))
     if ($_.ErrorDetails.Message) { [Console]::Error.WriteLine($_.ErrorDetails.Message) }
     Die 'Copilot could not complete self-host web search.' 1
   }
