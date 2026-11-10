@@ -18,7 +18,6 @@ export default meta;
 
 export const AllSourceTypes: StoryObj<Props> = {
   args: {
-    showHelperText: true,
     contextSource: {
       inclusions: patterns(
         "notes/research",
