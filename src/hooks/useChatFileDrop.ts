@@ -46,6 +46,17 @@ function parseObsidianUris(app: App, uriString: string): TFile[] {
   return files;
 }
 
+async function resolveVaultLinks(app: App, items: DataTransferItem[]): Promise<TFile[]> {
+  const texts = await Promise.all(
+    items.map((item) => new Promise<string>((resolve) => item.getAsString(resolve)))
+  );
+  const byPath = new Map<string, TFile>();
+  for (const text of texts) {
+    for (const file of parseObsidianUris(app, text)) byPath.set(file.path, file);
+  }
+  return [...byPath.values()];
+}
+
 const CHAT_IMAGE_EXTENSIONS = ["png", "gif", "jpeg", "jpg", "webp"];
 
 export function canAttachFileToChat(file: TFile): boolean {
@@ -134,69 +145,51 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         .map((item) => item.getAsFile())
         .filter((file): file is File => file !== null);
 
-      if (stringItems.length > 0) {
-        e.stopPropagation();
+      if (stringItems.length > 0) e.stopPropagation();
 
-        const uriStringPromises = stringItems.map(
-          (item) =>
-            new Promise<string>((resolve) => {
-              item.getAsString((data) => resolve(data));
-            })
-        );
-
-        const uriStrings = await Promise.all(uriStringPromises);
-
-        const fileMap = new Map<string, TFile>();
-        for (const uriString of uriStrings) {
-          const files = parseObsidianUris(app, uriString);
-          for (const file of files) {
-            fileMap.set(file.path, file);
-          }
-        }
-
-        // WeChat and browsers send a dropped file's name as text beside the file; only vault links mean an Obsidian drag.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
-        if (fileMap.size === 0 && droppedFiles.length > 0) {
+      // WeChat and browsers send a dropped file's name as text beside the file; only vault links mean an Obsidian drag.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
+      const vaultFiles = await resolveVaultLinks(app, stringItems);
+      if (vaultFiles.length === 0) {
+        if (droppedFiles.length > 0) {
           await addFilesToChat(app, droppedFiles, {
             onAddImage,
             setContextNotes,
             acceptAnyFileType,
           });
-          return;
         }
+        return;
+      }
 
-        for (const file of fileMap.values()) {
-          const isImage = CHAT_IMAGE_EXTENSIONS.includes(file.extension);
+      for (const file of vaultFiles) {
+        const isImage = CHAT_IMAGE_EXTENSIONS.includes(file.extension);
 
-          if (isImage) {
-            const isDuplicate = selectedImages.some((img) => img.name === file.name);
-            if (isDuplicate) {
-              new Notice("This image is already in the context");
-              continue;
-            }
-
-            const arrayBuffer = await app.vault.readBinary(file);
-            const blob = new Blob([arrayBuffer]);
-            const imageFile = new File([blob], file.name, {
-              type: getImageMimeType(file.extension),
-            });
-            onAddImage([imageFile]);
-          } else if (acceptAnyFileType || isAllowedFileForNoteContext(file)) {
-            const isDuplicate = contextNotes.some((note) => note.path === file.path);
-            if (isDuplicate) {
-              new Notice("This note is already in the context");
-              continue;
-            }
-
-            setContextNotes((prev) => [...prev, file]);
-          } else {
-            new Notice(
-              `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
-            );
+        if (isImage) {
+          const isDuplicate = selectedImages.some((img) => img.name === file.name);
+          if (isDuplicate) {
+            new Notice("This image is already in the context");
+            continue;
           }
+
+          const arrayBuffer = await app.vault.readBinary(file);
+          const blob = new Blob([arrayBuffer]);
+          const imageFile = new File([blob], file.name, {
+            type: getImageMimeType(file.extension),
+          });
+          onAddImage([imageFile]);
+        } else if (acceptAnyFileType || isAllowedFileForNoteContext(file)) {
+          const isDuplicate = contextNotes.some((note) => note.path === file.path);
+          if (isDuplicate) {
+            new Notice("This note is already in the context");
+            continue;
+          }
+
+          setContextNotes((prev) => [...prev, file]);
+        } else {
+          new Notice(
+            `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
+          );
         }
-      } else if (droppedFiles.length > 0) {
-        await addFilesToChat(app, droppedFiles, { onAddImage, setContextNotes, acceptAnyFileType });
       }
     };
 

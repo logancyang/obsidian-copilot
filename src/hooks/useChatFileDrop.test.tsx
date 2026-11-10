@@ -97,6 +97,28 @@ describe("useChatFileDrop", () => {
       expect(overlay.textContent).toBe("idle");
     });
 
+    it("attaches a note dragged from Obsidian's file explorer without copying it into the vault", async () => {
+      const note = new (TFile as unknown as new (path: string) => TFile)("Notes/Welcome.md");
+      const createBinary = jest.fn();
+      const app = {
+        vault: {
+          createBinary,
+          getAbstractFileByPath: (path: string) => (path === "Notes/Welcome.md" ? note : null),
+        },
+      } as unknown as App;
+      const attached = new Promise<TFile[]>((resolve) => {
+        const setContextNotes: HarnessProps["setContextNotes"] = (update) =>
+          resolve(typeof update === "function" ? update([]) : update);
+        const { getByTestId } = render(<Harness app={app} setContextNotes={setContextNotes} />);
+        dispatchDrag("drop", getByTestId("overlay"), [
+          { kind: "string", text: "obsidian://open?vault=Vault&file=Notes%2FWelcome" },
+        ]);
+      });
+
+      await expect(attached).resolves.toEqual([note]);
+      expect(createBinary).not.toHaveBeenCalled();
+    });
+
     function dropExternalFile(
       name: string,
       type: string,
