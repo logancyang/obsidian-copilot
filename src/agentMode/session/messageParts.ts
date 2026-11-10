@@ -105,6 +105,9 @@ function extractToolCallOutputs(
   for (const item of content) {
     if (item.type === "content" && item.content.type === "text") {
       outputs.push(capToolOutputText(item.content.text));
+    } else if (item.type === "content" && item.content.type === "image") {
+      // Keep returned images attached to the tool that viewed them. https://github.com/logancyang/obsidian-copilot/issues/4227
+      outputs.push(item.content);
     } else if (item.type === "diff") {
       outputs.push({
         type: "diff",

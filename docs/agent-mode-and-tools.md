@@ -93,7 +93,7 @@ Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** 
 
 An empty Agent Chat shows a fixed hint: "Ask anything • @ to add context • / for commands".
 
-Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step.
+Agent Chat groups consecutive tool calls and reasoning into a compact activity row. The row reports the total tool commands, distinct files read or edited, and recorded reasoning time. Open it to inspect every step. When a tool returns an image, a small thumbnail appears beside its tool call so you can see what the agent viewed. In a grouped activity row, expand the group to see the thumbnails; collapsing it hides them.
 
 After execution, OpenCode steps keep **Execute** and list the connector tools OpenCode reports, such as **Execute · Notion · Search**. A block that runs several tools lists each distinct tool once. Approval cards and steps without reported tool names show **Execute**; expand their details to inspect the code.
 
