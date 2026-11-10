@@ -8,7 +8,7 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
   }),
 }));
 
-jest.mock("@/components/modals/project/AddProjectModal", () => ({
+jest.mock("@/projects/ui/AddProjectModal", () => ({
   AddProjectModal: jest.fn().mockImplementation((_app, _onSave, project) => ({
     open: () => mockOpenedEditModals.push(project),
   })),

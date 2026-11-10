@@ -19,7 +19,7 @@ import {
   setSettings as mockedSetSettings,
 } from "@/settings/model";
 import * as projectsState from "@/projects/state";
-import { buildProjectContext } from "@/context/manifestBuilder";
+import { buildProjectContext } from "@/projects/projectContextBlock";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { type ProjectConfig } from "@/aiParams";
 import type { ProjectFileRecord } from "@/projects/type";
@@ -70,7 +70,7 @@ jest.mock("@/projects/ProjectFileManager", () => ({
   },
 }));
 
-jest.mock("@/context/manifestBuilder", () => ({
+jest.mock("@/projects/projectContextBlock", () => ({
   buildProjectContext: jest.fn(() => "<project_context>\n</project_context>"),
 }));
 

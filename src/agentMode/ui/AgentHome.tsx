@@ -5,13 +5,13 @@ import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
 import { formatChatReportNote } from "@/agentMode/session/feedback/feedbackOffer";
 import AgentContextMeter from "@/agentMode/ui/AgentContextMeter";
-import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentContextSection";
+import AgentContextSection, { buildContextSummary } from "@/projects/ui/AgentContextSection";
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
-import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
+import { CreateProjectPanel } from "@/projects/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
-import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
-import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
+import { AgentProjectHeader } from "@/projects/ui/AgentProjectHeader";
+import { ProjectInfoPopover } from "@/projects/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import { AgentTasksProvider } from "@/agentMode/ui/AgentTasksContext";
 import { QueuedMessageList } from "@/agentMode/ui/QueuedMessageList";
@@ -24,7 +24,7 @@ import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
   nextProjectLandingPlacement,
   type ProjectLandingPlacement,
-} from "@/agentMode/ui/projectLandingPlacement";
+} from "@/projects/projectLandingPlacement";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
@@ -33,8 +33,8 @@ import {
   setHomeShelfTab,
   HOME_SHELF_TAB_STORAGE_KEY,
 } from "@/agentMode/ui/homeShelfPrefs";
-import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
-import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
+import { leaveDeletedProject, projectRowActions } from "@/projects/ui/AgentProjectRowActions";
+import { ProjectPickerList } from "@/projects/ui/ProjectPickerList";
 import { RelevantNotesShelfPanel } from "@/agentMode/ui/RelevantNotesShelfPanel";
 import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpen";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
@@ -46,7 +46,7 @@ import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
 import { useRunningChatIds } from "@/agentMode/ui/hooks/useRunningChatIds";
 import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocus";
 import { useComposerFocusAfterTaskView } from "@/agentMode/ui/hooks/useComposerFocusAfterTaskView";
-import { useRefreshEmptyLandingOnContextSourceChange } from "@/agentMode/ui/hooks/useRefreshEmptyLandingOnContextSourceChange";
+import { useRefreshEmptyLandingOnContextSourceChange } from "@/projects/hooks/useRefreshEmptyLandingOnContextSourceChange";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
@@ -55,7 +55,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { type ProjectConfig } from "@/aiParams";
-import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
+import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
 import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
@@ -650,6 +650,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     });
 
   const showHeader = isProjectScope;
+  const headerProjectActions = activeProject
+    ? projectRowActions({ app, project: activeProject })
+    : undefined;
   const collapsibleHeaderRef = useRef<HTMLDivElement>(null);
   // The collapsed header stays mounted for its animation, so it is made inert to keep its buttons out of the tab order.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
@@ -683,6 +686,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             projectName={headerName}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
+            onOpenSettings={headerProjectActions?.edit}
+            onRevealFolder={headerProjectActions?.reveal}
+            isProjectHome={isProjectLanding}
             menu={
               activeProject ? (
                 <ProjectInfoPopover

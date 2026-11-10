@@ -213,7 +213,7 @@ describe("SessionsSidebarPanel", () => {
         renderPanel({ projects: projects(7) });
 
         const folders = within(section("Projects"))
-          .getAllByRole("button", { expanded: false, name: /^Project \d$/ })
+          .getAllByRole("button", { name: /^Project \d$/ })
           .map((button) => button.textContent);
         expect(folders).toEqual(["Project 1", "Project 2", "Project 3", "Project 4", "Project 5"]);
       });
@@ -233,14 +233,27 @@ describe("SessionsSidebarPanel", () => {
         expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
       });
 
-      it("only folds or unfolds a project on a click of its row, without opening the project or a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
+      it("opens a project's home on a click of its row without folding it or opening a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
+        const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
+          projects: projects(1),
+          items: projectChats("p1", 2),
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
+
+        expect(onOpenProject).toHaveBeenCalledWith("p1");
+        expect(onToggleProject).not.toHaveBeenCalled();
+        expect(onOpenChat).not.toHaveBeenCalled();
+      });
+
+      it("folds or unfolds a project from its chevron without opening the project or a chat for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
         const { onToggleProject, onOpenProject, onOpenChat } = renderPanel({
           projects: projects(1),
           items: projectChats("p1", 2),
           expandedProjectIds: new Set(["p1"]),
         });
 
-        fireEvent.click(screen.getByRole("button", { name: "Project 1" }));
+        fireEvent.click(screen.getByRole("button", { name: "Hide chats in Project 1" }));
 
         expect(onToggleProject).toHaveBeenCalledWith("p1");
         expect(onOpenProject).not.toHaveBeenCalled();
@@ -889,14 +902,14 @@ describe("SessionsSidebarPanel", () => {
 
       it("stores the new project order when a project is dropped by keyboard for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
         const props = renderPanel({ projects: projects(3) });
-        const [first] = within(section("Projects")).getAllByRole("button", { expanded: false });
+        const first = within(section("Projects")).getByRole("button", { name: "Project 1" });
 
         dragByKeyboard(first, "ArrowDown", 2);
 
         expect(props.onReorderProjects).toHaveBeenCalledWith(["p2", "p3", "p1"]);
       });
 
-      it("keeps Enter for opening a pinned chat or folding a project instead of picking the row up for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {
+      it("keeps Enter for opening a pinned chat or a project's home instead of picking the row up for https://github.com/Brevilabs/obsidian-copilot-private/issues/811 and https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
         const props = renderPanel({ items: pins, projects: projects(1) });
         const pin = screen.getByRole("button", { name: "Pin A" });
         const folder = screen.getByRole("button", { name: "Project 1" });
@@ -909,7 +922,7 @@ describe("SessionsSidebarPanel", () => {
         fireEvent.click(folder);
 
         expect(props.onOpenChat).toHaveBeenCalledWith("chats/pin-a.md");
-        expect(props.onToggleProject).toHaveBeenCalledWith("p1");
+        expect(props.onOpenProject).toHaveBeenCalledWith("p1");
       });
 
       it("offers reordering on Pinned and project rows only, not on Recents, project chats or search results, for https://github.com/Brevilabs/obsidian-copilot-private/issues/811", () => {

@@ -18,7 +18,7 @@ Each Project has a folder under `<Copilot folder>/projects/`. The default root i
 
 ## Add Project instructions
 
-Open the Project info menu beside the name and select **AGENTS.md**. You can also choose **Edit project** from the Projects list and edit **Project instructions**. Both open the same Project file.
+In a Project chat, open the Project info menu beside the name and select **AGENTS.md**. You can also select **Project settings** beside the name, or **Edit project** from the Projects list, and edit **Project instructions**. Each opens the same Project file.
 
 Vault-wide instructions still apply. Project instructions are more specific, so they take precedence when the two files conflict. The same Project `AGENTS.md` works with OpenCode, Claude, and Codex.
 
@@ -65,6 +65,7 @@ Inside a Project:
 - **Recent chats** and **Chat history** show that Project's conversations.
 - **New chat** starts a clean conversation with the latest Project instructions and context.
 - **Leave project** returns to the Agent Chat home screen.
+- **Project settings** beside the name edits the Project, and **Reveal project folder in vault** shows its folder in the file explorer.
 
 From the Projects list, hover over a Project to **Reveal in vault**, **Edit project**, **Archive**, or **Delete** it. The global **Recent chats** list on the Agent Chat home screen includes conversations from across Projects.
 

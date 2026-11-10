@@ -5,7 +5,7 @@ import { RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import type { ProjectConfig } from "@/aiParams";
 import { ReactModal } from "@/components/modals/ReactModal";
-import { ProjectFolderIcon } from "@/components/ui/ProjectFolderIcon";
+import { ProjectFolderIcon } from "@/projects/ui/ProjectFolderIcon";
 import { logError } from "@/logger";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";

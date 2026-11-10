@@ -520,6 +520,7 @@ export default [
         { type: "miyoAgent", pattern: "src/miyo/agentMode" },
         { type: "excalidrawAgent", pattern: "src/excalidraw/agentMode" },
         { type: "connectorsAgent", pattern: "src/connectors/agentMode" },
+        { type: "projectsUi", pattern: ["src/projects/ui", "src/projects/hooks"] },
         { type: "host", pattern: "src/**" },
       ],
     },
@@ -554,6 +555,7 @@ export default [
                     "miyoAgent",
                     "excalidrawAgent",
                     "connectorsAgent",
+                    "projectsUi",
                     "host",
                   ],
                 },
@@ -561,7 +563,7 @@ export default [
             },
             {
               from: { type: "navigator" },
-              allow: { to: { type: ["navigator", "ui", "session", "host"] } },
+              allow: { to: { type: ["navigator", "ui", "session", "projectsUi", "host"] } },
             },
             {
               from: { type: "miyoAgent" },
@@ -574,6 +576,10 @@ export default [
             {
               from: { type: "connectorsAgent" },
               allow: { to: { type: ["connectorsAgent", "ui", "session", "host"] } },
+            },
+            {
+              from: { type: "projectsUi" },
+              allow: { to: { type: ["projectsUi", "ui", "session", "host"] } },
             },
             {
               from: { type: "skills" },
@@ -675,7 +681,7 @@ export default [
   },
 
   {
-    files: ["src/agentMode/**/*.test.{ts,tsx}"],
+    files: ["src/agentMode/**/*.test.{ts,tsx}", "src/projects/{ui,hooks}/**/*.test.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-argument": "off",

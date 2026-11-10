@@ -17,7 +17,7 @@ import {
   subscribeToSettingsChange,
   type CopilotSettings,
 } from "@/settings/model";
-import { buildProjectContext } from "@/context/manifestBuilder";
+import { buildProjectContext } from "@/projects/projectContextBlock";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import {
@@ -67,7 +67,7 @@ import {
   getProjectContextSignature,
   getProjectLandingCaptureSignature,
 } from "@/projects/projectContextSignature";
-import { ProjectContentTracker } from "@/context/projectContentTracker";
+import { ProjectContentTracker } from "@/projects/projectContentTracker";
 import { buildProjectContextUpdatesBlock } from "@/context/contextUpdatesBlockBuilder";
 import { ensureAgentsFileForDiscovery } from "@/instructions/agentsFile";
 import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";

@@ -14,6 +14,7 @@ const meta = {
     active: false,
     current: false,
     hiddenStatus: "idle",
+    onOpen: () => {},
     onToggle: () => {},
     onNewChat: () => {},
     onDeleted: () => {},

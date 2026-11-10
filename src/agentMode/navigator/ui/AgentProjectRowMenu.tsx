@@ -1,7 +1,7 @@
 import {
   projectRowActions,
   type AgentProjectRowActionsProps,
-} from "@/agentMode/ui/AgentProjectRowActions";
+} from "@/projects/ui/AgentProjectRowActions";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import {
   DropdownMenu,
