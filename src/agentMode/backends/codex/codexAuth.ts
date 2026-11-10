@@ -14,11 +14,11 @@ interface AccountReply {
   error?: unknown;
 }
 
-async function invocation(settings: CopilotSettings) {
+export async function codexCliInvocation(settings: CopilotSettings, missingMessage: string) {
   const config = settings.agentMode?.backends?.codex;
   const descriptor = buildSimpleSpawnDescriptor(
     config?.binaryPath,
-    "Install Codex before signing in.",
+    missingMessage,
     sanitizeBuiltinSkillEnvOverrides(config?.envOverrides)
   );
   const codex = resolveCodexCommand(descriptor.command, descriptor.env);
@@ -27,8 +27,10 @@ async function invocation(settings: CopilotSettings) {
   return buildCodexAcpInvocation(codex, [], descriptor.env, process.platform, node ?? undefined);
 }
 
+const INSTALL_BEFORE_SIGN_IN = "Install Codex before signing in.";
+
 async function readCodexAuthStatus(settings: CopilotSettings) {
-  const call = await invocation(settings);
+  const call = await codexCliInvocation(settings, INSTALL_BEFORE_SIGN_IN);
   if (call.env.CODEX_API_KEY?.trim() || call.env.OPENAI_API_KEY?.trim()) return { signedIn: true };
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 10_000);
@@ -144,7 +146,7 @@ export const codexAuth: BackendAuth = {
     }
   },
   async signOut(settings, options) {
-    const call = await invocation(settings);
+    const call = await codexCliInvocation(settings, INSTALL_BEFORE_SIGN_IN);
     const status = await signOutWithCli(
       call.command,
       [...call.args, "logout"],
@@ -158,7 +160,7 @@ export const codexAuth: BackendAuth = {
     return { signedIn: status.loggedIn, ...(status.label ? { label: status.label } : {}) };
   },
   async signIn(settings, handlers) {
-    const call = await invocation(settings);
+    const call = await codexCliInvocation(settings, INSTALL_BEFORE_SIGN_IN);
     const result = await signInWithCli(
       call.command,
       [...call.args, "login"],
