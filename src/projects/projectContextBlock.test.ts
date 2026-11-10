@@ -37,7 +37,6 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
     extensions: [],
     tags: [],
     properties: [],
-    propertyNotes: [],
     documents: [],
     webUrls: [],
     youtubeUrls: [],
@@ -118,45 +117,24 @@ describe("projectContextBlock", () => {
       expect(block).toContain("`/vault/B/Spec.md`");
     });
 
-    it("counts a property-only inclusion as a source and enumerates matching notes by absolute path", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
-      const app = fakeApp([
-        { path: "Notes/Relativity.md", ext: "md" },
-        { path: "Notes/Cooking.md", ext: "md" },
-      ]);
-      indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path === "Notes/Relativity.md"); // prettier-ignore
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).toContain("## Notes matching an included property");
-      expect(block).toContain("`/vault/Notes/Relativity.md`");
-      expect(block).not.toContain("Cooking");
-    });
-
-    it("lists a note reached by both a title and a property once, as a declaration", () => {
-      getRecord.mockReturnValue(record({ inclusions: "[[Relativity]],[Topics:Physics]" }));
-      const app = fakeApp([{ path: "Notes/Relativity.md", ext: "md" }]);
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block.match(/\/vault\/Notes\/Relativity\.md/g)).toHaveLength(1);
-      expect(block).toContain("## Included notes");
-      expect(block).not.toContain("## Notes matching an included property");
-    });
-
-    it("lists exactly the linked folder, note, tag and URL plus the instruction to resolve the tag, without the notes carrying the tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+    it("lists exactly the linked folder, note, tag, property and URL plus the instruction to resolve tags and properties, without the notes they match — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
       getRecord.mockReturnValue(
-        record({ inclusions: "Plans,[[brief]],%23launch", webUrls: "https://example.com" })
+        record({
+          inclusions: "Plans,[[brief]],%23launch,[status:active]",
+          webUrls: "https://example.com",
+        })
       );
       const app = fakeApp(
         [
           { path: "Plans/brief.md", ext: "md" },
           { path: "Work/standup.md", ext: "md" },
+          { path: "Work/roadmap.md", ext: "md" },
         ],
         ["Plans"],
         {
-          "Plans/brief.md": { frontmatter: { tags: ["launch"] } },
+          "Plans/brief.md": { frontmatter: { tags: ["launch"], status: "active" } },
           "Work/standup.md": { tags: [{ tag: "#launch" }] },
+          "Work/roadmap.md": { frontmatter: { status: "active" } },
         }
       );
 
@@ -170,6 +148,9 @@ describe("projectContextBlock", () => {
           "",
           "## Included folders",
           "- `/vault/Plans`",
+          "",
+          "## Included properties",
+          "- [status:active]",
           "",
           "## Included notes",
           "- `/vault/Plans/brief.md`",
@@ -257,12 +238,11 @@ describe("projectContextBlock", () => {
 
     it("still emits <project_context> for a property-only project when no note currently matches", () => {
       getRecord.mockReturnValue(record({ inclusions: "[Topics:Physics]" }));
-      indexFile.mockReturnValue(false);
 
       const block = buildProjectContext(fakeApp([{ path: "Notes/Cooking.md", ext: "md" }]), "p1"); // prettier-ignore
 
       expect(block).toContain("<project_context>");
-      expect(block).toContain("## Included properties");
+      expect(block).toContain("## Included properties\n- [Topics:Physics]");
       expect(block).not.toContain("## Included notes");
     });
 
@@ -306,9 +286,11 @@ describe("projectContextBlock", () => {
       expect(md.endsWith("</project_context>")).toBe(true);
     });
 
-    it("tells the agent once how to find a linked tag's notes, after the listing and ahead of the overflow note, without spending an entry of the cap — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+    it("tells the agent once how to find the notes of linked tags and properties, after the listing and ahead of the overflow note, without spending an entry of the cap — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
       const folders = Array.from({ length: MAX_MANIFEST_ENTRIES + 5 }, (_, i) => abs(`F${i}`));
-      const md = buildProjectContextBlock(sources({ folders, tags: ["#launch", "#q4"] }));
+      const md = buildProjectContextBlock(
+        sources({ folders, tags: ["#launch"], properties: ["[status:active]"] })
+      );
 
       expect(md.split(LINKED_QUERY_INSTRUCTION)).toHaveLength(2);
       expect(md).toContain(
@@ -316,7 +298,15 @@ describe("projectContextBlock", () => {
       );
     });
 
-    it("leaves out the tag instruction when the project links no tag", () => {
+    it("gives the instruction for a property even when the project links no tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const md = buildProjectContextBlock(sources({ properties: ["[status:active]"] }));
+
+      expect(md).toContain(
+        `## Included properties\n- [status:active]\n\n${LINKED_QUERY_INSTRUCTION}\n</project_context>`
+      );
+    });
+
+    it("leaves out the instruction when the project links no tag or property", () => {
       const md = buildProjectContextBlock(
         sources({ folders: [abs("Papers", "/vault/Papers")], webUrls: ["https://a.com"] })
       );
@@ -374,14 +364,6 @@ describe("projectContextBlock", () => {
       expect(md).toContain("[Topics:Physics]");
     });
 
-    it("lists property-matched notes under their own heading", () => {
-      const md = buildProjectContextBlock(
-        sources({ properties: ["[Topics:Physics]"], propertyNotes: [abs("p.md", "/vault/p.md")] })
-      );
-      expect(md).toContain("## Notes matching an included property");
-      expect(md).toContain("`/vault/p.md`");
-    });
-
     it("lists document files by the absolute path of the original file under their own section", () => {
       const md = buildProjectContextBlock(
         sources({
@@ -411,11 +393,11 @@ describe("projectContextBlock", () => {
       expect(md).toContain("> 25 more sources are not listed; search the sources above for them.");
     });
 
-    it("keeps every declared source when property-matched notes overflow the entry cap", () => {
-      const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`n${i}.md`));
+    it("keeps every declared source when document file rows overflow the entry cap", () => {
+      const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`p${i}.pdf`));
       const md = buildProjectContextBlock(
         sources({
-          propertyNotes: many,
+          documents: many,
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
           notes: [abs("Spec.md", "/vault/Spec.md")],
@@ -435,29 +417,11 @@ describe("projectContextBlock", () => {
       expect(md).toContain("https://youtu.be/abc");
     });
 
-    it("keeps a declared note when document file rows overflow the entry cap", () => {
-      const documents = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) =>
-        abs(`Papers/p${i}.pdf`, `/vault/Papers/p${i}.pdf`)
-      );
-      const md = buildProjectContextBlock(
-        sources({
-          documents,
-          folders: [abs("Papers", "/vault/Papers")],
-          notes: [abs("Outside/Spec.md", "/elsewhere/Outside/Spec.md")],
-          tags: ["#physics"],
-        })
-      );
-
-      expect(md).toContain("`/elsewhere/Outside/Spec.md`");
-      expect(md).toContain("#physics");
-      expect(md).toContain("`/vault/Papers`");
-    });
-
     it("spends the leftover budget on expansions and counts the trimmed ones as omitted", () => {
-      const many = Array.from({ length: 120 }, (_, i) => abs(`n${i}.md`));
+      const many = Array.from({ length: 120 }, (_, i) => abs(`p${i}.pdf`));
       const md = buildProjectContextBlock(
         sources({
-          propertyNotes: many,
+          documents: many,
           properties: ["[Subject:]"],
           folders: [abs("Papers", "/vault/Papers")],
           extensions: ["*.pdf"],

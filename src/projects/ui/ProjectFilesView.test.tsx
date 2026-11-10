@@ -50,6 +50,12 @@ jest.mock("@/components/modals/TagSearchModal", () => ({
   })),
 }));
 
+jest.mock("@/components/modals/PropertySearchModal", () => ({
+  PropertySearchModal: jest.fn().mockImplementation((_app, onChoose) => ({
+    open: () => mockOpenPicker("properties", onChoose),
+  })),
+}));
+
 jest.mock("@/projects/ui/LinkUrlModal", () => ({
   LinkUrlModal: jest.fn().mockImplementation((_app, onChoose) => ({
     open: () => mockOpenPicker("link", onChoose),
@@ -509,34 +515,64 @@ describe("ProjectFilesView", () => {
         makeFolder("Work", [standup]),
         makeFolder("Plans", [brief, budget]),
       ]);
-      vault.setTags(standup, { inlineTags: ["#launch"] });
-      vault.setTags(brief, { frontmatter: { tags: ["launch", "q4"] } });
-      vault.setTags(budget, { frontmatter: { tags: ["q4"] } });
+      vault.setTags(standup, { inlineTags: ["#launch"], frontmatter: { status: "Active" } });
+      vault.setTags(brief, {
+        frontmatter: { tags: ["launch", "q4"], status: ["active", "draft"] },
+      });
+      vault.setTags(budget, { frontmatter: { tags: ["q4"], status: "done" } });
       return vault.app;
     }
 
     it("lists each linked tag with how many notes carry it in properties or inline, leaving its notes unread until it is expanded — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
-      const rows = buildLinkedMatchRows(taggedVault(), ["#launch", "#q4", "#archived"], new Set());
+      const rows = buildLinkedMatchRows(
+        taggedVault(),
+        { tags: ["#launch", "#q4", "#archived"], properties: [] },
+        new Set()
+      );
 
       expect(rows).toEqual([
-        { pattern: "#launch", label: "#launch", count: 2, notes: null },
-        { pattern: "#q4", label: "#q4", count: 2, notes: null },
-        { pattern: "#archived", label: "#archived", count: 0, notes: null },
+        { kind: "tag", pattern: "#launch", label: "#launch", count: 2, notes: null },
+        { kind: "tag", pattern: "#q4", label: "#q4", count: 2, notes: null },
+        { kind: "tag", pattern: "#archived", label: "#archived", count: 0, notes: null },
       ]);
     });
 
-    it("lists an expanded tag's notes by name with the folder each sits in, sorted by path", () => {
-      const [tag] = buildLinkedMatchRows(taggedVault(), ["#launch"], new Set(["#launch"]));
+    it("lists each linked property after the tags, labeled key: value, counting the notes the manifest includes for it — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const rows = buildLinkedMatchRows(
+        taggedVault(),
+        { tags: ["#q4"], properties: ["[status:active]", "[status:]", "[owner:]"] },
+        new Set()
+      );
+
+      expect(rows.map(({ kind, label, count }) => [kind, label, count])).toEqual([
+        ["tag", "#q4", 2],
+        ["property", "status: active", 2],
+        ["property", "status: (any)", 3],
+        ["property", "owner: (any)", 0],
+      ]);
+      expect(rows[1].pattern).toBe("[status:active]");
+    });
+
+    it("lists an expanded tag's or property's notes by name with the folder each sits in, sorted by path", () => {
+      const [tag, property] = buildLinkedMatchRows(
+        taggedVault(),
+        { tags: ["#launch"], properties: ["[status:active]"] },
+        new Set(["#launch", "[status:active]"])
+      );
 
       expect(tag.notes?.map((note) => [note.node.name, note.parent])).toEqual([
         ["brief.md", "Plans/"],
         ["standup.md", "Work/"],
       ]);
+      expect(property.notes?.map((note) => note.node.path)).toEqual([
+        "Plans/brief.md",
+        "Work/standup.md",
+      ]);
     });
 
-    it("returns the same empty list when no tag is linked", () => {
-      const first = buildLinkedMatchRows(taggedVault(), [], new Set());
-      const second = buildLinkedMatchRows(taggedVault(), [], new Set());
+    it("returns the same empty list when no tag or property is linked", () => {
+      const first = buildLinkedMatchRows(taggedVault(), { tags: [], properties: [] }, new Set());
+      const second = buildLinkedMatchRows(taggedVault(), { tags: [], properties: [] }, new Set());
 
       expect(first).toEqual([]);
       expect(first).toBe(second);
@@ -606,6 +642,7 @@ describe("ProjectFilesView", () => {
     const NO_URLS: ReturnType<typeof createUrlItem>[] = [];
     const MATCHES: LinkedMatchRow[] = [
       {
+        kind: "tag",
         pattern: "#launch",
         label: "#launch",
         count: 2,
@@ -614,7 +651,16 @@ describe("ProjectFilesView", () => {
           { node: { kind: "file", path: "Work/standup.md", name: "standup.md" }, parent: "Work/" },
         ],
       },
-      { pattern: "#q4", label: "#q4", count: 1, notes: null },
+      { kind: "tag", pattern: "#q4", label: "#q4", count: 1, notes: null },
+      {
+        kind: "property",
+        pattern: "[status:active]",
+        label: "status: active",
+        count: 1,
+        notes: [
+          { node: { kind: "file", path: "Work/standup.md", name: "standup.md" }, parent: "Work/" },
+        ],
+      },
     ];
     const URLS = [
       createUrlItem("https://example.com/pricing"),
@@ -677,7 +723,7 @@ describe("ProjectFilesView", () => {
       expect(handlers.onOpenFile).not.toHaveBeenCalled();
     });
 
-    it("lists linked tags after notes and folders, then links, each tag with its note count and each link by its address — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+    it("lists linked tags and then properties after notes and folders, then links, each tag and property with its note count and each link by its address — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
       render(<LinkedSection rows={ROWS} matches={MATCHES} urls={URLS} {...handlers} />);
 
       const rows = within(linkedRegion())
@@ -691,6 +737,8 @@ describe("ProjectFilesView", () => {
         "brief.mdPlans/",
         "standup.mdWork/",
         "#q41 note",
+        "status: active1 note",
+        "standup.mdWork/",
         "example.com/pricing",
         "youtu.be/dQw4w9WgXcQ",
       ]);
@@ -718,9 +766,11 @@ describe("ProjectFilesView", () => {
       expect(handlers.onOpenUrl).toHaveBeenCalledWith("https://youtu.be/dQw4w9WgXcQ");
     });
 
-    it("unlinks a tag by its saved pattern and a link by its saved address, without opening either", () => {
+    it("unlinks a tag or property by its saved pattern and a link by its saved address, without opening any", () => {
       render(<LinkedSection rows={[]} matches={MATCHES} urls={URLS} {...handlers} />);
 
+      fireEvent.click(screen.getByRole("button", { name: "Unlink status: active" }));
+      expect(handlers.onUnlink).toHaveBeenCalledWith("[status:active]");
       fireEvent.click(screen.getByRole("button", { name: "Unlink #q4" }));
       fireEvent.click(screen.getByRole("button", { name: "Unlink example.com/pricing" }));
 
@@ -730,13 +780,14 @@ describe("ProjectFilesView", () => {
       expect(handlers.onOpenUrl).not.toHaveBeenCalled();
     });
 
-    it("offers no file menu and no drag on tag and link rows, which are not files, but keeps both on the notes under them — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+    it("offers no file menu and no drag on tag, property and link rows, which are not files, but keeps both on the notes under them — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
       render(<LinkedSection rows={[]} matches={MATCHES} urls={URLS} {...handlers} />);
       const tag = screen.getByRole("button", { name: /^#launch/ });
+      const property = screen.getByRole("button", { name: /^status: active/ });
       const link = screen.getByRole("button", { name: "example.com/pricing" });
       const note = screen.getByRole("button", { name: /^brief\.md/ });
 
-      for (const row of [tag, link]) {
+      for (const row of [tag, property, link]) {
         fireEvent.contextMenu(row);
         expect(row.getAttribute("draggable")).toBe("false");
       }
@@ -748,7 +799,7 @@ describe("ProjectFilesView", () => {
   });
 
   describe("ProjectFilesPanel()", () => {
-    it("offers Files, Folders, Tags and Link from Link context and reports the kind chosen", () => {
+    it("offers Files, Folders, Tags, Properties and Link from Link context and reports the kind chosen", () => {
       const onLink = jest.fn();
       render(
         <ProjectFilesPanel onLink={onLink}>
@@ -765,7 +816,7 @@ describe("ProjectFilesView", () => {
         within(menu)
           .getAllByRole("menuitem")
           .map((item) => item.textContent)
-      ).toEqual(["Files", "Folders", "Tags", "Link"]);
+      ).toEqual(["Files", "Folders", "Tags", "Properties", "Link"]);
       fireEvent.click(within(menu).getByRole("menuitem", { name: "Folders" }));
 
       expect(onLink).toHaveBeenCalledWith("folders");
@@ -1136,6 +1187,25 @@ describe("ProjectFilesView", () => {
       expect(noticeMessages()).toEqual(["Linked #launch to the project"]);
     });
 
+    it("links the property pattern chosen from Link context's Properties picker and lists it as a property row", async () => {
+      const { vault, brief } = taggedFixture();
+      vault.setTags(brief, { frontmatter: { status: "active" } });
+      renderView(vault);
+
+      chooseLinkKind("Properties");
+      const [kind, choosePattern] = mockOpenPicker.mock.calls[0];
+      expect(kind).toBe("properties");
+      act(() => {
+        choosePattern("[status:active]");
+      });
+
+      await waitFor(() => expect(linkedNames()).toEqual(["status: active"]));
+      expect(savedPatterns()).toEqual(["[status:active]"]);
+      expect(screen.getByRole("button", { name: /^status: active/ }).textContent).toBe(
+        "status: active1 note"
+      );
+    });
+
     it("links a web or YouTube link from Link context's Link picker, saving it by its kind", async () => {
       renderView(taggedFixture().vault);
 
@@ -1151,6 +1221,36 @@ describe("ProjectFilesView", () => {
         "https://youtu.be/dQw4w9WgXcQ"
       );
       expect(noticeMessages()).toEqual(["Linked https://youtu.be/dQw4w9WgXcQ to the project"]);
+    });
+
+    it("expands a linked property to the notes that match it and updates them when a note's property changes, without a reload", () => {
+      linkPatterns(["[status:active]"]);
+      const { vault, brief, standup } = taggedFixture();
+      vault.setTags(brief, { frontmatter: { status: "active" } });
+      renderView(vault);
+      fireEvent.click(screen.getByRole("button", { name: /^status: active/ }));
+      expect(linkedNames()).toEqual(["status: active", "brief.md"]);
+
+      vault.setTags(standup, { frontmatter: { status: ["Active", "q4"] } });
+      expect(linkedNames()).toEqual(["status: active", "brief.md", "standup.md"]);
+
+      vault.setTags(brief, { frontmatter: { status: "done" } });
+      expect(linkedNames()).toEqual(["status: active", "standup.md"]);
+      expect(screen.getByRole("button", { name: /^status: active/ }).textContent).toBe(
+        "status: active1 note"
+      );
+    });
+
+    it("unlinks only the chosen property pattern and leaves the notes and other links alone", async () => {
+      linkPatterns(["#launch", "[status:active]", "[status:]"]);
+      const { vault } = taggedFixture();
+      renderView(vault);
+
+      fireEvent.click(screen.getByRole("button", { name: "Unlink status: active" }));
+
+      await waitFor(() => expect(savedPatterns()).toEqual(["#launch", "[status:]"]));
+      expect(linkedNames()).toEqual(["#launch", "status: (any)"]);
+      expect(vault.promptForDeletion).not.toHaveBeenCalled();
     });
 
     it("lists the project folder's top level with folders first and the config note hidden", () => {

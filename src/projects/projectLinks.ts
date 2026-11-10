@@ -46,6 +46,7 @@ export interface ProjectLinks {
   folders: readonly string[];
   notes: readonly string[];
   tags: readonly string[];
+  properties: readonly string[];
   urls: readonly UrlItem[];
 }
 
@@ -53,19 +54,33 @@ const NO_LINKS: ProjectLinks = Object.freeze({
   folders: Object.freeze([]),
   notes: Object.freeze([]),
   tags: Object.freeze([]),
+  properties: Object.freeze([]),
   urls: Object.freeze([]),
 });
 
 export function getProjectLinks(project: ProjectConfig | undefined): ProjectLinks {
   const contextSource = project?.contextSource;
-  const { folderPatterns, notePatterns, tagPatterns } = categorizePatterns([
+  const { folderPatterns, notePatterns, tagPatterns, propertyPatterns } = categorizePatterns([
     ...new Set(getDecodedPatterns(contextSource?.inclusions ?? "")),
   ]);
   const urls = parseProjectUrls(contextSource?.webUrls ?? "", contextSource?.youtubeUrls ?? "");
-  if (folderPatterns.length + notePatterns.length + tagPatterns.length + urls.length === 0) {
+  if (
+    folderPatterns.length +
+      notePatterns.length +
+      tagPatterns.length +
+      propertyPatterns.length +
+      urls.length ===
+    0
+  ) {
     return NO_LINKS;
   }
-  return { folders: folderPatterns, notes: notePatterns, tags: tagPatterns, urls };
+  return {
+    folders: folderPatterns,
+    notes: notePatterns,
+    tags: tagPatterns,
+    properties: propertyPatterns,
+    urls,
+  };
 }
 
 type ContextSource = ProjectConfig["contextSource"];
