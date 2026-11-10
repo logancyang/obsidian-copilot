@@ -75,6 +75,26 @@ describe("promptFailure", () => {
       expect(formatPromptFailure(error)).toBe("Overloaded: busy");
     });
 
+    it.each([
+      [
+        "Google",
+        "Internal error: Function calling is not enabled for models/antigravity-preview-latest",
+      ],
+      ["Ollama", "Internal error: registry.ollama.ai/library/gemma:latest does not support tools"],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4268 tells the user to choose another model when %s rejects a model that cannot use tools",
+      (_provider, message) => {
+        const error = Object.assign(new Error(message), {
+          code: -32603,
+          data: { service: "session", errorName: "provider.invalid-request" },
+        });
+
+        expect(formatPromptFailure(error)).toBe(
+          `${message}\nThis model can't use tools, which Agent Chat needs. Choose a different model.`
+        );
+      }
+    );
+
     it("stops searching an error whose cause points back at itself", () => {
       const error = new Error("loop") as Error & { cause?: unknown };
       error.cause = error;

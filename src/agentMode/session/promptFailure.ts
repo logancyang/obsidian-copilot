@@ -5,11 +5,20 @@ export function buildEmptyTurnMessage(backendId: BackendId, stopReason: StopReas
   return `${backendId} finished the turn without returning any assistant text or tool activity (stop reason: ${stopReason}). Try again, or switch models if this repeats.`;
 }
 
+// Agent Chat always sends tools, and a provider's rejection of a model without them names no next step.
+// https://github.com/logancyang/obsidian-copilot/issues/4268
+const TOOLS_UNSUPPORTED_PATTERNS: readonly RegExp[] = [
+  /function calling is not enabled/i,
+  /does not support tools/i,
+];
+
 export function formatPromptFailure(err: unknown): string {
   const base = err2String(err);
   const providerMessage = extractProviderErrorMessage(err);
-  if (!providerMessage || base.includes(providerMessage)) return base;
-  return `${base}\n${providerMessage}`;
+  const failure =
+    !providerMessage || base.includes(providerMessage) ? base : `${base}\n${providerMessage}`;
+  if (!TOOLS_UNSUPPORTED_PATTERNS.some((pattern) => pattern.test(failure))) return failure;
+  return `${failure}\nThis model can't use tools, which Agent Chat needs. Choose a different model.`;
 }
 
 function extractProviderErrorMessage(err: unknown): string | null {
