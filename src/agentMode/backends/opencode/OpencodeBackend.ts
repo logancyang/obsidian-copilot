@@ -174,7 +174,7 @@ export class OpencodeBackend implements AcpBackend {
   }
 }
 
-const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "::1"];
+const LOOPBACK_HOSTS = ["127.0.0.1", "localhost"];
 
 // OpenCode's ACP reaches its private server on loopback through HTTP_PROXY, so a proxy outage
 // fails every turn with "OpenCode server is unavailable". https://github.com/logancyang/obsidian-copilot/issues/4138

@@ -1195,7 +1195,7 @@ describe("OpencodeBackend", () => {
           vaultBasePath: "/vault",
         });
 
-        expect(desc.env.NO_PROXY).toBe("127.0.0.1,localhost,::1");
+        expect(desc.env.NO_PROXY).toBe("127.0.0.1,localhost");
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/4138 keeps the user's own proxy exclusions, from any spelling of NO_PROXY, beside the loopback hosts", async () => {
@@ -1211,7 +1211,7 @@ describe("OpencodeBackend", () => {
             vaultBasePath: "/vault",
           });
 
-          expect(desc.env.NO_PROXY).toBe("intranet.example,127.0.0.1,.corp.example,localhost,::1");
+          expect(desc.env.NO_PROXY).toBe("intranet.example,127.0.0.1,.corp.example,localhost");
           expect(Object.keys(desc.env).filter((key) => key.toUpperCase() === "NO_PROXY")).toEqual([
             "NO_PROXY",
           ]);
