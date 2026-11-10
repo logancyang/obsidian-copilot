@@ -14,7 +14,7 @@ export class TagSearchModal extends FuzzySuggestModal<string> {
     const tagSet = new Set<string>();
 
     for (const file of files) {
-      const tags = getTagsFromNote(this.app, file);
+      const tags = getTagsFromNote(this.app, file, false);
       tags.forEach((tag) => tagSet.add(tag));
     }
 

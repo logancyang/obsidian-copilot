@@ -16,6 +16,7 @@ import { shouldIndexFile } from "@/search/searchUtils";
 import {
   buildProjectContext,
   buildProjectContextBlock,
+  LINKED_QUERY_INSTRUCTION,
   MAX_MANIFEST_ENTRIES,
   PROJECT_WORKSPACE_POLICY,
   type ManifestPathEntry,
@@ -48,7 +49,11 @@ function record(contextSource: Record<string, string | undefined>, id = "p1") {
   return { project: { id, contextSource }, filePath: "Proj/AGENTS.md", folderName: "Proj" };
 }
 
-function fakeApp(files: Array<{ path: string; ext: string }> = [], folders: string[] = []): App {
+function fakeApp(
+  files: Array<{ path: string; ext: string }> = [],
+  folders: string[] = [],
+  caches: Record<string, unknown> = {}
+): App {
   const tfiles = files.map((f) => ({
     path: f.path,
     extension: f.ext,
@@ -68,6 +73,7 @@ function fakeApp(files: Array<{ path: string; ext: string }> = [], folders: stri
       getMarkdownFiles: () => tfiles.filter((f) => f.extension === "md"),
       getAbstractFileByPath: (p: string) => (folderSet.has(p) ? new Folder(p) : null),
     },
+    metadataCache: { getFileCache: (file: { path: string }) => caches[file.path] ?? null },
   } as unknown as App;
 }
 
@@ -136,6 +142,48 @@ describe("projectContextBlock", () => {
       expect(block.match(/\/vault\/Notes\/Relativity\.md/g)).toHaveLength(1);
       expect(block).toContain("## Included notes");
       expect(block).not.toContain("## Notes matching an included property");
+    });
+
+    it("lists exactly the linked folder, note, tag and URL plus the instruction to resolve the tag, without the notes carrying the tag — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      getRecord.mockReturnValue(
+        record({ inclusions: "Plans,[[brief]],%23launch", webUrls: "https://example.com" })
+      );
+      const app = fakeApp(
+        [
+          { path: "Plans/brief.md", ext: "md" },
+          { path: "Work/standup.md", ext: "md" },
+        ],
+        ["Plans"],
+        {
+          "Plans/brief.md": { frontmatter: { tags: ["launch"] } },
+          "Work/standup.md": { tags: [{ tag: "#launch" }] },
+        }
+      );
+
+      const block = buildProjectContext(app, "p1");
+
+      expect(block).toBe(
+        [
+          "<project_context>",
+          PROJECT_WORKSPACE_POLICY,
+          "Context sources for this project.",
+          "",
+          "## Included folders",
+          "- `/vault/Plans`",
+          "",
+          "## Included notes",
+          "- `/vault/Plans/brief.md`",
+          "",
+          "## Included tags",
+          "- #launch",
+          "",
+          "## Included URLs",
+          "- https://example.com",
+          "",
+          LINKED_QUERY_INSTRUCTION,
+          "</project_context>",
+        ].join("\n")
+      );
     });
 
     it("lists in-vault document files by their original absolute path", () => {
@@ -256,6 +304,24 @@ describe("projectContextBlock", () => {
       const md = buildProjectContextBlock(sources({ tags: ["#research"] }));
       expect(md.startsWith("<project_context>")).toBe(true);
       expect(md.endsWith("</project_context>")).toBe(true);
+    });
+
+    it("tells the agent once how to find a linked tag's notes, after the listing and ahead of the overflow note, without spending an entry of the cap — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", () => {
+      const folders = Array.from({ length: MAX_MANIFEST_ENTRIES + 5 }, (_, i) => abs(`F${i}`));
+      const md = buildProjectContextBlock(sources({ folders, tags: ["#launch", "#q4"] }));
+
+      expect(md.split(LINKED_QUERY_INSTRUCTION)).toHaveLength(2);
+      expect(md).toContain(
+        `\n\n${LINKED_QUERY_INSTRUCTION}\n\n> 7 more sources are not listed; search the sources above for them.\n</project_context>`
+      );
+    });
+
+    it("leaves out the tag instruction when the project links no tag", () => {
+      const md = buildProjectContextBlock(
+        sources({ folders: [abs("Papers", "/vault/Papers")], webUrls: ["https://a.com"] })
+      );
+
+      expect(md).not.toContain(LINKED_QUERY_INSTRUCTION);
     });
 
     it("states the outputs/ workspace policy ahead of the source listing, so the entry cap never drops it https://github.com/logancyang/obsidian-copilot/issues/3801", () => {

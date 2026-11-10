@@ -7,7 +7,7 @@ import { getEffectiveProjectsFolder } from "@/settings/copilotFolder";
 import { logFileManager } from "@/logFileManager";
 import { getPropertyValuesFromNote, getTagsFromNote, noteHasProperty, stripHash } from "@/utils";
 import { hasCaseInsensitiveFilesystem } from "@/utils/vaultAdapterUtils";
-import { App, TFile } from "obsidian";
+import { App, getAllTags, TFile } from "obsidian";
 
 export interface PatternCategory {
   tagPatterns?: string[];
@@ -349,6 +349,23 @@ export function getTagPattern(tag: string): string {
 
 export function getPropertyPattern(key: string, value?: string): string {
   return value ? `[${key}:${value}]` : `[${key}:]`;
+}
+
+export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
+  const tag = tagPattern.toLowerCase();
+  // A linked tag lists what Obsidian's own tag search finds: any case, plus every tag nested under it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/838
+  const matches = (noteTag: string): boolean => {
+    const normalized = noteTag.toLowerCase();
+    return normalized === tag || normalized.startsWith(`${tag}/`);
+  };
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => {
+      const cache = app.metadataCache.getFileCache(file);
+      return cache !== null && (getAllTags(cache) ?? []).some(matches);
+    })
+    .sort((a, b) => a.path.localeCompare(b.path));
 }
 
 export function getFilePattern(file: TFile): string {

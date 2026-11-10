@@ -5,8 +5,12 @@ import {
   getProjectLinks,
   linkProjectItems,
   splitOutsideDrop,
+  linkProjectPattern,
+  linkProjectUrl,
   unlinkProjectPattern,
+  unlinkProjectUrl,
 } from "@/projects/projectLinks";
+import { createUrlItem } from "@/lib/url-tag";
 import { getCachedProjectRecordById, updateCachedProjectRecords } from "@/projects/state";
 import { App, TAbstractFile, TFile, TFolder } from "obsidian";
 
@@ -91,24 +95,43 @@ describe("projectLinks", () => {
         getProjectLinks(
           projectWith(["Work/Notes", "[[Q3 retro]]", "Research/Pricing", "Work/Notes"])
         )
-      ).toEqual({ folders: ["Work/Notes", "Research/Pricing"], notes: ["[[Q3 retro]]"] });
+      ).toEqual({
+        folders: ["Work/Notes", "Research/Pricing"],
+        notes: ["[[Q3 retro]]"],
+        tags: [],
+        urls: [],
+      });
     });
 
-    it("leaves out saved tags, properties and file types, which the Files tab does not list", () => {
-      expect(
-        getProjectLinks(projectWith(["#launch", "[status:active]", "*.pdf", "[[Plan]]"]))
-      ).toEqual({
+    it("reads linked tags and the saved web and YouTube links next to folders and notes", () => {
+      const project = projectWith(["#launch", "[[Plan]]"]);
+      project.contextSource.webUrls = "https://example.com/brief";
+      project.contextSource.youtubeUrls = "https://youtu.be/dQw4w9WgXcQ";
+
+      const links = getProjectLinks(project);
+
+      expect(links).toMatchObject({ folders: [], notes: ["[[Plan]]"], tags: ["#launch"] });
+      expect(links.urls.map((item) => item.url)).toEqual([
+        "https://example.com/brief",
+        "https://youtu.be/dQw4w9WgXcQ",
+      ]);
+    });
+
+    it("leaves out saved properties and file types, which the Files tab does not list", () => {
+      expect(getProjectLinks(projectWith(["[status:active]", "*.pdf", "[[Plan]]"]))).toEqual({
         folders: [],
         notes: ["[[Plan]]"],
+        tags: [],
+        urls: [],
       });
     });
 
     it("returns the same empty links for a project with nothing linked or no project at all", () => {
       const none = getProjectLinks(undefined);
 
-      expect(none).toEqual({ folders: [], notes: [] });
+      expect(none).toEqual({ folders: [], notes: [], tags: [], urls: [] });
       expect(getProjectLinks(projectWith([]))).toBe(none);
-      expect(getProjectLinks(projectWith(["#launch"]))).toBe(none);
+      expect(getProjectLinks(projectWith(["*.pdf"]))).toBe(none);
     });
   });
 
@@ -197,6 +220,106 @@ describe("projectLinks", () => {
       await expect(linkProjectItems({} as App, "q4", [makeFolder("Meetings")])).rejects.toThrow(
         "Project not found"
       );
+    });
+  });
+
+  describe("linkProjectPattern()", () => {
+    it("adds a tag beside the saved notes and folders in the shape the project editor saves it", async () => {
+      seedProject({
+        inclusions: ["[[Q3 retro]]", "Research/Pricing"].map(encodeURIComponent).join(","),
+      });
+
+      await expect(linkProjectPattern({} as App, "q4", "#launch")).resolves.toBe(true);
+
+      expect(savedContextSource()?.inclusions).toBe(
+        "%23launch,%5B%5BQ3%20retro%5D%5D,Research%2FPricing"
+      );
+    });
+
+    it("returns false and writes nothing for a tag that is already linked", async () => {
+      seedProject({ inclusions: encodeURIComponent("#launch") });
+
+      await expect(linkProjectPattern({} as App, "q4", "#launch")).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("linkProjectUrl()", () => {
+    it("saves a web page under web URLs and a YouTube video under YouTube URLs, keeping the other saved sources", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief",
+      });
+
+      await linkProjectUrl({} as App, "q4", createUrlItem("https://example.com/pricing"));
+      await linkProjectUrl({} as App, "q4", createUrlItem("https://youtu.be/dQw4w9WgXcQ"));
+
+      expect(savedContextSource()).toEqual({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief\nhttps://example.com/pricing",
+        youtubeUrls: "https://youtu.be/dQw4w9WgXcQ",
+      });
+    });
+
+    it("returns false and writes nothing for a link that is already saved", async () => {
+      seedProject({ webUrls: "https://example.com/brief" });
+
+      await expect(
+        linkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"))
+      ).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("unlinkProjectUrl()", () => {
+    it("removes only that link and leaves the other links and sources as saved", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief\nhttps://example.com/pricing",
+        youtubeUrls: "https://youtu.be/dQw4w9WgXcQ",
+      });
+
+      await expect(
+        unlinkProjectUrl({} as App, "q4", createUrlItem("https://youtu.be/dQw4w9WgXcQ"))
+      ).resolves.toBe(true);
+      await unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"));
+
+      expect(savedContextSource()).toEqual({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/pricing",
+        youtubeUrls: "",
+      });
+    });
+
+    it("keeps both a link unlink and a tag unlink when the second starts before the first is saved, so neither comes back — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {
+      seedProject({
+        inclusions: encodeURIComponent("#launch"),
+        webUrls: "https://example.com/brief",
+      });
+      let releaseFirstSave!: () => void;
+      const firstSave = new Promise<void>((resolve) => (releaseFirstSave = resolve));
+      mockUpdateProject.mockImplementationOnce(async (projectId: string, next: ProjectConfig) => {
+        await firstSave;
+        return saveToCache(projectId, next);
+      });
+
+      const first = unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"));
+      const second = unlinkProjectPattern({} as App, "q4", "#launch");
+      releaseFirstSave();
+      await Promise.all([first, second]);
+
+      expect(savedInclusions()).toEqual([]);
+      expect(savedContextSource()?.webUrls).toBe("");
+    });
+
+    it("returns false and writes nothing for a link that is not saved", async () => {
+      await expect(
+        unlinkProjectUrl({} as App, "q4", createUrlItem("https://example.com/brief"))
+      ).resolves.toBe(false);
+
+      expect(mockUpdateProject).not.toHaveBeenCalled();
     });
   });
 
