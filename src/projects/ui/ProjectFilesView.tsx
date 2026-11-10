@@ -3,7 +3,9 @@ import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { LinkUrlModal } from "@/projects/ui/LinkUrlModal";
 import { ProjectFileSelectModal } from "@/projects/ui/ProjectFileSelectModal";
+import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
+import { getBadgeLabel } from "@/projects/ui/ProjectContextBadgeList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -31,7 +33,7 @@ import {
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { getNotesWithTag, getTagPattern } from "@/search/searchUtils";
+import { getNotesWithProperty, getNotesWithTag, getTagPattern } from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import {
   ChevronRight,
@@ -41,6 +43,7 @@ import {
   Link,
   type LucideIcon,
   Plus,
+  SlidersHorizontal,
   SquarePlay,
   Tag,
   X,
@@ -76,18 +79,20 @@ interface LinkedMatchNote {
 }
 
 export interface LinkedMatchRow {
+  kind: "tag" | "property";
   pattern: string;
   label: string;
   count: number;
   notes: readonly LinkedMatchNote[] | null;
 }
 
-export type LinkKind = "files" | "folders" | "tags" | "link";
+export type LinkKind = "files" | "folders" | "tags" | "properties" | "link";
 
 const LINK_KINDS: readonly { kind: LinkKind; label: string; icon: LucideIcon }[] = [
   { kind: "files", label: "Files", icon: File },
   { kind: "folders", label: "Folders", icon: Folder },
   { kind: "tags", label: "Tags", icon: Tag },
+  { kind: "properties", label: "Properties", icon: SlidersHorizontal },
   { kind: "link", label: "Link", icon: Link },
 ];
 
@@ -170,24 +175,38 @@ export function buildLinkedRows(
 
 export function buildLinkedMatchRows(
   app: App,
-  tags: readonly string[],
+  links: Pick<ProjectLinks, "tags" | "properties">,
   expandedPaths: ReadonlySet<string>
 ): readonly LinkedMatchRow[] {
-  if (tags.length === 0) return EMPTY_MATCHES;
-  return tags.map((tag) => {
-    const files = getNotesWithTag(app, tag);
-    return {
-      pattern: tag,
-      label: tag,
-      count: files.length,
-      notes: expandedPaths.has(tag)
-        ? files.map((file) => ({
-            node: { kind: "file", path: file.path, name: file.name },
-            parent: parentPath(file.path),
-          }))
-        : null,
-    };
+  if (links.tags.length + links.properties.length === 0) return EMPTY_MATCHES;
+  const row = (
+    kind: LinkedMatchRow["kind"],
+    pattern: string,
+    label: string,
+    files: TFile[]
+  ): LinkedMatchRow => ({
+    kind,
+    pattern,
+    label,
+    count: files.length,
+    notes: expandedPaths.has(pattern)
+      ? files.map((file) => ({
+          node: { kind: "file", path: file.path, name: file.name },
+          parent: parentPath(file.path),
+        }))
+      : null,
   });
+  return [
+    ...links.tags.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
+    ...links.properties.map((pattern) =>
+      row(
+        "property",
+        pattern,
+        getBadgeLabel({ pattern, type: "property" }),
+        getNotesWithProperty(app, pattern)
+      )
+    ),
+  ];
 }
 
 interface FileManagerPrompts {
@@ -500,8 +519,9 @@ export function LinkedSection({
             expanded={row.notes !== null}
             onActivate={() => handlers.onToggleFolder(row.pattern)}
           >
+            {/* Distinguish property queries from tags when both link matching notes. https://github.com/Brevilabs/obsidian-copilot-private/issues/838 */}
             <RowLabel
-              icon={Tag}
+              icon={row.kind === "tag" ? Tag : SlidersHorizontal}
               name={row.label}
               detail={`${row.count} ${row.count === 1 ? "note" : "notes"}`}
               expanded={row.notes !== null}
@@ -587,7 +607,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const nodes =
     folder instanceof TFolder ? buildProjectTree(folder, expandedPaths, configPath) : EMPTY_TREE;
   const linkedRows = buildLinkedRows(app, links, expandedPaths, configPath);
-  const matchRows = buildLinkedMatchRows(app, links.tags, expandedPaths);
+  const matchRows = buildLinkedMatchRows(app, links, expandedPaths);
 
   const toggleFolder = (path: string): void => {
     setExpandedPaths((previous) => {
@@ -665,8 +685,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     );
   };
 
-  const linkPattern = (pattern: string): void =>
-    announceLink(linkProjectPattern(app, projectId, pattern), pattern);
+  const linkPattern = (pattern: string, name = pattern): void =>
+    announceLink(linkProjectPattern(app, projectId, pattern), name);
 
   const pickToLink: Record<LinkKind, () => void> = {
     files: () =>
@@ -681,6 +701,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
         if (folder instanceof TFolder) linkItems([folder]);
       }).open(),
     tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
+    properties: () =>
+      new PropertySearchModal(app, (pattern) =>
+        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
+      ).open(),
     link: () =>
       new LinkUrlModal(app, (item) =>
         announceLink(linkProjectUrl(app, projectId, item), item.url)

@@ -140,6 +140,14 @@ export function shouldIndexFile(
   return true;
 }
 
+export function isFileIncluded(app: App, file: TFile, patterns: PatternCategory): boolean {
+  return (
+    !isInternalExcludedFile(file) &&
+    !isSystemExcludedPath(file.path) &&
+    matchFilePathWithPatterns(app, file, patterns)
+  );
+}
+
 export function createCopilotPatternFilter(app: App): (path: string) => boolean {
   const systemExcludedFolders = getSystemExcludedFolders(getSettings());
   const { inclusions, exclusions } = getMatchingPatterns();
@@ -366,6 +374,14 @@ export function getNotesWithTag(app: App, tagPattern: string): TFile[] {
       const cache = app.metadataCache.getFileCache(file);
       return cache !== null && (getAllTags(cache) ?? []).some((tag) => matchesTag(tag, tagPattern));
     })
+    .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export function getNotesWithProperty(app: App, propertyPattern: string): TFile[] {
+  const patterns: PatternCategory = { propertyPatterns: [propertyPattern] };
+  return app.vault
+    .getMarkdownFiles()
+    .filter((file) => isFileIncluded(app, file, patterns))
     .sort((a, b) => a.path.localeCompare(b.path));
 }
 

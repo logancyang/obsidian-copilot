@@ -99,6 +99,7 @@ describe("projectLinks", () => {
         folders: ["Work/Notes", "Research/Pricing"],
         notes: ["[[Q3 retro]]"],
         tags: [],
+        properties: [],
         urls: [],
       });
     });
@@ -110,18 +111,24 @@ describe("projectLinks", () => {
 
       const links = getProjectLinks(project);
 
-      expect(links).toMatchObject({ folders: [], notes: ["[[Plan]]"], tags: ["#launch"] });
+      expect(links).toMatchObject({
+        folders: [],
+        notes: ["[[Plan]]"],
+        tags: ["#launch"],
+        properties: [],
+      });
       expect(links.urls.map((item) => item.url)).toEqual([
         "https://example.com/brief",
         "https://youtu.be/dQw4w9WgXcQ",
       ]);
     });
 
-    it("leaves out saved properties and file types, which the Files tab does not list", () => {
+    it("reads linked properties and leaves out saved file types, which the Files tab does not list", () => {
       expect(getProjectLinks(projectWith(["[status:active]", "*.pdf", "[[Plan]]"]))).toEqual({
         folders: [],
         notes: ["[[Plan]]"],
         tags: [],
+        properties: ["[status:active]"],
         urls: [],
       });
     });
@@ -129,7 +136,7 @@ describe("projectLinks", () => {
     it("returns the same empty links for a project with nothing linked or no project at all", () => {
       const none = getProjectLinks(undefined);
 
-      expect(none).toEqual({ folders: [], notes: [], tags: [], urls: [] });
+      expect(none).toEqual({ folders: [], notes: [], tags: [], properties: [], urls: [] });
       expect(getProjectLinks(projectWith([]))).toBe(none);
       expect(getProjectLinks(projectWith(["*.pdf"]))).toBe(none);
     });

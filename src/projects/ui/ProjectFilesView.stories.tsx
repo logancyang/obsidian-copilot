@@ -145,7 +145,7 @@ function matchedNote(path: string) {
 }
 
 function tag(pattern: string, count: number, notes: string[] | null = null): LinkedMatchRow {
-  return { pattern, label: pattern, count, notes: notes?.map(matchedNote) ?? null };
+  return { kind: "tag", pattern, label: pattern, count, notes: notes?.map(matchedNote) ?? null };
 }
 
 const LINKED_TAGS: LinkedMatchRow[] = [
@@ -156,6 +156,24 @@ const LINKED_TAGS: LinkedMatchRow[] = [
   ]),
   tag("#research/pricing", 1),
   tag("#archived", 0),
+];
+
+const LINKED_PROPERTIES: LinkedMatchRow[] = [
+  {
+    kind: "property",
+    pattern: "[status:active]",
+    label: "status: active",
+    count: 2,
+    notes: ["Plans/Q4 launch brief.md", "Research/Personas.md"].map(matchedNote),
+  },
+  {
+    kind: "property",
+    pattern: "[client:Northwind Traders regional expansion program]",
+    label: "client: Northwind Traders regional expansion program",
+    count: 14,
+    notes: null,
+  },
+  { kind: "property", pattern: "[reviewer:]", label: "reviewer: (any)", count: 0, notes: null },
 ];
 
 const LINKED_URLS: UrlItem[] = [
@@ -234,4 +252,9 @@ export const LinkedLong: StoryObj<ProjectFolderSectionProps> = {
 export const LinkedTagsAndLinks: StoryObj<ProjectFolderSectionProps> = {
   args: { nodes: POPULATED_NODES },
   render: renderWithLinked(LINKED_ROWS.slice(0, 2), false, LINKED_TAGS, LINKED_URLS),
+};
+
+export const LinkedProperties: StoryObj<ProjectFolderSectionProps> = {
+  args: { nodes: POPULATED_NODES },
+  render: renderWithLinked(LINKED_ROWS.slice(3, 4), false, LINKED_PROPERTIES),
 };
