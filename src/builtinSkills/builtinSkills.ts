@@ -271,7 +271,14 @@ fi
     # Transport failures otherwise lose their cause before reaching the agent activity log.
     # https://github.com/logancyang/obsidian-copilot/issues/4177
     [Console]::Error.WriteLine(('{0}: {1}' -f $_.Exception.GetType().FullName, $_.Exception.Message))
-    if ($_.ErrorDetails.Message) { [Console]::Error.WriteLine($_.ErrorDetails.Message) }
+    # Windows PowerShell can omit HTTP bodies from ErrorDetails, hiding the provider's failure.
+    # https://github.com/logancyang/obsidian-copilot/issues/4177
+    $r = $_.Exception.Response
+    if ($r) {
+      $reader = New-Object System.IO.StreamReader($r.GetResponseStream())
+      [Console]::Error.WriteLine($reader.ReadToEnd())
+      $reader.Dispose()
+    } elseif ($_.ErrorDetails.Message) { [Console]::Error.WriteLine($_.ErrorDetails.Message) }
     Die 'Copilot could not complete self-host web search.' 1
   }
   [Console]::Out.WriteLine((Read-Utf8Body $response))
