@@ -17,6 +17,7 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
+import { useTailPaging } from "@/hooks/useTailPaging";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
@@ -28,7 +29,7 @@ import type {
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
 import { App } from "obsidian";
-import React, { memo, useMemo } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 
 const EMPTY_PARTS = Object.freeze([]) as unknown as AgentMessagePart[];
 
@@ -181,6 +182,12 @@ const AgentChatMessages = memo(
     const { app } = plugin;
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
+    const isUserMessageAt = useCallback(
+      (index: number) => visible[index]?.sender === USER_SENDER,
+      [visible]
+    );
+    // Rendering a long chat all at once on reopen exhausted Obsidian's memory; older turns load as the user scrolls up. https://github.com/logancyang/obsidian-copilot/issues/4248
+    const { first, sentinelRef } = useTailPaging(visible.length, isUserMessageAt);
     const {
       scrollContainerCallbackRef,
       contentCallbackRef,
@@ -256,7 +263,16 @@ const AgentChatMessages = memo(
           isScrollPaused={isScrollPaused}
           scrollToEnd={scrollToEnd}
         >
+          {first > 0 ? (
+            // The marker must not be the scroll anchor, or the view jumps when earlier turns load above it. https://github.com/logancyang/obsidian-copilot/issues/4248
+            <div
+              ref={sentinelRef}
+              aria-hidden="true"
+              className="tw-h-px tw-w-full [overflow-anchor:none]"
+            />
+          ) : null}
           {visible.map((message, index) => {
+            if (index < first) return null;
             return (
               <AgentMessageRow
                 key={getMessageKey(adapted[index], index)}

@@ -39,6 +39,53 @@ describe("ActionCard", () => {
       }
     );
 
+    it("shows a preview box, and no diff or text block, for an image still being shrunk https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      const { container } = render(
+        <ActionCard
+          part={readTool({ output: [{ type: "image_pending", key: "chart" }] })}
+          open={true}
+          onToggle={jest.fn()}
+        />
+      );
+      expect(screen.getByLabelText(/^Preparing image viewed by agent/)).toBeTruthy();
+      expect(container.querySelector("pre")).toBeNull();
+    });
+
+    it("opens the image file the agent read when its thumbnail is clicked https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      render(
+        <ActionCard
+          part={readTool({
+            title: "Read charts/q3.png",
+            input: { file_path: "charts/q3.png" },
+            output: [{ type: "image", mimeType: "image/webp", data: "VEhVTUI=" }],
+          })}
+          open={false}
+          onToggle={jest.fn()}
+        />
+      );
+
+      fireEvent.click(screen.getByRole("img"));
+
+      expect(openVaultPath).toHaveBeenCalledWith({}, "charts/q3.png", { pane: false });
+    });
+
+    it("leaves a thumbnail unclickable when the tool read no vault file", () => {
+      render(
+        <ActionCard
+          part={readTool({
+            vendorToolName: "mcp__browser__screenshot",
+            title: "Take screenshot",
+            input: {},
+            output: [{ type: "image", mimeType: "image/webp", data: "VEhVTUI=" }],
+          })}
+          open={false}
+          onToggle={jest.fn()}
+        />
+      );
+
+      expect(screen.getByRole("img").closest("a")).toBeNull();
+    });
+
     it("links only the file path of a completed read, keeping the verb as plain text", () => {
       render(<ActionCard part={readTool()} open={false} onToggle={jest.fn()} />);
 

@@ -31,6 +31,9 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const link = targetPath
     ? { path: targetPath, label: displayTargetFromPath(part, summaryCtx.vaultBase) ?? targetPath }
     : null;
+  const openTarget = link
+    ? openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))
+    : undefined;
 
   return (
     <AgentActivityCard
@@ -44,7 +47,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             <a
               href="#"
               className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
-              {...openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))}
+              {...openTarget}
             >
               {link.label}
             </a>
@@ -54,8 +57,8 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         )
       }
       secondary={
-        outputs.some((output) => output.type === "image") ? (
-          <ToolImagePreviews outputs={outputs} label={part.title} />
+        outputs.some((o) => o.type === "image" || o.type === "image_pending") ? (
+          <ToolImagePreviews outputs={outputs} label={part.title} openImage={openTarget} />
         ) : undefined
       }
       trailing={<StatusBadge status={part.status} />}
@@ -70,7 +73,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
       ) : null}
       {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
       {outputs
-        .filter((o) => o.type !== "image")
+        .filter((o) => o.type === "text" || o.type === "diff")
         .map((o, i) =>
           o.type === "text" ? (
             <pre
