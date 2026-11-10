@@ -68,25 +68,12 @@ function getInclusionPatterns(): string[] {
   return getDecodedPatterns(getSettings().qaInclusions);
 }
 
-export function getMatchingPatterns(options?: {
-  inclusions?: string;
-  exclusions?: string;
-  isProject?: boolean;
-}): {
+export function getMatchingPatterns(): {
   inclusions: PatternCategory | null;
   exclusions: PatternCategory | null;
 } {
-  const inclusionPatterns = options?.inclusions
-    ? getDecodedPatterns(options.inclusions)
-    : options?.isProject
-      ? []
-      : getInclusionPatterns();
-
-  const exclusionPatterns = options?.exclusions
-    ? getDecodedPatterns(options.exclusions)
-    : options?.isProject
-      ? []
-      : getExclusionPatterns();
+  const inclusionPatterns = getInclusionPatterns();
+  const exclusionPatterns = getExclusionPatterns();
 
   return {
     inclusions: inclusionPatterns.length > 0 ? categorizePatterns(inclusionPatterns) : null,
@@ -117,8 +104,7 @@ export function shouldIndexFile(
   app: App,
   file: TFile,
   inclusions: PatternCategory | null,
-  exclusions: PatternCategory | null,
-  isProject?: boolean
+  exclusions: PatternCategory | null
 ): boolean {
   if (isInternalExcludedFile(file)) {
     return false;
@@ -130,10 +116,6 @@ export function shouldIndexFile(
     return false;
   }
   if (inclusions && !matchFilePathWithPatterns(app, file, inclusions)) {
-    return false;
-  }
-
-  if (isProject && !inclusions) {
     return false;
   }
 
@@ -365,6 +347,12 @@ function matchesTag(noteTag: string, pattern: string): boolean {
   const tag = stripHash(noteTag).toLowerCase();
   const expected = stripHash(pattern).toLowerCase();
   return tag === expected || tag.startsWith(`${expected}/`);
+}
+
+export function getPropertyLabel(propertyPattern: string): string {
+  const parsed = parsePropertyPattern(propertyPattern);
+  if (!parsed) return propertyPattern;
+  return parsed.value ? `${parsed.key}: ${parsed.value}` : `${parsed.key}: (any)`;
 }
 
 export function getNotesWithTag(app: App, tagPattern: string): TFile[] {

@@ -183,7 +183,7 @@ describe("projectContentTracker", () => {
         expect(tracker.getEpoch("a")).toBe(1);
         tracker.dispose();
       });
-      it("conservatively dirties a project declaring a property EXCLUSION on a markdown change out of folder scope", () => {
+      it("ignores a saved property exclusion, leaving a markdown change outside the folder scope uncounted https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
         mockRecords(record("a", { inclusions: "Notes", exclusions: "[Draft:true]" }));
         const { app, fire } = makeApp();
         const tracker = new ProjectContentTracker(app);
@@ -191,11 +191,23 @@ describe("projectContentTracker", () => {
         fire("modify", file("Anywhere/note.md"));
         tracker.flushNow();
 
-        expect(tracker.getEpoch("a")).toBe(1);
+        expect(tracker.getEpoch("a")).toBe(0);
         tracker.dispose();
       });
-      it("ignores an internal Copilot file caught by a broad *.md pattern", () => {
-        mockRecords(record("a", { inclusions: "*.md" }));
+      it("ignores a file that only a saved file-type pattern reaches https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+        mockRecords(record("a", { inclusions: "*.pdf" }));
+        const { app, fire } = makeApp();
+        const tracker = new ProjectContentTracker(app);
+
+        fire("modify", file("Docs/manual.pdf"));
+        fire("rename", folder("Renamed"), "Docs");
+        tracker.flushNow();
+
+        expect(tracker.getEpoch("a")).toBe(0);
+        tracker.dispose();
+      });
+      it("ignores an internal Copilot file inside a declared folder", () => {
+        mockRecords(record("a", { inclusions: "copilot" }));
         const { app, fire } = makeApp();
         const tracker = new ProjectContentTracker(app);
 

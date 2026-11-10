@@ -2,6 +2,7 @@ import type { ProjectConfig } from "@/aiParams";
 import {
   copyIntoProjectSources,
   getDraggedVaultItems,
+  getProjectLinkPatterns,
   getProjectLinks,
   linkProjectItems,
   splitOutsideDrop,
@@ -371,6 +372,48 @@ describe("projectLinks", () => {
       await expect(unlinkProjectPattern({} as App, "q4", "Research/Pricing")).resolves.toBe(false);
 
       expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getProjectLinkPatterns()", () => {
+    function projectWith(patterns: string[]): ProjectConfig {
+      return {
+        id: "q4",
+        name: "Q4 Launch",
+        systemPrompt: "",
+        contextSource: {
+          inclusions: patterns.map(encodeURIComponent).join(","),
+          exclusions: encodeURIComponent("Research"),
+        },
+        created: 1,
+        UsageTimestamps: 2,
+      };
+    }
+
+    it("returns the project's linked folders, notes, tags and properties as vault patterns", () => {
+      expect(
+        getProjectLinkPatterns(projectWith(["Research", "[[Spec]]", "#launch", "[topic:physics]"]))
+      ).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: ["[[Spec]]"],
+        tagPatterns: ["#launch"],
+        propertyPatterns: ["[topic:physics]"],
+      });
+    });
+
+    it("ignores saved file-type patterns and exclusions, which no longer shape project context — https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      expect(getProjectLinkPatterns(projectWith(["*.pdf", "Research"]))).toEqual({
+        folderPatterns: ["Research"],
+        notePatterns: [],
+        tagPatterns: [],
+        propertyPatterns: [],
+      });
+      expect(getProjectLinkPatterns(projectWith(["*.pdf", "*.docx"]))).toBeNull();
+    });
+
+    it("returns null for a project with nothing linked or no project", () => {
+      expect(getProjectLinkPatterns(projectWith([]))).toBeNull();
+      expect(getProjectLinkPatterns(undefined)).toBeNull();
     });
   });
 

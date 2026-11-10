@@ -6,7 +6,6 @@ import { LinkUrlModal } from "@/projects/ui/LinkUrlModal";
 import { ProjectFileSelectModal } from "@/projects/ui/ProjectFileSelectModal";
 import { PropertySearchModal } from "@/components/modals/PropertySearchModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
-import { getBadgeLabel } from "@/projects/ui/ProjectContextBadgeList";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,7 +33,12 @@ import {
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
 import { getCachedProjectRecordById, useProjects } from "@/projects/state";
-import { getNotesWithProperty, getNotesWithTag, getTagPattern } from "@/search/searchUtils";
+import {
+  getNotesWithProperty,
+  getNotesWithTag,
+  getPropertyLabel,
+  getTagPattern,
+} from "@/search/searchUtils";
 import { openFileInTab, openLinkClickProps, type OpenPane } from "@/utils/openVaultPath";
 import {
   ChevronRight,
@@ -200,12 +204,7 @@ export function buildLinkedMatchRows(
   return [
     ...links.tags.map((tag) => row("tag", tag, tag, getNotesWithTag(app, tag))),
     ...links.properties.map((pattern) =>
-      row(
-        "property",
-        pattern,
-        getBadgeLabel({ pattern, type: "property" }),
-        getNotesWithProperty(app, pattern)
-      )
+      row("property", pattern, getPropertyLabel(pattern), getNotesWithProperty(app, pattern))
     ),
   ];
 }
@@ -738,7 +737,7 @@ export function ProjectFilesView({
     tags: () => new TagSearchModal(app, (tag) => linkPattern(getTagPattern(tag))).open(),
     properties: () =>
       new PropertySearchModal(app, (pattern) =>
-        linkPattern(pattern, getBadgeLabel({ pattern, type: "property" }))
+        linkPattern(pattern, getPropertyLabel(pattern))
       ).open(),
     link: () =>
       new LinkUrlModal(app, (item) =>

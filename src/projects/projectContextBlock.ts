@@ -1,27 +1,8 @@
+import { getProjectLinkPatterns } from "@/projects/projectLinks";
 import { getCachedProjectRecordById } from "@/projects/state";
-import { getMatchingPatterns, shouldIndexFile, type PatternCategory } from "@/search/searchUtils";
-import { App, FileSystemAdapter, TFile, TFolder } from "obsidian";
+import { App, FileSystemAdapter, TFolder } from "obsidian";
 
 export const MAX_MANIFEST_ENTRIES = 100;
-
-const DOCUMENT_EXTENSIONS = new Set([
-  "pdf",
-  "doc",
-  "docx",
-  "ppt",
-  "pptx",
-  "epub",
-  "rtf",
-  "xls",
-  "xlsx",
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "bmp",
-  "tiff",
-  "webp",
-]);
 
 export interface ManifestPathEntry {
   vaultPath: string;
@@ -31,10 +12,8 @@ export interface ManifestPathEntry {
 export interface ManifestSources {
   folders: ManifestPathEntry[];
   notes: ManifestPathEntry[];
-  extensions: string[];
   tags: string[];
   properties: string[];
-  documents: ManifestPathEntry[];
   webUrls: string[];
   youtubeUrls: string[];
 }
@@ -79,39 +58,27 @@ export function buildProjectContext(app: App, projectId: string): string {
 
   const webUrls = splitLines(contextSource.webUrls);
   const youtubeUrls = splitLines(contextSource.youtubeUrls);
-  const { inclusions, exclusions } = readProjectPatterns(contextSource);
-  const folders = inclusions?.folderPatterns ?? [];
-  const notes = inclusions?.notePatterns ?? [];
-  const extensions = inclusions?.extensionPatterns ?? [];
-  const tags = inclusions?.tagPatterns ?? [];
-  const properties = inclusions?.propertyPatterns ?? [];
+  const linkPatterns = getProjectLinkPatterns(record.project);
+  const folders = linkPatterns?.folderPatterns ?? [];
+  const notes = linkPatterns?.notePatterns ?? [];
+  const tags = linkPatterns?.tagPatterns ?? [];
+  const properties = linkPatterns?.propertyPatterns ?? [];
 
   const hasAnySource =
     webUrls.length > 0 ||
     youtubeUrls.length > 0 ||
     folders.length > 0 ||
     notes.length > 0 ||
-    extensions.length > 0 ||
     tags.length > 0 ||
     properties.length > 0;
   if (!hasAnySource) return EMPTY_PROJECT_CONTEXT_BLOCK;
 
   const adapter = vaultAdapter(app);
-  const noteEntries = resolveNotePaths(app, notes, adapter);
-  const declaredNotePaths = new Set(noteEntries.map(manifestEntryKey));
-
-  // A document picked in the Files picker is already listed under Included notes, and a duplicate would spend the manifest cap. https://github.com/Brevilabs/obsidian-copilot-private/issues/657
-  const documentEntries = resolveDocumentPaths(app, inclusions, exclusions, adapter).filter(
-    (entry) => !declaredNotePaths.has(manifestEntryKey(entry))
-  );
-
   return buildProjectContextBlock({
     folders: resolveFolderPaths(app, folders, adapter),
-    notes: noteEntries,
-    extensions,
+    notes: resolveNotePaths(app, notes, adapter),
     tags,
     properties,
-    documents: documentEntries,
     webUrls,
     youtubeUrls,
   });
@@ -120,18 +87,13 @@ export function buildProjectContext(app: App, projectId: string): string {
 export function buildProjectContextBlock(sources: ManifestSources): string {
   const pathText = (entry: ManifestPathEntry): string => `\`${entry.absPath ?? entry.vaultPath}\``;
 
-  const declared: ManifestLine[] = [
+  const lines: ManifestLine[] = [
     ...sources.folders.map((e) => line("Included folders", pathText(e))),
     ...sources.properties.map((p) => line("Included properties", p)),
     ...sources.notes.map((e) => line("Included notes", pathText(e))),
-    ...sources.extensions.map((p) => line("Included file types", `\`${p}\``)),
     ...sources.tags.map((t) => line("Included tags", t)),
     ...sources.webUrls.map((u) => line("Included URLs", u)),
     ...sources.youtubeUrls.map((u) => line("Included YouTube", u)),
-  ];
-  const lines: ManifestLine[] = [
-    ...declared,
-    ...sources.documents.map((e) => line("Document files", pathText(e))),
   ];
 
   const total = lines.length;
@@ -167,23 +129,8 @@ function line(section: string, text: string): ManifestLine {
   return { section, text };
 }
 
-function readProjectPatterns(contextSource: { inclusions?: string; exclusions?: string }): {
-  inclusions: PatternCategory | null;
-  exclusions: PatternCategory | null;
-} {
-  return getMatchingPatterns({
-    inclusions: contextSource.inclusions,
-    exclusions: contextSource.exclusions,
-    isProject: true,
-  });
-}
-
 function vaultAdapter(app: App): FileSystemAdapter | null {
   return app.vault.adapter instanceof FileSystemAdapter ? app.vault.adapter : null;
-}
-
-function manifestEntryKey(entry: ManifestPathEntry): string {
-  return entry.absPath ?? entry.vaultPath;
 }
 
 function resolveFolderPaths(
@@ -217,27 +164,6 @@ function resolveNotePaths(
       absPath: adapter.getFullPath(file.path),
     }));
   });
-}
-
-function resolveDocumentPaths(
-  app: App,
-  inclusions: PatternCategory | null,
-  exclusions: PatternCategory | null,
-  adapter: FileSystemAdapter | null
-): ManifestPathEntry[] {
-  if (!inclusions) return EMPTY_MANIFEST_ENTRIES;
-  return app.vault
-    .getFiles()
-    .filter((file) => DOCUMENT_EXTENSIONS.has(file.extension.toLowerCase()))
-    .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map((file) => toManifestEntry(file, adapter));
-}
-
-function toManifestEntry(file: TFile, adapter: FileSystemAdapter | null): ManifestPathEntry {
-  return adapter
-    ? { vaultPath: file.path, absPath: adapter.getFullPath(file.path) }
-    : { vaultPath: file.path };
 }
 
 function splitLines(value: string | undefined): string[] {

@@ -34,10 +34,8 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
   return {
     folders: [],
     notes: [],
-    extensions: [],
     tags: [],
     properties: [],
-    documents: [],
     webUrls: [],
     youtubeUrls: [],
     ...over,
@@ -167,55 +165,58 @@ describe("projectContextBlock", () => {
       );
     });
 
-    it("lists in-vault document files by their original absolute path", () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
-      const app = fakeApp([
-        { path: "Proj/a.pdf", ext: "pdf" },
-        { path: "Notes/brief.DOCX", ext: "DOCX" },
-        { path: "Proj/note.md", ext: "md" },
-      ]);
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).toContain("## Document files");
-      expect(block).toContain("- `/vault/Proj/a.pdf`");
-      expect(block).toContain("- `/vault/Notes/brief.DOCX`");
-      expect(block).not.toContain("note.md");
-    });
-
-    it("lists only PDF, Office, EPUB and image files under Document files, sorted by path", () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
-      const app = fakeApp([
-        { path: "Proj/z.png", ext: "png" },
-        { path: "Proj/data.csv", ext: "csv" },
-        { path: "Proj/b.DOCX", ext: "DOCX" },
-        { path: "Proj/a.pdf", ext: "pdf" },
-        { path: "Proj/book.epub", ext: "epub" },
-      ]);
+    it("lists the folder, tag, link and property of a project that also saved file-type patterns and exclusions, and ignores those two kinds https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      getRecord.mockReturnValue(
+        record({
+          inclusions: "%23launch,*.pdf,%5Btopic%3Aphysics%5D,Research",
+          exclusions: "*.tmp,Research%2FPrivate",
+          webUrls: "https://example.com/spec",
+        })
+      );
+      indexFile.mockImplementation(jest.requireActual<typeof import("@/search/searchUtils")>("@/search/searchUtils").shouldIndexFile); // prettier-ignore
+      const app = fakeApp(
+        [
+          { path: "Research/Private/secret.md", ext: "md" },
+          { path: "Docs/manual.pdf", ext: "pdf" },
+        ],
+        ["Research"]
+      );
 
       const block = buildProjectContext(app, "p1");
 
       expect(block).toContain(
-        "## Document files\n- `/vault/Proj/a.pdf`\n- `/vault/Proj/b.DOCX`\n- `/vault/Proj/book.epub`\n- `/vault/Proj/z.png`"
+        [
+          "Context sources for this project.",
+          "",
+          "## Included folders",
+          "- `/vault/Research`",
+          "",
+          "## Included properties",
+          "- [topic:physics]",
+          "",
+          "## Included tags",
+          "- #launch",
+          "",
+          "## Included URLs",
+          "- https://example.com/spec",
+          "",
+          LINKED_QUERY_INSTRUCTION,
+          "</project_context>",
+        ].join("\n")
       );
-      expect(block).not.toContain("data.csv");
+      expect(block).not.toContain("pdf");
+      expect(block).not.toContain("tmp");
+      expect(block).not.toContain("Private");
     });
 
-    it("leaves out document files the project's exclusions match", () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj", exclusions: "Proj/secret.pdf" }));
-      indexFile.mockImplementation((_app: unknown, file: { path: string }) => file.path !== "Proj/secret.pdf"); // prettier-ignore
-      const app = fakeApp([
-        { path: "Proj/a.pdf", ext: "pdf" },
-        { path: "Proj/secret.pdf", ext: "pdf" },
-      ]);
+    it("treats a project whose only saved patterns are file types and exclusions as having no context sources https://github.com/Brevilabs/obsidian-copilot-private/issues/841", () => {
+      getRecord.mockReturnValue(record({ inclusions: "*.pdf", exclusions: "Archive" }));
+      const app = fakeApp([{ path: "Docs/manual.pdf", ext: "pdf" }]);
 
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).toContain("`/vault/Proj/a.pdf`");
-      expect(block).not.toContain("secret.pdf");
+      expect(buildProjectContext(app, "p1")).toContain("No context sources are configured");
     });
 
-    it("lists a document picked as a file once, under Included notes, so it does not spend a second manifest entry https://github.com/Brevilabs/obsidian-copilot-private/issues/657", () => {
+    it("lists a PDF picked as a file once, under Included notes, by its absolute path", () => {
       getRecord.mockReturnValue(record({ inclusions: "[[report]]" }));
       const app = fakeApp([{ path: "Docs/report.pdf", ext: "pdf" }]);
 
@@ -223,17 +224,6 @@ describe("projectContextBlock", () => {
 
       expect(block.match(/\/vault\/Docs\/report\.pdf/g)).toHaveLength(1);
       expect(block).toContain("## Included notes");
-      expect(block).not.toContain("## Document files");
-    });
-
-    it("keeps a project with only document files out of the empty-context block", () => {
-      getRecord.mockReturnValue(record({ inclusions: "Proj" }));
-      const app = fakeApp([{ path: "Proj/scan.png", ext: "png" }]);
-
-      const block = buildProjectContext(app, "p1");
-
-      expect(block).not.toContain("No context sources are configured");
-      expect(block).toContain("`/vault/Proj/scan.png`");
     });
 
     it("still emits <project_context> for a property-only project when no note currently matches", () => {
@@ -326,7 +316,6 @@ describe("projectContextBlock", () => {
         sources({
           folders: [abs("Papers", "/vault/Papers")],
           tags: ["#research"],
-          extensions: ["*.pdf"],
           notes: [abs("Notes/Spec.md", "/vault/Notes/Spec.md")],
         })
       );
@@ -337,7 +326,6 @@ describe("projectContextBlock", () => {
       expect(md).toContain("`/vault/Notes/Spec.md`");
       expect(md).toContain("## Included tags");
       expect(md).toContain("#research");
-      expect(md).toContain("`*.pdf`");
       expect(md).not.toMatch(/Papers\/\S+\.md/);
     });
 
@@ -364,21 +352,6 @@ describe("projectContextBlock", () => {
       expect(md).toContain("[Topics:Physics]");
     });
 
-    it("lists document files by the absolute path of the original file under their own section", () => {
-      const md = buildProjectContextBlock(
-        sources({
-          documents: [
-            abs("Papers/a.pdf", "/vault/Papers/a.pdf"),
-            abs("Slides/deck.pptx", "/vault/Slides/deck.pptx"),
-          ],
-        })
-      );
-
-      expect(md).toContain(
-        "## Document files\n- `/vault/Papers/a.pdf`\n- `/vault/Slides/deck.pptx`"
-      );
-    });
-
     it("omits the truncation note when under the cap", () => {
       const md = buildProjectContextBlock(sources({ folders: [abs("A"), abs("B")] }));
       expect(md).not.toContain("not listed");
@@ -391,48 +364,6 @@ describe("projectContextBlock", () => {
       const md = buildProjectContextBlock(sources({ folders }));
 
       expect(md).toContain("> 25 more sources are not listed; search the sources above for them.");
-    });
-
-    it("keeps every declared source when document file rows overflow the entry cap", () => {
-      const many = Array.from({ length: MAX_MANIFEST_ENTRIES + 20 }, (_, i) => abs(`p${i}.pdf`));
-      const md = buildProjectContextBlock(
-        sources({
-          documents: many,
-          properties: ["[Subject:]"],
-          folders: [abs("Papers", "/vault/Papers")],
-          notes: [abs("Spec.md", "/vault/Spec.md")],
-          extensions: ["*.pdf"],
-          tags: ["#physics"],
-          webUrls: ["https://a.com"],
-          youtubeUrls: ["https://youtu.be/abc"],
-        })
-      );
-
-      expect(md).toContain("[Subject:]");
-      expect(md).toContain("`/vault/Papers`");
-      expect(md).toContain("`/vault/Spec.md`");
-      expect(md).toContain("`*.pdf`");
-      expect(md).toContain("#physics");
-      expect(md).toContain("https://a.com");
-      expect(md).toContain("https://youtu.be/abc");
-    });
-
-    it("spends the leftover budget on expansions and counts the trimmed ones as omitted", () => {
-      const many = Array.from({ length: 120 }, (_, i) => abs(`p${i}.pdf`));
-      const md = buildProjectContextBlock(
-        sources({
-          documents: many,
-          properties: ["[Subject:]"],
-          folders: [abs("Papers", "/vault/Papers")],
-          extensions: ["*.pdf"],
-          tags: ["#physics"],
-          webUrls: ["https://a.com"],
-        })
-      );
-
-      const listed = many.filter((note) => md.includes(`\`${note.vaultPath}\``));
-      expect(listed).toHaveLength(MAX_MANIFEST_ENTRIES - 5);
-      expect(md).toContain("25 more sources are not listed");
     });
   });
 });

@@ -3,6 +3,7 @@ import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getCachedProjectRecordById } from "@/projects/state";
 import {
   categorizePatterns,
+  type PatternCategory,
   createPatternSettingsValue,
   getDecodedPatterns,
   getFilePattern,
@@ -80,6 +81,19 @@ export function getProjectLinks(project: ProjectConfig | undefined): ProjectLink
     tags: tagPatterns,
     properties: propertyPatterns,
     urls,
+  };
+}
+
+export function getProjectLinkPatterns(project: ProjectConfig | undefined): PatternCategory | null {
+  // Only links shape project context; saved file-type patterns and exclusions stay in project.md untouched.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/841
+  const { folders, notes, tags, properties } = getProjectLinks(project);
+  if (folders.length + notes.length + tags.length + properties.length === 0) return null;
+  return {
+    folderPatterns: [...folders],
+    notePatterns: [...notes],
+    tagPatterns: [...tags],
+    propertyPatterns: [...properties],
   };
 }
 
