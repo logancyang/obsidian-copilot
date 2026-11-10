@@ -43,7 +43,7 @@ Start a new Agent Chat after changing `AGENTS.md` so the selected backend reads 
 
 ## Project instructions
 
-Each [Project](projects.md) can add its own `AGENTS.md` inside the Project folder. Open the Project info menu and select **AGENTS.md**, or use **Edit project → Project instructions**.
+Each [Project](projects.md) can add its own `AGENTS.md` inside the Project folder. In a Project chat, open the Project info menu and select **AGENTS.md**, or use **Edit project → Project instructions**.
 
 A Project chat follows both files:
 

@@ -38,6 +38,12 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
     Navigator means deleting the folder and those imports. Code whose purpose
     is the Navigator belongs here; generic helpers it uses belong in shared
     modules even when the Navigator is their only caller.
+11. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
+    UI and hooks: the project home and its Files tab, the project header and
+    popover, and the create and edit forms. They may import `ui/` and
+    `session/`; only `ui/` and `navigator/` import them. The rest of
+    `src/projects` is plain project logic that plugin code outside Agent
+    Mode also reads, so it stays free of Agent Mode imports.
 
 ## Why two adapters under one session
 

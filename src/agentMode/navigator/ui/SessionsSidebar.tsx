@@ -1,7 +1,7 @@
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
-import { createProjectAndEnter } from "@/agentMode/ui/AgentProjectCreateForm";
-import { leaveDeletedProject } from "@/agentMode/ui/AgentProjectRowActions";
+import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
+import { leaveDeletedProject } from "@/projects/ui/AgentProjectRowActions";
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
