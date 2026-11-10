@@ -677,17 +677,21 @@ interface ClaudeTranscriptEntry {
   };
 }
 
-export function replayClaudeTranscript(
-  jsonl: string,
+export interface ClaudeTranscriptReplay {
+  line(text: string): SessionEvent[];
+  finish(): SessionEvent[];
+}
+
+// A long chat's transcript can reach hundreds of megabytes, so it replays one line at a time rather than from one string. https://github.com/Brevilabs/obsidian-copilot-private/issues/896
+export function createClaudeTranscriptReplay(
   sessionId: SessionId,
   claudeTasks: ClaudeTaskPlanState
-): SessionEvent[] {
+): ClaudeTranscriptReplay {
   const state = createTranslatorState(claudeTasks);
-  const out: SessionEvent[] = [];
   const unansweredToolCallIds = new Set<string>();
-  for (const line of jsonl.split(/\r?\n/)) {
-    const entry = parseTranscriptEntry(line);
-    if (!entry || entry.isSidechain) continue;
+  const line = (text: string): SessionEvent[] => {
+    const entry = parseTranscriptEntry(text);
+    if (!entry || entry.isSidechain) return [];
     const occurredAt = typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : NaN;
     // Input the CLI adds on its own (a task notification, a subagent's hand-back) is not a message anyone wrote, and the agent's reply to it is a reply of its own. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     if (entry.type === "user" && isAgentOrigin(entry.origin)) {
@@ -696,15 +700,14 @@ export function replayClaudeTranscript(
         turnId: "",
         stopReason: "end_turn",
       });
-      out.push(Number.isFinite(occurredAt) ? { ...end, occurredAt } : end);
-      continue;
+      return [Number.isFinite(occurredAt) ? { ...end, occurredAt } : end];
     }
     // Meta entries are transcript bookkeeping the live chat never showed. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-    if (entry.isMeta) continue;
+    if (entry.isMeta) return [];
     // A compaction summary and the echo of a local command such as /compact are Claude CLI bookkeeping, not prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-    if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) continue;
+    if (entry.isCompactSummary || isLocalCommandEcho(entry.message?.content)) return [];
     // The CLI's stand-ins around a stopped turn are not messages anyone wrote. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
-    if (isStopBookkeeping(entry.message?.content)) continue;
+    if (isStopBookkeeping(entry.message?.content)) return [];
     const content = entry.message?.content;
     const steer = midTurnPrompt(entry);
     const events = steer
@@ -714,16 +717,17 @@ export function replayClaudeTranscript(
         : entry.type === "user"
           ? replayUserContent(content, entry.uuid, sessionId, state, entry.toolDenialKind)
           : [];
-    for (const e of events) {
+    return events.map((e) => {
       trackUnansweredToolCall(unansweredToolCallIds, e.update);
-      out.push(Number.isFinite(occurredAt) ? { ...e, occurredAt } : e);
-    }
-  }
+      return Number.isFinite(occurredAt) ? { ...e, occurredAt } : e;
+    });
+  };
   // A tool call the transcript never answered was cut off with its turn, and nothing will settle it after the replay. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-  for (const toolCallId of unansweredToolCallIds) {
-    out.push(event(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "failed" }));
-  }
-  return out;
+  const finish = (): SessionEvent[] =>
+    [...unansweredToolCallIds].map((toolCallId) =>
+      event(sessionId, { sessionUpdate: "tool_call_update", toolCallId, status: "failed" })
+    );
+  return { line, finish };
 }
 
 function isAgentOrigin(origin: unknown): boolean {

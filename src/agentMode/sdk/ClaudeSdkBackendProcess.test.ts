@@ -1,3 +1,4 @@
+import { logWarn } from "@/logger";
 import type {
   CanUseTool,
   HookCallback,
@@ -1701,6 +1702,25 @@ describe("ClaudeSdkBackendProcess", () => {
           sessionUpdate: "plan",
           entries: [{ content: "Collect sources", status: "completed", priority: "medium" }],
         });
+      });
+
+      it("still opens the chat, empty, and logs a warning when its transcript cannot be read https://github.com/Brevilabs/obsidian-copilot-private/issues/643", async () => {
+        await mkdir(
+          path.join(configDir, "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"), `${sessionId}.jsonl`),
+          {
+            recursive: true,
+          }
+        );
+        const proc = makeProcWithConfigDir();
+        const events = registerCollector(proc, sessionId);
+
+        await expect(proc.loadSession({ sessionId, cwd })).resolves.toMatchObject({ sessionId });
+
+        expect(events).toEqual([]);
+        expect(logWarn).toHaveBeenCalledWith(
+          expect.stringContaining(`could not read Claude transcript for ${sessionId}`),
+          expect.anything()
+        );
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 rejects, and sends no later prompt as a resume, when the session's transcript is not on this machine", async () => {
