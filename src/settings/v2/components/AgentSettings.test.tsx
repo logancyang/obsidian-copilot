@@ -4,6 +4,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import React from "react";
 import { setSettings } from "@/settings/model";
 import { playNotificationSound } from "@/utils/notificationSound";
+import { TabProvider } from "@/contexts/TabContext";
+import { SettingsSubPageHost } from "@/settings/v2/SettingsSubPage";
 import { AgentSettings } from "./AgentSettings";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -53,6 +55,11 @@ function publishInstallState() {
   for (const listener of installStateListeners) listener();
 }
 
+const claudeRuleStore = {
+  list: jest.fn(),
+  remove: jest.fn(),
+};
+
 function makeDescriptor(id: string, displayName: string, selfHostable = false) {
   return {
     id,
@@ -64,6 +71,7 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
     getResolvedBinaryPath: () => resolvedPaths[id] ?? null,
     openInstallUI: jest.fn(),
     SettingsPanel: () => <div data-testid={`panel-${id}`}>settings panel</div>,
+    ...(id === "claude" ? { approvedRules: claudeRuleStore } : {}),
     ...(id === "codex"
       ? {
           managedInstall: {
@@ -74,6 +82,16 @@ function makeDescriptor(id: string, displayName: string, selfHostable = false) {
         }
       : {}),
   };
+}
+
+const SettingsView: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <TabProvider>
+    <SettingsSubPageHost>{children}</SettingsSubPageHost>
+  </TabProvider>
+);
+
+function renderAgentSettings() {
+  return render(<AgentSettings />, { wrapper: SettingsView });
 }
 
 const DESCRIPTORS = [
@@ -160,6 +178,52 @@ describe("AgentSettings", () => {
       mockGetCachedModelCatalog.mockReset().mockReturnValue({ availableModels: [] });
       mockPreloadModels.mockReset().mockResolvedValue(undefined);
       resolvedPaths = {};
+      claudeRuleStore.list.mockReset().mockResolvedValue([
+        {
+          id: "rule-git",
+          allows: "Bash(git status:*)",
+          appliesTo: { kind: "file", path: "/Users/me/.claude/settings.json" },
+        },
+      ]);
+      claudeRuleStore.remove.mockReset().mockResolvedValue(undefined);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 offers Edit approved rules only on tabs of agents that can list their saved rules", () => {
+      renderAgentSettings();
+      expect(screen.queryByRole("button", { name: "Edit approved rules" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+
+      expect(screen.getByRole("button", { name: "Edit approved rules" })).not.toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/865 replaces the whole settings view with the agent's approved rules, and Back restores it on the same agent tab", async () => {
+      render(
+        <SettingsView>
+          <h1>Copilot settings</h1>
+          <AgentSettings />
+          <section aria-label="General">General settings</section>
+        </SettingsView>
+      );
+      fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Edit approved rules" }));
+
+      expect(await screen.findByText("Bash(git status:*)")).not.toBeNull();
+      expect(screen.queryByRole("heading", { name: "Copilot settings" })).toBeNull();
+      expect(screen.queryByRole("tablist")).toBeNull();
+      expect(screen.queryByRole("tabpanel")).toBeNull();
+      expect(screen.queryByRole("region", { name: "General" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+      expect(screen.queryByText("Bash(git status:*)")).toBeNull();
+      expect(screen.getByRole("heading", { name: "Copilot settings" })).not.toBeNull();
+      expect(screen.getByRole("region", { name: "General" })).not.toBeNull();
+      expect(screen.getByRole("tab", { name: "Claude" }).getAttribute("aria-selected")).toBe(
+        "true"
+      );
+      expect(within(screen.getByRole("tabpanel")).getByTestId("panel-claude")).not.toBeNull();
     });
 
     it.each(["claude", "codex"])(
@@ -167,7 +231,7 @@ describe("AgentSettings", () => {
       (id) => {
         mockSettings.agentMode.activeBackend = id;
         mockAuthStatuses[id] = { signedIn: false };
-        const view = render(<AgentSettings />);
+        const view = renderAgentSettings();
         fireEvent.click(screen.getByRole("tab", { name: id === "claude" ? "Claude" : "Codex" }));
         expect(screen.getByText("Sign in required")).toBeTruthy();
         expect(screen.queryByText("Ready")).toBeNull();
@@ -181,7 +245,7 @@ describe("AgentSettings", () => {
     );
 
     it("skips model preload when the shared catalog is already available", async () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
 
       await waitFor(() => expect(mockGetCachedModelCatalog).toHaveBeenCalledWith("opencode"));
       expect(mockPreloadModels).not.toHaveBeenCalled();
@@ -190,26 +254,26 @@ describe("AgentSettings", () => {
     it("preloads models when the shared catalog is unavailable", async () => {
       mockGetCachedModelCatalog.mockReturnValue(null);
 
-      render(<AgentSettings />);
+      renderAgentSettings();
 
       await waitFor(() => expect(mockPreloadModels).toHaveBeenCalledWith("opencode"));
     });
 
     it("renders the four sub-tabs in order: OpenCode, Claude, Codex, Quick Chat", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       const tabs = screen.getAllByRole("tab").map((t) => t.textContent);
       expect(tabs).toEqual(["OpenCode", "Claude", "Codex", "Quick Chat"]);
     });
 
     it("keeps the default agent picker outside the tab strip", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       const tablist = screen.getByRole("tablist");
       expect(within(tablist).queryByText("Default agent")).toBeNull();
       expect(screen.getByText("Default agent")).not.toBeNull();
     });
 
     it("mutes the chime when the notification sound switch is turned off", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       const toggle = screen.getByRole("switch");
       expect(toggle.getAttribute("aria-checked")).toBe("true");
 
@@ -224,7 +288,7 @@ describe("AgentSettings", () => {
     });
 
     it("plays a sound as soon as one is picked, and remembers the pick", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
 
       fireEvent.change(screen.getByDisplayValue("Piano key"), { target: { value: "doorbell" } });
 
@@ -236,7 +300,7 @@ describe("AgentSettings", () => {
     });
 
     it("shows the first backend's content by default and the default-model picker above the model list", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       const picker = screen.getByTestId("default-model-opencode");
       const list = screen.getByTestId("model-list-opencode");
       expect(picker).not.toBeNull();
@@ -246,7 +310,7 @@ describe("AgentSettings", () => {
     });
 
     it("switches to the selected backend's content", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       expect(screen.queryByTestId("model-list-codex")).toBeNull();
       fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
       expect(screen.getByTestId("model-list-codex")).not.toBeNull();
@@ -254,7 +318,7 @@ describe("AgentSettings", () => {
     });
 
     it("shows the Quick Chat model list on the Quick Chat tab", () => {
-      render(<AgentSettings />);
+      renderAgentSettings();
       expect(screen.queryByTestId("chat-model-list")).toBeNull();
       fireEvent.click(screen.getByText("Quick Chat"));
       expect(screen.getByTestId("chat-model-list")).not.toBeNull();
@@ -271,7 +335,7 @@ describe("AgentSettings", () => {
         message,
       };
 
-      render(<AgentSettings />);
+      renderAgentSettings();
       fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
 
       expect(screen.getByText(message)).toBeTruthy();
@@ -281,7 +345,7 @@ describe("AgentSettings", () => {
 
     it("shows a cloud-egress banner on a cloud backend under Self-Host Mode, not on a self-hostable one", () => {
       mockSettings.enableSelfHostMode = true;
-      render(<AgentSettings />);
+      renderAgentSettings();
       expect(screen.queryByText("Cloud service.")).toBeNull();
       fireEvent.click(screen.getByRole("tab", { name: "Claude" }));
       expect(screen.getByText("Cloud service.")).toBeTruthy();
@@ -291,7 +355,7 @@ describe("AgentSettings", () => {
       "opens $displayName configuration while the binary is absent",
       (descriptor) => {
         installStates[descriptor.id] = { kind: "absent" };
-        render(<AgentSettings />);
+        renderAgentSettings();
         fireEvent.click(screen.getByRole("tab", { name: descriptor.displayName }));
         fireEvent.click(screen.getByRole("button", { name: "Configure" }));
         expect(descriptor.openInstallUI).toHaveBeenCalledTimes(1);
@@ -302,7 +366,7 @@ describe("AgentSettings", () => {
 
     it("shows the resolved binary when configuration finishes installing OpenCode", async () => {
       installStates.opencode = { kind: "absent" };
-      render(<AgentSettings />);
+      renderAgentSettings();
       fireEvent.click(screen.getByRole("button", { name: "Configure" }));
       expect(DESCRIPTORS[0].openInstallUI).toHaveBeenCalledTimes(1);
 
@@ -325,7 +389,7 @@ describe("AgentSettings", () => {
         minVersion: "1.10.0",
         message: "Codex adapter 1.9.0 does not match this Copilot release (1.10.0).",
       };
-      const view = render(<AgentSettings />);
+      const view = renderAgentSettings();
       fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
       fireEvent.click(screen.getByRole("button", { name: "Configure" }));
       expect(DESCRIPTORS.find((d) => d.id === "codex")!.openInstallUI).toHaveBeenCalledTimes(1);

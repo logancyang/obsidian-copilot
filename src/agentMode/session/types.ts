@@ -10,6 +10,9 @@ export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
 
 export type {
+  ApprovedRule,
+  ApprovedRuleScope,
+  ApprovedRuleStore,
   BackendAuth,
   BackendAuthStatus,
   BackendDescriptor,
