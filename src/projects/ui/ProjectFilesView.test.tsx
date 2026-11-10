@@ -444,18 +444,28 @@ describe("ProjectFilesView", () => {
       });
     });
 
-    it("starts no drag for a file the composer cannot attach, such as a CSV, so it never shows an unsupported-file notice, for https://github.com/Brevilabs/obsidian-copilot-private/issues/462", () => {
-      const root = makeFolder(PROJECT_FOLDER, [makeFile(`${PROJECT_FOLDER}/metrics.csv`)]);
-      const vault = makeFakeVault(root);
-      renderView(vault);
+    it.each(["csv", "txt", "ts"])(
+      "starts an Obsidian link drag for a %s output accepted by Agent Mode — https://github.com/Brevilabs/obsidian-copilot-private/issues/462",
+      (extension) => {
+        const path = `${PROJECT_FOLDER}/metrics.${extension}`;
+        const root = makeFolder(PROJECT_FOLDER, [makeFile(path)]);
+        const vault = makeFakeVault(root);
+        renderView(vault);
 
-      const started = fireEvent.dragStart(screen.getByRole("button", { name: "metrics.csv" }), {
-        dataTransfer: { setData: jest.fn() },
-      });
+        const started = fireEvent.dragStart(
+          screen.getByRole("button", { name: `metrics.${extension}` }),
+          {
+            dataTransfer: { setData: jest.fn() },
+          }
+        );
 
-      expect(started).toBe(false);
-      expect(vault.onDragStart).not.toHaveBeenCalled();
-    });
+        expect(started).toBe(true);
+        expect(vault.onDragStart).toHaveBeenCalledWith(expect.anything(), {
+          type: "link",
+          linktext: path,
+        });
+      }
+    );
 
     it("shows a file created in an expanded folder without a restart", () => {
       const { root, outputs } = makeProjectFolder();

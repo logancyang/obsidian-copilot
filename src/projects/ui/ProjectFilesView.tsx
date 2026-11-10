@@ -1,5 +1,4 @@
 import { useApp } from "@/context";
-import { canAttachFileToChat } from "@/hooks/useChatFileDrop";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
@@ -252,12 +251,6 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const dragFile = (path: string, event: React.DragEvent): void => {
     const file = app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) return;
-    // The composer attaches only notes, PDFs and images, so other files would be dropped with an
-    // "unsupported file" notice. https://github.com/Brevilabs/obsidian-copilot-private/issues/462
-    if (!canAttachFileToChat(file)) {
-      event.preventDefault();
-      return;
-    }
     startNoteDrag(event, file);
   };
 
