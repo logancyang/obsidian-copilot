@@ -57,19 +57,13 @@ describe("miyoSearchRun", () => {
       });
     const opencodeCall = (overrides: Partial<ToolCallPart> = {}) =>
       tool({
-        title: "execute",
+        title: "obsidian-copilot_miyo_search",
         toolKind: "other",
         copilotTools:
-          readOpencodeCopilotTools(undefined, {
-            metadata: {
-              toolCalls: [
-                {
-                  tool: "obsidian-copilot.miyo_search",
-                  input: { query: "hiking trip", variants: ["hike"] },
-                },
-              ],
-            },
-          }) ?? undefined,
+          readOpencodeCopilotTools(
+            { query: "hiking trip", variants: ["hike"] },
+            "obsidian-copilot_miyo_search"
+          ) ?? undefined,
         ...overrides,
       });
     const savedOpencodeCall = (code: string) =>

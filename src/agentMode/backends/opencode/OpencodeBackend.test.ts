@@ -1244,21 +1244,6 @@ describe("OpencodeBackend", () => {
         expect(cfg.agents.empty).toEqual({ description: "No rule yet", permissions: denies });
       });
 
-      it.each(["permission", "tools", "agent", "mode"])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/558 rejects a Self-Host config override that sets the OpenCode 1 `%s` key",
-        async (legacyKey) => {
-          setSettings({ enableSelfHostMode: true });
-          setOpencodeSettings({
-            binaryPath: "/path/to/opencode",
-            envOverrides: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ [legacyKey]: {} }) },
-          });
-
-          await expect(
-            new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({ vaultBasePath: "/vault" })
-          ).rejects.toThrow(`OpenCode 1 keys (${legacyKey})`);
-        }
-      );
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 refuses to start Self-Host OpenCode before the replacement search channel is available", async () => {
         setSettings({ enableSelfHostMode: true });
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
@@ -1299,6 +1284,31 @@ describe("OpencodeBackend", () => {
           expect(await fs.promises.readFile(path.join(pluginDir, "index.js"), "utf8")).toBe(
             OPENCODE_COPILOT_PLUGIN_SOURCE
           );
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps the MCP integration plugin in a custom configuration without duplicating it", async () => {
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-direct-config-"));
+        const pluginDir = path.join(root, "copilot");
+        try {
+          for (const plugins of [["custom-plugin"], ["custom-plugin", pluginDir]]) {
+            setOpencodeSettings({
+              binaryPath: "/path/to/opencode",
+              envOverrides: {
+                OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "custom", plugins }),
+              },
+            });
+            const desc = await new OpencodeBackend({
+              ...NO_MODELS_DEPS,
+              getCopilotPluginDir: () => pluginDir,
+            }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+            expect(JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string)).toEqual({
+              model: "custom",
+              plugins: ["custom-plugin", pluginDir],
+            });
+          }
         } finally {
           await fs.promises.rm(root, { recursive: true, force: true });
         }

@@ -438,25 +438,9 @@ describe("AcpBackendProcess", () => {
         expect(handler).toHaveBeenCalledTimes(1);
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 forwards output metadata to the backend reader on a terminal update without input", async () => {
-        const uses = {
-          wrapper: "Execute",
-          calls: [{ name: "everything_echo", args: { message: "hello" } }],
-        };
-        const rawOutput = {
-          metadata: {
-            toolCalls: [
-              {
-                tool: "obsidian-copilot.everything_echo",
-                status: "completed",
-                input: { message: "hello" },
-              },
-            ],
-          },
-        };
-        const readCopilotTools = jest.fn((_input: unknown, output?: unknown) =>
-          output === rawOutput ? uses : null
-        );
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 gives the backend a direct tool name and arguments without reading terminal output metadata", async () => {
+        const uses = { calls: [{ name: "everything_echo", args: { message: "hello" } }] };
+        const readCopilotTools = jest.fn(() => uses);
         const backend = new AcpBackendProcess(
           buildApp(),
           { ...buildStubBackend(), readCopilotTools },
@@ -466,19 +450,33 @@ describe("AcpBackendProcess", () => {
         await backend.start();
         const handler = jest.fn();
         backend.registerSessionHandler("s1", handler);
-        await getVaultClient(backend).sessionUpdate({
+        const client = getVaultClient(backend);
+        await client.sessionUpdate({
+          sessionId: "s1",
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "direct",
+            title: "obsidian-copilot_everything_echo",
+            rawInput: { message: "hello" },
+          },
+        } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+        await client.sessionUpdate({
           sessionId: "s1",
           update: {
             sessionUpdate: "tool_call_update",
-            toolCallId: "executed",
+            toolCallId: "direct",
             status: "completed",
-            rawOutput,
+            rawOutput: { metadata: { ignored: true } },
           },
-        } as unknown as Parameters<ReturnType<typeof getVaultClient>["sessionUpdate"]>[0]);
-        expect(readCopilotTools).toHaveBeenCalledWith(undefined, rawOutput);
+        } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+        expect(readCopilotTools).toHaveBeenCalledTimes(1);
+        expect(readCopilotTools).toHaveBeenCalledWith(
+          { message: "hello" },
+          "obsidian-copilot_everything_echo"
+        );
         expect(handler).toHaveBeenCalledWith(
           expect.objectContaining({
-            update: expect.objectContaining({ toolCallId: "executed", copilotTools: uses }),
+            update: expect.objectContaining({ toolCallId: "direct", copilotTools: uses }),
           })
         );
       });

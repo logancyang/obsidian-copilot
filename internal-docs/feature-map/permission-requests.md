@@ -5,8 +5,8 @@
 ## Sub-features
 
 - card-permission: `Permission required` says who wants to run what ("The agent wants to run …", or a subagent by name), with its `Type`, the change or `Show details`, and the agent's choices, such as `Allow once`, `Allow always`, and `Deny once`. An "always" choice explains on hover what it covers.
-- card-connector-tool: a connected service's write tool is named like its [reply](agent-replies.md) step: "The agent wants to run <service> · <tool>.", while OpenCode shows `Execute` until it reports execution metadata.
-- card-connector-batch: an OpenCode approval shows `Execute` and exposes its code in details; the completed reply step lists the connector tools OpenCode reports.
+- card-connector-tool: a connected service's write tool is named like its [reply](agent-replies.md) step: "The agent wants to run <service> · <tool>.", including OpenCode’s direct calls.
+- card-connector-batch: when OpenCode requests several connector tools, each write call has its own named approval; read-only calls run without a card.
 - card-task-approval: a background task waiting on a permission shows `Needs approval`; inside the task, "The chat is waiting for your answer." with `Open chat`.
 
 ## How to get to it
@@ -20,8 +20,8 @@
 - Scope: hover `Allow always`. A tooltip says what it covers, such as "Covers all file edits until this chat ends. Start a new chat to undo."
 - Allow always: on a Claude Write card that covers all file edits, choose `Allow always`. `Mode` shows `Auto`, and later edits run without a card until you choose `Safe`.
 - Deny: ask for another note and choose `Deny once`. The trail reads `Didn't edit <note>` and the agent says the write was declined.
-- Connector tool: in `Safe` mode, with a service connected, ask the agent to create something in it. `Permission required` reads "The agent wants to run <service> · <tool>."; OpenCode shows `Execute`, and `Show details` shows the code it proposes to run.
-- Connector batch: in `Safe` mode, ask OpenCode to run a connector's read and write tools in one block. The approval shows `Execute`. Allow it and check that the finished step keeps `Execute` and lists both tools reported by OpenCode.
+- Connector tool: in `Safe` mode, with a service connected, ask the agent to create something in it. `Permission required` reads "The agent wants to run <service> · <tool>." with every agent, including OpenCode.
+- Connector batch: in `Safe` mode, ask OpenCode to use a connector’s read and write tools. The read runs without a card, and the write approval names that tool. Allow or deny the write and check that its own completed or failed step shows the same name.
 - Task approval: in `Safe` mode, ask Claude to launch a background subagent that creates a note. `Permission required` names the subagent: `general-purpose "<task>" wants to run Write <path>`. `1 task running` lists the task as `Needs approval`. Open the task: "The chat is waiting for your answer." shows with `Open chat`, which returns to the conversation and its card.
 
 ## Gotchas
