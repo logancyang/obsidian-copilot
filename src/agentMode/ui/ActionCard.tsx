@@ -1,4 +1,3 @@
-import { ToolImagePreviews } from "@/agentMode/ui/ToolImagePreviews";
 import React, { useMemo } from "react";
 import { CircleStop, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
@@ -31,9 +30,6 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
   const link = targetPath
     ? { path: targetPath, label: displayTargetFromPath(part, summaryCtx.vaultBase) ?? targetPath }
     : null;
-  const openTarget = link
-    ? openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))
-    : undefined;
 
   return (
     <AgentActivityCard
@@ -47,7 +43,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
             <a
               href="#"
               className="tw-min-w-0 tw-truncate tw-text-normal hover:tw-text-accent hover:tw-underline"
-              {...openTarget}
+              {...openLinkClickProps((pane) => openVaultPath(app, link.path, { pane }))}
             >
               {link.label}
             </a>
@@ -55,11 +51,6 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         ) : (
           <span className="tw-truncate">{line}</span>
         )
-      }
-      secondary={
-        outputs.some((o) => o.type === "image" || o.type === "image_pending") ? (
-          <ToolImagePreviews outputs={outputs} label={part.title} openImage={openTarget} />
-        ) : undefined
       }
       trailing={<StatusBadge status={part.status} />}
       expandable={expandable}
@@ -72,27 +63,25 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         </pre>
       ) : null}
       {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
-      {outputs
-        .filter((o) => o.type === "text" || o.type === "diff")
-        .map((o, i) =>
-          o.type === "text" ? (
-            <pre
-              // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-              key={`text-${i}`}
-              className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
-            >
-              {o.text}
-            </pre>
-          ) : (
+      {outputs.map((o, i) =>
+        o.type === "text" ? (
+          <pre
             // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-            <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
-              <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
-              <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-                {renderDiff(o.oldText, o.newText)}
-              </pre>
-            </div>
-          )
-        )}
+            key={`text-${i}`}
+            className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
+          >
+            {o.text}
+          </pre>
+        ) : (
+          // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
+          <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
+            <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
+            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
+              {renderDiff(o.oldText, o.newText)}
+            </pre>
+          </div>
+        )
+      )}
     </AgentActivityCard>
   );
 };

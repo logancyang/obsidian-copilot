@@ -174,12 +174,6 @@ function toolCallContentFromAcp(
   for (const item of content) {
     if (item.type === "content" && item.content.type === "text") {
       out.push({ type: "content", content: { type: "text", text: item.content.text } });
-    } else if (item.type === "content" && item.content.type === "image") {
-      // Preserve the image the agent received so its activity can show a preview. https://github.com/logancyang/obsidian-copilot/issues/4227
-      out.push({
-        type: "content",
-        content: { type: "image", mimeType: item.content.mimeType, data: item.content.data },
-      });
     } else if (item.type === "diff") {
       out.push({
         type: "diff",
@@ -197,25 +191,10 @@ function toolCallContentFromAcp(
 function mcpResultContent(rawOutput: unknown): ToolCallContent[] | undefined {
   const parts = (rawOutput as { result?: { content?: unknown } } | null)?.result?.content;
   if (!Array.isArray(parts)) return undefined;
-  const out = parts.flatMap(
-    (
-      part: { type?: unknown; text?: unknown; mimeType?: unknown; data?: unknown } | null
-    ): ToolCallContent[] => {
-      if (part?.type === "text" && typeof part.text === "string") {
-        return [{ type: "content", content: { type: "text", text: part.text } }];
-      }
-      // Image-only MCP results must survive the raw-output fallback too. https://github.com/logancyang/obsidian-copilot/issues/4227
-      if (
-        part?.type === "image" &&
-        typeof part.mimeType === "string" &&
-        typeof part.data === "string"
-      ) {
-        return [
-          { type: "content", content: { type: "image", mimeType: part.mimeType, data: part.data } },
-        ];
-      }
-      return [];
-    }
+  const out = parts.flatMap((part: { type?: unknown; text?: unknown } | null): ToolCallContent[] =>
+    part?.type === "text" && typeof part.text === "string"
+      ? [{ type: "content", content: { type: "text", text: part.text } }]
+      : []
   );
   return out.length > 0 ? out : undefined;
 }

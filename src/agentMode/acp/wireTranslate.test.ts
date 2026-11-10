@@ -28,32 +28,6 @@ const VALID_TODOS = [
 ];
 
 const testAcpNotificationToEvents = () => {
-  it.each(["tool_call", "tool_call_update"])(
-    "preserves ACP image results in %s https://github.com/logancyang/obsidian-copilot/issues/4227",
-    (sessionUpdate) => {
-      const image = { type: "image", mimeType: "image/png", data: "AQID" };
-      const content = [{ type: "content", content: image }];
-      expect(
-        acpNotificationToEvents(
-          notification({ sessionUpdate, toolCallId: "image", title: "Read image", content })
-        )[0].update
-      ).toMatchObject({ content });
-    }
-  );
-
-  it("preserves image-only MCP results from raw output https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-    const image = { type: "image", mimeType: "image/png", data: "AQID" };
-    expect(
-      acpNotificationToEvents(
-        notification({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "image",
-          rawOutput: { result: { content: [image] } },
-        })
-      )[0].update
-    ).toMatchObject({ content: [{ type: "content", content: image }] });
-  });
-
   it("translates a user message chunk into a user_message_chunk event carrying its text and message id", () => {
     const events = acpNotificationToEvents(
       notification({
