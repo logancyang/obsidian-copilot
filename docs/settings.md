@@ -68,6 +68,8 @@ The **Configure OpenCode** dialog has these controls:
 
 After installation, choose the **Default model**, **Default effort**, model switches, and optional environment variables such as `XDG_CONFIG_HOME` or `HTTPS_PROXY`. Copilot-hosted models require an eligible Copilot license. BYOK and local models do not.
 
+**Edit approved rules** lists the rules OpenCode saved for the vault folder when you chose **Always allow**. Select **Remove** on a rule to have OpenCode ask again.
+
 #### Claude
 
 Claude uses the Claude Code CLI and the credentials held by that CLI. It does not use Anthropic keys from the BYOK tab. If the installed CLI is too old, Copilot shows the current minimum supported version in the configuration dialog.
