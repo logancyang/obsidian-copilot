@@ -131,17 +131,6 @@ export class OpencodeBackend implements AcpBackend {
         overriddenConfig.plugins = [...new Set([...plugins, pluginDir])];
       }
       if (settings.enableSelfHostMode === true) {
-        // An explicit config override must not reopen agent-native web tools while Self-Host promises the configured route.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
-        const legacyKeys = OPENCODE_1_PERMISSION_KEYS.filter(
-          (key) => overriddenConfig[key] !== undefined
-        );
-        if (legacyKeys.length > 0) {
-          throw new Error(
-            `opencode OPENCODE_CONFIG_CONTENT uses OpenCode 1 keys (${legacyKeys.join(", ")}); ` +
-              "Self-Host Mode requires the OpenCode 2 `permissions` and `agents` keys."
-          );
-        }
         overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
         for (const agent of agentConfigs(overriddenConfig.agents)) {
           agent.permissions = appendNativeWebDenies(agent.permissions);
@@ -213,8 +202,6 @@ const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
   { action: "websearch", resource: "*", effect: "deny" },
   { action: "webfetch", resource: "*", effect: "deny" },
 ];
-
-const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as const;
 
 export async function buildOpencodeConfig(
   s: CopilotSettings,

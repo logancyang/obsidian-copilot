@@ -1244,21 +1244,6 @@ describe("OpencodeBackend", () => {
         expect(cfg.agents.empty).toEqual({ description: "No rule yet", permissions: denies });
       });
 
-      it.each(["permission", "tools", "agent", "mode"])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/558 rejects a Self-Host config override that sets the OpenCode 1 `%s` key",
-        async (legacyKey) => {
-          setSettings({ enableSelfHostMode: true });
-          setOpencodeSettings({
-            binaryPath: "/path/to/opencode",
-            envOverrides: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ [legacyKey]: {} }) },
-          });
-
-          await expect(
-            new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({ vaultBasePath: "/vault" })
-          ).rejects.toThrow(`OpenCode 1 keys (${legacyKey})`);
-        }
-      );
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 refuses to start Self-Host OpenCode before the replacement search channel is available", async () => {
         setSettings({ enableSelfHostMode: true });
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
