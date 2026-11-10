@@ -10,13 +10,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useApp } from "@/context";
-import { useNoteDrag } from "@/hooks/useNoteDrag";
+import { INTERNAL_DRAG_TYPE, useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { PROJECT_SOURCES_FOLDER_NAME } from "@/projects/constants";
 import {
+  copyIntoProjectSources,
+  getDraggedVaultItems,
   getProjectLinks,
   linkProjectItems,
   type ProjectLinks,
+  splitOutsideDrop,
   unlinkProjectPattern,
 } from "@/projects/projectLinks";
 import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
@@ -383,6 +387,16 @@ export function LinkedSection({
   );
 }
 
+export function FilesDropOverlay(): React.ReactElement {
+  return (
+    <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-bg-interactive-accent-hsl/10 tw-ring-2 tw-ring-inset tw-ring-ring">
+      <span className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1 tw-text-ui-small tw-text-on-accent tw-shadow">
+        Link files to this project
+      </span>
+    </div>
+  );
+}
+
 interface ProjectFilesViewProps {
   projectId: string;
 }
@@ -393,6 +407,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
   const links = getProjectLinks(useProjects().find((project) => project.id === projectId));
   const [expandedPaths, setExpandedPaths] = useState(NO_EXPANDED_FOLDERS);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [, refresh] = useReducer((version: number) => version + 1, 0);
 
   useEffect(() => {
@@ -504,21 +519,72 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
   };
 
+  // Rows dragged toward the composer must not become new project links.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  const acceptsDrag = (event: React.DragEvent): boolean =>
+    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+
+  const dropOnFiles = (event: React.DragEvent): void => {
+    if (!acceptsDrag(event)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+    const items = getDraggedVaultItems(app);
+    if (items.length > 0) return linkItems(items);
+    const { files, folderNames } = splitOutsideDrop(event.dataTransfer);
+    if (folderNames.length > 0) {
+      // Outside folders are usually large or live, so a drop never copies or links one; linking stays an explicit action.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/897
+      new Notice(
+        `Folders from outside the vault can't be added: ${folderNames.join(", ")}. Move the folder into your vault, or drop the files you need.`
+      );
+    }
+    if (files.length === 0) return;
+    copyIntoProjectSources(app, folderPath, files)
+      .then((copies) => {
+        const names = copies.map((copy) => copy.name).join(", ");
+        new Notice(`Copied ${names} into ${PROJECT_SOURCES_FOLDER_NAME}/`);
+      })
+      .catch(reportFailure(`copy into ${PROJECT_SOURCES_FOLDER_NAME}/`));
+  };
+
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
-    <ProjectFilesPanel onLink={(kind) => pickToLink[kind]()}>
-      <ProjectFolderSection
-        folderPath={folderPath}
-        nodes={nodes}
-        onToggleFolder={toggleFolder}
-        {...rowHandlers}
-      />
-      <LinkedSection
-        rows={linkedRows}
-        onUnlink={unlink}
-        onToggleFolder={toggleFolder}
-        {...rowHandlers}
-      />
-    </ProjectFilesPanel>
+    <div
+      data-copilot-drop-zone
+      className="tw-relative tw-flex tw-h-full tw-min-h-0 tw-flex-col"
+      onDragOver={(event) => {
+        if (!acceptsDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        if (!isDragOver) {
+          // A drag cancelled with Escape fires no dragleave, so the highlight would stay on until the next drag.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+          const endDrag = () => setIsDragOver(false);
+          event.currentTarget.ownerDocument.addEventListener("dragend", endDrag, { once: true });
+        }
+        setIsDragOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragOver(false);
+      }}
+      onDrop={dropOnFiles}
+    >
+      <ProjectFilesPanel onLink={(kind) => pickToLink[kind]()}>
+        <ProjectFolderSection
+          folderPath={folderPath}
+          nodes={nodes}
+          onToggleFolder={toggleFolder}
+          {...rowHandlers}
+        />
+        <LinkedSection
+          rows={linkedRows}
+          onUnlink={unlink}
+          onToggleFolder={toggleFolder}
+          {...rowHandlers}
+        />
+      </ProjectFilesPanel>
+      {isDragOver && <FilesDropOverlay />}
+    </div>
   );
 }
