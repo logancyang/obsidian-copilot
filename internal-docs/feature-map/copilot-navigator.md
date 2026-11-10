@@ -9,7 +9,7 @@ A sidebar listing chats and projects, available only as a preview for Supporters
 - nav-sections: chats grouped under Pinned, Projects, and Recents.
 - nav-open-chat: click a chat to show it in Agent Chat. The chat left behind stops its agent unless the user sent a message or left unsent text in it.
 - nav-new-chat: `New chat` at the top starts a chat outside any project, under the same rule.
-- nav-project-folders: a project folder expands to its chats without entering the project; `New chat in <project>` starts a chat there, under the same rule. A project name is dimmed unless the current chat is in it or a chat folded inside it needs the user.
+- nav-project-folders: a project row opens its home; its `Show/Hide chats in <project>` chevron expands or collapses its chats without navigating. `New chat in <project>` starts a chat there, under the same rule. A project name is dimmed unless the current chat is in it or a chat folded inside it needs the user.
 - nav-new-project: `New project` creates a project and opens it, under the same rule.
 - nav-reorder: drag pinned chats and projects to reorder them.
 - nav-archived: `Sidebar options` → View archived lists archived chats and projects to open or unarchive, under the same rule.
@@ -28,7 +28,7 @@ Run the `Open Copilot Navigator` command, or choose `Open Copilot Navigator` at 
 - Worked-in: open A, send a message, wait for the reply, then open B. A still shows `Running`.
 - Chat controls: open A without sending anything, then choose `New chat` in the [chat controls](chat-controls.md). A no longer shows `Running`.
 - Search: type part of a chat title into `Search chats`. Only matching chats remain.
-- Folder: choose a project folder. Its chats show, and Agent Chat still shows the same chat.
+- Folder: click a project row or press Enter on it. Its home opens. Choose the row's `Show/Hide chats in <project>` chevron, or focus it and press Enter or Space: the chats expand or collapse and the shown chat does not change.
 - New chat in a project: hover a folder and choose `New chat in <project>`. Agent Chat shows a new chat inside that project.
 - Project name: open a chat outside every project. Each project name is dimmed; open a chat in one project and its name brightens.
 - Archived: choose `Sidebar options` → View archived. Archived chats are listed; Unarchive returns one to Recents.
