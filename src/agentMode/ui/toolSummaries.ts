@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { copilotToolName } from "@/agentMode/ui/copilotToolCall";
 import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 import { describeConnectorTool } from "@/connectors/connectorTools";
 import { formatDuration } from "@/lib/duration";
@@ -23,12 +22,19 @@ export interface ToolSummary {
 }
 
 export function copilotToolLabel(part: ToolCallPart): string | null {
-  const name = copilotToolName(part);
-  if (!name) return null;
-  const tool = describeConnectorTool(name);
-  return tool
-    ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
-    : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
+  // Known calls can be part of a larger execute block, so their list must not narrow its approval scope.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+  const names = [...new Set(part.copilotTools?.calls.map((call) => call.name))];
+  const label = names
+    .map((name) => {
+      const tool = describeConnectorTool(name);
+      return tool
+        ? `${tool.serviceName} · ${serviceToolName(tool.serviceName, tool.toolName)}`
+        : `${COPILOT_MCP_SERVER_NAME} · ${humanizeToolName(name)}`;
+    })
+    .join(", ");
+  if (!label) return null;
+  return part.copilotTools?.wrapper ? `${part.copilotTools.wrapper} · ${label}` : label;
 }
 
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {

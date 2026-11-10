@@ -107,7 +107,6 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
     mcpServer: "obsidian-copilot",
     input: { query: "Orion" },
     copilotTools: {
-      runs: "notion_notion-search",
       calls: [{ name: "notion_notion-search", args: { query: "Orion" } }],
     },
     output: [{ type: "text", text: "Orion kickoff plan" }],
@@ -123,11 +122,10 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       arguments: { title: "Orion retro" },
     },
     copilotTools: {
-      runs: "linear_create_issue",
       calls: [{ name: "linear_create_issue", args: { title: "Orion retro" } }],
     },
   }),
-  say("OpenCode's execute code that calls one Copilot tool is named after that tool."),
+  say("OpenCode keeps Execute and names the Copilot tool reported by the runtime."),
   tool("opencode-notion-create", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -136,16 +134,16 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       code: 'const res = await tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
     },
     copilotTools: {
-      runs: "notion_notion-create-pages",
+      wrapper: "Execute",
       calls: [
         {
           name: "notion_notion-create-pages",
-          code: 'tools["obsidian-copilot"]["notion_notion-create-pages"]({ title: "Orion" });\nreturn res;',
+          args: { title: "Orion" },
         },
       ],
     },
   }),
-  say("Code that calls several tools keeps OpenCode's execute name."),
+  say("An executed block names each connector tool reported by the runtime."),
   tool("opencode-notion-both", "execute", {
     vendorToolName: undefined,
     title: "execute",
@@ -154,18 +152,44 @@ const CONNECTOR_TOOLS: AgentMessagePart[] = [
       code: 'return Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "Orion" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "Orion" }),\n]);',
     },
     copilotTools: {
-      runs: null,
+      wrapper: "Execute",
       calls: [
         {
           name: "notion_search",
-          code: 'tools["obsidian-copilot"].notion_search({ query: "Orion" })',
+          args: { query: "Orion" },
         },
         {
           name: "notion_create_page",
-          code: 'tools["obsidian-copilot"].notion_create_page({ title: "Orion" })',
+          args: { title: "Orion" },
         },
       ],
     },
+  }),
+  say("A word in a tool's arguments does not hide its name."),
+  tool("opencode-notion-string", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    input: {
+      code: 'return tools["obsidian-copilot"].notion_search({ query: "MCP tools test" });',
+    },
+    copilotTools: {
+      wrapper: "Execute",
+      calls: [
+        {
+          name: "notion_search",
+          args: { query: "MCP tools test" },
+        },
+      ],
+    },
+  }),
+  say("Before execution metadata arrives, an OpenCode approval keeps its Execute label."),
+  tool("opencode-notion-pending", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    status: "pending",
+    input: { code: 'return tools["obsidian-copilot"].notion_create_page({ title: "Orion" });' },
   }),
   say("Another server's tools keep the server's name."),
   tool("context7-docs", "query-docs", { mcpServer: "context7" }),

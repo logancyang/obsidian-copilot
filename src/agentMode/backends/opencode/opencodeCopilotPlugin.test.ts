@@ -307,40 +307,23 @@ describe("opencodeCopilotPlugin", () => {
       });
     });
 
-    describe("Copilot tool caller", () => {
-      async function runBefore(event: Record<string, unknown>) {
+    it.each([
+      ["obsidian-copilot_send_feedback", { title: "Failure" }],
+      ["obsidian-copilot_miyo_search", { query: "plans" }],
+      ["obsidian-copilot_openartifacts_publish", { title: "Page" }],
+      ["obsidian-copilot_strict_connector", {}],
+      ["obsidian-copilot_strict_connector", undefined],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4229 leaves %s arguments unchanged because session identity belongs in transport metadata",
+      async (tool, input) => {
         const { toolHooks } = await setUpPlugin(plugin);
+        const event = { tool, input, sessionID: "ses_caller", id: "call-1" };
+
         await toolHooks.get("execute.before")!(event);
-        return event.input;
+
+        expect(event.input).toBe(input);
       }
-
-      it.each(["obsidian-copilot_send_feedback", "obsidian-copilot_obsidian_cli"])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a %s call, replacing any value the model wrote",
-        async (tool) => {
-          const input = await runBefore({
-            tool,
-            sessionID: "ses_caller",
-            id: "call-1",
-            input: { title: "t", caller_session_id: "ses_guessed" },
-          });
-
-          expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
-        }
-      );
-
-      it("leaves other servers' tools' input untouched", async () => {
-        const original = { title: "t" };
-
-        const input = await runBefore({
-          tool: "other-server_send_feedback",
-          sessionID: "ses_caller",
-          id: "call-1",
-          input: original,
-        });
-
-        expect(input).toBe(original);
-      });
-    });
+    );
   });
 
   describe("opencodeCopilotPluginDir()", () => {

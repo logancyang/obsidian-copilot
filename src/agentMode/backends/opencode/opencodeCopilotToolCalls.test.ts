@@ -1,102 +1,111 @@
 import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
 
-const execute = (code: string) => ({ code });
-
-const NOTION_CALL =
-  'const res = await tools["obsidian-copilot"].notion_create_page({ title: "Orion" });\nreturn res;';
-const TWO_CALLS =
-  'const [a, b] = await Promise.all([\n  tools["obsidian-copilot"].notion_search({ query: "a" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "b" }),\n]);\nreturn { a, b };';
+const output = (toolCalls: unknown) => ({ metadata: { toolCalls } });
 
 describe("opencodeCopilotToolCalls", () => {
   describe("readOpencodeCopilotTools()", () => {
-    it("reads each Copilot tool call with the execute code from that call onward", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 reads the executed tool name and concrete input from OpenCode metadata", () => {
       expect(
         readOpencodeCopilotTools(
-          execute(
-            'const a = 1;\nreturn tools["obsidian-copilot"].excalidraw_read({ path: "a.md" });'
-          )
+          undefined,
+          output([
+            {
+              tool: "obsidian-copilot.everything_echo",
+              status: "completed",
+              input: { message: "MCP tools test" },
+            },
+          ])
         )
       ).toEqual({
-        runs: "excalidraw_read",
+        wrapper: "Execute",
+        calls: [{ name: "everything_echo", args: { message: "MCP tools test" } }],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 preserves actual call order, repeated calls and failed attempts while ignoring other namespaces", () => {
+      expect(
+        readOpencodeCopilotTools(
+          undefined,
+          output([
+            {
+              tool: "obsidian-copilot.everything_echo",
+              status: "completed",
+              input: { message: "alpha" },
+            },
+            { tool: "fetch", status: "completed", input: { url: "https://example.com" } },
+            { tool: "other.echo", status: "completed" },
+            {
+              tool: "obsidian-copilot.everything_echo",
+              status: "completed",
+              input: { message: "beta" },
+            },
+            { tool: "obsidian-copilot.everything_get-sum", status: "error", input: { a: 2, b: 3 } },
+          ])
+        )
+      ).toEqual({
+        wrapper: "Execute",
         calls: [
-          {
-            name: "excalidraw_read",
-            code: 'tools["obsidian-copilot"].excalidraw_read({ path: "a.md" });',
-          },
+          { name: "everything_echo", args: { message: "alpha" } },
+          { name: "everything_echo", args: { message: "beta" } },
+          { name: "everything_get-sum", args: { a: 2, b: 3 } },
         ],
       });
     });
 
-    it("lists every Copilot tool that code calls, in order", () => {
-      expect(readOpencodeCopilotTools(execute(TWO_CALLS))?.calls).toEqual([
-        {
-          name: "notion_search",
-          code: 'tools["obsidian-copilot"].notion_search({ query: "a" }),\n  tools["obsidian-copilot"].notion_create_page({ title: "b" }),\n]);\nreturn { a, b };',
-        },
-        {
-          name: "notion_create_page",
-          code: 'tools["obsidian-copilot"].notion_create_page({ title: "b" }),\n]);\nreturn { a, b };',
-        },
-      ]);
-    });
-
     it.each([
-      ["a dotted", NOTION_CALL],
-      [
-        "a quoted",
-        'const result = await tools["obsidian-copilot"]["notion_create_page"]({ title: "Orion" });\nreturn result;',
-      ],
-      [
-        "a single-quoted namespace and dotted",
-        "return tools['obsidian-copilot'].notion_create_page({ title: 'Orion' });",
-      ],
+      'const echo = tools["obsidian-copilot"].everything_echo; return echo({ message: "hello" });',
+      'const name = "everything_echo"; return tools["obsidian-copilot"][name]({ message: "hello" });',
+      '// tools["obsidian-copilot"].notion_create_page({})\nreturn "tools fetch";',
+      "not valid JavaScript at all",
     ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 says code runs the Copilot tool it calls once by %s member",
-      (_shape, code) => {
-        expect(readOpencodeCopilotTools(execute(code))?.runs).toBe("notion_create_page");
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 uses runtime metadata independently of execute source: %s",
+      (code) => {
+        const result = readOpencodeCopilotTools(
+          { code },
+          output([
+            {
+              tool: "obsidian-copilot.everything_echo",
+              status: "completed",
+              input: { message: "hello" },
+            },
+          ])
+        );
+        expect(result).toEqual({
+          wrapper: "Execute",
+          calls: [{ name: "everything_echo", args: { message: "hello" } }],
+        });
       }
     );
 
-    it.each([
-      ["code calling two Copilot tools", TWO_CALLS],
-      [
-        "code calling a Copilot tool and another namespace's tool",
-        'await tools.opencode.list_mcp_resources({});\nreturn tools["obsidian-copilot"].notion_search({ query: "a" });',
-      ],
-      [
-        "code that calls one Copilot tool directly and another through a destructured alias",
-        'const { "obsidian-copilot": copilot } = tools;\nawait tools["obsidian-copilot"].notion_search({ query: "a" });\nreturn copilot.notion_create_page({ title: "b" });',
-      ],
-      [
-        "code that fetches a URL beside one Copilot tool call",
-        'const page = await fetch("https://example.com");\nreturn tools["obsidian-copilot"].notion_search({ query: await page.text() });',
-      ],
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/872 names no tool the call runs for %s, since its approval may cover more than one tool",
-      (_name, code) => {
-        expect(readOpencodeCopilotTools(execute(code))?.runs).toBeNull();
-      }
-    );
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 supplies empty arguments when OpenCode omits an empty input", () => {
+      expect(
+        readOpencodeCopilotTools(
+          undefined,
+          output([
+            { tool: "obsidian-copilot.everything_toggle-simulated-logging", status: "completed" },
+          ])
+        )?.calls
+      ).toEqual([{ name: "everything_toggle-simulated-logging", args: {} }]);
+    });
 
     it.each([
-      ["code that only mentions a tool", execute("// excalidraw_write")],
-      [
-        "code that only searches the catalog",
-        execute('const r = search({ query: "notion" });\nreturn r;'),
-      ],
-      [
-        "code calling another namespace's tool",
-        execute("return await tools.opencode.list_mcp_resources({});"),
-      ],
-      [
-        "code that reaches Copilot's tools only through an alias",
-        execute(
-          'const copilot = tools["obsidian-copilot"];\nreturn copilot.notion_search({ query: "a" });'
-        ),
-      ],
-      ["a call without code", undefined],
-    ])("returns null for %s", (_name, input) => {
-      expect(readOpencodeCopilotTools(input)).toBeNull();
-    });
+      undefined,
+      {},
+      { metadata: {} },
+      output(null),
+      output("not a list"),
+      output([]),
+      output([null, {}, { tool: 42 }, { tool: "obsidian-copilot." }, { tool: "other.echo" }]),
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/875 returns no recognized calls for absent or unusable execution metadata: %j",
+      (rawOutput) => {
+        expect(
+          readOpencodeCopilotTools(
+            { code: 'return tools["obsidian-copilot"].everything_echo({});' },
+            rawOutput
+          )
+        ).toBeNull();
+      }
+    );
   });
 });
