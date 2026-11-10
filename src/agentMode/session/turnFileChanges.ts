@@ -1,5 +1,5 @@
 import { toVaultTargetPath } from "@/agentMode/session/editTargets";
-import type { TurnDiff, TurnFileChange } from "@/agentMode/session/types";
+import type { AgentChatMessage, TurnDiff, TurnFileChange } from "@/agentMode/session/types";
 import { applyPatch, diffLines, parsePatch, reversePatch, type StructuredPatch } from "diff";
 
 export interface TurnFileCapture {
@@ -26,6 +26,28 @@ export function buildTurnFileChange(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
   const status = before === null ? "created" : after === null ? "deleted" : "modified";
   return { path, status, before, after, additions, deletions };
+}
+
+const EMPTY_CHAT_FILE_CHANGES: readonly TurnFileChange[] = Object.freeze([]);
+
+// A file changed in several turns reads as one change from before its first change to after its last, as a turn
+// folds its own edits, so a file the chat created stays new. https://github.com/Brevilabs/obsidian-copilot-private/issues/839
+export function buildChatFileChanges(
+  messages: readonly AgentChatMessage[]
+): readonly TurnFileChange[] {
+  const spans = new Map<string, { first: TurnFileChange; last: TurnFileChange }>();
+  for (const message of [...messages].reverse()) {
+    const changes = [...(message.fileChanges ?? [])].sort((a, b) => a.path.localeCompare(b.path));
+    for (const change of changes) {
+      const span = spans.get(change.path);
+      if (span) span.first = change;
+      else spans.set(change.path, { first: change, last: change });
+    }
+  }
+  const merged = [...spans.values()].flatMap(
+    ({ first, last }) => buildTurnFileChange(last.path, first.before, last.after) ?? []
+  );
+  return merged.length > 0 ? merged : EMPTY_CHAT_FILE_CHANGES;
 }
 
 function diffSidePath(fileName: string | undefined): string | null {

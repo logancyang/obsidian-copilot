@@ -11,14 +11,13 @@ import {
   OUTPUT_LIMIT_CONTINUATION_PROMPT,
   stripUserMessageWrapper,
 } from "@/agentMode/session/promptEnvelope";
-import type { AgentPlanEntry, CompactionSnapshot, SessionEvent } from "@/agentMode/session/types";
+import type { CompactionSnapshot, SessionEvent } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { formatDateTime, type FormattedDateTime } from "@/utils";
 
 export interface SessionHistoryReplayDeps {
   store: AgentMessageStore;
   scheduleNotifyMessages(): void;
-  applyTodoList(entries: AgentPlanEntry[]): void;
 }
 
 export class SessionHistoryReplay {
@@ -98,8 +97,6 @@ export class SessionHistoryReplay {
         if (this.deps.store.upsertAgentPart(this.aiBubbleId(occurredAt), planToPart(update))) {
           this.deps.scheduleNotifyMessages();
         }
-        // The last replayed task list is the one the chat closed with, so the project popover shows it again. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-        this.deps.applyTodoList(update.entries);
         return true;
       case "compaction": {
         // A replayed compaction is already over, so one that never reports an end settles as cancelled rather than spinning. https://github.com/Brevilabs/obsidian-copilot-private/issues/638

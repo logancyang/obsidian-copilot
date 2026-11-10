@@ -1,4 +1,6 @@
+import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
 import {
+  buildChatFileChanges,
   buildTurnFileChange,
   filePatchesByVaultPath,
   revertFilePatch,
@@ -339,6 +341,83 @@ describe("turnFileChanges", () => {
         additions: 0,
         deletions: 2,
       });
+    });
+  });
+  describe("buildChatFileChanges()", () => {
+    function turn(...fileChanges: TurnFileChange[]): AgentChatMessage {
+      return {
+        id: `turn-${fileChanges.map((change) => change.path).join("+")}`,
+        sender: "ai",
+        timestamp: null,
+        isVisible: true,
+        message: "",
+        fileChanges,
+      };
+    }
+
+    function reply(): AgentChatMessage {
+      return { id: "reply", sender: "user", timestamp: null, isVisible: true, message: "thanks" };
+    }
+
+    function change(path: string, before: string | null, after: string | null): TurnFileChange {
+      const built = buildTurnFileChange(path, before, after);
+      if (!built) throw new Error(`no change for ${path}`);
+      return built;
+    }
+
+    it("lists each file the chat created or edited with its new or edited status and line counts, the latest turn's files first and one turn's files in path order", () => {
+      const brief = change("Q4/brief.md", "one\ntwo\n", "one\nTWO\nthree\n");
+      const timeline = change("Q4/outputs/timeline.md", null, "week 1\nweek 2\n");
+      const pricing = change("Q4/pricing.md", "old\n", "new\n");
+
+      const changes = buildChatFileChanges([turn(timeline, brief), reply(), turn(pricing)]);
+
+      expect(
+        changes.map(({ path, status, additions, deletions }) => [
+          path,
+          status,
+          additions,
+          deletions,
+        ])
+      ).toEqual([
+        ["Q4/pricing.md", "modified", 1, 1],
+        ["Q4/brief.md", "modified", 2, 1],
+        ["Q4/outputs/timeline.md", "created", 2, 0],
+      ]);
+    });
+
+    it("folds a file changed in several turns into one change from before its first change to after its last, as a turn folds its own edits, so a created then edited file stays new with its final lines — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+      const created = change("Q4/timeline.md", null, "week 1\n");
+      const other = change("Q4/brief.md", "a\n", "b\n");
+      const edited = change("Q4/timeline.md", "week 1\n", "week 1\nweek 2\nweek 3\n");
+
+      const changes = buildChatFileChanges([turn(created), turn(other), turn(edited)]);
+
+      expect(changes).toEqual([
+        {
+          path: "Q4/timeline.md",
+          status: "created",
+          before: null,
+          after: "week 1\nweek 2\nweek 3\n",
+          additions: 3,
+          deletions: 0,
+        },
+        other,
+      ]);
+    });
+
+    it("leaves out a file a later turn put back the way the chat found it", () => {
+      const edited = change("Q4/brief.md", "draft\n", "final\n");
+      const reverted = change("Q4/brief.md", "final\n", "draft\n");
+
+      expect(buildChatFileChanges([turn(edited), turn(reverted)])).toEqual([]);
+    });
+
+    it("returns the same empty list for every chat that has changed no file", () => {
+      const empty = buildChatFileChanges([]);
+
+      expect(empty).toEqual([]);
+      expect(buildChatFileChanges([reply(), turn()])).toBe(empty);
     });
   });
 });
