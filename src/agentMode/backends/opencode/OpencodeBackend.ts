@@ -159,7 +159,7 @@ export class OpencodeBackend implements AcpBackend {
       // OpenCode uses the process directory for project discovery; its ACP
       // command has no --cwd flag. https://github.com/Brevilabs/obsidian-copilot-private/issues/555
       cwd: ctx.vaultBasePath,
-      env: {
+      env: withLoopbackProxyBypass({
         ...process.env,
         PATH: await agentShellPath(),
         ...builtinSkillEnv,
@@ -169,9 +169,27 @@ export class OpencodeBackend implements AcpBackend {
         OPENCODE_LOG_LEVEL: "INFO",
         ...envOverrides,
         OPENCODE_CONFIG_CONTENT: configContent,
-      },
+      }),
     };
   }
+}
+
+const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "::1"];
+
+// OpenCode's ACP reaches its private server on loopback through HTTP_PROXY, so a proxy outage
+// fails every turn with "OpenCode server is unavailable". https://github.com/logancyang/obsidian-copilot/issues/4138
+function withLoopbackProxyBypass(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result = { ...env };
+  const exclusions: string[] = [];
+  for (const key of Object.keys(result)) {
+    if (key.toUpperCase() !== "NO_PROXY") continue;
+    exclusions.push(...(result[key] ?? "").split(","));
+    delete result[key];
+  }
+  const hosts = new Set([...exclusions.map((host) => host.trim()), ...LOOPBACK_HOSTS]);
+  hosts.delete("");
+  result.NO_PROXY = [...hosts].join(",");
+  return result;
 }
 
 function agentConfigs(agents: unknown): Record<string, unknown>[] {

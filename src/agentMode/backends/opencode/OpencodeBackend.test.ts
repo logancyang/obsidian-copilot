@@ -1188,6 +1188,39 @@ describe("OpencodeBackend", () => {
         expect(desc.env.PATH).toBe("/login/bin:/usr/bin");
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/4138 keeps OpenCode's loopback traffic off an HTTP proxy, so a proxy outage cannot cut Agent Chat off from OpenCode's private server", async () => {
+        setOpencodeSettings({ binaryPath: "/path/to/opencode" });
+
+        const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+          vaultBasePath: "/vault",
+        });
+
+        expect(desc.env.NO_PROXY).toBe("127.0.0.1,localhost,::1");
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4138 keeps the user's own proxy exclusions, from any spelling of NO_PROXY, beside the loopback hosts", async () => {
+        const inherited = process.env.no_proxy;
+        process.env.no_proxy = "intranet.example, 127.0.0.1";
+        try {
+          setOpencodeSettings({
+            binaryPath: "/path/to/opencode",
+            envOverrides: { No_Proxy: ".corp.example" },
+          });
+
+          const desc = await new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({
+            vaultBasePath: "/vault",
+          });
+
+          expect(desc.env.NO_PROXY).toBe("intranet.example,127.0.0.1,.corp.example,localhost,::1");
+          expect(Object.keys(desc.env).filter((key) => key.toUpperCase() === "NO_PROXY")).toEqual([
+            "NO_PROXY",
+          ]);
+        } finally {
+          if (inherited === undefined) delete process.env.no_proxy;
+          else process.env.no_proxy = inherited;
+        }
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/561 lets a user opt into more detailed OpenCode logs", async () => {
         setOpencodeSettings({
           binaryPath: "/path/to/opencode",
