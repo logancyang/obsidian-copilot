@@ -134,8 +134,8 @@ Copilot stores provider API keys and the Copilot license key in this device's
 device-specific, so syncing a vault does not copy its credentials to another
 computer.
 
-To remove stored credentials, open **Settings → Copilot → Advanced → API Key
-Storage** and click **Delete All Keys**.
+To remove a provider's key, delete that provider in **Settings → Copilot →
+BYOK**.
 
 ## Related
 

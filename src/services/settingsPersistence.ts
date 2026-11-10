@@ -51,14 +51,6 @@ export function resetPersistenceState(): void {
   pendingTombstones.clear();
 }
 
-export function releaseLegacyCredentialHold(): void {
-  legacyCredentialsUnprotected = false;
-}
-
-export function refreshLastPersistedSettings(data: CopilotSettings): void {
-  lastPersistedSettings = structuredClone(data);
-}
-
 export function suppressNextPersistOnce(): void {
   suppressNextPersist = true;
 }

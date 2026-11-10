@@ -13,15 +13,6 @@ jest.mock("obsidian", () => {
     App: class App {},
     SecretStorage: class SecretStorage {},
     FileSystemAdapter,
-    Notice: jest.fn(),
-  };
-});
-
-jest.mock("@/settings/model", () => {
-  const actual = jest.requireActual<object>("@/settings/model");
-  return {
-    ...actual,
-    getSettings: jest.fn(),
   };
 });
 
@@ -31,8 +22,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-import { FileSystemAdapter, Notice, type App } from "obsidian";
-import { getSettings } from "@/settings/model";
+import { FileSystemAdapter, type App } from "obsidian";
 import type { CopilotSettings } from "@/settings/model";
 import type { CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
@@ -343,46 +333,6 @@ describe("keychainService", () => {
       });
     });
 
-    describe("hasStoredProviderKey()", () => {
-      it("reports a stored key when a provider's Keychain entry holds its key, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
-        const service = KeychainService.getInstance(
-          makeApp({ secretStorage: makeMapStorage({ "copilot-v1-provider-minimax": "sk-live" }) })
-        );
-
-        const hasKey = service.hasStoredProviderKey({
-          agent: makeProvider({ providerId: "agent" }),
-          minimax: makeProvider({
-            providerId: "minimax",
-            apiKeyKeychainId: "copilot-v1-provider-minimax",
-          }),
-        });
-
-        expect(hasKey).toBe(true);
-      });
-
-      it("reports no stored key when no provider points at a Keychain entry, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
-        const service = KeychainService.getInstance(makeApp({ secretStorage: makeMapStorage({}) }));
-
-        expect(service.hasStoredProviderKey({ agent: makeProvider() })).toBe(false);
-      });
-
-      it("reports no stored key when a synced pointer names an entry missing or emptied on this device, https://github.com/logancyang/obsidian-copilot/issues/3000", () => {
-        const service = KeychainService.getInstance(
-          makeApp({ secretStorage: makeMapStorage({ "copilot-v1-provider-cleared": "" }) })
-        );
-
-        const hasKey = service.hasStoredProviderKey({
-          synced: makeProvider({ providerId: "synced", apiKeyKeychainId: "copilot-v1-provider-x" }),
-          cleared: makeProvider({
-            providerId: "cleared",
-            apiKeyKeychainId: "copilot-v1-provider-cleared",
-          }),
-        });
-
-        expect(hasKey).toBe(false);
-      });
-    });
-
     describe("deleteSecret()", () => {
       it("removes the vault-namespaced entry for a settings key", () => {
         const secretStorage = makeSecretStorage();
@@ -545,132 +495,6 @@ describe("keychainService", () => {
       });
     });
 
-    describe("forgetAllSecrets()", () => {
-      it("clears vault secrets, strips settings, and notifies the user", async () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        const vaultId = service.getVaultId();
-
-        secretStorage.listSecrets.mockReturnValue([
-          `copilot-v${vaultId}-open-a-i-api-key`,
-          "copilot-vother000-google-api-key",
-        ]);
-
-        (getSettings as jest.Mock).mockReturnValue(
-          makeSettings({
-            openAIApiKey: "sk-123",
-            activeModels: [makeModel({ apiKey: "model-secret" })],
-          })
-        );
-
-        const saveData = jest.fn().mockResolvedValue(undefined);
-        const syncMemory = jest.fn();
-
-        await service.forgetAllSecrets(saveData, syncMemory);
-
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(
-          `copilot-v${vaultId}-open-a-i-api-key`
-        );
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(
-          "copilot-vother000-google-api-key"
-        );
-
-        expect(saveData).toHaveBeenCalled();
-        const saved = saveData.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(saved._keychainOnly).toBeUndefined();
-        expect(saved.openAIApiKey).toBe("");
-        const savedModels = saved.activeModels as Array<Record<string, unknown>>;
-        expect(savedModels[0].apiKey).toBe("");
-
-        expect(syncMemory).toHaveBeenCalled();
-        const synced = syncMemory.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(synced.openAIApiKey).toBe("");
-        const syncedModels = synced.activeModels as Array<Record<string, unknown>>;
-        expect(syncedModels[0].apiKey).toBe("");
-        expect(Notice).toHaveBeenCalledWith(
-          "All API keys for this vault removed. Please re-enter them."
-        );
-      });
-
-      it("leaves the keychain untouched and tells the user when saving data.json fails", async () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        secretStorage.listSecrets.mockReturnValue([]);
-
-        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-123" }));
-
-        const saveData = jest.fn().mockRejectedValue(new Error("disk write failed"));
-        const syncMemory = jest.fn();
-
-        await service.forgetAllSecrets(saveData, syncMemory);
-
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
-        expect(syncMemory).not.toHaveBeenCalled();
-        expect(Notice).toHaveBeenCalledWith(
-          expect.stringContaining("Failed to remove API keys from data.json")
-        );
-      });
-
-      it("propagates keychain delete failures after successful disk save so the user can retry", async () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        const vaultId = service.getVaultId();
-
-        const idA = `copilot-v${vaultId}-open-a-i-api-key`;
-        const idB = `copilot-v${vaultId}-google-api-key`;
-        secretStorage.listSecrets.mockReturnValue([idA, idB]);
-
-        secretStorage.deleteSecret.mockImplementation((id: string) => {
-          if (id === idB) throw new Error("keychain locked");
-        });
-
-        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-123" }));
-
-        const saveData = jest.fn().mockResolvedValue(undefined);
-        const syncMemory = jest.fn();
-
-        await expect(service.forgetAllSecrets(saveData, syncMemory)).rejects.toThrow(
-          /Failed to clear 1 keychain/
-        );
-
-        expect(saveData).toHaveBeenCalled();
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(idA);
-        expect(syncMemory).toHaveBeenCalled();
-      });
-
-      it("refuses to run when Obsidian Keychain is unavailable", async () => {
-        const service = KeychainService.getInstance(makeApp({ secretStorage: null }));
-        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-disk" }));
-
-        const saveData = jest.fn().mockResolvedValue(undefined);
-        const syncMemory = jest.fn();
-
-        await expect(service.forgetAllSecrets(saveData, syncMemory)).rejects.toThrow(
-          /Secure Storage is unavailable/
-        );
-
-        expect(saveData).not.toHaveBeenCalled();
-        expect(syncMemory).not.toHaveBeenCalled();
-      });
-
-      it("refuses before stripping disk when Keychain entries cannot be enumerated", async () => {
-        const secretStorage = makeSecretStorage();
-        (secretStorage as unknown as { listSecrets: unknown }).listSecrets = undefined;
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-live" }));
-        const saveData = jest.fn().mockResolvedValue(undefined);
-        const syncMemory = jest.fn();
-
-        await expect(service.forgetAllSecrets(saveData, syncMemory)).rejects.toThrow(
-          /does not support enumerating Keychain entries/
-        );
-
-        expect(saveData).not.toHaveBeenCalled();
-        expect(syncMemory).not.toHaveBeenCalled();
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
-      });
-    });
-
     describe("removeRetiredEmbeddingSecrets()", () => {
       it("deletes only this vault's embedding-scoped model credentials (https://github.com/logancyang/obsidian-copilot/pull/3094#discussion_r3926692782)", () => {
         const secretStorage = makeSecretStorage();
@@ -696,38 +520,6 @@ describe("keychainService", () => {
         const service = KeychainService.getInstance(makeApp({ secretStorage }));
 
         expect(() => service.removeRetiredEmbeddingSecrets()).not.toThrow();
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
-      });
-    });
-
-    describe("clearAllVaultSecrets()", () => {
-      it("clears what it can, then throws aggregating the count of failed entries", () => {
-        const secretStorage = makeSecretStorage();
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-        const vaultId = service.getVaultId();
-
-        const ok = `copilot-v${vaultId}-open-a-i-api-key`;
-        const bad1 = `copilot-v${vaultId}-google-api-key`;
-        const bad2 = `copilot-v${vaultId}-cohere-api-key`;
-        const foreign = "copilot-vother000-anthropic-api-key";
-        secretStorage.listSecrets.mockReturnValue([ok, bad1, bad2, foreign]);
-
-        secretStorage.deleteSecret.mockImplementation((id: string) => {
-          if (id === bad1 || id === bad2) throw new Error("os denied");
-        });
-
-        expect(() => service.clearAllVaultSecrets()).toThrow(/Failed to clear 2 keychain entries/);
-
-        expect(secretStorage.deleteSecret).toHaveBeenCalledWith(ok);
-        expect(secretStorage.deleteSecret).not.toHaveBeenCalledWith(foreign);
-      });
-
-      it("throws without touching deleteSecret when listSecrets is not a function", () => {
-        const secretStorage = makeSecretStorage();
-        (secretStorage as unknown as { listSecrets: unknown }).listSecrets = undefined;
-        const service = KeychainService.getInstance(makeApp({ secretStorage }));
-
-        expect(() => service.clearAllVaultSecrets()).toThrow(/does not support listing entries/);
         expect(secretStorage.deleteSecret).not.toHaveBeenCalled();
       });
     });
