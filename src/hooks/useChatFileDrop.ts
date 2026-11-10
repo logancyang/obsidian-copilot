@@ -1,6 +1,6 @@
-import { addFilesToChat } from "@/components/chat-components/addFilesToChat";
-import { isAllowedFileForNoteContext } from "@/utils";
-import { App, Notice, TFile } from "obsidian";
+import { attachToChat } from "@/components/chat-components/attachToChat";
+import { splitByVault } from "@/utils/splitByVault";
+import { App, TFile } from "obsidian";
 import { RefObject, useEffect, useState } from "react";
 
 export interface UseChatFileDropProps {
@@ -15,58 +15,6 @@ export interface UseChatFileDropProps {
 
 export interface UseChatFileDropReturn {
   isDragActive: boolean;
-}
-
-function parseObsidianUri(app: App, uriString: string): TFile | null {
-  const match = uriString.match(/obsidian:\/\/open\?vault=.*?&file=(.*)$/);
-  if (!match) return null;
-
-  const filePath = decodeURIComponent(match[1]);
-
-  let file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile) return file;
-
-  file = app.vault.getAbstractFileByPath(filePath + ".md");
-  if (file instanceof TFile) return file;
-
-  return null;
-}
-
-function parseObsidianUris(app: App, uriString: string): TFile[] {
-  const lines = uriString.split("\n").filter((line) => line.trim());
-
-  const files: TFile[] = [];
-  for (const line of lines) {
-    const file = parseObsidianUri(app, line.trim());
-    if (file) {
-      files.push(file);
-    }
-  }
-
-  return files;
-}
-
-async function resolveVaultLinks(app: App, items: DataTransferItem[]): Promise<TFile[]> {
-  const texts = await Promise.all(
-    items.map((item) => new Promise<string>((resolve) => item.getAsString(resolve)))
-  );
-  const byPath = new Map<string, TFile>();
-  for (const text of texts) {
-    for (const file of parseObsidianUris(app, text)) byPath.set(file.path, file);
-  }
-  return [...byPath.values()];
-}
-
-const CHAT_IMAGE_EXTENSIONS = ["png", "gif", "jpeg", "jpg", "webp"];
-
-export function canAttachFileToChat(file: TFile): boolean {
-  return CHAT_IMAGE_EXTENSIONS.includes(file.extension) || isAllowedFileForNoteContext(file);
-}
-
-function getImageMimeType(extension: string): string {
-  const normalized = extension.toLowerCase();
-  if (normalized === "jpg") return "image/jpeg";
-  return `image/${normalized}`;
 }
 
 export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropReturn {
@@ -120,94 +68,33 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       }
     };
 
-    const handleDrop = async (e: DragEvent) => {
+    const handleDrop = (e: DragEvent) => {
       if (!e.dataTransfer) return;
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (target?.closest("[data-copilot-drop-zone]")) return;
       e.preventDefault();
-
+      e.stopPropagation();
       setIsDragActive(false);
-
-      const items = e.dataTransfer.items;
-      const stringItems: DataTransferItem[] = [];
-      const fileItems: DataTransferItem[] = [];
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.kind === "string") {
-          stringItems.push(item);
-        } else if (item.kind === "file") {
-          fileItems.push(item);
-        }
-      }
-
-      const droppedFiles = fileItems
-        .map((item) => item.getAsFile())
-        .filter((file): file is File => file !== null);
-
-      if (stringItems.length > 0) e.stopPropagation();
-
-      // WeChat and browsers send a dropped file's name as text beside the file; only vault links mean an Obsidian drag.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
-      const vaultFiles = await resolveVaultLinks(app, stringItems);
-      if (vaultFiles.length === 0) {
-        if (droppedFiles.length > 0) {
-          await addFilesToChat(app, droppedFiles, {
-            onAddImage,
-            setContextNotes,
-            acceptAnyFileType,
-          });
-        }
-        return;
-      }
-
-      for (const file of vaultFiles) {
-        const isImage = CHAT_IMAGE_EXTENSIONS.includes(file.extension);
-
-        if (isImage) {
-          const isDuplicate = selectedImages.some((img) => img.name === file.name);
-          if (isDuplicate) {
-            new Notice("This image is already in the context");
-            continue;
-          }
-
-          const arrayBuffer = await app.vault.readBinary(file);
-          const blob = new Blob([arrayBuffer]);
-          const imageFile = new File([blob], file.name, {
-            type: getImageMimeType(file.extension),
-          });
-          onAddImage([imageFile]);
-        } else if (acceptAnyFileType || isAllowedFileForNoteContext(file)) {
-          const isDuplicate = contextNotes.some((note) => note.path === file.path);
-          if (isDuplicate) {
-            new Notice("This note is already in the context");
-            continue;
-          }
-
-          setContextNotes((prev) => [...prev, file]);
-        } else {
-          new Notice(
-            `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
-          );
-        }
-      }
-    };
-
-    const handleDropEvent = (e: DragEvent) => {
-      void handleDrop(e);
+      void attachToChat(app, splitByVault(app, e.dataTransfer), {
+        contextNotes,
+        selectedImages,
+        onAddImage,
+        setContextNotes,
+        acceptAnyFileType,
+      });
     };
 
     const handleDropCaptureCleanup = () => setIsDragActive(false);
 
     container.addEventListener("dragover", handleDragOver, true);
     container.addEventListener("dragleave", handleDragLeave);
-    container.addEventListener("drop", handleDropEvent);
+    container.addEventListener("drop", handleDrop);
     container.addEventListener("drop", handleDropCaptureCleanup, true);
 
     return () => {
       container.removeEventListener("dragover", handleDragOver, true);
       container.removeEventListener("dragleave", handleDragLeave);
-      container.removeEventListener("drop", handleDropEvent);
+      container.removeEventListener("drop", handleDrop);
       container.removeEventListener("drop", handleDropCaptureCleanup, true);
     };
   }, [

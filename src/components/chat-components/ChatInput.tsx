@@ -32,7 +32,8 @@ import {
 } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
-import { addFilesToChat, CONTEXT_FILE_ACCEPT } from "./addFilesToChat";
+import { attachToChat, CONTEXT_FILE_ACCEPT } from "./attachToChat";
+import { splitByVault } from "@/utils/splitByVault";
 import { openFilePicker } from "./openFilePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
@@ -427,7 +428,9 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         openFilePicker(doc, {
           accept: isAgentMode ? undefined : CONTEXT_FILE_ACCEPT,
           onFiles: (files) =>
-            void addFilesToChat(app, files, {
+            void attachToChat(app, splitByVault(app, { files }), {
+              contextNotes,
+              selectedImages,
               onAddImage,
               setContextNotes,
               acceptAnyFileType: isAgentMode,

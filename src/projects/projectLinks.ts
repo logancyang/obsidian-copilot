@@ -11,37 +11,7 @@ import {
 import type { ProjectConfig } from "@/aiParams";
 import { parseProjectUrls, serializeProjectUrls, type UrlItem } from "@/lib/url-tag";
 import { ensureFolderExists } from "@/utils";
-import { App, TAbstractFile, TFile, TFolder } from "obsidian";
-
-interface ObsidianDraggable {
-  file?: TAbstractFile;
-  files?: TAbstractFile[];
-}
-
-export function getDraggedVaultItems(app: App): TAbstractFile[] {
-  const draggable = (app as unknown as { dragManager?: { draggable?: ObsidianDraggable | null } })
-    .dragManager?.draggable;
-  const items = draggable?.files ?? (draggable?.file ? [draggable.file] : []);
-  return items.filter((item) => item instanceof TFile || item instanceof TFolder);
-}
-
-interface OutsideDrop {
-  files: File[];
-  folderNames: string[];
-}
-
-export function splitOutsideDrop(dataTransfer: {
-  files: ArrayLike<File>;
-  items?: ArrayLike<DataTransferItem>;
-}): OutsideDrop {
-  const entries = Array.from(dataTransfer.items ?? []).filter((item) => item.kind === "file");
-  const drop: OutsideDrop = { files: [], folderNames: [] };
-  Array.from(dataTransfer.files).forEach((file, index) => {
-    if (entries[index]?.webkitGetAsEntry()?.isDirectory) drop.folderNames.push(file.name);
-    else drop.files.push(file);
-  });
-  return drop;
-}
+import { App, TAbstractFile, TFile } from "obsidian";
 
 export interface ProjectLinks {
   folders: readonly string[];
