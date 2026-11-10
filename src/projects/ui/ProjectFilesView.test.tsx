@@ -773,7 +773,7 @@ describe("ProjectFilesView", () => {
       expect(dropOverlay()).toBeNull();
     });
 
-    it("ignores a drag of its own rows, so moving a row toward the message box neither shows the drop overlay nor links", () => {
+    it("ignores a drag of its own rows, so moving a row toward the message box neither shows the drop overlay nor links — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", () => {
       const { vault, timeline } = linkedFixture();
       renderView(vault);
       vault.setDraggable({ type: "link", file: timeline });

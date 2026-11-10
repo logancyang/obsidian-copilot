@@ -519,6 +519,8 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
     unlinkProjectPattern(app, projectId, pattern).catch(reportFailure("unlink from the project"));
   };
 
+  // Rows dragged toward the composer must not become new project links.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
   const acceptsDrag = (event: React.DragEvent): boolean =>
     !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
 

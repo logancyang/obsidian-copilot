@@ -36,7 +36,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Files: in the project info, choose `AGENTS.md`. The project's `AGENTS.md` opens as a note.
 - Context: choose `Link context` → `Files` and select a note outside the project folder. It appears under `Linked` with its parent folder. Choose `Folders`, select a nested folder, and expand its row to browse its contents.
 - Unlink: hover a linked row and choose `Unlink`. Its link disappears; the original note or folder stays in the vault.
-- Drop: drag a nested folder from the file explorer onto the project's `Files` tab. It appears under `Linked`. Drop a PDF from Finder: a copy appears in the project's `sources/` folder. Drop a folder from Finder: a notice says folders from outside the vault can't be added, and nothing is copied or linked.
+- Drop: drag a nested vault folder over `Files`. The area highlights with `Link files to this project`; dropping it adds it under `Linked`. Drop a PDF from Finder: a copy appears in `sources/`. Drop a folder from Finder: a notice refuses it, and nothing is copied or linked. Cancel a drag with Escape: the highlight disappears.
 
 - Edit: hover a project in `Projects` and choose `Edit project`. The `Edit project` dialog shows `Project name`, `Description`, `Project instructions`, and `Context sources`.
 - Reveal: choose `Reveal in vault`. The file explorer opens with the project's folder selected.
@@ -50,3 +50,4 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - The folder tree shows `AGENTS.md` when present, but hides the project's configuration note and dotfiles. Folders appear before files, sorted by name.
 - `Link context` stays below the scrolling Project folder and Linked list. A missing linked item stays listed as `Not found` so it can still be unlinked.
 - One drop rule covers the `Files` tab and the [chat input](chat-input.md): Copilot works with what is in the vault. A vault note or folder is linked to the project on the `Files` tab and attached to the message on the chat input. A file from outside the vault is copied in, into the project's `sources/` folder or the attachment folder. A folder from outside the vault is never copied or linked by a drop.
+- `Recent chats` accepts no drops. Dropping an item already in the project shows `Already in this project`. Copies of external files get numbered names when needed; existing files are not overwritten.
