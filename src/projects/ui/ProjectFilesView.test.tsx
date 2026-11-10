@@ -285,10 +285,10 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
   };
 }
 
-function renderView(vault: FakeVault, { acceptsDrops = true } = {}) {
+function renderView(vault: FakeVault, { canLink = true } = {}) {
   return render(
     <AppContext.Provider value={vault.app}>
-      <ProjectFilesView projectId="q4" acceptsDrops={acceptsDrops} />
+      <ProjectFilesView projectId="q4" canLink={canLink} />
     </AppContext.Provider>
   );
 }
@@ -1062,9 +1062,9 @@ describe("ProjectFilesView", () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
     });
 
-    it("takes no drops without acceptsDrops, as in a chat's project popover, so a dragged vault note or computer file neither highlights, links nor copies — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+    it("offers no Link context and takes no drops without canLink, as in a chat's project popover, so a dragged vault note or computer file neither highlights, links nor copies — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
       const { vault, retro } = linkedFixture();
-      renderView(vault, { acceptsDrops: false });
+      renderView(vault, { canLink: false });
       const view = screen.getByRole("region", { name: "Linked" }).parentElement!;
       const pdf = { name: "board-notes.pdf", arrayBuffer: async () => new ArrayBuffer(4) };
       vault.setDraggable({ type: "file", file: retro });
@@ -1081,6 +1081,7 @@ describe("ProjectFilesView", () => {
       expect(mockUpdateProject).not.toHaveBeenCalled();
       expect(vault.createBinary).not.toHaveBeenCalled();
       expect(noticeMessages()).toEqual([]);
+      expect(screen.queryByRole("button", { name: "Link context" })).toBeNull();
     });
 
     it("says an item from the project folder is already in this project instead of linking it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {

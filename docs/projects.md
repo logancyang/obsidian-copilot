@@ -57,7 +57,7 @@ Linking never moves a vault file. Dropping on the message box adds the item to t
 
 In a Project chat, open the Project info menu beside the name. **Changed in this chat** lists each file the chat created, edited, or deleted, newest first, with **new**, **edited**, or **deleted** and the number of lines added and removed. A file changed in several turns appears once, counted from before the chat first changed it. Select a file to open it.
 
-Below it are the same **Project folder** and **Linked** sections as the **Files** tab. To link context from here, select **Link context** beside **Linked**.
+Below it are the same **Project folder** and **Linked** sections as the **Files** tab. To link something, use the **Files** tab on the Project's home.
 
 **Changed in this chat** covers the current session only. After you reload Obsidian or reopen the chat, it stays empty until the chat changes another file.
 

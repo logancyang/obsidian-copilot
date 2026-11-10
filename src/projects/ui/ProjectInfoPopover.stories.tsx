@@ -89,7 +89,7 @@ const noop = (): void => {};
 function FilesView({ nodes }: { nodes: ProjectTreeNode[] }): React.ReactElement {
   const handlers = { onOpenFile: noop, onShowFileMenu: noop, onDragFile: noop };
   return (
-    <ProjectFilesPanel onLink={noop}>
+    <ProjectFilesPanel>
       <ProjectFolderSection folderPath={ROOT} nodes={nodes} onToggleFolder={noop} {...handlers} />
       <LinkedSection
         rows={LINKED_ROWS}

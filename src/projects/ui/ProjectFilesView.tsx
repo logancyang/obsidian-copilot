@@ -472,7 +472,7 @@ function UnlinkableRow({ name, onUnlink, children }: UnlinkableRowProps): React.
 }
 
 export interface ProjectFilesPanelProps {
-  onLink: (kind: LinkKind) => void;
+  onLink?: (kind: LinkKind) => void;
   children: React.ReactNode;
 }
 
@@ -483,12 +483,14 @@ export function ProjectFilesPanel({
   return (
     <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2">
       <AgentHomePreviewList>{children}</AgentHomePreviewList>
-      <LinkContextMenu onLink={onLink} />
+      {/* Linking happens only on the project home; the chat's project popover just shows the files.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/839 */}
+      {onLink && <LinkContextMenu onLink={onLink} />}
     </div>
   );
 }
 
-function LinkContextMenu({ onLink }: Pick<ProjectFilesPanelProps, "onLink">): React.ReactElement {
+function LinkContextMenu({ onLink }: { onLink: (kind: LinkKind) => void }): React.ReactElement {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -600,12 +602,12 @@ export function FilesDropOverlay(): React.ReactElement {
 
 interface ProjectFilesViewProps {
   projectId: string;
-  acceptsDrops?: boolean;
+  canLink?: boolean;
 }
 
 export function ProjectFilesView({
   projectId,
-  acceptsDrops = false,
+  canLink = false,
 }: ProjectFilesViewProps): React.ReactElement | null {
   const app = useApp();
   const startNoteDrag = useNoteDrag();
@@ -757,7 +759,7 @@ export function ProjectFilesView({
   // Drops link or copy only on the project home; in a chat's popover they looked too busy and aren't needed.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/839
   const acceptsDrag = (event: React.DragEvent): boolean =>
-    acceptsDrops && !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+    canLink && !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
 
   const dropOnFiles = (event: React.DragEvent): void => {
     if (!acceptsDrag(event)) return;
@@ -786,7 +788,7 @@ export function ProjectFilesView({
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
     <div
-      data-copilot-drop-zone={acceptsDrops || undefined}
+      data-copilot-drop-zone={canLink || undefined}
       className="tw-relative tw-flex tw-h-full tw-min-h-0 tw-flex-col"
       onDragOver={(event) => {
         if (!acceptsDrag(event)) return;
@@ -805,7 +807,7 @@ export function ProjectFilesView({
       }}
       onDrop={dropOnFiles}
     >
-      <ProjectFilesPanel onLink={(kind) => pickToLink[kind]()}>
+      <ProjectFilesPanel onLink={canLink ? (kind) => pickToLink[kind]() : undefined}>
         <ProjectFolderSection
           folderPath={folderPath}
           nodes={nodes}

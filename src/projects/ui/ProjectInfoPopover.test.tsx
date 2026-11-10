@@ -1,9 +1,3 @@
-const mockOpenFilePicker = jest.fn();
-
-jest.mock("@/projects/ui/ProjectFileSelectModal", () => ({
-  ProjectFileSelectModal: jest.fn().mockImplementation(() => ({ open: mockOpenFilePicker })),
-}));
-
 import { buildTurnFileChange } from "@/agentMode/session/turnFileChanges";
 import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
 import { ProjectInfoPanel, ProjectInfoPopover } from "@/projects/ui/ProjectInfoPopover";
@@ -196,23 +190,12 @@ describe("ProjectInfoPopover", () => {
       expect(sectionTitles()).toEqual(["Changed in this chat", "Project folder", "Linked"]);
     });
 
-    it("offers the same Link context menu below the popover's Files view, opening its pickers from the popover", () => {
+    it("offers no Link context, since linking happens only on the project home's Files tab — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
       const { app } = makeApp([projectFolderFixture()]);
       renderPopover(app, [turn("reply")]);
 
-      fireEvent.pointerDown(screen.getByRole("button", { name: "Link context" }), {
-        button: 0,
-        ctrlKey: false,
-      });
-      const menu = screen.getByRole("menu");
-      expect(
-        within(menu)
-          .getAllByRole("menuitem")
-          .map((item) => item.textContent)
-      ).toEqual(["Files", "Folders", "Tags", "Properties", "Link"]);
-      fireEvent.click(within(menu).getByRole("menuitem", { name: "Files" }));
-
-      expect(mockOpenFilePicker).toHaveBeenCalled();
+      expect(screen.getByRole("region", { name: "Linked" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Link context" })).toBeNull();
     });
 
     it("takes no drops on its Files view, so dragging a computer file over it neither highlights nor is claimed from the chat — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
