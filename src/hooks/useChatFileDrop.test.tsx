@@ -6,20 +6,29 @@ import React, { useEffect, useRef } from "react";
 interface FakeItem {
   kind: "string" | "file";
   file?: File;
+  text?: string;
 }
 
-function makeDataTransfer(items: FakeItem[]) {
+function makeDataTransfer(items: FakeItem[], isDispatching: () => boolean) {
   return {
     types: [] as string[],
     dropEffect: "",
-    items: items.map((item) => ({ kind: item.kind, getAsFile: () => item.file ?? null })),
+    items: items.map((item) => ({
+      kind: item.kind,
+      getAsFile: () => (isDispatching() ? (item.file ?? null) : null),
+      getAsString: (callback: (data: string) => void) => callback(item.text ?? ""),
+    })),
   };
 }
 
 function dispatchDrag(type: "dragOver" | "drop", target: HTMLElement, items: FakeItem[]): void {
   const event = createEvent[type](target, { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: makeDataTransfer(items) });
+  let dispatching = true;
+  Object.defineProperty(event, "dataTransfer", {
+    value: makeDataTransfer(items, () => dispatching),
+  });
   fireEvent(target, event);
+  dispatching = false;
 }
 
 interface HarnessProps {
@@ -72,10 +81,19 @@ describe("useChatFileDrop", () => {
       expect(overlay.textContent).toBe("idle");
     });
 
-    function dropExternalFile(name: string, type: string, acceptAnyFileType?: boolean) {
+    function dropExternalFile(
+      name: string,
+      type: string,
+      acceptAnyFileType?: boolean,
+      extraItems: FakeItem[] = []
+    ) {
       const copied = new (TFile as unknown as new (path: string) => TFile)(`attachments/${name}`);
       const app = {
-        vault: { adapter: {}, createBinary: jest.fn().mockResolvedValue(copied) },
+        vault: {
+          adapter: {},
+          createBinary: jest.fn().mockResolvedValue(copied),
+          getAbstractFileByPath: () => null,
+        },
         fileManager: {
           getAvailablePathForAttachment: jest.fn().mockResolvedValue(`attachments/${name}`),
         },
@@ -95,7 +113,7 @@ describe("useChatFileDrop", () => {
         />
       );
 
-      dispatchDrag("drop", getByTestId("overlay"), [{ kind: "file", file }]);
+      dispatchDrag("drop", getByTestId("overlay"), [...extraItems, { kind: "file", file }]);
 
       return { attached, copied };
     }
@@ -108,6 +126,14 @@ describe("useChatFileDrop", () => {
 
     it("attaches a dropped file of any type when any type is accepted, as in Agent Chat (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
       const { attached, copied } = dropExternalFile("brief.docx", "application/msword", true);
+
+      await expect(attached).resolves.toEqual([copied]);
+    });
+
+    it("attaches a dropped file whose drag also carries its name as text, as WeChat sends it (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { attached, copied } = dropExternalFile("report.pdf", "application/pdf", false, [
+        { kind: "string", text: "report.pdf" },
+      ]);
 
       await expect(attached).resolves.toEqual([copied]);
     });
