@@ -1187,7 +1187,7 @@ describe("ProjectFilesView", () => {
       expect(noticeMessages()).toEqual(["Linked #launch to the project"]);
     });
 
-    it("links the property pattern chosen from Link context's Properties picker and lists it as a property row", async () => {
+    it("links the property pattern chosen from Link context's Properties picker and lists it as a property row — https://github.com/Brevilabs/obsidian-copilot-private/issues/838", async () => {
       const { vault, brief } = taggedFixture();
       vault.setTags(brief, { frontmatter: { status: "active" } });
       renderView(vault);

@@ -519,6 +519,7 @@ export function LinkedSection({
             expanded={row.notes !== null}
             onActivate={() => handlers.onToggleFolder(row.pattern)}
           >
+            {/* Distinguish property queries from tags when both link matching notes. https://github.com/Brevilabs/obsidian-copilot-private/issues/838 */}
             <RowLabel
               icon={row.kind === "tag" ? Tag : SlidersHorizontal}
               name={row.label}
