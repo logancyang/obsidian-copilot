@@ -98,6 +98,30 @@ describe("attachToChat", () => {
       expect(notices()).toEqual(["Copied report.pdf into attachments/"]);
     });
 
+    it("names every file copied from one drop in a single notice (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app } = makeApp();
+      const targets = makeTargets();
+
+      await attachToChat(
+        app,
+        split({
+          vaultItems: [vaultFile("Notes/plan.md")],
+          outsideFiles: [
+            outsideFile("report.pdf", "application/pdf"),
+            outsideFile("brief.pdf", "application/pdf"),
+          ],
+        }),
+        targets.options
+      );
+
+      expect(targets.notes()).toEqual([
+        "Notes/plan.md",
+        "attachments/report.pdf",
+        "attachments/brief.pdf",
+      ]);
+      expect(notices()).toEqual(["Copied report.pdf, brief.pdf into attachments/"]);
+    });
+
     it("names the copy Obsidian made and says it went to the root of the vault when that is the attachment location (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
       const { app, fileManager } = makeApp();
       fileManager.getAvailablePathForAttachment.mockResolvedValueOnce("report 1.pdf");

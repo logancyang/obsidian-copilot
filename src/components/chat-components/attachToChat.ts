@@ -33,15 +33,26 @@ async function copyIntoVault(app: App, file: File): Promise<TFile> {
     file.name,
     app.workspace.getActiveFile()?.path
   );
-  const copy = await app.vault.createBinary(path, await file.arrayBuffer());
-  // Every file Copilot saves into the vault is announced with its name and folder, so nothing lands there unseen.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
-  const folder = copy.path.slice(0, copy.path.length - copy.name.length);
-  new Notice(`Copied ${copy.name} into ${folder || "the root of your vault"}`);
-  return copy;
+  return app.vault.createBinary(path, await file.arrayBuffer());
 }
 
-async function attachFile(app: App, file: TFile | File, options: AttachToChatOptions) {
+function announceCopies(copies: readonly TFile[]): void {
+  const namesByFolder = new Map<string, string[]>();
+  for (const copy of copies) {
+    const folder = copy.path.slice(0, copy.path.length - copy.name.length);
+    namesByFolder.set(folder, [...(namesByFolder.get(folder) ?? []), copy.name]);
+  }
+  for (const [folder, names] of namesByFolder) {
+    new Notice(`Copied ${names.join(", ")} into ${folder || "the root of your vault"}`);
+  }
+}
+
+async function attachFile(
+  app: App,
+  file: TFile | File,
+  options: AttachToChatOptions,
+  copies: TFile[]
+) {
   const extension = file instanceof TFile ? file.extension : getExtension(file.name);
   if (CHAT_IMAGE_EXTENSIONS.includes(extension)) {
     if (options.selectedImages.some((image) => image.name === file.name)) {
@@ -62,6 +73,7 @@ async function attachFile(app: App, file: TFile | File, options: AttachToChatOpt
   // A file from outside the vault reaches the agent only as a vault path, so it is copied to the attachment folder first.
   // https://github.com/logancyang/obsidian-copilot/issues/4043
   const note = file instanceof TFile ? file : await copyIntoVault(app, file);
+  if (note !== file) copies.push(note);
   if (options.contextNotes.some((existing) => existing.path === note.path)) {
     new Notice("This note is already in the context");
     return;
@@ -89,12 +101,16 @@ export async function attachToChat(
     ...incoming.vaultItems.filter((item): item is TFile => item instanceof TFile),
     ...incoming.outsideFiles,
   ];
+  const copies: TFile[] = [];
   for (const file of files) {
     try {
-      await attachFile(app, file, options);
+      await attachFile(app, file, options, copies);
     } catch (error) {
       logError(`[Chat] could not add ${file.name} to the vault`, error);
       new Notice(`Could not add ${file.name} to the vault.`);
     }
   }
+  // Every file Copilot saves into the vault is announced with its name and folder, once per drop or pick, so nothing lands there unseen.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
+  announceCopies(copies);
 }

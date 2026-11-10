@@ -10,7 +10,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - input-current-note: the open note or web tab shows as a `Current` badge that the user can remove.
 - input-selection: text selected in a note shows as a badge with the text and its line, such as `L3`; text selected in a [turn diff](turn-diffs.md) or a web page shows as a `Selection` badge.
 - input-images: paste or drop images to attach them; `Remove image` takes one off.
-- input-files: drop a note from the file explorer or a Copilot list such as [Relevant Notes](relevant-notes.md), drop a file of any type from the computer, or pick one through `Files`, to add it as context. A file from outside the vault is copied to the attachment folder first, and a notice names the copy and its folder.
+- input-files: drop a note from the file explorer or a Copilot list such as [Relevant Notes](relevant-notes.md), drop a file of any type from the computer, or pick one through `Files`, to add it as context. A file from outside the vault is copied to the attachment folder first; one notice per drop names the copies and their folder.
 - input-commands: `/` lists `compact` ("Summarize this chat to free up context"), the agent's skills, and custom commands.
 - input-model-effort: `Model · effort` lists models grouped by agent, with an Effort slider; the choice applies when the picker closes.
 - input-mode: `Mode` picks `Safe`, `Plan`, or `Auto`; Shift+Tab cycles through them.
