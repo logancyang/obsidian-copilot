@@ -72,6 +72,17 @@ describe("configuredModelToCustomModel", () => {
       ).toBe(ChatModelProviders.OPENAI_FORMAT);
     });
 
+    it("maps the Perplexity Agent provider to the Responses API OpenAI provider because its Agent API has no Chat Completions route (https://github.com/logancyang/obsidian-copilot/issues/2922)", () => {
+      expect(
+        mapProviderTypeToChatModelProvider(
+          provider({
+            baseUrl: "https://api.perplexity.ai/v1",
+            origin: { kind: "byok", catalogProviderId: "perplexity-agent" },
+          })
+        )
+      ).toBe(ChatModelProviders.OPENAI);
+    });
+
     it("maps Copilot Plus providers to the dedicated Plus constructor", () => {
       expect(
         mapProviderTypeToChatModelProvider(
@@ -143,6 +154,34 @@ describe("configuredModelToCustomModel", () => {
 
       expect(openAiCompatible.maxTokens).toBeUndefined();
       expect(anthropicWithoutLimits.maxTokens).toBeUndefined();
+    });
+
+    it("sends the default output limit to every Perplexity Agent model because the Agent API rejects Claude models without one (https://github.com/logancyang/obsidian-copilot/issues/2922)", () => {
+      const perplexityAgent = provider({
+        baseUrl: "https://api.perplexity.ai/v1",
+        origin: { kind: "byok", catalogProviderId: "perplexity-agent" },
+      });
+      const claude = configuredModelToCustomModel({
+        provider: perplexityAgent,
+        configuredModel: configuredModel({
+          info: { id: "anthropic/claude-sonnet-5-5", displayName: "Claude Sonnet 5.5" },
+        }),
+        apiKey: "pplx",
+      });
+      const gpt = configuredModelToCustomModel({
+        provider: perplexityAgent,
+        configuredModel: configuredModel({
+          info: {
+            id: "openai/gpt-5.5",
+            displayName: "GPT-5.5",
+            limits: { context: 1050000, output: 128000 },
+          },
+        }),
+        apiKey: "pplx",
+      });
+
+      expect(claude.maxTokens).toBe(DEFAULT_MAX_OUTPUT_TOKENS);
+      expect(gpt.maxTokens).toBe(DEFAULT_MAX_OUTPUT_TOKENS);
     });
 
     it("carries the provider base URL onto the custom model", () => {

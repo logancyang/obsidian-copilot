@@ -21,6 +21,9 @@ export const CATALOG_ID_TO_CHAT_PROVIDER: Record<string, ChatModelProviders> = {
   siliconflow: ChatModelProviders.SILICONFLOW,
   anthropic: ChatModelProviders.ANTHROPIC,
   google: ChatModelProviders.GOOGLE,
+  // Perplexity's Agent API serves only the Responses API; Chat Completions returns 404.
+  // https://github.com/logancyang/obsidian-copilot/issues/2922
+  "perplexity-agent": ChatModelProviders.OPENAI,
 };
 
 export function mapProviderTypeToChatModelProvider(provider: Provider): ChatModelProviders {
@@ -62,7 +65,7 @@ function extraString(extras: Record<string, unknown>, key: string): string | und
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-// `maxTokens` is set only for Anthropic, the one provider that rejects a request without one;
+// `maxTokens` is set only for providers that reject a request without one;
 // elsewhere a limit can push prompt plus output past the context window:
 // https://github.com/logancyang/obsidian-copilot-preview/issues/312
 export function configuredModelToCustomModel(params: {
@@ -78,8 +81,12 @@ export function configuredModelToCustomModel(params: {
   const requiresApiKey = providerNeedsResolvedApiKey(provider) || !!trimmedKey;
 
   const chatProvider = mapProviderTypeToChatModelProvider(provider);
+  // Perplexity's Agent API rejects every Anthropic model sent without an output limit.
+  // https://github.com/logancyang/obsidian-copilot/issues/2922
+  const isPerplexityAgent =
+    provider.origin.kind === "byok" && provider.origin.catalogProviderId === "perplexity-agent";
   const maxTokens =
-    chatProvider === ChatModelProviders.ANTHROPIC && info.limits?.output
+    (chatProvider === ChatModelProviders.ANTHROPIC && info.limits?.output) || isPerplexityAgent
       ? DEFAULT_MAX_OUTPUT_TOKENS
       : undefined;
 
