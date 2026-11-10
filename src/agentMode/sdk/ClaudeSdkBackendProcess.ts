@@ -49,7 +49,7 @@ import { createClaudeTaskPlanState, type ClaudeTaskPlanState } from "./claudeTod
 import { ClaudeLiveQuery } from "./claudeLiveQuery";
 import {
   createTranslatorState,
-  replayClaudeTranscript,
+  createClaudeTranscriptReplay,
   type TranslatorState,
 } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
@@ -558,10 +558,16 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     const claudeTaskPlan = createClaudeTaskPlanState();
     const opened = await this.reopenSession("loadSession", params, claudeTaskPlan);
-    const transcript = await this.readTranscript(params.sessionId, params.cwd);
-    for (const event of replayClaudeTranscript(transcript, params.sessionId, claudeTaskPlan)) {
-      this.dispatchEvent(event);
+    const replay = createClaudeTranscriptReplay(params.sessionId, claudeTaskPlan);
+    try {
+      for await (const line of await this.transcriptLines(params.sessionId, params.cwd)) {
+        for (const event of replay.line(line)) this.dispatchEvent(event);
+      }
+    } catch (err) {
+      // An unreadable transcript still reopens the chat, with whatever it read, so the user can keep talking to it. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
+      logWarn(`[AgentMode] could not read Claude transcript for ${params.sessionId}`, err);
     }
+    for (const event of replay.finish()) this.dispatchEvent(event);
     return opened;
   }
 
@@ -600,15 +606,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     return { sessionId: params.sessionId, state };
   }
 
-  private async readTranscript(sessionId: SessionId, cwd: string): Promise<string> {
-    try {
-      const { readFile } = requireNodeModule<typeof import("node:fs/promises")>("fs/promises");
-      return await readFile(await this.claudeTranscriptPath(sessionId, cwd), "utf8");
-    } catch (err) {
-      // An unreadable transcript still reopens the chat, empty, so the user can keep talking to it. https://github.com/Brevilabs/obsidian-copilot-private/issues/643
-      logWarn(`[AgentMode] could not read Claude transcript for ${sessionId}`, err);
-      return "";
-    }
+  private async transcriptLines(sessionId: SessionId, cwd: string): Promise<AsyncIterable<string>> {
+    const { createReadStream } = requireNodeModule<typeof import("node:fs")>("fs");
+    const { createInterface } = requireNodeModule<typeof import("node:readline")>("readline");
+    const input = createReadStream(await this.claudeTranscriptPath(sessionId, cwd), "utf8");
+    return createInterface({ input, crlfDelay: Infinity });
   }
 
   async shutdown(): Promise<void> {
