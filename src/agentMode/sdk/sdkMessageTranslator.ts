@@ -597,7 +597,7 @@ function makeToolCallUpdate(
 
 function toolResultText(content: unknown): string {
   return (toolResultContent(content) ?? [])
-    .map((c) => (c.type === "content" ? c.content.text : ""))
+    .map((c) => (c.type === "content" && c.content.type === "text" ? c.content.text : ""))
     .join("\n");
 }
 
@@ -608,9 +608,24 @@ function toolResultContent(content: unknown): ToolCallContent[] | undefined {
   if (!Array.isArray(content)) return undefined;
   const out: ToolCallContent[] = [];
   for (const block of content) {
-    const b = block as { type?: string; text?: unknown };
+    const b = block as {
+      type?: string;
+      text?: unknown;
+      source?: { type?: unknown; media_type?: unknown; data?: unknown };
+    };
     if (b.type === "text" && typeof b.text === "string") {
       out.push({ type: "content", content: { type: "text", text: b.text } });
+    } else if (
+      b.type === "image" &&
+      b.source?.type === "base64" &&
+      typeof b.source.media_type === "string" &&
+      typeof b.source.data === "string"
+    ) {
+      // Claude returns image reads as base64 blocks alongside result text. https://github.com/logancyang/obsidian-copilot/issues/4227
+      out.push({
+        type: "content",
+        content: { type: "image", mimeType: b.source.media_type, data: b.source.data },
+      });
     }
   }
   return out.length > 0 ? out : undefined;

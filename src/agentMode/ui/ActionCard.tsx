@@ -1,3 +1,4 @@
+import { ToolImagePreviews } from "@/agentMode/ui/ToolImagePreviews";
 import React, { useMemo } from "react";
 import { CircleStop, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
@@ -52,6 +53,11 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
           <span className="tw-truncate">{line}</span>
         )
       }
+      secondary={
+        outputs.some((output) => output.type === "image") ? (
+          <ToolImagePreviews outputs={outputs} label={part.title} />
+        ) : undefined
+      }
       trailing={<StatusBadge status={part.status} />}
       expandable={expandable}
       open={open}
@@ -63,25 +69,27 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         </pre>
       ) : null}
       {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
-      {outputs.map((o, i) =>
-        o.type === "text" ? (
-          <pre
-            // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-            key={`text-${i}`}
-            className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
-          >
-            {o.text}
-          </pre>
-        ) : (
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
-          <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
-            <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
-            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-              {renderDiff(o.oldText, o.newText)}
+      {outputs
+        .filter((o) => o.type !== "image")
+        .map((o, i) =>
+          o.type === "text" ? (
+            <pre
+              // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
+              key={`text-${i}`}
+              className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
+            >
+              {o.text}
             </pre>
-          </div>
-        )
-      )}
+          ) : (
+            // eslint-disable-next-line @eslint-react/no-array-index-key -- tool outputs are append-only; index is stable
+            <div key={`diff-${i}-${o.path}`} className="tw-rounded tw-bg-secondary-alt tw-p-1">
+              <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
+              <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
+                {renderDiff(o.oldText, o.newText)}
+              </pre>
+            </div>
+          )
+        )}
     </AgentActivityCard>
   );
 };
