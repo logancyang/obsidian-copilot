@@ -1,7 +1,3 @@
-jest.mock("@/projects/ui/context-manage-modal", () => ({
-  ContextManageModal: jest.fn().mockImplementation(() => ({ open: jest.fn() })),
-}));
-
 jest.mock("@/projects/ProjectFileManager", () => ({
   ProjectFileManager: { getInstance: jest.fn() },
 }));

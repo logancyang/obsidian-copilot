@@ -11,6 +11,7 @@ import {
   getNotesWithProperty,
   isFileIncluded,
   getNotesWithTag,
+  getPropertyLabel,
   getPropertyPattern,
   getSystemExcludedFolders,
   isInternalExcludedPath,
@@ -729,6 +730,20 @@ describe("searchUtils", () => {
 
     it("returns [key:] when value is empty string", () => {
       expect(getPropertyPattern("Topics", "")).toBe("[Topics:]");
+    });
+  });
+
+  describe("getPropertyLabel()", () => {
+    it("labels a property pattern as `key: value`", () => {
+      expect(getPropertyLabel("[Topics:Physics]")).toBe("Topics: Physics");
+    });
+
+    it("labels a key-only property pattern as `key: (any)`", () => {
+      expect(getPropertyLabel("[Topics:]")).toBe("Topics: (any)");
+    });
+
+    it("returns the raw pattern when it is not a property pattern", () => {
+      expect(getPropertyLabel("not-a-property")).toBe("not-a-property");
     });
   });
 

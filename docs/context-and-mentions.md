@@ -62,14 +62,11 @@ Agent mentions select OpenCode, Claude, or Codex. They are different from note, 
 
 ## Reuse context with Projects
 
-For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab to link them, or select **Link context** beside **Linked** to link files, folders, tags, properties, or a web or YouTube link. Dropping on the message box attaches the item to that message only. Add other saved context under **Context sources** in **Project settings**:
-
-- select **URL** to add a web page or YouTube video; or
-- select **Manage context** to add links, tags, properties, folders, files, and ignored files.
+For material that should be prepared for more than one chat, create a [Project](projects.md). Drag notes and folders onto the Project's **Files** tab to link them, or select **Link context** beside **Linked** to link files, folders, tags, properties, or a web or YouTube link. Dropping on the message box attaches the item to that message only.
 
 Project context is prepared for every new chat in that Project. If preparation is still running when you send a message, Copilot queues the message and starts it when the context is ready.
 
-Saved context is a focus aid, not a permission boundary. The agent can still inspect other files available through its tools. **Ignore files** excludes files from prepared Project context but does not block an agent from reading them.
+Saved context is a focus aid, not a permission boundary. The agent can still inspect other files available through its tools. To keep the agent away from a folder, say so in the Project's instructions (`AGENTS.md`).
 
 One-turn attachments remain one-turn attachments inside a Project. Start a new Project chat after changing saved context or Project instructions when you want the latest version applied.
 

@@ -11,7 +11,8 @@ import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
-import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
+import { getProjectLinkPatterns } from "@/projects/projectLinks";
+import { isFileIncluded } from "@/search/searchUtils";
 import { App, MarkdownView, type TFile } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -68,17 +69,14 @@ export function useChatRelevantNotesContext(
   // Project files would drown out what the user writes, so they only seed a project chat that
   // has no text yet.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
-  const projectSource =
-    project && !draft.input.trim() && conversation.length === 0 ? project.contextSource : undefined;
+  const linkedProject =
+    project && !draft.input.trim() && conversation.length === 0 ? project : undefined;
   const projectFiles = useMemo(() => {
-    if (!projectSource) return NO_FILES;
-    const { inclusions, exclusions } = getMatchingPatterns({ ...projectSource, isProject: true });
-    return inclusions
-      ? app.vault
-          .getFiles()
-          .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+    const linkPatterns = getProjectLinkPatterns(linkedProject);
+    return linkPatterns
+      ? app.vault.getFiles().filter((file) => isFileIncluded(app, file, linkPatterns))
       : NO_FILES;
-  }, [app, projectSource]);
+  }, [app, linkedProject]);
   const files = [
     ...contexts.flatMap((context) => context.notes),
     ...draft.contextNotes,
