@@ -4,14 +4,18 @@ import { type ProjectConfig } from "@/aiParams";
 import { useSelectedTextContexts } from "@/selection/selectionStore";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 import { useActiveFile } from "@/hooks/useActiveFile";
-import { getMiyoFilePath, getMiyoFolderName } from "@/miyo/miyoUtils";
+import { RELATED_CONTEXT_MAX_FILE_PATHS } from "@/miyo/MiyoClient";
+import { getMiyoFilePath } from "@/miyo/miyoUtils";
+import { useMiyoFolderName } from "@/miyo/useMiyoFolderName";
 import {
   getChatRelevantNotesStore,
   type ChatRelevantNotesContext,
 } from "@/search/chatRelevantNotesContext";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { App, MarkdownView } from "obsidian";
+import { App, MarkdownView, type TFile } from "obsidian";
 import { useEffect, useMemo, useRef } from "react";
+
+const NO_FILES: readonly TFile[] = Object.freeze([]);
 
 export function useChatRelevantNotesContext(
   app: App,
@@ -19,25 +23,15 @@ export function useChatRelevantNotesContext(
   id: string,
   draft: AgentInputDraftControls,
   messages: AgentChatMessage[],
-  project: ProjectConfig | undefined
+  project?: ProjectConfig
 ): void {
   const store = getChatRelevantNotesStore(app);
   const activeFile = useActiveFile();
+  const miyoFolderName = useMiyoFolderName(app);
   const selections = useSelectedTextContexts();
   // New chats include the web tab by default, which is not an attachment until a page is open.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/667
   const { activeWebTabForMentions } = useActiveWebTabState();
-  const projectFiles = useMemo(() => {
-    const { inclusions, exclusions } = getMatchingPatterns({
-      ...project?.contextSource,
-      isProject: true,
-    });
-    return inclusions
-      ? app.vault
-          .getFiles()
-          .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
-      : [];
-  }, [app, project?.contextSource]);
   // The unfinished assistant tail belongs to the running turn. Derive that
   // boundary on mount and session changes instead of retaining partial text.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/383
@@ -49,41 +43,62 @@ export function useChatRelevantNotesContext(
   const contexts = [...history, ...queued].flatMap((message) =>
     message.context ? [message.context] : []
   );
+  const conversation = [
+    ...history
+      .filter(
+        (message) =>
+          message.isVisible &&
+          !message.isErrorMessage &&
+          (message.sender === "user" || message.sender === "AI")
+      )
+      .map((message) => ({
+        role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
+        content: message.parts
+          ? message.parts
+              .filter((part) => part.kind === "text")
+              .map((part) => part.text)
+              .join("\n")
+          : message.message,
+      }))
+      .filter((message) => message.content.trim()),
+    ...queued
+      .filter((message) => message.rawInput.trim())
+      .map((message) => ({ role: "user" as const, content: message.rawInput })),
+  ];
+  // Project files would drown out what the user writes, so they only seed a project chat that
+  // has no text yet.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
+  const projectSource =
+    project && !draft.input.trim() && conversation.length === 0 ? project.contextSource : undefined;
+  const projectFiles = useMemo(() => {
+    if (!projectSource) return NO_FILES;
+    const { inclusions, exclusions } = getMatchingPatterns({ ...projectSource, isProject: true });
+    return inclusions
+      ? app.vault
+          .getFiles()
+          .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
+      : NO_FILES;
+  }, [app, projectSource]);
   const files = [
-    ...projectFiles,
     ...contexts.flatMap((context) => context.notes),
     ...draft.contextNotes,
     ...(draft.includeActiveNote && activeFile ? [activeFile] : []),
+    ...projectFiles,
   ];
   const snapshot = {
-    folder_name: getMiyoFolderName(app),
-    messages: [
-      ...history
-        .filter(
-          (message) =>
-            message.isVisible &&
-            !message.isErrorMessage &&
-            (message.sender === "user" || message.sender === "AI")
-        )
-        .map((message) => ({
-          role: message.sender === "user" ? ("user" as const) : ("assistant" as const),
-          content: message.parts
-            ? message.parts
-                .filter((part) => part.kind === "text")
-                .map((part) => part.text)
-                .join("\n")
-            : message.message,
-        }))
-        .filter((message) => message.content.trim()),
-      ...queued
-        .filter((message) => message.rawInput.trim())
-        .map((message) => ({ role: "user" as const, content: message.rawInput })),
-    ],
+    folder_name: miyoFolderName,
+    messages: conversation,
     draft: draft.input,
     excerpts: [...contexts.flatMap((context) => context.selectedTextContexts ?? []), ...selections]
       .map((selection) => selection.content)
       .filter((text) => text.trim()),
-    file_paths: [...new Set(files.map((file) => getMiyoFilePath(app, file.path)))],
+    // Miyo rejects the whole request past its path limit, so a chat carrying more notes keeps
+    // its first ones.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/845
+    file_paths: [...new Set(files.map((file) => getMiyoFilePath(app, file.path)))].slice(
+      0,
+      RELATED_CONTEXT_MAX_FILE_PATHS
+    ),
     limit: 20,
   };
   // Sent images remain unsupported after the composer resets into chat history.

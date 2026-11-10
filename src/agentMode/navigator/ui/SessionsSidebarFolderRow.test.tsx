@@ -13,6 +13,7 @@ function renderFolderRow(
     project: sidebarProject("garden", "Garden plans"),
     expanded: false,
     active: false,
+    current: false,
     hiddenStatus: "idle" as const,
     onToggle: jest.fn(),
     onNewChat: jest.fn(),
@@ -90,6 +91,41 @@ describe("SessionsSidebarFolderRow", () => {
 
       expect(screen.getByText("Garden plans").className).toContain("tw-font-semibold");
     });
+
+    it.each([
+      [
+        "dims the name when the current chat is elsewhere and nothing hidden needs the user",
+        false,
+        "idle",
+        "tw-text-muted",
+      ],
+      ["dims the name while a hidden chat only runs", false, "running", "tw-text-muted"],
+      [
+        "brightens the name when the current chat or project page is in the project",
+        true,
+        "idle",
+        "tw-text-normal",
+      ],
+      [
+        "brightens the name when a hidden chat waits for permission",
+        false,
+        "waiting",
+        "tw-text-normal",
+      ],
+      [
+        "brightens the name when a hidden chat has an unseen result",
+        false,
+        "unread",
+        "tw-text-normal",
+      ],
+    ] as const)(
+      "%s for https://github.com/Brevilabs/obsidian-copilot-private/issues/890",
+      (_title, current, hiddenStatus, colorClass) => {
+        renderFolderRow({ current, hiddenStatus });
+
+        expect(screen.getByText("Garden plans").classList.contains(colorClass)).toBe(true);
+      }
+    );
 
     it("keeps the bubbled status's space and overlays the chevron on it, so hovering moves nothing, for https://github.com/Brevilabs/obsidian-copilot-private/issues/802", () => {
       renderFolderRow({ hiddenStatus: "waiting" });

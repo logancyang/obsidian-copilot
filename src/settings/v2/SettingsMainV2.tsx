@@ -1,7 +1,11 @@
 import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 import { Button } from "@/components/ui/button";
 import { MiyoLogo } from "@/miyo/ui/MiyoLogo";
-import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import {
+  SettingTabStrip,
+  TabContent,
+  type TabItem as TabItemType,
+} from "@/components/ui/setting-tabs";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
@@ -11,7 +15,11 @@ import { resetSettings } from "@/settings/model";
 import { COPILOT_SETTINGS_TAB_IDS, type CopilotSettingsTabId } from "@/settings/settingsTabs";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, ShieldCheck, Sparkle, Wrench } from "lucide-react";
+import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings";
+import { useIsConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
+import { usePlugin } from "@/contexts/PluginContext";
+import { Cog, Command, Cpu, Plug, ShieldCheck, Sparkle, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
@@ -43,6 +51,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   selfhost: <ShieldCheck className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
+  connectors: <Plug className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -53,6 +62,7 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   selfhost: () => <SelfHostSettings />,
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
+  connectors: ConnectorsSettings,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -63,6 +73,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   selfhost: "Self-Host",
   command: "Commands",
   skills: "Skills",
+  connectors: "Connectors",
   advanced: "Advanced",
 };
 
@@ -75,28 +86,30 @@ const tabs = COPILOT_SETTINGS_TAB_IDS.map((id) => ({
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
   const skillLoadErrorCount = useSkillLoadErrorCount();
+  const connectorsSnapshot = useConnectorsSnapshot(usePlugin().connectionManager);
+  const connectorsEnabled = useIsConnectorsEnabled();
+  const connectorsNeedAttention =
+    connectorsSnapshot?.needsAttention === true && connectorsEnabled !== false;
 
   return (
     <div className="tw-flex tw-flex-col">
-      <div className="tw-flex tw-flex-wrap tw-rounded-lg">
-        {tabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={{
-              ...tab,
-              // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
-              // The tab strip stays mounted while inactive panels do not, so
-              // load failures remain visible from every settings section.
-              warningLabel:
-                tab.id === "skills" && skillLoadErrorCount > 0
-                  ? "Some skills failed to load"
-                  : undefined,
-            }}
-            isSelected={selectedTab === tab.id}
-            onClick={() => setSelectedTab(tab.id)}
-          />
-        ))}
-      </div>
+      <SettingTabStrip
+        tabs={tabs.map((tab) => ({
+          ...tab,
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/166
+          // The tab strip stays mounted while inactive panels do not, so
+          // load failures remain visible from every settings section.
+          warningLabel:
+            tab.id === "skills" && skillLoadErrorCount > 0
+              ? "Some skills failed to load"
+              : tab.id === "connectors" && connectorsNeedAttention
+                ? "You have connectors that need your attention"
+                : undefined,
+          warningTone: tab.id === "connectors" ? "error" : "warning",
+        }))}
+        selectedId={selectedTab}
+        onSelect={setSelectedTab}
+      />
       <div className="tw-w-full tw-border tw-border-solid" />
 
       <div>

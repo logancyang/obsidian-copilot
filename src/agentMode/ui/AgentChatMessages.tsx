@@ -2,11 +2,13 @@ import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
-import { FeedbackCard, findFeedbackCardIndex } from "@/agentMode/ui/FeedbackCard";
-import { openReportIssueModal } from "@/agentMode/ui/ReportIssueModal";
-import { formatFeedbackNote, type FeedbackOffer } from "@/agentMode/session/feedback/feedbackOffer";
-import { setSettings } from "@/settings/model";
+import { placeChatCards } from "@/agentMode/ui/chatCards";
+import { CHAT_CARD_SLOTS } from "@/agentMode/ui/chatCardSlots";
+import type { ChatStates } from "@/agentMode/session/chatExtension";
+import type CopilotPlugin from "@/main";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
+import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
@@ -15,6 +17,7 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
+import { useTailPaging } from "@/hooks/useTailPaging";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
@@ -25,21 +28,21 @@ import type {
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
-import { App, Plugin } from "obsidian";
-import React, { memo, useMemo } from "react";
+import { App } from "obsidian";
+import React, { memo, useCallback, useMemo } from "react";
 
 const EMPTY_PARTS = Object.freeze([]) as unknown as AgentMessagePart[];
 
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
-  plugin: Pick<Plugin, "app" | "manifest">;
+  plugin: CopilotPlugin;
   sourcePath?: string;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
-  feedbackOffer: FeedbackOffer | null;
+  chatStates: ChatStates;
 }
 
 function toChatMessageView(m: AgentChatMessage): ChatMessage {
@@ -57,10 +60,10 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 
 // A permission card names the tool its request omits from the chat's own tool call.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
-function findToolCallTitle(messages: AgentChatMessage[], toolCallId: string): string | undefined {
+function findToolCall(messages: AgentChatMessage[], toolCallId: string): ToolCallPart | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const part = messages[i].parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
-    if (part?.kind === "tool_call") return part.title;
+    if (part?.kind === "tool_call") return part;
   }
   return undefined;
 }
@@ -174,11 +177,17 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
-    feedbackOffer,
+    chatStates,
   }: AgentChatMessagesProps) => {
     const { app } = plugin;
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
+    const isUserMessageAt = useCallback(
+      (index: number) => visible[index]?.sender === USER_SENDER,
+      [visible]
+    );
+    // Rendering a long chat all at once on reopen exhausted Obsidian's memory; older turns load as the user scrolls up. https://github.com/logancyang/obsidian-copilot/issues/4248
+    const { first, sentinelRef } = useTailPaging(visible.length, isUserMessageAt);
     const {
       scrollContainerCallbackRef,
       contentCallbackRef,
@@ -194,12 +203,25 @@ const AgentChatMessages = memo(
     ) : null;
     const pendingQuestion = pendingAskUserQuestions[0];
     const pendingPermission = pendingQuestion ? undefined : pendingToolPermissions[0];
-    const pendingToolName = useMemo(
+    const pendingToolCall = useMemo(
       () =>
         pendingPermission
-          ? findToolCallTitle(messages, pendingPermission.toolCall.toolCallId)
+          ? findToolCall(messages, pendingPermission.toolCall.toolCallId)
           : undefined,
       [messages, pendingPermission]
+    );
+    const pendingCopilotTool = toolUseLabel(pendingToolCall?.copilotTools);
+    // A connector tool's request names it by the service's id, which users don't know.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
+    const pendingRequest = useMemo(
+      () =>
+        pendingPermission && pendingCopilotTool
+          ? {
+              ...pendingPermission,
+              toolCall: { ...pendingPermission.toolCall, title: pendingCopilotTool },
+            }
+          : pendingPermission,
+      [pendingPermission, pendingCopilotTool]
     );
     const tasks = useAgentTasks();
     const pendingRequester =
@@ -215,33 +237,16 @@ const AgentChatMessages = memo(
         ? `permission:${pendingPermission.toolCall.toolCallId}`
         : null;
 
-    const feedbackCardIndex = useMemo(
-      () => findFeedbackCardIndex(visible, feedbackOffer),
-      [visible, feedbackOffer]
-    );
-    const feedbackCard = useMemo(
+    const chatCards = useMemo(
       () =>
-        feedbackOffer ? (
-          <FeedbackCard
-            offer={feedbackOffer}
-            onReview={() =>
-              openReportIssueModal(plugin, {
-                activeBackend: feedbackOffer.evidence.backendId,
-                initialNote: formatFeedbackNote(feedbackOffer),
-                preselectAllSources: true,
-                onReported: (report) => chatBackend.markFeedbackReported(report),
-              })
-            }
-            onDismiss={() => chatBackend.dismissFeedbackOffer()}
-            onTurnOff={() => {
-              setSettings((cur) => ({
-                agentMode: { ...cur.agentMode, offerFeedbackCards: false },
-              }));
-              chatBackend.dismissFeedbackOffer();
-            }}
-          />
-        ) : null,
-      [feedbackOffer, plugin, chatBackend]
+        placeChatCards(
+          visible,
+          messages,
+          chatStates,
+          { plugin, chat: chatBackend },
+          CHAT_CARD_SLOTS
+        ),
+      [visible, messages, chatStates, plugin, chatBackend]
     );
 
     const latestAssistant = useMemo(() => lastAssistant(visible), [visible]);
@@ -258,7 +263,16 @@ const AgentChatMessages = memo(
           isScrollPaused={isScrollPaused}
           scrollToEnd={scrollToEnd}
         >
+          {first > 0 ? (
+            // The marker must not be the scroll anchor, or the view jumps when earlier turns load above it. https://github.com/logancyang/obsidian-copilot/issues/4248
+            <div
+              ref={sentinelRef}
+              aria-hidden="true"
+              className="tw-h-px tw-w-full [overflow-anchor:none]"
+            />
+          ) : null}
           {visible.map((message, index) => {
+            if (index < first) return null;
             return (
               <AgentMessageRow
                 key={getMessageKey(adapted[index], index)}
@@ -269,7 +283,7 @@ const AgentChatMessages = memo(
                   message.sender !== USER_SENDER && message.id === latestAssistant?.id
                 }
                 isStreaming={message.id === streamingMessageId}
-                trailingCard={index === feedbackCardIndex ? feedbackCard : undefined}
+                trailingCard={chatCards.get(index)}
               />
             );
           })}
@@ -294,10 +308,10 @@ const AgentChatMessages = memo(
                   request={pendingQuestion}
                   onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
                 />
-              ) : pendingPermission ? (
+              ) : pendingRequest ? (
                 <ToolPermissionCard
-                  request={pendingPermission}
-                  toolName={pendingToolName}
+                  request={pendingRequest}
+                  toolName={pendingCopilotTool ? undefined : pendingToolCall?.title}
                   requester={pendingRequester}
                   onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
                 />

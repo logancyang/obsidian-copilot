@@ -1,5 +1,6 @@
 import type { BackendId, TurnDiff } from "@/agentMode/session/types";
 import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
 export interface AcpSpawnDescriptor {
   command: string;
@@ -19,4 +20,5 @@ export interface AcpBackend {
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
+  readCopilotTools?(rawInput: unknown, toolName?: string): CopilotToolUse | null;
 }

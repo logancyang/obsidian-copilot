@@ -4,11 +4,15 @@ import type { ModelCapability } from "@/constants";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 import type { FanoutTurn } from "@/agentMode/session/fanout/fanoutTypes";
 import type { PlanUsage } from "@/agentMode/session/planUsage";
+import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
 export type { PlanUsage, UsageWindow } from "@/agentMode/session/planUsage";
 import type { ProjectScopeId } from "./scope";
 
 export type {
+  ApprovedRule,
+  ApprovedRuleScope,
+  ApprovedRuleStore,
   BackendAuth,
   BackendAuthStatus,
   BackendDescriptor,
@@ -194,6 +198,8 @@ export type AgentToolKind =
 export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
 export type AgentToolCallOutput =
+  | { type: "image"; mimeType: string; data: string }
+  | { type: "image_pending"; key: string }
   | { type: "text"; text: string }
   | { type: "diff"; path: string; oldText: string | null; newText: string };
 
@@ -226,6 +232,7 @@ export interface ToolCallSnapshot {
   locations?: Array<{ path: string; line?: number | null }>;
   vendorToolName?: string;
   mcpServer?: string;
+  copilotTools?: CopilotToolUse;
   parentToolCallId?: string;
   progress?: AgentToolProgress;
   isPlanProposal?: boolean;
@@ -242,13 +249,17 @@ export interface ToolCallDelta {
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
   mcpServer?: string;
+  copilotTools?: CopilotToolUse;
   parentToolCallId?: string;
   progress?: AgentToolProgress;
   isPlanProposal?: boolean;
 }
 
 export type ToolCallContent =
-  | { type: "content"; content: { type: "text"; text: string } }
+  | {
+      type: "content";
+      content: { type: "text"; text: string } | { type: "image"; mimeType: string; data: string };
+    }
   | { type: "diff"; path: string; oldText?: string | null; newText: string };
 
 export interface PlanSummary {
@@ -535,6 +546,7 @@ export type AgentMessagePart =
       locations?: { path: string; line?: number }[];
       vendorToolName?: string;
       mcpServer?: string;
+      copilotTools?: CopilotToolUse;
       parentToolCallId?: string;
       progress?: AgentToolProgress;
     }

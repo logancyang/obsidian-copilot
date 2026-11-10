@@ -1,6 +1,7 @@
 import { parseVersionFromStdout, verifyOpencodeBinary } from "./OpencodeBinaryManager";
 import { assertBinaryCompatible } from "@/agentMode/backends/shared/binaryCompatibility";
 import { OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
+import { readOpencodeCopilotTools } from "./opencodeCopilotToolCalls";
 import { ChatModelProviders } from "@/constants";
 import { logInfo } from "@/logger";
 import type { App } from "obsidian";
@@ -25,6 +26,7 @@ import { CopilotPlusUsageReader } from "@/agentMode/backends/shared/copilotPlusU
 import type { SelfHostWebSearchAgentChannel } from "@/LLMProviders/selfHostServices";
 import type { Config } from "@opencode/schema/config";
 import { installOpencodeCopilotPlugin } from "./opencodeCopilotPlugin";
+import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
 
 export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> = {
   [ChatModelProviders.ANTHROPIC]: "anthropic",
@@ -54,11 +56,13 @@ export interface OpencodeModelDeps {
   clientVersion?: string;
   getCopilotPluginDir?: () => string;
   getSelfHostWebSearchChannel?: () => Promise<Readonly<SelfHostWebSearchAgentChannel>>;
+  readCopilotReadOnlyToolNames?: () => Promise<ReadonlyArray<string>>;
 }
 
 export class OpencodeBackend implements AcpBackend {
   readonly id = "opencode" as const;
   readonly displayName = "opencode";
+  readonly readCopilotTools = readOpencodeCopilotTools;
 
   readonly #deps: OpencodeModelDeps;
 
@@ -106,20 +110,12 @@ export class OpencodeBackend implements AcpBackend {
     );
     const configOverride = envOverrides.OPENCODE_CONFIG_CONTENT;
     delete envOverrides.OPENCODE_CONFIG_CONTENT;
+    const pluginDir =
+      this.#deps.getCopilotPluginDir &&
+      (await installOpencodeCopilotPlugin(this.#deps.getCopilotPluginDir()));
     let configContent =
-      configOverride ??
-      JSON.stringify(
-        await buildOpencodeConfig(
-          settings,
-          this.#deps,
-          this.#deps.getCopilotPluginDir &&
-            (await installOpencodeCopilotPlugin(this.#deps.getCopilotPluginDir()))
-        )
-      );
-    if (settings.enableSelfHostMode === true && configOverride !== undefined) {
-      // An explicit config override must not reopen agent-native web tools while
-      // Self-Host mode promises that queries stay on the configured route.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/558
+      configOverride ?? JSON.stringify(await buildOpencodeConfig(settings, this.#deps, pluginDir));
+    if (configOverride !== undefined && (pluginDir || settings.enableSelfHostMode === true)) {
       let overriddenConfig: Record<string, unknown>;
       try {
         const parsed = JSON.parse(configOverride) as unknown;
@@ -128,18 +124,17 @@ export class OpencodeBackend implements AcpBackend {
       } catch {
         throw new Error("opencode OPENCODE_CONFIG_CONTENT must be a JSON object.");
       }
-      const legacyKeys = OPENCODE_1_PERMISSION_KEYS.filter(
-        (key) => overriddenConfig[key] !== undefined
-      );
-      if (legacyKeys.length > 0) {
-        throw new Error(
-          `opencode OPENCODE_CONFIG_CONTENT uses OpenCode 1 keys (${legacyKeys.join(", ")}); ` +
-            "Self-Host Mode requires the OpenCode 2 `permissions` and `agents` keys."
-        );
+      if (pluginDir) {
+        // ACP-added MCP servers need the same direct-call policy even with a user's custom configuration.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/875
+        const plugins = (overriddenConfig.plugins as OpencodeConfig["plugins"]) ?? [];
+        overriddenConfig.plugins = [...new Set([...plugins, pluginDir])];
       }
-      overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
-      for (const agent of agentConfigs(overriddenConfig.agents)) {
-        agent.permissions = appendNativeWebDenies(agent.permissions);
+      if (settings.enableSelfHostMode === true) {
+        overriddenConfig.permissions = appendNativeWebDenies(overriddenConfig.permissions);
+        for (const agent of agentConfigs(overriddenConfig.agents)) {
+          agent.permissions = appendNativeWebDenies(agent.permissions);
+        }
       }
       configContent = JSON.stringify(overriddenConfig);
     }
@@ -207,8 +202,6 @@ const NATIVE_WEB_DENIES: readonly PermissionRule[] = [
   { action: "websearch", resource: "*", effect: "deny" },
   { action: "webfetch", resource: "*", effect: "deny" },
 ];
-
-const OPENCODE_1_PERMISSION_KEYS = ["permission", "tools", "agent", "mode"] as const;
 
 export async function buildOpencodeConfig(
   s: CopilotSettings,
@@ -343,6 +336,7 @@ export async function buildOpencodeConfig(
   const selfHost = s.enableSelfHostMode === true;
   if (selfHost) permissions.push(...NATIVE_WEB_DENIES);
 
+  const readOnlyCopilotTools = (await deps.readCopilotReadOnlyToolNames?.()) ?? [];
   const skillManagerReady = SkillManager.hasInstance();
   const system = buildAgentSystemPrompt(OpencodeBackendDescriptor.id, deps.app);
 
@@ -403,6 +397,18 @@ export async function buildOpencodeConfig(
           // this out to keep its top-level deny decisive.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/599
           ...(selfHost ? [] : [{ action: "websearch", resource: "*", effect: "ask" } as const]),
+          // OpenCode runs MCP tools without asking, even from its execute tool, so the ask-first
+          // agent asks before every Copilot tool not marked read-only, as Claude and Codex do.
+          // Its action for a tool is `<server>_<tool>` with other characters than [A-Za-z0-9_-] as `_`.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
+          { action: `${COPILOT_MCP_SERVER_NAME}_*`, resource: "*", effect: "ask" },
+          ...readOnlyCopilotTools.map(
+            (name): PermissionRule => ({
+              action: `${COPILOT_MCP_SERVER_NAME}_${name.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+              resource: "*",
+              effect: "allow",
+            })
+          ),
         ],
       },
     },

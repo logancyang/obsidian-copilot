@@ -1,3 +1,4 @@
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import type {
   AgentMessagePart,
@@ -25,6 +26,8 @@ export function toolCallToPart(
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     vendorToolName: call.vendorToolName,
     mcpServer: call.mcpServer,
+    copilotTools:
+      call.copilotTools ?? directCopilotToolUse(call.mcpServer, call.vendorToolName, call.rawInput),
     parentToolCallId: call.parentToolCallId,
     progress: call.progress,
   };
@@ -66,12 +69,15 @@ export function mergeToolCallUpdate(
           status: "pending",
         };
   if (base.kind !== "tool_call") return base;
+  const input = upd.rawInput !== undefined ? upd.rawInput : base.input;
+  const vendorToolName = upd.vendorToolName ?? base.vendorToolName;
+  const mcpServer = upd.mcpServer ?? base.mcpServer;
   return {
     ...base,
     title: upd.title ?? base.title,
     toolKind: upd.kind ?? base.toolKind,
     status: upd.status ?? base.status,
-    input: upd.rawInput !== undefined ? upd.rawInput : base.input,
+    input,
     output:
       upd.content !== undefined && upd.content !== null
         ? extractToolCallOutputs(upd.content)
@@ -80,8 +86,12 @@ export function mergeToolCallUpdate(
       upd.locations !== undefined && upd.locations !== null
         ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
         : base.locations,
-    vendorToolName: upd.vendorToolName ?? base.vendorToolName,
-    mcpServer: upd.mcpServer ?? base.mcpServer,
+    vendorToolName,
+    mcpServer,
+    copilotTools:
+      directCopilotToolUse(mcpServer, vendorToolName, input) ??
+      upd.copilotTools ??
+      (upd.rawInput !== undefined ? undefined : base.copilotTools),
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
     progress: upd.progress === undefined ? base.progress : { ...base.progress, ...upd.progress },
   };
@@ -95,6 +105,9 @@ function extractToolCallOutputs(
   for (const item of content) {
     if (item.type === "content" && item.content.type === "text") {
       outputs.push(capToolOutputText(item.content.text));
+    } else if (item.type === "content" && item.content.type === "image") {
+      // Keep returned images attached to the tool that viewed them. https://github.com/logancyang/obsidian-copilot/issues/4227
+      outputs.push(item.content);
     } else if (item.type === "diff") {
       outputs.push({
         type: "diff",

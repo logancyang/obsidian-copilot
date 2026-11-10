@@ -2,6 +2,12 @@ import { CONNECTOR_CATALOG, CONNECTOR_CATEGORIES } from "@/connectors/catalog";
 
 describe("catalog", () => {
   describe("CONNECTOR_CATALOG", () => {
+    it("https://github.com/NangoHQ/nango/issues/7142 uses dynamic registration for Airtable because its authorization page rejects URL client IDs", () => {
+      expect(CONNECTOR_CATALOG.find(({ id }) => id === "airtable")).toMatchObject({
+        useDynamicClientRegistration: true,
+      });
+    });
+
     it("lists services alphabetically by display name, ignoring case", () => {
       const names = CONNECTOR_CATALOG.map((entry) => entry.name);
 

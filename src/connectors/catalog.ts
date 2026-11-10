@@ -24,6 +24,7 @@ export interface ConnectorCatalogEntry {
   readonly category: ConnectorCategory;
   readonly serverUrl: string;
   readonly logoUrl?: string;
+  readonly useDynamicClientRegistration?: boolean;
 }
 
 const LOGO_BASE_URL = "https://images.brevilabs.com/newsletters/copilot-plugin/connectors";
@@ -35,6 +36,8 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
     description: "Bases, tables and records",
     category: "Tasks & projects",
     serverUrl: "https://mcp.airtable.com/mcp",
+    // Airtable advertises metadata support but rejects URL client IDs: https://github.com/NangoHQ/nango/issues/7142
+    useDynamicClientRegistration: true,
   },
   {
     id: "apify",
@@ -285,4 +288,8 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
 
 export const CONNECTOR_CATALOG: readonly ConnectorCatalogEntry[] = Object.freeze(
   CATALOG_ENTRIES.map((entry) => ({ ...entry, logoUrl: `${LOGO_BASE_URL}/${entry.id}.png` }))
+);
+
+export const CONNECTOR_SERVICES: ReadonlyMap<string, ConnectorCatalogEntry> = new Map(
+  CONNECTOR_CATALOG.map((service) => [service.id, service])
 );

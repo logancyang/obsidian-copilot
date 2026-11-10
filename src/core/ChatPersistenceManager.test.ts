@@ -194,6 +194,16 @@ describe("ChatPersistenceManager", () => {
         ).toBe(true);
       });
 
+      it("saves a reply that starts with a code fence so the note renders it and it loads back unchanged (https://github.com/Brevilabs/obsidian-copilot-private/issues/889)", async () => {
+        const reply = "```mermaid\nflowchart LR\n  A --> B\n```\n\nThat is the flow.";
+        await saveMessages([chatMessage("Draw it"), chatMessage(reply, AI_SENDER)]);
+
+        const content = createdContent();
+        expect(content).toContain("**ai**: \n\n```mermaid\n");
+        const messages = await loadNote(content);
+        expect(messages.map((m) => m.message)).toEqual(["Draw it", reply]);
+      });
+
       it("writes Unknown time for messages without a timestamp", async () => {
         await saveMessages([chatMessage("Hello", USER_SENDER, { timestamp: null })]);
 

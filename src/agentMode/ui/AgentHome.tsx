@@ -9,6 +9,7 @@ import AgentContextSection, { buildContextSummary } from "@/agentMode/ui/AgentCo
 import { AgentLandingStack } from "@/agentMode/ui/AgentLandingStack";
 import { CreateProjectPanel } from "@/agentMode/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
 import { AgentProjectHeader } from "@/agentMode/ui/AgentProjectHeader";
 import { ProjectInfoPopover } from "@/agentMode/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
@@ -39,7 +40,6 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
-import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -102,7 +102,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
-  const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
   useChatInputAutoFocus();
@@ -116,7 +115,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     currentTodoList,
     pendingToolPermissions,
     pendingAskUserQuestions,
-    feedbackOffer,
+    chatStates,
     queuedPrompts,
     tasks,
     isReplyRunning,
@@ -340,6 +339,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     selectedImages: draft.images,
     onAddImage: draft.addImages,
     containerRef: chatContainerRef,
+    acceptAnyFileType: true,
   });
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
@@ -390,7 +390,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     archivedChatCount: archivedChatItems.length,
   });
   const projectPlacement = placementRef.current;
-  const isProjectContextInline = sidebarOpen || projectPlacement?.standalone === true;
+  const isProjectContextInline = projectPlacement?.standalone === true;
 
   const mainAgentId =
     manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
@@ -504,17 +504,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       plugin,
       settings.chatHistorySortStrategy,
     ]
-  );
-
-  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and shows the
-  // project context inline instead of a shelf.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
-  const globalShelfSections = useMemo(
-    () =>
-      sidebarOpen
-        ? landingSections.filter((section) => section.id === "relevant-notes")
-        : landingSections,
-    [sidebarOpen, landingSections]
   );
 
   const contextSummary = useMemo(() => buildContextSummary(activeProject), [activeProject]);
@@ -694,9 +683,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             projectName={headerName}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
-            // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
-            canLeaveProject={!sidebarOpen}
             menu={
               activeProject ? (
                 <ProjectInfoPopover
@@ -742,6 +728,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 }
               >
                 <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
+                <ConnectorsAttentionBanner manager={plugin.connectionManager} />
                 {isLanding ? (
                   <AgentLandingStack
                     hero={hero}
@@ -767,13 +754,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         projectPlacement && !isProjectContextInline ? (
                           <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
                         ) : null
-                      ) : globalShelfSections.length > 0 ? (
+                      ) : (
                         <AgentHomeShelf
-                          sections={globalShelfSections}
+                          sections={landingSections}
                           activeSectionId={globalShelfTab}
                           onSectionSelect={setGlobalShelfTab}
                         />
-                      ) : null
+                      )
                     }
                   />
                 ) : (
@@ -807,7 +794,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         pendingAskUserQuestions={pendingAskUserQuestions}
                         chatBackend={backend}
                         isLoading={isLoading}
-                        feedbackOffer={feedbackOffer}
+                        chatStates={chatStates}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

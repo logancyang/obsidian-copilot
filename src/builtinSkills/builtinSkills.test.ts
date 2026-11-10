@@ -4,6 +4,7 @@ import {
   BUILTIN_SKILLS,
   DEFAULT_BUILTIN_PREFERENCES,
   isBuiltinSkillEnabledFor,
+  getBuiltinSkillUnavailableReason,
   PLUS_ENV,
   SELF_HOST_WEB_SEARCH_ENV,
   SELF_HOST_WEB_SEARCH_TOKEN_ENV,
@@ -28,6 +29,8 @@ function settingsWith(
 ): CopilotSettings {
   return {
     ...DEFAULT_SETTINGS,
+    isPaidUser: true,
+    plusLicenseKey: "test-license",
     ...overrides,
     agentMode: {
       ...DEFAULT_SETTINGS.agentMode,
@@ -231,11 +234,53 @@ describe("builtinSkills", () => {
       expect(DEFAULT_BUILTIN_PREFERENCES).toEqual({
         "copilot-web-search": { disabled: true },
         "copilot-web-fetch": { disabled: true },
-        "obsidian-markdown": { disabledAgents: ["claude"] },
         "obsidian-bases": { disabledAgents: ["claude"] },
         "json-canvas": { disabledAgents: ["claude", "codex"] },
       });
     });
+  });
+
+  describe("getBuiltinSkillUnavailableReason()", () => {
+    it.each(["obsidian-markdown", "obsidian-bases", "json-canvas"])(
+      "keeps opted-in %s available without Plus or a license key https://github.com/logancyang/obsidian-copilot/issues/4239",
+      (name) => {
+        const settings = settingsWith({}, { isPaidUser: false, plusLicenseKey: "" });
+        expect(getBuiltinSkillUnavailableReason(settings, name)).toBeUndefined();
+        for (const agent of ["claude", "codex", "opencode"]) {
+          expect(isBuiltinSkillEnabledFor(settings, name, agent)).toBe(true);
+        }
+      }
+    );
+
+    it("keeps paid users' opted-in relay skills available https://github.com/logancyang/obsidian-copilot/issues/4239", () => {
+      const settings = settingsWith({});
+      for (const skill of RELAY_SKILLS) {
+        expect(getBuiltinSkillUnavailableReason(settings, skill.name)).toBeUndefined();
+        expect(isBuiltinSkillEnabledFor(settings, skill.name, "codex")).toBe(true);
+      }
+      expect(getBuiltinSkillUnavailableReason(settings, "unknown")).toBeUndefined();
+    });
+
+    it.each([
+      [false, "test-license"],
+      [undefined, "test-license"],
+      [true, ""],
+    ])(
+      "disables every Plus relay skill when paid status is %s and the key is %s https://github.com/logancyang/obsidian-copilot/issues/4239",
+      (isPaidUser, plusLicenseKey) => {
+        const settings = settingsWith({}, { isPaidUser, plusLicenseKey });
+        for (const skill of RELAY_SKILLS) {
+          expect(getBuiltinSkillUnavailableReason(settings, skill.name)).toBe(
+            "An active Copilot Plus license is required."
+          );
+          for (const agent of ["claude", "codex", "opencode"]) {
+            expect(isBuiltinSkillEnabledFor(settings, skill.name, agent)).toBe(false);
+          }
+        }
+        expect(getBuiltinSkillUnavailableReason(settings, "obsidian-markdown")).toBeUndefined();
+        expect(isBuiltinSkillEnabledFor(settings, "obsidian-markdown", "claude")).toBe(true);
+      }
+    );
   });
 
   describe("isBuiltinSkillEnabledFor()", () => {
@@ -251,7 +296,7 @@ describe("builtinSkills", () => {
         for (const name of ["copilot-web-search", "copilot-web-fetch"]) {
           expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, name, agent)).toBe(false);
         }
-        expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(true);
+        expect(isBuiltinSkillEnabledFor(DEFAULT_SETTINGS, "copilot-fetch-x", agent)).toBe(false);
       }
     });
 

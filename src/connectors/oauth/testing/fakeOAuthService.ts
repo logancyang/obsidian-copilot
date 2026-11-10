@@ -39,6 +39,7 @@ export class FakeOAuthService {
   readonly revokedTokens: string[] = [];
   readonly registrations: Array<Record<string, unknown>> = [];
   unreachable = false;
+  refreshFailsEchoingRequest = false;
   private readonly clientSecrets = new Map<string, string | undefined>();
   private readonly codes = new Map<string, IssuedCode>();
   private readonly refreshTokens = new Set<string>();
@@ -173,6 +174,9 @@ export class FakeOAuthService {
         return json(400, { error: "invalid_grant" });
       }
       return json(200, this.issueTokens());
+    }
+    if (this.refreshFailsEchoingRequest) {
+      return { status: 500, headers: {}, text: `Server error for ${request.body}` };
     }
     const refreshToken = params.get("refresh_token") ?? "";
     if (!this.refreshTokens.delete(refreshToken)) return json(400, { error: "invalid_grant" });

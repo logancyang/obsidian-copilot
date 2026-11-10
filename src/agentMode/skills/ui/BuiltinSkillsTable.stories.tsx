@@ -66,3 +66,11 @@ export const UpdatingOneSkill: StoryObj<BuiltinSkillsTableProps> = {
     ],
   },
 };
+
+export const InactivePlus: StoryObj<BuiltinSkillsTableProps> = {
+  args: {
+    ...args,
+    preferences: { [args.skills[0].name]: { disabled: true } },
+    unavailableReasons: { [args.skills[0].name]: "An active Copilot Plus license is required." },
+  },
+};

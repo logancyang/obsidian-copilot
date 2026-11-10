@@ -1,4 +1,7 @@
 const PROVIDER_SIDE_CATEGORIES: ReadonlySet<string> = new Set([
+  // Rejected provider credentials need account repair rather than a Copilot bug report.
+  // https://github.com/logancyang/obsidian-copilot/issues/4244
+  "provider.auth",
   // OpenCode and Codex name the failure in the JSON-RPC error data, so a provider's new wording needs no new pattern.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/810
   "provider.quota",
@@ -15,6 +18,9 @@ const PROVIDER_SIDE_CATEGORIES: ReadonlySet<string> = new Set([
 ]);
 
 const PROVIDER_SIDE_PATTERNS: readonly RegExp[] = [
+  // OpenCode can reject authentication with empty error data, leaving only this response prefix.
+  // https://github.com/logancyang/obsidian-copilot/issues/4244
+  /^Authentication required(?::|$)/i,
   // Claude sends no category, and OpenCode files OpenRouter's max_tokens affordability error as an invalid request.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/810
   /hit your (?:\w+ )?limit/i,

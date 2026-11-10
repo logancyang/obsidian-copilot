@@ -1,28 +1,8 @@
-import { COPILOT_MCP_SERVER_NAME } from "@/agentMode/session/copilotMcpServer";
+import type { CopilotToolCall } from "@/agentMode/session/copilotToolCalls";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
-export type CopilotToolCall = { args: Record<string, unknown> } | { code: string };
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-}
-
-// Claude names the call by server and tool, Codex nests the arguments under `server`/`tool`, and
-// OpenCode runs it as JavaScript inside its `execute` tool, so its arguments are only code.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/735
 export function copilotToolCall(part: ToolCallPart, toolName: string): CopilotToolCall | null {
-  const input = asRecord(part.input);
-  if (part.mcpServer === COPILOT_MCP_SERVER_NAME && part.vendorToolName === toolName) {
-    return { args: input };
-  }
-  if (input.server === COPILOT_MCP_SERVER_NAME && input.tool === toolName) {
-    return { args: asRecord(input.arguments) };
-  }
-  const code = typeof input.code === "string" ? input.code : "";
-  const call = new RegExp(`tools\\[["']${COPILOT_MCP_SERVER_NAME}["']\\]\\.${toolName}\\(`).exec(
-    code
-  );
-  return call ? { code: code.slice(call.index) } : null;
+  return part.copilotTools?.calls.find((call) => call.name === toolName) ?? null;
 }
 
 export function codeStringField(code: string, field: string): string | null {

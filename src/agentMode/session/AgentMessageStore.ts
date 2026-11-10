@@ -153,6 +153,13 @@ function toolOutputsEqual(
         output.newText === other.newText
       );
     }
+    // Repeated image results must not trigger duplicate store updates. https://github.com/logancyang/obsidian-copilot/issues/4227
+    if (output.type === "image" && other.type === "image") {
+      return output.mimeType === other.mimeType && output.data === other.data;
+    }
+    if (output.type === "image_pending" && other.type === "image_pending") {
+      return output.key === other.key;
+    }
     if (output.type === "text" && other.type === "text") {
       return textFingerprint(output.text) === textFingerprint(other.text);
     }
@@ -185,10 +192,16 @@ function textFingerprint(text: string): string {
   )}`;
 }
 
+export interface AgentMessageStoreOptions {
+  stageToolOutputs?: (outputs: AgentToolCallOutput[]) => AgentToolCallOutput[];
+}
+
 export class AgentMessageStore {
   private messages: StoredAgentMessage[] = [];
   private displayCache = new Map<string, { version: number; view: AgentChatMessage }>();
   private lastDisplay: AgentChatMessage[] | null = null;
+
+  constructor(private readonly options: AgentMessageStoreOptions = {}) {}
 
   private generateId(): string {
     return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
@@ -359,10 +372,15 @@ export class AgentMessageStore {
     return true;
   }
 
-  upsertAgentPart(id: string, part: AgentMessagePart): boolean {
+  upsertAgentPart(id: string, incoming: AgentMessagePart): boolean {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return false;
     if (!msg.parts) msg.parts = [];
+    const stage = this.options.stageToolOutputs;
+    const part =
+      stage && incoming.kind === "tool_call" && incoming.output
+        ? { ...incoming, output: stage(incoming.output) }
+        : incoming;
     const partId = agentPartId(part);
     if (partId !== undefined) {
       const idx = msg.parts.findIndex((p) => agentPartId(p) === partId);
@@ -384,6 +402,25 @@ export class AgentMessageStore {
     msg.parts.push(part);
     this.touch(msg);
     return true;
+  }
+
+  settleToolImage(key: string, thumbnail: AgentToolCallOutput | null): boolean {
+    const waits = (o: AgentToolCallOutput) => o.type === "image_pending" && o.key === key;
+    let changed = false;
+    for (const msg of this.messages) {
+      if (!msg.parts?.some((p) => p.kind === "tool_call" && p.output?.some(waits))) continue;
+      msg.parts = msg.parts.map((p) =>
+        p.kind === "tool_call" && p.output?.some(waits)
+          ? {
+              ...p,
+              output: p.output.flatMap((o) => (!waits(o) ? [o] : thumbnail ? [thumbnail] : [])),
+            }
+          : p
+      );
+      this.touch(msg);
+      changed = true;
+    }
+    return changed;
   }
 
   // A spinner must not outlive the turn that started it.

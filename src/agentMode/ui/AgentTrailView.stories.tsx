@@ -99,6 +99,61 @@ const FAILED_FILE_CHANGES: AgentMessagePart[] = [
   tool("done-edit", "Edit", { input: { file_path: "Projects/plan.md" } }),
 ];
 
+const CONNECTOR_TOOLS: AgentMessagePart[] = [
+  say(
+    "A connector tool is named by its service and its readable tool name, without the service's own prefix."
+  ),
+  tool("notion-search", "notion_notion-search", {
+    mcpServer: "obsidian-copilot",
+    input: { query: "Orion" },
+    copilotTools: {
+      calls: [{ name: "notion_notion-search", args: { query: "Orion" } }],
+    },
+    output: [{ type: "text", text: "Orion kickoff plan" }],
+  }),
+  say("Codex names the same call through Copilot's server."),
+  tool("linear-create", "linear_create_issue", {
+    vendorToolName: undefined,
+    title: "mcp.obsidian-copilot.linear_create_issue",
+    toolKind: "execute",
+    input: {
+      server: "obsidian-copilot",
+      tool: "linear_create_issue",
+      arguments: { title: "Orion retro" },
+    },
+    copilotTools: {
+      calls: [{ name: "linear_create_issue", args: { title: "Orion retro" } }],
+    },
+  }),
+  say("OpenCode calls each connected tool directly, with its own name and arguments."),
+  tool("opencode-notion-create", "obsidian-copilot_notion_notion-create-pages", {
+    vendorToolName: undefined,
+    title: "obsidian-copilot_notion_notion-create-pages",
+    toolKind: "other",
+    input: { title: "Orion" },
+    copilotTools: { calls: [{ name: "notion_notion-create-pages", args: { title: "Orion" } }] },
+  }),
+  say("Native OpenCode code execution keeps its own Execute step."),
+  tool("opencode-native", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    input: { code: "return await tools.opencode.list_mcp_resources({});" },
+  }),
+  say("Older saved chats keep the tool labels recorded for their wrapped calls."),
+  tool("saved-wrapped-notion", "execute", {
+    vendorToolName: undefined,
+    title: "execute",
+    toolKind: "other",
+    copilotTools: {
+      wrapper: "Execute",
+      calls: [{ name: "notion_search", args: { query: "Orion" } }],
+    },
+  }),
+  say("Another server's tools keep the server's name."),
+  tool("context7-docs", "query-docs", { mcpServer: "context7" }),
+];
+
 type CompactionOverrides = Partial<Extract<AgentMessagePart, { kind: "compaction" }>>;
 
 const compaction = (overrides: CompactionOverrides = {}): AgentMessagePart => ({
@@ -161,6 +216,10 @@ export const UnifiedCardStyles: StoryObj<AgentTrailProps> = {
 
 export const FailedFileChanges: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={FAILED_FILE_CHANGES} />,
+};
+
+export const ConnectorTools: StoryObj<AgentTrailProps> = {
+  render: () => <TrailDemo parts={CONNECTOR_TOOLS} />,
 };
 
 export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {

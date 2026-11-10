@@ -1,6 +1,7 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
-import type { CopilotMcpServer, FeedbackOfferHandler } from "@/agentMode/session/copilotMcpServer";
+import type { ChatExtension } from "@/agentMode/session/chatExtension";
+import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
 import { resolveEffort } from "@/lib/model-effort";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -178,6 +179,7 @@ export interface AgentSessionManagerOptions {
   persistenceManager?: AgentChatPersistenceManager;
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
 export class AgentSessionManager {
@@ -928,6 +930,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       mcpServers,
       ...(projectId !== GLOBAL_SCOPE
         ? {
@@ -947,7 +950,9 @@ export class AgentSessionManager {
     }
     this.detachedFromTabIds.delete(session.internalId);
     this.lastActiveByScope.set(projectId, session.internalId);
-    if (projectId === this.activeProjectId) {
+    // A restart reselects the user's chat once every chat is rebuilt; a rebuilt chat taking the selection meanwhile would receive the user's next message.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+    if (projectId === this.activeProjectId && !this.restartingBackends.has(resolvedId)) {
       this.activeSessionId = session.internalId;
     }
     this.attachAutoSave(session);
@@ -1864,13 +1869,18 @@ export class AgentSessionManager {
     // A folder's chats share one connection, so its token names only the folder and the agent stamps the calling session on each call.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
     const shared = descriptor.sharesMcpServersAcrossSessions === true;
-    const offer: FeedbackOfferHandler = shared
-      ? (draft, callerSessionId) =>
-          this.findFolderSession(descriptor.id, cwd, callerSessionId)?.offerFeedback(draft) ??
-          "unattributed"
-      : (draft) => this.sessions.get(internalId)?.offerFeedback(draft) ?? "turned_off";
+    const findChat: FindCallingChat = (callerSessionId) =>
+      (shared
+        ? this.findFolderSession(descriptor.id, cwd, callerSessionId)
+        : this.sessions.get(internalId)) ?? null;
     try {
-      return [await server.connect(shared ? `${descriptor.id}:${cwd}` : internalId, offer)];
+      return [
+        await server.connect(
+          shared ? `${descriptor.id}:${cwd}` : internalId,
+          descriptor.id,
+          findChat
+        ),
+      ];
     } catch (err) {
       logWarn("[AgentMode] Copilot MCP server unavailable; continuing without it", err);
       return EMPTY_MCP_SERVERS;
@@ -2217,6 +2227,7 @@ export class AgentSessionManager {
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
+      chatExtensions: this.opts.chatExtensions,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2647,6 +2658,7 @@ export class AgentSessionManager {
         app: this.app,
         clientVersion: this.plugin.manifest.version,
         descriptor,
+        copilotMcpServer: this.opts.copilotMcpServer,
       });
       if (proc.start) await proc.start();
       this.wireProcessCallbacks(backendId, proc);
@@ -2769,7 +2781,6 @@ export class AgentSessionManager {
       });
       if (resumed) {
         if (label && !resumed.getLabel()) resumed.restoreLabel(label, labelSource ?? "agent");
-        this.setActiveSession(resumed.internalId);
         return resumed;
       }
     }
@@ -2802,13 +2813,14 @@ export class AgentSessionManager {
     this.heldConfigChanges.delete(backendId);
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     const retainedChatInputIds: string[] = [];
+    let selectionCleared = false;
+    let reselectId: string | null = null;
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
       // A chat's first save can still be pending, and its note must exist before the note is read below.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/742
       for (const session of affected) await this.drainAutoSave(session);
       const activeSessionId = this.activeSessionId;
-      const activeProjectId = this.activeProjectId;
       // Every affected composer must stay owned across the gap, including tabs
       // outside the active scope, or the draft store prunes their unsent text.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/475
@@ -2826,12 +2838,21 @@ export class AgentSessionManager {
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
+            // A card that just connected a service is why the user reloads, and its outcome is still owed to the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+            chatStates: session.getReloadableChatStates(),
             notePath: this.getSessionSourcePath(session.internalId),
           }))
         : [];
       for (const replacement of replacements) {
         retainedChatInputIds.push(replacement.chatInputId);
         this.retainedChatInputIds.add(replacement.chatInputId);
+      }
+      // Closing the selected chat would select another agent's chat until the rebuild, and a message sent then runs there.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+      if (replacements.some((r) => r.internalId === activeSessionId)) {
+        this.activeSessionId = null;
+        selectionCleared = true;
       }
       for (const session of affected) {
         await this.closeSession(session.internalId);
@@ -2847,7 +2868,6 @@ export class AgentSessionManager {
         this.registerPreload(backendId, probe);
         if (replacements.length > 0 && !this.disposed) {
           await probe;
-          let selectedId = activeSessionId;
           for (const replacement of replacements) {
             const rebuilt = await this.rebuildReplacedSession(
               backendId,
@@ -2877,19 +2897,28 @@ export class AgentSessionManager {
               // https://github.com/Brevilabs/obsidian-copilot-private/issues/561
               rebuilt.loadDisplayMessages(replacement.recoveryMessages);
             }
+            rebuilt.restoreChatStates(replacement.chatStates);
             if (replacement.detached) this.detachedFromTabIds.add(rebuilt.internalId);
-            if (replacement.internalId === activeSessionId) selectedId = rebuilt.internalId;
-          }
-          if (selectedId) this.setActiveSession(selectedId);
-          else {
-            this.activeSessionId = null;
-            this.activeProjectId = activeProjectId;
+            if (replacement.internalId === activeSessionId) reselectId = rebuilt.internalId;
           }
         }
       }
     } finally {
       this.restartingBackends.delete(backendId);
       for (const id of retainedChatInputIds) this.retainedChatInputIds.delete(id);
+      // Only the restart that cleared the selection restores it, and only if nothing was selected since; a failed rebuild falls back to a neighbor so the tabs stay visible.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/877
+      if (selectionCleared && this.activeSessionId === null) {
+        const scope = this.activeProjectId;
+        const next =
+          reselectId ??
+          pickScopeNeighbor(
+            this.getSessionIdsForScope(scope),
+            0,
+            this.lastActiveByScope.get(scope)
+          );
+        if (next) this.setActiveSession(next);
+      }
       this.notify();
     }
     const queued = this.pendingBackendRestarts.get(backendId);

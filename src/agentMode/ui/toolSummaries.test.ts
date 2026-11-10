@@ -1,3 +1,5 @@
+import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import {
   displayTargetFromPath,
   lookupToolSummary,
@@ -9,14 +11,34 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 const CTX = { vaultBase: "/Users/me/vault" };
 
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
-  return {
+  const part: ToolCallPart = {
     kind: "tool_call",
     id: "x",
     title: "tool",
     status: "completed",
     ...overrides,
   };
+  const copilotTools =
+    directCopilotToolUse(part.mcpServer, part.vendorToolName, part.input) ??
+    readCodexCopilotTools(part.input);
+  return copilotTools ? { ...part, copilotTools } : part;
 }
+
+function savedWrappedTools(...names: string[]): ToolCallPart {
+  return tool({
+    title: "execute",
+    toolKind: "other",
+    copilotTools: names.length
+      ? {
+          wrapper: "Execute",
+          calls: names.map((name) => ({ name, args: {} })),
+        }
+      : undefined,
+  });
+}
+
+const SAVED_NOTION_CALL = "notion_create_page";
+const SAVED_TWO_CALLS = ["notion_search", "notion_create_page"];
 
 describe("toolSummaries", () => {
   describe("lookupToolSummary()", () => {
@@ -129,6 +151,47 @@ describe("toolSummaries", () => {
         mcpServer: "context7",
       });
       expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("context7 · Query docs");
+    });
+
+    it.each([
+      [
+        "Claude",
+        tool({
+          vendorToolName: "notion_search_pages",
+          title: "notion_search_pages",
+          mcpServer: "obsidian-copilot",
+          toolKind: "other",
+        }),
+      ],
+      [
+        "Codex",
+        tool({
+          title: "mcp.obsidian-copilot.notion_search_pages",
+          toolKind: "execute",
+          input: {
+            server: "obsidian-copilot",
+            tool: "notion_search_pages",
+            arguments: { query: "Orion" },
+          },
+        }),
+      ],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/857 renders a %s connector tool as 'Service · Tool name' instead of Copilot's server and the raw tool name",
+      (_backend, t) => {
+        expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Notion · Search pages");
+      }
+    );
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 names every distinct Copilot tool in a completed OpenCode row", () => {
+      const single = savedWrappedTools(SAVED_NOTION_CALL);
+      const several = savedWrappedTools(...SAVED_TWO_CALLS);
+
+      expect(lookupToolSummary(single).collapsedLine(single, CTX)).toBe(
+        "Execute · Notion · Create page"
+      );
+      expect(lookupToolSummary(several).collapsedLine(several, CTX)).toBe(
+        "Execute · Notion · Search, Notion · Create page"
+      );
     });
 
     it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {

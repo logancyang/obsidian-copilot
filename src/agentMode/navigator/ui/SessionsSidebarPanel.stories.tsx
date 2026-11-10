@@ -68,23 +68,32 @@ const projects = [
   sidebarProject("thesis", "Thesis research with a very long name that must truncate"),
 ];
 
-const projectChat = (projectId: string, index: number, minutesAgo: number) =>
+const projectChat = (projectId: string, index: number, minutesAgo: number, backendId = "claude") =>
   sidebarChat(`chats/${projectId}-${index}.md`, `${projectId} chat ${index}`, minutesAgo, {
     projectId,
+    backendId,
   });
 
 const everyGroupItems = [
-  sidebarChat("chats/pinned.md", "Weekly review template", 600, { pinnedAt: 2 }),
+  sidebarChat("chats/pinned.md", "Weekly review template", 600, {
+    pinnedAt: 2,
+    backendId: "opencode",
+  }),
   sidebarChat("chats/pinned-project.md", "Pricing page copy", 90, {
     pinnedAt: 3,
     projectId: "launch",
+    backendId: "codex",
   }),
   projectChat("garden", 1, 30),
-  projectChat("garden", 2, 200),
+  projectChat("garden", 2, 200, "codex"),
   projectChat("launch", 1, 15),
   projectChat("thesis", 1, 400),
-  sidebarChat("chats/recent-1.md", "Summarize the Q3 interview notes", 5),
-  sidebarChat("chats/recent-2.md", "Draft the release announcement", 120),
+  sidebarChat("chats/recent-1.md", "Summarize the Q3 interview notes", 5, {
+    backendId: "claude",
+  }),
+  sidebarChat("chats/recent-2.md", "Draft the release announcement", 120, {
+    backendId: "opencode",
+  }),
   sidebarChat(
     "chats/recent-3.md",
     "Investigate why the nightly sync keeps overwriting the reading list after a rename on mobile",
@@ -99,6 +108,7 @@ export const EveryGroupPopulated: StoryObj<SessionsSidebarPanelProps> = {
     items: everyGroupItems,
     projects,
     expandedProjectIds: new Set(["garden"]),
+    activeProjectId: "garden",
     activeChatIds: new Set(["chats/garden-1.md"]),
     openChatIds: new Set([
       "chats/garden-1.md",
@@ -108,7 +118,7 @@ export const EveryGroupPopulated: StoryObj<SessionsSidebarPanelProps> = {
     ]),
     runningChatIds: new Set(["chats/recent-1.md"]),
     waitingChatIds: new Set(["chats/pinned-project.md"]),
-    attentionChatIds: new Set(["chats/pinned.md"]),
+    attentionChatIds: new Set(["chats/pinned.md", "chats/garden-2.md"]),
   },
   render: WithToggleableFolders,
 };

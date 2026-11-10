@@ -245,6 +245,7 @@ function renderNode(
         <AgentMarkdownText
           key={key}
           text={node.part.text}
+          streaming={atLiveEdge}
           app={ctx.app}
           miyoPaths={ctx.miyoPaths}
         />

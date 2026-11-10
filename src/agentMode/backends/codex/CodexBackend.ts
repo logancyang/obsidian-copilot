@@ -13,6 +13,7 @@ import type { PlanUsageReading } from "@/agentMode/session/planUsage";
 import type { TurnDiff } from "@/agentMode/session/types";
 import { defaultCodexHome, readCodexPlanUsage } from "./codexPlanUsage";
 import { mergeCodexConfigEnv } from "./codexConfigEnv";
+import { readCodexCopilotTools } from "./codexCopilotToolCalls";
 import { buildCodexAcpInvocation, inspectCodexAcpPackage, CODEX_MIN_VERSION } from "./codexVersion";
 
 // Codex's built-in Default mode says to ask in plain text instead of calling
@@ -24,6 +25,7 @@ export const CODEX_QUESTION_CARD_STEERING =
 export class CodexBackend implements AcpBackend {
   readonly id = "codex" as const;
   readonly displayName = "Codex";
+  readonly readCopilotTools = readCodexCopilotTools;
 
   // Codex records each file's baseline inside apply_patch and sends its turn diff only to clients that opt in.
   // https://github.com/agentclientprotocol/codex-acp/issues/601

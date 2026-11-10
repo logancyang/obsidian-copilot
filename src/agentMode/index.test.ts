@@ -9,6 +9,8 @@ import { AgentSessionManager } from "./session/AgentSessionManager";
 import { reconcileBuiltinSkills } from "./skills/builtin/reconcileBuiltinSkills";
 import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
+import { createCopilotMcpServer } from "./session/copilotMcpServer";
+import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -56,6 +58,10 @@ jest.mock("./session/AgentSessionManager", () => ({
   AgentSessionManager: jest.fn(() => mockManager),
 }));
 jest.mock("./session/copilotDefaultModel", () => ({ seedCopilotDefaultModel: jest.fn() }));
+jest.mock("./session/copilotMcpServer", () => {
+  const actual = jest.requireActual("./session/copilotMcpServer");
+  return { ...actual, createCopilotMcpServer: jest.fn(actual.createCopilotMcpServer) };
+});
 jest.mock("./skills", () => ({
   SkillManager: {
     initialize: (_app: App, _dirs: unknown, runtime: BuiltinSkillRuntime) => {
@@ -90,8 +96,21 @@ jest.mock("./ui/ReportIssueModal", () => ({}));
 jest.mock("./session/debugSink", () => ({}));
 jest.mock("./backends/shared/ui/AgentBackendHeader", () => ({}));
 jest.mock("./session/useBackendAuthState", () => ({}));
+jest.mock("@/connectors/connectorsEntitlement", () => ({ isConnectorsEnabled: jest.fn() }));
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
+
+function connectorCardsExtension() {
+  return jest
+    .mocked(AgentSessionManager)
+    .mock.calls[0][2].chatExtensions?.find(({ key }) => key.id === "connector-cards");
+}
+
+function connectorCardNote(serviceId: string): string | undefined {
+  return connectorCardsExtension()?.beforePrompt?.([
+    { serviceId, afterUserTurn: 1, dismissed: false, reported: null },
+  ])?.note;
+}
 const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
 const RELOAD_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/475";
 type SettingsSubscriber = (prev: CopilotSettings, next: CopilotSettings) => void;
@@ -182,6 +201,21 @@ describe("agentMode", () => {
           ),
         },
       } as unknown as CopilotPlugin;
+    });
+
+    it("refreshes built-in availability when a license key is removed without a paid-status change https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      mockRefresh.mockClear();
+      emitSettingsChange(
+        { ...mockSettings, isPaidUser: true, plusLicenseKey: "test-license" },
+        { ...mockSettings, isPaidUser: true, plusLicenseKey: "" }
+      );
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      await mockRefresh.mock.results[0].value;
+      expect(reconcile).toHaveBeenLastCalledWith(
+        expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
+      );
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
@@ -587,6 +621,76 @@ describe("agentMode", () => {
         "claude",
         "env overrides changed"
       );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/857 offers a reload to each agent the connector change affects, so its open chats can pick up the new tools", () => {
+      const toolSetListeners: Array<(affectsBackend: (backendId: string) => boolean) => void> = [];
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectorTools: {
+            subscribeToToolSetChange: (listener: (typeof toolSetListeners)[number]) => {
+              toolSetListeners.push(listener);
+              return () => {};
+            },
+          },
+        } as unknown as CopilotPlugin
+      );
+
+      toolSetListeners.forEach((listener) => listener((backendId) => backendId === "opencode"));
+
+      expect(mockManager.noteSpawnConfigChanged.mock.calls).toEqual([
+        ["opencode", "connectors changed"],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers agents suggest_connector on a device with connectors, and reports connected services in a chat's card outcomes", () => {
+      jest.mocked(isConnectorsEnabled).mockReturnValue(true);
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectionManager: {
+            getSnapshot: () => ({
+              connections: [
+                { id: "c1", serviceId: "notion", status: "connected" },
+                { id: "c2", serviceId: "linear", status: "needs-login" },
+              ],
+            }),
+          },
+        } as unknown as CopilotPlugin
+      );
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).toContain("suggest_connector");
+      expect(connectorCardNote("notion")).toContain("The user connected Notion.");
+      expect(connectorCardNote("linear")).toContain("without connecting Linear");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 reports no service connected in a chat's card outcomes while the connectors entitlement is off, even with a stored login", () => {
+      jest.mocked(isConnectorsEnabled).mockReturnValue(false);
+      createAgentSessionManager(
+        {} as App,
+        {
+          ...plugin,
+          connectionManager: {
+            getSnapshot: () => ({
+              connections: [{ id: "c1", serviceId: "notion", status: "connected" }],
+            }),
+          },
+        } as unknown as CopilotPlugin
+      );
+
+      expect(connectorCardNote("notion")).toContain("without connecting Notion");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers no suggest_connector or connector cards where connectors aren't available, such as mobile", () => {
+      createAgentSessionManager({} as App, plugin);
+
+      const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
+      expect(hosted.map(({ definition }) => definition.name)).not.toContain("suggest_connector");
+      expect(connectorCardsExtension()).toBeUndefined();
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

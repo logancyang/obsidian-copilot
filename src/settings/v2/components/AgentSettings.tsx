@@ -8,6 +8,7 @@ import {
   useManagedInstallActionState,
   type BackendDescriptor,
 } from "@/agentMode";
+import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { playNotificationSound } from "@/utils/notificationSound";
 import {
@@ -15,7 +16,11 @@ import {
   isNotificationSoundId,
 } from "@/utils/notificationSoundCatalog";
 import { SettingSection } from "@/components/ui/setting-section";
-import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import {
+  SettingTabStrip,
+  TabContent,
+  type TabItem as TabItemType,
+} from "@/components/ui/setting-tabs";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
 import { setSettings, useSettingsValue } from "@/settings/model";
@@ -25,8 +30,10 @@ import React from "react";
 import { QuickChatPanel } from "./QuickChatPanel";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 import { AgentNotificationSoundSettings } from "./ui/AgentNotificationSoundSettings";
+import { ApprovedRulesPage } from "./ui/ApprovedRulesPage";
 import { getVaultBase } from "@/utils/vaultPath";
 import { getScrollableParent } from "@/utils/dom/scrollableParent";
+import { useSettingsSubPage } from "@/settings/v2/SettingsSubPage";
 
 const QUICK_CHAT_TAB_ID = "quickchat";
 
@@ -103,16 +110,13 @@ export const AgentSettings: React.FC = () => {
       </SettingSection>
 
       <div className="tw-flex tw-flex-col">
-        <div ref={tabStripRef} className="tw-flex tw-flex-wrap tw-gap-1" role="tablist">
-          {tabs.map((tab) => (
-            <TabItem
-              key={tab.id}
-              tab={tab}
-              isSelected={selectedTabId === tab.id}
-              onClick={() => handleSelectTab(tab.id)}
-              variant="inline"
-            />
-          ))}
+        <div ref={tabStripRef}>
+          <SettingTabStrip
+            tabs={tabs}
+            selectedId={selectedTabId}
+            onSelect={handleSelectTab}
+            variant="inline"
+          />
         </div>
 
         {orderedDescriptors.map((descriptor) => (
@@ -149,6 +153,8 @@ const BackendPanel: React.FC<{
   const managedInstall = useManagedInstallActionState(descriptor, plugin);
   const auth = useBackendAuthState(descriptor);
   const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
+  const approvedRules = descriptor.approvedRules;
+  const subPage = useSettingsSubPage();
 
   React.useEffect(() => {
     if (!manager) return;
@@ -196,6 +202,33 @@ const BackendPanel: React.FC<{
         )}
 
         {Panel && <Panel plugin={plugin} app={plugin.app} />}
+
+        {/* Only agents whose backend can read and remove its saved rules offer the page.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/865 */}
+        {approvedRules && (
+          <SettingItem
+            type="custom"
+            title="Approved rules"
+            description={`Actions ${descriptor.displayName} may take without asking, saved when you chose an “always” option.`}
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                subPage.open(
+                  <ApprovedRulesPage
+                    agentName={descriptor.displayName}
+                    store={approvedRules}
+                    plugin={plugin}
+                    onBack={subPage.close}
+                  />
+                )
+              }
+            >
+              Edit approved rules
+            </Button>
+          </SettingItem>
+        )}
       </SettingSection>
     </div>
   );

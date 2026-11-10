@@ -1,4 +1,4 @@
-import { AI_SENDER, USER_SENDER } from "@/constants";
+import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
@@ -44,7 +44,7 @@ import {
   showMultiAgentUpgradePrompt,
 } from "@/agentMode/session/fanout/multiAgentEntitlement";
 import type { App, DataAdapter } from "obsidian";
-import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
   editTargetPaths,
@@ -104,13 +104,26 @@ import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
-import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
-import { isProviderSideFailure } from "@/agentMode/session/feedback/providerSideFailure";
-import type {
-  FeedbackEvidence,
-  FeedbackOffer,
-  FeedbackOfferTrigger,
-} from "@/agentMode/session/feedback/feedbackOffer";
+import {
+  shrinkToolImage,
+  ToolImageThumbnails,
+  type ShrinkToolImage,
+  type ToolImage,
+} from "@/agentMode/session/toolImageThumbnails";
+import type { FeedbackEvidence } from "@/agentMode/session/feedback/feedbackOffer";
+import {
+  EMPTY_CHAT_EXTENSIONS,
+  EMPTY_CHAT_STATES,
+  readChatState,
+  withChatState,
+  type ChatExtension,
+  type ChatStateHost,
+  type ChatStateKey,
+  type ChatStates,
+  type ChatView,
+  type PromptNote,
+  type TurnFailure,
+} from "@/agentMode/session/chatExtension";
 
 export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
 
@@ -212,8 +225,10 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
+  shrinkToolImage?: ShrinkToolImage;
   getProjectContextBlock?: () => string;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
+  chatExtensions?: readonly ChatExtension<unknown>[];
 }
 
 export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
@@ -230,10 +245,13 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
+  chatExtensions?: readonly ChatExtension<unknown>[];
+  shrinkToolImage?: ShrinkToolImage;
 }
 
-export class AgentSession {
-  readonly store = new AgentMessageStore();
+export class AgentSession implements ChatStateHost, ChatView {
+  private readonly toolImages: ToolImageThumbnails;
+  readonly store = this.createStore();
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
@@ -281,13 +299,18 @@ export class AgentSession {
   });
   private readonly requests: InteractiveRequests;
   private readonly usageTracker: UsageTracker;
-  private feedbackOffer: FeedbackOffer | null = null;
+  private chatStates: ChatStates = EMPTY_CHAT_STATES;
+  private readonly chatExtensions: readonly ChatExtension<unknown>[];
 
   private needsAttention = false;
   private notifyScheduled = false;
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
 
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
+    this.toolImages = new ToolImageThumbnails(
+      opts.shrinkToolImage ?? shrinkToolImage,
+      (key, thumbnail) => this.settleToolImage(key, thumbnail)
+    );
     this.backend = opts.backend;
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
@@ -315,7 +338,7 @@ export class AgentSession {
       captureFileChanges: (files, messageId, turnDiff) =>
         this.finalizeFileChanges(files, this.store, messageId, turnDiff),
       onTurnCompleted: () => void this.pollSessionTitle(),
-      onTurnFailed: (errorText, error) => this.offerTurnErrorReport(errorText, error),
+      onTurnFailed: (errorText, error) => this.applyTurnFailure({ errorText, error }),
     });
     this.planFeedbackDelivery = opts.getDescriptor?.()?.planFeedbackDelivery ?? "permission";
     this.projectId = opts.projectId ?? GLOBAL_SCOPE;
@@ -326,6 +349,7 @@ export class AgentSession {
     this.getApp = opts.getApp ?? null;
     this.getProjectContextUpdatesFn = opts.getProjectContextUpdates ?? null;
     this.markProjectContextUpdatesDeliveredFn = opts.markProjectContextUpdatesDelivered ?? null;
+    this.chatExtensions = opts.chatExtensions ?? EMPTY_CHAT_EXTENSIONS;
     this.getProjectContextBlockFn =
       "getProjectContextBlock" in opts ? (opts.getProjectContextBlock ?? null) : null;
     this.requests = new InteractiveRequests({
@@ -931,9 +955,16 @@ export class AgentSession {
             CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
+      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      const promptNotes = sendsCompact ? [] : this.takePromptNotes();
       const leadingContextBlock = sendsCompact
         ? null
-        : [historyBlock, buildPriorFanoutContextBlock(this.pendingFanoutContext)]
+        : [
+            historyBlock,
+            buildPriorFanoutContextBlock(this.pendingFanoutContext),
+            ...promptNotes.map(({ note }) => note.note),
+          ]
             .filter(Boolean)
             .join("\n\n") || null;
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
@@ -957,6 +988,11 @@ export class AgentSession {
       if (outcome.error !== undefined) return outcome;
       if (leadingContextBlock !== null && outcome.stopReason !== "cancelled") {
         this.pendingFanoutContext = [];
+      }
+      // A note counts as told only once the backend accepts the prompt.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      for (const { extension, note } of promptNotes) {
+        this.updateChatState(extension.key, note.delivered);
       }
       if (sendsSavedHistory && outcome.stopReason !== "cancelled") {
         this.resendSavedHistory = false;
@@ -1090,6 +1126,7 @@ export class AgentSession {
     this.unregisterSessionHandler = null;
     this.requests.dispose();
     this.turns.dispose();
+    this.toolImages.dispose();
     this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
@@ -1128,59 +1165,52 @@ export class AgentSession {
     };
   }
 
-  getFeedbackOffer(): FeedbackOffer | null {
-    return this.feedbackOffer;
+  getDisplayMessages(): readonly AgentChatMessage[] {
+    return this.store.getDisplayMessages();
   }
 
-  // One card per session, whatever became of it, so a frustrated user is never nagged.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-  offerFeedback(draft: FeedbackDraft): FeedbackOfferResult {
-    if (this.feedbackOffer) return "already_offered";
-    this.feedbackOffer = this.openFeedbackOffer("agent", draft);
+  getChatStates(): ChatStates {
+    return this.chatStates;
+  }
+
+  readChatState<S>(key: ChatStateKey<S>): S {
+    return readChatState(this.chatStates, key);
+  }
+
+  updateChatState<S>(key: ChatStateKey<S>, change: (state: S, chat: ChatView) => S): void {
+    const next = withChatState(this.chatStates, key, change(this.readChatState(key), this));
+    if (next === this.chatStates) return;
+    this.chatStates = next;
     this.notifyMessages();
-    return "shown";
   }
 
-  // A failed reply leaves no agent turn to raise the card, so the session raises it with the error.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/762
-  private offerTurnErrorReport(errorText: string, error: unknown): void {
-    if (this.feedbackOffer || !getSettings().agentMode.offerFeedbackCards) return;
-    // A missing sign-in is the user's account state, and the error already points at the Sign in button.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/831
-    if (error instanceof AuthRequiredError || isProviderSideFailure(error, errorText)) return;
-    this.feedbackOffer = this.openFeedbackOffer("turn_error", {
-      title: `Agent Chat reply failed on ${this.backendId}`,
-      whatHappened: errorText,
-      userSaid: "",
-      repro: "",
+  private applyTurnFailure(failure: TurnFailure): void {
+    for (const extension of this.chatExtensions) {
+      if (!extension.onTurnFailed) continue;
+      const state = extension.onTurnFailed(this.readChatState(extension.key), this, failure);
+      this.chatStates = withChatState(this.chatStates, extension.key, state);
+    }
+  }
+
+  getReloadableChatStates(): ChatStates {
+    return this.chatExtensions
+      .filter((extension) => extension.keepOnReload)
+      .reduce(
+        (states, { key }) => withChatState(states, key, this.readChatState(key)),
+        EMPTY_CHAT_STATES
+      );
+  }
+
+  restoreChatStates(states: ChatStates): void {
+    this.chatStates = states;
+    this.notifyMessages();
+  }
+
+  private takePromptNotes(): { extension: ChatExtension<unknown>; note: PromptNote<unknown> }[] {
+    return this.chatExtensions.flatMap((extension) => {
+      const note = extension.beforePrompt?.(this.readChatState(extension.key));
+      return note ? [{ extension, note }] : [];
     });
-  }
-
-  private openFeedbackOffer(trigger: FeedbackOfferTrigger, draft: FeedbackDraft): FeedbackOffer {
-    const userMessages = this.store
-      .getDisplayMessages()
-      .filter((message) => message.sender === USER_SENDER);
-    return {
-      trigger,
-      draft,
-      evidence: this.getReportEvidence(),
-      afterUserMessageId: userMessages[userMessages.length - 1]?.id ?? null,
-      status: "open",
-    };
-  }
-
-  dismissFeedbackOffer(): void {
-    if (this.feedbackOffer?.status !== "open") return;
-    this.feedbackOffer = { ...this.feedbackOffer, status: "dismissed" };
-    this.notifyMessages();
-  }
-
-  markFeedbackReported(report: { reportId: string; issueUrl: string }): void {
-    // An upload can land after the user closed the dialog and dismissed the card, which must stay dismissed.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
-    if (this.feedbackOffer?.status !== "open") return;
-    this.feedbackOffer = { ...this.feedbackOffer, status: "reported", report };
-    this.notifyMessages();
   }
 
   getSessionUsage(): SessionUsage | null {
@@ -1602,7 +1632,7 @@ export class AgentSession {
   private applyTaskContent(toolCallId: string, update: SessionEvent["update"]): void {
     let store = this.taskContent.get(toolCallId);
     if (!store) {
-      store = new AgentMessageStore();
+      store = this.createStore();
       this.taskContent.set(toolCallId, store);
     }
     const messageId =
@@ -1654,6 +1684,20 @@ export class AgentSession {
   private publishTasks(): void {
     this.taskList = this.tasks.size === 0 ? EMPTY_TASKS : Object.freeze([...this.tasks.values()]);
     this.notifyTasks();
+  }
+
+  // A full-size image per tool result kept long chats holding megabytes they only show at 80 pixels. https://github.com/logancyang/obsidian-copilot/issues/4248
+  private createStore(): AgentMessageStore {
+    return new AgentMessageStore({ stageToolOutputs: (outputs) => this.toolImages.stage(outputs) });
+  }
+
+  private settleToolImage(key: string, thumbnail: ToolImage | null): void {
+    if (this.store.settleToolImage(key, thumbnail)) this.scheduleNotifyMessages();
+    let tasksChanged = false;
+    for (const store of this.taskContent.values()) {
+      tasksChanged = store.settleToolImage(key, thumbnail) || tasksChanged;
+    }
+    if (tasksChanged) this.notifyTasks();
   }
 
   private notifyTasks(): void {

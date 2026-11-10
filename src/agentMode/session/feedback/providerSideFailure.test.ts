@@ -70,7 +70,29 @@ describe("providerSideFailure", () => {
       expect(isProviderSideFailure(error, error.message)).toBe(true);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/4244 recognizes provider authentication by category even with unfamiliar wording", () => {
+      const error = acpFailure("Internal error: credentials rejected", {
+        service: "session",
+        errorName: "provider.auth",
+      });
+
+      expect(isProviderSideFailure(error, error.message)).toBe(true);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/4244 recognizes OpenCode's authentication-required response with empty data", () => {
+      const error = Object.assign(
+        new Error("Authentication required: provider authentication required"),
+        { code: -32000, data: {} }
+      );
+
+      expect(isProviderSideFailure(error, error.message)).toBe(true);
+    });
+
     it.each([
+      [
+        "a tool error mentioning authentication (https://github.com/logancyang/obsidian-copilot/issues/4244)",
+        new Error("Copilot tool failed: authentication required"),
+      ],
       ["a backend crash", acpFailure("Internal error", { errorName: "ClientError" })],
       [
         "an unsupported model capability",
@@ -81,13 +103,6 @@ describe("providerSideFailure", () => {
             errorName: "provider.invalid-request",
           }
         ),
-      ],
-      [
-        "a provider sign-in failure",
-        acpFailure("Authentication required: provider authentication required", {
-          service: "session",
-          errorName: "provider.auth",
-        }),
       ],
       ["a missing model", new Error("model not supported: gemini-4")],
       ["a request id containing 429", new Error("Internal error: request req_4291 failed")],

@@ -214,6 +214,7 @@ const COPILOT_BUILD_ASKS = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "edit", resource: "*", effect: "ask" },
   { action: "websearch", resource: "*", effect: "ask" },
+  { action: "obsidian-copilot_*", resource: "*", effect: "ask" },
 ];
 
 describe("OpencodeBackend", () => {
@@ -965,11 +966,25 @@ describe("OpencodeBackend", () => {
       ]);
     });
 
-    it("configures copilot-build as a primary agent that asks before shell, edit, and web search", async () => {
+    it("configures copilot-build as a primary agent that asks before shell, edit, web search, and Copilot's MCP tools", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 
       expect(cfg.agents["copilot-build"].mode).toBe("primary");
       expect(cfg.agents["copilot-build"].permissions).toEqual(COPILOT_BUILD_ASKS);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 lets the ask-first agent run Copilot's read-only MCP tools, named as OpenCode names them, without asking, while Auto runs every tool", async () => {
+      const cfg = await buildOpencodeConfig(getSettings(), {
+        ...NO_MODELS_DEPS,
+        readCopilotReadOnlyToolNames: async () => ["send_feedback", "drive_files.list"],
+      });
+
+      expect(cfg.agents["copilot-build"].permissions).toEqual([
+        ...COPILOT_BUILD_ASKS,
+        { action: "obsidian-copilot_send_feedback", resource: "*", effect: "allow" },
+        { action: "obsidian-copilot_drive_files_list", resource: "*", effect: "allow" },
+      ]);
+      expect(cfg.agents.build.permissions).toBeUndefined();
     });
 
     it("gives both agents the shared product prompt, byte for byte", async () => {
@@ -979,7 +994,8 @@ describe("OpencodeBackend", () => {
       expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode", APP));
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for OpenCode in both agent prompts", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for a paid OpenCode user in both agent prompts", async () => {
+      setSettings({ isPaidUser: true, plusLicenseKey: "test-license" });
       const agentMode = getSettings().agentMode;
       updateSetting("agentMode", {
         ...agentMode,
@@ -994,6 +1010,28 @@ describe("OpencodeBackend", () => {
       for (const id of ["copilot-build", "build"]) {
         expect(cfg.agents[id].system).not.toContain("copilot-web-search");
         expect(cfg.agents[id].system).toContain("copilot-web-fetch for pages/URLs");
+      }
+    });
+
+    it("omits every Plus relay skill from both OpenCode agent prompts when paid access is inactive https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      setSettings({ isPaidUser: false, plusLicenseKey: "test-license" });
+      const agentMode = getSettings().agentMode;
+      updateSetting("agentMode", {
+        ...agentMode,
+        skills: { ...agentMode.skills, builtinPreferences: {} },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+      for (const id of ["copilot-build", "build"]) {
+        for (const name of [
+          "copilot-web-search",
+          "copilot-web-fetch",
+          "copilot-youtube-transcript",
+          "copilot-fetch-x",
+        ]) {
+          expect(cfg.agents[id].system).not.toContain(name);
+        }
       }
     });
 
@@ -1229,21 +1267,6 @@ describe("OpencodeBackend", () => {
         expect(cfg.agents.empty).toEqual({ description: "No rule yet", permissions: denies });
       });
 
-      it.each(["permission", "tools", "agent", "mode"])(
-        "https://github.com/Brevilabs/obsidian-copilot-private/issues/558 rejects a Self-Host config override that sets the OpenCode 1 `%s` key",
-        async (legacyKey) => {
-          setSettings({ enableSelfHostMode: true });
-          setOpencodeSettings({
-            binaryPath: "/path/to/opencode",
-            envOverrides: { OPENCODE_CONFIG_CONTENT: JSON.stringify({ [legacyKey]: {} }) },
-          });
-
-          await expect(
-            new OpencodeBackend(NO_MODELS_DEPS).buildSpawnDescriptor({ vaultBasePath: "/vault" })
-          ).rejects.toThrow(`OpenCode 1 keys (${legacyKey})`);
-        }
-      );
-
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/165 refuses to start Self-Host OpenCode before the replacement search channel is available", async () => {
         setSettings({ enableSelfHostMode: true });
         setOpencodeSettings({ binaryPath: "/path/to/opencode" });
@@ -1284,6 +1307,31 @@ describe("OpencodeBackend", () => {
           expect(await fs.promises.readFile(path.join(pluginDir, "index.js"), "utf8")).toBe(
             OPENCODE_COPILOT_PLUGIN_SOURCE
           );
+        } finally {
+          await fs.promises.rm(root, { recursive: true, force: true });
+        }
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 keeps the MCP integration plugin in a custom configuration without duplicating it", async () => {
+        const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-direct-config-"));
+        const pluginDir = path.join(root, "copilot");
+        try {
+          for (const plugins of [["custom-plugin"], ["custom-plugin", pluginDir]]) {
+            setOpencodeSettings({
+              binaryPath: "/path/to/opencode",
+              envOverrides: {
+                OPENCODE_CONFIG_CONTENT: JSON.stringify({ model: "custom", plugins }),
+              },
+            });
+            const desc = await new OpencodeBackend({
+              ...NO_MODELS_DEPS,
+              getCopilotPluginDir: () => pluginDir,
+            }).buildSpawnDescriptor({ vaultBasePath: "/vault" });
+            expect(JSON.parse(desc.env.OPENCODE_CONFIG_CONTENT as string)).toEqual({
+              model: "custom",
+              plugins: ["custom-plugin", pluginDir],
+            });
+          }
         } finally {
           await fs.promises.rm(root, { recursive: true, force: true });
         }

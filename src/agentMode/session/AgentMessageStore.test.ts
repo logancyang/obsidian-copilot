@@ -346,6 +346,66 @@ describe("AgentMessageStore", () => {
       ).toBe(true);
     });
 
+    it("skips unchanged image results but publishes changed image bytes and media types https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      const part: AgentMessagePart = {
+        kind: "tool_call",
+        id: "image",
+        title: "Read image",
+        status: "completed",
+        output: [{ type: "image", mimeType: "image/png", data: "AQID" }],
+      };
+      expect(store.upsertAgentPart(id, part)).toBe(true);
+      expect(
+        store.upsertAgentPart(id, {
+          ...part,
+          output: [{ type: "image", mimeType: "image/png", data: "AQID" }],
+        })
+      ).toBe(false);
+      expect(
+        store.upsertAgentPart(id, {
+          ...part,
+          output: [{ type: "image", mimeType: "image/png", data: "BAUG" }],
+        })
+      ).toBe(true);
+      expect(
+        store.upsertAgentPart(id, {
+          ...part,
+          output: [{ type: "image", mimeType: "image/jpeg", data: "BAUG" }],
+        })
+      ).toBe(true);
+      expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
+        output: [{ type: "image", mimeType: "image/jpeg", data: "BAUG" }],
+      });
+    });
+
+    it("stores a tool call's outputs as staged, so a full-size image is never held https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      const store = new AgentMessageStore({
+        stageToolOutputs: (outputs) =>
+          outputs.map((o) => (o.type === "image" ? { type: "image_pending", key: "chart" } : o)),
+      });
+      const id = store.addMessage(placeholder());
+
+      store.upsertAgentPart(id, {
+        kind: "tool_call",
+        id: "read",
+        title: "Read chart",
+        status: "completed",
+        output: [
+          { type: "text", text: "Chart read" },
+          { type: "image", mimeType: "image/png", data: "RlVMTA==" },
+        ],
+      });
+
+      expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
+        output: [
+          { type: "text", text: "Chart read" },
+          { type: "image_pending", key: "chart" },
+        ],
+      });
+    });
+
     it("reports no change when a large tool output is re-applied unchanged", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
@@ -572,6 +632,60 @@ describe("AgentMessageStore", () => {
         ["read", "completed"],
       ]);
       expect(store.stopToolCalls(id, new Set(["agent"]))).toBe(false);
+    });
+  });
+
+  describe("settleToolImage()", () => {
+    const pendingRead = (callId: string, key: string): AgentMessagePart => ({
+      kind: "tool_call",
+      id: callId,
+      title: "Read chart",
+      status: "completed",
+      output: [
+        { type: "text", text: "Chart read" },
+        { type: "image_pending", key },
+      ],
+    });
+
+    it("replaces every placeholder for the image with its thumbnail https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      const store = new AgentMessageStore();
+      const first = store.addMessage(placeholder());
+      const second = store.addMessage(placeholder());
+      store.upsertAgentPart(first, pendingRead("read-1", "chart"));
+      store.upsertAgentPart(second, pendingRead("read-2", "chart"));
+
+      expect(
+        store.settleToolImage("chart", { type: "image", mimeType: "image/webp", data: "VEhVTUI=" })
+      ).toBe(true);
+
+      for (const id of [first, second]) {
+        expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
+          output: [
+            { type: "text", text: "Chart read" },
+            { type: "image", mimeType: "image/webp", data: "VEhVTUI=" },
+          ],
+        });
+      }
+    });
+
+    it("removes the placeholder when the image could not be shrunk", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, pendingRead("read", "chart"));
+
+      expect(store.settleToolImage("chart", null)).toBe(true);
+
+      expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
+        output: [{ type: "text", text: "Chart read" }],
+      });
+    });
+
+    it("reports no change when no tool call waits on the image", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+      store.upsertAgentPart(id, pendingRead("read", "chart"));
+
+      expect(store.settleToolImage("diagram", null)).toBe(false);
     });
   });
 

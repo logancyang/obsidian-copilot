@@ -2,7 +2,7 @@ import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { App, TFile } from "obsidian";
 import * as React from "react";
 
@@ -40,6 +40,28 @@ describe("AgentMarkdownText", () => {
       const text = "[[Standing desk setup]] [[Reading list]]";
       render(tree(app, text, miyoPaths));
     }
+
+    it("passes streamed text to the renderer word by word and the full text once streaming ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/886)", () => {
+      jest.useFakeTimers();
+      const app = new App();
+      jest.mocked(renderMarkdown).mockReset();
+      jest.mocked(renderMarkdown).mockResolvedValue(undefined);
+      const burst = "Here " + "is a steady reply ".repeat(30);
+      const view = (text: string, streaming: boolean) => (
+        <AppContext.Provider value={app}>
+          <AgentMarkdownText app={app} text={text} streaming={streaming} />
+        </AppContext.Provider>
+      );
+      const rendered = () => jest.mocked(renderMarkdown).mock.calls.at(-1)?.[1] ?? "";
+      const { rerender } = render(view("Here ", true));
+      rerender(view(burst, true));
+      act(() => jest.advanceTimersByTime(20));
+      expect(rendered().length).toBeGreaterThan("Here ".length);
+      expect(rendered().length).toBeLessThan(burst.length);
+      rerender(view(burst + "done.", false));
+      expect(rendered()).toBe(burst + "done.");
+      jest.useRealTimers();
+    });
 
     it("labels only the links to notes in the turn's Miyo results as found by Miyo", async () => {
       renderLinks(["notes/Standing desk setup.md"]);

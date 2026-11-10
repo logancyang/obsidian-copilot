@@ -1,8 +1,4 @@
-import {
-  AgentTabStrip,
-  computeVisibleCount,
-  partitionSessions,
-} from "@/agentMode/ui/AgentTabStrip";
+import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SESSIONS_SIDEBAR_VIEWTYPE } from "@/constants";
@@ -56,91 +52,34 @@ function makeManagerWithOneChat() {
 }
 
 describe("AgentTabStrip", () => {
-  describe("computeVisibleCount()", () => {
-    it("returns 0 for empty input", () => {
-      expect(computeVisibleCount(500, 0)).toBe(0);
-    });
-
-    it("shows all tabs when they fit alongside the + button", () => {
-      expect(computeVisibleCount(424, 3)).toBe(3);
-    });
-
-    it("reserves overflow button space when not all tabs fit", () => {
-      expect(computeVisibleCount(460, 5)).toBe(3);
-    });
-
-    it("guarantees at least one visible tab even when nothing fits", () => {
-      expect(computeVisibleCount(40, 3)).toBe(1);
-    });
-
-    it("treats the + button as always reserved", () => {
-      expect(computeVisibleCount(160, 1)).toBe(1);
-      expect(computeVisibleCount(159, 1)).toBe(1);
-    });
-
-    it("accounts for inter-tab gaps", () => {
-      expect(computeVisibleCount(292, 2)).toBe(2);
-      expect(computeVisibleCount(291, 2)).toBe(1);
-    });
-  });
-
-  describe("partitionSessions()", () => {
-    const s = (id: string) => ({ internalId: id });
-
-    it("returns empty arrays for empty input", () => {
-      expect(partitionSessions({ sessions: [], visibleCount: 0, activeId: null })).toEqual({
-        visibleSessions: [],
-        overflowSessions: [],
-      });
-    });
-
-    it("splits front-to-back when active is already visible", () => {
-      const sessions = [s("a"), s("b"), s("c"), s("d")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 2,
-        activeId: "a",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["c", "d"]);
-    });
-
-    it("pins the active tab into the last visible slot when it would overflow", () => {
-      const sessions = [s("a"), s("b"), s("c"), s("d")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 2,
-        activeId: "d",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a", "d"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
-    });
-
-    it("does not swap when activeId is null", () => {
-      const sessions = [s("a"), s("b"), s("c")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 1,
-        activeId: null,
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["a"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["b", "c"]);
-    });
-
-    it("handles visibleCount === 1 with overflow active", () => {
-      const sessions = [s("a"), s("b"), s("c")];
-      const { visibleSessions, overflowSessions } = partitionSessions({
-        sessions,
-        visibleCount: 1,
-        activeId: "c",
-      });
-      expect(visibleSessions.map((x) => x.internalId)).toEqual(["c"]);
-      expect(overflowSessions.map((x) => x.internalId)).toEqual(["a", "b"]);
-    });
-  });
-
   describe("AgentTabStrip()", () => {
     beforeEach(() => setNavigatorAccess("supporter"));
+    afterEach(() => jest.restoreAllMocks());
+
+    it("pins the active chat into the last visible slot and lists the rest in the overflow menu when the strip is too narrow for https://github.com/Brevilabs/obsidian-copilot-private/issues/891", () => {
+      const sessions = ["First", "Second", "Third", "Fourth"].map((label) => ({
+        internalId: label.toLowerCase(),
+        backendId: "test",
+        subscribe: () => () => {},
+        getLabel: () => label,
+        getStatus: () => "idle",
+        getNeedsAttention: () => false,
+      }));
+      const manager = {
+        subscribe: () => () => {},
+        getSessionsForScope: () => sessions,
+        getActiveProjectId: () => null,
+        getActiveSession: () => sessions[3],
+        getIsStarting: () => false,
+      };
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(400);
+
+      renderStrip(manager);
+
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["First", "Fourth"]);
+      expect(screen.getByRole("tab", { selected: true }).textContent).toBe("Fourth");
+      expect(screen.getByRole("button", { name: "Show 2 more chats" })).not.toBeNull();
+    });
 
     it("detaches a closed tab without closing its backend session for https://github.com/Brevilabs/obsidian-copilot-private/issues/429", () => {
       const session = {

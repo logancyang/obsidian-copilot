@@ -2,7 +2,9 @@ import type { LucideIcon } from "lucide-react";
 import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
+import { toolUseLabel } from "@/agentMode/session/copilotToolCalls";
 import { formatDuration } from "@/lib/duration";
+import { humanizeToolName } from "@/lib/toolName";
 import { diffTargetPaths, primaryEditTargetPath } from "@/agentMode/session/editTargets";
 import { isAbsolutePath } from "@/utils/vaultPath";
 
@@ -20,6 +22,8 @@ export interface ToolSummary {
 
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   const base = selectToolSummary(part);
+  const label = toolUseLabel(part.copilotTools);
+  if (label) return { ...base, collapsedLine: () => label };
   if (!part.mcpServer) return base;
   const server = part.mcpServer;
   return {
@@ -33,7 +37,7 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   // update retains the original tool kind or vendor name.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/41
   if (part.userResponse) return USER_RESPONSE_SUMMARY;
-  if (isOpencodeTaskTool(part)) return TASK_SUMMARY;
+  if (isSubagentTask(part)) return TASK_SUMMARY;
   if (part.vendorToolName) {
     const v = VENDOR_SUMMARIES[part.vendorToolName];
     if (v) return v;
@@ -45,7 +49,7 @@ function selectToolSummary(part: ToolCallPart): ToolSummary {
   return GENERIC_SUMMARY;
 }
 
-function isOpencodeTaskTool(part: ToolCallPart): boolean {
+function isSubagentTask(part: ToolCallPart): boolean {
   if (part.vendorToolName) return false;
   if (part.toolKind && part.toolKind !== "other") return false;
   const input = part.input as { subagent_type?: unknown } | null | undefined;
@@ -61,16 +65,6 @@ function targetFromTitle(part: ToolCallPart): string {
   if (!t) return "…";
   if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
   return t;
-}
-
-function humanizeToolName(name: string): string {
-  const words = name
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[_-]+/g, " ")
-    .trim()
-    .toLowerCase();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
 }
 
 function genericToolLabel(part: ToolCallPart): string {

@@ -4,6 +4,7 @@ import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { Destination } from "@/types/destination";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { CopilotMcpServer } from "@/agentMode/session/copilotMcpServer";
 import type {
   BackendConfigOption,
   BackendId,
@@ -50,6 +51,19 @@ export interface ManagedInstallAction {
   getState(plugin: CopilotPlugin): ManagedInstallActionState;
   subscribe(plugin: CopilotPlugin, onChange: () => void): () => void;
   run(plugin: CopilotPlugin): Promise<void>;
+}
+
+export type ApprovedRuleScope = { kind: "folder"; path: string } | { kind: "file"; path: string };
+
+export interface ApprovedRule {
+  readonly id: string;
+  readonly allows: string;
+  readonly appliesTo: ApprovedRuleScope;
+}
+
+export interface ApprovedRuleStore {
+  list(plugin: CopilotPlugin): Promise<ReadonlyArray<ApprovedRule>>;
+  remove(plugin: CopilotPlugin, rule: ApprovedRule): Promise<void | { undo(): Promise<void> }>;
 }
 
 export interface BackendAuthStatus {
@@ -129,11 +143,14 @@ export interface BackendDescriptor {
 
   auth?: BackendAuth;
 
+  approvedRules?: ApprovedRuleStore;
+
   createBackendProcess(args: {
     plugin: CopilotPlugin;
     app: App;
     clientVersion: string;
     descriptor: BackendDescriptor;
+    copilotMcpServer?: CopilotMcpServer;
   }): BackendProcess;
 
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;

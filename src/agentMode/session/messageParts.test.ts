@@ -14,6 +14,20 @@ import type { AgentMessagePart } from "./types";
 
 describe("messageParts", () => {
   describe("toolCallToPart()", () => {
+    it("preserves images alongside text in tool results https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
+      const image = { type: "image" as const, mimeType: "image/png", data: "AQID" };
+      expect(
+        toolCallToPart({
+          toolCallId: "image",
+          title: "Read image",
+          content: [
+            { type: "content", content: { type: "text", text: "Image read" } },
+            { type: "content", content: image },
+          ],
+        })
+      ).toMatchObject({ output: [{ type: "text", text: "Image read" }, image] });
+    });
+
     it("maps a tool call snapshot to a tool-call part with its text and diff outputs", () => {
       expect(
         toolCallToPart({
@@ -71,6 +85,27 @@ describe("messageParts", () => {
           "x".repeat(256_000) +
           "\n\n[Display trimmed: 5 more characters. The agent received the full output.]",
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 says a direct call on Copilot's server runs its tool with its input as arguments", () => {
+      const part = toolCallToPart({
+        toolCallId: "t1",
+        title: "notion_search",
+        rawInput: { query: "Orion" },
+        mcpServer: "obsidian-copilot",
+        vendorToolName: "notion_search",
+      });
+
+      expect(part.kind === "tool_call" && part.copilotTools).toEqual({
+        calls: [{ name: "notion_search", args: { query: "Orion" } }],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 keeps the Copilot tools a backend read from a call it wraps", () => {
+      const copilotTools = { calls: [{ name: "notion_search", code: "x" }] };
+      const part = toolCallToPart({ toolCallId: "t1", title: "execute", copilotTools });
+
+      expect(part.kind === "tool_call" && part.copilotTools).toBe(copilotTools);
     });
   });
 
@@ -162,6 +197,18 @@ describe("messageParts", () => {
       progress: { toolUses: 1, durationMs: 10 },
     };
 
+    it("keeps an image result through a subsequent status-only update https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
+      const image = { type: "image" as const, mimeType: "image/png", data: "AQID" };
+      const merged = mergeToolCallUpdate(existing, {
+        toolCallId: "t1",
+        content: [{ type: "content", content: image }],
+      });
+      expect(mergeToolCallUpdate(merged, { toolCallId: "t1", status: "completed" })).toMatchObject({
+        status: "completed",
+        output: [image],
+      });
+    });
+
     it("overlays the fields an update reports and keeps the ones it omits", () => {
       expect(
         mergeToolCallUpdate(existing, {
@@ -196,6 +243,46 @@ describe("messageParts", () => {
         toolKind: "edit",
         status: "pending",
       });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads a direct Copilot call's arguments from the latest input", () => {
+      const call = { ...existing, mcpServer: "obsidian-copilot", vendorToolName: "notion_search" };
+      const merged = mergeToolCallUpdate(call, { toolCallId: "t1", rawInput: { query: "Orion" } });
+
+      expect(merged.kind === "tool_call" && merged.copilotTools).toEqual({
+        calls: [{ name: "notion_search", args: { query: "Orion" } }],
+      });
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 accepts executed tool metadata on a completion update without new input", () => {
+      const copilotTools = {
+        wrapper: "Execute",
+        calls: [{ name: "everything_echo", args: { message: "hello" } }],
+      };
+      const merged = mergeToolCallUpdate(existing, {
+        toolCallId: "t1",
+        status: "completed",
+        copilotTools,
+      });
+      expect(merged.kind === "tool_call" && merged.copilotTools).toBe(copilotTools);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 replaces a wrapped call's Copilot tools with the ones read from new input and keeps them when no input arrives", () => {
+      const before = { calls: [{ name: "notion_search", code: "a" }] };
+      const after = { calls: [{ name: "notion_search", code: "b" }] };
+      const call = { ...existing, copilotTools: before };
+
+      const kept = mergeToolCallUpdate(call, { toolCallId: "t1", status: "completed" });
+      const replaced = mergeToolCallUpdate(call, {
+        toolCallId: "t1",
+        rawInput: { code: "b" },
+        copilotTools: after,
+      });
+      const cleared = mergeToolCallUpdate(call, { toolCallId: "t1", rawInput: { code: "c" } });
+
+      expect(kept.kind === "tool_call" && kept.copilotTools).toBe(before);
+      expect(replaced.kind === "tool_call" && replaced.copilotTools).toBe(after);
+      expect(cleared.kind === "tool_call" && cleared.copilotTools).toBeUndefined();
     });
   });
 

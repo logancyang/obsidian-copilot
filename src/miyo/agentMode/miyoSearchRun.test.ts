@@ -1,15 +1,25 @@
+import { readCodexCopilotTools } from "@/agentMode/backends/codex/codexCopilotToolCalls";
+import { readOpencodeCopilotTools } from "@/agentMode/backends/opencode/opencodeCopilotToolCalls";
+import { directCopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { miyoResultPaths, miyoSearchRun } from "@/miyo/agentMode/miyoSearchRun";
 
+function ingested(part: ToolCallPart): ToolCallPart {
+  const copilotTools =
+    directCopilotToolUse(part.mcpServer, part.vendorToolName, part.input) ??
+    readCodexCopilotTools(part.input);
+  return copilotTools ? { ...part, copilotTools } : part;
+}
+
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
-  return {
+  return ingested({
     kind: "tool_call",
     id: "x",
     title: "tool",
     status: "completed",
     ...overrides,
-  };
+  });
 }
 
 describe("miyoSearchRun", () => {
@@ -47,13 +57,17 @@ describe("miyoSearchRun", () => {
       });
     const opencodeCall = (overrides: Partial<ToolCallPart> = {}) =>
       tool({
-        title: "execute",
+        title: "obsidian-copilot_miyo_search",
         toolKind: "other",
-        input: {
-          code: 'const r = await tools["obsidian-copilot"].miyo_search({ query: "hiking trip", variants: ["hike"] });\nreturn r;',
-        },
+        copilotTools:
+          readOpencodeCopilotTools(
+            { query: "hiking trip", variants: ["hike"] },
+            "obsidian-copilot_miyo_search"
+          ) ?? undefined,
         ...overrides,
       });
+    const savedOpencodeCall = (code: string) =>
+      tool({ title: "execute", copilotTools: { calls: [{ name: "miyo_search", code }] } });
     const backends = [
       ["Claude", claudeCall],
       ["Codex", codexCall],
@@ -169,29 +183,23 @@ describe("miyoSearchRun", () => {
       ],
       [
         "an OpenCode call whose query is not a string literal",
-        opencodeCall({
-          input: { code: 'return tools["obsidian-copilot"].miyo_search({ query: q });' },
-        }),
+        savedOpencodeCall('return tools["obsidian-copilot"].miyo_search({ query: q });'),
       ],
     ])("shows the card without a query for %s", (_name, call) => {
       expect(miyoSearchRun(call)?.query).toBeNull();
     });
 
-    it("reads an OpenCode query written with escapes and single-quoted tool access", () => {
-      const t = opencodeCall({
-        input: {
-          code: 'return tools[\'obsidian-copilot\'].miyo_search({ "query": "say \\"hi\\"" });',
-        },
-      });
+    it("reads a saved OpenCode query written with escapes and single-quoted tool access", () => {
+      const t = savedOpencodeCall(
+        'return tools[\'obsidian-copilot\'].miyo_search({ "query": "say \\"hi\\"" });'
+      );
       expect(miyoSearchRun(t)?.query).toBe('say "hi"');
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads an OpenCode query written as a single-quoted literal", () => {
-      const t = opencodeCall({
-        input: {
-          code: `return tools["obsidian-copilot"].miyo_search({ query: 'Sam\\'s "standing" desk' });`,
-        },
-      });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 reads a saved OpenCode query written as a single-quoted literal", () => {
+      const t = savedOpencodeCall(
+        `return tools["obsidian-copilot"].miyo_search({ query: 'Sam\\'s "standing" desk' });`
+      );
       expect(miyoSearchRun(t)?.query).toBe('Sam\'s "standing" desk');
     });
 
@@ -204,11 +212,11 @@ describe("miyoSearchRun", () => {
       ],
       [
         "an OpenCode execute call to another tool",
-        opencodeCall({ input: { code: 'return tools["obsidian-copilot"].send_feedback({});' } }),
+        opencodeCall({ copilotTools: { calls: [{ name: "send_feedback", args: {} }] } }),
       ],
       [
         "an OpenCode execute call that only mentions the tool",
-        opencodeCall({ input: { code: "// miyo_search" } }),
+        opencodeCall({ copilotTools: undefined, input: { code: "// miyo_search" } }),
       ],
       ["a call without input", tool({ input: undefined })],
     ])("returns null for %s", (_name, call) => {
@@ -280,7 +288,10 @@ describe("miyoSearchRun", () => {
           {
             mcpServer: undefined,
             vendorToolName: undefined,
-            input: { code: 'return tools["obsidian-copilot"].miyo_search({ query: "q" });' },
+            copilotTools: {
+              wrapper: "Execute",
+              calls: [{ name: "miyo_search", args: { query: "q" } }],
+            },
           },
           ["v/opencode.md"]
         ),

@@ -56,7 +56,13 @@ const ENV_BLOCK_TRIMMED = [
 const WORKTREE_HINT =
   "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.";
 
+interface McpEditor {
+  list(): [string, Record<string, unknown>][];
+  update(name: string, edit: (server: Record<string, unknown>) => void): void;
+}
+
 async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
+  const mcpTransforms: ((editor: McpEditor) => void)[] = [];
   const hooks = new Map<string, Hook>();
   const providerHooks: ProviderHook[] = [];
   const toolHooks = new Map<string, ToolHook>();
@@ -65,6 +71,11 @@ async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
     ["report", {}],
   ]);
   await plugin.setup({
+    mcp: {
+      transform: async (transform: (editor: McpEditor) => void) => {
+        mcpTransforms.push(transform);
+      },
+    },
     session: {
       hook: async (name: string, hook: Hook, options?: { providerID: string }) =>
         void (options
@@ -78,7 +89,7 @@ async function setUpPlugin(plugin: LoadedPlugin, directory = "/vault") {
     tool: { hook: async (name: string, hook: ToolHook) => void toolHooks.set(name, hook) },
     location: { directory },
   });
-  return { hooks, providerHooks, toolHooks, skills };
+  return { hooks, providerHooks, toolHooks, skills, mcpTransforms };
 }
 
 describe("opencodeCopilotPlugin", () => {
@@ -103,6 +114,39 @@ describe("opencodeCopilotPlugin", () => {
       const { hooks } = await setUpPlugin(plugin);
       return hooks.get("context")!;
     }
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/875 exposes configured and later ACP MCP servers directly without changing their other settings", async () => {
+      const { mcpTransforms } = await setUpPlugin(plugin);
+      const servers = new Map<string, Record<string, unknown>>([
+        ["local", { type: "local", command: ["node", "server.js"], codemode: true }],
+        ["remote", { type: "remote", url: "https://example.com/mcp", disabled: true }],
+      ]);
+      const editor: McpEditor = {
+        list: () => [...servers],
+        update: (name, edit) => edit(servers.get(name)!),
+      };
+      expect(mcpTransforms).toHaveLength(1);
+      mcpTransforms[0](editor);
+      expect([...servers]).toEqual([
+        ["local", { type: "local", command: ["node", "server.js"], codemode: false }],
+        [
+          "remote",
+          { type: "remote", url: "https://example.com/mcp", disabled: true, codemode: false },
+        ],
+      ]);
+      servers.set("obsidian-copilot", {
+        type: "remote",
+        url: "http://127.0.0.1/mcp",
+        headers: { Authorization: "fixture" },
+      });
+      mcpTransforms[0](editor);
+      expect(servers.get("obsidian-copilot")).toEqual({
+        type: "remote",
+        url: "http://127.0.0.1/mcp",
+        headers: { Authorization: "fixture" },
+        codemode: false,
+      });
+    });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/665 trims every request kind and removes only the built-in report skill", async () => {
       const { hooks, skills } = await setUpPlugin(plugin);
@@ -307,37 +351,23 @@ describe("opencodeCopilotPlugin", () => {
       });
     });
 
-    describe("send_feedback caller", () => {
-      async function runBefore(event: Record<string, unknown>) {
+    it.each([
+      ["obsidian-copilot_send_feedback", { title: "Failure" }],
+      ["obsidian-copilot_miyo_search", { query: "plans" }],
+      ["obsidian-copilot_openartifacts_publish", { title: "Page" }],
+      ["obsidian-copilot_strict_connector", {}],
+      ["obsidian-copilot_strict_connector", undefined],
+    ])(
+      "https://github.com/logancyang/obsidian-copilot/issues/4229 leaves %s arguments unchanged because session identity belongs in transport metadata",
+      async (tool, input) => {
         const { toolHooks } = await setUpPlugin(plugin);
+        const event = { tool, input, sessionID: "ses_caller", id: "call-1" };
+
         await toolHooks.get("execute.before")!(event);
-        return event.input;
+
+        expect(event.input).toBe(input);
       }
-
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 stamps the calling session on a send_feedback call, replacing any value the model wrote", async () => {
-        const input = await runBefore({
-          tool: "obsidian-copilot_send_feedback",
-          sessionID: "ses_caller",
-          id: "call-1",
-          input: { title: "t", caller_session_id: "ses_guessed" },
-        });
-
-        expect(input).toEqual({ title: "t", caller_session_id: "ses_caller" });
-      });
-
-      it("leaves other tools' input untouched", async () => {
-        const original = { title: "t" };
-
-        const input = await runBefore({
-          tool: "other-server_send_feedback",
-          sessionID: "ses_caller",
-          id: "call-1",
-          input: original,
-        });
-
-        expect(input).toBe(original);
-      });
-    });
+    );
   });
 
   describe("opencodeCopilotPluginDir()", () => {

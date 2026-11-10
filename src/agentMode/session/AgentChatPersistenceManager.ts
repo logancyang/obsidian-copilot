@@ -23,6 +23,7 @@ import {
   patchFrontmatter,
   trashFile,
 } from "@/utils/vaultAdapterUtils";
+import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
 import { joinPosix } from "@/utils/pathUtils";
 import { TFile, type App } from "obsidian";
 import {
@@ -270,7 +271,7 @@ export class AgentChatPersistenceManager {
           m.message.length === 0 && m.fanout
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
-        return `**${m.sender}**: ${body}\n[Timestamp: ${ts}]`;
+        return `${formatChatNoteMessage(m.sender, body)}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
