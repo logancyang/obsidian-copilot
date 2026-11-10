@@ -203,6 +203,21 @@ describe("agentMode", () => {
       } as unknown as CopilotPlugin;
     });
 
+    it("refreshes built-in availability when a license key is removed without a paid-status change https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      createAgentSessionManager({} as App, plugin);
+      await mockManager.registerPreload.mock.calls[0][1];
+      mockRefresh.mockClear();
+      emitSettingsChange(
+        { ...mockSettings, isPaidUser: true, plusLicenseKey: "test-license" },
+        { ...mockSettings, isPaidUser: true, plusLicenseKey: "" }
+      );
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+      await mockRefresh.mock.results[0].value;
+      expect(reconcile).toHaveBeenLastCalledWith(
+        expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
+      );
+    });
+
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
       const manager = createAgentSessionManager({} as App, plugin);
 

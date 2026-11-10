@@ -7,6 +7,7 @@ import { howToRunSection } from "./howToRunSection";
 export interface BuiltinSkill {
   readonly name: string;
   readonly version: number;
+  readonly requiresPlus?: boolean;
   readonly defaultPreference?: BuiltinPreferences[string];
   readonly skillMd: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly content: string }>;
@@ -281,6 +282,7 @@ fi
   return {
     name: opts.name,
     version,
+    requiresPlus: true,
     defaultPreference: opts.defaultPreference,
     skillMd: `---
 name: ${opts.name}
@@ -401,6 +403,19 @@ export const DEFAULT_BUILTIN_PREFERENCES: BuiltinPreferences = Object.freeze(
   )
 );
 
+export function getBuiltinSkillUnavailableReason(
+  settings: Pick<CopilotSettings, "isPaidUser" | "plusLicenseKey">,
+  skillName: string
+): string | undefined {
+  const skill = BUILTIN_SKILLS.find((item) => item.name === skillName);
+  // Inactive relay skills stayed discoverable and generated no-license failures on every lookup.
+  // https://github.com/logancyang/obsidian-copilot/issues/4239
+  if (skill?.requiresPlus && (settings.isPaidUser !== true || !settings.plusLicenseKey)) {
+    return "An active Copilot Plus license is required.";
+  }
+  return undefined;
+}
+
 export function isBuiltinSkillEnabledFor(
   settings: CopilotSettings,
   skillName: string,
@@ -408,5 +423,6 @@ export function isBuiltinSkillEnabledFor(
 ): boolean {
   const pref = settings.agentMode.skills.builtinPreferences?.[skillName];
   if (pref?.disabled || pref?.disabledAgents?.includes(agentId)) return false;
+  if (getBuiltinSkillUnavailableReason(settings, skillName)) return false;
   return BUILTIN_SKILLS.some((skill) => skill.name === skillName);
 }

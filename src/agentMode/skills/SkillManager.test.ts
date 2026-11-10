@@ -31,6 +31,8 @@ const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3022";
 jest.mock("@/settings/model", () => ({
   sanitizeBuiltinPreferences: jest.requireActual("@/settings/model").sanitizeBuiltinPreferences,
   getSettings: () => ({
+    isPaidUser: true,
+    plusLicenseKey: "test-license",
     agentMode: {
       skills: {
         folder: skillsFolder,

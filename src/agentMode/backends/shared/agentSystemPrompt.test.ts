@@ -16,6 +16,7 @@ import {
   COPILOT_FEEDBACK_POINTER,
   COPILOT_OBSIDIAN_CLI_STEERING,
   COPILOT_PROMPT_BASE,
+  COPILOT_SKILL_FIRST_LEAD,
   COPILOT_SKILL_FALLBACK,
   COPILOT_VAULT_HYGIENE,
   COPILOT_WEB_RESEARCH_STEERING,
@@ -74,6 +75,8 @@ describe("agentSystemPrompt", () => {
   describe("buildAgentSystemPrompt()", () => {
     beforeEach(() => {
       resetSettings();
+      updateSetting("isPaidUser", true);
+      updateSetting("plusLicenseKey", "test-license");
       updateSetting("enableMiyoDocumentProcessing", false);
       resetPromptState();
       mockIsObsidianCliEnabled.mockReturnValue(true);
@@ -92,6 +95,16 @@ describe("agentSystemPrompt", () => {
           );
         }
       }
+    });
+
+    it("omits every relay skill while Plus is inactive and restores enabled skills after renewal https://github.com/logancyang/obsidian-copilot/issues/4239", () => {
+      setBuiltinPreferences({});
+      updateSetting("isPaidUser", false);
+      for (const agent of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(agent, APP)).not.toContain(COPILOT_SKILL_FIRST_LEAD);
+      }
+      updateSetting("isPaidUser", true);
+      expect(buildAgentSystemPrompt("codex", APP)).toContain(COPILOT_SKILL_FIRST_LEAD);
     });
 
     it("starts with the Copilot base prompt and includes the folder-mention directive by default", () => {

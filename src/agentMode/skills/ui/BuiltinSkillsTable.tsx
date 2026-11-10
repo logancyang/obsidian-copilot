@@ -171,8 +171,9 @@ const BuiltinSkillItem = React.memo(function BuiltinSkillItem({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" container={containerRef.current}>
+              {/* Unavailable skills cannot be re-enabled through their menu. https://github.com/logancyang/obsidian-copilot/issues/4239 */}
               <DropdownMenuItem
-                disabled={pending}
+                disabled={pending || (!!unavailableReason && !skillEnabled)}
                 className="tw-gap-2.5 tw-text-ui-small"
                 onSelect={() => onToggleSkill(skill.name, !skillEnabled)}
               >
