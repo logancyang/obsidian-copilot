@@ -67,7 +67,7 @@ describe("attachToChat", () => {
   });
 
   describe("attachToChat()", () => {
-    it("attaches a vault note as context without copying it", async () => {
+    it("attaches a vault note as context without copying it or showing a notice", async () => {
       const { app, created } = makeApp();
       const targets = makeTargets();
 
@@ -75,9 +75,10 @@ describe("attachToChat", () => {
 
       expect(targets.notes()).toEqual(["Notes/plan.md"]);
       expect(created).toEqual([]);
+      expect(notices()).toEqual([]);
     });
 
-    it("copies a PDF from outside the vault into Obsidian's attachment location and attaches the copy as context (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
+    it("copies a PDF from outside the vault into Obsidian's attachment location, attaches the copy as context, and names the copy and its folder in a notice (https://github.com/logancyang/obsidian-copilot/issues/4043)", async () => {
       const { app, created, fileManager } = makeApp();
       const targets = makeTargets();
 
@@ -94,6 +95,22 @@ describe("attachToChat", () => {
       expect(created.map((entry) => entry.path)).toEqual(["attachments/report.pdf"]);
       expect(new TextDecoder().decode(created[0].data)).toBe("report.pdf");
       expect(targets.notes()).toEqual(["attachments/report.pdf"]);
+      expect(notices()).toEqual(["Copied report.pdf into attachments/"]);
+    });
+
+    it("names the copy Obsidian made and says it went to the root of the vault when that is the attachment location (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {
+      const { app, fileManager } = makeApp();
+      fileManager.getAvailablePathForAttachment.mockResolvedValueOnce("report 1.pdf");
+      const targets = makeTargets();
+
+      await attachToChat(
+        app,
+        split({ outsideFiles: [outsideFile("report.pdf", "application/pdf")] }),
+        targets.options
+      );
+
+      expect(targets.notes()).toEqual(["report 1.pdf"]);
+      expect(notices()).toEqual(["Copied report 1.pdf into the root of your vault"]);
     });
 
     it("sends an outside image to the image tray as is and a vault image as its file contents, copying neither", async () => {
@@ -186,7 +203,7 @@ describe("attachToChat", () => {
 
       expect(created.map((entry) => entry.path)).toEqual(["attachments/brief.docx"]);
       expect(targets.notes()).toEqual(["Data/sales.csv", "attachments/brief.docx"]);
-      expect(notices()).toEqual([]);
+      expect(notices()).toEqual(["Copied brief.docx into attachments/"]);
     });
 
     it("names folders from the vault or the computer in one notice and attaches the files dropped with them (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
@@ -222,7 +239,10 @@ describe("attachToChat", () => {
         targets.options
       );
 
-      expect(notices()).toEqual(["Could not add first.pdf to the vault."]);
+      expect(notices()).toEqual([
+        "Could not add first.pdf to the vault.",
+        "Copied second.pdf into attachments/",
+      ]);
       expect(targets.notes()).toEqual(["attachments/second.pdf"]);
     });
   });

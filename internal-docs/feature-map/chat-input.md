@@ -10,7 +10,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - input-current-note: the open note or web tab shows as a `Current` badge that the user can remove.
 - input-selection: text selected in a note shows as a badge with the text and its line, such as `L3`; text selected in a [turn diff](turn-diffs.md) or a web page shows as a `Selection` badge.
 - input-images: paste or drop images to attach them; `Remove image` takes one off.
-- input-files: drop a note from the file explorer or a Copilot list such as [Relevant Notes](relevant-notes.md), drop a file of any type from the computer, or pick one through `Files`, to add it as context. A file from outside the vault is copied to the attachment folder first.
+- input-files: drop a note from the file explorer or a Copilot list such as [Relevant Notes](relevant-notes.md), drop a file of any type from the computer, or pick one through `Files`, to add it as context. A file from outside the vault is copied to the attachment folder first, and a notice names the copy and its folder.
 - input-commands: `/` lists `compact` ("Summarize this chat to free up context"), the agent's skills, and custom commands.
 - input-model-effort: `Model · effort` lists models grouped by agent, with an Effort slider; the choice applies when the picker closes.
 - input-mode: `Mode` picks `Safe`, `Plan`, or `Auto`; Shift+Tab cycles through them.
@@ -31,7 +31,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Current note: open a note beside Agent Chat. A badge with its name and `Current` shows above the text.
 - Selection: select a line in that note. A badge with the selected text and its line (`L3`) shows next to the `Current` badge.
 - Images: paste an image into the chat input. A preview shows above the text; `Remove image` takes it off.
-- Files: drop a `.csv` file from Finder onto the chat input. A copy appears in the attachment folder and its badge shows above the text. Drag a note from the file explorer onto the chat input: its badge shows and nothing is copied.
+- Files: drop a `.csv` file from Finder onto the chat input. A copy appears in the attachment folder, a notice reads `Copied <file> into <folder>/`, and its badge shows above the text. Drag a note from the file explorer onto the chat input: its badge shows and nothing is copied.
 - Commands: type `/`. `compact` is listed first with "Summarize this chat to free up context", followed by skills.
 - Model and effort: choose `Model · effort`. Models are grouped under each agent (OPENCODE, CLAUDE, CODEX), the current one checked, with an Effort slider below. Pick another model of the same agent and close the picker; the button shows the new model.
 - Mode: choose `Mode`. `Safe`, `Plan`, and `Auto` are listed with a line each. Press Shift+Tab in the chat input; the button moves from `Auto` to `Safe`, then `Plan`, then back to `Auto`.

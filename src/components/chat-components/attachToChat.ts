@@ -33,7 +33,12 @@ async function copyIntoVault(app: App, file: File): Promise<TFile> {
     file.name,
     app.workspace.getActiveFile()?.path
   );
-  return app.vault.createBinary(path, await file.arrayBuffer());
+  const copy = await app.vault.createBinary(path, await file.arrayBuffer());
+  // Every file Copilot saves into the vault is announced with its name and folder, so nothing lands there unseen.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
+  const folder = copy.path.slice(0, copy.path.length - copy.name.length);
+  new Notice(`Copied ${copy.name} into ${folder || "the root of your vault"}`);
+  return copy;
 }
 
 async function attachFile(app: App, file: TFile | File, options: AttachToChatOptions) {
