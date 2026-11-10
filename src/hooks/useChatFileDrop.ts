@@ -130,6 +130,10 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         }
       }
 
+      const droppedFiles = fileItems
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+
       if (stringItems.length > 0) {
         e.stopPropagation();
 
@@ -148,6 +152,17 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
           for (const file of files) {
             fileMap.set(file.path, file);
           }
+        }
+
+        // WeChat and browsers send a dropped file's name as text beside the file; only vault links mean an Obsidian drag.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/898
+        if (fileMap.size === 0 && droppedFiles.length > 0) {
+          await addFilesToChat(app, droppedFiles, {
+            onAddImage,
+            setContextNotes,
+            acceptAnyFileType,
+          });
+          return;
         }
 
         for (const file of fileMap.values()) {
@@ -180,11 +195,8 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
             );
           }
         }
-      } else if (fileItems.length > 0) {
-        const files = fileItems
-          .map((item) => item.getAsFile())
-          .filter((file): file is File => file !== null);
-        await addFilesToChat(app, files, { onAddImage, setContextNotes, acceptAnyFileType });
+      } else if (droppedFiles.length > 0) {
+        await addFilesToChat(app, droppedFiles, { onAddImage, setContextNotes, acceptAnyFileType });
       }
     };
 
