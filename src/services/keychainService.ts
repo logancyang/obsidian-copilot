@@ -1,17 +1,14 @@
 import { type App, type SecretStorage, FileSystemAdapter } from "obsidian";
-import { type CopilotSettings, getModelKeyFromModel, getSettings } from "@/settings/model";
+import { type CopilotSettings, getModelKeyFromModel } from "@/settings/model";
 import { type CustomModel } from "@/aiParams";
 import type { Provider } from "@/modelManagement";
 import {
-  stripKeychainFields,
-  cleanupLegacyFields,
   isSensitiveKey,
   MODEL_SECRET_FIELDS,
   TOP_LEVEL_SECRET_FIELDS,
 } from "@/services/settingsSecretTransforms";
-import { Notice } from "obsidian";
 import { md5 } from "@/utils/hash";
-import { logError, logWarn } from "@/logger";
+import { logWarn } from "@/logger";
 
 const EXTRA_SECRET_KEYS: readonly string[] = [];
 
@@ -143,8 +140,6 @@ export interface PersistSecretsResult {
   secretEntries: Array<[string, string]>;
   keychainIdsToDelete: string[];
 }
-
-export type SaveDataFn = (data: CopilotSettings) => Promise<void>;
 
 export class KeychainService {
   private static instance: KeychainService | null = null;
@@ -340,85 +335,6 @@ export class KeychainService {
         logWarn(`Keychain: failed to remove retired embedding secret ${id}`, error);
       }
     }
-  }
-
-  clearAllVaultSecrets(): void {
-    const vaultPrefix = `copilot-v${this.vaultId}-`;
-    if (typeof this.storage.listSecrets !== "function") {
-      throw new Error(
-        "Obsidian Keychain on this build does not support listing entries; " +
-          "cannot guarantee a complete clear."
-      );
-    }
-    const allIds = this.storage.listSecrets();
-    const failures: string[] = [];
-    for (const id of allIds) {
-      if (id.startsWith(vaultPrefix)) {
-        try {
-          this.removeSecret(id);
-        } catch {
-          failures.push(id);
-        }
-      }
-    }
-    if (failures.length > 0) {
-      throw new Error(
-        `Failed to clear ${failures.length} keychain ` +
-          `entr${failures.length === 1 ? "y" : "ies"}. Please retry.`
-      );
-    }
-  }
-
-  async forgetAllSecrets(
-    saveData: SaveDataFn,
-    syncMemory: (data: Partial<CopilotSettings>) => void
-  ): Promise<void> {
-    const current = getSettings();
-    if (!this.isAvailable()) {
-      throw new Error(
-        "Cannot delete API keys from the Obsidian Keychain because Secure Storage is " +
-          "unavailable in this Obsidian build. Update Obsidian to 1.11.4 or later, or open " +
-          "this vault on a device with Keychain access, then try again."
-      );
-    }
-    if (typeof this.app.secretStorage?.listSecrets !== "function") {
-      throw new Error(
-        "Cannot delete all API keys because this Obsidian build does not support " +
-          "enumerating Keychain entries. Update Obsidian to a newer version and retry."
-      );
-    }
-
-    const stripped = stripKeychainFields(current);
-
-    const toSave = cleanupLegacyFields(stripped);
-    try {
-      await saveData(toSave);
-    } catch (error) {
-      logError("forgetAllSecrets: saveData failed — aborting keychain clear", error);
-      new Notice(
-        "Failed to remove API keys from data.json. Obsidian Keychain was NOT cleared. Please try again."
-      );
-      return;
-    }
-
-    let keychainError: Error | undefined;
-    try {
-      this.clearAllVaultSecrets();
-    } catch (e) {
-      keychainError = e instanceof Error ? e : new Error(String(e));
-    }
-
-    syncMemory(stripped);
-
-    if (keychainError) {
-      new Notice(
-        "Some Obsidian Keychain entries could not be removed. " +
-          "Your keys have been cleared from data.json and memory. Please restart and retry."
-      );
-      throw keychainError;
-    }
-
-    new Notice("All API keys for this vault removed. Please re-enter them.");
   }
 
   private async hydrateModelSecrets(

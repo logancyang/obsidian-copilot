@@ -65,19 +65,6 @@ describe("settingsPersistence", () => {
     });
   });
 
-  describe("refreshLastPersistedSettings()", () => {
-    it("sets the Keychain diff baseline for the next write", async () => {
-      const { module, keychain } = await loadModule();
-      const baseline = makeSettings({ openAIApiKey: "old-key" });
-      const next = makeSettings({ openAIApiKey: "new-key" });
-      module.refreshLastPersistedSettings(baseline);
-
-      await module.persistSettings(next, jest.fn().mockResolvedValue(undefined));
-
-      expect(keychain.persistSecrets).toHaveBeenCalledWith(next, baseline);
-    });
-  });
-
   describe("suppressNextPersistOnce()", () => {
     it("skips exactly one subscriber-driven save", async () => {
       const { module } = await loadModule();
@@ -423,24 +410,6 @@ describe("settingsPersistence", () => {
     });
   });
 
-  describe("releaseLegacyCredentialHold()", () => {
-    it("resumes writing once a dedicated flow has stripped data.json", async () => {
-      const { module } = await loadModule();
-      await module.loadSettingsWithKeychain(
-        APP,
-        { _keychainVaultId: "1234abcd", openAIApiKey: "plaintext-disk-key" },
-        jest.fn().mockResolvedValue(undefined),
-        jest.fn().mockResolvedValue({ status: "failed", error: new Error("read-only") })
-      );
-      const saveData = jest.fn().mockResolvedValue(undefined);
-
-      module.releaseLegacyCredentialHold();
-      await module.persistSettings(makeSettings(), saveData);
-
-      expect(saveData).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe("persistSettingsWithinTransaction()", () => {
     it("writes Keychain entries and strips the disk snapshot immediately", async () => {
       const { module, keychain } = await loadModule({
@@ -495,6 +464,7 @@ describe("settingsPersistence", () => {
     it("rolls Keychain values back when the disk save fails", async () => {
       const persistSecrets = jest
         .fn()
+        .mockReturnValueOnce({ secretEntries: [], keychainIdsToDelete: [] })
         .mockReturnValueOnce({
           secretEntries: [["credential-id", "new-key"]],
           keychainIdsToDelete: [],
@@ -504,7 +474,10 @@ describe("settingsPersistence", () => {
           keychainIdsToDelete: [],
         });
       const { module, keychain } = await loadModule({ persistSecrets });
-      module.refreshLastPersistedSettings(makeSettings({ openAIApiKey: "old-key" }));
+      await module.persistSettings(
+        makeSettings({ openAIApiKey: "old-key" }),
+        jest.fn().mockResolvedValue(undefined)
+      );
 
       await expect(
         module.persistSettings(

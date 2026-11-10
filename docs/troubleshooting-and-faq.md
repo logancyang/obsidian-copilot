@@ -57,13 +57,9 @@ Open **Basic → Agents → Quick Chat**, enable a model, and choose a **Default
 
 Claude and Codex models come from their CLI accounts; BYOK serves OpenCode and Quick Chat. See [Models](models-and-parameters.md) and [Providers](llm-providers.md).
 
-### Keys disappeared, or “API Key Storage” says “Unavailable”
+### Keys disappeared
 
-V4 stores secrets in the Obsidian Keychain.
-
-- **Unavailable:** update Obsidian to 1.11.4 or newer.
-- **No API keys found in this device's Obsidian Keychain:** re-enter them. Keys are per device and do not follow a synced vault.
-- To remove every stored secret, use **Advanced → API key storage → Delete All Keys**.
+V4 stores secrets in the Obsidian Keychain. Keys are per device and do not follow a synced vault, so re-enter them under **BYOK** on each device.
 
 Do not delete `data.json`: it contains the vault's Keychain namespace. Use the in-app reset; it does not delete Keychain entries.
 
