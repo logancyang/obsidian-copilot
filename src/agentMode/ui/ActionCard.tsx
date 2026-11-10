@@ -54,7 +54,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
         )
       }
       secondary={
-        outputs.some((output) => output.type === "image") ? (
+        outputs.some((o) => o.type === "image" || o.type === "image_pending") ? (
           <ToolImagePreviews outputs={outputs} label={part.title} />
         ) : undefined
       }
@@ -70,7 +70,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, open, onToggle }) 
       ) : null}
       {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
       {outputs
-        .filter((o) => o.type !== "image")
+        .filter((o) => o.type === "text" || o.type === "diff")
         .map((o, i) =>
           o.type === "text" ? (
             <pre

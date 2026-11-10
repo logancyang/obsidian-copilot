@@ -17,6 +17,9 @@ export const SingleImage: StoryObj<ToolImagePreviewsProps> = {};
 export const MultipleImages: StoryObj<ToolImagePreviewsProps> = {
   args: { outputs: [image, image, image, image, image] },
 };
+export const ShrinkingImage: StoryObj<ToolImagePreviewsProps> = {
+  args: { outputs: [image, { type: "image_pending", key: "chart" }] },
+};
 export const TextOnly: StoryObj<ToolImagePreviewsProps> = {
   args: { outputs: [{ type: "text", text: "Read note" }] },
 };

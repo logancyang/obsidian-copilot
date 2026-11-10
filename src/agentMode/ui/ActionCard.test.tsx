@@ -39,6 +39,18 @@ describe("ActionCard", () => {
       }
     );
 
+    it("shows a preview box, and no diff or text block, for an image still being shrunk https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      const { container } = render(
+        <ActionCard
+          part={readTool({ output: [{ type: "image_pending", key: "chart" }] })}
+          open={true}
+          onToggle={jest.fn()}
+        />
+      );
+      expect(screen.getByLabelText(/^Preparing image viewed by agent/)).toBeTruthy();
+      expect(container.querySelector("pre")).toBeNull();
+    });
+
     it("links only the file path of a completed read, keeping the verb as plain text", () => {
       render(<ActionCard part={readTool()} open={false} onToggle={jest.fn()} />);
 

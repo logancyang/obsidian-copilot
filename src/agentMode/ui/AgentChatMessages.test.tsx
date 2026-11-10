@@ -247,6 +247,34 @@ describe("AgentChatMessages", () => {
       expect(mockScrollState.onResume).toHaveBeenCalledTimes(1);
     });
 
+    it("renders only the last 10 messages of a long chat and adds earlier turns as the top comes into view https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      const originalObserver = window.IntersectionObserver;
+      let reportTop: IntersectionObserverCallback = () => undefined;
+      window.IntersectionObserver = jest.fn((callback: IntersectionObserverCallback) => {
+        reportTop = callback;
+        return { observe: jest.fn(), disconnect: jest.fn() };
+      }) as unknown as typeof IntersectionObserver;
+      try {
+        const transcript = Array.from({ length: 30 }, (_, i) =>
+          i % 2 === 0
+            ? assistantMessage(`user-${i}`, i, { sender: "user", message: `question ${i}` })
+            : assistantMessage(`reply-${i}`, i, { message: `answer ${i}` })
+        );
+        renderMessages(transcript, false);
+
+        expect(screen.queryByText("question 18")).toBeNull();
+        expect(screen.getByText("question 20")).toBeTruthy();
+        expect(screen.getByText("question 28")).toBeTruthy();
+
+        act(() => reportTop([{ isIntersecting: true } as IntersectionObserverEntry], {} as never));
+
+        expect(screen.getByText("question 10")).toBeTruthy();
+        expect(screen.queryByText("question 8")).toBeNull();
+      } finally {
+        window.IntersectionObserver = originalObserver;
+      }
+    });
+
     it("shows the feedback card right after the reply of the turn that raised it", () => {
       const { container } = renderMessages(FEEDBACK_TRANSCRIPT, false, {
         chatStates: withChatState(EMPTY_CHAT_STATES, FEEDBACK_OFFER, OPEN_OFFER),

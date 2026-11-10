@@ -104,6 +104,12 @@ import { SessionHistoryReplay } from "@/agentMode/session/SessionHistoryReplay";
 import { InteractiveRequests } from "@/agentMode/session/InteractiveRequests";
 import { UsageTracker } from "@/agentMode/session/UsageTracker";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
+import {
+  shrinkToolImage,
+  ToolImageThumbnails,
+  type ShrinkToolImage,
+  type ToolImage,
+} from "@/agentMode/session/toolImageThumbnails";
 import type { FeedbackEvidence } from "@/agentMode/session/feedback/feedbackOffer";
 import {
   EMPTY_CHAT_EXTENSIONS,
@@ -219,6 +225,7 @@ export interface AgentSessionStartOptions extends ProjectContextUpdatesHooks {
   runFanoutTurn?: RunFanoutTurn;
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
+  shrinkToolImage?: ShrinkToolImage;
   getProjectContextBlock?: () => string;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
   chatExtensions?: readonly ChatExtension<unknown>[];
@@ -239,10 +246,12 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   getDisplayName?: (backendId: BackendId) => string;
   getApp?: () => App;
   chatExtensions?: readonly ChatExtension<unknown>[];
+  shrinkToolImage?: ShrinkToolImage;
 }
 
 export class AgentSession implements ChatStateHost, ChatView {
-  readonly store = new AgentMessageStore();
+  private readonly toolImages: ToolImageThumbnails;
+  readonly store = this.createStore();
   readonly internalId: string;
   readonly chatInputId: string;
   readonly backendId: BackendId;
@@ -298,6 +307,10 @@ export class AgentSession implements ChatStateHost, ChatView {
   private notifyHandle: ReturnType<typeof setTimeout> | number | null = null;
 
   constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
+    this.toolImages = new ToolImageThumbnails(
+      opts.shrinkToolImage ?? shrinkToolImage,
+      (key, thumbnail) => this.settleToolImage(key, thumbnail)
+    );
     this.backend = opts.backend;
     this.internalId = opts.internalId;
     this.chatInputId = opts.chatInputId ?? uuidv4();
@@ -1113,6 +1126,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.unregisterSessionHandler = null;
     this.requests.dispose();
     this.turns.dispose();
+    this.toolImages.dispose();
     this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
@@ -1618,7 +1632,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   private applyTaskContent(toolCallId: string, update: SessionEvent["update"]): void {
     let store = this.taskContent.get(toolCallId);
     if (!store) {
-      store = new AgentMessageStore();
+      store = this.createStore();
       this.taskContent.set(toolCallId, store);
     }
     const messageId =
@@ -1670,6 +1684,21 @@ export class AgentSession implements ChatStateHost, ChatView {
   private publishTasks(): void {
     this.taskList = this.tasks.size === 0 ? EMPTY_TASKS : Object.freeze([...this.tasks.values()]);
     this.notifyTasks();
+  }
+
+  // A full-size image per tool result kept long chats holding megabytes they only show at 80 pixels. https://github.com/logancyang/obsidian-copilot/issues/4248
+  private createStore(): AgentMessageStore {
+    return new AgentMessageStore({ stageToolOutputs: (outputs) => this.toolImages.stage(outputs) });
+  }
+
+  private settleToolImage(key: string, thumbnail: ToolImage | null): void {
+    const output = thumbnail ? ({ type: "image", ...thumbnail } as const) : null;
+    if (this.store.settleToolImage(key, output)) this.scheduleNotifyMessages();
+    let tasksChanged = false;
+    for (const store of this.taskContent.values()) {
+      tasksChanged = store.settleToolImage(key, output) || tasksChanged;
+    }
+    if (tasksChanged) this.notifyTasks();
   }
 
   private notifyTasks(): void {

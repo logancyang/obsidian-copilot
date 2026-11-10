@@ -22,6 +22,23 @@ describe("ToolImagePreviews", () => {
       expect(screen.getByAltText("Image viewed by agent: Read diagram (1)")).toBeTruthy();
     });
 
+    it("holds a same-size empty box in place of an image that is still being shrunk https://github.com/logancyang/obsidian-copilot/issues/4248", () => {
+      render(
+        <ToolImagePreviews
+          label="Read chart"
+          outputs={[
+            { type: "image", mimeType: "image/webp", data: "VEhVTUI=" },
+            { type: "image_pending", key: "chart" },
+          ]}
+        />
+      );
+      expect(screen.getAllByRole("img").map((image) => image.getAttribute("src"))).toEqual([
+        "data:image/webp;base64,VEhVTUI=",
+      ]);
+      const pending = screen.getByLabelText("Preparing image viewed by agent: Read chart (2)");
+      expect(pending.tagName).toBe("DIV");
+    });
+
     it("renders nothing without image results https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
       const { container, rerender } = render(<ToolImagePreviews label="Read note" />);
       expect(container.childElementCount).toBe(0);

@@ -2665,6 +2665,42 @@ describe("AgentSession", () => {
         await turn;
       });
 
+      it("keeps only a shrunk thumbnail of an image a tool returns, never the full-size image https://github.com/logancyang/obsidian-copilot/issues/4248", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        let finishShrink!: (thumbnail: { mimeType: string; data: string }) => void;
+        const shrinking = new Promise<{ mimeType: string; data: string }>(
+          (resolve) => (finishShrink = resolve)
+        );
+        const session = makeSession(mock, { shrinkToolImage: () => shrinking });
+        const { turn } = session.sendPrompt("check the chart");
+
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "read-chart",
+          title: "Read chart.png",
+          status: "completed",
+          content: [
+            {
+              type: "content",
+              content: { type: "image", mimeType: "image/png", data: "RlVMTA==" },
+            },
+          ],
+        });
+        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
+          output: [{ type: "image_pending" }],
+        });
+
+        finishShrink({ mimeType: "image/webp", data: "VEhVTUI=" });
+        await shrinking;
+        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
+          output: [{ type: "image", mimeType: "image/webp", data: "VEhVTUI=" }],
+        });
+
+        finishPrompt();
+        await turn;
+      });
+
       it("routes a tool_call_update for a prior turn's tool call to its original message", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);

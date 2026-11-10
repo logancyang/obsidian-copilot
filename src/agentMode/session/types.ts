@@ -199,6 +199,7 @@ export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed"
 
 export type AgentToolCallOutput =
   | { type: "image"; mimeType: string; data: string }
+  | { type: "image_pending"; key: string }
   | { type: "text"; text: string }
   | { type: "diff"; path: string; oldText: string | null; newText: string };
 
