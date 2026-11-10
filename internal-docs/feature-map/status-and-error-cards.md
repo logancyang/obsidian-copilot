@@ -28,4 +28,5 @@ Cards in the conversation that report a problem with the chat's agent or a faile
 ## Gotchas
 
 - The connectors banner shows only with a Supporter license, and not for a service that `Couldn't reach`.
+- A provider authentication failure shows its error without automatically offering a feedback report. You can still open `Report an issue` from `More actions`.
 - `Don't offer again` turns off `Offer feedback reports in Agent Chat` for every chat.
