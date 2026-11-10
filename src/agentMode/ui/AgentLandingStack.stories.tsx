@@ -153,32 +153,21 @@ function RelevantNotesPreviewCanvas({ args }: Pick<LandingStackCanvasProps, "arg
 
 function LandingCanvas({
   args,
-  sidebarOpen,
   project,
   relevantNotesInSidePanel = false,
 }: Pick<LandingStackCanvasProps, "args"> & {
-  sidebarOpen: boolean;
   project: boolean;
   relevantNotesInSidePanel?: boolean;
 }) {
-  const globalSections = allSections.filter((section) =>
-    section.id === "relevant-notes" ? !relevantNotesInSidePanel : !sidebarOpen
-  );
-  const contextInline = project && sidebarOpen;
-  const shelf = project ? (
-    contextInline ? undefined : (
-      <AgentHomeShelf sections={projectLandingSections} />
-    )
-  ) : globalSections.length > 0 ? (
-    <AgentHomeShelf sections={globalSections} />
-  ) : undefined;
+  const globalSections = relevantNotesInSidePanel
+    ? allSections.filter((section) => section.id !== "relevant-notes")
+    : allSections;
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2">
       <AgentLandingStack
         hero={args.hero ?? null}
         composer={args.composer ?? null}
-        context={contextInline ? <div className="tw-pt-3">{projectContextBody}</div> : undefined}
-        shelf={shelf}
+        shelf={<AgentHomeShelf sections={project ? projectLandingSections : globalSections} />}
       />
     </div>
   );
@@ -213,24 +202,14 @@ export const RelevantNotesPreview: StoryObj<AgentLandingStackProps> = {
   render: (args) => <RelevantNotesPreviewCanvas args={args} />,
 };
 
-export const GlobalLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen={false} project={false} />,
+export const GlobalLanding: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} project={false} />,
 };
 
-export const GlobalLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen project={false} />,
+export const GlobalLandingRelevantNotesInSidePanel: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} project={false} relevantNotesInSidePanel />,
 };
 
-export const ProjectLandingSidebarClosed: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen={false} project />,
-};
-
-export const ProjectLandingSidebarOpen: StoryObj<AgentLandingStackProps> = {
-  render: (args) => <LandingCanvas args={args} sidebarOpen project />,
-};
-
-export const GlobalLandingSidebarOpenNothingBelow: StoryObj<AgentLandingStackProps> = {
-  render: (args) => (
-    <LandingCanvas args={args} sidebarOpen project={false} relevantNotesInSidePanel />
-  ),
+export const ProjectLanding: StoryObj<AgentLandingStackProps> = {
+  render: (args) => <LandingCanvas args={args} project />,
 };

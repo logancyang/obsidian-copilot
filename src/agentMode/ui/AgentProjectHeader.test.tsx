@@ -17,7 +17,6 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
         onExit={onExit}
         menu={menu}
         orphaned={props.orphaned}
-        canLeaveProject={props.canLeaveProject}
       />
     </TooltipProvider>
   );
@@ -35,14 +34,6 @@ describe("AgentProjectHeader", () => {
       const { onExit } = renderHeader();
       fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
       expect(onExit).toHaveBeenCalledTimes(1);
-    });
-
-    it("hides the leave button when leaving the project is not allowed, keeping the project name and menu, for https://github.com/Brevilabs/obsidian-copilot-private/issues/804", () => {
-      renderHeader({ projectName: "Research", canLeaveProject: false });
-
-      expect(screen.queryByRole("button", { name: "Leave project" })).toBeNull();
-      expect(screen.getByText("Research")).toBeTruthy();
-      expect(screen.getByLabelText("Project options")).toBeTruthy();
     });
 
     it("renders the provided options menu in the trailing slot", () => {
