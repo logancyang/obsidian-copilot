@@ -222,6 +222,19 @@ export const ConnectorTools: StoryObj<AgentTrailProps> = {
   render: () => <TrailDemo parts={CONNECTOR_TOOLS} />,
 };
 
+export const ReplyStreamedAsReasoning: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[
+        tool("r1", "Read", { input: { file_path: "AGENTS.md" } }),
+        think(
+          "The user asks whether their phrasing triggers the issue. Honest answer: no. The pattern shows up with short and long questions alike, so the cause is elsewhere."
+        ),
+      ]}
+    />
+  ),
+};
+
 export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {
   render: () => (
     <TrailDemo

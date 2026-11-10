@@ -213,6 +213,17 @@ describe("AgentTrail", () => {
     expect(screen.getByText("2026/08/07 20:31:10")).toBeTruthy();
   });
 
+  it("shows a reply the model streamed as reasoning as the visible answer with its copy action (https://github.com/logancyang/obsidian-copilot/issues/3293)", () => {
+    renderTrail({
+      parts: [{ kind: "thought", text: "Paris is the capital of France.", durationMs: 7_000 }],
+    });
+
+    expect(screen.getByTestId("agent-md").textContent).toBe("Paris is the capital of France.");
+    expect(screen.queryByText("Thought for")).toBeNull();
+    fireEvent.click(screen.getByTitle("Copy"));
+    expect(writeText).toHaveBeenCalledWith("Paris is the capital of France.");
+  });
+
   it("renders neither button when the turn produced no trailing prose", () => {
     renderTrail({ parts: [{ kind: "tool_call", id: "t1", title: "Read", status: "completed" }] });
     expect(screen.queryByTitle("Copy")).toBeNull();

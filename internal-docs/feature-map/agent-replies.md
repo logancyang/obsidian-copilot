@@ -46,3 +46,4 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 ## Gotchas
 
 - A finished background task or subagent starts a new agent reply on its own, so a chat can be running with no message from the user.
+- A finished turn whose last step wrote only reasoning, with no reply text after it, shows that reasoning as the reply instead of `Thought for <time>`. Some reasoning models put their whole answer on the reasoning channel.

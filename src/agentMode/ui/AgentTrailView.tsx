@@ -1,5 +1,9 @@
 import React, { useMemo } from "react";
-import { agentResponseText, buildAgentTrail } from "@/agentMode/ui/agentTrail";
+import {
+  agentResponseText,
+  buildAgentTrail,
+  surfaceUnansweredThought,
+} from "@/agentMode/ui/agentTrail";
 import type {
   AgentCancelCause,
   AgentMessagePart,
@@ -86,7 +90,11 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
 }) => {
-  const answer = agentResponseText(parts);
+  const shownParts = useMemo(
+    () => surfaceUnansweredThought(parts, turnStopReason),
+    [parts, turnStopReason]
+  );
+  const answer = agentResponseText(shownParts);
   // A failed turn's error is stored as message text, which a reply with parts never shows.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
   const notice =
@@ -96,7 +104,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   // A compaction row reports its own progress and is not a reply to time or copy.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  const trailNodes = buildAgentTrail(parts);
+  const trailNodes = buildAgentTrail(shownParts);
   const compactionOnly =
     trailNodes.length > 0 && trailNodes.every((node) => node.type === "compaction");
   const footer =
@@ -119,7 +127,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
 
   return (
     <div className="tw-group tw-flex tw-flex-col tw-gap-1">
-      <LinearTrail parts={parts} isStreaming={isStreaming} app={app} />
+      <LinearTrail parts={shownParts} isStreaming={isStreaming} app={app} />
       {notice ? (
         <div className="tw-text-error">
           <AgentMarkdownText text={notice} app={app} />

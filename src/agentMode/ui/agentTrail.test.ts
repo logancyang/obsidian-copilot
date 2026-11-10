@@ -1,4 +1,9 @@
-import { agentResponseText, buildAgentTrail, type RenderNode } from "@/agentMode/ui/agentTrail";
+import {
+  agentResponseText,
+  buildAgentTrail,
+  surfaceUnansweredThought,
+  type RenderNode,
+} from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 
 function tool(
@@ -263,6 +268,51 @@ describe("agentTrail", () => {
     it("returns an empty string when the turn produced no prose", () => {
       expect(agentResponseText([thought("..."), tool("a")])).toBe("");
       expect(agentResponseText([])).toBe("");
+    });
+  });
+
+  describe("surfaceUnansweredThought()", () => {
+    it("shows the final thought as the reply when a finished turn ended on reasoning with no reply text (https://github.com/logancyang/obsidian-copilot/issues/3293)", () => {
+      const parts: AgentMessagePart[] = [
+        thought("The user asks for the capital. Paris is the capital."),
+      ];
+      expect(surfaceUnansweredThought(parts, "end_turn")).toEqual([
+        text("The user asks for the capital. Paris is the capital."),
+      ]);
+    });
+
+    it("shows the thought after the last tool call as the reply when only earlier steps wrote text (https://github.com/logancyang/obsidian-copilot/issues/3293)", () => {
+      const parts: AgentMessagePart[] = [
+        text("I'll read the note first."),
+        tool("a", { vendorToolName: "Read" }),
+        thought("The note says Paris."),
+        text("  "),
+      ];
+      expect(surfaceUnansweredThought(parts, "end_turn")).toEqual([
+        text("I'll read the note first."),
+        tool("a", { vendorToolName: "Read" }),
+        text("The note says Paris."),
+        text("  "),
+      ]);
+    });
+
+    it("keeps the parts when the final step already wrote reply text, even if a thought arrives after it", () => {
+      const parts: AgentMessagePart[] = [thought("plan"), text("Paris."), thought("late chunk")];
+      expect(surfaceUnansweredThought(parts, "end_turn")).toBe(parts);
+    });
+
+    it("keeps the parts while the turn runs or when it stopped early, was cancelled, or ended on a tool call", () => {
+      const endsOnThought: AgentMessagePart[] = [thought("still thinking")];
+      expect(surfaceUnansweredThought(endsOnThought, undefined)).toBe(endsOnThought);
+      expect(surfaceUnansweredThought(endsOnThought, "max_tokens")).toBe(endsOnThought);
+      expect(surfaceUnansweredThought(endsOnThought, "cancelled")).toBe(endsOnThought);
+      const endsOnTool: AgentMessagePart[] = [thought("edit it"), tool("a")];
+      expect(surfaceUnansweredThought(endsOnTool, "end_turn")).toBe(endsOnTool);
+    });
+
+    it("keeps a blank final thought as reasoning", () => {
+      const parts: AgentMessagePart[] = [thought("  ")];
+      expect(surfaceUnansweredThought(parts, "end_turn")).toBe(parts);
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { AgentMessagePart } from "@/agentMode/session/types";
+import type { AgentMessagePart, StopReason } from "@/agentMode/session/types";
 import { cleanMessageForCopy } from "@/utils";
 
 export type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
@@ -25,6 +25,28 @@ export function agentResponseText(parts: AgentMessagePart[]): string {
     .map((p) => p.text)
     .join("\n\n");
   return cleanMessageForCopy(text);
+}
+
+// A reasoning model can stream its whole reply on the reasoning channel, so a finished turn showed only "Thought for n seconds". https://github.com/logancyang/obsidian-copilot/issues/3293
+export function surfaceUnansweredThought(
+  parts: AgentMessagePart[],
+  turnStopReason: StopReason | undefined
+): AgentMessagePart[] {
+  if (turnStopReason !== "end_turn") return parts;
+  let last = parts.length - 1;
+  while (last >= 0 && isBlankText(parts[last])) last--;
+  const thought = parts[last];
+  if (thought?.kind !== "thought" || thought.text.trim().length === 0) return parts;
+  for (let i = last - 1; i >= 0 && parts[i].kind !== "tool_call"; i--) {
+    if (parts[i].kind === "text" && !isBlankText(parts[i])) return parts;
+  }
+  const surfaced = [...parts];
+  surfaced[last] = { kind: "text", text: thought.text };
+  return surfaced;
+}
+
+function isBlankText(part: AgentMessagePart): boolean {
+  return part.kind === "text" && part.text.trim().length === 0;
 }
 
 function isHiddenTool(part: AgentMessagePart): boolean {
