@@ -24,6 +24,8 @@ export class ManagedInstallAbortError extends Error {
   }
 }
 
+const STAGE_PROMOTION_TIMEOUT_MS = 30_000;
+
 export async function promoteManagedVersion(
   stageDir: string,
   versionDir: string,
@@ -41,7 +43,8 @@ export async function promoteManagedVersion(
   }
 
   try {
-    await renameWithRetry(stageDir, versionDir);
+    // Antivirus can hold a file in the freshly verified stage for seconds on Windows. https://github.com/logancyang/obsidian-copilot/issues/3822
+    await renameWithRetry(stageDir, versionDir, STAGE_PROMOTION_TIMEOUT_MS);
   } catch (error) {
     if (asideDir) {
       await renameWithRetry(asideDir, versionDir).catch((restoreError) =>
