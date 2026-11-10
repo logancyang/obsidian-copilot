@@ -38,4 +38,3 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 
 - `Project instructions` in `Edit project` and the project's `AGENTS.md` are the same text; editing either changes both.
 - A new project shows its `Context` under the chat input instead of a shelf. The shelf with `Recent chats` and `Context` appears once the project has a chat.
-- While the [Copilot Navigator](copilot-navigator.md) is open, the project header has no `Leave project`; leave through the Navigator.

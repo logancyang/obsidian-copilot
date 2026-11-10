@@ -40,7 +40,6 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
-import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -103,7 +102,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const app = plugin.app || appContext;
   const settings = useSettingsValue();
   const isRelevantNotesPaneOpen = useRelevantNotesPaneOpen(app);
-  const sidebarOpen = useSessionsSidebarOpen(app);
   const draft = useAgentInputDrafts({ store: manager.drafts, chatInputId });
 
   useChatInputAutoFocus();
@@ -392,7 +390,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     archivedChatCount: archivedChatItems.length,
   });
   const projectPlacement = placementRef.current;
-  const isProjectContextInline = sidebarOpen || projectPlacement?.standalone === true;
+  const isProjectContextInline = projectPlacement?.standalone === true;
 
   const mainAgentId =
     manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
@@ -506,17 +504,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       plugin,
       settings.chatHistorySortStrategy,
     ]
-  );
-
-  // The sessions sidebar already lists chats and projects, so the landing keeps only Relevant Notes and shows the
-  // project context inline instead of a shelf.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
-  const globalShelfSections = useMemo(
-    () =>
-      sidebarOpen
-        ? landingSections.filter((section) => section.id === "relevant-notes")
-        : landingSections,
-    [sidebarOpen, landingSections]
   );
 
   const contextSummary = useMemo(() => buildContextSummary(activeProject), [activeProject]);
@@ -696,9 +683,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             projectName={headerName}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
-            // The open sessions sidebar is the navigation, so the header offers no way back out of a project.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/804
-            canLeaveProject={!sidebarOpen}
             menu={
               activeProject ? (
                 <ProjectInfoPopover
@@ -770,13 +754,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         projectPlacement && !isProjectContextInline ? (
                           <AgentHomeShelf key={activeProjectId} sections={projectLandingSections} />
                         ) : null
-                      ) : globalShelfSections.length > 0 ? (
+                      ) : (
                         <AgentHomeShelf
-                          sections={globalShelfSections}
+                          sections={landingSections}
                           activeSectionId={globalShelfTab}
                           onSectionSelect={setGlobalShelfTab}
                         />
-                      ) : null
+                      )
                     }
                   />
                 ) : (
