@@ -260,7 +260,7 @@ Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the
 
 The **Built-in skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your skills**.
 
-Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, YouTube transcripts, and X posts.
+Custom Skills and built-in Obsidian Skills are free. Active Plus access adds cloud-backed Skills for web research, YouTube transcripts, and X posts. When Plus is inactive or no license key is configured, Copilot automatically makes these Skills unavailable and removes their managed files and agent links. Settings shows why they are unavailable. Your saved choices are kept and apply again after Plus is activated.
 
 The web search and web fetch Skills (`copilot-web-search` and `copilot-web-fetch`) start turned off in new installs, so agents use their own web tools. Turn them on in **Built-in skills** to route those requests through Copilot instead.
 

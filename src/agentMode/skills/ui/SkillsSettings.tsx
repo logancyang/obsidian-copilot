@@ -1,6 +1,6 @@
 import { availableBuiltinAgents } from "@/agentMode/skills/builtin/reconcileBuiltinSkills";
 import { useBackendInstallStates } from "@/agentMode/session/useBackendInstallStates";
-import { BUILTIN_SKILLS } from "@/builtinSkills/builtinSkills";
+import { BUILTIN_SKILLS, getBuiltinSkillUnavailableReason } from "@/builtinSkills/builtinSkills";
 import { parseSkillFile } from "@/agentMode/skills/skillFormat";
 import { BuiltinSkillsTable } from "./BuiltinSkillsTable";
 import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
@@ -98,6 +98,10 @@ export const SkillsSettings: React.FC = () => {
         (rejected) =>
           toVaultRelative(rejected.dirPath, getVaultBase(app)) === `${skillsFolder}/${skill.name}`
       );
+    // Inactive relay skills must explain why their agent switches cannot be enabled.
+    // https://github.com/logancyang/obsidian-copilot/issues/4239
+    const licenseReason = getBuiltinSkillUnavailableReason(settings, skill.name);
+    if (licenseReason) unavailableReasons[skill.name] = licenseReason;
     if (collision) {
       unavailableReasons[skill.name] =
         "A skill with this name already exists in Your skills. Your file is kept unchanged.";

@@ -32,6 +32,25 @@ describe("BuiltinSkillsTable", () => {
     Element.prototype.scrollIntoView = () => {};
   });
   describe("BuiltinSkillsTable()", () => {
+    it("prevents enabling an unavailable skill https://github.com/logancyang/obsidian-copilot/issues/4239", () => {
+      const p = props();
+      render(
+        <BuiltinSkillsTable
+          {...p}
+          preferences={{ transcript: { disabled: true } }}
+          unavailableReasons={{ transcript: "An active Copilot Plus license is required." }}
+        />
+      );
+      fireEvent.pointerDown(screen.getByLabelText("More actions for transcript"), {
+        button: 0,
+        ctrlKey: false,
+      });
+      const enable = screen.getByRole("menuitem", { name: "Enable skill" });
+      expect(enable.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(enable);
+      expect(p.onToggleSkill).not.toHaveBeenCalled();
+    });
+
     it(`does not render unrelated rows when a skill menu opens or its preference changes for ${issue}`, () => {
       const p = props();
       const Icon = jest.fn(() => <span />);

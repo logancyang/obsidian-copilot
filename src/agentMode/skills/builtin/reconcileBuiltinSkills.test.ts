@@ -73,6 +73,8 @@ function fixture(preferences?: BuiltinPreferences) {
   };
   const settings = {
     ...DEFAULT_SETTINGS,
+    isPaidUser: true,
+    plusLicenseKey: "test-license",
     enableMiyoDocumentProcessing: false,
     agentMode: { ...DEFAULT_SETTINGS.agentMode, skills: { ...DEFAULT_SETTINGS.agentMode.skills } },
   };
@@ -121,6 +123,31 @@ describe("reconcileBuiltinSkills", () => {
     });
   });
   describe("reconcileBuiltinSkills()", () => {
+    it("removes inactive Plus skills and restores saved choices after renewal https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      const preferences = { "copilot-web-search": { disabledAgents: ["claude"] } };
+      const f = fixture(preferences);
+      f.options.availableAgents = ["opencode"];
+      await reconcileBuiltinSkills(f.options);
+      expect(f.files.has(f.path("copilot-web-search"))).toBe(true);
+      expect(f.files.has(f.path("copilot-youtube-transcript"))).toBe(true);
+
+      f.options.settings.isPaidUser = false;
+      await reconcileBuiltinSkills(f.options);
+      for (const skill of BUILTIN_SKILLS.filter((item) => item.requiresPlus)) {
+        expect(f.files.has(f.path(skill.name))).toBe(false);
+      }
+      expect(f.files.has(f.path("obsidian-markdown"))).toBe(true);
+      expect(f.options.settings.agentMode.skills.builtinPreferences).toBe(preferences);
+
+      f.options.settings.isPaidUser = true;
+      await reconcileBuiltinSkills(f.options);
+      expect(
+        parseSkillFile(f.files.get(f.path("copilot-web-search"))!, "copilot-web-search").frontmatter
+          .enabledAgents
+      ).toEqual(["codex", "opencode"]);
+      expect(f.files.has(f.path("copilot-youtube-transcript"))).toBe(true);
+    });
+
     it(`removes an installed obsidian-cli skill, even one with saved agent choices, now that the CLI is the obsidian_cli tool ${ISSUE_833}`, async () => {
       const f = fixture({ "obsidian-cli": { disabledAgents: ["claude", "codex"] } });
       f.files.set(

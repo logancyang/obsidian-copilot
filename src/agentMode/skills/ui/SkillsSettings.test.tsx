@@ -104,7 +104,35 @@ describe("SkillsSettings", () => {
       mockRejectedSkills = [];
       mockCapturedLoadIssues = [];
       mockCapturedFixAll = () => undefined;
-      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, copilotFolder: "copilot" });
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        isPaidUser: true,
+        plusLicenseKey: "test-license",
+        copilotFolder: "copilot",
+      });
+    });
+
+    it("turns relay agent buttons off when Plus becomes inactive and restores them after renewal https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      mockAgents = [{ id: "claude", displayName: "Claude", Icon: Bot }];
+      mockInstallStates = { claude: { kind: "ready", source: "managed" } };
+      await act(async () => {
+        renderSettings();
+      });
+      const button = () => screen.getByRole("button", { name: "copilot-fetch-x for Claude" });
+      expect(button().getAttribute("aria-pressed")).toBe("true");
+      await act(async () => {
+        updateSetting("isPaidUser", false);
+      });
+      expect(button().getAttribute("aria-pressed")).toBe("false");
+      expect(button().getAttribute("aria-disabled")).toBe("true");
+      expect(screen.getAllByLabelText("An active Copilot Plus license is required.")).toHaveLength(
+        4
+      );
+      await act(async () => {
+        updateSetting("isPaidUser", true);
+      });
+      expect(button().getAttribute("aria-pressed")).toBe("true");
+      expect(button().getAttribute("aria-disabled")).toBe("false");
     });
 
     it("shows a new install's Markdown skill on for every agent, Bases off for Claude and Canvas off for Claude and Codex, and an existing install's saved opt-out unchanged https://github.com/Brevilabs/obsidian-copilot-private/issues/726 https://github.com/logancyang/obsidian-copilot/issues/3868", async () => {
