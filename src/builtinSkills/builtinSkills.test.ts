@@ -241,6 +241,17 @@ describe("builtinSkills", () => {
   });
 
   describe("getBuiltinSkillUnavailableReason()", () => {
+    it.each(["obsidian-markdown", "obsidian-bases", "json-canvas"])(
+      "keeps opted-in %s available without Plus or a license key https://github.com/logancyang/obsidian-copilot/issues/4239",
+      (name) => {
+        const settings = settingsWith({}, { isPaidUser: false, plusLicenseKey: "" });
+        expect(getBuiltinSkillUnavailableReason(settings, name)).toBeUndefined();
+        for (const agent of ["claude", "codex", "opencode"]) {
+          expect(isBuiltinSkillEnabledFor(settings, name, agent)).toBe(true);
+        }
+      }
+    );
+
     it("keeps paid users' opted-in relay skills available https://github.com/logancyang/obsidian-copilot/issues/4239", () => {
       const settings = settingsWith({});
       for (const skill of RELAY_SKILLS) {

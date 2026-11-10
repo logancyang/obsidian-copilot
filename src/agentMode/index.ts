@@ -431,7 +431,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     const nextFolder = deriveSkillsFolder(next);
     // Removing a key must refresh relay skills even before paid status updates.
     // https://github.com/logancyang/obsidian-copilot/issues/4239
-    const miyoAvailabilityChanged =
+    const builtinSkillAvailabilityChanged =
       prev.enableMiyoSearchSkill !== next.enableMiyoSearchSkill ||
       prev.enableMiyoDocumentProcessing !== next.enableMiyoDocumentProcessing ||
       prev.enableMiyo !== next.enableMiyo ||
@@ -441,7 +441,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       prev.plusLicenseKey !== next.plusLicenseKey;
     if (
       prevFolder !== nextFolder ||
-      miyoAvailabilityChanged ||
+      builtinSkillAvailabilityChanged ||
       prev.agentMode.skills.builtinPreferences !== next.agentMode.skills.builtinPreferences
     ) {
       void seedManagedBuiltins()

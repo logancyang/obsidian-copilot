@@ -994,7 +994,8 @@ describe("OpencodeBackend", () => {
       expect(cfg.agents.build.system).toBe(buildAgentSystemPrompt("opencode", APP));
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for OpenCode in both agent prompts", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/599 names only the builtin skills enabled for a paid OpenCode user in both agent prompts", async () => {
+      setSettings({ isPaidUser: true, plusLicenseKey: "test-license" });
       const agentMode = getSettings().agentMode;
       updateSetting("agentMode", {
         ...agentMode,
@@ -1009,6 +1010,28 @@ describe("OpencodeBackend", () => {
       for (const id of ["copilot-build", "build"]) {
         expect(cfg.agents[id].system).not.toContain("copilot-web-search");
         expect(cfg.agents[id].system).toContain("copilot-web-fetch for pages/URLs");
+      }
+    });
+
+    it("omits every Plus relay skill from both OpenCode agent prompts when paid access is inactive https://github.com/logancyang/obsidian-copilot/issues/4239", async () => {
+      setSettings({ isPaidUser: false, plusLicenseKey: "test-license" });
+      const agentMode = getSettings().agentMode;
+      updateSetting("agentMode", {
+        ...agentMode,
+        skills: { ...agentMode.skills, builtinPreferences: {} },
+      });
+
+      const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+
+      for (const id of ["copilot-build", "build"]) {
+        for (const name of [
+          "copilot-web-search",
+          "copilot-web-fetch",
+          "copilot-youtube-transcript",
+          "copilot-fetch-x",
+        ]) {
+          expect(cfg.agents[id].system).not.toContain(name);
+        }
       }
     });
 
