@@ -195,7 +195,6 @@ export type AgentToolKind =
 export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
 export type AgentToolCallOutput =
-  | { type: "image"; mimeType: string; data: string }
   | { type: "text"; text: string }
   | { type: "diff"; path: string; oldText: string | null; newText: string };
 
@@ -252,10 +251,7 @@ export interface ToolCallDelta {
 }
 
 export type ToolCallContent =
-  | {
-      type: "content";
-      content: { type: "text"; text: string } | { type: "image"; mimeType: string; data: string };
-    }
+  | { type: "content"; content: { type: "text"; text: string } }
   | { type: "diff"; path: string; oldText?: string | null; newText: string };
 
 export interface PlanSummary {

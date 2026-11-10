@@ -1,4 +1,3 @@
-import { ToolImagePreviews } from "@/agentMode/ui/ToolImagePreviews";
 import { ActivityGroupCard } from "@/agentMode/ui/ActivityGroupCard";
 import type { ActivityGroupNode, ActivityMember } from "@/agentMode/ui/activityGroups";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
@@ -36,33 +35,6 @@ function renderCard(props: Partial<React.ComponentProps<typeof ActivityGroupCard
 
 describe("ActivityGroupCard", () => {
   describe("ActivityGroupCard()", () => {
-    it("shows images only inside an expanded group and hides them when collapsed https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-      const props = {
-        group: group([
-          action("image", {
-            vendorToolName: "Read",
-            output: [{ type: "image" as const, mimeType: "image/png", data: "AQID" }],
-          }),
-          action("second-image", {
-            vendorToolName: "Read",
-            output: [{ type: "image" as const, mimeType: "image/png", data: "BAUG" }],
-          }),
-        ]),
-        onToggle: jest.fn(),
-        renderMember: (member: ActivityMember, key: string | number) =>
-          member.type === "action" ? (
-            <ToolImagePreviews key={key} label={member.part.title} outputs={member.part.output} />
-          ) : null,
-      };
-      const { rerender } = renderCard({ ...props, open: true });
-      expect(screen.getAllByRole("img")).toHaveLength(2);
-      rerender(<ActivityGroupCard {...props} open={false} />);
-      expect(screen.queryAllByRole("img")).toHaveLength(0);
-      expect(screen.getByRole("button").textContent).toBe("Ran 2 commands, read 2 files");
-      rerender(<ActivityGroupCard {...props} open />);
-      expect(screen.getAllByRole("img")).toHaveLength(2);
-    });
-
     it("summarizes every family in the run plus the measured thinking time", () => {
       renderCard({
         group: group([

@@ -153,10 +153,6 @@ function toolOutputsEqual(
         output.newText === other.newText
       );
     }
-    // Repeated image results must not trigger duplicate store updates. https://github.com/logancyang/obsidian-copilot/issues/4227
-    if (output.type === "image" && other.type === "image") {
-      return output.mimeType === other.mimeType && output.data === other.data;
-    }
     if (output.type === "text" && other.type === "text") {
       return textFingerprint(output.text) === textFingerprint(other.text);
     }

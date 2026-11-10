@@ -9,7 +9,6 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-duration: `Agent is working` with a timer while the turn runs, then `Worked for <time>`.
 - reply-reasoning: `Reasoning...` while the agent thinks, then `Thought for <time>`; expand it to read the reasoning.
 - reply-activity: the agent's tool calls collapse into a one-line summary, such as `Ran 2 commands, read 1 file`; expand it to see each step.
-- reply-image-reads: images returned by tools appear as small thumbnails beside their individual tool calls; collapsing a multi-tool activity group hides the images.
 - reply-plan: the agent's `Plan` checklist, with each step's progress.
 - reply-connector-tools: a tool call to a connected service is named `<service> · <tool>`, such as `Notion · Search`, with every agent; OpenCode calls connected tools directly, with a separate named step for each call. Native OpenCode code execution still shows `Execute`; older saved wrapped calls keep their recorded labels.
 - reply-subagents: a subagent's card shows its type and task, such as `general-purpose · Count lines in notes.md`, with a spinner while it runs and a check when it is done. With Claude, open it to see its prompt, its steps, and its result, then `Back to chat`; with other agents it expands in place, with its `Prompt`.
@@ -30,7 +29,6 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 - Tables: ask for a Markdown table with short headers and long cell values. During streaming and after completion, headers align with their columns. In a narrow pane, a wide table scrolls horizontally without widening the reply.
 - Reasoning: ask a question the agent thinks about. `Reasoning...` shows, then `Thought for <time>`; expand it to read the reasoning.
 - Activity: ask the agent to run two shell commands. A summary such as `Ran 2 commands` shows; expand it to list each command.
-- Image reads: ask the agent to read two images. The collapsed activity summary shows no images or preview labels. Expand the summary: each thumbnail appears with the tool that read it. Collapse it again: the thumbnails disappear.
 - Plan: ask an agent with a plan tool to plan two steps and follow them. A `Plan` checklist shows each step's progress.
 - Connector tool: with Notion connected, ask the agent to search Notion. The step reads `Notion · Search`, not the tool's internal name.
 - OpenCode connector batch: ask OpenCode to use a connected service twice. Each call appears as its own named step, without an Execute prefix. A native resource-discovery or tool-search script can still appear as Execute.

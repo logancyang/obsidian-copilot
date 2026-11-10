@@ -24,21 +24,6 @@ function readTool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
 
 describe("ActionCard", () => {
   describe("ActionCard()", () => {
-    it.each([false, true])(
-      "shows the returned image with details open=%s https://github.com/logancyang/obsidian-copilot/issues/4227",
-      (open) => {
-        render(
-          <ActionCard
-            part={readTool({ output: [{ type: "image", mimeType: "image/png", data: "AQID" }] })}
-            open={open}
-            onToggle={jest.fn()}
-          />
-        );
-        expect(screen.getAllByRole("img")).toHaveLength(1);
-        expect(screen.getByRole("img").getAttribute("src")).toBe("data:image/png;base64,AQID");
-      }
-    );
-
     it("links only the file path of a completed read, keeping the verb as plain text", () => {
       render(<ActionCard part={readTool()} open={false} onToggle={jest.fn()} />);
 

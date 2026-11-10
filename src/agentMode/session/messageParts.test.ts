@@ -14,20 +14,6 @@ import type { AgentMessagePart } from "./types";
 
 describe("messageParts", () => {
   describe("toolCallToPart()", () => {
-    it("preserves images alongside text in tool results https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-      const image = { type: "image" as const, mimeType: "image/png", data: "AQID" };
-      expect(
-        toolCallToPart({
-          toolCallId: "image",
-          title: "Read image",
-          content: [
-            { type: "content", content: { type: "text", text: "Image read" } },
-            { type: "content", content: image },
-          ],
-        })
-      ).toMatchObject({ output: [{ type: "text", text: "Image read" }, image] });
-    });
-
     it("maps a tool call snapshot to a tool-call part with its text and diff outputs", () => {
       expect(
         toolCallToPart({
@@ -196,18 +182,6 @@ describe("messageParts", () => {
       locations: [{ path: "a.md" }],
       progress: { toolUses: 1, durationMs: 10 },
     };
-
-    it("keeps an image result through a subsequent status-only update https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-      const image = { type: "image" as const, mimeType: "image/png", data: "AQID" };
-      const merged = mergeToolCallUpdate(existing, {
-        toolCallId: "t1",
-        content: [{ type: "content", content: image }],
-      });
-      expect(mergeToolCallUpdate(merged, { toolCallId: "t1", status: "completed" })).toMatchObject({
-        status: "completed",
-        output: [image],
-      });
-    });
 
     it("overlays the fields an update reports and keeps the ones it omits", () => {
       expect(

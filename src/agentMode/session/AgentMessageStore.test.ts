@@ -346,40 +346,6 @@ describe("AgentMessageStore", () => {
       ).toBe(true);
     });
 
-    it("skips unchanged image results but publishes changed image bytes and media types https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-      const store = new AgentMessageStore();
-      const id = store.addMessage(placeholder());
-      const part: AgentMessagePart = {
-        kind: "tool_call",
-        id: "image",
-        title: "Read image",
-        status: "completed",
-        output: [{ type: "image", mimeType: "image/png", data: "AQID" }],
-      };
-      expect(store.upsertAgentPart(id, part)).toBe(true);
-      expect(
-        store.upsertAgentPart(id, {
-          ...part,
-          output: [{ type: "image", mimeType: "image/png", data: "AQID" }],
-        })
-      ).toBe(false);
-      expect(
-        store.upsertAgentPart(id, {
-          ...part,
-          output: [{ type: "image", mimeType: "image/png", data: "BAUG" }],
-        })
-      ).toBe(true);
-      expect(
-        store.upsertAgentPart(id, {
-          ...part,
-          output: [{ type: "image", mimeType: "image/jpeg", data: "BAUG" }],
-        })
-      ).toBe(true);
-      expect(store.getMessage(id)?.parts?.[0]).toMatchObject({
-        output: [{ type: "image", mimeType: "image/jpeg", data: "BAUG" }],
-      });
-    });
-
     it("reports no change when a large tool output is re-applied unchanged", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());
