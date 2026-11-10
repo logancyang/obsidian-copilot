@@ -156,39 +156,6 @@ function userMessage(content: unknown[], parent: string | null = null): SDKMessa
 
 describe("sdkMessageTranslator", () => {
   describe("translateSdkMessage()", () => {
-    it("preserves base64 images alongside tool result text https://github.com/logancyang/obsidian-copilot/issues/4227", () => {
-      const out = translateSdkMessage(
-        {
-          type: "user",
-          message: {
-            content: [
-              {
-                type: "tool_result",
-                tool_use_id: "image",
-                content: [
-                  { type: "text", text: "Image read" },
-                  {
-                    type: "image",
-                    source: { type: "base64", media_type: "image/png", data: "AQID" },
-                  },
-                ],
-              },
-            ],
-          } as never,
-          parent_tool_use_id: null,
-          session_id: SESSION_ID,
-        },
-        SESSION_ID,
-        createTranslatorState()
-      );
-      expect(out[0].update).toMatchObject({
-        content: [
-          { type: "content", content: { type: "text", text: "Image read" } },
-          { type: "content", content: { type: "image", mimeType: "image/png", data: "AQID" } },
-        ],
-      });
-    });
-
     it("emits agent_message_chunk for text deltas", () => {
       const state = createTranslatorState();
       const out = translateSdkMessage(

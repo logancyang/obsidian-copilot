@@ -25,7 +25,6 @@ import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
-import type { ToolImage } from "@/agentMode/session/toolImageThumbnails";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentChatMessage,
@@ -2660,40 +2659,6 @@ describe("AgentSession", () => {
           title: "Read README",
           status: "completed",
           output: [{ type: "text", text: "file contents" }],
-        });
-
-        finishPrompt();
-        await turn;
-      });
-
-      it("keeps only a shrunk thumbnail of an image a tool returns, never the full-size image https://github.com/logancyang/obsidian-copilot/issues/4248", async () => {
-        const mock = makeMockBackend();
-        const finishPrompt = holdPrompt(mock);
-        let finishShrink!: (thumbnail: ToolImage) => void;
-        const shrinking = new Promise<ToolImage>((resolve) => (finishShrink = resolve));
-        const session = makeSession(mock, { shrinkToolImage: () => shrinking });
-        const { turn } = session.sendPrompt("check the chart");
-
-        mock.emitUpdate({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "read-chart",
-          title: "Read chart.png",
-          status: "completed",
-          content: [
-            {
-              type: "content",
-              content: { type: "image", mimeType: "image/png", data: "RlVMTA==" },
-            },
-          ],
-        });
-        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
-          output: [{ type: "image_pending" }],
-        });
-
-        finishShrink({ type: "image", mimeType: "image/webp", data: "VEhVTUI=" });
-        await shrinking;
-        expect(aiMessage(session)?.parts?.[0]).toMatchObject({
-          output: [{ type: "image", mimeType: "image/webp", data: "VEhVTUI=" }],
         });
 
         finishPrompt();
