@@ -285,10 +285,10 @@ function makeFakeVault(root: TFolder | null, outside: TFolder[] = []): FakeVault
   };
 }
 
-function renderView(vault: FakeVault) {
+function renderView(vault: FakeVault, { canLink = true } = {}) {
   return render(
     <AppContext.Provider value={vault.app}>
-      <ProjectFilesView projectId="q4" />
+      <ProjectFilesView projectId="q4" canLink={canLink} />
     </AppContext.Provider>
   );
 }
@@ -1060,6 +1060,28 @@ describe("ProjectFilesView", () => {
       );
       expect(vault.createBinary).not.toHaveBeenCalled();
       expect(mockUpdateProject).not.toHaveBeenCalled();
+    });
+
+    it("offers no Link context and takes no drops without canLink, as in a chat's project popover, so a dragged vault note or computer file neither highlights, links nor copies — https://github.com/Brevilabs/obsidian-copilot-private/issues/839", () => {
+      const { vault, retro } = linkedFixture();
+      renderView(vault, { canLink: false });
+      const view = screen.getByRole("region", { name: "Linked" }).parentElement!;
+      const pdf = { name: "board-notes.pdf", arrayBuffer: async () => new ArrayBuffer(4) };
+      vault.setDraggable({ type: "file", file: retro });
+
+      const noteDragOver = fireEvent.dragOver(view, { dataTransfer: { types: ["text/plain"] } });
+      fireEvent.drop(view, { dataTransfer: { types: ["text/plain"], files: [] } });
+      vault.setDraggable(null);
+      const fileDragOver = fireEvent.dragOver(view, { dataTransfer: { types: ["Files"] } });
+      fireEvent.drop(view, { dataTransfer: { types: ["Files"], files: [pdf] } });
+
+      expect([noteDragOver, fileDragOver]).toEqual([true, true]);
+      expect(document.querySelector("[data-copilot-drop-zone]")).toBeNull();
+      expect(screen.queryByText("Link files to this project")).toBeNull();
+      expect(mockUpdateProject).not.toHaveBeenCalled();
+      expect(vault.createBinary).not.toHaveBeenCalled();
+      expect(noticeMessages()).toEqual([]);
+      expect(screen.queryByRole("button", { name: "Link context" })).toBeNull();
     });
 
     it("says an item from the project folder is already in this project instead of linking it — https://github.com/Brevilabs/obsidian-copilot-private/issues/461", async () => {

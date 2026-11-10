@@ -1,270 +1,107 @@
-import { revealProjectFolder } from "@/projects/ui/AgentProjectRowActions";
-import type { AgentTodoListEntry } from "@/agentMode/session/types";
+import { buildChatFileChanges } from "@/agentMode/session/turnFileChanges";
+import type { AgentChatMessage, TurnFileChange } from "@/agentMode/session/types";
+import { FileChangeCounts } from "@/agentMode/ui/FileChangeSummary";
+import {
+  FileDetailRow,
+  ProjectFilesSection,
+  ProjectFilesView,
+} from "@/projects/ui/ProjectFilesView";
 import { ProjectConfig } from "@/aiParams";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { isClaudeImportOnly, openAgentsFile } from "@/instructions/agentsFile";
-import { moveProjectPromptToAgentsFile } from "@/projects/moveProjectPrompt";
-import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { getProjectAnchorFromConfigPath } from "@/projects/projectPaths";
-import { getCachedProjectRecordById } from "@/projects/state";
-import { ArrowUpRight, Check, ChevronDown, ChevronRight, FolderSearch, List } from "lucide-react";
-import { App, Notice, TFile, TFolder } from "obsidian";
-import React, { memo, useEffect, useState } from "react";
+import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
+import { List } from "lucide-react";
+import { App, TFile } from "obsidian";
+import React, { memo, useMemo, useState } from "react";
 
-const HIDDEN_BASENAMES = new Set(["project.md", "agents.md"]);
-
-const BADGE_CLASSES: Record<string, string> = {
-  pdf: "tw-bg-project-red tw-text-project-red",
-  md: "tw-bg-project-blue tw-text-project-blue",
-  html: "tw-bg-project-orange tw-text-project-orange",
-  png: "tw-bg-project-green tw-text-project-green",
+const CHANGE_LABELS: Record<TurnFileChange["status"], string> = {
+  created: "new",
+  modified: "edited",
+  deleted: "deleted",
 };
 
-function FileBadge({ ext }: { ext: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "tw-flex tw-h-4 tw-w-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded tw-text-smallest tw-font-bold tw-uppercase",
-        BADGE_CLASSES[ext] ?? "tw-bg-secondary tw-text-muted"
-      )}
-    >
-      {ext.slice(0, 4) || "file"}
-    </span>
-  );
+export interface ProjectInfoPanelProps {
+  changes: readonly TurnFileChange[];
+  onOpenFile: (path: string, pane: OpenPane) => void;
+  children: React.ReactNode;
 }
 
-interface ProgressSectionProps {
-  todoList: AgentTodoListEntry[] | null;
-}
-
-function ProgressSection({ todoList }: ProgressSectionProps) {
-  if (!todoList || todoList.length === 0) return null;
-  const done = todoList.filter((t) => t.status === "completed").length;
-  return (
-    <div className="tw-px-3 tw-py-2.5">
-      <div className="tw-mb-1.5 tw-flex tw-items-baseline tw-justify-between">
-        <span className="tw-text-ui-smaller tw-font-semibold tw-text-faint">Progress</span>
-        <span className="tw-text-ui-smaller tw-text-faint">
-          {done}/{todoList.length}
-        </span>
-      </div>
-      <ul className="tw-m-0 tw-flex tw-list-none tw-flex-col tw-gap-1 tw-p-0">
-        {todoList.map((todo, i) => (
-          // eslint-disable-next-line @eslint-react/no-array-index-key -- entries are positional and may share content
-          <li key={`todo-${i}`} className="tw-flex tw-items-center tw-gap-2">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "tw-flex tw-size-5 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-text-xs tw-font-semibold",
-                todo.status === "completed"
-                  ? "tw-bg-interactive-accent tw-text-on-accent"
-                  : todo.status === "in_progress"
-                    ? "tw-border-[1.5px] tw-border-solid tw-border-interactive-accent tw-text-accent"
-                    : "tw-border-[1.5px] tw-border-solid tw-border-border tw-text-faint"
-              )}
-            >
-              {todo.status === "completed" ? <Check className="tw-size-3" /> : i + 1}
-            </span>
-            <span
-              className={cn(
-                "tw-min-w-0 tw-truncate tw-text-ui-small",
-                todo.status === "completed" ? "tw-text-faint tw-line-through" : "tw-text-normal"
-              )}
-              title={todo.content}
-            >
-              {todo.content}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export interface ProjectFileEntry {
-  path: string;
-  name: string;
-  extension: string;
-}
-
-export interface ProjectFilesListProps {
-  files: ProjectFileEntry[];
-  onOpenInstructions: () => void;
-  onOpenFile: (path: string) => void;
-  onReveal: () => void;
-}
-
-export function ProjectFilesList({
-  files,
-  onOpenInstructions,
+export function ProjectInfoPanel({
+  changes,
   onOpenFile,
-  onReveal,
-}: ProjectFilesListProps) {
-  const [outputsOpen, setOutputsOpen] = useState(false);
-
+  children,
+}: ProjectInfoPanelProps): React.ReactElement {
   return (
-    <div className="tw-px-3 tw-py-2.5">
-      <div className="tw-mb-1 tw-flex tw-items-center tw-justify-between">
-        <span className="tw-text-ui-smaller tw-font-semibold tw-text-faint">Project files</span>
-        <Button
-          variant="ghost2"
-          size="icon"
-          aria-label="Reveal project files in vault"
-          className="tw-size-5 tw-text-faint hover:tw-text-normal"
-          onClick={onReveal}
-        >
-          <FolderSearch className="tw-size-3.5" />
-        </Button>
+    <>
+      <div className="copilot-divider-b">
+        <ProjectFilesSection title="Changed in this chat">
+          {changes.length === 0 ? (
+            <div className="tw-px-1.5 tw-py-1 tw-text-ui-small tw-text-faint">
+              No files changed in this chat yet.
+            </div>
+          ) : (
+            changes.map((change) => {
+              const folderEnd = change.path.lastIndexOf("/") + 1;
+              return (
+                <FileDetailRow
+                  key={change.path}
+                  path={change.path}
+                  name={change.path.slice(folderEnd)}
+                  folder={change.path.slice(0, folderEnd)}
+                  status={CHANGE_LABELS[change.status]}
+                  onActivate={(pane) => onOpenFile(change.path, pane)}
+                >
+                  <FileChangeCounts additions={change.additions} deletions={change.deletions} />
+                </FileDetailRow>
+              );
+            })
+          )}
+        </ProjectFilesSection>
       </div>
-
-      <div
-        role="button"
-        tabIndex={0}
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
-        onClick={onOpenInstructions}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onOpenInstructions();
-        }}
-      >
-        <FileBadge ext="md" />
-        <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small">AGENTS.md</span>
-        <ArrowUpRight aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-faint" />
-      </div>
-
-      {files.map((file) => (
-        <div
-          key={file.path}
-          role="button"
-          tabIndex={0}
-          className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded tw-p-1 hover:tw-bg-secondary"
-          onClick={() => onOpenFile(file.path)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") onOpenFile(file.path);
-          }}
-        >
-          <FileBadge ext={file.extension.toLowerCase()} />
-          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small" title={file.name}>
-            {file.name}
-          </span>
-        </div>
-      ))}
-
-      <div
-        role="button"
-        tabIndex={0}
-        className="tw-flex tw-cursor-pointer tw-items-center tw-gap-1 tw-rounded tw-p-1 tw-text-muted hover:tw-bg-secondary"
-        onClick={() => setOutputsOpen((v) => !v)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setOutputsOpen((v) => !v);
-        }}
-        aria-expanded={outputsOpen}
-      >
-        {outputsOpen ? (
-          <ChevronDown className="tw-size-3.5" aria-hidden="true" />
-        ) : (
-          <ChevronRight className="tw-size-3.5" aria-hidden="true" />
-        )}
-        <span className="tw-text-ui-small tw-font-medium">Outputs</span>
-        <span className="tw-text-ui-smaller tw-text-faint">(0)</span>
-      </div>
-      {outputsOpen && (
-        <div className="tw-py-1 tw-pl-6 tw-text-ui-smaller tw-text-faint">No outputs yet</div>
-      )}
-    </div>
+      {children}
+    </>
   );
 }
 
-interface ProjectFilesSectionProps {
+interface ProjectInfoContentProps {
   app: App;
-  project: ProjectConfig;
+  projectId: string;
+  messages: readonly AgentChatMessage[];
   onClose: () => void;
 }
 
-function ProjectFilesSection({ app, project, onClose }: ProjectFilesSectionProps) {
-  const [files, setFiles] = useState<TFile[]>([]);
-  useEffect(() => {
-    const record = getCachedProjectRecordById(project.id);
-    const folderPath = record
-      ? getProjectAnchorFromConfigPath(record.filePath).projectFolderPath
-      : null;
-    const folder = folderPath ? app.vault.getAbstractFileByPath(folderPath) : null;
-    let cancelled = false;
-    void (async () => {
-      if (!(folder instanceof TFolder)) {
-        if (!cancelled) setFiles([]);
-        return;
-      }
-      const list = folder.children.filter(
-        (child): child is TFile =>
-          child instanceof TFile &&
-          !child.name.startsWith(".") &&
-          !HIDDEN_BASENAMES.has(child.name.toLowerCase()) &&
-          child.name.toLowerCase() !== "claude.md"
-      );
-      const claude = folder.children.find(
-        (child): child is TFile =>
-          child instanceof TFile && child.name.toLowerCase() === "claude.md"
-      );
-      if (claude) {
-        const content = await app.vault.read(claude).catch(() => "");
-        if (!isClaudeImportOnly(content)) list.push(claude);
-      }
-      if (!cancelled) setFiles(list.sort((a, b) => a.name.localeCompare(b.name)));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [app, project.id]);
-
-  const handleOpenFile = (path: string) => {
-    const file = files.find((candidate) => candidate.path === path);
-    if (!file) return;
+function ProjectInfoContent({
+  app,
+  projectId,
+  messages,
+  onClose,
+}: ProjectInfoContentProps): React.ReactElement {
+  const changes = useMemo(() => buildChatFileChanges(messages), [messages]);
+  const openChangedFile = (path: string, pane: OpenPane): void => {
+    const file = app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return;
     onClose();
-    void app.workspace
-      .getLeaf(false)
-      .openFile(file)
-      .catch((err) => logError("[ProjectInfoPopover] openFile failed", err));
+    openFileInTab(app, file, pane).catch((error: unknown) =>
+      logError("[ProjectInfoPopover] failed to open the changed file", error)
+    );
   };
-
-  const handleOpenProjectInstructions = () => {
-    const record = getCachedProjectRecordById(project.id);
-    if (!record) return;
-    onClose();
-    void moveProjectPromptToAgentsFile(app, record)
-      .then(() =>
-        openAgentsFile(app, getProjectAnchorFromConfigPath(record.filePath).projectFolderPath)
-      )
-      .catch((error) => {
-        logError("[ProjectInfoPopover] Failed to open project AGENTS.md", error);
-        new Notice("Failed to open project AGENTS.md.");
-      });
-  };
-
   return (
-    <ProjectFilesList
-      files={files}
-      onOpenInstructions={handleOpenProjectInstructions}
-      onOpenFile={handleOpenFile}
-      onReveal={() => {
-        onClose();
-        revealProjectFolder(app, project);
-      }}
-    />
+    <ProjectInfoPanel changes={changes} onOpenFile={openChangedFile}>
+      <ProjectFilesView projectId={projectId} />
+    </ProjectInfoPanel>
   );
 }
 
 interface ProjectInfoPopoverProps {
   app: App;
   project: ProjectConfig;
-  todoList: AgentTodoListEntry[] | null;
+  messages: readonly AgentChatMessage[];
   container?: HTMLElement | null;
 }
 
 export const ProjectInfoPopover = memo(
-  ({ app, project, todoList, container }: ProjectInfoPopoverProps) => {
+  ({ app, project, messages, container }: ProjectInfoPopoverProps) => {
     const [open, setOpen] = useState(false);
 
     return (
@@ -282,19 +119,17 @@ export const ProjectInfoPopover = memo(
         <PopoverContent
           align="end"
           container={container}
-          className="tw-w-72 tw-p-0"
+          collisionBoundary={container}
+          collisionPadding={8}
+          className="tw-max-h-[var(--radix-popover-content-available-height)] tw-w-80 tw-max-w-[var(--radix-popover-content-available-width)] tw-overflow-y-auto tw-p-0"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="tw-px-3 tw-py-2.5">
-            <span
-              className="tw-block tw-truncate tw-text-ui-small tw-font-semibold"
-              title={project.name}
-            >
-              {project.name}
-            </span>
-          </div>
-          <ProgressSection todoList={todoList} />
-          <ProjectFilesSection app={app} project={project} onClose={() => setOpen(false)} />
+          <ProjectInfoContent
+            app={app}
+            projectId={project.id}
+            messages={messages}
+            onClose={() => setOpen(false)}
+          />
         </PopoverContent>
       </Popover>
     );

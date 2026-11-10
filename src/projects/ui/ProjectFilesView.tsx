@@ -1,4 +1,5 @@
 import { AgentHomePreviewList } from "@/agentMode/ui/AgentHomeSection";
+import { FileStatusLabel } from "@/agentMode/ui/FileChangeSummary";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { LinkUrlModal } from "@/projects/ui/LinkUrlModal";
@@ -372,7 +373,7 @@ interface ProjectFilesSectionProps {
   children: React.ReactNode;
 }
 
-function ProjectFilesSection({
+export function ProjectFilesSection({
   title,
   detail,
   children,
@@ -414,6 +415,34 @@ export function ProjectFolderSection({
   );
 }
 
+export interface FileDetailRowProps extends Omit<ProjectRowProps, "expanded"> {
+  name: string;
+  folder: string;
+  status: string;
+}
+
+export function FileDetailRow({
+  name,
+  folder,
+  status,
+  children,
+  ...rowProps
+}: FileDetailRowProps): React.ReactElement {
+  return (
+    <ProjectRow {...rowProps}>
+      <File aria-hidden="true" className="tw-ml-5 tw-size-3.5 tw-shrink-0 tw-text-faint" />
+      <span className="tw-min-w-0 tw-shrink tw-truncate" title={name}>
+        {name}
+      </span>
+      <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-smaller tw-text-faint">
+        {folder || "/"}
+      </span>
+      <FileStatusLabel>{status}</FileStatusLabel>
+      {children}
+    </ProjectRow>
+  );
+}
+
 export interface LinkedSectionProps extends ProjectTreeHandlers {
   rows: readonly LinkedProjectRow[];
   matches: readonly LinkedMatchRow[];
@@ -443,7 +472,7 @@ function UnlinkableRow({ name, onUnlink, children }: UnlinkableRowProps): React.
 }
 
 export interface ProjectFilesPanelProps {
-  onLink: (kind: LinkKind) => void;
+  onLink?: (kind: LinkKind) => void;
   children: React.ReactNode;
 }
 
@@ -454,12 +483,14 @@ export function ProjectFilesPanel({
   return (
     <div className="tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2">
       <AgentHomePreviewList>{children}</AgentHomePreviewList>
-      <LinkContextMenu onLink={onLink} />
+      {/* Linking happens only on the project home; the chat's project popover just shows the files.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/839 */}
+      {onLink && <LinkContextMenu onLink={onLink} />}
     </div>
   );
 }
 
-function LinkContextMenu({ onLink }: Pick<ProjectFilesPanelProps, "onLink">): React.ReactElement {
+function LinkContextMenu({ onLink }: { onLink: (kind: LinkKind) => void }): React.ReactElement {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -571,9 +602,13 @@ export function FilesDropOverlay(): React.ReactElement {
 
 interface ProjectFilesViewProps {
   projectId: string;
+  canLink?: boolean;
 }
 
-export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.ReactElement | null {
+export function ProjectFilesView({
+  projectId,
+  canLink = false,
+}: ProjectFilesViewProps): React.ReactElement | null {
   const app = useApp();
   const startNoteDrag = useNoteDrag();
   const configPath = getCachedProjectRecordById(projectId)?.filePath;
@@ -721,8 +756,10 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
 
   // Rows dragged toward the composer must not become new project links.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/461
+  // Drops link or copy only on the project home; in a chat's popover they looked too busy and aren't needed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/839
   const acceptsDrag = (event: React.DragEvent): boolean =>
-    !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
+    canLink && !event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE);
 
   const dropOnFiles = (event: React.DragEvent): void => {
     if (!acceptsDrag(event)) return;
@@ -751,7 +788,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
   const rowHandlers = { onOpenFile: openFile, onShowFileMenu: showFileMenu, onDragFile: dragFile };
   return (
     <div
-      data-copilot-drop-zone
+      data-copilot-drop-zone={canLink || undefined}
       className="tw-relative tw-flex tw-h-full tw-min-h-0 tw-flex-col"
       onDragOver={(event) => {
         if (!acceptsDrag(event)) return;
@@ -770,7 +807,7 @@ export function ProjectFilesView({ projectId }: ProjectFilesViewProps): React.Re
       }}
       onDrop={dropOnFiles}
     >
-      <ProjectFilesPanel onLink={(kind) => pickToLink[kind]()}>
+      <ProjectFilesPanel onLink={canLink ? (kind) => pickToLink[kind]() : undefined}>
         <ProjectFolderSection
           folderPath={folderPath}
           nodes={nodes}

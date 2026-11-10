@@ -9,9 +9,9 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-row-actions: a project row offers `Reveal in vault`, `Edit project`, `Archive`, and `Delete`. Archiving moves the project under `View archived`; deleting asks first and keeps the notes in the vault.
 - project-enter: inside a project, the start screen reads `Chat in <project>` and opens on `Files`; `Recent chats` lists only its chats. It has its own [chat tabs](chat-tabs.md).
 - project-header: the header shows the project name, `Leave project`, `Project settings`, and `Reveal project folder in vault`. Inside a chat it also shows `Project info for <project>`.
-- project-info: inside a project chat, `Project info for <project>` shows the project name, `Progress` on the agent's plan, and `Project files`.
+- project-info: inside a project chat, `Project info for <project>` shows `Changed in this chat`, followed by `Project folder` and `Linked` to browse. It has no `Link context` and takes no drops.
 - project-edit: `Edit project` opens the project's name, description, `Project instructions`, and context sources.
-- project-files: `Project files` in the project info lists `AGENTS.md` and the files in the project folder to open, and `Outputs`.
+- project-files: the project info lists files created, edited, or deleted in the chat, with `new`, `edited`, or `deleted` and lines added and removed. Its folder tree and Linked section browse the same files as the project home.
 - project-folder: the home's `Files` view shows `Project folder` and an expandable folder tree; choose a file to open it.
 - project-context: the Files view's `Linked` section lists linked notes, folders, tags, properties, and web or YouTube links. `Link context` offers `Files`, `Folders`, `Tags`, `Properties`, and `Link`; `Unlink` removes a link without deleting notes.
 
@@ -31,9 +31,9 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Leave: choose `Leave project`. The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf.
 - Settings: choose `Project settings` in the header. The `Edit project` dialog opens.
 - Header reveal: choose `Reveal project folder in vault` in the header. The file explorer selects the project folder.
-- Info: inside a project chat, choose `Project info for <project>`. A panel shows the project name, then `Progress` when the agent has a plan, then `Project files`.
+- Info: ask the agent to create or edit a project file, then choose `Project info for <project>`. `Changed in this chat` shows the file and its line counts. Choose the row: the file opens and the popover closes.
 - Folder tree: on the project home, expand `outputs` and its nested folders, then choose a generated file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
-- Files: in the project info, choose `AGENTS.md`. The project's `AGENTS.md` opens as a note.
+- Files: in project info, expand nested folders under `Project folder` or `Linked` and choose a file to open it. The popover offers no `Link context`. In a narrow chat pane, expand a long tree: the popover fits the pane and scrolls.
 - Context: choose `Link context` → `Files` and select a note outside the project folder. It appears under `Linked` with its parent folder. Choose `Folders`, select a nested folder, and expand its row to browse its contents.
 - Tag: choose `Link context` → `Tags` and pick a tag. Its row shows the matching-note count. Expand it to open matching notes; tag or untag a note and the list and count update.
 - Link: choose `Link context` → `Link`, type or paste a web or YouTube address, and select it. Its row appears under Linked; choosing the row opens the address in the browser.
@@ -57,3 +57,5 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - `Recent chats` accepts no drops. Dropping an item already in the project shows `Already in this project`. Copies of external files get numbered names when needed; existing files are not overwritten.
 - Linked tags include nested tags. Linking a page does not fetch a snapshot or a YouTube transcript.
 - Tags and properties are live queries rather than frozen lists of notes. Unlinking a query leaves its matching notes unchanged.
+- `Changed in this chat` is empty after reopening a chat following a reload. A file changed in several turns appears once; a file restored to its original content drops out.
+- Only the project home's `Files` tab links context, through `Link context` or a drop. `Project info for <project>` in a chat shows the same files and links read-only.

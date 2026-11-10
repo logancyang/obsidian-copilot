@@ -8,7 +8,6 @@ import {
   AgentMessagePart,
   AgentToolKind,
   AgentQuestionAnswers,
-  AgentTodoListEntry,
   AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
@@ -188,7 +187,6 @@ export interface AgentSessionListener {
   onModelChanged?(): void;
   onLabelChanged?(): void;
   onCurrentPlanChanged?(): void;
-  onCurrentTodoListChanged?(): void;
   onNeedsAttentionChanged?(needsAttention: boolean): void;
   onTasksChanged?(): void;
   onQueuedPromptsChanged?(): void;
@@ -286,7 +284,6 @@ export class AgentSession implements ChatStateHost, ChatView {
   private readonly historyReplay = new SessionHistoryReplay({
     store: this.store,
     scheduleNotifyMessages: () => this.scheduleNotifyMessages(),
-    applyTodoList: (entries) => this.requests.applyTodoList(entries),
   });
   private readonly requests: InteractiveRequests;
   private readonly usageTracker: UsageTracker;
@@ -347,7 +344,6 @@ export class AgentSession implements ChatStateHost, ChatView {
       recomputeStatus: () => this.recomputeStatusIfChanged(),
       notifyMessages: () => this.notifyMessages(),
       notifyPlanChanged: () => this.notifyCurrentPlanChanged(),
-      notifyTodoListChanged: () => this.notifyCurrentTodoListChanged(),
     });
     this.usageTracker = new UsageTracker({
       backend: this.backend,
@@ -1130,10 +1126,6 @@ export class AgentSession implements ChatStateHost, ChatView {
     return this.requests.getCurrentPlan();
   }
 
-  getCurrentTodoList(): AgentTodoListEntry[] | null {
-    return this.requests.getCurrentTodoList();
-  }
-
   getTasks(): readonly AgentTask[] {
     return this.taskList;
   }
@@ -1337,8 +1329,6 @@ export class AgentSession implements ChatStateHost, ChatView {
           return;
       }
     }
-
-    if (update.sessionUpdate === "plan") this.requests.applyTodoList(update.entries);
 
     if (update.sessionUpdate === "session_info_update") {
       // An update that omits `title` (opencode's compaction and retry markers) leaves the title alone; only an explicit null clears it. https://github.com/Brevilabs/obsidian-copilot-private/issues/632
@@ -1865,16 +1855,6 @@ export class AgentSession implements ChatStateHost, ChatView {
         l.onModelChanged?.();
       } catch (e) {
         logWarn(`[AgentMode] model listener threw`, e);
-      }
-    }
-  }
-
-  private notifyCurrentTodoListChanged(): void {
-    for (const l of this.listeners) {
-      try {
-        l.onCurrentTodoListChanged?.();
-      } catch (e) {
-        logWarn(`[AgentMode] todo-list listener threw`, e);
       }
     }
   }
