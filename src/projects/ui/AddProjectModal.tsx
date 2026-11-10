@@ -235,9 +235,6 @@ export function AddProjectModalContent({
               onChange={handleContextChange}
               onManage={() => handleEditProjectContext(formData)}
               popoverContainer={popoverContainer}
-              droppable={false}
-              solidManageButton
-              showHelperText
             />
           </div>
         </div>
