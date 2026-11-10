@@ -221,6 +221,26 @@ describe("feedbackOffer", () => {
         expect(fail(null, new AuthRequiredError("You're not signed in to Claude."))).toBeNull();
       });
 
+      it.each([
+        [
+          "categorized provider authentication failure",
+          { service: "session", errorName: "provider.auth" },
+          "Internal error: credentials rejected",
+        ],
+        [
+          "OpenCode authentication-required response",
+          {},
+          "Authentication required: provider authentication required",
+        ],
+      ])(
+        "https://github.com/logancyang/obsidian-copilot/issues/4244 shows no card for the %s",
+        (_label, data, message) => {
+          const error = Object.assign(new Error(message), { code: -32000, data });
+
+          expect(fail(null, error)).toBeNull();
+        }
+      );
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", () => {
         jest
           .mocked(getSettings)
