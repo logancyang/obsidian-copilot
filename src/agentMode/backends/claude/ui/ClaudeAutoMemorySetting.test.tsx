@@ -41,8 +41,8 @@ describe("ClaudeAutoMemorySetting", () => {
     });
 
     it.each([
-      [true, "Claude Code default (On)"],
-      [false, "Claude Code default (Off)"],
+      [true, "Default (On)"],
+      [false, "Default (Off)"],
     ])(
       `names Claude Code's own value %s in the default option (${ISSUE})`,
       (onByDefault, label) => {

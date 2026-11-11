@@ -22,9 +22,7 @@ export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = (
   onClear,
 }) => {
   const choice: Choice = value === undefined ? "default" : value ? "on" : "off";
-  const defaultLabel = memory
-    ? `Claude Code default (${memory.onByDefault ? "On" : "Off"})`
-    : "Claude Code default";
+  const defaultLabel = memory ? `Default (${memory.onByDefault ? "On" : "Off"})` : "Default";
   const on = value ?? memory?.onByDefault;
   return (
     <>
