@@ -866,7 +866,8 @@ export class AgentSessionManager {
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    seedMode?: CopilotMode
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -877,6 +878,7 @@ export class AgentSessionManager {
     const errorSeqAtStart = this.lastErrorSeq;
     const descriptor = this.resolveDescriptor(resolvedId);
     const resolvedSeed = seedSelection ?? this.getSeedSelection(resolvedId) ?? undefined;
+    const mode = seedMode ?? this.getDefaultMode(resolvedId);
     if (!resolvedSeed && descriptor.routesCopilotModels) {
       const message = `Enable a model for ${descriptor.displayName} in Copilot's model settings to start a chat.`;
       this.setLastError(message);
@@ -925,7 +927,7 @@ export class AgentSessionManager {
       backendId: resolvedId,
       projectId,
       defaultModelSelection: resolvedSeed,
-      defaultMode: this.getDefaultMode(resolvedId),
+      defaultMode: mode,
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
       getDisplayName: (backendId) => this.resolveDescriptor(backendId).displayName,
@@ -979,7 +981,7 @@ export class AgentSessionManager {
         logInfo(
           `[AgentMode] session ready (internal=${session.internalId} backend-id=${session.getBackendSessionId()} backend=${resolvedId}); pool size=${this.sessions.size}`
         );
-        await replayPersistedMode(session, this.getDefaultMode(resolvedId));
+        await replayPersistedMode(session, mode);
       })
       .catch((err) => {
         this.setLastError(err2String(err));
@@ -2010,7 +2012,14 @@ export class AgentSessionManager {
           )
         : null;
       session =
-        resumed ?? (await this.createSession(loaded.backendId, projectId, loaded.modelSelection));
+        resumed ??
+        (await this.createSession(
+          loaded.backendId,
+          projectId,
+          loaded.modelSelection,
+          undefined,
+          loaded.copilotMode
+        ));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
@@ -2198,6 +2207,9 @@ export class AgentSessionManager {
     );
     const cwd = this.resolveSessionCwd(projectId);
     const descriptor = this.resolveDescriptor(backendId);
+    const selection =
+      seedSelection ??
+      (descriptor.savesChatSelection ? (this.getSeedSelection(backendId) ?? undefined) : undefined);
 
     this.pendingCreates++;
     this.startingBackendId = backendId;
@@ -2232,7 +2244,7 @@ export class AgentSessionManager {
       chatInputId,
       backendId,
       projectId,
-      defaultModelSelection: seedSelection,
+      defaultModelSelection: selection,
       defaultMode: mode,
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
@@ -2295,7 +2307,7 @@ export class AgentSessionManager {
 
     if (descriptor.applyInitialSessionConfig) {
       try {
-        await descriptor.applyInitialSessionConfig(session, getSettings(), seedSelection);
+        await descriptor.applyInitialSessionConfig(session, getSettings(), selection);
       } catch (e) {
         logWarn(
           `[AgentMode] applyInitialSessionConfig failed for resumed ${backendId} session; continuing`,

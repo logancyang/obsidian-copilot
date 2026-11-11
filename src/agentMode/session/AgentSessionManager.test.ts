@@ -5921,6 +5921,84 @@ describe("AgentSessionManager", () => {
         );
       });
 
+      describe("a note with no saved selection", () => {
+        const argonState: BackendState = {
+          model: {
+            current: { baseModelId: "gemini-4-argon", effort: "medium" },
+            availableModels: [],
+            apply: { kind: "setModel" },
+          },
+          mode: null,
+        };
+        const reopenWithoutSelection = async (savesChatSelection: boolean) => {
+          mockSavedDefault({ baseModelId: "gemini-3.8-flash", effort: "low" });
+          const applySelection = jest.fn(async () => undefined);
+          const backend = {
+            ...makeMockBackendProcess(),
+            loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+              sessionId,
+              state: argonState,
+            })),
+          };
+          await buildManager({
+            persistence: {
+              loadFile: jest.fn().mockResolvedValue({
+                backendId: "opencode",
+                sessionId: "native-1",
+                projectId: GLOBAL_SCOPE,
+                messages: savedTurn,
+              }),
+            },
+            descriptor: buildDescriptor({
+              createBackendProcess: () => backend,
+              applySelection,
+              savesChatSelection,
+            }),
+          }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+          return applySelection;
+        };
+
+        it("reopens on the user's default model and effort when the backend saves chat selections, since the agent only reports its own default", async () => {
+          expect(await reopenWithoutSelection(true)).toHaveBeenCalledWith(expect.anything(), {
+            baseModelId: "gemini-3.8-flash",
+            effort: "low",
+          });
+        });
+
+        it("keeps the model the agent reports when the backend does not save chat selections", async () => {
+          expect(await reopenWithoutSelection(false)).not.toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ baseModelId: "gemini-3.8-flash" })
+          );
+        });
+      });
+
+      it("opens the fresh chat that replaces a conversation the agent no longer has in the mode saved in its note", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new Error("Invalid params: session not found: native-1");
+          }),
+        });
+        sessionCreateSpy.mockClear();
+
+        await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              copilotMode: "plan",
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(sessionCreateSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ defaultMode: "plan" })
+        );
+      });
+
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 opens a fresh session that sends the note's turns to the agent when the backend's store does not know the saved session", async () => {
         const replay = buildReplayingBackend({
           loadSession: jest.fn(async () => {
