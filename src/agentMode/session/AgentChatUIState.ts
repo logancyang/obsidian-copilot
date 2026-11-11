@@ -15,6 +15,7 @@ import type {
   QueuedPrompt,
   SessionUsage,
 } from "@/agentMode/session/types";
+import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { MessageContext } from "@/types/message";
 import type { ChatStateKey, ChatStates, ChatView } from "@/agentMode/session/chatExtension";
 
@@ -220,7 +221,15 @@ export class AgentChatUIState implements AgentChatBackend {
   ): Promise<void> {
     const plan = this.session.getCurrentPlan();
     if (!plan || plan.id !== proposalId || plan.decision !== "pending") return;
-    if (!plan.permissionGated || !plan.pendingToolCallId) {
+    if (!plan.permissionGated) {
+      await this.resolvePlanByPrompt(
+        plan.id,
+        decision,
+        decision === "feedback" ? feedbackText?.trim() : undefined
+      );
+      return;
+    }
+    if (!plan.pendingToolCallId) {
       logWarn("[AgentChatUIState] non-gated plan card has no resolution path");
       return;
     }
@@ -245,5 +254,22 @@ export class AgentChatUIState implements AgentChatBackend {
       await pendingTurn;
       await this.sendMessage(trimmedFeedback).turn;
     }
+  }
+
+  private async resolvePlanByPrompt(
+    proposalId: string,
+    decision: PlanDecisionAction,
+    feedback: string | undefined
+  ): Promise<void> {
+    if (decision === "feedback" && !feedback) return;
+    const pendingTurn = this.currentTurn;
+    this.session.finalizePlanDecision(proposalId, decision, feedback);
+    this.notifyListeners();
+    if (decision === "reject") return;
+    await pendingTurn;
+    if (decision === "approve" && this.session.getState()?.mode?.current === "plan") {
+      await replayPersistedMode(this.session, "default");
+    }
+    await this.sendMessage(feedback ?? "Proceed").turn;
   }
 }

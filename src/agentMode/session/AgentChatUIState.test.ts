@@ -117,6 +117,100 @@ describe("AgentChatUIState", () => {
     };
   }
 
+  function promptedPlanReview() {
+    let emitUpdate: SessionUpdateHandler | undefined;
+    let finishFirstTurn: (() => void) | undefined;
+    const prompt = jest
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirstTurn = () => resolve({ stopReason: "end_turn" });
+          })
+      )
+      .mockResolvedValue({ stopReason: "end_turn" });
+    const modeState = (current: "default" | "plan") => ({
+      model: null,
+      mode: {
+        current,
+        options: [
+          { value: "default" as const, label: "Safe" },
+          { value: "plan" as const, label: "Plan" },
+        ],
+        apply: {
+          default: { kind: "setMode" as const, nativeId: "default" },
+          plan: { kind: "setMode" as const, nativeId: "plan" },
+        },
+      },
+    });
+    const events: string[] = [];
+    const setSessionMode = jest.fn(async ({ modeId }: { modeId: string }) => {
+      events.push(`mode:${modeId}`);
+      return modeState(modeId === "plan" ? "plan" : "default");
+    });
+    const backend = {
+      isRunning: () => true,
+      onExit: () => () => undefined,
+      registerSessionHandler: (_id: string, handler: SessionUpdateHandler) => {
+        emitUpdate = handler;
+        return () => undefined;
+      },
+      setSessionMode,
+      prompt: async (input: PromptInput) => {
+        const emit = (update: SessionEvent["update"]) =>
+          emitUpdate!({ sessionId: "agy-session", update });
+        events.push(`prompt:${input.prompt[0].type === "text" ? input.prompt[0].text : ""}`);
+        emit({ sessionUpdate: "message_delivered", promptId: input.promptId });
+        emit({ sessionUpdate: "turn_started", turnId: input.promptId });
+        void prompt(input).then((outcome: { stopReason: "end_turn" }) =>
+          emit({ sessionUpdate: "turn_ended", turnId: input.promptId, ...outcome })
+        );
+      },
+    } as unknown as BackendProcess;
+    const descriptor = { planProposalsEndTurn: true } as unknown as BackendDescriptor;
+    const session = new AgentSession({
+      backend,
+      backendSessionId: "agy-session",
+      internalId: "prompted-plan",
+      backendId: "antigravity",
+      getDescriptor: () => descriptor,
+    });
+    session.completeResume(modeState("plan"));
+    const chat = new AgentChatUIState(session);
+    const firstTurn = chat.sendMessage("Draft a plan").turn;
+    emitUpdate!({
+      sessionId: "agy-session",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "plan-write",
+        title: "Plan",
+        kind: "switch_mode",
+        status: "completed",
+        rawInput: { plan: "# Add a heading" },
+      },
+    });
+    const plan = chat.getCurrentPlan();
+    if (!plan) throw new Error("Expected a pending plan");
+    return {
+      chat,
+      session,
+      plan,
+      prompt,
+      events,
+      firstTurn,
+      finishFirstTurn: () => finishFirstTurn!(),
+      decisionLine: () => {
+        const part = chat
+          .getMessages()
+          .flatMap((message) => message.parts ?? [])
+          .find((item) => item.kind === "tool_call" && item.id === "plan-write");
+        return part?.kind === "tool_call"
+          ? lookupToolSummary(part).collapsedLine(part, { vaultBase: null })
+          : null;
+      },
+    };
+  }
+
   describe("resolvePlanProposal()", () => {
     it.each([
       ["approve", "Approved plan"],
@@ -214,6 +308,60 @@ describe("AgentChatUIState", () => {
         expect(review.prompt).toHaveBeenCalledTimes(1);
       }
     );
+    it("approves a plan that waits for the next prompt by leaving Plan mode once the turn ends, then telling the agent to proceed", async () => {
+      const review = promptedPlanReview();
+      const resolution = review.chat.resolvePlanProposal(review.plan.id, "approve");
+
+      expect(review.chat.getCurrentPlan()).toBeNull();
+      expect(review.decisionLine()).toBe("Approved plan");
+      expect(review.events).toEqual(["prompt:Draft a plan"]);
+      review.finishFirstTurn();
+      await review.firstTurn;
+      await resolution;
+
+      expect(review.events).toEqual(["prompt:Draft a plan", "mode:default", "prompt:Proceed"]);
+      expect(review.session.getState()?.mode?.current).toBe("default");
+    });
+
+    it("sends feedback on a plan that waits for the next prompt as the next message and stays in Plan mode", async () => {
+      const review = promptedPlanReview();
+      const resolution = review.chat.resolvePlanProposal(
+        review.plan.id,
+        "feedback",
+        "  add a second step  "
+      );
+      review.finishFirstTurn();
+      await review.firstTurn;
+      await resolution;
+
+      expect(review.decisionLine()).toBe("Requested plan changes: add a second step");
+      expect(review.events).toEqual(["prompt:Draft a plan", "prompt:add a second step"]);
+      expect(review.session.getState()?.mode?.current).toBe("plan");
+    });
+
+    it("rejects a plan that waits for the next prompt by closing the card without sending anything", async () => {
+      const review = promptedPlanReview();
+      review.finishFirstTurn();
+      await review.firstTurn;
+
+      await review.chat.resolvePlanProposal(review.plan.id, "reject");
+
+      expect(review.chat.getCurrentPlan()).toBeNull();
+      expect(review.chat.hasPendingPlanPermission()).toBe(false);
+      expect(review.decisionLine()).toBe("Rejected plan");
+      expect(review.events).toEqual(["prompt:Draft a plan"]);
+    });
+
+    it("keeps a plan that waits for the next prompt pending when the feedback is blank", async () => {
+      const review = promptedPlanReview();
+      review.finishFirstTurn();
+      await review.firstTurn;
+
+      await review.chat.resolvePlanProposal(review.plan.id, "feedback", "   ");
+
+      expect(review.chat.getCurrentPlan()?.id).toBe(review.plan.id);
+      expect(review.events).toEqual(["prompt:Draft a plan"]);
+    });
   });
 
   describe("resolveAskUserQuestion()", () => {

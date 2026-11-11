@@ -223,6 +223,15 @@ describe("InteractiveRequests", () => {
         requests.resolvePlanProposalPermission("tc-plan", true);
         expect(requests.hasPendingPlanPermission()).toBe(false);
       });
+
+      it("reports a plan that waits for the next prompt as pending until the user decides", () => {
+        const { requests } = makeRequests({ planProposalsEndTurn: true });
+        requests.publishGatedPlan("tc-plan", PLAN_INFO);
+        expect(requests.hasPendingPlanPermission()).toBe(true);
+
+        requests.finalizePlanDecision(requests.getCurrentPlan()!.id, "approve");
+        expect(requests.hasPendingPlanPermission()).toBe(false);
+      });
     });
 
     describe("handleToolPermission()", () => {
@@ -449,6 +458,19 @@ describe("InteractiveRequests", () => {
     });
 
     describe("publishGatedPlan()", () => {
+      it("publishes a plan without a permission gate when the backend's plan proposals end the turn", () => {
+        const { requests } = makeRequests({ planProposalsEndTurn: true });
+
+        requests.publishGatedPlan("tc-plan", PLAN_INFO);
+
+        expect(requests.getCurrentPlan()).toMatchObject({
+          title: "Ship it",
+          permissionGated: false,
+          pendingToolCallId: "tc-plan",
+          decision: "pending",
+        });
+      });
+
       it("keeps the plan revision but tracks the new pending tool call when an identical plan body is proposed again", () => {
         const { requests } = makeRequests();
         const planBody = "# proposed plan body";

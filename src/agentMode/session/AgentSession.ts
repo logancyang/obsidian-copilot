@@ -342,6 +342,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       internalId: this.internalId,
       getReplyId: () => this.turns.getReplyId(),
       hasLeftPlanMode: () => this.hasLeftPlanMode(),
+      planProposalsEndTurn: opts.getDescriptor?.()?.planProposalsEndTurn,
       recomputeStatus: () => this.recomputeStatusIfChanged(),
       notifyMessages: () => this.notifyMessages(),
       notifyPlanChanged: () => this.notifyCurrentPlanChanged(),

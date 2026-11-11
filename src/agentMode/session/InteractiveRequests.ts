@@ -37,6 +37,7 @@ export interface InteractiveRequestsDeps {
   internalId: string;
   getReplyId(): string | null;
   hasLeftPlanMode(): boolean;
+  planProposalsEndTurn?: boolean;
   recomputeStatus(): void;
   notifyMessages(): void;
   notifyPlanChanged(): void;
@@ -165,7 +166,7 @@ export class InteractiveRequests {
   }
 
   hasPendingPlanPermission(): boolean {
-    return this.pendingPlanResolvers.size > 0;
+    return this.pendingPlanResolvers.size > 0 || this.currentPlan?.permissionGated === false;
   }
 
   handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
@@ -300,7 +301,7 @@ export class InteractiveRequests {
       body: info.plan,
       title,
       sourceFilePath: info.planFilePath,
-      permissionGated: true,
+      permissionGated: !this.deps.planProposalsEndTurn,
       pendingToolCallId: toolCallId,
     });
   }
