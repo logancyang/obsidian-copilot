@@ -14,7 +14,6 @@ function renderSetting(overrides: Partial<ClaudeAutoMemorySettingProps> = {}) {
     enabled: true,
     onEnabledChange: jest.fn(),
     memory: {
-      turnedOffInClaude: false,
       folders: [VAULT_MEMORY, PROJECT_MEMORY],
       folderSetInClaude: false,
     },
@@ -56,37 +55,24 @@ describe("ClaudeAutoMemorySetting", () => {
 
     it(`says nothing is saved yet and offers no Clear when Claude has written no memory (${ISSUE})`, () => {
       renderSetting({
-        memory: { turnedOffInClaude: false, folders: [], folderSetInClaude: false },
+        memory: { folders: [], folderSetInClaude: false },
       });
 
-      expect(screen.getByText("Claude hasn't saved any memory for this vault yet.")).toBeTruthy();
+      expect(screen.getByText("Nothing saved yet")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Clear memory" })).toBeNull();
     });
 
     it(`offers Open but no Clear for a folder Claude Code's settings choose, which may hold other projects' memory or anything else (${ISSUE})`, () => {
       renderSetting({
         memory: {
-          turnedOffInClaude: false,
           folders: ["/home/claude-memory"],
           folderSetInClaude: true,
         },
       });
 
       expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
+      expect(screen.getByText("Folder set in Claude Code")).toBeTruthy();
       expect(screen.queryByRole("button", { name: "Clear memory" })).toBeNull();
-    });
-
-    it(`says Claude Code's own settings turn memory off instead of showing it as on (${ISSUE})`, () => {
-      renderSetting({
-        memory: {
-          turnedOffInClaude: true,
-          folders: [VAULT_MEMORY],
-          folderSetInClaude: false,
-        },
-      });
-
-      expect(screen.getByText(/Your Claude Code settings turn auto memory off/)).toBeTruthy();
-      expect(screen.queryByText("Memory files")).toBeNull();
     });
   });
 });

@@ -100,7 +100,6 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
 interface ClaudeSettingsJson {
   env?: Record<string, unknown>;
   permissions?: { allow?: unknown };
-  autoMemoryEnabled?: unknown;
   autoMemoryDirectory?: unknown;
 }
 
@@ -248,7 +247,6 @@ export function isClaudeAutoMemoryOn(settings: CopilotSettings): boolean {
 }
 
 export interface ClaudeAutoMemory {
-  turnedOffInClaude: boolean;
   folders: string[];
   folderSetInClaude: boolean;
 }
@@ -274,7 +272,7 @@ export async function readClaudeAutoMemory(
   const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const env = claudeChildEnv(settings);
-  const [user, project, local] = await Promise.all(
+  const [user, , local] = await Promise.all(
     claudeSettingsFiles(env, vaultBase).map((file) =>
       readClaudeSettings(file).then(
         (loaded) => loaded.settings,
@@ -282,12 +280,6 @@ export async function readClaudeAutoMemory(
       )
     )
   );
-  const enabledSetting = [local, project, user]
-    .map((file) => file?.autoMemoryEnabled)
-    .find((value) => typeof value === "boolean");
-  const turnedOffInClaude =
-    isEnabledFlag(claudeEffectiveEnv(settings, vaultBase).CLAUDE_CODE_DISABLE_AUTO_MEMORY) ||
-    enabledSetting === false;
   const customFolder = [local, user].find((file) => typeof file?.autoMemoryDirectory === "string");
   const candidates = customFolder
     ? [(customFolder.autoMemoryDirectory as string).replace(/^~(?=$|[/\\])/, os.homedir())]
@@ -305,7 +297,6 @@ export async function readClaudeAutoMemory(
     )
   );
   return {
-    turnedOffInClaude,
     folders: existing.filter((folder): folder is string => folder !== null),
     folderSetInClaude: customFolder !== undefined,
   };

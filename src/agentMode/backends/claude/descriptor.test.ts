@@ -543,7 +543,6 @@ describe("descriptor", () => {
       await expect(
         readClaudeAutoMemory(settings(), vaultBase, [research, travel])
       ).resolves.toEqual({
-        turnedOffInClaude: false,
         folders: [memoryFolder(vaultBase), memoryFolder(research)],
         folderSetInClaude: false,
       });
@@ -560,53 +559,11 @@ describe("descriptor", () => {
       expect(memory.folders).toEqual([memoryFolder(root)]);
     });
 
-    it.each([
-      [
-        "the user settings",
-        () => writeJson(path.join(configDir, "settings.json"), { autoMemoryEnabled: false }),
-      ],
-      [
-        "the vault's local settings",
-        () =>
-          writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
-            autoMemoryEnabled: false,
-          }),
-      ],
-      [
-        "a settings file's env",
-        () =>
-          writeJson(path.join(configDir, "settings.json"), {
-            env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" },
-          }),
-      ],
-    ])(
-      `reports memory turned off in Claude Code when %s turn it off (${ISSUE})`,
-      async (_where, arrange) => {
-        arrange();
-
-        const memory = await readClaudeAutoMemory(settings(), vaultBase, []);
-
-        expect(memory.turnedOffInClaude).toBe(true);
-      }
-    );
-
-    it(`lets the vault's local settings turn memory back on over the user settings (${ISSUE})`, async () => {
-      writeJson(path.join(configDir, "settings.json"), { autoMemoryEnabled: false });
-      writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
-        autoMemoryEnabled: true,
-      });
-
-      const memory = await readClaudeAutoMemory(settings(), vaultBase, []);
-
-      expect(memory.turnedOffInClaude).toBe(false);
-    });
-
     it(`lists a memory folder set in the user settings as set in Claude Code, expanding ~ (${ISSUE})`, async () => {
       writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
       fs.mkdirSync(path.join(root, "home", "notes-memory"), { recursive: true });
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
-        turnedOffInClaude: false,
         folders: [path.join(root, "home", "notes-memory")],
         folderSetInClaude: true,
       });
@@ -621,7 +578,6 @@ describe("descriptor", () => {
       fs.mkdirSync(folder);
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
-        turnedOffInClaude: false,
         folders: [folder],
         folderSetInClaude: true,
       });
