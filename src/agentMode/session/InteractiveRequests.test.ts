@@ -402,6 +402,20 @@ describe("InteractiveRequests", () => {
           }),
         ]);
       });
+
+      it("records a list answer as its entries joined with commas", async () => {
+        const store = new AgentMessageStore();
+        const replyId = addReply(store);
+        const { requests } = makeRequests({ store, getReplyId: () => replyId });
+        const answers = requests.handleAskUserQuestion(fruitQuestion());
+
+        requests.resolveAskUserQuestion("tc-ask", { "Pick a fruit": ["Pear", "Fig"] });
+
+        await expect(answers).resolves.toEqual({ "Pick a fruit": ["Pear", "Fig"] });
+        expect(store.getMessage(replyId)?.parts).toEqual([
+          expect.objectContaining({ userResponse: "Answered: Pear, Fig" }),
+        ]);
+      });
     });
 
     describe("getPendingAskUserQuestions()", () => {

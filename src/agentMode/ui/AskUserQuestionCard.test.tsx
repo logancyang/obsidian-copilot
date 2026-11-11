@@ -80,6 +80,28 @@ describe("AskUserQuestionCard", () => {
       });
     });
 
+    it("answers a list question with each checked label and the typed text as separate entries", () => {
+      const onResolve = jest.fn();
+      const request = makeRequest([
+        {
+          question: "Pick seasoning",
+          multiSelect: true,
+          answersAsList: true,
+          options: [{ label: "salt, pepper" }, { label: "chili" }],
+        },
+      ]);
+      renderCard(request, onResolve);
+
+      fireEvent.click(screen.getByRole("checkbox", { name: /^salt, pepper$/ }));
+      fireEvent.click(getOtherControl("checkbox"));
+      fireEvent.change(otherTextarea(), { target: { value: "  lemon  " } });
+      fireEvent.click(submitButton());
+
+      expect(onResolve).toHaveBeenCalledWith(REQUEST_ID, {
+        "Pick seasoning": ["salt, pepper", "lemon"],
+      });
+    });
+
     it("requires an explicit answer for every question before submitting (https://github.com/Brevilabs/obsidian-copilot-private/issues/182)", () => {
       const onResolve = jest.fn();
       const request = makeRequest([

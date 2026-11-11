@@ -63,7 +63,7 @@ export const AskUserQuestionCard: React.FC<AskUserQuestionCardProps> = ({ reques
       if (q.multiSelect) {
         const labels = sel instanceof Set ? Array.from(sel) : [];
         if (other && text) labels.push(text);
-        answers[q.answerKey ?? q.question] = labels.join(", ");
+        answers[q.answerKey ?? q.question] = q.answersAsList ? labels : labels.join(", ");
       } else {
         answers[q.answerKey ?? q.question] = other ? text : typeof sel === "string" ? sel : "";
       }

@@ -392,11 +392,12 @@ export interface AgentQuestion {
   header?: string;
   options: Array<{ label: string; description?: string }>;
   multiSelect?: boolean;
+  answersAsList?: boolean;
   answerKey?: string;
   allowOther?: boolean;
 }
 
-export type AgentQuestionAnswers = { [answerKey: string]: string };
+export type AgentQuestionAnswers = { [answerKey: string]: string | string[] };
 
 export interface AskUserQuestionPrompt {
   sessionId: SessionId;

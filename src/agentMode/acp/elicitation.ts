@@ -34,15 +34,22 @@ function codexMeta(field: ElicitationPropertySchema): Record<string, unknown> | 
 // declined. https://github.com/Brevilabs/obsidian-copilot-private/issues/551
 export function formToQuestionPrompt(
   request: CreateElicitationRequest,
-  requestId: string
+  requestId: string,
+  acceptsStandardForms = false
 ): ElicitationQuestionForm | null {
   if (request.mode !== "form" || !("sessionId" in request) || !("requestedSchema" in request))
     return null;
-  const properties = Object.entries(
-    (request.requestedSchema as ElicitationSchema).properties ?? {}
-  );
+  const schema = request.requestedSchema as ElicitationSchema;
+  const properties = Object.entries(schema.properties ?? {});
   if (!properties.some(([, field]) => codexMeta(field))) {
-    return standardFormToQuestionPrompt(request.sessionId as SessionId, requestId, properties);
+    return acceptsStandardForms
+      ? standardFormToQuestionPrompt(
+          request.sessionId as SessionId,
+          requestId,
+          properties,
+          new Set(schema.required ?? [])
+        )
+      : null;
   }
   const noteIds = new Map<string, string>();
   for (const [id, field] of properties) {
@@ -99,7 +106,6 @@ export function formToQuestionPrompt(
 }
 
 const OTHER_FIELD_SUFFIX = "_other";
-const MULTI_SELECT_SEPARATOR = ", ";
 
 interface StandardChoiceField {
   id: string;
@@ -118,7 +124,8 @@ function standardChoices(field: ElicitationPropertySchema): EnumOption[] | null 
 function standardFormToQuestionPrompt(
   sessionId: SessionId,
   requestId: string,
-  properties: Array<[string, ElicitationPropertySchema]>
+  properties: Array<[string, ElicitationPropertySchema]>,
+  required: ReadonlySet<string>
 ): ElicitationQuestionForm | null {
   const ids = new Set(properties.map(([id]) => id));
   const fields: StandardChoiceField[] = [];
@@ -130,7 +137,8 @@ function standardFormToQuestionPrompt(
       if (field.type === "string" && id.endsWith(OTHER_FIELD_SUFFIX) && ids.has(owner)) continue;
       return null;
     }
-    const noteId = ids.has(`${id}${OTHER_FIELD_SUFFIX}`) ? `${id}${OTHER_FIELD_SUFFIX}` : undefined;
+    const otherId = `${id}${OTHER_FIELD_SUFFIX}`;
+    const noteId = ids.has(otherId) && !required.has(id) ? otherId : undefined;
     const multiSelect = field.type === "array";
     const { title, description } = field as StringPropertySchema | MultiSelectPropertySchema;
     fields.push({ id, choices, multiSelect, noteId });
@@ -139,7 +147,7 @@ function standardFormToQuestionPrompt(
       ...(description ? { header: description } : {}),
       answerKey: id,
       options: choices.map((choice) => ({ label: choice.title })),
-      ...(multiSelect ? { multiSelect } : {}),
+      ...(multiSelect ? { multiSelect, answersAsList: true } : {}),
       allowOther: noteId !== undefined,
     });
   }
@@ -152,9 +160,7 @@ function standardFormToQuestionPrompt(
       for (const { id, choices, multiSelect, noteId } of fields) {
         const answer = answers[id];
         if (answer === undefined) continue;
-        const labels = (multiSelect ? answer.split(MULTI_SELECT_SEPARATOR) : [answer]).filter(
-          (label) => label.length > 0
-        );
+        const labels = typeof answer === "string" ? [answer] : answer;
         const picked = labels.flatMap((label) => {
           const choice = choices.find((option) => option.title === label);
           return choice ? [choice.const] : [];
@@ -162,7 +168,7 @@ function standardFormToQuestionPrompt(
         const other = labels.filter((label) => !choices.some((option) => option.title === label));
         if (multiSelect) content[id] = picked;
         else if (picked[0] !== undefined) content[id] = picked[0];
-        if (noteId && other.length > 0) content[noteId] = other.join(MULTI_SELECT_SEPARATOR);
+        if (noteId && other.length > 0) content[noteId] = other.join(", ");
       }
       return content;
     },

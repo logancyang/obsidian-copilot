@@ -119,7 +119,7 @@ describe("elicitation", () => {
         },
       } as const satisfies CreateElicitationRequest;
 
-      const form = formToQuestionPrompt(request, "rpc-5");
+      const form = formToQuestionPrompt(request, "rpc-5", true);
 
       expect(form?.prompt.questions).toEqual([
         {
@@ -136,17 +136,88 @@ describe("elicitation", () => {
           answerKey: "q2",
           options: [{ label: "ham" }, { label: "corn" }],
           multiSelect: true,
+          answersAsList: true,
           allowOther: false,
         },
       ]);
-      expect(form?.toContent({ q1: "large - Great for sharing", q2: "ham, corn" })).toEqual({
+      expect(form?.toContent({ q1: "large - Great for sharing", q2: ["ham", "corn"] })).toEqual({
         q1: "2",
         q2: ["1", "2"],
       });
-      expect(form?.toContent({ q1: "medium please", q2: "" })).toEqual({
+      expect(form?.toContent({ q1: "medium please", q2: ["corn"] })).toEqual({
         q1_other: "medium please",
-        q2: [],
+        q2: ["2"],
       });
+    });
+
+    it(`declines a standard choice form unless the backend accepts standard forms, as for any form that is not a Codex question (${issue})`, () => {
+      const thirdParty = {
+        mode: "form",
+        sessionId: "s",
+        message: "Pick a region",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            region: { type: "string", oneOf: [{ const: "us", title: "US" }] },
+          },
+        },
+      } as const satisfies CreateElicitationRequest;
+
+      expect(formToQuestionPrompt(thirdParty, "rpc-3")).toBeNull();
+      expect(formToQuestionPrompt(thirdParty, "rpc-3", true)?.toContent({ region: "US" })).toEqual({
+        region: "us",
+      });
+    });
+
+    it("maps each picked multi-select label to its value even when a label contains a comma, and sends typed text to the paired _other field", () => {
+      const request = {
+        mode: "form",
+        sessionId: "s",
+        message: "Seasoning",
+        requestedSchema: {
+          type: "object",
+          properties: {
+            spice: {
+              type: "array",
+              title: "Seasoning",
+              items: {
+                anyOf: [
+                  { const: "sp", title: "salt, pepper" },
+                  { const: "c", title: "chili" },
+                ],
+              },
+            },
+            spice_other: { type: "string", title: "Other" },
+          },
+        },
+      } as const satisfies CreateElicitationRequest;
+
+      const form = formToQuestionPrompt(request, "rpc-6", true);
+
+      expect(form?.toContent({ spice: ["salt, pepper", "lemon, lime"] })).toEqual({
+        spice: ["sp"],
+        spice_other: "lemon, lime",
+      });
+    });
+
+    it("offers no typed answer for a required choice field, so an accepted form always carries a listed value for it", () => {
+      const request = {
+        mode: "form",
+        sessionId: "s",
+        message: "Size",
+        requestedSchema: {
+          type: "object",
+          required: ["size"],
+          properties: {
+            size: { type: "string", title: "Size", oneOf: [{ const: "s", title: "small" }] },
+            size_other: { type: "string", title: "Other" },
+          },
+        },
+      } as const satisfies CreateElicitationRequest;
+
+      const form = formToQuestionPrompt(request, "rpc-7", true);
+
+      expect(form?.prompt.questions.map((question) => question.allowOther)).toEqual([false]);
     });
 
     it(`declines forms with a field the question card cannot collect (${issue})`, () => {

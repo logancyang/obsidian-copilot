@@ -230,7 +230,8 @@ export class InteractiveRequests {
     if (!entry) return;
     this.pendingQuestionResolvers.delete(requestId);
     const responses = entry.request.questions.flatMap((question) => {
-      const answer = answers[question.answerKey ?? question.question];
+      const given = answers[question.answerKey ?? question.question];
+      const answer = typeof given === "string" ? given : given?.join(", ");
       return answer ? [{ question: question.question, answer }] : [];
     });
     // ACP elicitation may have no tool call of its own; record the submitted

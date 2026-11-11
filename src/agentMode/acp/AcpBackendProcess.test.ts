@@ -1190,10 +1190,10 @@ describe("AcpBackendProcess", () => {
         },
       };
 
-      async function openElicitationBackend() {
+      async function openElicitationBackend(overrides: Partial<AcpBackend> = {}) {
         const backend = new AcpBackendProcess(
           buildApp(),
-          buildStubBackend(),
+          buildStubBackend(overrides),
           "1.0.0",
           buildStubDescriptor()
         );
@@ -1253,6 +1253,29 @@ describe("AcpBackendProcess", () => {
           )
         ).resolves.toEqual({ action: "decline" });
         expect(prompter).not.toHaveBeenCalled();
+      });
+
+      it("shows a standard choice form without Codex metadata only when the backend accepts standard forms, and declines it otherwise", async () => {
+        const standardForm = {
+          ...form,
+          requestedSchema: {
+            type: "object",
+            properties: {
+              size: { type: "string", title: "Size", oneOf: [{ const: "s", title: "small" }] },
+            },
+          },
+        };
+        const answer = async (overrides: Partial<AcpBackend>) => {
+          const { backend, client } = await openElicitationBackend(overrides);
+          backend.setAskUserQuestionPrompter(jest.fn().mockResolvedValue({ size: "small" }));
+          return client.createElicitation(standardForm, "rpc-4", new AbortController().signal);
+        };
+
+        await expect(answer({ acceptsStandardElicitationForms: true })).resolves.toEqual({
+          action: "accept",
+          content: { size: "s" },
+        });
+        await expect(answer({})).resolves.toEqual({ action: "decline" });
       });
     });
 

@@ -21,6 +21,7 @@ export interface AcpBackend {
   newSessionMeta?(): Record<string, unknown>;
   readonly synthesizesManualCompaction?: boolean;
   readonly reopensWithResume?: boolean;
+  readonly acceptsStandardElicitationForms?: boolean;
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
