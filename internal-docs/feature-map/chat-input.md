@@ -39,5 +39,6 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 ## Gotchas
 
 - Picking another agent's model in `Model · effort` replaces the chat in the tab with a new chat on that agent, and that agent becomes the default for new chats.
+- A chat reopened from Recent chats or [Copilot Navigator](copilot-navigator.md), after `Shut down` or an Obsidian restart, comes back on the model and effort of its last reply, not the agent's `Default model`.
 - While the agent works, Escape in the chat input stops the reply even when a draft is typed.
 - A file dragged from Finder that is already in the vault is attached where it is, not copied. One drop can carry notes and outside files together; each is attached. Folders can't be attached: dropping one shows a notice.
