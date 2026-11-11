@@ -119,6 +119,7 @@ export class AcpBackendProcess implements BackendProcess {
   private readonly sessionWireState = new Map<SessionId, SessionWireState>();
   private readonly todoToolCallIdsBySession = new Map<SessionId, Set<string>>();
   private readonly manualCompactSessions = new Set<SessionId>();
+  private readonly sessionsLastDeclined = new Set<SessionId>();
   private readonly loadingSessions = new Set<SessionId>();
   private readonly sawLiveUsage = new Set<SessionId>();
   private lastPlanUsage: PlanUsage | null = null;
@@ -392,6 +393,7 @@ export class AcpBackendProcess implements BackendProcess {
     if (isCompactPrompt(params.prompt)) {
       this.manualCompactSessions.add(params.sessionId);
     }
+    this.sessionsLastDeclined.delete(params.sessionId);
     const resp = await connection.agent
       .request("session/prompt", {
         sessionId: sessionIdToAcp(params.sessionId),
@@ -426,7 +428,12 @@ export class AcpBackendProcess implements BackendProcess {
     }
     void this.refreshPlanUsage();
     const turnDiff = this.backend.readTurnDiff?.(resp._meta);
-    return { stopReason: stopReasonFromAcp(resp.stopReason), ...(turnDiff ? { turnDiff } : {}) };
+    const endedOnDecline =
+      resp.stopReason === "end_turn" && this.sessionsLastDeclined.delete(params.sessionId);
+    return {
+      stopReason: endedOnDecline ? "cancelled" : stopReasonFromAcp(resp.stopReason),
+      ...(turnDiff ? { turnDiff } : {}),
+    };
   }
 
   // A failed read keeps the last snapshot; a successful read with no caps clears it. The result
@@ -778,6 +785,9 @@ export class AcpBackendProcess implements BackendProcess {
     if (update.update.sessionUpdate === "usage_update") {
       this.sawLiveUsage.add(sessionId);
     }
+    if (update.update.sessionUpdate === "agent_message_chunk") {
+      this.sessionsLastDeclined.delete(sessionId);
+    }
 
     const handler = this.domainHandlers.get(sessionId);
     if (!handler) {
@@ -908,6 +918,14 @@ export class AcpBackendProcess implements BackendProcess {
         (option, metadata) => this.descriptor.presentPermissionOption?.(option, metadata) ?? option
       )
     );
+    const outcome = decision.outcome;
+    const chosen =
+      outcome.outcome === "selected"
+        ? req.options.find((option) => option.optionId === outcome.optionId)
+        : undefined;
+    if (this.backend.endsTurnWhenPermissionDeclined && chosen?.kind.startsWith("reject_")) {
+      this.sessionsLastDeclined.add(sessionIdFromAcp(req.sessionId));
+    }
     return decisionToAcpResponse(decision);
   }
 

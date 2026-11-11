@@ -23,6 +23,7 @@ export interface AcpBackend {
   readonly synthesizesManualCompaction?: boolean;
   readonly reopensWithResume?: boolean;
   readonly acceptsStandardElicitationForms?: boolean;
+  readonly endsTurnWhenPermissionDeclined?: boolean;
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;

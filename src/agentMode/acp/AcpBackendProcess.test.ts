@@ -1722,6 +1722,63 @@ describe("AcpBackendProcess", () => {
         });
       });
 
+      it.each([
+        [
+          "ends a turn the agent closed right after a declined permission as cancelled",
+          true,
+          false,
+          "cancelled",
+        ],
+        [
+          "keeps end_turn when the agent replied after the declined permission",
+          true,
+          true,
+          "end_turn",
+        ],
+        [
+          "keeps end_turn for a backend that does not end turns on a decline",
+          false,
+          false,
+          "end_turn",
+        ],
+      ])("%s", async (_case, endsTurnWhenPermissionDeclined, repliesAfter, expected) => {
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ endsTurnWhenPermissionDeclined }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        backend.setPermissionPrompter(
+          jest.fn().mockResolvedValue({ outcome: { outcome: "selected", optionId: "deny" } })
+        );
+        const client = getVaultClient(backend);
+        promptMock(backend).mockImplementationOnce(async () => {
+          await client.requestPermission({
+            sessionId: "s1",
+            toolCall: { toolCallId: "tc1", title: "File notes/a.md" },
+            options: [
+              { optionId: "allow", name: "Allow", kind: "allow_once" },
+              { optionId: "deny", name: "Deny", kind: "reject_once" },
+            ],
+          } as unknown as Parameters<typeof client.requestPermission>[0]);
+          if (repliesAfter) {
+            await client.sessionUpdate({
+              sessionId: "s1",
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: "Okay, I left it." },
+              },
+            } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+          }
+          return { stopReason: "end_turn" };
+        });
+
+        const turnEnd = await promptTurn(backend);
+
+        expect(turnEnd).toMatchObject({ stopReason: expected });
+      });
+
       describe("synthesized manual compaction", () => {
         async function compactionUpdates(
           synthesizesManualCompaction: boolean,
