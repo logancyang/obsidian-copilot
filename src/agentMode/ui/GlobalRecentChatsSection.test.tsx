@@ -1035,6 +1035,23 @@ describe("GlobalRecentChatsSection", () => {
       expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
     });
 
+    it(`${ISSUE} keeps the selection when Escape closes the selected chats menu`, () => {
+      renderSection({ items: fourChats() });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.contextMenu(rowFor("Chat A"));
+      fireEvent.keyDown(within(screen.getByRole("menu")).getAllByRole("menuitem")[0], {
+        key: "Escape",
+      });
+      fireEvent.contextMenu(rowFor("Chat B"));
+
+      expect(menuEntries(screen.getAllByRole("menu").at(-1)!)).toEqual([
+        "Archive 2 chats",
+        "Delete 2 chats",
+      ]);
+    });
+
     it(`${ISSUE} drops the selection when the search changes`, () => {
       renderSection({ items: fourChats() });
 

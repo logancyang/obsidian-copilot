@@ -1,5 +1,9 @@
 import { act, renderHook } from "@testing-library/react";
-import { useChatSelection, type SelectionClick } from "@/agentMode/ui/hooks/useChatSelection";
+import {
+  useChatSelection,
+  type SelectionClick,
+  type SelectionKeyDown,
+} from "@/agentMode/ui/hooks/useChatSelection";
 
 const PLAIN: SelectionClick = { shiftKey: false, metaKey: false, ctrlKey: false };
 const SHIFT: SelectionClick = { ...PLAIN, shiftKey: true };
@@ -7,6 +11,13 @@ const CMD: SelectionClick = { ...PLAIN, metaKey: true };
 const CTRL: SelectionClick = { ...PLAIN, ctrlKey: true };
 
 const CHATS = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" }];
+
+const LIST = document.createElement("div");
+const LIST_ROW = LIST.appendChild(document.createElement("div"));
+
+function escapeFrom(target: Element, stopPropagation: () => void): SelectionKeyDown {
+  return { key: "Escape", stopPropagation, target, currentTarget: LIST };
+}
 
 function renderSelection(items: readonly { id: string }[] = CHATS) {
   return renderHook(({ visible }) => useChatSelection(visible), {
@@ -173,14 +184,14 @@ describe("useChatSelection", () => {
   });
 
   describe("handleKeyDown()", () => {
-    it("clears the selection on Escape and stops the key from closing anything else", () => {
+    it("clears the selection on Escape inside the list and stops the key from closing anything else", () => {
       const { result } = renderSelection();
       act(() => {
         result.current.handleClick("a", CMD);
       });
       const stopPropagation = jest.fn();
       act(() => {
-        result.current.handleKeyDown({ key: "Escape", stopPropagation });
+        result.current.handleKeyDown(escapeFrom(LIST_ROW, stopPropagation));
       });
       expect(selectedIds(result)).toEqual([]);
       expect(stopPropagation).toHaveBeenCalled();
@@ -190,9 +201,20 @@ describe("useChatSelection", () => {
       const { result } = renderSelection();
       const stopPropagation = jest.fn();
       act(() => {
-        result.current.handleKeyDown({ key: "Escape", stopPropagation });
+        result.current.handleKeyDown(escapeFrom(LIST_ROW, stopPropagation));
       });
       expect(stopPropagation).not.toHaveBeenCalled();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 keeps the selection when Escape comes from a menu rendered outside the list", () => {
+      const { result } = renderSelection();
+      act(() => {
+        result.current.handleClick("a", CMD);
+      });
+      act(() => {
+        result.current.handleKeyDown(escapeFrom(document.createElement("div"), jest.fn()));
+      });
+      expect(selectedIds(result)).toEqual(["a"]);
     });
   });
 

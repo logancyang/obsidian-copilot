@@ -1,3 +1,4 @@
+import type React from "react";
 import { useCallback, useMemo, useState } from "react";
 
 export interface SelectionClick {
@@ -6,12 +7,17 @@ export interface SelectionClick {
   ctrlKey: boolean;
 }
 
+export type SelectionKeyDown = Pick<
+  React.KeyboardEvent<Element>,
+  "key" | "stopPropagation" | "target" | "currentTarget"
+>;
+
 export interface ChatSelection<T extends { id: string }> {
   selectedItems: readonly T[];
   isSelected: (id: string) => boolean;
   handleClick: (id: string, click: SelectionClick) => boolean;
   handleContextMenu: (id: string) => void;
-  handleKeyDown: (event: Pick<KeyboardEvent, "key" | "stopPropagation">) => void;
+  handleKeyDown: (event: SelectionKeyDown) => void;
   clear: () => void;
 }
 
@@ -71,8 +77,11 @@ export function useChatSelection<T extends { id: string }>(
   );
 
   const handleKeyDown = useCallback(
-    (event: Pick<KeyboardEvent, "key" | "stopPropagation">) => {
+    (event: SelectionKeyDown) => {
       if (event.key !== "Escape" || selectedIds.size === 0) return;
+      // Escape in a row's menu bubbles here through the menu's portal; it should only close the menu.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
+      if (!event.currentTarget.contains(event.target as Node)) return;
       event.stopPropagation();
       clear();
     },
