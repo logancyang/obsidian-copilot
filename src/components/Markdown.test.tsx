@@ -4,6 +4,7 @@ import { GOLDEN_EXAMPLES } from "@/intelligentUi/testing/golden";
 import { Markdown } from "@/components/Markdown";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
+import { TEXT_FADE_MS } from "@/utils/streamingTextFade";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { App } from "obsidian";
 import * as React from "react";
@@ -166,12 +167,58 @@ describe("Markdown", () => {
             jest.mocked(renderMarkdown).mock.results.map((r) => r.value as Promise<void>)
           );
         });
-        const html = (element: HTMLElement) => element.innerHTML.replace(/:r\w+:/g, "ID");
+        const html = (element: HTMLElement) => {
+          const withoutFadeSpans = element.cloneNode(true) as HTMLElement;
+          withoutFadeSpans
+            .querySelectorAll("span")
+            .forEach((span) => span.attributes.length || span.replaceWith(...span.childNodes));
+          withoutFadeSpans.normalize();
+          return withoutFadeSpans.innerHTML.replace(/:r\w+:/g, "ID");
+        };
         expect(html(view.container)).toBe(html(fixed.container));
         fixed.unmount();
         view.unmount();
       }
     );
+    it("fades in only newly streamed prose when a reply turns into a layout, leaving shown prose and layout content unwrapped (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
+      jest.useFakeTimers();
+      try {
+        jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
+          for (const segment of splitUiFences(text, true)) {
+            if (segment.kind === "layout") {
+              const block = target.createDiv({ cls: "block-language-copilot-ui" });
+              nativeUiSources.set(block, segment.source.replace(/\n$/, ""));
+            } else target.createDiv({ text: segment.source });
+          }
+        });
+        const app = new App();
+        const tree = (text: string) => (
+          <AppContext.Provider value={app}>
+            <Markdown text={text} sourcePath="" streaming />
+          </AppContext.Provider>
+        );
+        const settle = () =>
+          act(async () => {
+            await Promise.allSettled(
+              jest.mocked(renderMarkdown).mock.results.map((r) => r.value as Promise<void>)
+            );
+          });
+        const view = render(tree("Before"));
+        await settle();
+        jest.advanceTimersByTime(TEXT_FADE_MS);
+        view.rerender(tree("Before\n\n```copilot-ui\n<text>Card</text>\n```\n\nAfter"));
+        await settle();
+
+        const faded = [...view.container.querySelectorAll("span:not([class])")].map((span) =>
+          span.textContent?.trim()
+        );
+        expect(faded.filter(Boolean)).toEqual(["After"]);
+        expect(view.container.textContent).toMatch(/^Before[\s\S]*Card[\s\S]*After$/);
+        view.unmount();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
     it("keeps an ordinary streamed reply on the existing Markdown renderer (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
       jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
         target.textContent = text;

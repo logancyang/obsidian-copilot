@@ -16,6 +16,7 @@ export interface MarkdownProps {
   sourcePath: string;
   text: string;
   streaming?: boolean;
+  textFade?: StreamingTextFade;
 }
 
 function MarkdownBody({
@@ -25,12 +26,10 @@ function MarkdownBody({
   runDataviewQueries = false,
   sourcePath,
   text,
-  streaming = false,
+  textFade,
 }: MarkdownProps): React.ReactElement {
   const app = useApp();
   const targetRef = React.useRef<HTMLDivElement | null>(null);
-  const fadeRef = React.useRef<StreamingTextFade | null>(null);
-  if (streaming && !fadeRef.current) fadeRef.current = new StreamingTextFade();
 
   React.useEffect(() => {
     const target = targetRef.current;
@@ -44,7 +43,7 @@ function MarkdownBody({
     void renderMarkdown(app, text, target, sourcePath, component, runDataviewQueries)
       .then(() => {
         if (cancelled) return;
-        fadeRef.current?.apply(target);
+        textFade?.apply(target);
         onRendered?.(target);
       })
       .catch((error: unknown) => {
@@ -58,16 +57,20 @@ function MarkdownBody({
       component.unload();
       target.replaceChildren();
     };
-  }, [app, nested, onRendered, runDataviewQueries, sourcePath, text]);
+  }, [app, nested, onRendered, runDataviewQueries, sourcePath, text, textFade]);
 
   return <div className={cn(className)} ref={targetRef} />;
 }
 
 export function Markdown(props: MarkdownProps): React.ReactElement {
+  const ownFade = React.useRef<StreamingTextFade | undefined>(undefined);
+  if (props.streaming && !ownFade.current) ownFade.current = new StreamingTextFade();
+  // One tracker spans the switch to layout rendering, or prose already shown would fade in again. https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+  const textFade = props.textFade ?? ownFade.current;
   if (
     splitUiFences(props.text, props.streaming ?? false).some((segment) => segment.kind === "layout")
   ) {
-    return <LayoutMarkdown {...props} />;
+    return <LayoutMarkdown {...props} textFade={textFade} />;
   }
-  return <MarkdownBody {...props} />;
+  return <MarkdownBody {...props} textFade={textFade} />;
 }

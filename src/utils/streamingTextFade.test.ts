@@ -121,6 +121,15 @@ describe("streamingTextFade", () => {
         expect(next.textContent).toBe("First\nSecond and more");
       });
 
+      it("leaves layout hosts to their own element fades and fades the prose around them (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", () => {
+        const container = rendered(
+          '<p>Intro</p><div data-ui-host=""><p>Card text</p></div><p>Outro</p>'
+        );
+        new StreamingTextFade().apply(container);
+        expect(fadedText(container)).toEqual(["Intro", "Outro"]);
+        expect(container.querySelector("[data-ui-host]")?.innerHTML).toBe("<p>Card text</p>");
+      });
+
       it(`keeps text whole when a completed Markdown span shortens the rendered text mid-fade (${ISSUE})`, () => {
         const fade = new StreamingTextFade();
         fade.apply(rendered("<p>**hello world </p>"));
