@@ -1,3 +1,4 @@
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({ isObsidianCliEnabled: () => true }));
 import * as path from "node:path";
 import * as os from "os";
 import * as fs from "node:fs";
@@ -10,7 +11,13 @@ jest.mock("os", () => {
 
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendState } from "@/agentMode/session/types";
-import { getSettings, resetSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import {
+  getSettings,
+  resetSettings,
+  setSettings,
+  updateSetting,
+  type CopilotSettings,
+} from "@/settings/model";
 import type CopilotPlugin from "@/main";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
@@ -493,6 +500,26 @@ describe("descriptor", () => {
   });
 
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
+    it("passes the shared opt-in layout guidance to Claude and restores the original append when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", () => {
+      resetSettings();
+      __resetVaultBaseCache();
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      const adapter = Object.create(FileSystemAdapter.prototype) as FileSystemAdapter;
+      adapter.getBasePath = () => "/active-vault";
+      const app = { vault: { adapter, getName: () => "active-vault" } } as unknown as App;
+      const proc = ClaudeBackendDescriptor.createBackendProcess({
+        plugin: {} as never,
+        app,
+        clientVersion: "4.0.0",
+        descriptor: ClaudeBackendDescriptor,
+      }) as unknown as { opts: { getSystemPromptAppend: () => string } };
+      const before = proc.opts.getSystemPromptAppend();
+      updateSetting("enableIntelligentUi", true);
+      expect(proc.opts.getSystemPromptAppend()).toContain("copilot-ui");
+      updateSetting("enableIntelligentUi", false);
+      expect(proc.opts.getSystemPromptAppend()).toBe(before);
+    });
+
     afterEach(() => {
       resetSettings();
       __resetVaultBaseCache();

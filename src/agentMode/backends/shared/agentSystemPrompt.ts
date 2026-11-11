@@ -1,3 +1,4 @@
+import { INTELLIGENT_UI_GUIDANCE } from "@/intelligentUi/guidance";
 import type { App } from "obsidian";
 import type { BackendId } from "@/agentMode/session/types";
 import { isBuiltinSkillEnabledFor } from "@/builtinSkills/builtinSkills";
@@ -107,5 +108,7 @@ export function buildAgentSystemPrompt(
   }
   if (builtinPrompt && isObsidianCliEnabled()) parts.push(COPILOT_OBSIDIAN_CLI_STEERING);
 
+  // An explicit layout preference adds guidance without changing the disabled prompt. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+  if (settings.enableIntelligentUi) parts.push(INTELLIGENT_UI_GUIDANCE);
   return parts.join("\n\n");
 }

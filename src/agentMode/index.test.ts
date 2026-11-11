@@ -39,7 +39,7 @@ jest.mock("@/utils/appPaths", () => ({
 }));
 jest.mock("./backends/shared/agentSystemPrompt", () => ({
   buildAgentSystemPrompt: (id: string, app: { plugins?: { getPlugin(id: string): unknown } }) =>
-    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
+    `prompt:${id}:${JSON.stringify(mockSettings.agentMode.skills.builtinPreferences ?? {})}:${mockSettings.agentMode.offerFeedbackCards}:${mockSettings.enableIntelligentUi}:${mockSettings.enableMiyoSearchSkill}:${mockSettings.enableMiyoDocumentProcessing}:${app.plugins?.getPlugin("obsidian-excalidraw-plugin") != null}:${jest.requireMock<typeof import("@/services/obsidianCli/ObsidianCliClient")>("@/services/obsidianCli/ObsidianCliClient").isObsidianCliEnabled()}`,
 }));
 jest.mock("./backends/shared/builtinSkillEnv", () => ({
   getBuiltinSkillEnvRestartPolicy: () => "none",
@@ -182,6 +182,30 @@ function deferred() {
 
 describe("agentMode", () => {
   describe("createAgentSessionManager()", () => {
+    it("refreshes every backend on Intelligent UI changes so open chats resume with the new prompt (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", () => {
+      createAgentSessionManager({} as App, plugin);
+      emitSettingsChange(mockSettings, { ...mockSettings, enableIntelligentUi: true });
+      for (const descriptor of mockDescriptors)
+        expect(mockManager.restartBackend).toHaveBeenCalledWith(
+          descriptor.id,
+          "Intelligent UI changed"
+        );
+      const notifyPromptChange = jest
+        .requireMock("@/system-prompts/state")
+        .subscribeToSystemPromptChange.mock.calls.at(-1)[0];
+      notifyPromptChange();
+      expect(mockManager.noteSpawnConfigChanged).not.toHaveBeenCalled();
+      mockManager.restartBackend.mockClear();
+      emitSettingsChange(mockSettings, { ...mockSettings });
+      expect(mockManager.restartBackend).not.toHaveBeenCalled();
+      emitSettingsChange(mockSettings, { ...mockSettings, enableIntelligentUi: false });
+      for (const descriptor of mockDescriptors)
+        expect(mockManager.restartBackend).toHaveBeenCalledWith(
+          descriptor.id,
+          "Intelligent UI changed"
+        );
+    });
+
     beforeEach(() => {
       jest.clearAllMocks();
       mockStates.claude = { kind: "ready", source: "custom" };

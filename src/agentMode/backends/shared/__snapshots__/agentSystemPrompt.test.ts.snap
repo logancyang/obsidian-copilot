@@ -1,0 +1,7 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`agentSystemPrompt buildAgentSystemPrompt() adds shared layout guidance for claude only while enabled, retaining the original bytes when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884): claude disabled prompt bytes 1`] = `"d9e04a8177e44a0ed13f14eea9fe8bb834acae2c44048b8020d9a9f19b7d3274"`;
+
+exports[`agentSystemPrompt buildAgentSystemPrompt() adds shared layout guidance for codex only while enabled, retaining the original bytes when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884): codex disabled prompt bytes 1`] = `"5e93a1cd4b4ad2f5915d021dc0849958186562ccbae33864653bdff372627bec"`;
+
+exports[`agentSystemPrompt buildAgentSystemPrompt() adds shared layout guidance for opencode only while enabled, retaining the original bytes when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884): opencode disabled prompt bytes 1`] = `"c110ee185fccda21379c118c69250ab5cc4642514161d08f642792ba54d1cad0"`;

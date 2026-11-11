@@ -1,3 +1,5 @@
+import { createHash } from "crypto";
+import { INTELLIGENT_UI_GUIDANCE } from "@/intelligentUi/guidance";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
@@ -76,6 +78,25 @@ function resetPromptState(): void {
 
 describe("agentSystemPrompt", () => {
   describe("buildAgentSystemPrompt()", () => {
+    it.each(["claude", "codex", "opencode"] as const)(
+      "adds shared layout guidance for %s only while enabled, retaining the original bytes when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)",
+      (backend) => {
+        const before = buildAgentSystemPrompt(backend, APP);
+        expect(createHash("sha256").update(before).digest("hex")).toMatchSnapshot(
+          `${backend} disabled prompt bytes`
+        );
+        Object.assign(getSettings(), { enableIntelligentUi: true });
+        expect(buildAgentSystemPrompt(backend, APP)).toBe(
+          `${before}\n\n${INTELLIGENT_UI_GUIDANCE}`
+        );
+        setDisableBuiltinSystemPrompt(true);
+        expect(buildAgentSystemPrompt(backend, APP)).toContain(INTELLIGENT_UI_GUIDANCE);
+        setDisableBuiltinSystemPrompt(false);
+        Object.assign(getSettings(), { enableIntelligentUi: false });
+        expect(buildAgentSystemPrompt(backend, APP)).toBe(before);
+      }
+    );
+
     beforeEach(() => {
       resetSettings();
       updateSetting("isPaidUser", true);

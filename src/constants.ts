@@ -487,6 +487,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   debug: false,
   maxSourceChunks: DEFAULT_MAX_SOURCE_CHUNKS,
   enableInlineCitations: true,
+  enableIntelligentUi: false,
   groqApiKey: "",
   activeModels: [],
   lexicalSearchRamLimit: 100,

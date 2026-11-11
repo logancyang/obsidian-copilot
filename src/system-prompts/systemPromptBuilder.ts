@@ -1,3 +1,5 @@
+import { INTELLIGENT_UI_GUIDANCE } from "@/intelligentUi/guidance";
+import { getSettings } from "@/settings/model";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { App } from "obsidian";
 import { readAgentsFile } from "@/instructions/agentsFile";
@@ -21,10 +23,16 @@ export function getSystemPrompt(userPrompt: string): string {
   const disableBuiltin = getDisableBuiltinSystemPrompt();
 
   if (disableBuiltin) {
-    return userPrompt;
+    // Explicit layout opt-in also applies to custom-only prompts. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+    return getSettings().enableIntelligentUi
+      ? [userPrompt, INTELLIGENT_UI_GUIDANCE].filter(Boolean).join("\n\n")
+      : userPrompt;
   }
 
-  const basePrompt = DEFAULT_SYSTEM_PROMPT;
+  // Layout generation is opt-in; saved blocks render independently. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+  const basePrompt = getSettings().enableIntelligentUi
+    ? `${DEFAULT_SYSTEM_PROMPT}\n\n${INTELLIGENT_UI_GUIDANCE}`
+    : DEFAULT_SYSTEM_PROMPT;
 
   if (userPrompt) {
     return `${basePrompt}

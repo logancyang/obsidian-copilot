@@ -50,6 +50,7 @@ import { mockTFile } from "@/__tests__/mockObsidian";
 import { getCachedCustomCommands } from "@/commands/state";
 import { getSettings } from "@/settings/model";
 import { processPrompt } from "@/commands/customCommandUtils";
+import { INTELLIGENT_UI_GUIDANCE } from "@/intelligentUi/guidance";
 
 const ISSUE_3210 = "https://github.com/logancyang/obsidian-copilot/issues/3210";
 const ISSUE_667 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/667";
@@ -524,6 +525,42 @@ describe("ChatManager", () => {
 
         expect(systemPromptSent()).toBe("PROCESSED_CONTENT_ONLY");
       });
+
+      it.each([false, true])(
+        "expands custom-only instructions with Intelligent UI enabled=%s while retaining guidance, memory, and included notes (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)",
+        async (enableIntelligentUi) => {
+          systemPromptState.setDisableBuiltinSystemPrompt(true);
+          (getSettings as jest.Mock).mockReturnValue({
+            enableCustomPromptTemplating: true,
+            enableIntelligentUi,
+          });
+          const memory = "<user_memory>Memory content</user_memory>";
+          mockChainManager.userMemoryManager = { getUserMemoryPrompt: async () => memory };
+          const activeFile = mockTFile({ path: "Plan.md", basename: "Plan" });
+          getActiveFile.mockReturnValue(activeFile);
+          instructions = "Use {activeNote}";
+          const expanded = "Use the launch plan. Budget: $&.";
+          mockProcessPrompt.mockResolvedValue({
+            processedPrompt: expanded,
+            includedFiles: [activeFile],
+          });
+
+          await chatManager.sendMessage("Hello", emptyContext(), ChainType.LLM_CHAIN);
+
+          expect(systemPromptSent()).toBe(
+            `${memory}\n${expanded}${enableIntelligentUi ? `\n\n${INTELLIGENT_UI_GUIDANCE}` : ""}`
+          );
+          expect(mockContextManager.processMessageContext.mock.calls[0][9]).toEqual([activeFile]);
+          expect(mockProcessPrompt).toHaveBeenCalledWith(
+            app,
+            instructions,
+            "",
+            app.vault,
+            activeFile,
+            true
+          );
+        }
+      );
 
       it("keeps the memory prefix when the built-in prompt is disabled", async () => {
         systemPromptState.setDisableBuiltinSystemPrompt(true);

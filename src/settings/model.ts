@@ -75,6 +75,7 @@ export interface CopilotSettings {
   debug: boolean;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
+  enableIntelligentUi: boolean;
   qaExclusions: string;
   qaInclusions: string;
   groqApiKey: string;
@@ -565,6 +566,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
+  }
+
+  // Older settings must not opt users into generated layouts. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+  if (typeof sanitizedSettings.enableIntelligentUi !== "boolean") {
+    sanitizedSettings.enableIntelligentUi = DEFAULT_SETTINGS.enableIntelligentUi;
   }
 
   if (typeof sanitizedSettings.enableInlineCitations !== "boolean") {
