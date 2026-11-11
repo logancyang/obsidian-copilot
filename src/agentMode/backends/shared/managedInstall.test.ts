@@ -54,5 +54,31 @@ describe("managedInstall", () => {
 
       expect(fs.readFileSync(path.join(version, "new"), "utf8")).toBe("new");
     });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3822 promotes the staged directory once another program releases a file inside it", async () => {
+      const stage = path.join(root, "stage");
+      const version = path.join(root, "1.0.0");
+      fs.mkdirSync(stage);
+      fs.writeFileSync(path.join(stage, "new"), "new");
+      const realRename = fs.promises.rename.bind(fs.promises);
+      let lockedAttempts = 5;
+      const rename = jest.spyOn(fs.promises, "rename").mockImplementation(async (from, to) => {
+        if (from === stage && lockedAttempts-- > 0) {
+          throw Object.assign(new Error("EPERM: operation not permitted, rename"), {
+            code: "EPERM",
+          });
+        }
+        return realRename(from, to);
+      });
+
+      try {
+        await promoteManagedVersion(stage, version, "opencode");
+      } finally {
+        rename.mockRestore();
+      }
+
+      expect(fs.readFileSync(path.join(version, "new"), "utf8")).toBe("new");
+      expect(fs.existsSync(stage)).toBe(false);
+    });
   });
 });
