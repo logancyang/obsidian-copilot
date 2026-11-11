@@ -19,7 +19,7 @@ How a reply appears in a conversation: streaming text, reasoning, tool and activ
 - reply-compaction: `Compacting conversation…`, then `Context compacted` with the token count before and after; when the context fills up, `Context is full, compacting…`, then `Context compacted automatically`.
 - reply-files-changed: a turn that edited notes ends with its [turn diffs](turn-diffs.md).
 - reply-layout-stream: completed layout content stays visible as a reply streams; open cards and grid columns show shimmering placeholders where content is still arriving.
-- reply-layout-preference: **Settings → Copilot → Basic → AI answers → Intelligent UI** is off by default; turning it on lets later replies include layouts when useful.
+- reply-layout-preference: **Settings → Copilot → Basic → AI answers → Intelligent UI** is on by default and lets later replies include layouts when useful; turning it off keeps later replies in plain Markdown.
 - reply-layouts: replies containing a `copilot-ui` block show cards, steps, callouts, tabs and other layouts; saved or inserted blocks render in notes too.
 - reply-actions: `Copy` and `Insert / Replace at cursor` under a finished reply.
 
@@ -44,7 +44,7 @@ Send a message from the [chat input](chat-input.md). The reply shows below the m
 - Compaction: send `/compact`. `Compacting conversation…` shows, then `Context compacted · 41k → 12k tokens` (the numbers vary).
 - Files changed: ask the agent to edit a note. The reply ends with the changed file and its added and removed lines.
 - Layout stream: request a two-column card layout. The grid's second column shows a placeholder card until that card arrives, and an open card shows placeholder lines where its text is coming; completed cards stay visible. Stop an incomplete layout: its original source is shown.
-- Layout preference: turn **Intelligent UI** on and ask a comparison question in an open chat. The next reply may use a two-column layout. Turn it off and ask again; layout guidance is removed while the earlier layout stays rendered. An agent may still use layouts from the existing chat context.
+- Layout preference: with **Intelligent UI** on (the default), ask a comparison question in an open chat. The next reply may use a two-column layout. Turn it off and ask again; layout guidance is removed while the earlier layout stays rendered. An agent may still use layouts from the existing chat context.
 - Layouts: open a reply containing a `copilot-ui` block. Its layout appears in the reply; save or insert it into a note and the layout appears in Reading view and Live Preview. Click into the block in Live Preview to edit its source. In a block with tabs, click a tab or use the arrow keys to switch views.
 - Copy: choose `Copy` under a finished reply. The reply's text is on the clipboard.
 - Insert: place the cursor in a note and choose `Insert / Replace at cursor` under a finished reply. The reply's text is inserted at the cursor.

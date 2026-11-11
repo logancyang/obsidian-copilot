@@ -988,6 +988,7 @@ describe("OpencodeBackend", () => {
     });
 
     it("adds Intelligent UI to both OpenCode agents only when enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", async () => {
+      updateSetting("enableIntelligentUi", false);
       const before = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
       updateSetting("enableIntelligentUi", true);
       const enabled = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);

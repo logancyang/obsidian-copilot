@@ -70,14 +70,14 @@ describe("model", () => {
   });
 
   describe("sanitizeSettings()", () => {
-    it("loads missing or invalid Intelligent UI preferences as off and preserves booleans (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", () => {
+    it("loads missing or invalid Intelligent UI preferences as on and preserves booleans (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", () => {
       for (const value of [undefined, null, "true", 1, false, true]) {
         const loaded = sanitizeSettings({
           ...DEFAULT_SETTINGS,
           enableIntelligentUi: value,
         } as unknown as CopilotSettings);
         expect((loaded as unknown as Record<string, unknown>).enableIntelligentUi).toBe(
-          value === true
+          value !== false
         );
       }
     });

@@ -102,6 +102,7 @@ describe("agentSystemPrompt", () => {
       updateSetting("isPaidUser", true);
       updateSetting("plusLicenseKey", "test-license");
       updateSetting("enableMiyoDocumentProcessing", false);
+      updateSetting("enableIntelligentUi", false);
       resetPromptState();
       mockIsObsidianCliEnabled.mockReturnValue(true);
     });

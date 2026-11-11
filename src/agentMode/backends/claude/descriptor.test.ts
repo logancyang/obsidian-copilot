@@ -513,6 +513,7 @@ describe("descriptor", () => {
         clientVersion: "4.0.0",
         descriptor: ClaudeBackendDescriptor,
       }) as unknown as { opts: { getSystemPromptAppend: () => string } };
+      updateSetting("enableIntelligentUi", false);
       const before = proc.opts.getSystemPromptAppend();
       updateSetting("enableIntelligentUi", true);
       expect(proc.opts.getSystemPromptAppend()).toContain("copilot-ui");

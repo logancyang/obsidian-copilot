@@ -568,7 +568,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
   }
 
-  // Older settings must not opt users into generated layouts. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
   if (typeof sanitizedSettings.enableIntelligentUi !== "boolean") {
     sanitizedSettings.enableIntelligentUi = DEFAULT_SETTINGS.enableIntelligentUi;
   }
