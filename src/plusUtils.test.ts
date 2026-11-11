@@ -713,6 +713,30 @@ describe("plusUtils", () => {
       expect(hasVerifiedFeature("multi_agent")).toBe(false);
     });
 
+    it("never shows listeners a renewed token as still awaiting verification, which open agent chats took for a connector change for https://github.com/Brevilabs/obsidian-copilot-private/issues/903", async () => {
+      await verifySessionFeatures(["connectors"]);
+      mockGetSettings.mockReturnValue(tokenBackedSettings());
+      mockSetSettings.mockImplementationOnce((partial) =>
+        emitSettings({ ...mockGetSettings(), ...partial })
+      );
+      const pendingSeen: boolean[] = [];
+      subscribeToEntitlementChange(() => pendingSeen.push(isEntitlementVerificationPending()));
+      mockVerifyEntitlement.mockResolvedValue({
+        user_id: "user-123",
+        plan: "believer",
+        tier: "plus",
+        features: ["connectors"],
+        iat: 0,
+        exp: FUTURE_EXP_SECONDS,
+      });
+
+      expect(await applyEntitlement("renewed-token")).toBe(true);
+
+      expect(pendingSeen.length).toBeGreaterThan(0);
+      expect(pendingSeen).not.toContain(true);
+      expect(hasVerifiedFeature("connectors")).toBe(true);
+    });
+
     it("does NOT change settings when the token cannot be verified", async () => {
       mockVerifyEntitlement.mockResolvedValue(null);
 
