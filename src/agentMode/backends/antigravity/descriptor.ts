@@ -49,6 +49,7 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   summarizesSessionTitle: false,
   reportsPartialModelLists: true,
   savesChatSelection: true,
+  acceptsOnlyStringToolEnums: true,
   wire: antigravityWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

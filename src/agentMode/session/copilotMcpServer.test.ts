@@ -189,6 +189,54 @@ describe("copilotMcpServer", () => {
       });
     });
 
+    it("lists every numeric enum as plain text in its description for an agent that accepts only string enums, and leaves other agents' tool lists as given", async () => {
+      const sized = Object.freeze({
+        name: "canvas_draw",
+        inputSchema: {
+          type: "object",
+          properties: {
+            corners: {
+              type: "object",
+              properties: { radius: { type: "integer", enum: [2, 3], description: "Radius." } },
+            },
+            sides: { type: "array", items: { enum: [4, "many"] } },
+            color: { type: "string", enum: ["red", "blue"] },
+          },
+        },
+      });
+      server.dispose();
+      server = createCopilotMcpServer(
+        () => true,
+        [{ definition: sized, turnedOffText: "off", call: jest.fn() }],
+        undefined,
+        (backendId) => backendId === "antigravity"
+      );
+      const toolList = async (backendId: "antigravity" | "claude") => {
+        const channel = await server.connect(`session-${backendId}`, backendId, NO_CHAT);
+        const result = await post(channel, rpc(2, "tools/list"));
+        return (result.body as { result: { tools: McpToolDefinition[] } }).result.tools;
+      };
+
+      const [, stringEnumsOnly] = await toolList("antigravity");
+      const [, asGiven] = await toolList("claude");
+
+      expect(stringEnumsOnly).toEqual({
+        name: "canvas_draw",
+        inputSchema: {
+          type: "object",
+          properties: {
+            corners: {
+              type: "object",
+              properties: { radius: { type: "integer", description: "Radius. One of: 2, 3." } },
+            },
+            sides: { type: "array", items: { description: 'One of: 4, "many".' } },
+            color: { type: "string", enum: ["red", "blue"] },
+          },
+        },
+      });
+      expect(asGiven).toEqual(sized);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/862 leaves out a connector tool named like one of Copilot's own tools, whose calls reach Copilot's tool, so it neither lists twice nor makes Copilot's tool read-only", async () => {
       server.dispose();
       const clash = Object.freeze({

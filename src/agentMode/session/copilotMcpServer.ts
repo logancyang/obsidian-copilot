@@ -120,6 +120,7 @@ export interface ToolProvider {
 interface SessionHandlers {
   findChat: FindCallingChat;
   listing: ToolListing;
+  stringEnumsOnly: boolean;
 }
 
 const SEND_FEEDBACK_HOSTED_TOOL: HostedTool = Object.freeze({
@@ -162,7 +163,8 @@ type JsonRpcReply = { result: unknown } | { error: { code: number; message: stri
 export function createCopilotMcpServer(
   isToolOn: ToolSwitch,
   tools: readonly HostedTool[],
-  toolProvider?: ToolProvider
+  toolProvider?: ToolProvider,
+  acceptsOnlyStringEnums: (backendId: BackendId) => boolean = () => false
 ): CopilotMcpServer {
   const hostedTools: readonly HostedTool[] = Object.freeze([SEND_FEEDBACK_HOSTED_TOOL, ...tools]);
   const handlersByToken = new Map<string, SessionHandlers>();
@@ -199,7 +201,11 @@ export function createCopilotMcpServer(
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
       const token = tokensBySession.get(sessionKey) ?? crypto.randomBytes(32).toString("hex");
       tokensBySession.set(sessionKey, token);
-      handlersByToken.set(token, { findChat, listing: { sessionKey, backendId } });
+      handlersByToken.set(token, {
+        findChat,
+        listing: { sessionKey, backendId },
+        stringEnumsOnly: acceptsOnlyStringEnums(backendId),
+      });
       return Object.freeze({
         name: COPILOT_MCP_SERVER_NAME,
         url,
@@ -290,17 +296,17 @@ async function reply(
     }
     case "ping":
       return { result: {} };
-    case "tools/list":
+    case "tools/list": {
+      const tools = [
+        ...hostedTools
+          .filter((tool) => isToolOn(tool.definition.name))
+          .map((tool) => tool.definition),
+        ...providedTools(hostedTools, toolProvider, handlers.listing),
+      ];
       return {
-        result: {
-          tools: [
-            ...hostedTools
-              .filter((tool) => isToolOn(tool.definition.name))
-              .map((tool) => tool.definition),
-            ...providedTools(hostedTools, toolProvider, handlers.listing),
-          ],
-        },
+        result: { tools: handlers.stringEnumsOnly ? tools.map(withStringEnumsOnly) : tools },
       };
+    }
     case "tools/call":
       return {
         result: await callTool(message.params ?? {}, handlers, isToolOn, hostedTools, toolProvider),
@@ -320,6 +326,22 @@ function providedTools(
   return (toolProvider?.tools(listing) ?? []).filter(
     ({ name }) => !hostedTools.some(({ definition }) => definition.name === name)
   );
+}
+
+function withStringEnumsOnly<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map(withStringEnumsOnly) as T;
+  if (typeof schema !== "object" || schema === null) return schema;
+  const { enum: values, ...rest } = schema as Record<string, unknown>;
+  const copy = Object.fromEntries(
+    Object.entries(rest).map(([key, value]) => [key, withStringEnumsOnly(value)])
+  );
+  if (!Array.isArray(values) || values.every((value) => typeof value === "string")) {
+    return (values === undefined ? copy : { ...copy, enum: withStringEnumsOnly(values) }) as T;
+  }
+  const allowed = `One of: ${values.map((value) => JSON.stringify(value)).join(", ")}.`;
+  const description =
+    typeof copy.description === "string" ? `${copy.description} ${allowed}` : allowed;
+  return { ...copy, description } as T;
 }
 
 async function callTool(

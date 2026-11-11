@@ -267,7 +267,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           ]
         : []),
     ],
-    connectorTools
+    connectorTools,
+    (id) => backendRegistry[id]?.acceptsOnlyStringToolEnums === true
   );
   const preloader = new AgentModelPreloader(
     app,

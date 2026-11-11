@@ -693,6 +693,24 @@ describe("agentMode", () => {
       expect(connectorCardsExtension()).toBeUndefined();
     });
 
+    it("has Copilot's MCP server list only string enums to an agent whose descriptor accepts nothing else", () => {
+      const registry = jest.requireMock<{ backendRegistry: Record<string, object> }>(
+        "./backends/registry"
+      ).backendRegistry;
+      registry.antigravity = { acceptsOnlyStringToolEnums: true };
+      registry.claude = {};
+      createAgentSessionManager({} as App, plugin);
+
+      const acceptsOnlyStringEnums = jest.mocked(createCopilotMcpServer).mock.calls[0][3]!;
+
+      expect([acceptsOnlyStringEnums("antigravity"), acceptsOnlyStringEnums("claude")]).toEqual([
+        true,
+        false,
+      ]);
+      delete registry.antigravity;
+      delete registry.claude;
+    });
+
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {
       createAgentSessionManager({} as App, plugin);
       await mockManager.registerPreload.mock.calls[0][1];

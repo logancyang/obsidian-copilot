@@ -173,6 +173,8 @@ export interface BackendDescriptor {
 
   readonly savesChatSelection?: boolean;
 
+  readonly acceptsOnlyStringToolEnums?: boolean;
+
   applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void>;
 
   getModeMapping?(
