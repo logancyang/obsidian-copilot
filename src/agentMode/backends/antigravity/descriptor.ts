@@ -48,6 +48,7 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
   summarizesSessionTitle: false,
+  reportsPartialModelLists: true,
   wire: antigravityWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {

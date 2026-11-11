@@ -26,6 +26,7 @@ export interface SyncAgentModelsInput {
   wireModelIds: readonly string[];
   fallbackDisplayNames?: Record<string, string>;
   fallbackDescriptions?: Record<string, string>;
+  keepUnreported?: boolean;
 }
 
 export interface AgentSetupResult {
@@ -131,7 +132,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { autoEnrollModelIds: ENROLL_NONE }
+        { autoEnrollModelIds: ENROLL_NONE, keepUnreported: input.keepUnreported }
       );
       return {
         added: added.map((a) => a.configuredModelId),
@@ -159,7 +160,7 @@ export class AgentSetupApi {
         input.agentType,
         provider.providerId,
         infos,
-        { autoEnrollModelIds: ENROLL_NONE }
+        { autoEnrollModelIds: ENROLL_NONE, keepUnreported: input.keepUnreported }
       );
       for (const a of added) addedAll.push(a.configuredModelId);
       for (const r of removed) removedAll.push(r.configuredModelId);
@@ -275,7 +276,7 @@ export class AgentSetupApi {
     agentType: AgentType,
     providerId: string,
     infos: readonly ModelInfo[],
-    opts: { autoEnrollModelIds?: readonly string[] }
+    opts: { autoEnrollModelIds?: readonly string[]; keepUnreported?: boolean }
   ): Promise<{
     added: Array<{ wireId: string; configuredModelId: string }>;
     removed: Array<{ wireId: string; configuredModelId: string }>;
@@ -307,7 +308,7 @@ export class AgentSetupApi {
     }
 
     const removed: Array<{ wireId: string; configuredModelId: string }> = [];
-    for (const model of existing) {
+    for (const model of opts.keepUnreported ? [] : existing) {
       if (desiredWireIds.has(model.info.id)) continue;
       await this.#coordinator.removeConfiguredModel(model.configuredModelId);
       removed.push({ wireId: model.info.id, configuredModelId: model.configuredModelId });

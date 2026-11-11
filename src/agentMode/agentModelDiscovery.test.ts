@@ -303,6 +303,25 @@ describe("agentModelDiscovery", () => {
       unsub();
     });
 
+    it("asks the sync to keep models a later probe omits when the backend reports partial model lists", async () => {
+      mockDescriptors = [makeDescriptor({ id: "antigravity", reportsPartialModelLists: true })];
+      const m = makeManagerFake();
+      const a = makeApiFake();
+      m.setCatalog("antigravity", catalogWithModels(["gemini-3.8-flash", "claude-opus-5.5"]));
+
+      const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+      await waitForDiscoveryLog("first enrollment for antigravity");
+
+      m.setCatalog("antigravity", catalogWithModels(["gemini-3.8-flash"]));
+      m.emit();
+      await waitFor(() => expect(a.syncAgentModels).toHaveBeenCalledTimes(1));
+
+      expect(a.syncAgentModels.mock.calls[0][0]).toEqual(
+        expect.objectContaining({ wireModelIds: ["gemini-3.8-flash"], keepUnreported: true })
+      );
+      unsub();
+    });
+
     it("does nothing when a later probe reports the same model list", async () => {
       mockDescriptors = [makeDescriptor({ id: "codex" })];
       const m = makeManagerFake();

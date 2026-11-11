@@ -105,6 +105,7 @@ async function enrollBackend(
       wireModelIds,
       fallbackDisplayNames,
       fallbackDescriptions,
+      ...(descriptor.reportsPartialModelLists ? { keepUnreported: true } : {}),
     });
     return;
   }

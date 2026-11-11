@@ -421,6 +421,31 @@ describe("AgentSetupApi", () => {
       expect(h.enabledFor("claude")).not.toContain(opusId);
     });
 
+    it("keeps an unreported model with its enabled state and adds new ones when told to keep unreported models", async () => {
+      const h = makeHarness();
+      const reg = await h.api.registerAgentProvider({
+        agentType: "claude",
+        providerType: "anthropic",
+        displayName: "Claude Code",
+        apiKey: null,
+        wireModelIds: ["claude-sonnet-4-5", "claude-opus-4-5"],
+      });
+      const opusId = h.configuredModelId(reg.providerId, "claude-opus-4-5");
+
+      const result = await h.api.syncAgentModels({
+        agentType: "claude",
+        wireModelIds: ["claude-sonnet-4-5", "claude-haiku-4-5"],
+        keepUnreported: true,
+      });
+
+      expect(result).toEqual({
+        added: [h.configuredModelId(reg.providerId, "claude-haiku-4-5")],
+        removed: [],
+      });
+      expect(h.models.getByWireId(reg.providerId, "claude-opus-4-5")).toBeDefined();
+      expect(h.enabledFor("claude")).toContain(opusId);
+    });
+
     it("changes nothing when the reported list matches the stored models", async () => {
       const h = makeHarness();
       await h.api.registerAgentProvider({
