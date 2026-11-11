@@ -65,6 +65,10 @@ export class AntigravityBackend implements AcpBackend {
     };
   }
 
+  resumeSessionMeta(): Record<string, unknown> {
+    return this.newSessionMeta();
+  }
+
   async readPlanUsage(signal?: AbortSignal): Promise<PlanUsageReading> {
     if (!this.spawned || Date.now() < this.nextUsageReadAt) return this.lastUsageReading;
     const groups = await readAntigravityQuotaGroups(this.spawned.command, this.spawned.env, signal);

@@ -113,6 +113,16 @@ describe("AntigravityBackend", () => {
       });
     });
 
+    describe("resumeSessionMeta()", () => {
+      beforeEach(() => resetSettings());
+
+      it("appends Copilot's agent system prompt again when a chat is reopened", () => {
+        const backend = new AntigravityBackend(APP);
+
+        expect(backend.resumeSessionMeta()).toEqual(backend.newSessionMeta());
+      });
+    });
+
     describe("readOriginalFiles()", () => {
       it("reads a completed edit's file text from before the write out of its full-file diff", () => {
         expect(

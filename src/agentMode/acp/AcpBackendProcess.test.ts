@@ -1474,6 +1474,30 @@ describe("AcpBackendProcess", () => {
         ]);
       });
 
+      it("sends the backend's resume metadata with session/resume", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {} } },
+        };
+        const meta = { antigravity: { systemPrompt: { append: "Be brief." } } };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ resumeSessionMeta: () => meta }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.resumeSession({ sessionId: "s1", cwd: "/vault" });
+
+        expect(mockResumeSession.mock.calls[0][0]).toEqual({
+          sessionId: "s1",
+          cwd: "/vault",
+          mcpServers: [],
+          _meta: meta,
+        });
+      });
+
       it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,

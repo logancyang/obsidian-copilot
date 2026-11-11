@@ -627,6 +627,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    const meta = this.backend.resumeSessionMeta?.();
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -634,6 +635,7 @@ export class AcpBackendProcess implements BackendProcess {
           sessionId: sessionIdToAcp(params.sessionId),
           cwd: params.cwd,
           mcpServers: this.mcpServersField(params.mcpServers),
+          ...(meta ? { _meta: meta } : {}),
         }),
       { mustBeAdvertised: true }
     );

@@ -19,6 +19,7 @@ export interface AcpBackend {
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   readonly clientCapabilitiesMeta?: Readonly<Record<string, unknown>>;
   newSessionMeta?(): Record<string, unknown>;
+  resumeSessionMeta?(): Record<string, unknown>;
   readonly synthesizesManualCompaction?: boolean;
   readonly reopensWithResume?: boolean;
   readonly acceptsStandardElicitationForms?: boolean;
