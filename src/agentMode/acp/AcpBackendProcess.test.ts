@@ -1497,6 +1497,25 @@ describe("AcpBackendProcess", () => {
         expect(mockNewSession.mock.calls[0][0]).toMatchObject({ _meta: meta });
       });
 
+      it("lets the backend prepare the vault before session/new, and opens no chat when that fails", async () => {
+        const prepareSession = jest.fn().mockResolvedValue(undefined);
+        const backend = new AcpBackendProcess(
+          buildApp("/my-vault"),
+          buildStubBackend({ prepareSession }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/my-vault/project" });
+        prepareSession.mockRejectedValueOnce(new Error("vault not ready"));
+        const refused = backend.newSession({ cwd: "/my-vault" });
+
+        await expect(refused).rejects.toThrow("vault not ready");
+        expect(prepareSession).toHaveBeenCalledWith({ vaultBasePath: "/my-vault" });
+        expect(mockNewSession).toHaveBeenCalledTimes(1);
+      });
+
       it("sends no session metadata when the backend has none", async () => {
         const backend = await startBackend();
 
@@ -1624,6 +1643,27 @@ describe("AcpBackendProcess", () => {
         });
       });
 
+      it("lets the backend prepare the vault before session/resume, and reopens nothing when that fails", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { sessionCapabilities: { resume: {} } },
+        };
+        const prepareSession = jest.fn().mockRejectedValue(new Error("vault not ready"));
+        const backend = new AcpBackendProcess(
+          buildApp("/my-vault"),
+          buildStubBackend({ prepareSession }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await expect(backend.resumeSession({ sessionId: "s1", cwd: "/my-vault" })).rejects.toThrow(
+          "vault not ready"
+        );
+        expect(prepareSession).toHaveBeenCalledWith({ vaultBasePath: "/my-vault" });
+        expect(mockResumeSession).not.toHaveBeenCalled();
+      });
+
       it("sends the session's cwd with no MCP servers to session/resume", async () => {
         mockInitializeResult = {
           protocolVersion: 1,
@@ -1681,6 +1721,24 @@ describe("AcpBackendProcess", () => {
         expect(req.mcpServers).toEqual([
           { type: "http", name: "obsidian-copilot", url: "http://127.0.0.1:1/mcp", headers: [] },
         ]);
+      });
+
+      it("lets the backend prepare the vault before session/load, and loads nothing when that fails", async () => {
+        mockInitializeResult = { protocolVersion: 1, agentCapabilities: { loadSession: true } };
+        const prepareSession = jest.fn().mockRejectedValue(new Error("vault not ready"));
+        const backend = new AcpBackendProcess(
+          buildApp("/my-vault"),
+          buildStubBackend({ prepareSession }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await expect(backend.loadSession({ sessionId: "s1", cwd: "/my-vault" })).rejects.toThrow(
+          "vault not ready"
+        );
+        expect(prepareSession).toHaveBeenCalledWith({ vaultBasePath: "/my-vault" });
+        expect(mockLoadSession).not.toHaveBeenCalled();
       });
 
       it("returns the session id and the state the agent reports", async () => {

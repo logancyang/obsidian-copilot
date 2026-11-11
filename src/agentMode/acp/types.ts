@@ -28,6 +28,7 @@ export interface AcpBackend {
   selectPlanUsage?(planUsage: PlanUsage, wireModelId: string | null | undefined): PlanUsage | null;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   readonly clientCapabilitiesMeta?: Readonly<Record<string, unknown>>;
+  prepareSession?(ctx: { vaultBasePath: string }): Promise<void>;
   newSessionMeta?(): Record<string, unknown>;
   resumeSessionMeta?(): Record<string, unknown>;
   readonly synthesizesManualCompaction?: boolean;

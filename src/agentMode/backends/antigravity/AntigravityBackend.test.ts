@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import type { App } from "obsidian";
 import { COPILOT_PROMPT_BASE } from "@/agentMode/backends/shared/agentSystemPrompt";
@@ -79,9 +79,7 @@ describe("AntigravityBackend", () => {
         const agy = home.installAgy();
         saveAntigravitySettings();
 
-        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor({
-          vaultBasePath: home.homeDir,
-        });
+        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor();
 
         expect(descriptor.command).toBe(agy);
         expect(descriptor.args).toEqual(["acp", "--process-per-session"]);
@@ -91,9 +89,7 @@ describe("AntigravityBackend", () => {
         const agy = home.installAgy();
         saveAntigravitySettings({ binaryPath: agy, envOverrides: { HTTPS_PROXY: "http://proxy" } });
 
-        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor({
-          vaultBasePath: home.homeDir,
-        });
+        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor();
 
         expect(descriptor.env.HTTPS_PROXY).toBe("http://proxy");
       });
@@ -101,44 +97,49 @@ describe("AntigravityBackend", () => {
       it("refuses to start with a setup hint when agy is not installed", async () => {
         saveAntigravitySettings();
 
-        await expect(
-          new AntigravityBackend(APP).buildSpawnDescriptor({ vaultBasePath: home.homeDir })
-        ).rejects.toThrow(ANTIGRAVITY_NOT_SET_UP_MESSAGE);
-
-        expect(existsSync(join(home.homeDir, ".agent"))).toBe(false);
+        await expect(new AntigravityBackend(APP).buildSpawnDescriptor()).rejects.toThrow(
+          ANTIGRAVITY_NOT_SET_UP_MESSAGE
+        );
       });
 
       it("marks agy as started by Copilot, over any user override, so the vault's late-work guard acts on its chats", async () => {
         const agy = home.installAgy();
         saveAntigravitySettings({ binaryPath: agy, envOverrides: { OBSIDIAN_COPILOT_ACP: "0" } });
 
-        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor({
-          vaultBasePath: home.homeDir,
-        });
+        const descriptor = await new AntigravityBackend(APP).buildSpawnDescriptor();
 
         expect(descriptor.env.OBSIDIAN_COPILOT_ACP).toBe("1");
       });
+    });
 
-      it("installs the late-work guard hooks in the vault before agy starts", async () => {
-        saveAntigravitySettings({ binaryPath: home.installAgy() });
+    describe("prepareSession()", () => {
+      let home: TempHome;
 
-        await new AntigravityBackend(APP).buildSpawnDescriptor({ vaultBasePath: home.homeDir });
+      beforeEach(() => {
+        home = pinTempHome();
+        resetSettings();
+      });
+
+      afterEach(() => home.restore());
+
+      it("installs the late-work guard hooks into the vault before each chat starts", async () => {
+        await new AntigravityBackend(APP).prepareSession({ vaultBasePath: home.homeDir });
 
         expect(
           Object.keys(JSON.parse(readFileSync(join(home.homeDir, ".agent", "hooks.json"), "utf8")))
         ).toEqual(["copilot-no-late-work"]);
       });
 
-      it("refuses to start when the vault's hooks.json was not written by Copilot", async () => {
-        saveAntigravitySettings({ binaryPath: home.installAgy() });
+      it("refuses to start a chat when the vault's hooks.json was not written by Copilot", async () => {
         mkdirSync(join(home.homeDir, ".agent"));
         writeFileSync(join(home.homeDir, ".agent", "hooks.json"), '{"mine":{}}');
 
         await expect(
-          new AntigravityBackend(APP).buildSpawnDescriptor({ vaultBasePath: home.homeDir })
+          new AntigravityBackend(APP).prepareSession({ vaultBasePath: home.homeDir })
         ).rejects.toThrow("was not written by Copilot");
       });
     });
+
     describe("newSessionMeta()", () => {
       beforeEach(() => resetSettings());
 
@@ -222,7 +223,7 @@ describe("AntigravityBackend", () => {
       async function spawnedBackend(script: string): Promise<AntigravityBackend> {
         saveAntigravitySettings({ binaryPath: home.installAgy(script) });
         const backend = new AntigravityBackend(APP);
-        await backend.buildSpawnDescriptor({ vaultBasePath: home.homeDir });
+        await backend.buildSpawnDescriptor();
         return backend;
       }
 
@@ -335,7 +336,7 @@ describe("AntigravityBackend", () => {
           binaryPath: home.installAgy(`echo '${JSON.stringify(PRO_USAGE)}'\n`),
         });
         const backend = new AntigravityBackend(APP);
-        await backend.buildSpawnDescriptor({ vaultBasePath: home.homeDir });
+        await backend.buildSpawnDescriptor();
         const reading = await backend.readPlanUsage();
         if (reading.kind !== "usage") throw new Error("expected a usage reading");
 

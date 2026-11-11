@@ -135,14 +135,22 @@ export class AcpBackendProcess implements BackendProcess {
     private readonly descriptor: BackendDescriptor
   ) {}
 
-  async start(): Promise<void> {
-    if (this.connection) return;
+  private requireVaultBasePath(): string {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
       throw new Error("Agent Chat requires Obsidian on desktop.");
     }
+    return adapter.getBasePath();
+  }
+
+  private async prepareSession(): Promise<void> {
+    await this.backend.prepareSession?.({ vaultBasePath: this.requireVaultBasePath() });
+  }
+
+  async start(): Promise<void> {
+    if (this.connection) return;
     const descriptor = await this.backend.buildSpawnDescriptor({
-      vaultBasePath: adapter.getBasePath(),
+      vaultBasePath: this.requireVaultBasePath(),
     });
 
     const procOpts: AcpProcessManagerOptions = {
@@ -323,6 +331,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
+    await this.prepareSession();
     const meta = this.backend.newSessionMeta?.();
     const req: NewSessionRequest = {
       cwd: params.cwd,
@@ -634,6 +643,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    await this.prepareSession();
     const meta = this.backend.resumeSessionMeta?.();
     const wireResp = await this.dispatchCapability(
       "session/resume",
@@ -658,6 +668,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    await this.prepareSession();
     const sessionId = params.sessionId;
     this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
