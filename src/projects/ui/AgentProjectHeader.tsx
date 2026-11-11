@@ -53,11 +53,11 @@ export const AgentProjectHeader = memo(
             size="sm"
             onClick={onOpenHome}
             aria-label={`Go to ${projectName} home`}
-            className="tw-min-w-0 tw-justify-start tw-gap-1.5 tw-px-1.5 tw-text-normal"
+            className="tw-group tw-min-w-0 tw-cursor-pointer tw-justify-start tw-gap-1.5 tw-px-1.5 tw-text-normal"
           >
             <ProjectFolderIcon />
             <TruncatedText
-              className="tw-min-w-0 tw-text-ui-small tw-font-medium"
+              className="tw-min-w-0 tw-text-ui-small tw-font-medium group-hover:tw-text-accent group-hover:tw-underline group-focus-visible:tw-text-accent group-focus-visible:tw-underline"
               tooltipContent={projectName}
             >
               {projectName}
