@@ -15,6 +15,11 @@ const PROVIDER_SIDE_CATEGORIES: ReadonlySet<string> = new Set([
   // A provider API that refuses or drops the connection is the user's network or endpoint state.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/826
   "provider.transport",
+  // A model the provider rejects for the request, such as one without function calling or one that cannot take a PDF, needs another model or chat, not a Copilot report.
+  // https://github.com/logancyang/obsidian-copilot/issues/4116
+  // https://github.com/logancyang/obsidian-copilot/issues/4268
+  "provider.invalid-request",
+  "provider.unknown",
 ]);
 
 const PROVIDER_SIDE_PATTERNS: readonly RegExp[] = [
