@@ -28,13 +28,15 @@ const COMMIT = 'prefix_rule(pattern=["git", "commit", "-m", "it\'s done"], decis
 const GITHUB_HOST =
   'network_rule(host="api.github.com", protocol="https", decision="allow", justification="Allow https_connect access to api.github.com")';
 
+// Concurrent checks record to one path; CopyFile locks its destination on Windows, so the fake writes it instead.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/900
 const FAKE_CODEX = `#!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
 const args = process.argv.slice(2);
 const env = process.env;
 fs.writeFileSync(env.FAKE_CODEX_LOG, [...args, "CODEX_HOME=" + env.CODEX_HOME, "PATH=" + env.PATH, ""].join("\\n"));
-fs.copyFileSync(args[3], env.FAKE_CODEX_LOG + ".checked");
+fs.writeFileSync(env.FAKE_CODEX_LOG + ".checked", fs.readFileSync(args[3]));
 if (env.FAKE_CODEX_SAVES) {
   fs.appendFileSync(path.join(env.CODEX_HOME, "rules", "default.rules"), env.FAKE_CODEX_SAVES + "\\n");
 }
