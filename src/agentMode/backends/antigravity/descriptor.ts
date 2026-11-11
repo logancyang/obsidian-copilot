@@ -11,10 +11,13 @@ import type {
   ModelSelectionSession,
   ModelWireCodec,
 } from "@/agentMode/session/types";
+import { getManagedSkills } from "@/agentMode/skills/SkillManager";
 import { resolveEffort } from "@/lib/model-effort";
 import type CopilotPlugin from "@/main";
 import { subscribeToSettingsChange, type CopilotSettings } from "@/settings/model";
+import { FileSystemAdapter, type App } from "obsidian";
 import { AntigravityBackend } from "./AntigravityBackend";
+import { syncAntigravitySkillsConfig } from "./antigravitySkillsConfig";
 import { antigravityInstallState, resolveAntigravityBinaryPath } from "./antigravityCli";
 import { AntigravityInstallModal } from "./AntigravityInstallModal";
 import { AntigravitySettingsPanel } from "./AntigravitySettingsPanel";
@@ -42,7 +45,7 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   setupDescription:
     "Gemini and other models from your Google Antigravity plan. Runs the Antigravity CLI on your machine.",
   skillsProjectDir: ".agent/skills",
-  crossDiscoveredAgents: [],
+  crossDiscoveredAgents: ["codex"],
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,
@@ -112,6 +115,16 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   },
 
   prefetchEffortCatalog: prefetchConfigEfforts,
+
+  async onManagedSkillsChange(app: App): Promise<void> {
+    const adapter = app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return;
+    await syncAntigravitySkillsConfig(
+      adapter.getBasePath(),
+      getManagedSkills(),
+      AntigravityBackendDescriptor.crossDiscoveredAgents
+    );
+  },
 
   createBackendProcess(args): BackendProcess {
     return simpleBinaryBackendProcess(args, new AntigravityBackend(args.app, args.clientVersion));

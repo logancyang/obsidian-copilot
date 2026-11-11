@@ -66,7 +66,7 @@ jest.mock("./skills", () => ({
   SkillManager: {
     initialize: (_app: App, _dirs: unknown, runtime: BuiltinSkillRuntime) => {
       mockRuntime = runtime;
-      return { refresh: mockRefresh, subscribeToSkillSetChange: jest.fn() };
+      return { refresh: mockRefresh, subscribeToSkillSetChange: mockSubscribeToSkillSetChange };
     },
   },
 }));
@@ -122,6 +122,7 @@ const mockInstallListeners: Record<string, () => void> = {};
 const mockDescriptors = ["claude", "opencode"].map((id) => ({
   id,
   onPluginLoad: jest.fn(async (_plugin: CopilotPlugin) => {}),
+  onManagedSkillsChange: jest.fn(async (_app: App) => {}),
   skillsProjectDir: `.${id}/skills`,
   restartOnProviderConfigChange: id === "opencode",
   restartOnSystemPromptChange: id === "opencode",
@@ -131,6 +132,7 @@ const mockDescriptors = ["claude", "opencode"].map((id) => ({
   },
 }));
 const mockRefresh = jest.fn<Promise<unknown>, unknown[]>();
+const mockSubscribeToSkillSetChange = jest.fn<() => void, [(backendId: string) => void]>();
 const mockManager = {
   preloadModels: jest.fn(async () => {}),
   restartBackend: jest.fn(async (_id: string, _reason: string) => {}),
@@ -709,6 +711,18 @@ describe("agentMode", () => {
       ]);
       delete registry.antigravity;
       delete registry.claude;
+    });
+
+    it("lets every agent update its own skill settings when any agent's managed skills change", () => {
+      const app = {} as App;
+      createAgentSessionManager(app, plugin);
+
+      for (const [listener] of mockSubscribeToSkillSetChange.mock.calls) listener("codex");
+
+      expect(mockDescriptors.map((d) => d.onManagedSkillsChange.mock.calls)).toEqual([
+        [[app]],
+        [[app]],
+      ]);
     });
 
     it(`retains only previously ready agents during compatibility checks ${ISSUE}`, async () => {

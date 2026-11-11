@@ -7,6 +7,10 @@ import type {
 } from "@/agentMode/session/types";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
+import { getManagedSkills } from "@/agentMode/skills/SkillManager";
+import { readFileSync } from "fs";
+import { FileSystemAdapter, type App } from "obsidian";
+import { join } from "path";
 import { AntigravityBackendDescriptor } from "./descriptor";
 import { pinTempHome, type TempHome } from "./testing/tempHome";
 
@@ -16,6 +20,7 @@ jest.mock("@/utils/binaryPath", () => ({
   WELL_KNOWN_BIN_DIRS: [],
 }));
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
+jest.mock("@/agentMode/skills/SkillManager", () => ({ getManagedSkills: jest.fn(() => []) }));
 
 const MODEL_IDS = [
   "gemini-3.8-flash",
@@ -237,6 +242,41 @@ describe("descriptor", () => {
           kind: "cloud",
           label: "Google",
         });
+      });
+    });
+
+    describe("onManagedSkillsChange()", () => {
+      let home: TempHome;
+
+      beforeEach(() => {
+        home = pinTempHome();
+      });
+
+      afterEach(() => home.restore());
+
+      it("hides from Antigravity the vault's managed skills that are switched on for Codex only", async () => {
+        jest.mocked(getManagedSkills).mockReturnValue([
+          {
+            name: "codexonly",
+            description: "",
+            filePath: "copilot/skills/codexonly/SKILL.md",
+            dirPath: "copilot/skills/codexonly",
+            body: "",
+            enabledAgents: ["codex"],
+            location: { kind: "canonical" },
+          },
+        ]);
+        const adapter = new (FileSystemAdapter as unknown as new (base: string) => unknown)(
+          home.homeDir
+        );
+
+        await AntigravityBackendDescriptor.onManagedSkillsChange!({
+          vault: { adapter },
+        } as unknown as App);
+
+        expect(
+          JSON.parse(readFileSync(join(home.homeDir, ".agent", "skills.json"), "utf8"))
+        ).toEqual({ entries: [{ path: ".agents/skills", exclude: ["^codexonly$"] }] });
       });
     });
 

@@ -157,6 +157,8 @@ export interface BackendDescriptor {
 
   onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
 
+  onManagedSkillsChange?(app: App): Promise<void>;
+
   readonly wire: ModelWireCodec;
 
   normalizeModelName?(name: string): string;

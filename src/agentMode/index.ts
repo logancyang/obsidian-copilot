@@ -332,6 +332,15 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   trackTabStripShown(plugin, manager);
   // `noteSpawnConfigChanged` holds the restart behind Reload while a session is open: a skill
   // file an agent just wrote must not close the conversation that asked for it. https://github.com/Brevilabs/obsidian-copilot-private/issues/475
+  skillManager.subscribeToSkillSetChange(() => {
+    for (const descriptor of listBackendDescriptors()) {
+      descriptor
+        .onManagedSkillsChange?.(app)
+        .catch((error) =>
+          logError(`[Skills] Failed to update ${descriptor.id}'s skill settings`, error)
+        );
+    }
+  });
   skillManager.subscribeToSkillSetChange((backendId) => {
     const descriptor = backendRegistry[backendId];
     if (!descriptor?.restartOnManagedSkillsChange) return;
