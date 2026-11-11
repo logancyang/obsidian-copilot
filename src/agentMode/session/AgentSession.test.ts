@@ -2684,6 +2684,44 @@ describe("AgentSession", () => {
         expect(laterTurn?.isErrorMessage).not.toBe(true);
       });
 
+      it("shows a step still running at the turn's end as stopped when the agent ends tool calls with the turn, and as completed once its late result arrives", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock, {
+          getDescriptor: () => ({ endsToolCallsWithTurn: true }) as unknown as BackendDescriptor,
+        });
+
+        const first = session.sendPrompt("run it in the background");
+        mock.emitUpdate({
+          sessionUpdate: "tool_call",
+          toolCallId: "tc-sleep",
+          title: "sleep 45",
+          kind: "execute",
+          status: "in_progress",
+        });
+        finishPrompt();
+        await first.turn;
+
+        expect(aiMessages(session)[0]?.parts?.[0]).toMatchObject({
+          id: "tc-sleep",
+          status: "cancelled",
+        });
+
+        const second = session.sendPrompt("next");
+        mock.emitUpdate({
+          sessionUpdate: "tool_call_update",
+          toolCallId: "tc-sleep",
+          status: "completed",
+        });
+        finishPrompt();
+        await second.turn;
+
+        expect(aiMessages(session)[0]?.parts?.[0]).toMatchObject({
+          id: "tc-sleep",
+          status: "completed",
+        });
+      });
+
       it("merges partial progress updates into the tool part's progress", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);

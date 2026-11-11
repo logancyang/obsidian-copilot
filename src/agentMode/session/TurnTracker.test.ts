@@ -974,6 +974,34 @@ describe("TurnTracker", () => {
         });
       });
 
+      it("leaves a tool call still running at the turn's end running, since it may report after the turn", async () => {
+        const { deps, tracker } = setup();
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        addToolCall(deps.store, replyId, "tc-background", "in_progress");
+
+        tracker.endTurn({ turnId: "t1", stopReason: "end_turn" });
+        await outcome;
+
+        expect(toolStatuses(deps.store, replyId)).toEqual({ "tc-background": "in_progress" });
+      });
+
+      it("stops a tool call still running at the turn's end when the agent reports nothing between turns, keeping running tasks", async () => {
+        const { deps, tracker } = setup();
+        deps.endsToolCallsWithTurn.mockReturnValue(true);
+        deps.runningTaskToolCallIds.mockReturnValue(new Set(["tc-task"]));
+        const { outcome, replyId } = runningTurn(tracker, "p1", "t1");
+        addToolCall(deps.store, replyId, "tc-background", "in_progress");
+        addToolCall(deps.store, replyId, "tc-task", "in_progress");
+
+        tracker.endTurn({ turnId: "t1", stopReason: "end_turn" });
+        await outcome;
+
+        expect(toolStatuses(deps.store, replyId)).toEqual({
+          "tc-background": "cancelled",
+          "tc-task": "in_progress",
+        });
+      });
+
       it("leaves a reply that ended normally without an agent cancel cause", async () => {
         const { deps, tracker } = setup();
         const { outcome, replyId } = runningTurn(tracker, "p1", "t1");

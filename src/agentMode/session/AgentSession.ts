@@ -318,6 +318,7 @@ export class AgentSession implements ChatStateHost, ChatView {
             .filter((task) => task.status === "running" && task.taskId !== undefined)
             .map((task) => task.toolCallId)
         ),
+      endsToolCallsWithTurn: () => this.getDescriptor?.()?.endsToolCallsWithTurn === true,
       endLaunches: (status) => this.endLaunchesOfEndedTurn(status),
       captureFileChanges: (files, messageId, turnDiff) =>
         this.finalizeFileChanges(files, this.store, messageId, turnDiff),

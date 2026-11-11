@@ -177,6 +177,8 @@ export interface BackendDescriptor {
 
   readonly acceptsOnlyStringToolEnums?: boolean;
 
+  readonly endsToolCallsWithTurn?: boolean;
+
   applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void>;
 
   getModeMapping?(

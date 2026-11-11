@@ -35,6 +35,7 @@ export interface TurnTrackerDeps {
   promptsWithdrawn: (prompts: readonly QueuedPrompt[]) => void;
   notifyStatus: () => void;
   runningTaskToolCallIds: () => ReadonlySet<string>;
+  endsToolCallsWithTurn: () => boolean;
   endLaunches: (status: TaskEndStatus) => void;
   captureFileChanges: (
     files: FileCaptures,
@@ -478,7 +479,7 @@ export class TurnTracker {
       store.markMessageError(placeholderId, message);
     }
     // Stop ends the turn's tool calls with it; a background task launched in the turn keeps running. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
-    if (stopReason === "cancelled") {
+    if (stopReason === "cancelled" || this.deps.endsToolCallsWithTurn()) {
       store.stopToolCalls(placeholderId, this.deps.runningTaskToolCallIds());
     }
     store.settleOpenParts(placeholderId);

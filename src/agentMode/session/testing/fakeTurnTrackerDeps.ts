@@ -9,6 +9,7 @@ export interface FakeTurnTrackerDeps extends TurnTrackerDeps {
   promptsWithdrawn: jest.MockedFunction<TurnTrackerDeps["promptsWithdrawn"]>;
   notifyStatus: jest.MockedFunction<TurnTrackerDeps["notifyStatus"]>;
   runningTaskToolCallIds: jest.MockedFunction<TurnTrackerDeps["runningTaskToolCallIds"]>;
+  endsToolCallsWithTurn: jest.MockedFunction<TurnTrackerDeps["endsToolCallsWithTurn"]>;
   endLaunches: jest.MockedFunction<TurnTrackerDeps["endLaunches"]>;
   captureFileChanges: jest.MockedFunction<TurnTrackerDeps["captureFileChanges"]>;
   onTurnCompleted: jest.MockedFunction<TurnTrackerDeps["onTurnCompleted"]>;
@@ -36,6 +37,7 @@ export function fakeTurnTrackerDeps(): FakeTurnTrackerDeps {
     promptsWithdrawn: jest.fn(),
     notifyStatus: jest.fn(),
     runningTaskToolCallIds: jest.fn(() => new Set<string>()),
+    endsToolCallsWithTurn: jest.fn(() => false),
     endLaunches: jest.fn(),
     captureFileChanges: jest.fn<
       Promise<boolean>,
