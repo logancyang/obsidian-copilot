@@ -224,7 +224,7 @@ export class AcpBackendProcess implements BackendProcess {
       if (init.agentCapabilities?.sessionCapabilities?.resume != null) {
         this.capabilities.set("session/resume", true);
       }
-      if (init.agentCapabilities?.loadSession === true) {
+      if (init.agentCapabilities?.loadSession === true && !this.backend.reopensWithResume) {
         this.capabilities.set("session/load", true);
       }
       if (init.agentCapabilities?.mcpCapabilities?.http === true) {

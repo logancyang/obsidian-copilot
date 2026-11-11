@@ -28,6 +28,7 @@ export class AntigravityBackend implements AcpBackend {
   readonly displayName = "Antigravity";
   readonly readCopilotTools = readAntigravityCopilotTools;
   readonly synthesizesManualCompaction = true;
+  readonly reopensWithResume = true;
 
   private spawned: AcpSpawnDescriptor | null = null;
   private quotaGroups: ReadonlyArray<AntigravityQuotaGroup> = [];

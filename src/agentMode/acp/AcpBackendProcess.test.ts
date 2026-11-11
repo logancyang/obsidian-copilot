@@ -1469,6 +1469,25 @@ describe("AcpBackendProcess", () => {
         expect(result).not.toHaveProperty("transcript");
       });
 
+      it("reports session/load as unsupported without sending it when the backend reopens chats with session/resume, so an unknown session fails on reopen instead of on the next prompt", async () => {
+        mockInitializeResult = {
+          protocolVersion: 1,
+          agentCapabilities: { loadSession: true, sessionCapabilities: { resume: {} } },
+        };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ reopensWithResume: true }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await expect(
+          backend.loadSession({ sessionId: "ses_load", cwd: "/vault" })
+        ).rejects.toBeInstanceOf(MethodUnsupportedError);
+        expect(mockLoadSession).not.toHaveBeenCalled();
+      });
+
       it("resolves only after the frames the agent replays ahead of its response reach the session's handler (https://github.com/Brevilabs/obsidian-copilot-private/issues/602)", async () => {
         const backend = await startLoadCapableBackend();
         const handler = jest.fn();

@@ -5851,6 +5851,26 @@ describe("AgentSessionManager", () => {
         expect(session.resendSavedHistoryOnNextTurn).toHaveBeenCalledTimes(1);
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/3643 opens a fresh session that sends the note's turns to the agent when load is unsupported and session/resume rejects the saved session", async () => {
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async () => {
+            throw new MethodUnsupportedError("session/load");
+          }),
+          resumeSession: jest.fn(async () => {
+            throw new Error("trajectory not found: native-1");
+          }),
+        });
+
+        const session = await openSavedChat(replay);
+
+        expect(session.getBackendSessionId()).not.toBe("native-1");
+        expect(senderAndText(session)).toEqual([
+          [USER_SENDER, "saved question"],
+          [AI_SENDER, "saved answer"],
+        ]);
+        expect(session.resendSavedHistoryOnNextTurn).toHaveBeenCalledTimes(1);
+      });
+
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 does not resend the note's turns when the saved session reattaches", async () => {
         const resend = jest.spyOn(AgentSession.prototype, "resendSavedHistoryOnNextTurn");
         const replay = buildReplayingBackend({

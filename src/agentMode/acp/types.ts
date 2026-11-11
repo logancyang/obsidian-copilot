@@ -20,6 +20,7 @@ export interface AcpBackend {
   readonly clientCapabilitiesMeta?: Readonly<Record<string, unknown>>;
   newSessionMeta?(): Record<string, unknown>;
   readonly synthesizesManualCompaction?: boolean;
+  readonly reopensWithResume?: boolean;
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
