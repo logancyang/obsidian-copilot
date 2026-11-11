@@ -137,6 +137,16 @@ function translateSystemMessage(
   sessionId: SessionId,
   state: TranslatorState
 ): SessionEvent[] {
+  // Claude retries a failed model request for minutes without other output, so the turn must say so. https://github.com/logancyang/obsidian-copilot/issues/3705
+  if (msg.subtype === "api_retry") {
+    return [
+      event(sessionId, {
+        sessionUpdate: "retrying",
+        attempt: msg.attempt,
+        maxRetries: msg.max_retries,
+      }),
+    ];
+  }
   return [
     ...compactionEvents(msg, sessionId, state),
     ...state.tasks.accept(msg).map((update) => event(sessionId, update)),

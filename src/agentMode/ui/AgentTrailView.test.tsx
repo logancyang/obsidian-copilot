@@ -206,6 +206,18 @@ describe("AgentTrail", () => {
     expect(screen.queryByText("2026/08/07 20:31:10")).toBeNull();
   });
 
+  it("shows the running label in place of Worked for while streaming (https://github.com/logancyang/obsidian-copilot/issues/3705)", () => {
+    renderTrail({
+      isStreaming: true,
+      turnStopReason: undefined,
+      turnStartedAtMs: Date.now() - 24_000,
+      runningLabel: "Model request failed, retrying (3/10)…",
+    });
+
+    expect(screen.getByRole("status").textContent).toBe("Model request failed, retrying (3/10)…");
+    expect(screen.queryByText("Worked for")).toBeNull();
+  });
+
   it("renders neither button when the turn was cancelled", () => {
     renderTrail({ turnStopReason: "cancelled", timestamp: "2026/08/07 20:31:10" });
     expect(screen.queryByTitle("Copy")).toBeNull();

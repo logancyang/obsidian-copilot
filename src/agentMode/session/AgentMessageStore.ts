@@ -12,6 +12,7 @@ import {
   NewAgentChatMessage,
   StopReason,
   TurnFileChange,
+  TurnRetry,
 } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
@@ -31,6 +32,7 @@ interface StoredAgentMessage {
   declinedPermission?: boolean;
   agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
+  retrying?: TurnRetry;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
   version: number;
@@ -196,7 +198,17 @@ export class AgentMessageStore {
 
   private touch(msg: StoredAgentMessage): void {
     msg.version += 1;
+    // Any progress on the reply means the agent's retry succeeded or the turn ended. https://github.com/logancyang/obsidian-copilot/issues/3705
+    msg.retrying = undefined;
     this.lastDisplay = null;
+  }
+
+  markRetrying(id: string, retrying: TurnRetry): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    this.touch(msg);
+    msg.retrying = retrying;
+    return true;
   }
 
   /**
@@ -531,6 +543,7 @@ export class AgentMessageStore {
       turnStopReason: m.turnStopReason,
       agentCancelCause: m.agentCancelCause,
       turnDurationMs: m.turnDurationMs,
+      retrying: m.retrying,
       fileChanges: m.fileChanges,
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };

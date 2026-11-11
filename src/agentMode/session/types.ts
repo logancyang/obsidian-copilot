@@ -269,6 +269,11 @@ export interface CompactionSnapshot {
   postTokens?: number;
 }
 
+export interface TurnRetry {
+  attempt: number;
+  maxRetries: number;
+}
+
 export type SessionUpdate =
   | { sessionUpdate: "user_message_chunk"; content: PromptContent; messageId?: string }
   | { sessionUpdate: "agent_message_chunk"; content: PromptContent; messageId?: string }
@@ -277,6 +282,7 @@ export type SessionUpdate =
   | ({ sessionUpdate: "tool_call_update" } & ToolCallDelta)
   | { sessionUpdate: "plan"; entries: AgentPlanEntry[] }
   | ({ sessionUpdate: "compaction" } & CompactionSnapshot)
+  | ({ sessionUpdate: "retrying" } & TurnRetry)
   | { sessionUpdate: "session_info_update"; title?: string | null }
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | { sessionUpdate: "config_option_update"; configOptions: BackendConfigOption[] }
@@ -569,6 +575,7 @@ export interface AgentChatMessage {
   turnStopReason?: StopReason;
   agentCancelCause?: AgentCancelCause;
   turnDurationMs?: number;
+  retrying?: TurnRetry;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
 }

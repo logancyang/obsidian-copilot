@@ -107,9 +107,16 @@ const AgentMessageRow = memo(function AgentMessageRow({
     completedTurnDurationMs !== undefined ? (
       <AgentTurnDurationIndicator status="complete" durationMs={completedTurnDurationMs} inline />
     ) : null;
+  const runningLabel = message.retrying
+    ? `Model request failed, retrying (${message.retrying.attempt}/${message.retrying.maxRetries})…`
+    : undefined;
   const runningTurnDuration =
     runningTurnStartedAtMs !== undefined ? (
-      <AgentTurnDurationIndicator status="running" startedAtMs={runningTurnStartedAtMs} />
+      <AgentTurnDurationIndicator
+        status="running"
+        startedAtMs={runningTurnStartedAtMs}
+        label={runningLabel}
+      />
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
   const fanoutTurn = isAssistant ? message.fanout : undefined;
@@ -136,6 +143,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             parts={message.parts ?? EMPTY_PARTS}
             isStreaming={isStreaming}
             turnStartedAtMs={runningTurnStartedAtMs}
+            runningLabel={runningLabel}
             turnDurationMs={completedTurnDurationMs}
             timestamp={message.timestamp?.display}
             app={app}

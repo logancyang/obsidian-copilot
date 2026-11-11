@@ -1418,6 +1418,28 @@ describe("sdkMessageTranslator", () => {
       });
     });
 
+    describe("API retry system frames", () => {
+      it("reports Claude retrying a failed model request as a retrying update with the attempt count (https://github.com/logancyang/obsidian-copilot/issues/3705)", () => {
+        const retry = {
+          type: "system",
+          subtype: "api_retry",
+          attempt: 3,
+          max_retries: 10,
+          retry_delay_ms: 2400,
+          error_status: 502,
+          error: "server_error",
+          uuid: "retry-1",
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+
+        const updates = translateSdkMessage(retry, SESSION_ID, createTranslatorState()).map(
+          (e) => e.update
+        );
+
+        expect(updates).toEqual([{ sessionUpdate: "retrying", attempt: 3, maxRetries: 10 }]);
+      });
+    });
+
     describe("usage_update on a turn result", () => {
       const FIXED_NOW = 1_700_000_000_000;
       let nowSpy: jest.SpyInstance;

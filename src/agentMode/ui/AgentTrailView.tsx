@@ -35,6 +35,7 @@ interface AgentTrailProps {
   parts: AgentMessagePart[];
   isStreaming: boolean;
   turnStartedAtMs?: number;
+  runningLabel?: string;
   turnDurationMs?: number;
   timestamp?: string;
   app: App;
@@ -77,6 +78,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   parts,
   isStreaming,
   turnStartedAtMs,
+  runningLabel,
   turnDurationMs,
   timestamp,
   app,
@@ -129,7 +131,11 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
         <FilesChangedCard changes={fileChanges} onOpen={onOpenFileChange} />
       ) : null}
       {hasRunningDuration && !compactionOnly ? (
-        <AgentTurnDurationIndicator status="running" startedAtMs={turnStartedAtMs} />
+        <AgentTurnDurationIndicator
+          status="running"
+          startedAtMs={turnStartedAtMs}
+          label={runningLabel}
+        />
       ) : null}
       {compactionOnly ? null : footer}
     </div>

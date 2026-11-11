@@ -296,6 +296,27 @@ export const AgentStoppedBeforeReplying: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
+export const RetryingModelRequest: StoryObj<AgentChatMessagesProps> = {
+  args: {
+    ...actionRailArgs,
+    pendingToolPermissions: [],
+    pendingAskUserQuestions: [],
+    messages: [
+      { ...message, id: "continue-request", sender: "user", message: "continue" },
+      {
+        ...message,
+        id: "retrying-reply",
+        message: "",
+        parts: [],
+        timestamp: { epoch: Date.now() - 77_000, display: "", fileName: "" },
+        retrying: { attempt: 7, maxRetries: 10 },
+      },
+    ],
+    isLoading: true,
+  },
+  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
+};
+
 export const FinishedReplyWhileSubagentsRun: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,

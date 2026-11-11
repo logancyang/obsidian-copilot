@@ -67,6 +67,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     agentCancelCause,
     fileChanges,
     onOpenFileChange,
+    runningLabel,
   }: {
     timestamp?: string;
     parts: unknown[];
@@ -74,11 +75,13 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
     onOpenFileChange?: (change: TurnFileChange) => void;
+    runningLabel?: string;
   }) => {
     mockTrailRender(parts);
     return (
       <div data-testid="agent-trail-timestamp">
         {timestamp}
+        {runningLabel ? <span data-testid="agent-trail-running-label">{runningLabel}</span> : null}
         {errorText ? <span data-testid="agent-trail-error">{errorText}</span> : null}
         {agentCancelCause ? (
           <span data-testid="agent-trail-cancel-cause">{agentCancelCause}</span>
@@ -386,6 +389,38 @@ describe("AgentChatMessages", () => {
 
       expect(screen.getByText("12s")).toBeTruthy();
       expect(screen.queryByText("Agent is working")).toBeNull();
+    });
+
+    it("says the model request failed and is being retried while the agent retries a reply with no content yet (https://github.com/logancyang/obsidian-copilot/issues/3705)", () => {
+      renderMessages(
+        [
+          assistantMessage("retrying-1", 198_000, {
+            message: "",
+            parts: [],
+            retrying: { attempt: 3, maxRetries: 10 },
+          }),
+        ],
+        true
+      );
+
+      expect(screen.getByRole("status").textContent).toBe("Model request failed, retrying (3/10)…");
+      expect(screen.queryByText("Worked for")).toBeNull();
+    });
+
+    it("hands the retry wording to the trail of a reply that already has content (https://github.com/logancyang/obsidian-copilot/issues/3705)", () => {
+      renderMessages(
+        [
+          assistantMessage("retrying-2", 198_000, {
+            parts: [{ kind: "thought", text: "Inspect the response." }],
+            retrying: { attempt: 2, maxRetries: 10 },
+          }),
+        ],
+        true
+      );
+
+      expect(screen.getByTestId("agent-trail-running-label").textContent).toBe(
+        "Model request failed, retrying (2/10)…"
+      );
     });
 
     it("passes the message timestamp to a structured trail without a duration", () => {

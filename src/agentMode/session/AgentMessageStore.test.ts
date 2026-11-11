@@ -230,6 +230,45 @@ describe("AgentMessageStore", () => {
     });
   });
 
+  describe("markRetrying()", () => {
+    it("shows the latest retry attempt on the reply while the agent retries a failed model request (https://github.com/logancyang/obsidian-copilot/issues/3705)", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage(placeholder());
+
+      store.markRetrying(id, { attempt: 1, maxRetries: 10 });
+      store.markRetrying(id, { attempt: 2, maxRetries: 10 });
+
+      expect(store.getDisplayMessages()[0].retrying).toEqual({ attempt: 2, maxRetries: 10 });
+    });
+
+    it.each([
+      ["streamed text", (s: AgentMessageStore, id: string) => s.appendAgentText(id, "Hi")],
+      ["a thought", (s: AgentMessageStore, id: string) => s.appendAgentThought(id, "Hmm")],
+      ["a tool call", (s: AgentMessageStore, id: string) => s.upsertAgentPart(id, compaction())],
+      [
+        "the turn ending",
+        (s: AgentMessageStore, id: string) => s.markTurnComplete(id, "end_turn", 1),
+      ],
+    ])(
+      "clears the retry status once %s arrives after it (https://github.com/logancyang/obsidian-copilot/issues/3705)",
+      (_label, progress) => {
+        const store = new AgentMessageStore();
+        const id = store.addMessage(placeholder());
+        store.markRetrying(id, { attempt: 1, maxRetries: 10 });
+
+        progress(store, id);
+
+        expect(store.getMessage(id)?.retrying).toBeUndefined();
+      }
+    );
+
+    it("returns false for an unknown message", () => {
+      expect(new AgentMessageStore().markRetrying("missing", { attempt: 1, maxRetries: 10 })).toBe(
+        false
+      );
+    });
+  });
+
   describe("markPermissionDeclined()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/4062 makes a later agent cancellation of the reply name the declined permission as its cause", () => {
       const store = new AgentMessageStore();

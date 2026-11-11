@@ -1443,6 +1443,13 @@ export class AgentSession implements ChatStateHost, ChatView {
         if (upserted || metered) this.scheduleNotifyMessages();
         return;
       }
+      case "retrying": {
+        const { attempt, maxRetries } = update;
+        if (this.store.markRetrying(targetMessageId, { attempt, maxRetries })) {
+          this.scheduleNotifyMessages();
+        }
+        return;
+      }
       default:
         logInfo(
           `[AgentMode] ignoring session/update kind=${(update as { sessionUpdate: string }).sessionUpdate}`

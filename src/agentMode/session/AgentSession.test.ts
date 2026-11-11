@@ -1976,6 +1976,25 @@ describe("AgentSession", () => {
         }
       });
 
+      it("shows the agent's latest model-request retry on the in-flight reply until its answer streams (https://github.com/logancyang/obsidian-copilot/issues/3705)", async () => {
+        const mock = makeMockBackend();
+        const finishPrompt = holdPrompt(mock);
+        const session = makeSession(mock);
+        const { turn } = session.sendPrompt("continue");
+
+        mock.emitUpdate({ sessionUpdate: "retrying", attempt: 4, maxRetries: 10 });
+        expect(aiMessage(session)?.retrying).toEqual({ attempt: 4, maxRetries: 10 });
+
+        mock.emitUpdate({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "Recovered." },
+        });
+        expect(aiMessage(session)?.retrying).toBeUndefined();
+
+        finishPrompt();
+        await turn;
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 finishes a turn whose only activity is a compaction without the empty-turn error", async () => {
         const mock = makeMockBackend();
         const finishPrompt = holdPrompt(mock);
