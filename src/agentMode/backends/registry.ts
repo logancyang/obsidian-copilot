@@ -1,4 +1,5 @@
 import type { CopilotSettings } from "@/settings/model";
+import { AntigravityBackendDescriptor } from "./antigravity/descriptor";
 import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
@@ -8,6 +9,7 @@ export const backendRegistry: Record<BackendId, BackendDescriptor> = {
   opencode: OpencodeBackendDescriptor,
   claude: ClaudeBackendDescriptor,
   codex: CodexBackendDescriptor,
+  antigravity: AntigravityBackendDescriptor,
 };
 
 export const RECOMMENDED_BACKEND_ID: BackendId = "opencode";
@@ -20,6 +22,7 @@ export function backendDisplayOrder(): BackendDescriptor[] {
       OpencodeBackendDescriptor,
       ClaudeBackendDescriptor,
       CodexBackendDescriptor,
+      AntigravityBackendDescriptor,
     ];
   }
   return displayOrderCache;

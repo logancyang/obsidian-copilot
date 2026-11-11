@@ -8,6 +8,7 @@ import {
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
 } from "./registry";
+import { AntigravityBackendDescriptor } from "./antigravity/descriptor";
 import { ClaudeBackendDescriptor } from "./claude/descriptor";
 import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
@@ -48,6 +49,9 @@ describe("registry", () => {
         ClaudeBackendDescriptor
       );
       expect(getActiveBackendDescriptor(baseSettings("codex", true))).toBe(CodexBackendDescriptor);
+      expect(getActiveBackendDescriptor(baseSettings("antigravity", true))).toBe(
+        AntigravityBackendDescriptor
+      );
     });
 
     it("falls back to OpenCode when an unknown backend is selected", () => {
@@ -67,17 +71,19 @@ describe("registry", () => {
           OpencodeBackendDescriptor,
           ClaudeBackendDescriptor,
           CodexBackendDescriptor,
+          AntigravityBackendDescriptor,
         ])
       );
     });
   });
 
   describe("backendDisplayOrder()", () => {
-    it("lists opencode, then Claude, then Codex", () => {
+    it("lists opencode, then Claude, then Codex, then Antigravity", () => {
       expect(backendDisplayOrder()).toEqual([
         OpencodeBackendDescriptor,
         ClaudeBackendDescriptor,
         CodexBackendDescriptor,
+        AntigravityBackendDescriptor,
       ]);
     });
 
@@ -103,20 +109,22 @@ describe("registry", () => {
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, off)).toBe(false);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, off)).toBe(false);
+      expect(backendNeedsSelfHostWarning(AntigravityBackendDescriptor, off)).toBe(false);
     });
 
-    it("warns on cloud agents (Claude, Codex) but not opencode when Self-Host Mode is on", () => {
+    it("warns on cloud agents (Claude, Codex, Antigravity) but not opencode when Self-Host Mode is on", () => {
       const on = baseSettings("opencode", true);
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
+      expect(backendNeedsSelfHostWarning(AntigravityBackendDescriptor, on)).toBe(true);
     });
   });
 
   describe("getCloudAgentIds()", () => {
     it("contains exactly the non-self-hostable backends and returns the same set on every call", () => {
       const ids = getCloudAgentIds();
-      expect([...ids].sort()).toEqual(["claude", "codex"]);
+      expect([...ids].sort()).toEqual(["antigravity", "claude", "codex"]);
       expect(getCloudAgentIds()).toBe(ids);
     });
   });
