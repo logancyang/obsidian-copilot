@@ -42,8 +42,16 @@ function sources(over: Partial<ManifestSources> = {}): ManifestSources {
   };
 }
 
-function record(contextSource: Record<string, string | undefined>, id = "p1") {
-  return { project: { id, contextSource }, filePath: "Proj/AGENTS.md", folderName: "Proj" };
+function record(
+  contextSource: Record<string, string | undefined> | undefined,
+  id = "p1",
+  description?: string
+) {
+  return {
+    project: { id, contextSource, description },
+    filePath: "Proj/AGENTS.md",
+    folderName: "Proj",
+  };
 }
 
 function fakeApp(
@@ -266,6 +274,31 @@ describe("projectContextBlock", () => {
 
       expect(noSources).toContain(PROJECT_WORKSPACE_POLICY);
       expect(unavailable).toContain(PROJECT_WORKSPACE_POLICY);
+    });
+    it("states the project description right after the workspace policy, with or without context sources — https://github.com/Brevilabs/obsidian-copilot-private/issues/901", () => {
+      const preamble = `<project_context>\n${PROJECT_WORKSPACE_POLICY}\nProject description: Plan the Q3 launch\n`;
+      getRecord.mockReturnValue(
+        record({ webUrls: "https://a.com" }, "p1", "  Plan the Q3 launch  ")
+      );
+      const withSources = buildProjectContext(fakeApp(), "p1");
+      getRecord.mockReturnValue(record({}, "p1", "Plan the Q3 launch"));
+      const noSources = buildProjectContext(fakeApp(), "p1");
+      getRecord.mockReturnValue(record(undefined, "p1", "Plan the Q3 launch"));
+      const noContextSource = buildProjectContext(fakeApp(), "p1");
+
+      expect(withSources.startsWith(preamble)).toBe(true);
+      expect(noSources.startsWith(preamble)).toBe(true);
+      expect(noContextSource.startsWith(preamble)).toBe(true);
+    });
+
+    it("leaves the description line out when the project description is blank — https://github.com/Brevilabs/obsidian-copilot-private/issues/901", () => {
+      getRecord.mockReturnValue(record({ webUrls: "https://a.com" }, "p1", "   "));
+      const blank = buildProjectContext(fakeApp(), "p1");
+      getRecord.mockReturnValue(record({}));
+      const missing = buildProjectContext(fakeApp(), "p1");
+
+      expect(blank).not.toContain("Project description:");
+      expect(missing).not.toContain("Project description:");
     });
   });
 

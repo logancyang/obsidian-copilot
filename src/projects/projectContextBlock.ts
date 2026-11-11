@@ -43,18 +43,12 @@ const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
   "</project_context>",
 ].join("\n");
 
-const EMPTY_PROJECT_CONTEXT_BLOCK = [
-  "<project_context>",
-  PROJECT_WORKSPACE_POLICY,
-  "No context sources are configured for this project.",
-  "</project_context>",
-].join("\n");
-
 export function buildProjectContext(app: App, projectId: string): string {
   const record = getCachedProjectRecordById(projectId);
   if (!record) return UNAVAILABLE_PROJECT_CONTEXT_BLOCK;
+  const description = record.project.description ?? "";
   const contextSource = record.project.contextSource;
-  if (!contextSource) return EMPTY_PROJECT_CONTEXT_BLOCK;
+  if (!contextSource) return buildEmptyProjectContextBlock(description);
 
   const webUrls = splitLines(contextSource.webUrls);
   const youtubeUrls = splitLines(contextSource.youtubeUrls);
@@ -71,20 +65,40 @@ export function buildProjectContext(app: App, projectId: string): string {
     notes.length > 0 ||
     tags.length > 0 ||
     properties.length > 0;
-  if (!hasAnySource) return EMPTY_PROJECT_CONTEXT_BLOCK;
+  if (!hasAnySource) return buildEmptyProjectContextBlock(description);
 
   const adapter = vaultAdapter(app);
-  return buildProjectContextBlock({
-    folders: resolveFolderPaths(app, folders, adapter),
-    notes: resolveNotePaths(app, notes, adapter),
-    tags,
-    properties,
-    webUrls,
-    youtubeUrls,
-  });
+  return buildProjectContextBlock(
+    {
+      folders: resolveFolderPaths(app, folders, adapter),
+      notes: resolveNotePaths(app, notes, adapter),
+      tags,
+      properties,
+      webUrls,
+      youtubeUrls,
+    },
+    description
+  );
 }
 
-export function buildProjectContextBlock(sources: ManifestSources): string {
+function buildEmptyProjectContextBlock(description: string): string {
+  return [
+    "<project_context>",
+    ...projectContextPreamble(description),
+    "No context sources are configured for this project.",
+    "</project_context>",
+  ].join("\n");
+}
+
+// The edit form asks for the project's purpose and goals, so the agent needs it to act on them.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/901
+function projectContextPreamble(description: string): string[] {
+  const trimmed = description.trim();
+  if (!trimmed) return [PROJECT_WORKSPACE_POLICY];
+  return [PROJECT_WORKSPACE_POLICY, `Project description: ${trimmed}`];
+}
+
+export function buildProjectContextBlock(sources: ManifestSources, description = ""): string {
   const pathText = (entry: ManifestPathEntry): string => `\`${entry.absPath ?? entry.vaultPath}\``;
 
   const lines: ManifestLine[] = [
@@ -102,7 +116,7 @@ export function buildProjectContextBlock(sources: ManifestSources): string {
 
   const out: string[] = [
     "<project_context>",
-    PROJECT_WORKSPACE_POLICY,
+    ...projectContextPreamble(description),
     "Context sources for this project.",
   ];
 
