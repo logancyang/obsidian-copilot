@@ -773,6 +773,36 @@ describe("model", () => {
       expect(profiles[""]).toBeUndefined();
     });
 
+    it("keeps the Antigravity backend slice and its device profile, dropping invalid fields", () => {
+      const out = sanitizeSettings({
+        agentMode: {
+          backends: {
+            antigravity: {
+              binaryPath: "/flat/agy",
+              defaultModel: { baseModelId: "gemini-3.8-flash", effort: "high" },
+              defaultMode: "plan",
+              envOverrides: { GOOD: "1", "bad-key": "x" },
+              unknownField: true,
+            },
+          },
+          deviceProfiles: {
+            "device-a": { antigravity: { binaryPath: "/profile/agy", envOverrides: { A: "1" } } },
+          },
+        },
+      } as unknown as CopilotSettings);
+
+      expect(out.agentMode.backends.antigravity).toEqual({
+        binaryPath: "/flat/agy",
+        defaultModel: { baseModelId: "gemini-3.8-flash", effort: "high" },
+        defaultMode: "plan",
+        envOverrides: { GOOD: "1" },
+      });
+      expect(out.agentMode.deviceProfiles?.["device-a"]?.antigravity).toEqual({
+        binaryPath: "/profile/agy",
+        envOverrides: { A: "1" },
+      });
+    });
+
     it("marks every unannotated Codex path as custom ownership (https://github.com/Brevilabs/obsidian-copilot-private/issues/368)", () => {
       const out = sanitizeSettings({
         agentMode: {

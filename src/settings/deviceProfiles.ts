@@ -18,6 +18,7 @@ function omitKeys<T extends object>(obj: T, keys: readonly string[]): T {
 
 const CODEX_DEVICE_KEYS = ["binaryPath", "binaryVersion", "binarySource", "envOverrides"] as const;
 const CLAUDE_DEVICE_KEYS = ["envOverrides"] as const;
+const ANTIGRAVITY_DEVICE_KEYS = ["binaryPath", "envOverrides"] as const;
 const OPENCODE_DEVICE_KEYS = [
   "binaryPath",
   "binaryVersion",
@@ -62,6 +63,14 @@ function buildProfileFromFlat(agentMode: AgentMode): DeviceAgentProfile {
     profile.claude = { envOverrides: claudeSrc.envOverrides };
   }
 
+  const antigravitySrc = agentMode.backends?.antigravity;
+  if (antigravitySrc) {
+    const antigravity: NonNullable<DeviceAgentProfile["antigravity"]> = {};
+    if (antigravitySrc.binaryPath) antigravity.binaryPath = antigravitySrc.binaryPath;
+    if (antigravitySrc.envOverrides) antigravity.envOverrides = antigravitySrc.envOverrides;
+    if (hasOwnKeys(antigravity)) profile.antigravity = antigravity;
+  }
+
   return profile;
 }
 
@@ -80,6 +89,10 @@ function stripDeviceFieldsFromBackends(backends: Backends | undefined): Backends
   if (backends.opencode) {
     const synced = omitKeys(backends.opencode, OPENCODE_DEVICE_KEYS);
     if (hasOwnKeys(synced)) out.opencode = synced;
+  }
+  if (backends.antigravity) {
+    const synced = omitKeys(backends.antigravity, ANTIGRAVITY_DEVICE_KEYS);
+    if (hasOwnKeys(synced)) out.antigravity = synced;
   }
   return out;
 }
@@ -114,6 +127,9 @@ export function hydrateDeviceProfile(settings: CopilotSettings, deviceId: string
   if (profile?.codex) nextBackends.codex = { ...nextBackends.codex, ...profile.codex };
   if (profile?.opencode) nextBackends.opencode = { ...nextBackends.opencode, ...profile.opencode };
   if (profile?.claude) nextBackends.claude = { ...nextBackends.claude, ...profile.claude };
+  if (profile?.antigravity) {
+    nextBackends.antigravity = { ...nextBackends.antigravity, ...profile.antigravity };
+  }
 
   const nextAgentMode: AgentMode = {
     ...agentMode,

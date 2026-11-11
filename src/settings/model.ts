@@ -140,6 +140,7 @@ export interface CopilotSettings {
       opencode?: OpencodeBackendSettings;
       claude?: ClaudeBackendSettings;
       codex?: CodexBackendSettings;
+      antigravity?: AntigravityBackendSettings;
     };
     // Keyed by device id because binary paths must not sync across devices:
     // https://github.com/logancyang/obsidian-copilot/issues/2539
@@ -186,6 +187,13 @@ export interface CodexBackendSettings {
   envOverrides?: Record<string, string>;
 }
 
+export interface AntigravityBackendSettings {
+  binaryPath?: string;
+  defaultModel?: ModelSelection | null;
+  defaultMode?: CopilotMode | null;
+  envOverrides?: Record<string, string>;
+}
+
 export interface OpencodeBackendSettings {
   binaryVersion?: string;
   binaryPath?: string;
@@ -212,6 +220,10 @@ export interface DeviceAgentProfile {
     envOverrides?: Record<string, string>;
   };
   claude?: {
+    envOverrides?: Record<string, string>;
+  };
+  antigravity?: {
+    binaryPath?: string;
     envOverrides?: Record<string, string>;
   };
 }
@@ -788,17 +800,22 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
   const existingClaude = backendsRaw.claude as Record<string, unknown> | undefined;
   const existingCodex = backendsRaw.codex as Record<string, unknown> | undefined;
+  const existingAntigravity = backendsRaw.antigravity as Record<string, unknown> | undefined;
 
   const opencodeSlice = existingOpencode
     ? sanitizeOpencodeBackendSettings(existingOpencode)
     : undefined;
   const claudeSlice = existingClaude ? sanitizeClaudeBackendSettings(existingClaude) : undefined;
   const codexSlice = existingCodex ? sanitizeCodexBackendSettings(existingCodex) : undefined;
+  const antigravitySlice = existingAntigravity
+    ? sanitizeAntigravityBackendSettings(existingAntigravity)
+    : undefined;
 
   const backends: CopilotSettings["agentMode"]["backends"] = {};
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeSlice) backends.claude = claudeSlice;
   if (codexSlice) backends.codex = codexSlice;
+  if (antigravitySlice) backends.antigravity = antigravitySlice;
 
   const deviceProfiles = sanitizeDeviceProfiles(r.deviceProfiles);
 
@@ -1092,6 +1109,17 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   };
 }
 
+function sanitizeAntigravityBackendSettings(
+  raw: Record<string, unknown>
+): AntigravityBackendSettings {
+  return {
+    binaryPath: nonEmptyString(raw.binaryPath),
+    defaultModel: sanitizeDefaultModel(raw.defaultModel),
+    defaultMode: sanitizeDefaultMode(raw.defaultMode),
+    envOverrides: sanitizeEnvOverrides(raw.envOverrides),
+  };
+}
+
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
@@ -1164,6 +1192,19 @@ function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefine
   if (claudeRaw) {
     const envOverrides = sanitizeEnvOverrides(claudeRaw.envOverrides);
     if (envOverrides) out.claude = { envOverrides };
+  }
+
+  const antigravityRaw =
+    r.antigravity && typeof r.antigravity === "object"
+      ? (r.antigravity as Record<string, unknown>)
+      : null;
+  if (antigravityRaw) {
+    const antigravity: NonNullable<DeviceAgentProfile["antigravity"]> = {};
+    const binaryPath = nonEmptyString(antigravityRaw.binaryPath);
+    if (binaryPath) antigravity.binaryPath = binaryPath;
+    const envOverrides = sanitizeEnvOverrides(antigravityRaw.envOverrides);
+    if (envOverrides) antigravity.envOverrides = envOverrides;
+    if (Object.keys(antigravity).length > 0) out.antigravity = antigravity;
   }
 
   return Object.keys(out).length > 0 ? out : undefined;

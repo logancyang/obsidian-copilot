@@ -218,6 +218,34 @@ describe("deviceProfiles", () => {
       expect(restored.agentMode.backends.codex?.defaultModel?.baseModelId).toBe("gpt-5");
     });
 
+    it("restores the Antigravity binary path and env overrides for the device that saved them, keeping its synced default model", () => {
+      const settings = makeSettings(
+        makeAgentMode({
+          backends: {
+            antigravity: {
+              binaryPath: "/a/agy",
+              envOverrides: { GEMINI_API_KEY: "k" },
+              defaultModel: { baseModelId: "gemini-3.8-flash", effort: "high" },
+            },
+          },
+        })
+      );
+
+      const disk = dehydrateDeviceProfile(settings, DEVICE_A);
+      const otherDevice = hydrateDeviceProfile(disk, DEVICE_B);
+      const sameDevice = hydrateDeviceProfile(disk, DEVICE_A);
+
+      expect(disk.agentMode.backends.antigravity).toEqual({
+        defaultModel: { baseModelId: "gemini-3.8-flash", effort: "high" },
+      });
+      expect(otherDevice.agentMode.backends.antigravity?.binaryPath).toBeUndefined();
+      expect(sameDevice.agentMode.backends.antigravity).toEqual({
+        binaryPath: "/a/agy",
+        envOverrides: { GEMINI_API_KEY: "k" },
+        defaultModel: { baseModelId: "gemini-3.8-flash", effort: "high" },
+      });
+    });
+
     it("isolates devices: a path configured on A is invisible to B but survives B's save", () => {
       const aDisk = dehydrateDeviceProfile(
         makeSettings(makeAgentMode({ claudeCli: { path: "/a/claude" } })),

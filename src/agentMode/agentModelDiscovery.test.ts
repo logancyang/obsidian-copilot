@@ -193,6 +193,25 @@ describe("agentModelDiscovery", () => {
       unsub();
     });
 
+    it("registers Antigravity's reported models under a Google-type provider with its whole catalog enabled", async () => {
+      mockDescriptors = [makeDescriptor({ id: "antigravity", displayName: "Antigravity" })];
+      const m = makeManagerFake();
+      const a = makeApiFake();
+      m.setCatalog("antigravity", catalogWithModels(["gemini-3.8-flash", "claude-sonnet-4-6"]));
+
+      const unsub = wireAgentModelDiscovery(makePlugin(a.api), m.manager);
+      await waitForDiscoveryLog("first enrollment for antigravity");
+
+      expect(a.registerAgentProvider.mock.calls[0][0]).toMatchObject({
+        agentType: "antigravity",
+        providerType: "google",
+        displayName: "Antigravity",
+        wireModelIds: ["gemini-3.8-flash", "claude-sonnet-4-6"],
+        autoEnrollModelIds: undefined,
+      });
+      unsub();
+    });
+
     it("registers only the OpenCode models whose provider is not already managed by BYOK", async () => {
       mockDescriptors = [makeDescriptor({ id: "opencode" })];
       const m = makeManagerFake();

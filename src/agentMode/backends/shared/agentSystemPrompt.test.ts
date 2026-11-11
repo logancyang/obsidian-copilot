@@ -176,6 +176,9 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt("opencode", APP)).toContain(
         "Edit vault files with your edit/write/patch tools so Copilot shows a diff"
       );
+      expect(buildAgentSystemPrompt("antigravity", APP)).toContain(
+        "Edit vault files with your write_to_file/replace_file_content tools so Copilot shows a diff"
+      );
     });
 
     it("limits shell file writes, not other shell use, to moves, script rewrites of most of a large file, and bulk changes across dozens of files (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {
