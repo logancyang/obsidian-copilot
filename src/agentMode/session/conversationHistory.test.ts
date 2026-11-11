@@ -1,6 +1,6 @@
 import {
   buildConversationHistoryBlock,
-  CONVERSATION_HISTORY_MAX_CHARS,
+  SAVED_HISTORY_MAX_CHARS,
   toolsUsedLines,
 } from "@/agentMode/session/conversationHistory";
 import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
@@ -246,10 +246,10 @@ describe("conversationHistory", () => {
     it("renders prior turns labeled by role, framed as read-only history", () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, "What is the plan?"), histMsg(AI_SENDER, "Here is the plan.")],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         noSavedImages
-      )!;
+      )!.text;
       expect(block).toContain("<conversation_history>");
       expect(block).toContain("</conversation_history>");
       expect(block).toContain('<turn role="user">');
@@ -262,7 +262,7 @@ describe("conversationHistory", () => {
 
     it("returns null for an empty transcript", () => {
       expect(
-        buildConversationHistoryBlock([], CONVERSATION_HISTORY_MAX_CHARS, null, noSavedImages)
+        buildConversationHistoryBlock([], SAVED_HISTORY_MAX_CHARS, null, noSavedImages)
       ).toBeNull();
     });
 
@@ -271,10 +271,38 @@ describe("conversationHistory", () => {
       const messages = Array.from({ length: 20 }, (_, i) =>
         histMsg(i % 2 === 0 ? USER_SENDER : AI_SENDER, `turn-${i}-${big}`)
       );
-      const block = buildConversationHistoryBlock(messages, 1000, null, noSavedImages)!;
-      expect(block).toContain("[earlier conversation truncated]");
-      expect(block).not.toContain("turn-0-");
-      expect(block).toContain("turn-19-");
+      const history = buildConversationHistoryBlock(messages, 1000, null, noSavedImages)!;
+      expect(history.truncated).toBe(true);
+      expect(history.text).toContain("<conversation_history>\n");
+      expect(history.text).toContain("[earlier conversation truncated]");
+      expect(history.text).not.toContain("turn-0-");
+      expect(history.text).toContain("turn-19-");
+    });
+
+    it("cuts a single turn longer than the cap to its first part and reports the history as truncated", () => {
+      const history = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, `START-${"x".repeat(2_000)}-END`)],
+        1000,
+        null,
+        noSavedImages
+      )!;
+      expect(history.truncated).toBe(true);
+      expect(history.text).toContain("[earlier conversation truncated]");
+      expect(history.text).toContain("START-");
+      expect(history.text).not.toContain("-END");
+      expect(history.text).toContain("[turn truncated]");
+    });
+
+    it("reports a history that fits the cap as not truncated and sends every turn without a marker", () => {
+      const history = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, "first question"), histMsg(AI_SENDER, "first answer")],
+        1000,
+        null,
+        noSavedImages
+      )!;
+      expect(history.truncated).toBe(false);
+      expect(history.text).toContain("first question");
+      expect(history.text).not.toContain("[earlier conversation truncated]");
     });
 
     const withContext = (
@@ -301,10 +329,10 @@ describe("conversationHistory", () => {
       });
       const block = buildConversationHistoryBlock(
         [msg],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         noSavedImages
-      )!;
+      )!.text;
       expect(block).toContain("[context]");
       expect(block).toContain("[selected from DesignDoc]");
       expect(block).toContain("the fan-out renderer drops context");
@@ -323,10 +351,10 @@ describe("conversationHistory", () => {
             }),
           ]),
         ],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         noSavedImages
-      )!;
+      )!.text;
 
       expect(block).toContain(
         '<turn role="assistant">\nHere is the summary.\n[tools used]\nRead a.md (read): notes/a.md\n</turn>'
@@ -337,10 +365,10 @@ describe("conversationHistory", () => {
     it("keeps a reply that only used tools instead of dropping it as empty", () => {
       const block = buildConversationHistoryBlock(
         [replyWithTools("", [toolCall({ title: "Read a.md", toolKind: "read" })])],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         noSavedImages
-      )!;
+      )!.text;
 
       expect(block).toContain('<turn role="assistant">\n[tools used]\nRead a.md (read)\n</turn>');
     });
@@ -348,20 +376,20 @@ describe("conversationHistory", () => {
     it("adds no tools section to a turn that used no tools", () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, "Hi"), histMsg(AI_SENDER, "Hello.")],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         noSavedImages
-      )!;
+      )!.text;
 
       expect(block).not.toContain("[tools used]");
     });
     it(`gives the saved file path of each earlier image instead of a count (${IMAGE_ISSUE})`, () => {
       const block = buildConversationHistoryBlock(
         [withImages("What does this show?", [SAVED_DATA_URL])],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         savedImagePath
-      )!;
+      )!.text;
 
       expect(block).toContain(
         '<turn role="user">\nWhat does this show?\n[image attachment saved at /vault/copilot/attachments/live.png]\n</turn>'
@@ -373,10 +401,10 @@ describe("conversationHistory", () => {
     it(`replaces the image embed a reopened chat's note holds with that image's saved file path (${IMAGE_ISSUE})`, () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, `What does this show?\n\n${SAVED_EMBED}`)],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         savedImagePath
-      )!;
+      )!.text;
 
       expect(block).toContain(
         '<turn role="user">\nWhat does this show?\n[image attachment saved at /vault/copilot/attachments/loaded.png]\n</turn>'
@@ -387,10 +415,10 @@ describe("conversationHistory", () => {
     it(`says an image without a saved file was omitted and sends none of its data (${IMAGE_ISSUE})`, () => {
       const block = buildConversationHistoryBlock(
         [withImages("What does this show?", [UNSAVED_DATA_URL])],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         savedImagePath
-      )!;
+      )!.text;
 
       expect(block).toContain(
         '<turn role="user">\nWhat does this show?\n[1 image attachment omitted from history; existed in this turn]\n</turn>'
@@ -405,10 +433,10 @@ describe("conversationHistory", () => {
           withImages("Compare these.", [SAVED_DATA_URL, UNSAVED_DATA_URL]),
           histMsg(USER_SENDER, `And these.\n\n${SAVED_EMBED}\n\n${MISSING_EMBED}`),
         ],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         savedImagePath
-      )!;
+      )!.text;
 
       expect(block).toContain(
         "Compare these.\n[image attachment saved at /vault/copilot/attachments/live.png]\n[1 image attachment omitted from history; existed in this turn]"
@@ -423,10 +451,10 @@ describe("conversationHistory", () => {
     it("leaves an embed of anything other than a saved chat image in the turn's text", () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, "See this:\n\n![[diagram.png]]")],
-        CONVERSATION_HISTORY_MAX_CHARS,
+        SAVED_HISTORY_MAX_CHARS,
         null,
         savedImagePath
-      )!;
+      )!.text;
 
       expect(block).toContain("See this:\n\n![[diagram.png]]");
       expect(block).not.toContain("image attachment");
