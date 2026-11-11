@@ -64,6 +64,7 @@ interface AgentChatInputProps {
   modePickerOverride: ChatInputProps["modePickerOverride"];
   onCycleMode: () => void;
   disabled?: boolean;
+  projectFolderPath?: string;
 }
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -165,6 +166,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   modePickerOverride,
   onCycleMode,
   disabled = false,
+  projectFolderPath,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -523,6 +525,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           agentBrands={agentBrands}
           cloudAgentIds={getCloudAgentIds()}
           onMentionedAgentsChange={handleMentionedAgentsChange}
+          projectFolderPath={projectFolderPath}
         />
       </div>
     </>

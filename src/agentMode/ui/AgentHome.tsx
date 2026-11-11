@@ -65,6 +65,7 @@ import { logError, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { getProjectLandingCaptureSignature } from "@/projects/projectContextSignature";
+import { getProjectFolderPath } from "@/projects/projectPaths";
 import {
   getCachedProjectRecordById,
   useActiveProjects,
@@ -205,6 +206,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const isProjectScope = activeProjectId !== GLOBAL_SCOPE;
   const activeProject = isProjectScope ? projects.find((p) => p.id === activeProjectId) : undefined;
   const isOrphanedProject = isProjectScope && !activeProject;
+  const activeProjectRecord = isProjectScope ? getCachedProjectRecordById(activeProjectId) : null;
+  const projectFolderPath = activeProjectRecord
+    ? getProjectFolderPath(activeProjectRecord.folderName)
+    : undefined;
   const projectName = activeProject?.name ?? "";
   const lastProjectHeaderRef = useRef({
     name: projectName,
@@ -339,6 +344,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     onAddImage: draft.addImages,
     containerRef: chatContainerRef,
     acceptAnyFileType: true,
+    projectFolderPath,
   });
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
@@ -596,6 +602,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       modePickerOverride={modePickerOverride ?? undefined}
       onCycleMode={handleCycleMode}
       disabled={isOrphanedProject}
+      projectFolderPath={projectFolderPath}
     />
   );
 
