@@ -29,6 +29,8 @@ export function inertChatActions(overrides: Partial<RecentChatActions> = {}): Re
     onOpenSourceFile: () => {},
     onSetChatPinned: noop,
     onSetChatArchived: noop,
+    onDeleteChats: noop,
+    onArchiveChats: noop,
     ...overrides,
   };
 }

@@ -850,4 +850,88 @@ describe("useAgentHistoryControls", () => {
       expect(result.current.chatHistoryItems).toEqual([{ id: "chats/saved.md" }]);
     });
   });
+
+  describe("deleteChats()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 deletes every given chat, shows one notice with the count, and reloads the history once", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager, "project-1");
+
+      await act(async () => {
+        await result.current.deleteChats(["a", "b"]);
+      });
+
+      expect(manager.deleteChatHistory.mock.calls).toEqual([["a"], ["b"]]);
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("2 chats deleted from Copilot.");
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+      expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 keeps deleting the rest when one chat fails, and reports the failure and the chats that were deleted", async () => {
+      const manager = makeManager();
+      manager.deleteChatHistory.mockImplementation(async (id: string) => {
+        if (id === "a") throw new Error("file is locked");
+      });
+      const { result } = renderControls(manager);
+
+      await act(async () => {
+        await result.current.deleteChats(["a", "b"]);
+      });
+
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("b");
+      expect(Notice).toHaveBeenCalledWith("Failed to delete chat.");
+      expect(Notice).toHaveBeenCalledWith("1 chat deleted from Copilot.");
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+    });
+
+    it("removes the bookmark of every deleted chat", async () => {
+      const bookmarks = makeBookmarks([LINK_A, LINK_SAVED]);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.deleteChats(["chats/agent__a.md", "chats/saved.md"]);
+      });
+
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([]);
+    });
+  });
+
+  describe("archiveChats()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 moves every given chat from the chat list to the archived list", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.archiveChats(["a", "b"]);
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([]);
+      expect(result.current.archivedChatItems.map((chat) => chat.id)).toEqual(["a", "b"]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 keeps archiving the rest when one chat fails, and shows the failure notice", async () => {
+      const manager = makeManager();
+      manager.setChatArchived.mockImplementation(async (id: string) => {
+        if (id === "a") throw new Error("Chat note not found");
+        return { id, archivedAt: 7_000 };
+      });
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.archiveChats(["a", "b"]);
+      });
+
+      expect(Notice).toHaveBeenCalledWith("Failed to archive chat.");
+      expect(result.current.chatHistoryItems).toEqual([item("a")]);
+      expect(result.current.archivedChatItems.map((chat) => chat.id)).toEqual(["b"]);
+    });
+  });
 });

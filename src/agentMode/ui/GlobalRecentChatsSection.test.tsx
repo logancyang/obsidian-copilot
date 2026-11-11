@@ -62,6 +62,8 @@ function renderSection(
         onCopyChatLink={props.onCopyChatLink ?? noop}
         onSetChatPinned={props.onSetChatPinned ?? noop}
         onSetChatArchived={props.onSetChatArchived ?? noop}
+        onDeleteChats={props.onDeleteChats ?? noop}
+        onArchiveChats={props.onArchiveChats ?? noop}
         onViewArchived={props.onViewArchived}
         getChatBookmarkState={props.getChatBookmarkState ?? unsettledBookmarkState}
         onSetChatBookmarked={props.onSetChatBookmarked ?? noop}
@@ -892,6 +894,8 @@ describe("GlobalRecentChatsSection", () => {
             onCopyChatLink={noop}
             onSetChatPinned={noop}
             onSetChatArchived={noop}
+            onDeleteChats={noop}
+            onArchiveChats={noop}
             getChatBookmarkState={async () => "unavailable"}
             onSetChatBookmarked={noop}
             onLoadHistory={safeAsyncHandler(loadHistory)}
@@ -906,6 +910,142 @@ describe("GlobalRecentChatsSection", () => {
       rerender(<Parent items={[makeItem("loaded-1"), makeItem("loaded-2")]} />);
 
       expect(loadHistory).toHaveBeenCalledTimes(1);
+    });
+
+    const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3553";
+    const fourChats = () =>
+      ["A", "B", "C", "D"].map((name, index) =>
+        makeItem(`chats/${name}.md`, {
+          title: `Chat ${name}`,
+          backendId: "claude",
+          lastAccessedAt: new Date(Date.parse("2026-11-01T12:00:00Z") - index * 60_000),
+        })
+      );
+
+    it(`${ISSUE} selects chats with Cmd-click and Shift-click without opening them`, () => {
+      const onLoadChat = jest.fn(noop);
+      renderSection({ items: fourChats(), onLoadChat });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat C"), { shiftKey: true });
+      fireEvent.contextMenu(rowFor("Chat B"));
+
+      expect(onLoadChat).not.toHaveBeenCalled();
+      expect(menuEntries(screen.getByRole("menu"))).toEqual(["Archive 3 chats", "Delete 3 chats"]);
+    });
+
+    it(`${ISSUE} deletes every selected chat after the user confirms in the Delete chats dialog`, async () => {
+      const onDeleteChats = jest.fn(noop);
+      renderSection({ items: fourChats(), onDeleteChats });
+
+      fireEvent.click(rowFor("Chat B"), { ctrlKey: true });
+      fireEvent.click(rowFor("Chat D"), { ctrlKey: true });
+      fireEvent.contextMenu(rowFor("Chat D"));
+      act(() => chooseMenuItem(screen.getByRole("menu"), "Delete 2 chats"));
+      const dialog = lastModal();
+      expect(dialog.titleEl.textContent).toBe("Delete 2 chats");
+      expect(
+        within(dialog.contentEl).getByText(
+          "Delete 2 chats from Copilot? Their agents may keep their own copies of these conversations on this computer."
+        )
+      ).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(within(dialog.contentEl).getByRole("button", { name: "Delete" }));
+      });
+
+      expect(onDeleteChats).toHaveBeenCalledWith(["chats/B.md", "chats/D.md"]);
+    });
+
+    it(`${ISSUE} archives every selected chat after the user confirms in the Archive chats dialog`, async () => {
+      const onArchiveChats = jest.fn(noop);
+      renderSection({ items: fourChats(), onArchiveChats });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { shiftKey: true });
+      fireEvent.contextMenu(rowFor("Chat A"));
+      act(() => chooseMenuItem(screen.getByRole("menu"), "Archive 2 chats"));
+      const dialog = lastModal();
+      expect(dialog.titleEl.textContent).toBe("Archive 2 chats");
+      await act(async () => {
+        fireEvent.click(within(dialog.contentEl).getByRole("button", { name: "Archive" }));
+      });
+
+      expect(onArchiveChats).toHaveBeenCalledWith(["chats/A.md", "chats/B.md"]);
+    });
+
+    it(`${ISSUE} keeps every selected chat when the Delete chats dialog is cancelled`, () => {
+      const onDeleteChats = jest.fn(noop);
+      renderSection({ items: fourChats(), onDeleteChats });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.contextMenu(rowFor("Chat A"));
+      act(() => chooseMenuItem(screen.getByRole("menu"), "Delete 2 chats"));
+      act(() => {
+        fireEvent.click(within(lastModal().contentEl).getByRole("button", { name: "Cancel" }));
+      });
+
+      expect(onDeleteChats).not.toHaveBeenCalled();
+    });
+
+    it(`${ISSUE} shows the single-chat menu for a right-clicked chat outside the selection and drops the selection`, () => {
+      const onCopyChatLink = jest.fn(noop);
+      renderSection({ items: fourChats(), onCopyChatLink });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.contextMenu(rowFor("Chat D"));
+      act(() => chooseMenuItem(screen.getByRole("menu"), "Copy chat link"));
+      fireEvent.contextMenu(rowFor("Chat A"));
+
+      expect(onCopyChatLink).toHaveBeenCalledWith("chats/D.md");
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
+    });
+
+    it(`${ISSUE} shows the single-chat menu when only one chat is selected`, () => {
+      renderSection({ items: fourChats() });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.contextMenu(rowFor("Chat A"));
+
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
+    });
+
+    it(`${ISSUE} opens a plain-clicked chat and drops the selection`, () => {
+      const onLoadChat = jest.fn(noop);
+      renderSection({ items: fourChats(), onLoadChat });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.click(rowFor("Chat C"));
+      fireEvent.contextMenu(rowFor("Chat A"));
+
+      expect(onLoadChat).toHaveBeenCalledWith("chats/C.md");
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
+    });
+
+    it(`${ISSUE} drops the selection on Escape`, () => {
+      renderSection({ items: fourChats() });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.keyDown(rowFor("Chat B"), { key: "Escape" });
+      fireEvent.contextMenu(rowFor("Chat A"));
+
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
+    });
+
+    it(`${ISSUE} drops the selection when the search changes`, () => {
+      renderSection({ items: fourChats() });
+
+      fireEvent.click(rowFor("Chat A"), { metaKey: true });
+      fireEvent.click(rowFor("Chat B"), { metaKey: true });
+      fireEvent.change(screen.getByPlaceholderText("Search chats..."), {
+        target: { value: "Chat" },
+      });
+      fireEvent.contextMenu(rowFor("Chat A"));
+
+      expect(menuEntries(screen.getByRole("menu"))).toContain("Rename");
     });
   });
 });

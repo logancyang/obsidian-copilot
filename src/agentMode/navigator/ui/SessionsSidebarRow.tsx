@@ -1,11 +1,13 @@
 import {
   RecentChatMenu,
   RowActionButton,
+  SELECTED_CHAT_ROW_CLASS,
   isPinned,
   type RecentChatActions,
 } from "@/agentMode/ui/RecentChatMenu";
 import { RecentChatProjectBadge, RecentChatTitle } from "@/agentMode/ui/RecentChatTitle";
 import { chatBackendIcon } from "@/agentMode/ui/chatBackendIcon";
+import type { ChatSelection } from "@/agentMode/ui/hooks/useChatSelection";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { cn } from "@/lib/utils";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
@@ -57,6 +59,7 @@ interface SessionsSidebarRowProps {
   actions: RecentChatActions;
   onSelect: () => void;
   sortHandle?: SortHandle;
+  selection?: ChatSelection<ChatHistoryItem>;
 }
 
 export const SessionStatusIcon: React.FC<{ status: SessionStatus; isSessionOpen?: boolean }> = ({
@@ -102,9 +105,11 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
   actions,
   onSelect,
   sortHandle,
+  selection,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
+  const selected = selection?.isSelected(item.id) ?? false;
   const needsAttention = status === "waiting" || status === "unread";
   const BackendIcon = chatBackendIcon(item);
   return (
@@ -112,11 +117,13 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
       className={cn(
         "tw-group tw-relative tw-flex tw-min-w-0 tw-items-center tw-rounded-md",
         "focus-within:tw-bg-modifier-hover hover:tw-bg-modifier-hover",
-        active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover"
+        active && "tw-bg-modifier-active-hover hover:tw-bg-modifier-active-hover",
+        selected && SELECTED_CHAT_ROW_CLASS
       )}
       {...sortHandle?.listeners}
       onContextMenu={(event) => {
         event.preventDefault();
+        selection?.handleContextMenu(item.id);
         setMenuOpen(true);
       }}
     >
@@ -125,9 +132,11 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
         {...sortHandle?.attributes}
         type="button"
         aria-current={active ? "true" : undefined}
-        onClick={onSelect}
+        onClick={(event) => {
+          if (!selection?.handleClick(item.id, event)) onSelect();
+        }}
         className={cn(
-          "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2",
+          "clickable-icon tw-flex tw-h-auto tw-min-w-0 tw-flex-1 tw-select-none tw-items-center tw-gap-2",
           "tw-rounded-md tw-bg-transparent tw-p-2 tw-text-left tw-shadow-none hover:tw-bg-transparent"
         )}
       >
@@ -192,6 +201,7 @@ export const SessionsSidebarRow: React.FC<SessionsSidebarRowProps> = ({
           open={menuOpen}
           onOpenChange={setMenuOpen}
           actions={actions}
+          selectedItems={selected ? selection?.selectedItems : undefined}
         />
       </div>
     </div>

@@ -14,6 +14,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - row-archive: `Archive chat` hides the chat from the list; it stays under View archived.
 - row-delete: `More actions` → Delete chat.
 - row-note: `Open chat note`, `Copy chat link`, and bookmarking, for chats saved as notes.
+- row-multi-select: in Recent chats and the Navigator, Shift-click selects the rows between the last clicked row and this one, and Cmd-click (Ctrl-click on Windows) adds or removes one row. Right-clicking a selected row offers only `Archive N chats` and `Delete N chats`, each confirmed first.
 
 ## How to get to it
 
@@ -30,8 +31,10 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 - Agent: open the Navigator with chats from two agents. Each row starts with its own agent's logo.
 - Attention: let a chat finish while another chat is open. In the Navigator, its title turns bold and a bell replaces its green dot; opening the chat clears both.
 - Archive: choose `Archive chat`. The row leaves the list and shows under View archived.
+- Multi-select: in Recent chats, Cmd-click one row and Shift-click another. Those rows and every row between them are outlined. Right-click one: the menu offers only `Archive N chats` and `Delete N chats`. Choose `Delete N chats` and confirm; the rows leave the list and one notice gives the count. Repeat in the Navigator with a range from Pinned into Recents.
 - Repeat open and close from the Navigator and from `Chat history`, which list the same chats.
 
 ## Gotchas
 
 - A row's `Shut down` also closes the chat's [tab](chat-tabs.md), if it has one.
+- A Shift-click range covers only rows on screen: chats in a folded group, a collapsed project, or behind `Show more` are skipped. Changing the search text, a plain click, or Esc clears the selection. `Chat history` has no multi-select.

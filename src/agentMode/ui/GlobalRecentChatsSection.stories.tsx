@@ -2,7 +2,8 @@ import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/Agent
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import type { Meta, StoryObj } from "@/lib/story";
 import { MessageSquare } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import { useStepsAcrossRenders } from "@/agentMode/ui/testing/useStepsAcrossRenders";
+import React, { useEffect, useRef, useState } from "react";
 
 type GlobalRecentChatsSectionProps = React.ComponentProps<typeof GlobalRecentChatsSection>;
 
@@ -28,6 +29,8 @@ const defaultArgs: GlobalRecentChatsSectionProps = {
   onCopyChatLink: noop,
   onSetChatPinned: noop,
   onSetChatArchived: noop,
+  onDeleteChats: noop,
+  onArchiveChats: noop,
   getChatBookmarkState: async () => "not-bookmarked",
   onSetChatBookmarked: noop,
   onLoadHistory: noopSync,
@@ -174,4 +177,34 @@ export const ViewArchivedEntry: StoryObj<GlobalRecentChatsSectionProps> = {
 export const EveryChatArchived: StoryObj<GlobalRecentChatsSectionProps> = {
   args: { items: [], onViewArchived: noopSync },
   render: renderShelf,
+};
+
+function SelectedRowsShelf(args: Partial<GlobalRecentChatsSectionProps> & { openMenu?: boolean }) {
+  const { openMenu, ...sectionArgs } = args;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [steps] = useState(() => {
+    const row = (index: number) =>
+      containerRef.current?.querySelectorAll('[role="button"][tabindex="0"]')[index];
+    const click = (index: number, init: MouseEventInit) => () =>
+      row(index)?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...init }));
+    const rightClick = () =>
+      row(2)?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+    return [
+      click(1, { metaKey: true }),
+      click(3, { shiftKey: true }),
+      ...(openMenu ? [rightClick] : []),
+    ];
+  });
+  useStepsAcrossRenders(steps);
+  return <div ref={containerRef}>{renderShelf(sectionArgs)}</div>;
+}
+
+export const SelectedChats: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 6) },
+  render: SelectedRowsShelf,
+};
+
+export const SelectedChatsMenu: StoryObj<GlobalRecentChatsSectionProps> = {
+  args: { items: items.slice(0, 6), openMenu: true } as Partial<GlobalRecentChatsSectionProps>,
+  render: SelectedRowsShelf as React.ComponentType<Partial<GlobalRecentChatsSectionProps>>,
 };

@@ -18,3 +18,16 @@ export function formatChatDeleteNotice(descriptor: DeleteTextDescriptor | undefi
     ? `Chat deleted from Copilot. ${agentName(descriptor)} may keep its own copy.`
     : "Chat deleted from Copilot.";
 }
+
+export function describeChatsDelete(
+  descriptors: readonly (DeleteTextDescriptor | undefined)[]
+): string {
+  const question = `Delete ${descriptors.length} chats from Copilot?`;
+  return descriptors.some(Boolean)
+    ? `${question} Their agents may keep their own copies of these conversations on this computer.`
+    : question;
+}
+
+export function formatChatsDeleteNotice(count: number): string {
+  return `${count} ${count === 1 ? "chat" : "chats"} deleted from Copilot.`;
+}
