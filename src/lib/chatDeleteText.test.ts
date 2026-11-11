@@ -2,7 +2,7 @@ import {
   describeChatDelete,
   describeChatsDelete,
   formatChatDeleteNotice,
-  formatChatsDeleteNotice,
+  formatChatsResultNotice,
 } from "@/lib/chatDeleteText";
 
 const AGENTS = [
@@ -50,13 +50,25 @@ describe("chatDeleteText", () => {
     });
   });
 
-  describe("formatChatsDeleteNotice()", () => {
-    it("says how many chats left Copilot", () => {
-      expect(formatChatsDeleteNotice(3)).toBe("3 chats deleted from Copilot.");
+  describe("formatChatsResultNotice()", () => {
+    it("says how many chats left Copilot when every delete succeeded", () => {
+      expect(formatChatsResultNotice("delete", 3, 0)).toBe("3 chats deleted from Copilot.");
     });
 
-    it("uses the singular when only one chat was deleted", () => {
-      expect(formatChatsDeleteNotice(1)).toBe("1 chat deleted from Copilot.");
+    it("says how many chats were deleted and how many could not be", () => {
+      expect(formatChatsResultNotice("delete", 2, 1)).toBe(
+        "2 chats deleted from Copilot. 1 chat could not be deleted."
+      );
+    });
+
+    it("says only how many chats could not be deleted when every delete failed", () => {
+      expect(formatChatsResultNotice("delete", 0, 2)).toBe("2 chats could not be deleted.");
+    });
+
+    it("reports archiving in the same shape", () => {
+      expect(formatChatsResultNotice("archive", 1, 2)).toBe(
+        "1 chat archived. 2 chats could not be archived."
+      );
     });
   });
 });

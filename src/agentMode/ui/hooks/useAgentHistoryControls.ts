@@ -1,5 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
-import { formatChatDeleteNotice, formatChatsDeleteNotice } from "@/lib/chatDeleteText";
+import { formatChatDeleteNotice, formatChatsResultNotice } from "@/lib/chatDeleteText";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -150,18 +150,21 @@ export function useAgentHistoryControls(
   );
 
   const deleteChatAndBookmark = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<{ bookmarkRemoved: boolean }> => {
       const link = await getChatLink(plugin.app, id);
       await manager.deleteChatHistory(id);
+      if (!link) return { bookmarkRemoved: true };
       // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
-      if (link) {
-        await runWithNotice("remove chat bookmark", async () =>
-          getUrlBookmarks(plugin.app)?.remove(link)
-        );
+      try {
+        getUrlBookmarks(plugin.app)?.remove(link);
+        return { bookmarkRemoved: true };
+      } catch (error) {
+        logError("[AgentMode] remove chat bookmark failed", error);
+        return { bookmarkRemoved: false };
       }
     },
-    [manager, plugin, runWithNotice]
+    [manager, plugin]
   );
 
   const deleteChat = useCallback(
@@ -171,10 +174,11 @@ export function useAgentHistoryControls(
           "delete chat",
           async () => {
             const item = chatHistoryItems.find((chat) => chat.id === id);
-            await deleteChatAndBookmark(id);
+            const { bookmarkRemoved } = await deleteChatAndBookmark(id);
             new Notice(
               formatChatDeleteNotice(item?.backendId ? backendRegistry[item.backendId] : undefined)
             );
+            if (!bookmarkRemoved) new Notice("Failed to remove chat bookmark.");
           },
           true
         );
@@ -185,23 +189,26 @@ export function useAgentHistoryControls(
     [chatHistoryItems, deleteChatAndBookmark, loadChatHistory, runWithNotice]
   );
 
+  // A bulk action reports once, with how many chats it changed and how many it could not, instead of a notice per chat.
+  // https://github.com/logancyang/obsidian-copilot/issues/3553
   const deleteChats = useCallback(
     async (ids: readonly string[]) => {
       let deleted = 0;
       try {
         for (const id of ids) {
-          const done = await runWithNotice("delete chat", async () => {
+          try {
             await deleteChatAndBookmark(id);
-            return true;
-          });
-          if (done) deleted++;
+            deleted++;
+          } catch (error) {
+            logError("[AgentMode] delete chat failed", error);
+          }
         }
-        if (deleted > 0) new Notice(formatChatsDeleteNotice(deleted));
+        new Notice(formatChatsResultNotice("delete", deleted, ids.length - deleted));
       } finally {
         await loadChatHistory();
       }
     },
-    [deleteChatAndBookmark, loadChatHistory, runWithNotice]
+    [deleteChatAndBookmark, loadChatHistory]
   );
 
   const setChatPinned = useCallback(
@@ -239,37 +246,47 @@ export function useAgentHistoryControls(
     [manager, loadChatHistory, runWithNotice]
   );
 
+  const writeChatArchived = useCallback(
+    async (id: string, archived: boolean) => {
+      const chat = await manager.setChatArchived(id, archived);
+      if (!isMountedRef.current) return;
+      historyRequestRef.current++;
+      // A reload right after the frontmatter write reads the metadata cache's previous archive state.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/805
+      setChatHistoryItems((items) =>
+        items.map((item) =>
+          item.id === id ? { ...item, id: chat.id, archivedAt: chat.archivedAt } : item
+        )
+      );
+    },
+    [manager]
+  );
+
   const setChatArchived = useCallback(
     async (id: string, archived: boolean) => {
       await runWithNotice(
         archived ? "archive chat" : "unarchive chat",
-        async () => {
-          const chat = await manager.setChatArchived(id, archived);
-          if (!isMountedRef.current) return;
-          historyRequestRef.current++;
-          // A reload right after the frontmatter write reads the metadata cache's previous archive state.
-          // https://github.com/Brevilabs/obsidian-copilot-private/issues/805
-          setChatHistoryItems((items) =>
-            items.map((item) =>
-              item.id === id ? { ...item, id: chat.id, archivedAt: chat.archivedAt } : item
-            )
-          );
-        },
+        () => writeChatArchived(id, archived),
         true
       );
     },
-    [manager, runWithNotice]
+    [runWithNotice, writeChatArchived]
   );
 
   const archiveChats = useCallback(
     async (ids: readonly string[]) => {
+      let archived = 0;
       for (const id of ids) {
-        // One chat that fails to archive shows its own notice and must not leave the rest of the selection behind.
-        // https://github.com/logancyang/obsidian-copilot/issues/3553
-        await setChatArchived(id, true).catch(() => undefined);
+        try {
+          await writeChatArchived(id, true);
+          archived++;
+        } catch (error) {
+          logError("[AgentMode] archive chat failed", error);
+        }
       }
+      new Notice(formatChatsResultNotice("archive", archived, ids.length - archived));
     },
-    [setChatArchived]
+    [writeChatArchived]
   );
 
   const openSourceFile = useCallback(

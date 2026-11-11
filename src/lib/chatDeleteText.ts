@@ -28,6 +28,25 @@ export function describeChatsDelete(
     : question;
 }
 
-export function formatChatsDeleteNotice(count: number): string {
-  return `${count} ${count === 1 ? "chat" : "chats"} deleted from Copilot.`;
+const CHATS_RESULT_TEXT = {
+  delete: { done: "deleted from Copilot", failed: "could not be deleted" },
+  archive: { done: "archived", failed: "could not be archived" },
+} as const;
+
+function countChats(count: number): string {
+  return `${count} ${count === 1 ? "chat" : "chats"}`;
+}
+
+export function formatChatsResultNotice(
+  action: keyof typeof CHATS_RESULT_TEXT,
+  done: number,
+  failed: number
+): string {
+  const text = CHATS_RESULT_TEXT[action];
+  return [
+    done > 0 && `${countChats(done)} ${text.done}.`,
+    failed > 0 && `${countChats(failed)} ${text.failed}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
