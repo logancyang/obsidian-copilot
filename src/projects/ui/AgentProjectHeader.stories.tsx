@@ -12,6 +12,7 @@ const meta = {
   component: AgentProjectHeader,
   args: {
     projectName: "Product research",
+    onOpenHome: () => undefined,
     onExit: () => undefined,
     onOpenSettings: () => undefined,
     onRevealFolder: () => undefined,
@@ -24,6 +25,7 @@ const renderHeader: StoryObj<AgentProjectHeaderProps>["render"] = (args) => (
   <TooltipProvider>
     <AgentProjectHeader
       projectName={args.projectName ?? "Product research"}
+      onOpenHome={args.onOpenHome ?? (() => undefined)}
       onExit={args.onExit ?? (() => undefined)}
       onOpenSettings={args.onOpenSettings}
       onRevealFolder={args.onRevealFolder}

@@ -258,6 +258,7 @@ export class AgentSessionManager {
       savedLabel?: string | null;
       attentionUnsub?: () => void;
       withholdsSessionId?: boolean;
+      replacedSessionId?: string;
     }
   >();
 
@@ -2051,7 +2052,10 @@ export class AgentSessionManager {
     // A fresh session has no transcript until its first prompt; saving it earlier repoints the note away from the session
     // another device can still resume, and each browse leaves a duplicate history row.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/814
-    if (!resumed) state.withholdsSessionId = true;
+    if (!resumed) {
+      state.withholdsSessionId = true;
+      state.replacedSessionId = loaded.sessionId;
+    }
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2420,6 +2424,13 @@ export class AgentSessionManager {
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
       model: session.getState()?.model?.current,
     });
+    // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/902
+    const state = this.sessionState.get(session.internalId);
+    if (state?.replacedSessionId) {
+      await index.deleteSession(session.backendId, state.replacedSessionId);
+      state.replacedSessionId = undefined;
+    }
     // A chat without a note has no metadata-cache event, so the chat lists only learn of it here.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/801
     this.markHistoryChanged();
