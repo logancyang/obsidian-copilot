@@ -13,7 +13,7 @@ const meta = {
   args: {
     enabled: true,
     onEnabledChange: () => undefined,
-    memory: { turnedOffInClaude: false, folders: [VAULT_MEMORY], sharedWithOtherProjects: false },
+    memory: { turnedOffInClaude: false, folders: [VAULT_MEMORY], folderSetInClaude: false },
     onOpenFolder: () => undefined,
     onClear: () => undefined,
   },
@@ -28,28 +28,28 @@ export const ProjectChats: StoryObj<ClaudeAutoMemorySettingProps> = {
     memory: {
       turnedOffInClaude: false,
       folders: [VAULT_MEMORY, PROJECT_MEMORY],
-      sharedWithOtherProjects: false,
+      folderSetInClaude: false,
     },
   },
 };
 
 export const NothingSaved: StoryObj<ClaudeAutoMemorySettingProps> = {
-  args: { memory: { turnedOffInClaude: false, folders: [], sharedWithOtherProjects: false } },
+  args: { memory: { turnedOffInClaude: false, folders: [], folderSetInClaude: false } },
 };
 
-export const SharedFolder: StoryObj<ClaudeAutoMemorySettingProps> = {
+export const FolderSetInClaude: StoryObj<ClaudeAutoMemorySettingProps> = {
   args: {
     memory: {
       turnedOffInClaude: false,
       folders: ["/Users/me/claude-memory"],
-      sharedWithOtherProjects: true,
+      folderSetInClaude: true,
     },
   },
 };
 
 export const TurnedOffInClaude: StoryObj<ClaudeAutoMemorySettingProps> = {
   args: {
-    memory: { turnedOffInClaude: true, folders: [VAULT_MEMORY], sharedWithOtherProjects: false },
+    memory: { turnedOffInClaude: true, folders: [VAULT_MEMORY], folderSetInClaude: false },
   },
 };
 

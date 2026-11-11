@@ -250,7 +250,7 @@ export function isClaudeAutoMemoryOn(settings: CopilotSettings): boolean {
 export interface ClaudeAutoMemory {
   turnedOffInClaude: boolean;
   folders: string[];
-  sharedWithOtherProjects: boolean;
+  folderSetInClaude: boolean;
 }
 
 function gitRoot(dir: string): string | null {
@@ -262,8 +262,9 @@ function gitRoot(dir: string): string | null {
   }
 }
 
-// Claude Code keeps memory per git repository or chat folder, outside the vault, so the
-// settings list every folder this vault's chats can use. https://github.com/logancyang/obsidian-copilot/issues/2892
+// Claude Code keeps memory per git repository or chat folder, outside the vault, so the settings
+// list every folder this vault's chats can use. A folder set by autoMemoryDirectory can be any
+// path, even one a shared vault's settings chose, so it is never cleared. https://github.com/logancyang/obsidian-copilot/issues/2892
 export async function readClaudeAutoMemory(
   settings: CopilotSettings,
   vaultBase: string,
@@ -306,7 +307,7 @@ export async function readClaudeAutoMemory(
   return {
     turnedOffInClaude,
     folders: existing.filter((folder): folder is string => folder !== null),
-    sharedWithOtherProjects: customFolder !== undefined && customFolder === user,
+    folderSetInClaude: customFolder !== undefined,
   };
 }
 

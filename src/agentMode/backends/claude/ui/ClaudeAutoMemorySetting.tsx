@@ -39,8 +39,8 @@ export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = (
           description={
             memory.folders.length === 0
               ? "Claude hasn't saved any memory for this vault yet."
-              : memory.sharedWithOtherProjects
-                ? "Your Claude Code settings keep every project's memory in this folder."
+              : memory.folderSetInClaude
+                ? "Your Claude Code settings choose this folder, so Copilot only opens it."
                 : "Review or clear what Claude remembers for this vault's chats."
           }
         >
@@ -53,7 +53,7 @@ export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = (
                 </Button>
               </div>
             ))}
-            {memory.folders.length > 0 && !memory.sharedWithOtherProjects && (
+            {memory.folders.length > 0 && !memory.folderSetInClaude && (
               <Button variant="secondary" size="sm" onClick={onClear}>
                 Clear memory
               </Button>

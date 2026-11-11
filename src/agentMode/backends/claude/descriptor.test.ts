@@ -545,7 +545,7 @@ describe("descriptor", () => {
       ).resolves.toEqual({
         turnedOffInClaude: false,
         folders: [memoryFolder(vaultBase), memoryFolder(research)],
-        sharedWithOtherProjects: false,
+        folderSetInClaude: false,
       });
     });
 
@@ -601,18 +601,18 @@ describe("descriptor", () => {
       expect(memory.turnedOffInClaude).toBe(false);
     });
 
-    it(`lists a memory folder set in the user settings as shared with other projects, expanding ~ (${ISSUE})`, async () => {
+    it(`lists a memory folder set in the user settings as set in Claude Code, expanding ~ (${ISSUE})`, async () => {
       writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
       fs.mkdirSync(path.join(root, "home", "notes-memory"), { recursive: true });
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
         turnedOffInClaude: false,
         folders: [path.join(root, "home", "notes-memory")],
-        sharedWithOtherProjects: true,
+        folderSetInClaude: true,
       });
     });
 
-    it(`lists a memory folder set in the vault's local settings as this vault's own (${ISSUE})`, async () => {
+    it(`lists the memory folder the vault's local settings set over the user settings' one (${ISSUE})`, async () => {
       const folder = path.join(root, "vault-memory");
       writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
       writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
@@ -623,7 +623,7 @@ describe("descriptor", () => {
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
         turnedOffInClaude: false,
         folders: [folder],
-        sharedWithOtherProjects: false,
+        folderSetInClaude: true,
       });
     });
   });
