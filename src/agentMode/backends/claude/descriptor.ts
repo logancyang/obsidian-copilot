@@ -246,7 +246,6 @@ const claudeApprovedRules: ApprovedRuleStore = {
 export interface ClaudeAutoMemory {
   onByDefault: boolean;
   folders: string[];
-  folderSetInClaude: boolean;
 }
 
 function gitRoot(dir: string): string | null {
@@ -271,8 +270,7 @@ function validMemoryFolder(configured: unknown): string | null {
 }
 
 // Claude Code keeps memory per git repository or chat folder, outside the vault, so the settings
-// list every folder this vault's chats can use. A folder set by autoMemoryDirectory can be any
-// path, even one a shared vault's settings chose, so it is never cleared. https://github.com/logancyang/obsidian-copilot/issues/2892
+// list every folder this vault's chats can use. https://github.com/logancyang/obsidian-copilot/issues/2892
 export async function readClaudeAutoMemory(
   settings: CopilotSettings,
   vaultBase: string,
@@ -318,15 +316,7 @@ export async function readClaudeAutoMemory(
   return {
     onByDefault,
     folders: existing.filter((folder): folder is string => folder !== null),
-    folderSetInClaude: customFolder !== null,
   };
-}
-
-export async function clearClaudeAutoMemory(folders: readonly string[]): Promise<void> {
-  const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  await Promise.all(
-    folders.map((folder) => fs.promises.rm(folder, { recursive: true, force: true }))
-  );
 }
 
 // Same truthy values Claude Code accepts for its provider switches.

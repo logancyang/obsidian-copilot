@@ -11,7 +11,6 @@ export interface ClaudeAutoMemorySettingProps {
   onChange: (value: boolean | undefined) => void;
   memory: ClaudeAutoMemory | null;
   onOpen: () => void;
-  onClear: () => void;
 }
 
 export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = ({
@@ -19,7 +18,6 @@ export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = (
   onChange,
   memory,
   onOpen,
-  onClear,
 }) => {
   const choice: Choice = value === undefined ? "default" : value ? "on" : "off";
   const defaultLabel = memory ? `Default (${memory.onByDefault ? "On" : "Off"})` : "Default";
@@ -47,19 +45,9 @@ export const ClaudeAutoMemorySetting: React.FC<ClaudeAutoMemorySettingProps> = (
           {memory.folders.length === 0 ? (
             <span className="tw-text-xs tw-text-muted">Nothing saved yet</span>
           ) : (
-            <div className="tw-flex tw-items-center tw-gap-2">
-              {memory.folderSetInClaude && (
-                <span className="tw-text-xs tw-text-muted">Folder set in Claude Code</span>
-              )}
-              <Button variant="secondary" size="sm" onClick={onOpen}>
-                Open
-              </Button>
-              {!memory.folderSetInClaude && (
-                <Button variant="secondary" size="sm" onClick={onClear}>
-                  Clear memory
-                </Button>
-              )}
-            </div>
+            <Button variant="secondary" size="sm" onClick={onOpen}>
+              Open
+            </Button>
           )}
         </SettingItem>
       )}

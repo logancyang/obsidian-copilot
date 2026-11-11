@@ -1,9 +1,7 @@
 import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
 import { ClaudeAutoMemorySetting } from "@/agentMode/backends/claude/ui/ClaudeAutoMemorySetting";
 import { ClaudeAutoModePermissionSetting } from "@/agentMode/backends/claude/ui/ClaudeAutoModePermissionSetting";
-import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { SettingItem } from "@/components/ui/setting-item";
-import { err2String } from "@/errorFormat";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getCachedProjectRecords } from "@/projects/state";
@@ -11,10 +9,9 @@ import { useSettingsValue } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { getVaultBase } from "@/utils/vaultPath";
-import { Notice, type App } from "obsidian";
+import type { App } from "obsidian";
 import React from "react";
 import {
-  clearClaudeAutoMemory,
   readClaudeAutoMemory,
   resolveClaudeAutoModePermission,
   updateClaudeFields,
@@ -30,7 +27,6 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
   const settings = useSettingsValue();
   const vaultBase = getVaultBase(app);
   const [memory, setMemory] = React.useState<ClaudeAutoMemory | null>(null);
-  const [memoryReads, setMemoryReads] = React.useState(0);
 
   React.useEffect(() => {
     if (!vaultBase) return;
@@ -47,28 +43,7 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
     return () => {
       current = false;
     };
-  }, [settings, vaultBase, memoryReads]);
-
-  const confirmClear = (folders: string[]): void => {
-    new ConfirmModal(
-      app,
-      async () => {
-        try {
-          await clearClaudeAutoMemory(folders);
-          new Notice("Cleared Claude's memory for this vault.");
-        } catch (error) {
-          new Notice(`Couldn't clear Claude's memory. ${err2String(error)}`);
-        }
-        setMemoryReads((reads) => reads + 1);
-      },
-      `Delete everything Claude remembers for this vault's chats? This deletes:\n${folders.join("\n")}`,
-      "Clear Claude's memory",
-      "Clear memory",
-      "Cancel",
-      undefined,
-      "destructive"
-    ).open();
-  };
+  }, [settings, vaultBase]);
 
   return (
     <>
@@ -90,7 +65,6 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
         onChange={(autoMemory) => updateClaudeFields({ autoMemory })}
         memory={memory}
         onOpen={() => memory?.folders.forEach((folder) => void openWithSystemDefault(folder))}
-        onClear={() => memory && confirmClear(memory.folders)}
       />
 
       <EnvOverridesSetting

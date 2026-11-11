@@ -16,10 +16,8 @@ function renderSetting(overrides: Partial<ClaudeAutoMemorySettingProps> = {}) {
     memory: {
       onByDefault: true,
       folders: [VAULT_MEMORY, PROJECT_MEMORY],
-      folderSetInClaude: false,
     },
     onOpen: jest.fn(),
-    onClear: jest.fn(),
     ...overrides,
   };
   render(<ClaudeAutoMemorySetting {...props} />);
@@ -28,15 +26,13 @@ function renderSetting(overrides: Partial<ClaudeAutoMemorySettingProps> = {}) {
 
 describe("ClaudeAutoMemorySetting", () => {
   describe("ClaudeAutoMemorySetting()", () => {
-    it(`offers one Open and Clear memory for the saved memory, without listing paths, while memory is on (${ISSUE})`, () => {
+    it(`offers one Open for the saved memory, without listing paths, while memory is on (${ISSUE})`, () => {
       const props = renderSetting();
 
       expect(screen.queryByText(VAULT_MEMORY)).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Open" }));
-      fireEvent.click(screen.getByRole("button", { name: "Clear memory" }));
 
       expect(props.onOpen).toHaveBeenCalledTimes(1);
-      expect(props.onClear).toHaveBeenCalledTimes(1);
     });
 
     it.each([
@@ -45,7 +41,7 @@ describe("ClaudeAutoMemorySetting", () => {
     ])(
       `names Claude Code's own value %s in the default option (${ISSUE})`,
       (onByDefault, label) => {
-        renderSetting({ memory: { onByDefault, folders: [], folderSetInClaude: false } });
+        renderSetting({ memory: { onByDefault, folders: [] } });
 
         expect(screen.getByRole("option", { name: label })).toBeTruthy();
       }
@@ -65,11 +61,11 @@ describe("ClaudeAutoMemorySetting", () => {
 
     it.each([
       ["Off", false, true],
-      ["the Claude Code default while Claude Code has it off", undefined, false],
+      ["Default while Claude Code has it off", undefined, false],
     ])(`hides the memory files when memory is %s (${ISSUE})`, (_when, value, onByDefault) => {
       renderSetting({
         value,
-        memory: { onByDefault, folders: [VAULT_MEMORY], folderSetInClaude: false },
+        memory: { onByDefault, folders: [VAULT_MEMORY] },
       });
 
       expect(screen.queryByText("Memory files")).toBeNull();
@@ -78,33 +74,19 @@ describe("ClaudeAutoMemorySetting", () => {
     it(`shows the memory files when On overrides Claude Code's off default (${ISSUE})`, () => {
       renderSetting({
         value: true,
-        memory: { onByDefault: false, folders: [VAULT_MEMORY], folderSetInClaude: false },
+        memory: { onByDefault: false, folders: [VAULT_MEMORY] },
       });
 
       expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
     });
 
-    it(`says nothing is saved yet and offers no Clear when Claude has written no memory (${ISSUE})`, () => {
+    it(`says nothing is saved yet and offers no Open when Claude has written no memory (${ISSUE})`, () => {
       renderSetting({
-        memory: { onByDefault: true, folders: [], folderSetInClaude: false },
+        memory: { onByDefault: true, folders: [] },
       });
 
       expect(screen.getByText("Nothing saved yet")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Clear memory" })).toBeNull();
-    });
-
-    it(`offers Open but no Clear for a folder Claude Code's settings choose, which may hold other projects' memory or anything else (${ISSUE})`, () => {
-      renderSetting({
-        memory: {
-          onByDefault: true,
-          folders: ["/home/claude-memory"],
-          folderSetInClaude: true,
-        },
-      });
-
-      expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
-      expect(screen.getByText("Folder set in Claude Code")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Clear memory" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
     });
   });
 });

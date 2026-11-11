@@ -18,7 +18,6 @@ import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { probeClaudeVersion } from "./claudeVersion";
 import {
   ClaudeBackendDescriptor,
-  clearClaudeAutoMemory,
   getClaudeInstallState,
   readClaudeAutoMemory,
   refreshClaudeInstallState,
@@ -530,7 +529,6 @@ describe("descriptor", () => {
       ).resolves.toEqual({
         onByDefault: true,
         folders: [memoryFolder(vaultBase), memoryFolder(research)],
-        folderSetInClaude: false,
       });
     });
 
@@ -591,14 +589,13 @@ describe("descriptor", () => {
       expect(memory.folders).toEqual([memoryFolder(root)]);
     });
 
-    it(`lists a memory folder set in the user settings as set in Claude Code, expanding ~ (${ISSUE})`, async () => {
+    it(`lists a memory folder set in the user settings, expanding ~ (${ISSUE})`, async () => {
       writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
       fs.mkdirSync(path.join(root, "home", "notes-memory"), { recursive: true });
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
         onByDefault: true,
         folders: [path.join(root, "home", "notes-memory")],
-        folderSetInClaude: true,
       });
     });
 
@@ -613,7 +610,6 @@ describe("descriptor", () => {
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
         onByDefault: true,
         folders: [folder],
-        folderSetInClaude: true,
       });
     });
 
@@ -626,28 +622,9 @@ describe("descriptor", () => {
         await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
           onByDefault: true,
           folders: [memoryFolder(vaultBase)],
-          folderSetInClaude: false,
         });
       }
     );
-  });
-
-  describe("clearClaudeAutoMemory()", () => {
-    it("deletes the given memory folders and leaves another project's memory in place (https://github.com/logancyang/obsidian-copilot/issues/2892)", async () => {
-      const root = fs.mkdtempSync(path.join(os.tmpdir(), "claude-memory-"));
-      const vaultMemory = path.join(root, "vault", "memory");
-      const otherMemory = path.join(root, "other", "memory");
-      fs.mkdirSync(vaultMemory, { recursive: true });
-      fs.mkdirSync(otherMemory, { recursive: true });
-      fs.writeFileSync(path.join(vaultMemory, "MEMORY.md"), "- writes in British English");
-      fs.writeFileSync(path.join(otherMemory, "MEMORY.md"), "- other project");
-
-      await clearClaudeAutoMemory([vaultMemory]);
-
-      expect(fs.existsSync(vaultMemory)).toBe(false);
-      expect(fs.readFileSync(path.join(otherMemory, "MEMORY.md"), "utf8")).toBe("- other project");
-      fs.rmSync(root, { recursive: true, force: true });
-    });
   });
 
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
