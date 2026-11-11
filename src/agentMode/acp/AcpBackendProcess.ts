@@ -843,15 +843,18 @@ export class AcpBackendProcess implements BackendProcess {
           },
         ];
       }
-      const todos = artifact.entries ?? [];
-      const toolEvent: SessionEvent = {
-        ...event,
-        update: { ...written, kind: "other", vendorToolName: "TodoWrite", rawInput: { todos } },
-      };
-      if (!artifact.entries) return [toolEvent];
+      const { entries } = artifact;
       return [
-        toolEvent,
-        { ...event, update: { sessionUpdate: "plan", entries: artifact.entries } },
+        {
+          ...event,
+          update: {
+            ...written,
+            kind: "other",
+            vendorToolName: "TodoWrite",
+            rawInput: { todos: entries },
+          },
+        },
+        { ...event, update: { sessionUpdate: "plan", entries } },
       ];
     }
     const copilotTools =

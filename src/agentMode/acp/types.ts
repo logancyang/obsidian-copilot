@@ -17,7 +17,7 @@ export interface AcpSpawnDescriptor {
 
 export type AgentArtifactWrite =
   | { kind: "plan"; plan?: string; planFilePath: string }
-  | { kind: "checklist"; entries?: AgentPlanEntry[] };
+  | { kind: "checklist"; entries: AgentPlanEntry[] };
 
 export interface AcpBackend {
   readonly id: BackendId;

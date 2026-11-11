@@ -67,13 +67,17 @@ describe("antigravityArtifactWrites", () => {
       });
     });
 
-    it("reads the brain folder's todo.md as a checklist of its done, current and open items", () => {
-      const call = writeCall(`${brain}/todo.md`, {
+    it("reads a brain-folder file of checklist items, whatever its name, as a checklist of its done, current and open items", () => {
+      const todo = writeCall(`${brain}/todo.md`, {
         Content: TODO_TEXT,
         ArtifactMetadata: { RequestFeedback: false },
       });
+      const taskList = writeCall(`${brain}/task_list.md`, {
+        Content: "# Task List\n\n- [/] 1. Read `Spike/s7-list.md`\n",
+        ArtifactMetadata: { RequestFeedback: false },
+      });
 
-      expect(readAntigravityArtifactWrite(call)).toEqual({
+      expect(readAntigravityArtifactWrite(todo)).toEqual({
         kind: "checklist",
         entries: [
           { content: "Read the note", status: "completed", priority: "medium" },
@@ -81,24 +85,30 @@ describe("antigravityArtifactWrites", () => {
           { content: "Check it", status: "pending", priority: "medium" },
         ],
       });
+      expect(readAntigravityArtifactWrite(taskList)).toEqual({
+        kind: "checklist",
+        entries: [
+          { content: "1. Read `Spike/s7-list.md`", status: "in_progress", priority: "medium" },
+        ],
+      });
     });
 
-    it("reports a todo.md edit as a checklist with no items until its completed update gives the whole file", () => {
+    it("reads a checklist edit only once its completed update gives the whole file", () => {
       const call = writeCall(`${brain}/todo.md`, { Target: "- [ ]", Replacement: "- [x]" });
 
-      expect(readAntigravityArtifactWrite(call)).toEqual({ kind: "checklist" });
+      expect(readAntigravityArtifactWrite(call)).toBeNull();
       expect(readAntigravityArtifactWrite(completed(call, "- [x] Check it\n\n"))).toEqual({
         kind: "checklist",
         entries: [{ content: "Check it", status: "completed", priority: "medium" }],
       });
     });
 
-    it("leaves brain-folder files written without a review request, and writes outside the brain folder, as ordinary edits", () => {
+    it("leaves brain-folder files with no review request and no checklist, and writes outside the brain folder, as ordinary edits", () => {
       const walkthrough = writeCall(`${brain}/walkthrough.md`, {
         Content: "# Walkthrough\n",
         ArtifactMetadata: { RequestFeedback: false },
       });
-      const vaultNote = writeCall("/vault/todo.md", {
+      const vaultNote = writeCall("/vault/brain/s/todo.md", {
         Content: "- [ ] Milk\n",
         ArtifactMetadata: { RequestFeedback: true },
       });

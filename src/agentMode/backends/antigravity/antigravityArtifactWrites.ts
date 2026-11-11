@@ -2,7 +2,6 @@ import type { AgentArtifactWrite } from "@/agentMode/acp/types";
 import type { AgentPlanEntry, ToolCallDelta } from "@/agentMode/session/types";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
-const CHECKLIST_FILE = "todo.md";
 const CHECKLIST_ITEM = /^\s*[-*]\s+\[([ xX/])\]\s+(.+?)\s*$/;
 
 interface ArtifactInput {
@@ -20,13 +19,11 @@ export function readAntigravityArtifactWrite(update: ToolCallDelta): AgentArtifa
   const brain = path.join(os.homedir(), ".gemini", "antigravity-cli", "brain");
   if (!filePath || path.dirname(path.dirname(filePath)) !== brain) return null;
   const text = writtenText(update, input, filePath);
-  if (path.basename(filePath) === CHECKLIST_FILE) {
-    return text === undefined
-      ? { kind: "checklist" }
-      : { kind: "checklist", entries: checklist(text) };
+  if (input.ArtifactMetadata?.RequestFeedback === true) {
+    return { kind: "plan", plan: text, planFilePath: filePath };
   }
-  if (input.ArtifactMetadata?.RequestFeedback !== true) return null;
-  return { kind: "plan", plan: text, planFilePath: filePath };
+  const entries = text === undefined ? [] : checklist(text);
+  return entries.length > 0 ? { kind: "checklist", entries } : null;
 }
 
 function writtenText(

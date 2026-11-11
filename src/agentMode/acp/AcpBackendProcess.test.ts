@@ -1259,10 +1259,8 @@ describe("AcpBackendProcess", () => {
           if (update.toolCallId === "plan-write") {
             return { kind: "plan", plan: "# Plan", planFilePath: "/brain/s1/plan.md" };
           }
-          if (update.toolCallId === "todo-write") {
-            return update.status === "completed"
-              ? { kind: "checklist", entries }
-              : { kind: "checklist" };
+          if (update.toolCallId === "todo-write" && update.status === "completed") {
+            return { kind: "checklist", entries };
           }
           return null;
         });
@@ -1309,17 +1307,17 @@ describe("AcpBackendProcess", () => {
           expect.objectContaining({
             sessionUpdate: "tool_call",
             toolCallId: "todo-write",
-            kind: "other",
-            vendorToolName: "TodoWrite",
-            rawInput: { todos: [] },
-            locations: undefined,
+            kind: "edit",
+            locations: [{ path: "/brain/s1/todo.md" }],
           }),
           expect.objectContaining({
             sessionUpdate: "tool_call_update",
             toolCallId: "todo-write",
+            kind: "other",
             vendorToolName: "TodoWrite",
             rawInput: { todos: entries },
             content: undefined,
+            locations: undefined,
           }),
           { sessionUpdate: "plan", entries },
           expect.objectContaining({
