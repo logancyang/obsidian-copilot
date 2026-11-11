@@ -2,12 +2,13 @@ import { mockTFile } from "@/__tests__/mockObsidian";
 import {
   prepareChatImagesForSave,
   preserveChatImageReferences,
+  savedChatImagePath,
   updateChatTranscript,
   stripChatImageReceipts,
 } from "@/utils/chatImagePersistence";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
-import { type TFile, type App } from "obsidian";
+import { FileSystemAdapter, type TFile, type App } from "obsidian";
 
 const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2900";
 const DESTINATION_ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/3242";
@@ -43,6 +44,21 @@ function makeApp() {
   return { files, folders, vault, app: { vault } as unknown as App };
 }
 
+const PATH_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/907";
+
+function vaultWithFiles(paths: string[], adapter: unknown = new FileSystemAdapter()): App {
+  const files = new Map(
+    paths.map((path) => [path, mockTFile({ path, name: path.split("/").pop() })])
+  );
+  return {
+    vault: { adapter, getAbstractFileByPath: (path: string) => files.get(path) ?? null },
+    metadataCache: {
+      getFirstLinkpathDest: (link: string) =>
+        files.get(link) ?? [...files.values()].find((file) => file.name === link) ?? null,
+    },
+  } as unknown as App;
+}
+
 function visibleMessage(message: string): string {
   return message
     .replace(/<!-- copilot-image:[\w-]+ -->\n/g, "")
@@ -68,6 +84,37 @@ describe("chatImagePersistence", () => {
           "<!-- authored -->\n<!-- copilot-image:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa -->\n![[image.png]]\n<!-- /copilot-image -->"
         )
       ).toBe("<!-- authored -->\n![[image.png]]");
+    });
+  });
+
+  describe("savedChatImagePath()", () => {
+    const saved = `${STORE}/copilot-image-${sha256(DATA)}.png`;
+
+    it(`gives the full path of the file a save wrote for a live image's data (${PATH_ISSUE})`, () => {
+      expect(savedChatImagePath(vaultWithFiles([saved]), CHATS, IMAGE.image_url.url)).toBe(
+        `/vault/${saved}`
+      );
+    });
+
+    it(`gives the full path of the file an embed in a reopened chat's note links to (${PATH_ISSUE})`, () => {
+      const app = vaultWithFiles([saved]);
+      expect(savedChatImagePath(app, CHATS, `![[copilot-image-${sha256(DATA)}.png]]`)).toBe(
+        `/vault/${saved}`
+      );
+      expect(savedChatImagePath(app, CHATS, `![](/${saved})`)).toBe(`/vault/${saved}`);
+    });
+
+    it(`returns null for an image whose file was never saved or no longer exists (${PATH_ISSUE})`, () => {
+      const app = vaultWithFiles([]);
+      expect(savedChatImagePath(app, CHATS, IMAGE.image_url.url)).toBeNull();
+      expect(savedChatImagePath(app, CHATS, `![[copilot-image-${sha256(DATA)}.png]]`)).toBeNull();
+      expect(savedChatImagePath(app, CHATS, "data:image/png;base64,%%%")).toBeNull();
+    });
+
+    it("gives the vault path when the vault has no folder on disk", () => {
+      expect(savedChatImagePath(vaultWithFiles([saved], {}), CHATS, IMAGE.image_url.url)).toBe(
+        saved
+      );
     });
   });
 

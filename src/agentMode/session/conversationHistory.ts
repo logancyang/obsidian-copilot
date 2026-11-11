@@ -7,6 +7,7 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { USER_SENDER } from "@/constants";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
 import { isAbsolutePath } from "@/utils/vaultPath";
 import {
   isNoteSelectedTextContext,
@@ -22,15 +23,15 @@ const CONVERSATION_HISTORY_TURN_TRUNCATION_MARKER = "[turn truncated]";
 
 const CONVERSATION_HISTORY_TOOL_OUTPUT_MAX_CHARS = 2_000;
 
-function countImageAttachments(content: readonly unknown[] | undefined): number {
-  if (!content) return 0;
-  let count = 0;
-  for (const entry of content) {
+function attachedImages(content: readonly unknown[] | undefined): (string | null)[] {
+  const images: (string | null)[] = [];
+  for (const entry of content ?? []) {
     if (typeof entry !== "object" || entry === null) continue;
-    const type = (entry as { type?: unknown }).type;
-    if (type === "image" || type === "image_url") count += 1;
+    const { type, image_url } = entry as { type?: unknown; image_url?: { url?: unknown } };
+    if (type === "image_url" && typeof image_url?.url === "string") images.push(image_url.url);
+    else if (type === "image" || type === "image_url") images.push(null);
   }
-  return count;
+  return images;
 }
 
 function renderMessageContext(context: MessageContext | undefined): string[] {
@@ -77,16 +78,34 @@ function historyProse(message: AgentChatMessage): string {
   return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
 }
 
-function renderTurnContent(message: AgentChatMessage, vaultBase: string | null): string | null {
+function renderTurnContent(
+  message: AgentChatMessage,
+  vaultBase: string | null,
+  savedImagePath: (image: string) => string | null
+): string | null {
   const segments: string[] = [];
-  const prose = historyProse(message).trim();
+  // The agent gets the saved file of each earlier image so it can open it, never the image data; a reopened chat holds its images as note embeds.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+  const images = attachedImages(message.content);
+  const prose = historyProse(message)
+    .replace(CHAT_IMAGE_EMBED, (embed) => {
+      images.push(embed);
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
   if (prose.length > 0) segments.push(prose);
   const tools = toolsUsedLines(message, vaultBase);
   if (tools.length > 0) segments.push(`[tools used]\n${tools.join("\n")}`);
-  const imageCount = countImageAttachments(message.content);
-  if (imageCount > 0) {
-    const noun = imageCount === 1 ? "image attachment" : "image attachments";
-    segments.push(`[${imageCount} ${noun} omitted from history; existed in this turn]`);
+  let omitted = 0;
+  for (const image of images) {
+    const path = image === null ? null : savedImagePath(image);
+    if (path === null) omitted += 1;
+    else segments.push(`[image attachment saved at ${path}]`);
+  }
+  if (omitted > 0) {
+    const noun = omitted === 1 ? "image attachment" : "image attachments";
+    segments.push(`[${omitted} ${noun} omitted from history; existed in this turn]`);
   }
   segments.push(...renderMessageContext(message.context));
   if (segments.length === 0) return null;
@@ -154,11 +173,12 @@ export function toolsUsedLines(
 export function buildConversationHistoryBlock(
   messages: readonly AgentChatMessage[],
   maxChars: number,
-  vaultBase: string | null
+  vaultBase: string | null,
+  savedImagePath: (image: string) => string | null
 ): string | null {
   const rendered: string[] = [];
   for (const m of messages) {
-    const content = renderTurnContent(m, vaultBase);
+    const content = renderTurnContent(m, vaultBase, savedImagePath);
     if (content === null) continue;
     const role = m.sender === USER_SENDER ? "user" : "assistant";
     rendered.push(`<turn role="${role}">\n${escapeXml(content)}\n</turn>`);

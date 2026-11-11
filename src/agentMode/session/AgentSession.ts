@@ -59,6 +59,8 @@ import {
 } from "@/agentMode/session/turnFileChanges";
 import { TurnTracker, type TurnOutcome, type TurnSend } from "@/agentMode/session/TurnTracker";
 import { getVaultBase } from "@/utils/vaultPath";
+import { savedChatImagePath } from "@/utils/chatImagePersistence";
+import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
 import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
@@ -1057,7 +1059,8 @@ export class AgentSession implements ChatStateHost, ChatView {
     return buildConversationHistoryBlock(
       this.store.getDisplayMessages().filter((m) => m.id !== userMessageId),
       CONVERSATION_HISTORY_MAX_CHARS,
-      app ? getVaultBase(app) : null
+      app ? getVaultBase(app) : null,
+      (image) => (app ? savedChatImagePath(app, getEffectiveConversationsFolder(), image) : null)
     );
   }
 

@@ -30,6 +30,27 @@ const replyWithTools = (message: string, parts: AgentMessagePart[]): AgentChatMe
   parts,
 });
 
+const noSavedImages = () => null;
+
+const IMAGE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/907";
+const SAVED_DATA_URL = "data:image/png;base64,U0FWRUQ=";
+const UNSAVED_DATA_URL = "data:image/png;base64,VU5TQVZFRA==";
+const SAVED_EMBED = `![[copilot-image-${"a".repeat(64)}.png]]`;
+const MISSING_EMBED = `![](/copilot/attachments/copilot-image-${"b".repeat(64)}.png)`;
+const SAVED_PATHS = new Map([
+  [SAVED_DATA_URL, "/vault/copilot/attachments/live.png"],
+  [SAVED_EMBED, "/vault/copilot/attachments/loaded.png"],
+]);
+const savedImagePath = (image: string) => SAVED_PATHS.get(image) ?? null;
+
+const withImages = (message: string, urls: string[]): AgentChatMessage => ({
+  ...histMsg(USER_SENDER, message),
+  content: [
+    { type: "text", text: message },
+    ...urls.map((url) => ({ type: "image_url", image_url: { url } })),
+  ],
+});
+
 describe("conversationHistory", () => {
   describe("toolsUsedLines()", () => {
     it("lists each tool call as its card title, kind and touched paths", () => {
@@ -226,7 +247,8 @@ describe("conversationHistory", () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, "What is the plan?"), histMsg(AI_SENDER, "Here is the plan.")],
         CONVERSATION_HISTORY_MAX_CHARS,
-        null
+        null,
+        noSavedImages
       )!;
       expect(block).toContain("<conversation_history>");
       expect(block).toContain("</conversation_history>");
@@ -239,7 +261,9 @@ describe("conversationHistory", () => {
     });
 
     it("returns null for an empty transcript", () => {
-      expect(buildConversationHistoryBlock([], CONVERSATION_HISTORY_MAX_CHARS, null)).toBeNull();
+      expect(
+        buildConversationHistoryBlock([], CONVERSATION_HISTORY_MAX_CHARS, null, noSavedImages)
+      ).toBeNull();
     });
 
     it("drops the oldest turns first and prepends a truncation marker past the cap", () => {
@@ -247,7 +271,7 @@ describe("conversationHistory", () => {
       const messages = Array.from({ length: 20 }, (_, i) =>
         histMsg(i % 2 === 0 ? USER_SENDER : AI_SENDER, `turn-${i}-${big}`)
       );
-      const block = buildConversationHistoryBlock(messages, 1000, null)!;
+      const block = buildConversationHistoryBlock(messages, 1000, null, noSavedImages)!;
       expect(block).toContain("[earlier conversation truncated]");
       expect(block).not.toContain("turn-0-");
       expect(block).toContain("turn-19-");
@@ -275,7 +299,12 @@ describe("conversationHistory", () => {
           },
         ],
       });
-      const block = buildConversationHistoryBlock([msg], CONVERSATION_HISTORY_MAX_CHARS, null)!;
+      const block = buildConversationHistoryBlock(
+        [msg],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        noSavedImages
+      )!;
       expect(block).toContain("[context]");
       expect(block).toContain("[selected from DesignDoc]");
       expect(block).toContain("the fan-out renderer drops context");
@@ -295,7 +324,8 @@ describe("conversationHistory", () => {
           ]),
         ],
         CONVERSATION_HISTORY_MAX_CHARS,
-        null
+        null,
+        noSavedImages
       )!;
 
       expect(block).toContain(
@@ -308,7 +338,8 @@ describe("conversationHistory", () => {
       const block = buildConversationHistoryBlock(
         [replyWithTools("", [toolCall({ title: "Read a.md", toolKind: "read" })])],
         CONVERSATION_HISTORY_MAX_CHARS,
-        null
+        null,
+        noSavedImages
       )!;
 
       expect(block).toContain('<turn role="assistant">\n[tools used]\nRead a.md (read)\n</turn>');
@@ -318,10 +349,87 @@ describe("conversationHistory", () => {
       const block = buildConversationHistoryBlock(
         [histMsg(USER_SENDER, "Hi"), histMsg(AI_SENDER, "Hello.")],
         CONVERSATION_HISTORY_MAX_CHARS,
-        null
+        null,
+        noSavedImages
       )!;
 
       expect(block).not.toContain("[tools used]");
+    });
+    it(`gives the saved file path of each earlier image instead of a count (${IMAGE_ISSUE})`, () => {
+      const block = buildConversationHistoryBlock(
+        [withImages("What does this show?", [SAVED_DATA_URL])],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        savedImagePath
+      )!;
+
+      expect(block).toContain(
+        '<turn role="user">\nWhat does this show?\n[image attachment saved at /vault/copilot/attachments/live.png]\n</turn>'
+      );
+      expect(block).not.toContain("omitted");
+      expect(block).not.toContain("base64");
+    });
+
+    it(`replaces the image embed a reopened chat's note holds with that image's saved file path (${IMAGE_ISSUE})`, () => {
+      const block = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, `What does this show?\n\n${SAVED_EMBED}`)],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        savedImagePath
+      )!;
+
+      expect(block).toContain(
+        '<turn role="user">\nWhat does this show?\n[image attachment saved at /vault/copilot/attachments/loaded.png]\n</turn>'
+      );
+      expect(block).not.toContain("copilot-image-");
+    });
+
+    it(`says an image without a saved file was omitted and sends none of its data (${IMAGE_ISSUE})`, () => {
+      const block = buildConversationHistoryBlock(
+        [withImages("What does this show?", [UNSAVED_DATA_URL])],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        savedImagePath
+      )!;
+
+      expect(block).toContain(
+        '<turn role="user">\nWhat does this show?\n[1 image attachment omitted from history; existed in this turn]\n</turn>'
+      );
+      expect(block).not.toContain("base64");
+      expect(block).not.toContain("VU5TQVZFRA");
+    });
+
+    it(`lists saved image paths and counts the unsaved ones in a turn that mixes both (${IMAGE_ISSUE})`, () => {
+      const block = buildConversationHistoryBlock(
+        [
+          withImages("Compare these.", [SAVED_DATA_URL, UNSAVED_DATA_URL]),
+          histMsg(USER_SENDER, `And these.\n\n${SAVED_EMBED}\n\n${MISSING_EMBED}`),
+        ],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        savedImagePath
+      )!;
+
+      expect(block).toContain(
+        "Compare these.\n[image attachment saved at /vault/copilot/attachments/live.png]\n[1 image attachment omitted from history; existed in this turn]"
+      );
+      expect(block).toContain(
+        "And these.\n[image attachment saved at /vault/copilot/attachments/loaded.png]\n[1 image attachment omitted from history; existed in this turn]"
+      );
+      expect(block).not.toContain("base64");
+      expect(block).not.toContain("copilot-image-");
+    });
+
+    it("leaves an embed of anything other than a saved chat image in the turn's text", () => {
+      const block = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, "See this:\n\n![[diagram.png]]")],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        null,
+        savedImagePath
+      )!;
+
+      expect(block).toContain("See this:\n\n![[diagram.png]]");
+      expect(block).not.toContain("image attachment");
     });
   });
 });

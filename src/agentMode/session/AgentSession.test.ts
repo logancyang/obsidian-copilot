@@ -4977,6 +4977,30 @@ describe("AgentSession", () => {
         expect(promptTexts(mock)[2]).toBe("and backwards?");
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/907 names the saved file of an image the reopened chat's note embeds instead of sending the embed", async () => {
+        const name = `copilot-image-${"a".repeat(64)}.png`;
+        const saved = mockTFile({ path: `copilot/attachments/${name}`, name });
+        const app = {
+          vault: { adapter: new FileSystemAdapter(), getAbstractFileByPath: () => null },
+          metadataCache: {
+            getFirstLinkpathDest: (link: string) => (link === name ? saved : null),
+          },
+        } as unknown as App;
+        const mock = makeMockBackend();
+        const session = makeSession(mock, { getApp: () => app });
+        session.loadDisplayMessages([
+          { ...savedChat[0], message: `what does this show?\n\n![[${name}]]` },
+          savedChat[1],
+        ]);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("describe the screenshot").turn;
+
+        expect(promptTexts(mock)[0]).toContain(
+          `<turn role="user">\nwhat does this show?\n[image attachment saved at /vault/copilot/attachments/${name}]\n</turn>`
+        );
+      });
+
       it("sends no conversation_history when no saved history is queued", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
