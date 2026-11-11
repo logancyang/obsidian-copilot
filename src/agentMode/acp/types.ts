@@ -1,4 +1,10 @@
-import type { AgentToolKind, BackendId, ToolCallDelta, TurnDiff } from "@/agentMode/session/types";
+import type {
+  AgentPlanEntry,
+  AgentToolKind,
+  BackendId,
+  ToolCallDelta,
+  TurnDiff,
+} from "@/agentMode/session/types";
 import type { PlanUsage, PlanUsageReading } from "@/agentMode/session/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
@@ -8,6 +14,10 @@ export interface AcpSpawnDescriptor {
   cwd?: string;
   env: NodeJS.ProcessEnv;
 }
+
+export type AgentArtifactWrite =
+  | { kind: "plan"; plan?: string; planFilePath: string }
+  | { kind: "checklist"; entries?: AgentPlanEntry[] };
 
 export interface AcpBackend {
   readonly id: BackendId;
@@ -29,6 +39,7 @@ export interface AcpBackend {
   ): TurnDiff | null;
   readCopilotTools?(rawInput: unknown, toolName?: string): CopilotToolUse | null;
   readOriginalFiles?(update: ToolCallDelta): Readonly<Record<string, string | null>> | null;
+  readArtifactWrite?(update: ToolCallDelta): AgentArtifactWrite | null;
   presentToolTitle?(call: {
     kind?: AgentToolKind;
     locations?: ReadonlyArray<{ path: string }> | null;

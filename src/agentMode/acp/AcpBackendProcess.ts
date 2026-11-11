@@ -294,7 +294,7 @@ export class AcpBackendProcess implements BackendProcess {
             this.todoToolCallIdsFor(sessionId),
             this.compactionTriggerFor(sessionId)
           ))
-            handler(this.withBackendToolReadings(event));
+            for (const backendEvent of this.withBackendToolReadings(event)) handler(backendEvent);
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
         }
@@ -822,13 +822,37 @@ export class AcpBackendProcess implements BackendProcess {
       this.todoToolCallIdsFor(sessionId),
       this.compactionTriggerFor(sessionId)
     ))
-      handler(this.withBackendContextWindow(this.withBackendToolReadings(event)));
+      for (const backendEvent of this.withBackendToolReadings(event))
+        handler(this.withBackendContextWindow(backendEvent));
   }
 
-  private withBackendToolReadings(event: SessionEvent): SessionEvent {
+  private withBackendToolReadings(event: SessionEvent): SessionEvent[] {
     const update = event.update;
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
-      return event;
+      return [event];
+    }
+    const artifact = this.backend.readArtifactWrite?.(update);
+    if (artifact) {
+      const written = { ...update, content: undefined, locations: undefined };
+      if (artifact.kind === "plan") {
+        const { plan, planFilePath } = artifact;
+        return [
+          {
+            ...event,
+            update: { ...written, kind: "switch_mode", rawInput: { plan, planFilePath } },
+          },
+        ];
+      }
+      const todos = artifact.entries ?? [];
+      const toolEvent: SessionEvent = {
+        ...event,
+        update: { ...written, kind: "other", vendorToolName: "TodoWrite", rawInput: { todos } },
+      };
+      if (!artifact.entries) return [toolEvent];
+      return [
+        toolEvent,
+        { ...event, update: { sessionUpdate: "plan", entries: artifact.entries } },
+      ];
     }
     const copilotTools =
       this.backend.readCopilotTools && update.rawInput !== undefined
@@ -837,16 +861,18 @@ export class AcpBackendProcess implements BackendProcess {
     const originalFiles =
       update.sessionUpdate === "tool_call_update" ? this.backend.readOriginalFiles?.(update) : null;
     const title = update.title === undefined ? undefined : this.backend.presentToolTitle?.(update);
-    if (!copilotTools && !originalFiles && !title) return event;
-    return {
-      ...event,
-      update: {
-        ...update,
-        ...(copilotTools ? { copilotTools } : {}),
-        ...(originalFiles ? { originalFiles } : {}),
-        ...(title ? { title } : {}),
+    if (!copilotTools && !originalFiles && !title) return [event];
+    return [
+      {
+        ...event,
+        update: {
+          ...update,
+          ...(copilotTools ? { copilotTools } : {}),
+          ...(originalFiles ? { originalFiles } : {}),
+          ...(title ? { title } : {}),
+        },
       },
-    };
+    ];
   }
 
   private withBackendContextWindow(event: SessionEvent): SessionEvent {

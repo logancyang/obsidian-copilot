@@ -149,6 +149,28 @@ describe("AntigravityBackend", () => {
       });
     });
 
+    describe("readArtifactWrite()", () => {
+      let home: TempHome;
+
+      beforeEach(() => {
+        home = pinTempHome();
+      });
+
+      afterEach(() => home.restore());
+
+      it("reads a plan the agent writes to its brain folder for review", () => {
+        const planFile = `${home.homeDir}/.gemini/antigravity-cli/brain/s1/plan.md`;
+
+        expect(
+          new AntigravityBackend(APP).readArtifactWrite({
+            toolCallId: "plan",
+            locations: [{ path: planFile }],
+            rawInput: { Content: "# Plan\n", ArtifactMetadata: { RequestFeedback: true } },
+          })
+        ).toEqual({ kind: "plan", plan: "# Plan\n", planFilePath: planFile });
+      });
+    });
+
     describe("readPlanUsage()", () => {
       let home: TempHome;
 

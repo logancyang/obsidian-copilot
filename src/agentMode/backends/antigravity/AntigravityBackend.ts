@@ -13,6 +13,7 @@ import {
 } from "@/agentMode/session/planUsage";
 import { getSettings } from "@/settings/model";
 import { resolveAntigravityBinaryPath } from "./antigravityCli";
+import { readAntigravityArtifactWrite } from "./antigravityArtifactWrites";
 import { readAntigravityCopilotTools } from "./antigravityCopilotToolCalls";
 import { readAntigravityOriginalFiles } from "./antigravityOriginalFiles";
 import { presentAntigravityToolTitle } from "./antigravityToolTitles";
@@ -33,6 +34,7 @@ export class AntigravityBackend implements AcpBackend {
   readonly displayName = "Antigravity";
   readonly readCopilotTools = readAntigravityCopilotTools;
   readonly readOriginalFiles = readAntigravityOriginalFiles;
+  readonly readArtifactWrite = readAntigravityArtifactWrite;
   readonly synthesizesManualCompaction = true;
   readonly reopensWithResume = true;
   readonly acceptsStandardElicitationForms = true;

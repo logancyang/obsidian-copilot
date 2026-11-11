@@ -1249,6 +1249,89 @@ describe("AcpBackendProcess", () => {
       });
     });
 
+    describe("agent artifacts written by the backend's tools", () => {
+      it("shows a plan file the agent writes for review as a proposed plan and a checklist file as a task list, leaving other writes as edits", async () => {
+        const entries = [
+          { content: "Add the heading", status: "completed", priority: "medium" },
+          { content: "Check the note", status: "pending", priority: "medium" },
+        ];
+        const readArtifactWrite = jest.fn((update: { toolCallId: string; status?: string }) => {
+          if (update.toolCallId === "plan-write") {
+            return { kind: "plan", plan: "# Plan", planFilePath: "/brain/s1/plan.md" };
+          }
+          if (update.toolCallId === "todo-write") {
+            return update.status === "completed"
+              ? { kind: "checklist", entries }
+              : { kind: "checklist" };
+          }
+          return null;
+        });
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ readArtifactWrite } as Partial<AcpBackend>),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const handler = jest.fn();
+        backend.registerSessionHandler("s1", handler);
+        const client = getVaultClient(backend);
+        const send = (update: Record<string, unknown>) =>
+          client.sessionUpdate({ sessionId: "s1", update } as unknown as Parameters<
+            typeof client.sessionUpdate
+          >[0]);
+        const write = (toolCallId: string, path: string) => ({
+          toolCallId,
+          title: `File ${path}`,
+          kind: "edit",
+          locations: [{ path }],
+          rawInput: { Path: path },
+        });
+
+        await send({ sessionUpdate: "tool_call", ...write("plan-write", "/brain/s1/plan.md") });
+        await send({ sessionUpdate: "tool_call", ...write("todo-write", "/brain/s1/todo.md") });
+        await send({
+          sessionUpdate: "tool_call_update",
+          ...write("todo-write", "/brain/s1/todo.md"),
+          status: "completed",
+          content: [{ type: "diff", path: "/brain/s1/todo.md", newText: "- [x] Add" }],
+        });
+        await send({ sessionUpdate: "tool_call", ...write("note-write", "/vault/a.md") });
+
+        expect(handler.mock.calls.map(([event]) => event.update)).toEqual([
+          expect.objectContaining({
+            sessionUpdate: "tool_call",
+            toolCallId: "plan-write",
+            kind: "switch_mode",
+            rawInput: { plan: "# Plan", planFilePath: "/brain/s1/plan.md" },
+            locations: undefined,
+          }),
+          expect.objectContaining({
+            sessionUpdate: "tool_call",
+            toolCallId: "todo-write",
+            kind: "other",
+            vendorToolName: "TodoWrite",
+            rawInput: { todos: [] },
+            locations: undefined,
+          }),
+          expect.objectContaining({
+            sessionUpdate: "tool_call_update",
+            toolCallId: "todo-write",
+            vendorToolName: "TodoWrite",
+            rawInput: { todos: entries },
+            content: undefined,
+          }),
+          { sessionUpdate: "plan", entries },
+          expect.objectContaining({
+            sessionUpdate: "tool_call",
+            toolCallId: "note-write",
+            kind: "edit",
+            locations: [{ path: "/vault/a.md" }],
+          }),
+        ]);
+      });
+    });
+
     describe("setAskUserQuestionPrompter()", () => {
       const form = {
         mode: "form",

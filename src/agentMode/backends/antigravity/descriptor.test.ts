@@ -236,6 +236,12 @@ describe("descriptor", () => {
       });
     });
 
+    describe("planProposalsEndTurn", () => {
+      it("takes the user's decision on a plan as the next prompt, since agy asks for no permission to leave Plan mode", () => {
+        expect(AntigravityBackendDescriptor.planProposalsEndTurn).toBe(true);
+      });
+    });
+
     describe("dataDestination()", () => {
       it("names Google's cloud as where chat data goes", () => {
         expect(AntigravityBackendDescriptor.dataDestination!(settingsWith({}), null)).toEqual({
