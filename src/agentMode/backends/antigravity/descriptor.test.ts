@@ -22,6 +22,7 @@ const MODEL_IDS = [
   "claude-sonnet-4-6",
   "claude-opus-4-6-thinking",
   "gpt-oss-120b-medium",
+  "gemini-4-argon",
 ];
 
 function sessionConfigOptions(
@@ -170,7 +171,7 @@ describe("descriptor", () => {
         const session = fakeSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
 
         await AntigravityBackendDescriptor.applySelection(session, {
-          baseModelId: "gemini-4-argon",
+          baseModelId: "claude-opus-5-5",
           effort: "low",
         });
 
@@ -180,8 +181,8 @@ describe("descriptor", () => {
     });
 
     describe("applyInitialSessionConfig()", () => {
-      function agentSession(state: BackendState) {
-        return fakeSession(state) as unknown as Parameters<
+      function agentSession(state: BackendState, afterModelSwitch?: BackendState) {
+        return fakeSession(state, afterModelSwitch) as unknown as Parameters<
           NonNullable<typeof AntigravityBackendDescriptor.applyInitialSessionConfig>
         >[0] &
           ReturnType<typeof fakeSession>;
@@ -195,13 +196,16 @@ describe("descriptor", () => {
         },
       } as unknown as Partial<CopilotSettings>);
 
-      it("reapplies the saved thinking level to a reopened chat, which the agent resets to high", async () => {
-        const session = agentSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
+      it("puts a reopened chat back on the saved model and thinking level, which the agent resets to its own default", async () => {
+        const session = agentSession(
+          stateFor("gemini-4-argon", ["low", "medium", "high"], "high"),
+          stateFor("gemini-3.8-flash", ["low", "medium", "high"], "high")
+        );
 
         await AntigravityBackendDescriptor.applyInitialSessionConfig!(session, SAVED_LOW);
 
+        expect(session.applyModelWireId).toHaveBeenCalledWith("gemini-3.8-flash");
         expect(session.setConfigOption).toHaveBeenCalledWith("thought_level", "low");
-        expect(session.applyModelWireId).not.toHaveBeenCalled();
       });
 
       it("leaves a chat alone when it was started from a seeded selection", async () => {

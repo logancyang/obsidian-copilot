@@ -115,12 +115,8 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
     seededSelection?: ModelSelection
   ): Promise<void> {
     const saved = settings.agentMode?.backends?.antigravity?.defaultModel;
-    const current = session.getState()?.model?.current;
-    if (seededSelection || !saved || !current) return;
-    await AntigravityBackendDescriptor.applySelection(session, {
-      baseModelId: current.baseModelId,
-      effort: saved.effort,
-    });
+    if (seededSelection || !saved) return;
+    await AntigravityBackendDescriptor.applySelection(session, saved);
   },
 
   prefetchEffortCatalog: prefetchConfigEfforts,
