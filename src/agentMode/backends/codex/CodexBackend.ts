@@ -46,7 +46,7 @@ export class CodexBackend implements AcpBackend {
       "Codex isn't set up. Install or detect it in Settings → Copilot → Basic → Agents.",
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
-        ...pythonUtf8Env(settings.agentMode?.backends?.codex?.envOverrides),
+        ...pythonUtf8Env(),
         ...(await buildBuiltinSkillEnv(this.clientVersion)),
         // The supported adapter derives its initial ACP mode from this variable.
         // User env overrides still win.

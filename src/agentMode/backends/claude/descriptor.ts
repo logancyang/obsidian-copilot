@@ -464,7 +464,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
       getManagedEnv: async () => ({
-        ...pythonUtf8Env(getSettings().agentMode?.backends?.claude?.envOverrides),
+        ...pythonUtf8Env(),
         ...(await buildBuiltinSkillEnv(args.clientVersion)),
       }),
       checkAuth: async () =>

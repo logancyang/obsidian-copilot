@@ -90,7 +90,7 @@ describe("agentSystemPrompt", () => {
         updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
-          const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "darwin");
+          const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
           expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
@@ -202,11 +202,11 @@ describe("agentSystemPrompt", () => {
       expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(COPILOT_VAULT_HYGIENE);
     });
 
-    it(`tells every agent on Windows to run quoted code from a script file or here-string, double-quote paths, save non-ASCII scripts as UTF-8 with BOM and try py, right after the vault hygiene line (${ISSUE_3867})`, () => {
+    it(`tells every agent on Windows to run code from a file or here-string, double-quote paths and save non-ASCII scripts as UTF-8 with BOM, right after the vault hygiene line (${ISSUE_3867})`, () => {
       const steering = "Backend-specific steering.";
       for (const backendId of ["claude", "codex", "opencode"] as const) {
         expect(buildAgentSystemPrompt(backendId, APP, steering, "win32")).toContain(
-          `${COPILOT_VAULT_HYGIENE}\n\nWindows shell is PowerShell: run multi-line or quoted code from a script file or a here-string piped to the interpreter, not -e/-c; double-quote paths; save scripts with non-ASCII text as UTF-8 with BOM; Python may be \`py\`.\n\n${steering}`
+          `${COPILOT_VAULT_HYGIENE}\n\nPowerShell: run code from a file or piped here-string, not -e/-c; double-quote paths; save non-ASCII scripts as UTF-8 with BOM.\n\n${steering}`
         );
       }
     });

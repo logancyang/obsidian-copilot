@@ -163,7 +163,7 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         PATH: await agentShellPath(),
-        ...pythonUtf8Env(envOverrides),
+        ...pythonUtf8Env(),
         ...builtinSkillEnv,
         // OpenCode's level filters its file log and stderr together, and its
         // server logs request-failure causes at INFO, so WARN hid every cause.

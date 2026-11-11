@@ -48,10 +48,10 @@ export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vaul
 // https://github.com/logancyang/obsidian-copilot/issues/3868
 export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes.`;
 
-// Windows agents lost quotes passing inline code through PowerShell 5.1, broke on paths with a curly apostrophe, and missed the py launcher.
+// Windows agents lost quotes passing inline code through PowerShell 5.1, broke on paths with a curly apostrophe, and ran BOM-less scripts in the ANSI code page.
 // https://github.com/logancyang/obsidian-copilot/issues/3867
 export const COPILOT_WINDOWS_SHELL_STEERING =
-  "Windows shell is PowerShell: run multi-line or quoted code from a script file or a here-string piped to the interpreter, not -e/-c; double-quote paths; save scripts with non-ASCII text as UTF-8 with BOM; Python may be `py`.";
+  "PowerShell: run code from a file or piped here-string, not -e/-c; double-quote paths; save non-ASCII scripts as UTF-8 with BOM.";
 
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
