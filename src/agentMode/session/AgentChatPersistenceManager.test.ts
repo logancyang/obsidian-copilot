@@ -703,6 +703,26 @@ describe("AgentChatPersistenceManager", () => {
       expect(file.contents).toBe(before);
     });
 
+    it("keeps a copy of a tools block that a reply quotes in its own text (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const quoted =
+        "Your note stores:\n<!-- copilot-tools\nRead (read): a.md\n-->\nunder each reply.";
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "What does the note store?"),
+          {
+            ...makeMessage(AI_SENDER, quoted, 1735732800001),
+            parts: [{ kind: "tool_call", id: "tc1", title: "Read b.md", status: "completed" }],
+          },
+        ],
+        "claude"
+      );
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.messages[1].message).toBe(quoted);
+      expect(loaded.messages[1].toolsUsed).toEqual(["Read b.md"]);
+    });
+
     it("loads a note saved without a tools block as before", async () => {
       const path = "test-folder/agent__no-tools.md";
       await app.vault.adapter.write(

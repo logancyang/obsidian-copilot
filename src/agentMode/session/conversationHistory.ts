@@ -7,6 +7,7 @@ import {
 } from "@/agentMode/session/fanout/fanoutTypes";
 import { USER_SENDER } from "@/constants";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import { isAbsolutePath } from "@/utils/vaultPath";
 import {
   isNoteSelectedTextContext,
   isWebSelectedTextContext,
@@ -116,6 +117,9 @@ export function toolsUsedLines(
       { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
       vaultBase
     )
+      // A path outside the vault would put the user's home folder into a synced note.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+      .filter((path) => !isAbsolutePath(path))
       .map(toolsUsedText)
       .filter((path) => path && !title.includes(path));
     lines.add(`${title}${kind}${paths.length > 0 ? `: ${paths.join(", ")}` : ""}`);

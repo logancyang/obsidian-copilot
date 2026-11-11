@@ -69,6 +69,25 @@ describe("conversationHistory", () => {
       ]);
     });
 
+    it("leaves out paths outside the vault, so a synced note never holds an absolute home-folder path (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", () => {
+      const reply = replyWithTools("Summary.", [
+        toolCall({
+          title: "Read",
+          toolKind: "read",
+          input: { file_path: "/home/ana/.claude/skills/notes/SKILL.md" },
+        }),
+        toolCall({ id: "tc2", title: "Glob", toolKind: "read", input: { path: "/vault" } }),
+        toolCall({
+          id: "tc3",
+          title: "Read",
+          toolKind: "read",
+          input: { file_path: "C:\\Users\\ana\\notes.md" },
+        }),
+      ]);
+
+      expect(toolsUsedLines(reply, "/vault")).toEqual(["Read (read)", "Glob (read)"]);
+    });
+
     it("returns the shared empty list for a reply without tool calls", () => {
       const plain = histMsg(AI_SENDER, "No tools here.");
       const thinking = replyWithTools("Thought about it.", [{ kind: "thought", text: "hmm" }]);

@@ -40,9 +40,9 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
-// Tool cards are not saved, so each reply keeps the tools it used in a hidden block that a reopened chat sends the agent as history.
+// Tool cards are not saved, so each reply keeps the tools it used in a hidden block that a reopened chat sends the agent as history; its lines never hold "-->", so a block the reply quotes stays text.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
-const TOOLS_USED_BLOCK = /(?:^|\r?\n)<!-- copilot-tools\r?\n([\s\S]*?)\r?\n-->$/;
+const TOOLS_USED_BLOCK = /(?:^|\r?\n)<!-- copilot-tools\r?\n((?:(?!-->)[\s\S])*?)\r?\n-->$/;
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
   const epoch = Number(raw);
