@@ -105,6 +105,7 @@ export interface ClaudeSdkBackendProcessOptions {
   clientVersion: string;
   descriptor: BackendDescriptor;
   getEnableThinking?: () => boolean;
+  getAutoMemoryEnabled?: () => boolean;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
   getDefaultModelId?: () => string | undefined;
   getSystemPromptAppend?: () => string | undefined;
@@ -319,6 +320,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         pluginConfigs: {
           "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
         },
+        // Copilot's switch keeps Claude from reading or saving memory outside the vault; when on, Claude Code's own settings decide. https://github.com/logancyang/obsidian-copilot/issues/2892
+        ...(this.opts.getAutoMemoryEnabled?.() === false && { autoMemoryEnabled: false }),
       },
       // Each prompt's echo reports when it reaches Claude. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       extraArgs: { "replay-user-messages": null },

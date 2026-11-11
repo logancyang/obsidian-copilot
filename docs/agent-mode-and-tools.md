@@ -55,6 +55,8 @@ Claude Code stores the credentials on your computer. Copilot checks its sign-in 
 
 Claude models and billing come from your Claude Code account. Models added under **BYOK** do not join the Claude model list.
 
+Claude Code saves what it learns about you and your vault in memory files outside the vault and reads them in later chats. To stop new chats from reading or saving memory, turn off **Auto memory** in Claude's settings tab. While it is on, **Memory files** lists the folders Claude uses for this vault's chats. Select **Open** to review them, or **Clear memory** to delete them. Other vaults and projects keep their memory. If your Claude Code settings already turn memory off, or keep every project's memory in one folder, the setting says so. Deleting a chat doesn't remove what Claude saved from it.
+
 ### Codex
 
 The Codex backend uses `@agentclientprotocol/codex-acp`, which includes a compatible Codex CLI:

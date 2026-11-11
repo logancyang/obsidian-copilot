@@ -100,13 +100,19 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
 interface ClaudeSettingsJson {
   env?: Record<string, unknown>;
   permissions?: { allow?: unknown };
+  autoMemoryEnabled?: unknown;
+  autoMemoryDirectory?: unknown;
+}
+
+function claudeConfigDir(env: NodeJS.ProcessEnv): string {
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  return env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
 }
 
 function claudeSettingsFiles(env: NodeJS.ProcessEnv, vaultBase: string | null): string[] {
-  const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
-  const configDir = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
-  const files = [path.join(configDir, "settings.json")];
+  const files = [path.join(claudeConfigDir(env), "settings.json")];
   if (vaultBase) {
     files.push(path.join(vaultBase, ".claude", "settings.json"));
     files.push(path.join(vaultBase, ".claude", "settings.local.json"));
@@ -236,6 +242,78 @@ const claudeApprovedRules: ApprovedRuleStore = {
     };
   },
 };
+
+export function isClaudeAutoMemoryOn(settings: CopilotSettings): boolean {
+  return settings.agentMode?.backends?.claude?.autoMemory !== false;
+}
+
+export interface ClaudeAutoMemory {
+  turnedOffInClaude: boolean;
+  folders: string[];
+  sharedWithOtherProjects: boolean;
+}
+
+function gitRoot(dir: string): string | null {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  for (let current = dir; ; current = path.dirname(current)) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    if (path.dirname(current) === current) return null;
+  }
+}
+
+// Claude Code keeps memory per git repository or chat folder, outside the vault, so the
+// settings list every folder this vault's chats can use. https://github.com/logancyang/obsidian-copilot/issues/2892
+export async function readClaudeAutoMemory(
+  settings: CopilotSettings,
+  vaultBase: string,
+  chatFolders: readonly string[]
+): Promise<ClaudeAutoMemory> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const env = claudeChildEnv(settings);
+  const [user, project, local] = await Promise.all(
+    claudeSettingsFiles(env, vaultBase).map((file) =>
+      readClaudeSettings(file).then(
+        (loaded) => loaded.settings,
+        () => null
+      )
+    )
+  );
+  const enabledSetting = [local, project, user]
+    .map((file) => file?.autoMemoryEnabled)
+    .find((value) => typeof value === "boolean");
+  const turnedOffInClaude =
+    isEnabledFlag(claudeEffectiveEnv(settings, vaultBase).CLAUDE_CODE_DISABLE_AUTO_MEMORY) ||
+    enabledSetting === false;
+  const customFolder = [local, user].find((file) => typeof file?.autoMemoryDirectory === "string");
+  const candidates = customFolder
+    ? [(customFolder.autoMemoryDirectory as string).replace(/^~(?=$|[/\\])/, os.homedir())]
+    : [vaultBase, ...chatFolders].map((folder) =>
+        path.join(
+          claudeConfigDir(env),
+          "projects",
+          (gitRoot(folder) ?? folder).replace(/[^a-zA-Z0-9]/g, "-"),
+          "memory"
+        )
+      );
+  const existing = await Promise.all(
+    [...new Set(candidates)].map(async (folder) =>
+      (await fs.promises.stat(folder).catch(() => null))?.isDirectory() ? folder : null
+    )
+  );
+  return {
+    turnedOffInClaude,
+    folders: existing.filter((folder): folder is string => folder !== null),
+    sharedWithOtherProjects: customFolder !== undefined && customFolder === user,
+  };
+}
+
+export async function clearClaudeAutoMemory(folders: readonly string[]): Promise<void> {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  await Promise.all(folders.map((folder) => fs.promises.rm(folder, { recursive: true })));
+}
 
 // Same truthy values Claude Code accepts for its provider switches.
 // https://github.com/logancyang/obsidian-copilot/issues/2889
@@ -460,6 +538,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
+      getAutoMemoryEnabled: () => isClaudeAutoMemoryOn(getSettings()),
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
       getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),

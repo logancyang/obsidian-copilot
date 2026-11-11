@@ -927,6 +927,30 @@ describe("ClaudeSdkBackendProcess", () => {
         });
       });
 
+      it.each([
+        [false, { autoMemoryEnabled: false }],
+        [true, {}],
+      ])(
+        "with Copilot's auto memory switch %s, turns Claude's auto memory off only when the switch is off, leaving Claude Code's own settings in charge otherwise (https://github.com/logancyang/obsidian-copilot/issues/2892)",
+        async (autoMemory, expected) => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc({ getAutoMemoryEnabled: () => autoMemory });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const { options } = getPromptQueryCalls()[0][0] as {
+            options: { settings: Record<string, unknown> };
+          };
+          expect(options.settings).toEqual({
+            pluginConfigs: {
+              "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
+            },
+            ...expected,
+          });
+        }
+      );
+
       it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
         queryMock.mockImplementation(
           answering([streamEvent({ type: "message_start", message: {} }), resultMessage()])
