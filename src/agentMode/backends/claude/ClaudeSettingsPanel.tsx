@@ -89,7 +89,7 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
         value={settings.agentMode?.backends?.claude?.autoMemory}
         onChange={(autoMemory) => updateClaudeFields({ autoMemory })}
         memory={memory}
-        onOpenFolder={(folder) => void openWithSystemDefault(folder)}
+        onOpen={() => memory?.folders.forEach((folder) => void openWithSystemDefault(folder))}
         onClear={() => memory && confirmClear(memory.folders)}
       />
 

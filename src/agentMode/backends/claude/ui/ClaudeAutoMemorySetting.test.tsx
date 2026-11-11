@@ -18,7 +18,7 @@ function renderSetting(overrides: Partial<ClaudeAutoMemorySettingProps> = {}) {
       folders: [VAULT_MEMORY, PROJECT_MEMORY],
       folderSetInClaude: false,
     },
-    onOpenFolder: jest.fn(),
+    onOpen: jest.fn(),
     onClear: jest.fn(),
     ...overrides,
   };
@@ -28,15 +28,14 @@ function renderSetting(overrides: Partial<ClaudeAutoMemorySettingProps> = {}) {
 
 describe("ClaudeAutoMemorySetting", () => {
   describe("ClaudeAutoMemorySetting()", () => {
-    it(`shows each memory folder with Open, and Clear memory, while memory is on (${ISSUE})`, () => {
+    it(`offers one Open and Clear memory for the saved memory, without listing paths, while memory is on (${ISSUE})`, () => {
       const props = renderSetting();
 
-      expect(screen.getByText(VAULT_MEMORY)).toBeTruthy();
-      expect(screen.getByText(PROJECT_MEMORY)).toBeTruthy();
-      fireEvent.click(screen.getAllByRole("button", { name: "Open" })[1]);
+      expect(screen.queryByText(VAULT_MEMORY)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
       fireEvent.click(screen.getByRole("button", { name: "Clear memory" }));
 
-      expect(props.onOpenFolder).toHaveBeenCalledWith(PROJECT_MEMORY);
+      expect(props.onOpen).toHaveBeenCalledTimes(1);
       expect(props.onClear).toHaveBeenCalledTimes(1);
     });
 
@@ -82,7 +81,7 @@ describe("ClaudeAutoMemorySetting", () => {
         memory: { onByDefault: false, folders: [VAULT_MEMORY], folderSetInClaude: false },
       });
 
-      expect(screen.getByText(VAULT_MEMORY)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Open" })).toBeTruthy();
     });
 
     it(`says nothing is saved yet and offers no Clear when Claude has written no memory (${ISSUE})`, () => {

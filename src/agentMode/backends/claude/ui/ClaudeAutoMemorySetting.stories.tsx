@@ -14,7 +14,7 @@ const meta = {
     value: undefined,
     onChange: () => undefined,
     memory: { onByDefault: true, folders: [VAULT_MEMORY], folderSetInClaude: false },
-    onOpenFolder: () => undefined,
+    onOpen: () => undefined,
     onClear: () => undefined,
   },
   parameters: { gallery: { host: "settings-tab", layout: "padded" } },
