@@ -5,24 +5,18 @@ import { logWarn } from "@/logger";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 
 const SKILLS_CONFIG_PATH = [".agent", "skills.json"] as const;
-const SHARED_SKILLS_DIR = ".agents/skills";
 
-function skillsConfigText(patterns: readonly string[]): string {
-  return `${JSON.stringify({ entries: [{ path: SHARED_SKILLS_DIR, exclude: patterns }] }, null, 2)}\n`;
-}
-
-function wholeNamePattern(name: string): string {
-  return `^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`;
+function skillsConfigText(names: readonly string[]): string {
+  return `${JSON.stringify({ exclude: names }, null, 2)}\n`;
 }
 
 function writtenByCopilot(text: string): boolean {
   try {
-    const parsed = JSON.parse(text) as { entries?: Array<{ exclude?: unknown }> };
-    const patterns = parsed.entries?.[0]?.exclude;
+    const names = (JSON.parse(text) as { exclude?: unknown }).exclude;
     return (
-      Array.isArray(patterns) &&
-      patterns.every((pattern) => typeof pattern === "string") &&
-      text === skillsConfigText(patterns)
+      Array.isArray(names) &&
+      names.every((name) => typeof name === "string") &&
+      text === skillsConfigText(names)
     );
   } catch {
     return false;
@@ -49,7 +43,7 @@ export async function syncAntigravitySkillsConfig(
     return;
   }
   const names = composeDenyList([...managedSkills], "antigravity", crossDiscoveredAgents);
-  const next = names.length > 0 ? skillsConfigText(names.map(wholeNamePattern)) : null;
+  const next = names.length > 0 ? skillsConfigText(names) : null;
   if (next === current) return;
   if (next === null) {
     await fs.rm(file, { force: true });

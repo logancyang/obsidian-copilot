@@ -34,12 +34,9 @@ describe("antigravitySkillsConfig", () => {
 
     afterEach(() => home.restore());
 
-    const excluded = () =>
-      JSON.parse(readFileSync(config, "utf8")) as {
-        entries: Array<{ path: string; exclude: string[] }>;
-      };
+    const excluded = () => JSON.parse(readFileSync(config, "utf8")) as unknown;
 
-    it("excludes from Codex's .agents/skills, by whole name, each managed skill switched on for Codex and off for Antigravity", async () => {
+    it("excludes by exact directory name each managed skill switched on for Codex and off for Antigravity, and never one switched on for Antigravity", async () => {
       await syncAntigravitySkillsConfig(
         vault,
         [
@@ -52,9 +49,7 @@ describe("antigravitySkillsConfig", () => {
         ["codex"]
       );
 
-      expect(excluded()).toEqual({
-        entries: [{ path: ".agents/skills", exclude: ["^codexonly$", "^dot\\.name$"] }],
-      });
+      expect(excluded()).toEqual({ exclude: ["codexonly", "dot.name"] });
     });
 
     it("writes no file when no skill needs excluding", async () => {

@@ -276,7 +276,7 @@ describe("descriptor", () => {
 
         expect(
           JSON.parse(readFileSync(join(home.homeDir, ".agent", "skills.json"), "utf8"))
-        ).toEqual({ entries: [{ path: ".agents/skills", exclude: ["^codexonly$"] }] });
+        ).toEqual({ exclude: ["codexonly"] });
       });
     });
 
