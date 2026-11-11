@@ -64,7 +64,7 @@ const FILE_EDIT_TOOLS: Readonly<Record<BackendId, string>> = {
   claude: "Edit/Write",
   codex: "apply_patch",
   opencode: "edit/write/patch",
-  antigravity: "write_to_file/replace_file_content",
+  antigravity: "edit_file/write_file",
 };
 
 function buildFileEditPolicy(backendId: BackendId): string {

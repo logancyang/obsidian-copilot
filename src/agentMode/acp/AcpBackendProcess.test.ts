@@ -1015,6 +1015,51 @@ describe("AcpBackendProcess", () => {
 
           expect(lastPlanEvent(unmetered)?.update.planUsage).toEqual(PLAN_USAGE);
         });
+
+        it("shows each session the windows the backend selects for its current model and reselects on a model switch", async () => {
+          const windows = [
+            { id: "gemini-5h", label: "5h", percent: 10 },
+            { id: "3p-5h", label: "5h", percent: 40 },
+          ];
+          const backend = new AcpBackendProcess(
+            buildApp(),
+            {
+              ...buildStubBackend(),
+              readPlanUsage: jest
+                .fn()
+                .mockResolvedValue({ kind: "usage", planUsage: { windows, updatedAt: 1_000 } }),
+              selectPlanUsage: (planUsage, wireModelId) => ({
+                ...planUsage,
+                windows: planUsage.windows.filter((w) =>
+                  w.id.startsWith(wireModelId === "gemini" ? "gemini-" : "3p-")
+                ),
+              }),
+            },
+            "1.0.0",
+            modelDescriptor()
+          );
+          await backend.start();
+          mockNewSession.mockResolvedValueOnce({
+            sessionId: "s1",
+            configOptions: modelOptions("gemini"),
+          } as unknown as { sessionId: string });
+          await backend.newSession({ cwd: "/vault" });
+          const handler = jest.fn();
+          backend.registerSessionHandler("s1", handler);
+          await settle();
+
+          expect(lastPlanEvent(handler)?.update.planUsage).toEqual({
+            windows: [windows[0]],
+            updatedAt: 1_000,
+          });
+
+          await backend.setSessionModel({ sessionId: "s1", modelId: "claude" });
+
+          expect(lastPlanEvent(handler)?.update.planUsage).toEqual({
+            windows: [windows[1]],
+            updatedAt: 1_000,
+          });
+        });
       });
     });
 
@@ -1235,6 +1280,29 @@ describe("AcpBackendProcess", () => {
             headers: [{ name: "Authorization", value: "Bearer t0k3n" }],
           },
         ]);
+      });
+
+      it("sends the backend's session metadata with session/new", async () => {
+        const meta = { antigravity: { systemPrompt: { append: "Be brief." } } };
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ newSessionMeta: () => meta }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).toMatchObject({ _meta: meta });
+      });
+
+      it("sends no session metadata when the backend has none", async () => {
+        const backend = await startBackend();
+
+        await backend.newSession({ cwd: "/vault" });
+
+        expect(mockNewSession.mock.calls[0][0]).not.toHaveProperty("_meta");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 starts the chat without Copilot's MCP servers when the agent never advertised HTTP MCP", async () => {
@@ -1534,6 +1602,80 @@ describe("AcpBackendProcess", () => {
           turnId: "p1",
           stopReason: "end_turn",
           turnDiff: { root: "/repo", unifiedDiff: "diff --git a/x b/x\n" },
+        });
+      });
+
+      describe("synthesized manual compaction", () => {
+        async function compactionUpdates(
+          synthesizesManualCompaction: boolean,
+          promptText: string,
+          answer: () => Promise<{ stopReason: string }>
+        ): Promise<SessionEvent["update"][]> {
+          const backend = new AcpBackendProcess(
+            buildApp(),
+            buildStubBackend({ synthesizesManualCompaction }),
+            "1.0.0",
+            buildStubDescriptor()
+          );
+          await backend.start();
+          promptMock(backend).mockImplementationOnce(answer);
+          const handler = jest.fn();
+          await promptTurn(backend, [{ type: "text", text: promptText }], handler);
+          return handler.mock.calls
+            .map(([e]) => e.update)
+            .filter((u) => u.sessionUpdate === "compaction" || u.sessionUpdate.startsWith("turn_"));
+        }
+
+        it("reports a bare /compact turn as a manual compaction that completes before the turn ends", async () => {
+          const updates = await compactionUpdates(true, "/compact", async () => ({
+            stopReason: "end_turn",
+          }));
+
+          expect(updates).toEqual([
+            { sessionUpdate: "turn_started", turnId: "p1" },
+            {
+              sessionUpdate: "compaction",
+              id: "p1",
+              trigger: "manual",
+              status: "in_progress",
+            },
+            { sessionUpdate: "compaction", id: "p1", trigger: "manual", status: "completed" },
+            { sessionUpdate: "turn_ended", turnId: "p1", stopReason: "end_turn" },
+          ]);
+        });
+
+        it("reports a cancelled /compact turn as a cancelled compaction", async () => {
+          const updates = await compactionUpdates(true, "/compact", async () => ({
+            stopReason: "cancelled",
+          }));
+
+          expect(updates).toContainEqual(expect.objectContaining({ status: "cancelled" }));
+        });
+
+        it("reports a rejected /compact turn as a failed compaction with the error", async () => {
+          const updates = await compactionUpdates(true, "/compact", async () => {
+            throw new Error("quota exhausted");
+          });
+
+          expect(updates).toContainEqual(
+            expect.objectContaining({ status: "failed", error: "quota exhausted" })
+          );
+        });
+
+        it("reports no compaction for an ordinary prompt", async () => {
+          const updates = await compactionUpdates(true, "summarize my note", async () => ({
+            stopReason: "end_turn",
+          }));
+
+          expect(updates.filter((u) => u.sessionUpdate === "compaction")).toEqual([]);
+        });
+
+        it("leaves compaction to the agent's own updates when the backend does not synthesize it", async () => {
+          const updates = await compactionUpdates(false, "/compact", async () => ({
+            stopReason: "end_turn",
+          }));
+
+          expect(updates.filter((u) => u.sessionUpdate === "compaction")).toEqual([]);
         });
       });
 

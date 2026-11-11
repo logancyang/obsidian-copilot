@@ -87,6 +87,11 @@ function isMethodNotFoundError(err: unknown): boolean {
   return false;
 }
 
+function isCompactPrompt(prompt: PromptInput["prompt"]): boolean {
+  const [first] = prompt;
+  return first?.type === "text" && isCompactCommand(first.text);
+}
+
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 const JSONRPC_INTERNAL_ERROR = -32603;
 
@@ -316,9 +321,11 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
+    const meta = this.backend.newSessionMeta?.();
     const req: NewSessionRequest = {
       cwd: params.cwd,
       mcpServers: this.mcpServersField(params.mcpServers),
+      ...(meta ? { _meta: meta } : {}),
     };
     const wireResp = await this.requireConnection()
       .agent.request("session/new", req)
@@ -342,17 +349,33 @@ export class AcpBackendProcess implements BackendProcess {
     // The turn's end must reach its session even after the agent exits and its handlers are cleared. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
     const handler = this.domainHandlers.get(sessionId);
     const emit = (update: SessionEvent["update"]) => handler?.({ sessionId, update });
+    const compaction =
+      this.backend.synthesizesManualCompaction && isCompactPrompt(params.prompt)
+        ? { sessionUpdate: "compaction" as const, id: promptId, trigger: "manual" as const }
+        : null;
     emit({ sessionUpdate: "message_delivered", promptId });
     emit({ sessionUpdate: "turn_started", turnId: promptId });
+    if (compaction) emit({ ...compaction, status: "in_progress" });
     void turn.then(
-      (end) => emit({ sessionUpdate: "turn_ended", turnId: promptId, ...end }),
-      (error: unknown) =>
+      (end) => {
+        if (compaction) {
+          emit({
+            ...compaction,
+            status: end.stopReason === "cancelled" ? "cancelled" : "completed",
+          });
+        }
+        emit({ sessionUpdate: "turn_ended", turnId: promptId, ...end });
+      },
+      (error: unknown) => {
+        const failure = error instanceof Error ? error : new Error(err2String(error));
+        if (compaction) emit({ ...compaction, status: "failed", error: failure.message });
         emit({
           sessionUpdate: "turn_ended",
           turnId: promptId,
           stopReason: "end_turn",
-          error: error instanceof Error ? error : new Error(err2String(error)),
-        })
+          error: failure,
+        });
+      }
     );
   }
 
@@ -360,8 +383,7 @@ export class AcpBackendProcess implements BackendProcess {
     connection: ClientConnection,
     params: PromptInput
   ): Promise<Omit<TurnEnd, "turnId">> {
-    const [first] = params.prompt;
-    if (first?.type === "text" && isCompactCommand(first.text)) {
+    if (isCompactPrompt(params.prompt)) {
       this.manualCompactSessions.add(params.sessionId);
     }
     const resp = await connection.agent
@@ -446,12 +468,16 @@ export class AcpBackendProcess implements BackendProcess {
 
   private planUsageFor(sessionId: SessionId): PlanUsage | null {
     if (!this.lastPlanUsage) return null;
+    if (this.backend.selectPlanUsage) {
+      return this.backend.selectPlanUsage(this.lastPlanUsage, this.currentWireModelId(sessionId));
+    }
     const applies = this.backend.planUsageAppliesTo?.(this.currentWireModelId(sessionId)) ?? true;
     return applies ? this.lastPlanUsage : null;
   }
 
   private republishPlanUsage(sessionId: SessionId): void {
-    if (!this.lastPlanUsage || !this.backend.planUsageAppliesTo) return;
+    if (!this.lastPlanUsage || (!this.backend.planUsageAppliesTo && !this.backend.selectPlanUsage))
+      return;
     this.domainHandlers.get(sessionId)?.({
       sessionId,
       update: { sessionUpdate: "plan_usage_update", planUsage: this.planUsageFor(sessionId) },

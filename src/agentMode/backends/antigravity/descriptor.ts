@@ -1,6 +1,7 @@
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendDescriptor,
   BackendProcess,
@@ -85,6 +86,10 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
+    const offered = session
+      .getState()
+      ?.model?.availableModels.find((entry) => entry.baseModelId === selection.baseModelId);
+    if (!offered) return;
     if (session.getState()?.model?.current.baseModelId !== selection.baseModelId) {
       await session.applyModelWireId(antigravityWire.encode(selection));
     }
@@ -94,15 +99,34 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
       model?.availableModels.find((entry) => entry.baseModelId === selection.baseModelId)
         ?.effortOptions
     );
-    if (model?.apply.kind === "setConfigOption" && model.apply.effortConfigId && effort !== null) {
+    if (
+      model?.apply.kind === "setConfigOption" &&
+      model.apply.effortConfigId &&
+      effort !== null &&
+      effort !== model.current.effort
+    ) {
       await session.setConfigOption(model.apply.effortConfigId, effort);
     }
+  },
+
+  async applyInitialSessionConfig(
+    session: AgentSession,
+    settings: CopilotSettings,
+    seededSelection?: ModelSelection
+  ): Promise<void> {
+    const saved = settings.agentMode?.backends?.antigravity?.defaultModel;
+    const current = session.getState()?.model?.current;
+    if (seededSelection || !saved || !current) return;
+    await AntigravityBackendDescriptor.applySelection(session, {
+      baseModelId: current.baseModelId,
+      effort: saved.effort,
+    });
   },
 
   prefetchEffortCatalog: prefetchConfigEfforts,
 
   createBackendProcess(args): BackendProcess {
-    return simpleBinaryBackendProcess(args, new AntigravityBackend(args.clientVersion));
+    return simpleBinaryBackendProcess(args, new AntigravityBackend(args.app, args.clientVersion));
   },
 
   SettingsPanel: AntigravitySettingsPanel,

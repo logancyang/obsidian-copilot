@@ -2,7 +2,7 @@ import { requireNodeModule } from "@/utils/desktopRuntime";
 
 export interface TempHome {
   homeDir: string;
-  installAgy(): string;
+  installAgy(script?: string): string;
   restore(): void;
 }
 
@@ -16,11 +16,11 @@ export function pinTempHome(): TempHome {
   jest.mocked(os.homedir).mockReturnValue(homeDir);
   return {
     homeDir,
-    installAgy() {
+    installAgy(script = "") {
       const binDir = path.join(homeDir, ".local", "bin");
       fs.mkdirSync(binDir, { recursive: true });
       const agy = path.join(binDir, "agy");
-      fs.writeFileSync(agy, "#!/bin/sh\n", { mode: 0o755 });
+      fs.writeFileSync(agy, `#!/bin/sh\n${script}`, { mode: 0o755 });
       return agy;
     },
     restore() {

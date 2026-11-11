@@ -26,7 +26,8 @@ const MODEL_IDS = [
 
 function sessionConfigOptions(
   currentModel: string,
-  thoughtLevels: string[] | null
+  thoughtLevels: string[] | null,
+  currentLevel?: string
 ): BackendConfigOption[] {
   const options: BackendConfigOption[] = [
     {
@@ -44,7 +45,7 @@ function sessionConfigOptions(
       type: "select",
       category: "thought_level",
       name: "Thinking",
-      currentValue: thoughtLevels[thoughtLevels.length - 1],
+      currentValue: currentLevel ?? thoughtLevels[thoughtLevels.length - 1],
       options: thoughtLevels.map((value) => ({ value, name: value })),
     });
   }
@@ -56,12 +57,16 @@ const ANTIGRAVITY_MODES: RawModeState = {
   availableModes: ["default", "accept-edits", "auto", "plan"].map((id) => ({ id, name: id })),
 };
 
-function stateFor(currentModel: string, thoughtLevels: string[] | null): BackendState {
+function stateFor(
+  currentModel: string,
+  thoughtLevels: string[] | null,
+  currentLevel?: string
+): BackendState {
   return translateBackendState(
     {
       models: null,
       modes: ANTIGRAVITY_MODES,
-      configOptions: sessionConfigOptions(currentModel, thoughtLevels),
+      configOptions: sessionConfigOptions(currentModel, thoughtLevels, currentLevel),
     },
     AntigravityBackendDescriptor
   );
@@ -110,7 +115,7 @@ describe("descriptor", () => {
       it("switches the model, then applies the thinking level the new model offers", async () => {
         const session = fakeSession(
           stateFor("gemini-3.8-flash", ["low", "medium", "high"]),
-          stateFor("claude-opus-4-6-thinking", ["low", "medium", "high", "max"])
+          stateFor("claude-opus-4-6-thinking", ["low", "medium", "high", "max"], "high")
         );
 
         await AntigravityBackendDescriptor.applySelection(session, {
@@ -146,6 +151,67 @@ describe("descriptor", () => {
         });
 
         expect(session.applyModelWireId).toHaveBeenCalledWith("gpt-oss-120b-medium");
+        expect(session.setConfigOption).not.toHaveBeenCalled();
+      });
+
+      it("sends nothing when the session already runs the selected model and thinking level", async () => {
+        const session = fakeSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
+
+        await AntigravityBackendDescriptor.applySelection(session, {
+          baseModelId: "gemini-3.8-flash",
+          effort: "high",
+        });
+
+        expect(session.applyModelWireId).not.toHaveBeenCalled();
+        expect(session.setConfigOption).not.toHaveBeenCalled();
+      });
+
+      it("keeps the agent's model when this session does not offer the selected one", async () => {
+        const session = fakeSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
+
+        await AntigravityBackendDescriptor.applySelection(session, {
+          baseModelId: "gemini-4-argon",
+          effort: "low",
+        });
+
+        expect(session.applyModelWireId).not.toHaveBeenCalled();
+        expect(session.setConfigOption).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("applyInitialSessionConfig()", () => {
+      function agentSession(state: BackendState) {
+        return fakeSession(state) as unknown as Parameters<
+          NonNullable<typeof AntigravityBackendDescriptor.applyInitialSessionConfig>
+        >[0] &
+          ReturnType<typeof fakeSession>;
+      }
+
+      const SAVED_LOW = settingsWith({
+        agentMode: {
+          backends: {
+            antigravity: { defaultModel: { baseModelId: "gemini-3.8-flash", effort: "low" } },
+          },
+        },
+      } as unknown as Partial<CopilotSettings>);
+
+      it("reapplies the saved thinking level to a reopened chat, which the agent resets to high", async () => {
+        const session = agentSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
+
+        await AntigravityBackendDescriptor.applyInitialSessionConfig!(session, SAVED_LOW);
+
+        expect(session.setConfigOption).toHaveBeenCalledWith("thought_level", "low");
+        expect(session.applyModelWireId).not.toHaveBeenCalled();
+      });
+
+      it("leaves a chat alone when it was started from a seeded selection", async () => {
+        const session = agentSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
+
+        await AntigravityBackendDescriptor.applyInitialSessionConfig!(session, SAVED_LOW, {
+          baseModelId: "gemini-3.8-flash",
+          effort: "high",
+        });
+
         expect(session.setConfigOption).not.toHaveBeenCalled();
       });
     });

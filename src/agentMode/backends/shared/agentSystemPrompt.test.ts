@@ -177,7 +177,7 @@ describe("agentSystemPrompt", () => {
         "Edit vault files with your edit/write/patch tools so Copilot shows a diff"
       );
       expect(buildAgentSystemPrompt("antigravity", APP)).toContain(
-        "Edit vault files with your write_to_file/replace_file_content tools so Copilot shows a diff"
+        "Edit vault files with your edit_file/write_file tools so Copilot shows a diff"
       );
     });
 

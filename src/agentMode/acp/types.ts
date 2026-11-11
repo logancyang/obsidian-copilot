@@ -1,5 +1,5 @@
 import type { BackendId, TurnDiff } from "@/agentMode/session/types";
-import type { PlanUsageReading } from "@/agentMode/session/planUsage";
+import type { PlanUsage, PlanUsageReading } from "@/agentMode/session/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
 export interface AcpSpawnDescriptor {
@@ -15,8 +15,11 @@ export interface AcpBackend {
   buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor>;
   readPlanUsage?(): Promise<PlanUsageReading>;
   planUsageAppliesTo?(wireModelId: string | null | undefined): boolean;
+  selectPlanUsage?(planUsage: PlanUsage, wireModelId: string | null | undefined): PlanUsage | null;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;
   readonly clientCapabilitiesMeta?: Readonly<Record<string, unknown>>;
+  newSessionMeta?(): Record<string, unknown>;
+  readonly synthesizesManualCompaction?: boolean;
   readTurnDiff?(
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
