@@ -46,9 +46,16 @@ function makeApp() {
 
 const PATH_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/907";
 
-function vaultWithFiles(paths: string[], adapter: unknown = new FileSystemAdapter()): App {
+function vaultWithFiles(
+  paths: string[],
+  adapter: unknown = new FileSystemAdapter(),
+  size = base64ToArrayBuffer(DATA).byteLength
+): App {
   const files = new Map(
-    paths.map((path) => [path, mockTFile({ path, name: path.split("/").pop() })])
+    paths.map((path) => [
+      path,
+      mockTFile({ path, name: path.split("/").pop(), stat: { size, ctime: 0, mtime: 0 } }),
+    ])
   );
   return {
     vault: { adapter, getAbstractFileByPath: (path: string) => files.get(path) ?? null },
@@ -102,6 +109,19 @@ describe("chatImagePersistence", () => {
         `/vault/${saved}`
       );
       expect(savedChatImagePath(app, CHATS, `![](/${saved})`)).toBe(`/vault/${saved}`);
+    });
+
+    it(`finds the file by its saved name whatever folder a relative or malformed embed names (${PATH_ISSUE})`, () => {
+      const app = vaultWithFiles([saved]);
+      const name = `copilot-image-${sha256(DATA)}.png`;
+      expect(savedChatImagePath(app, CHATS, `![[../attachments/${name}]]`)).toBe(`/vault/${saved}`);
+      expect(savedChatImagePath(app, CHATS, `![](/bad%zz/${name})`)).toBe(`/vault/${saved}`);
+    });
+
+    it(`returns null when the hash-named file's size differs from the live image's data (${PATH_ISSUE})`, () => {
+      expect(
+        savedChatImagePath(vaultWithFiles([saved], undefined, 1), CHATS, IMAGE.image_url.url)
+      ).toBeNull();
     });
 
     it(`returns null for an image whose file was never saved or no longer exists (${PATH_ISSUE})`, () => {

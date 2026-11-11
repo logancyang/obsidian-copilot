@@ -92,7 +92,6 @@ function renderTurnContent(
       images.push(embed);
       return "";
     })
-    .replace(/\n{3,}/g, "\n\n")
     .trim();
   if (prose.length > 0) segments.push(prose);
   const tools = toolsUsedLines(message, vaultBase);

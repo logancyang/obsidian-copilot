@@ -30,12 +30,6 @@ const EMBED = /^!\[\[[^\r\n]+\]\]$|^!\[[^\r\n]*\]\([^\r\n]+\)$/gm;
 export const CHAT_IMAGE_EMBED =
   /^!\[\[[^\r\n]*copilot-image-[a-f0-9]{64}[^\r\n]*\]\]$|^!\[[^\r\n]*\]\([^\r\n]*copilot-image-[a-f0-9]{64}[^\r\n]*\)$/gm;
 
-function embedTarget(embed: string): string {
-  return embed.startsWith("![[")
-    ? embed.slice(3, -2).split("|")[0]
-    : decodeURIComponent(embed.slice(embed.indexOf("](") + 2, -1).replace(/^<|>$/g, ""));
-}
-
 function parseImageDataUrl(
   url: string
 ): { bytes: ArrayBuffer; base64: string; extension: string; hash: string } | null {
@@ -69,11 +63,15 @@ export function savedChatImagePath(
     const upload = parseImageDataUrl(image);
     const name = upload && `copilot-image-${upload.hash}.${upload.extension}`;
     const saved = name && `${deriveConversationAttachmentsFolder(conversationsFolder)}/${name}`;
-    if (saved && app.vault.getAbstractFileByPath(saved) instanceof TFile) path = saved;
+    const file = saved ? app.vault.getAbstractFileByPath(saved) : null;
+    // A hash-named file of another size is not this image (a truncated write or a stranger's file), so the agent must not be sent to it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+    if (file instanceof TFile && file.stat.size === upload?.bytes.byteLength) path = file.path;
   } else {
-    path =
-      app.metadataCache.getFirstLinkpathDest(embedTarget(image).replace(/^\//, ""), "")?.path ??
-      null;
+    // Saved image names are unique by content hash, so the name alone finds the file, and a hand-edited link with a broken percent escape cannot fail the send.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+    const name = /copilot-image-[a-f0-9]{64}(?: \d+)?\.[a-z0-9]+/.exec(image)?.[0];
+    path = (name && app.metadataCache.getFirstLinkpathDest(name, "")?.path) || null;
   }
   const adapter = app.vault.adapter;
   return path && adapter instanceof FileSystemAdapter ? adapter.getFullPath(path) : path;
@@ -201,7 +199,9 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       if (persisted === undefined && canAdoptLegacy) {
         try {
           const embed = legacyEmbeds[ordinal];
-          const target = embedTarget(embed);
+          const target = embed.startsWith("![[")
+            ? embed.slice(3, -2).split("|")[0]
+            : decodeURIComponent(embed.slice(embed.indexOf("](") + 2, -1).replace(/^<|>$/g, ""));
           // Readable legacy files must match bytes even with a hash filename; only missing targets may rely on the filename as a receipt.
           // https://github.com/Brevilabs/obsidian-copilot-private/issues/533
           const file = app.metadataCache?.getFirstLinkpathDest(target, sourcePath);
