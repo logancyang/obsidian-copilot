@@ -55,7 +55,7 @@ Claude Code stores the credentials on your computer. Copilot checks its sign-in 
 
 Claude models and billing come from your Claude Code account. Models added under **BYOK** do not join the Claude model list.
 
-Claude Code saves what it learns about you and your vault in memory files outside the vault and reads them in later chats. To stop new chats from reading or saving memory, turn off **Auto memory** in Claude's settings tab. While it is on, **Memory files** lists the folders Claude uses for this vault's chats. Select **Open** to review them, or **Clear memory** to delete them. Other vaults and projects keep their memory. A folder set in your Claude Code settings offers **Open** but not **Clear memory**. Deleting a chat doesn't remove what Claude saved from it.
+Claude Code saves what it learns about you and your vault in memory files outside the vault and reads them in later chats. **Auto memory** in Claude's settings tab follows your Claude Code setting by default and shows whether that is on or off. Choose **On** or **Off** to override it for this vault's new chats. While memory is on, **Memory files** lists the folders Claude uses for this vault's chats. Select **Open** to review them, or **Clear memory** to delete them. Other vaults and projects keep their memory. A folder set in your Claude Code settings offers **Open** but not **Clear memory**. Deleting a chat doesn't remove what Claude saved from it.
 
 ### Codex
 

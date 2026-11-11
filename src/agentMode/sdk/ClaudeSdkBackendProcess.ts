@@ -105,7 +105,7 @@ export interface ClaudeSdkBackendProcessOptions {
   clientVersion: string;
   descriptor: BackendDescriptor;
   getEnableThinking?: () => boolean;
-  getAutoMemoryEnabled?: () => boolean;
+  getAutoMemoryEnabled?: () => boolean | undefined;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
   getDefaultModelId?: () => string | undefined;
   getSystemPromptAppend?: () => string | undefined;
@@ -116,6 +116,12 @@ export interface ClaudeSdkBackendProcessOptions {
 }
 
 const THINKING_BUDGET_TOKENS = 31_999;
+
+// Claude Code reads this variable before its own settings, so Copilot's On or Off wins and the
+// Claude Code default leaves it untouched. https://github.com/logancyang/obsidian-copilot/issues/2892
+function autoMemoryEnv(enabled: boolean | undefined): Record<string, string> {
+  return enabled === undefined ? {} : { CLAUDE_CODE_DISABLE_AUTO_MEMORY: enabled ? "0" : "1" };
+}
 
 const STATIC_SDK_MODES: RawModeState = {
   currentModeId: "default",
@@ -320,8 +326,6 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         pluginConfigs: {
           "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
         },
-        // Copilot's switch keeps Claude from reading or saving memory outside the vault; when on, Claude Code's own settings decide. https://github.com/logancyang/obsidian-copilot/issues/2892
-        ...(this.opts.getAutoMemoryEnabled?.() === false && { autoMemoryEnabled: false }),
       },
       // Each prompt's echo reports when it reaches Claude. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       extraArgs: { "replay-user-messages": null },
@@ -372,8 +376,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
       ...managedEnv,
       ...envOverrides,
-      // An inherited or overridden CLAUDE_CODE_DISABLE_AUTO_MEMORY=0 forces memory on over the setting, so Copilot's switch sets it last. https://github.com/logancyang/obsidian-copilot/issues/2892
-      ...(this.opts.getAutoMemoryEnabled?.() === false && { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" }),
+      ...autoMemoryEnv(this.opts.getAutoMemoryEnabled?.()),
     };
 
     if (this.sessions.get(sessionId) !== session) {

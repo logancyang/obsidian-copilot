@@ -11,9 +11,9 @@ const meta = {
   title: "Agent Mode/Claude Auto Memory Setting",
   component: ClaudeAutoMemorySetting,
   args: {
-    enabled: true,
-    onEnabledChange: () => undefined,
-    memory: { folders: [VAULT_MEMORY], folderSetInClaude: false },
+    value: undefined,
+    onChange: () => undefined,
+    memory: { onByDefault: true, folders: [VAULT_MEMORY], folderSetInClaude: false },
     onOpenFolder: () => undefined,
     onClear: () => undefined,
   },
@@ -26,6 +26,7 @@ export const On: StoryObj<ClaudeAutoMemorySettingProps> = {};
 export const ProjectChats: StoryObj<ClaudeAutoMemorySettingProps> = {
   args: {
     memory: {
+      onByDefault: true,
       folders: [VAULT_MEMORY, PROJECT_MEMORY],
       folderSetInClaude: false,
     },
@@ -33,12 +34,13 @@ export const ProjectChats: StoryObj<ClaudeAutoMemorySettingProps> = {
 };
 
 export const NothingSaved: StoryObj<ClaudeAutoMemorySettingProps> = {
-  args: { memory: { folders: [], folderSetInClaude: false } },
+  args: { memory: { onByDefault: true, folders: [], folderSetInClaude: false } },
 };
 
 export const FolderSetInClaude: StoryObj<ClaudeAutoMemorySettingProps> = {
   args: {
     memory: {
+      onByDefault: true,
       folders: ["/Users/me/claude-memory"],
       folderSetInClaude: true,
     },
@@ -46,5 +48,9 @@ export const FolderSetInClaude: StoryObj<ClaudeAutoMemorySettingProps> = {
 };
 
 export const Off: StoryObj<ClaudeAutoMemorySettingProps> = {
-  args: { enabled: false },
+  args: { value: false },
+};
+
+export const OffInClaudeCode: StoryObj<ClaudeAutoMemorySettingProps> = {
+  args: { memory: { onByDefault: false, folders: [], folderSetInClaude: false } },
 };

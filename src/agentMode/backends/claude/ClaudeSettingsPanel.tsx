@@ -15,7 +15,6 @@ import { Notice, type App } from "obsidian";
 import React from "react";
 import {
   clearClaudeAutoMemory,
-  isClaudeAutoMemoryOn,
   readClaudeAutoMemory,
   resolveClaudeAutoModePermission,
   updateClaudeFields,
@@ -87,8 +86,8 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
       />
 
       <ClaudeAutoMemorySetting
-        enabled={isClaudeAutoMemoryOn(settings)}
-        onEnabledChange={(autoMemory) => updateClaudeFields({ autoMemory })}
+        value={settings.agentMode?.backends?.claude?.autoMemory}
+        onChange={(autoMemory) => updateClaudeFields({ autoMemory })}
         memory={memory}
         onOpenFolder={(folder) => void openWithSystemDefault(folder)}
         onClear={() => memory && confirmClear(memory.folders)}

@@ -928,39 +928,16 @@ describe("ClaudeSdkBackendProcess", () => {
       });
 
       it.each([
-        [false, { autoMemoryEnabled: false }],
-        [true, {}],
-      ])(
-        "with Copilot's auto memory switch %s, turns Claude's auto memory off only when the switch is off, leaving Claude Code's own settings in charge otherwise (https://github.com/logancyang/obsidian-copilot/issues/2892)",
-        async (autoMemory, expected) => {
-          queryMock.mockImplementation(answering([resultMessage()]));
-          const proc = makeProc({ getAutoMemoryEnabled: () => autoMemory });
-          const { sessionId } = await proc.newSession({ cwd: "/vault" });
-
-          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
-
-          const { options } = getPromptQueryCalls()[0][0] as {
-            options: { settings: Record<string, unknown> };
-          };
-          expect(options.settings).toEqual({
-            pluginConfigs: {
-              "agents-md@builtin": { options: { instructionFiles: "claude-md-and-agents-md" } },
-            },
-            ...expected,
-          });
-        }
-      );
-
-      it.each([
         [false, "1"],
         [true, "0"],
+        [undefined, "inherited"],
       ])(
-        "with Copilot's auto memory switch %s and CLAUDE_CODE_DISABLE_AUTO_MEMORY=0 in the environment overrides, starts Claude with the variable at %s so the switch being off wins over a value that forces memory on (https://github.com/logancyang/obsidian-copilot/issues/2892)",
+        "with Copilot's auto memory choice %s and CLAUDE_CODE_DISABLE_AUTO_MEMORY=inherited in the environment overrides, starts Claude with the variable at %s, so On and Off win and the Claude Code default leaves it alone (https://github.com/logancyang/obsidian-copilot/issues/2892)",
         async (autoMemory, expected) => {
           queryMock.mockImplementation(answering([resultMessage()]));
           const proc = makeProc({
             getAutoMemoryEnabled: () => autoMemory,
-            getEnvOverrides: () => ({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "0" }),
+            getEnvOverrides: () => ({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: "inherited" }),
           });
           const { sessionId } = await proc.newSession({ cwd: "/vault" });
 

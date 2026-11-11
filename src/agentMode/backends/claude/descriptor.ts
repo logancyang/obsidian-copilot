@@ -100,6 +100,7 @@ function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "o
 interface ClaudeSettingsJson {
   env?: Record<string, unknown>;
   permissions?: { allow?: unknown };
+  autoMemoryEnabled?: unknown;
   autoMemoryDirectory?: unknown;
 }
 
@@ -242,11 +243,8 @@ const claudeApprovedRules: ApprovedRuleStore = {
   },
 };
 
-export function isClaudeAutoMemoryOn(settings: CopilotSettings): boolean {
-  return settings.agentMode?.backends?.claude?.autoMemory !== false;
-}
-
 export interface ClaudeAutoMemory {
+  onByDefault: boolean;
   folders: string[];
   folderSetInClaude: boolean;
 }
@@ -283,7 +281,7 @@ export async function readClaudeAutoMemory(
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const env = claudeChildEnv(settings);
-  const [user, , local] = await Promise.all(
+  const [user, project, local] = await Promise.all(
     claudeSettingsFiles(env, vaultBase).map((file) =>
       readClaudeSettings(file).then(
         (loaded) => loaded.settings,
@@ -291,6 +289,15 @@ export async function readClaudeAutoMemory(
       )
     )
   );
+  // The Claude Code default option names the value Claude would use on its own, which its
+  // environment variable decides before its settings. https://github.com/logancyang/obsidian-copilot/issues/2892
+  const envValue = claudeEffectiveEnv(settings, vaultBase).CLAUDE_CODE_DISABLE_AUTO_MEMORY;
+  const settingsValue = [local, project, user]
+    .map((file) => file?.autoMemoryEnabled)
+    .find((value): value is boolean => typeof value === "boolean");
+  const onByDefault = isEnabledFlag(envValue)
+    ? false
+    : isDisabledFlag(envValue) || (settingsValue ?? true);
   const configured = [local, user].find((file) => file?.autoMemoryDirectory != null);
   const customFolder = validMemoryFolder(configured?.autoMemoryDirectory);
   const candidates = customFolder
@@ -309,6 +316,7 @@ export async function readClaudeAutoMemory(
     )
   );
   return {
+    onByDefault,
     folders: existing.filter((folder): folder is string => folder !== null),
     folderSetInClaude: customFolder !== null,
   };
@@ -327,6 +335,12 @@ const TRUTHY_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
 
 function isEnabledFlag(value: unknown): boolean {
   return typeof value === "string" && TRUTHY_ENV_VALUES.has(value.trim().toLowerCase());
+}
+
+function isDisabledFlag(value: unknown): boolean {
+  return (
+    typeof value === "string" && ["0", "false", "no", "off"].includes(value.trim().toLowerCase())
+  );
 }
 
 function claudeChildEnv(settings: CopilotSettings): NodeJS.ProcessEnv {
@@ -544,7 +558,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
-      getAutoMemoryEnabled: () => isClaudeAutoMemoryOn(getSettings()),
+      getAutoMemoryEnabled: () => getSettings().agentMode?.backends?.claude?.autoMemory,
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
       getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),

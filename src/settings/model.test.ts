@@ -567,7 +567,7 @@ describe("model", () => {
       [false, false],
       ["off", undefined],
     ])(
-      "keeps a Claude auto memory switch of %p as %p, dropping a non-boolean so memory stays on",
+      "keeps a Claude auto memory choice of %p as %p, dropping a non-boolean so the Claude Code default applies",
       (autoMemory, kept) => {
         const sanitized = sanitizeSettings({
           ...DEFAULT_SETTINGS,

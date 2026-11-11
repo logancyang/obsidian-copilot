@@ -20,7 +20,6 @@ import {
   ClaudeBackendDescriptor,
   clearClaudeAutoMemory,
   getClaudeInstallState,
-  isClaudeAutoMemoryOn,
   readClaudeAutoMemory,
   refreshClaudeInstallState,
   resolveClaudeAutoModePermission,
@@ -494,20 +493,6 @@ describe("descriptor", () => {
     });
   });
 
-  describe("isClaudeAutoMemoryOn()", () => {
-    it.each([
-      [undefined, true],
-      [true, true],
-      [false, false],
-    ])(
-      "reads the auto memory switch %s as %s, so memory stays on until turned off",
-      (autoMemory, on) => {
-        const settings = { agentMode: { backends: { claude: { autoMemory } } } } as CopilotSettings;
-        expect(isClaudeAutoMemoryOn(settings)).toBe(on);
-      }
-    );
-  });
-
   describe("readClaudeAutoMemory()", () => {
     const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2892";
     let root: string;
@@ -543,10 +528,57 @@ describe("descriptor", () => {
       await expect(
         readClaudeAutoMemory(settings(), vaultBase, [research, travel])
       ).resolves.toEqual({
+        onByDefault: true,
         folders: [memoryFolder(vaultBase), memoryFolder(research)],
         folderSetInClaude: false,
       });
     });
+
+    it.each([
+      ["nothing sets it", [], {}, true],
+      ["the user settings turn it off", [["user", { autoMemoryEnabled: false }]], {}, false],
+      [
+        "the vault's local settings turn it back on over the user settings",
+        [
+          ["user", { autoMemoryEnabled: false }],
+          ["local", { autoMemoryEnabled: true }],
+        ],
+        {},
+        true,
+      ],
+      [
+        "a settings file's env turns it off",
+        [["user", { env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } }]],
+        {},
+        false,
+      ],
+      [
+        "the environment forces it on over settings that turn it off",
+        [["user", { autoMemoryEnabled: false }]],
+        { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "0" },
+        true,
+      ],
+    ] as const)(
+      `reports Claude Code's own auto memory as on by default when %s, so the default option names the value Claude would use (${ISSUE})`,
+      async (_when, files, env, onByDefault) => {
+        for (const [where, content] of files) {
+          writeJson(
+            where === "user"
+              ? path.join(configDir, "settings.json")
+              : path.join(vaultBase, ".claude", "settings.local.json"),
+            content
+          );
+        }
+
+        const memory = await readClaudeAutoMemory(
+          settingsWithClaudeRuntime({ envOverrides: { CLAUDE_CONFIG_DIR: configDir, ...env } }),
+          vaultBase,
+          []
+        );
+
+        expect(memory.onByDefault).toBe(onByDefault);
+      }
+    );
 
     it(`lists one folder named for the git repository when the vault is inside one, as Claude Code keys memory by repository (${ISSUE})`, async () => {
       fs.mkdirSync(path.join(root, ".git"));
@@ -564,6 +596,7 @@ describe("descriptor", () => {
       fs.mkdirSync(path.join(root, "home", "notes-memory"), { recursive: true });
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
+        onByDefault: true,
         folders: [path.join(root, "home", "notes-memory")],
         folderSetInClaude: true,
       });
@@ -578,6 +611,7 @@ describe("descriptor", () => {
       fs.mkdirSync(folder);
 
       await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
+        onByDefault: true,
         folders: [folder],
         folderSetInClaude: true,
       });
@@ -590,6 +624,7 @@ describe("descriptor", () => {
         fs.mkdirSync(memoryFolder(vaultBase), { recursive: true });
 
         await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
+          onByDefault: true,
           folders: [memoryFolder(vaultBase)],
           folderSetInClaude: false,
         });
@@ -658,19 +693,21 @@ describe("descriptor", () => {
       expect(env).toEqual({});
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory switch", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for the Claude Code default", () => {
       mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
       const process = ClaudeBackendDescriptor.createBackendProcess({
         plugin: {} as never,
         app: {} as App,
         clientVersion: "4.0.0",
         descriptor: ClaudeBackendDescriptor,
-      }) as unknown as { opts: { getAutoMemoryEnabled: () => boolean } };
+      }) as unknown as { opts: { getAutoMemoryEnabled: () => boolean | undefined } };
 
       updateClaudeFields({ autoMemory: false });
       expect(process.opts.getAutoMemoryEnabled()).toBe(false);
       updateClaudeFields({ autoMemory: true });
       expect(process.opts.getAutoMemoryEnabled()).toBe(true);
+      updateClaudeFields({ autoMemory: undefined });
+      expect(process.opts.getAutoMemoryEnabled()).toBeUndefined();
     });
   });
 
