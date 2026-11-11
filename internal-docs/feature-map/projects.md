@@ -10,7 +10,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-enter: inside a project, the start screen reads `Chat in <project>` and opens on `Files`; `Recent chats` lists only its chats. It has its own [chat tabs](chat-tabs.md).
 - project-header: the header shows the project name, `Leave project`, `Project settings`, and `Reveal project folder in vault`. Inside a chat it also shows `Project info for <project>`.
 - project-info: inside a project chat, `Project info for <project>` shows `Changed in this chat`, followed by `Project folder` and `Linked` to browse. It has no `Link context` and takes no drops.
-- project-edit: `Edit project` opens `Project name`, `Description`, and `Project instructions`, with `Cancel` and `Save`.
+- project-edit: `Edit project` opens `Project name`, `Description`, and `Project instructions`, with `Cancel` and `Save`. The agent reads the description at the start of each new chat in the project.
 - project-files: the project info lists files created, edited, or deleted in the chat, with `new`, `edited`, or `deleted` and lines added and removed.
 - project-folder: the home's `Files` view shows `Project folder` and an expandable folder tree; choose a file to open it.
 - project-context: the Files view's `Linked` section lists linked notes, folders, tags, properties, and web or YouTube links. `Link context` offers `Files`, `Folders`, `Tags`, `Properties`, and `Link`; `Unlink` removes a link without deleting notes.
@@ -40,6 +40,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Unlink: hover a linked row and choose `Unlink`. Its link disappears; the original note or folder stays in the vault.
 - Drop: drag a nested vault folder over `Files`. The area highlights with `Link files to this project`; dropping it adds it under `Linked`. Drop a PDF from Finder: a copy appears in `sources/`, and a notice reads `Copied <file> into sources/`. Drop a PDF from Finder that is already in the vault: it appears under `Linked` and nothing is copied. Select a vault file and a file outside the vault in Finder and drop both: the first is linked and the second is copied. Drop a folder from Finder: a notice refuses it, and nothing is copied or linked. Cancel a drag with Escape: the highlight disappears. Drop a PDF from Finder on the message box: a copy appears in `sources/`, a notice names it, and its badge shows above the text.
 - Edit: choose `Project settings` in the header. The `Edit project` dialog opens; edit the fields and choose `Save`. Enter saves; Escape cancels. In a narrow window, open the dialog: Cancel and Save remain visible.
+- Description: set `Description` to the project's goal and choose `Save`. In a new chat in the project, ask what the project is for: the agent answers with that goal.
 - Reveal: choose `Reveal in vault`. The file explorer opens with the project's folder selected.
 - Archive: choose `Archive`. The project leaves `Projects` and the count drops; it is listed under `View archived` in Recent chats.
 - Delete: choose `Delete`, then `Delete` in the confirmation. The project leaves `Projects`; its folder and `AGENTS.md` stay in the vault.
@@ -47,6 +48,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 ## Gotchas
 
 - `Project instructions` in `Edit project` and the project's `AGENTS.md` are the same text; editing either changes both.
+- A chat that is already open keeps the description it started with; an edited description reaches new chats only.
 - Files appears alone without a tab bar when the project has no chats or the [Copilot Navigator](copilot-navigator.md) is open. Otherwise the home offers `Files` and `Recent chats`.
 - The folder tree shows `AGENTS.md` when present, but hides the project's configuration note and dotfiles. Folders appear before files, sorted by name.
 - `Link context` stays below the scrolling Project folder and Linked list. A missing linked item stays listed as `Not found` so it can still be unlinked.
