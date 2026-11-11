@@ -312,7 +312,9 @@ export async function readClaudeAutoMemory(
 
 export async function clearClaudeAutoMemory(folders: readonly string[]): Promise<void> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  await Promise.all(folders.map((folder) => fs.promises.rm(folder, { recursive: true })));
+  await Promise.all(
+    folders.map((folder) => fs.promises.rm(folder, { recursive: true, force: true }))
+  );
 }
 
 // Same truthy values Claude Code accepts for its provider switches.
