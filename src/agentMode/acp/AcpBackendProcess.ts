@@ -362,7 +362,12 @@ export class AcpBackendProcess implements BackendProcess {
         if (compaction) {
           emit({
             ...compaction,
-            status: end.stopReason === "cancelled" ? "cancelled" : "completed",
+            status:
+              end.stopReason === "end_turn"
+                ? "completed"
+                : end.stopReason === "cancelled"
+                  ? "cancelled"
+                  : "failed",
           });
         }
         emit({ sessionUpdate: "turn_ended", turnId: promptId, ...end });

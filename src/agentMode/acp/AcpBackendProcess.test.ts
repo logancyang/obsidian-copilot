@@ -1709,6 +1709,19 @@ describe("AcpBackendProcess", () => {
           expect(updates).toContainEqual(expect.objectContaining({ status: "cancelled" }));
         });
 
+        it("reports a /compact turn that stops for any reason other than its end as a failed compaction, not a completed one", async () => {
+          const updates = await compactionUpdates(true, "/compact", async () => ({
+            stopReason: "max_tokens",
+          }));
+
+          expect(updates.filter((u) => u.sessionUpdate === "compaction").at(-1)).toEqual({
+            sessionUpdate: "compaction",
+            id: "p1",
+            trigger: "manual",
+            status: "failed",
+          });
+        });
+
         it("reports a rejected /compact turn as a failed compaction with the error", async () => {
           const updates = await compactionUpdates(true, "/compact", async () => {
             throw new Error("quota exhausted");
