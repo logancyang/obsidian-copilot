@@ -22,6 +22,7 @@ export interface AgentModelPickerOverride {
     disabled?: boolean;
   };
   effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
+  initialEffortByModelKey?: Readonly<Record<string, string | null>>;
   commitSelection?: (modelKey: string, effort: string | null) => void;
 }
 

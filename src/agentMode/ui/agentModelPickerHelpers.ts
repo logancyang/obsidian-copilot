@@ -415,6 +415,21 @@ export function buildEffortOptionsByModelKey(
   return out;
 }
 
+export function buildInitialEffortByModelKey(
+  manager: AgentSessionManager,
+  entries: ModelSelectorEntry[],
+  activeBackendId: BackendId | null
+): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const entry of entries) {
+    const backendId = entry._backendId;
+    if (!backendId || backendId === activeBackendId) continue;
+    const effort = manager.getDefaultSelection(backendId)?.effort;
+    if (effort != null) out[getModelKeyFromModel(entry)] = effort;
+  }
+  return out;
+}
+
 export function resolveEffortOptions(
   manager: AgentSessionManager,
   backendId: BackendId,
@@ -487,6 +502,7 @@ export function buildAgentModelPicker(args: {
     disabled: false,
     effort: buildEffortSibling(manager, ctx),
     effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    initialEffortByModelKey: buildInitialEffortByModelKey(manager, entries, ctx.activeBackendId),
     onChange,
     commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
   };

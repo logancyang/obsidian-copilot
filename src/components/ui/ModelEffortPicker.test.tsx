@@ -201,6 +201,38 @@ describe("ModelEffortPicker", () => {
         expect(onChange).toHaveBeenCalledWith("low");
       }
     );
+    it.each([
+      ["starts from its own initial effort", "flash|gemini", "low"],
+      ["keeps the current effort when it has no initial effort", "sibling|agent", "high"],
+    ])("commits a picked model that %s", async (_case, key, expected) => {
+      const commitSelection = jest.fn();
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [
+              ...models,
+              { name: "sibling", provider: "agent", enabled: true },
+              { name: "flash", provider: "gemini", enabled: true },
+            ],
+            value: "model|agent",
+            effort: { options, value: "high", onChange: jest.fn() },
+            effortOptionsByModelKey: {
+              "model|agent": options,
+              "sibling|agent": options,
+              "flash|gemini": options,
+            },
+            initialEffortByModelKey: { "flash|gemini": "low" },
+            commitSelection,
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      fireEvent.click(await screen.findByRole("option", { name: new RegExp(key.split("|")[0]) }));
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+      expect(commitSelection).toHaveBeenCalledWith(key, expected);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/219 preserves a supported effort when the picker closes unchanged", async () => {
       const onChange = jest.fn();
       render(

@@ -26,6 +26,7 @@ export interface ModelEffortPickerOverride {
     disabled?: boolean;
   };
   effortOptionsByModelKey: Record<string, { label: string; value: string | null }[]>;
+  initialEffortByModelKey?: Readonly<Record<string, string | null>>;
   commitSelection: (modelKey: string, effort: string | null) => void;
 }
 
@@ -40,7 +41,15 @@ interface EffortOpt {
 }
 
 export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
-  const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
+  const {
+    models,
+    value,
+    effort,
+    effortOptionsByModelKey,
+    initialEffortByModelKey,
+    commitSelection,
+    disabled,
+  } = override;
 
   const [open, setOpen] = useState(false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
@@ -99,9 +108,10 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
       setDraftModelKey(key);
       setHighlightKey(key);
       const rowOpts = effortOptionsByModelKey[key] ?? [];
-      setDraftEffort(resolveEffort(key === value ? activeEffortValue : draftEffort, rowOpts));
+      const carried = initialEffortByModelKey?.[key] ?? draftEffort;
+      setDraftEffort(resolveEffort(key === value ? activeEffortValue : carried, rowOpts));
     },
-    [effortOptionsByModelKey, draftEffort, value, activeEffortValue]
+    [effortOptionsByModelKey, initialEffortByModelKey, draftEffort, value, activeEffortValue]
   );
 
   const stepDraftEffort = useCallback(

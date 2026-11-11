@@ -99,6 +99,7 @@ export interface ChatInputProps {
       disabled?: boolean;
     };
     effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
+    initialEffortByModelKey?: Readonly<Record<string, string | null>>;
     commitSelection?: (modelKey: string, effort: string | null) => void;
   };
   modePickerOverride?: {
@@ -760,6 +761,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 disabled: modelPickerOverride.disabled,
                 effort: modelPickerOverride.effort,
                 effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
+                initialEffortByModelKey: modelPickerOverride.initialEffortByModelKey,
                 commitSelection: modelPickerOverride.commitSelection,
               }}
               className="tw-min-w-0 tw-max-w-full tw-truncate"

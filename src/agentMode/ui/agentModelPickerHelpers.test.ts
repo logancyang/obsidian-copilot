@@ -2,6 +2,7 @@ import {
   appendBackendSection,
   backendReadinessReason,
   buildEffortOptionsByModelKey,
+  buildInitialEffortByModelKey,
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
@@ -1208,6 +1209,31 @@ describe("agentModelPickerHelpers", () => {
       const entries = [synthesizeAgentEntry(OTHER, OTHER, opencode)];
       const out = buildEffortOptionsByModelKey(manager, entries);
       expect(out[getModelKeyFromModel(entries[0])]).toEqual([]);
+    });
+  });
+
+  describe("buildInitialEffortByModelKey()", () => {
+    it("starts each other agent's models at that agent's saved thinking level and leaves the active agent's models out", () => {
+      const claude = makeDescriptor("claude");
+      const codex = makeDescriptor("codex");
+      const opencode = makeDescriptor("opencode");
+      const manager = makeManager({
+        defaultSelectionById: {
+          claude: { baseModelId: "sonnet", effort: "high" },
+          codex: { baseModelId: "gpt-5.5", effort: "low" },
+        },
+      });
+      const entries = [
+        synthesizeAgentEntry("sonnet", "Sonnet", claude),
+        synthesizeAgentEntry("gpt-5.5", "GPT-5.5", codex),
+        synthesizeAgentEntry("gpt-5.5-mini", "GPT-5.5 mini", codex),
+        synthesizeAgentEntry("kimi", "Kimi", opencode),
+      ];
+
+      expect(buildInitialEffortByModelKey(manager, entries, "claude")).toEqual({
+        [getModelKeyFromModel(entries[1])]: "low",
+        [getModelKeyFromModel(entries[2])]: "low",
+      });
     });
   });
 
