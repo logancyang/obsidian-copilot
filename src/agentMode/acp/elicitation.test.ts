@@ -88,19 +88,78 @@ describe("elicitation", () => {
       expect(form?.toContent({ mcp_install: "Skip" })).toEqual({ mcp_install: "Skip" });
     });
 
-    it(`declines forms that are not Codex questions (${issue})`, () => {
-      const thirdParty = {
+    it("maps a standard form's single choice, multi-select and paired _other fields into questions", () => {
+      const request = {
         mode: "form",
         sessionId: "s",
-        message: "Pick a region",
+        message: "The agent has 2 questions.",
         requestedSchema: {
           type: "object",
           properties: {
-            region: { type: "string", oneOf: [{ const: "us", title: "US" }] },
+            q1: {
+              type: "string",
+              title: "Pick a size",
+              oneOf: [
+                { const: "1", title: "(Recommended) small - Ideal for a quick bite" },
+                { const: "2", title: "large - Great for sharing" },
+              ],
+            },
+            q1_other: { type: "string", title: "Other" },
+            q2: {
+              type: "array",
+              title: "Pick toppings",
+              items: {
+                anyOf: [
+                  { const: "1", title: "ham" },
+                  { const: "2", title: "corn" },
+                ],
+              },
+            },
           },
         },
       } as const satisfies CreateElicitationRequest;
-      expect(formToQuestionPrompt(thirdParty, "rpc-3")).toBeNull();
+
+      const form = formToQuestionPrompt(request, "rpc-5");
+
+      expect(form?.prompt.questions).toEqual([
+        {
+          question: "Pick a size",
+          answerKey: "q1",
+          options: [
+            { label: "(Recommended) small - Ideal for a quick bite" },
+            { label: "large - Great for sharing" },
+          ],
+          allowOther: true,
+        },
+        {
+          question: "Pick toppings",
+          answerKey: "q2",
+          options: [{ label: "ham" }, { label: "corn" }],
+          multiSelect: true,
+          allowOther: false,
+        },
+      ]);
+      expect(form?.toContent({ q1: "large - Great for sharing", q2: "ham, corn" })).toEqual({
+        q1: "2",
+        q2: ["1", "2"],
+      });
+      expect(form?.toContent({ q1: "medium please", q2: "" })).toEqual({
+        q1_other: "medium please",
+        q2: [],
+      });
+    });
+
+    it(`declines forms with a field the question card cannot collect (${issue})`, () => {
+      const freeText = {
+        mode: "form",
+        sessionId: "s",
+        message: "Name the project",
+        requestedSchema: {
+          type: "object",
+          properties: { name: { type: "string", title: "Project name" } },
+        },
+      } as const satisfies CreateElicitationRequest;
+      expect(formToQuestionPrompt(freeText, "rpc-3")).toBeNull();
       expect(
         formToQuestionPrompt(
           {
