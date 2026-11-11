@@ -42,7 +42,7 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   routesCopilotModels: false,
   setupDescription:
     "Gemini and other models from your Google Antigravity plan. Runs the Antigravity CLI on your machine.",
-  skillsProjectDir: ".antigravity/skills",
+  skillsProjectDir: ".agent/skills",
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
