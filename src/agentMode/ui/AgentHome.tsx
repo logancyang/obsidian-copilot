@@ -29,9 +29,9 @@ import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/Agent
 import { ArchivedChatsModal, createProjectArchiveActions } from "@/agentMode/ui/ArchivedChatsModal";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import {
-  getHomeShelfTab,
-  setHomeShelfTab,
+  useHomeShelfTab,
   HOME_SHELF_TAB_STORAGE_KEY,
+  PROJECT_SHELF_TAB_STORAGE_KEY,
 } from "@/agentMode/ui/homeShelfPrefs";
 import { leaveDeletedProject, projectRowActions } from "@/projects/ui/AgentProjectRowActions";
 import { ProjectPickerList } from "@/projects/ui/ProjectPickerList";
@@ -290,6 +290,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     });
   }, [manager]);
 
+  const handleOpenProjectHome = useCallback(() => {
+    manager.openProjectLanding(manager.getActiveProjectId()).catch((e) => {
+      logError("[AgentMode] open project home failed", e);
+      new Notice("Failed to open project. Please try again.");
+    });
+  }, [manager]);
+
   const handleProjectDeleted = useCallback(
     (deletedId: string) => leaveDeletedProject(manager, deletedId),
     [manager]
@@ -412,16 +419,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isLanding) void handleLoadChatHistory();
   }, [isLanding, handleLoadChatHistory, archivedProjectKey]);
 
-  const [globalShelfTab, setGlobalShelfTabState] = useState<string | null>(() =>
-    getHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY)
-  );
-  const setGlobalShelfTab = useCallback(
-    (id: string) => {
-      setGlobalShelfTabState(id);
-      setHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY, id);
-    },
-    [app]
-  );
+  const [globalShelfTab, setGlobalShelfTab] = useHomeShelfTab(app, HOME_SHELF_TAB_STORAGE_KEY);
+  const [projectShelfTab, setProjectShelfTab] = useHomeShelfTab(app, PROJECT_SHELF_TAB_STORAGE_KEY);
 
   const landingSections = useMemo<AgentHomeShelfSection[]>(
     () => [
@@ -696,6 +695,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         <div className="tw-min-h-0 tw-overflow-hidden">
           <AgentProjectHeader
             projectName={headerName}
+            onOpenHome={handleOpenProjectHome}
             onExit={handleExitProject}
             orphaned={headerOrphaned}
             onOpenSettings={headerProjectActions?.edit}
@@ -764,7 +764,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                     shelf={
                       isProjectLanding ? (
                         showProjectShelf ? (
-                          <AgentHomeShelf key={activeProjectId} sections={projectShelfSections} />
+                          <AgentHomeShelf
+                            sections={projectShelfSections}
+                            activeSectionId={projectShelfTab}
+                            onSectionSelect={setProjectShelfTab}
+                          />
                         ) : null
                       ) : (
                         <AgentHomeShelf

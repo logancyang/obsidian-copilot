@@ -1,4 +1,5 @@
-import { getHomeShelfTab, setHomeShelfTab } from "@/agentMode/ui/homeShelfPrefs";
+import { getHomeShelfTab, setHomeShelfTab, useHomeShelfTab } from "@/agentMode/ui/homeShelfPrefs";
+import { act, renderHook } from "@testing-library/react";
 import { logWarn } from "@/logger";
 import type { App } from "obsidian";
 
@@ -79,6 +80,35 @@ describe("homeShelfPrefs", () => {
         "Failed to persist home shelf tab",
         expect.any(Error)
       );
+    });
+  });
+
+  describe("useHomeShelfTab()", () => {
+    it("starts on the tab stored under its key", () => {
+      const { app } = createFakeApp(new Map([["shelf-key", "project-chats"]]));
+
+      const { result } = renderHook(() => useHomeShelfTab(app, "shelf-key"));
+
+      expect(result.current[0]).toBe("project-chats");
+    });
+
+    it("starts with no tab when nothing is stored", () => {
+      const { app } = createFakeApp();
+
+      const { result } = renderHook(() => useHomeShelfTab(app, "shelf-key"));
+
+      expect(result.current[0]).toBeNull();
+    });
+
+    it("keeps a selected tab for the next shelf opened with the same key", () => {
+      const { app } = createFakeApp();
+      const first = renderHook(() => useHomeShelfTab(app, "shelf-key"));
+
+      act(() => first.result.current[1]("project-chats"));
+
+      expect(first.result.current[0]).toBe("project-chats");
+      const second = renderHook(() => useHomeShelfTab(app, "shelf-key"));
+      expect(second.result.current[0]).toBe("project-chats");
     });
   });
 });
