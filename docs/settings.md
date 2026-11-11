@@ -237,7 +237,19 @@ Copilot discovers skills automatically from:
 
 There is no separate Skills folder setting. Change the root under **Basic → General → Copilot folder location**.
 
-The tab separates **Your skills** from **Built-in skills**. Your skills keeps the editing, properties, and deletion controls described below. Built-in skills are maintained by Copilot; you can preview their content but cannot edit, rename, or delete them from this tab.
+The tab has three sections: **Your skills**, **On this computer**, and **Built-in skills**. Your skills keeps the editing, properties, and deletion controls described below. Built-in skills are maintained by Copilot; you can preview their content but cannot edit, rename, or delete them from this tab.
+
+A link in `.claude/skills/`, `.agents/skills/`, or `.opencode/skills/` to a skill folder kept elsewhere also shows in Your skills. These rows show which agents use the skill and offer **Open SKILL.md** and **Reveal in vault** or **Show in folder**. To change one, edit the folder the link points to.
+
+**On this computer** lists the skills each agent loads from its own folders outside the vault. Every vault on the computer shares them:
+
+| Agent    | Folders                                                                           |
+| -------- | --------------------------------------------------------------------------------- |
+| Claude   | `~/.claude/skills/`, or `skills/` in `CLAUDE_CONFIG_DIR` when set                 |
+| Codex    | `~/.agents/skills/` and `~/.codex/skills/`, or `skills/` in `CODEX_HOME` when set |
+| OpenCode | `~/.config/opencode/skills/`, `~/.claude/skills/`, and `~/.agents/skills/`        |
+
+Copilot reads these folders with the environment variables set for each agent under **Agents**. Each row shows the agents that use the skill. You can open its `SKILL.md` or show its folder; to change, turn off, or delete it, edit that folder. If Copilot cannot read a folder, the section stays empty and your agents keep working. Changes made outside Obsidian show up the next time you open the Skills tab or return to Obsidian with it open.
 
 Each built-in skill has per-agent icon switches. While a change is saving, only that skill’s controls are temporarily unavailable. Choose **Disable skill** from its overflow menu to disable it for every agent. Disabling the whole skill removes its entire folder and agent links, including any files you added inside the folder, while leaving its row visible so you can re-enable it. Keep custom skills and files in separate folders. Turning off one agent removes that agent's access and remembers your choice. Restarting Obsidian, updating Copilot, or changing the Copilot folder does not reset these choices. Re-enabling a skill preserves its per-agent opt-outs. Only opt-outs are saved. Turning a skill and all of its agents back on clears that skill’s preference entry; skills that are on for every agent need no entry. Retired skills lose their saved preferences and entire folders, and renamed skills start with fresh defaults.
 

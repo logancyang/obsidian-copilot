@@ -17,6 +17,7 @@ import {
   SkillManager,
   subscribeToReadOnlySkills,
   type RefreshResult,
+  useReadOnlySkills,
   useRejectedSkills,
 } from "./SkillManager";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
@@ -757,6 +758,22 @@ describe("SkillManager", () => {
         expect(preferences[builtinSkill.name].disabledAgents).toEqual(["claude"]);
         expect(getManagedSkills()[0].enabledAgents).toEqual(["opencode"]);
       });
+    });
+  });
+  describe("useReadOnlySkills()", () => {
+    it("re-renders with the skills from agent folders each refresh finds", async () => {
+      const manager = SkillManager.initialize(
+        makeApp(),
+        { claude: ".claude/skills" },
+        undefined,
+        () => AGENT_ROOTS
+      );
+      const { result } = renderHook(() => useReadOnlySkills());
+      expect(result.current).toEqual([]);
+      mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult());
+      mockedDiscoverReadOnlySkills.mockResolvedValue([makeReadOnlySkill({ name: "plan" })]);
+      await act(() => manager.refresh());
+      expect(result.current.map((skill) => skill.name)).toEqual(["plan"]);
     });
   });
   describe("getReadOnlySkills()", () => {

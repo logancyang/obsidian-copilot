@@ -3,12 +3,13 @@ import { Bot } from "lucide-react";
 import { AppContext } from "@/context";
 import { PluginProvider } from "@/contexts/PluginContext";
 import { DEFAULT_SETTINGS } from "@/constants";
-import type { RejectedSkill, Skill } from "@/agentMode/skills/types";
+import type { ReadOnlySkill, RejectedSkill, Skill } from "@/agentMode/skills/types";
+import { makeReadOnlySkill } from "@/agentMode/skills/testing/readOnlySkillFixtures";
 import { settingsAtom, settingsStore, updateSetting } from "@/settings/model";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { FileSystemAdapter, TFile, TFolder, type App } from "obsidian";
 import React from "react";
 import type CopilotPlugin from "@/main";
@@ -27,6 +28,7 @@ jest.mock("@/agentMode/session/useBackendInstallStates", () => ({
   useBackendInstallStates: () => mockInstallStates,
 }));
 let mockRejectedSkills: RejectedSkill[] = [];
+let mockReadOnlySkills: ReadOnlySkill[] = [];
 let mockCapturedLoadIssues: readonly SkillLoadIssue[] = [];
 let mockCapturedFixAll: () => void = () => undefined;
 const mockOpenSkillLoadIssuesModal = jest.fn();
@@ -45,6 +47,8 @@ jest.mock("@/agentMode/skills/SkillManager", () => ({
   useManagedSkills: () => mockManagedSkills,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useRejectedSkills: () => mockRejectedSkills,
+  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
+  useReadOnlySkills: () => mockReadOnlySkills,
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
   useEpermSeen: () => false,
   dismissEpermBanner: jest.fn(),
@@ -67,6 +71,9 @@ jest.mock("./SkillLoadIssues", () => {
 
 jest.mock("@/utils/openWithSystemDefault", () => ({ openWithSystemDefault: jest.fn() }));
 jest.mock("@/utils/openVaultPath", () => ({ openVaultPath: jest.fn() }));
+jest.mock("@/utils/binaryPath", () => ({
+  formatBinaryPathForDisplay: (p: string) => p.replace("/home/me", "~"),
+}));
 
 jest.mock("@/agentMode/backends/registry", () => ({
   listBackendDescriptors: () => mockAgents,
@@ -102,6 +109,7 @@ describe("SkillsSettings", () => {
       mockAgents = [];
       mockInstallStates = {};
       mockRejectedSkills = [];
+      mockReadOnlySkills = [];
       mockCapturedLoadIssues = [];
       mockCapturedFixAll = () => undefined;
       settingsStore.set(settingsAtom, {
@@ -497,6 +505,103 @@ describe("SkillsSettings", () => {
       expect(refresh).toHaveBeenCalledTimes(2);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 lists skills from agents' folders on this computer in their own section, with the agents that use each", async () => {
+      mockAgents = [
+        { id: "claude", displayName: "Claude", Icon: Bot },
+        { id: "opencode", displayName: "OpenCode", Icon: Bot },
+      ];
+      mockReadOnlySkills = [
+        makeReadOnlySkill({
+          name: "release-notes",
+          folders: ["/home/me/.claude/skills"],
+          agents: ["claude", "opencode"],
+        }),
+      ];
+      await act(async () => {
+        renderSettings();
+      });
+
+      const section = within(screen.getByRole("region", { name: "On this computer" }));
+      expect(section.getByText("release-notes")).not.toBeNull();
+      expect(section.getByText("in ~/.claude/skills")).not.toBeNull();
+      expect(section.getByRole("img", { name: "Used by Claude, OpenCode" })).not.toBeNull();
+      expect(
+        within(screen.getByRole("region", { name: "Your skills" })).queryByText("release-notes")
+      ).toBeNull();
+      expect(screen.getByText("No skills yet")).not.toBeNull();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 lists skills linked into the vault's agent folders under Your skills, sorted with the others and counted as loaded", async () => {
+      mockManagedSkills = [makeManagedSkill("writing-helper")];
+      mockReadOnlySkills = [
+        makeReadOnlySkill({
+          name: "fechar-sessao",
+          scope: "vault",
+          folders: ["/vault/.claude/skills"],
+          dirPath: "/vault/12. Skills/fechar-sessao",
+          filePath: "/vault/12. Skills/fechar-sessao/SKILL.md",
+        }),
+      ];
+      await act(async () => {
+        renderSettings();
+      });
+
+      const yourSkills = within(screen.getByRole("region", { name: "Your skills" }));
+      expect(
+        yourSkills
+          .getAllByRole("button", { name: /More actions for/ })
+          .map((b) => b.getAttribute("aria-label"))
+      ).toEqual(["More actions for fechar-sessao", "More actions for writing-helper"]);
+      expect(yourSkills.getByText("in .claude/skills")).not.toBeNull();
+      expect(screen.getByText("2 loaded")).not.toBeNull();
+      expect(
+        within(screen.getByRole("region", { name: "On this computer" })).getByText(
+          "No skills found in your agents' folders on this computer."
+        )
+      ).not.toBeNull();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 opens a skill from this computer and its folder with system apps", async () => {
+      mockReadOnlySkills = [makeReadOnlySkill({ name: "release-notes" })];
+      await act(async () => {
+        renderSettings();
+      });
+
+      const menu = () =>
+        fireEvent.pointerDown(screen.getByLabelText("More actions for release-notes"), {
+          button: 0,
+          ctrlKey: false,
+        });
+      menu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Open SKILL.md" }));
+      menu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Show in folder" }));
+
+      expect(openVaultPath).toHaveBeenCalledWith(
+        expect.anything(),
+        "/home/me/.claude/skills/release-notes/SKILL.md"
+      );
+      expect(openWithSystemDefault).toHaveBeenCalledWith("/home/me/.claude/skills/release-notes");
+    });
+
+    it("filters skills on this computer with the shared search", async () => {
+      mockReadOnlySkills = [
+        makeReadOnlySkill({ name: "release-notes" }),
+        makeReadOnlySkill({ name: "plan-work" }),
+      ];
+      await act(async () => {
+        renderSettings();
+      });
+
+      fireEvent.change(screen.getByLabelText("Search skills"), { target: { value: "release" } });
+      const section = within(screen.getByRole("region", { name: "On this computer" }));
+      expect(section.getByText("release-notes")).not.toBeNull();
+      expect(section.queryByText("plan-work")).toBeNull();
+
+      fireEvent.change(screen.getByLabelText("Search skills"), { target: { value: "zzz" } });
+      expect(section.getByText("No skills match \u201czzz\u201d.")).not.toBeNull();
+    });
+
     it("shows actionable recovery instead of the creation empty state for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
       mockRejectedSkills = [makeRejectedSkill()];
       await act(async () => {
@@ -667,5 +772,17 @@ function makeRejectedSkill(overrides: Partial<RejectedSkill> = {}): RejectedSkil
     reason: 'The description contains ": " and must be quoted.',
     offendingText: "description: Use this skill for: reviewing notes",
     ...overrides,
+  };
+}
+
+function makeManagedSkill(name: string): Skill {
+  return {
+    name,
+    description: `desc for ${name}`,
+    filePath: `/vault/copilot/skills/${name}/SKILL.md`,
+    dirPath: `/vault/copilot/skills/${name}`,
+    body: "",
+    enabledAgents: [],
+    location: { kind: "canonical" },
   };
 }
