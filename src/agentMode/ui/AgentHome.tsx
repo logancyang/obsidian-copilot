@@ -765,6 +765,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       isProjectLanding ? (
                         showProjectShelf ? (
                           <AgentHomeShelf
+                            key={activeProjectId}
                             sections={projectShelfSections}
                             activeSectionId={projectShelfTab}
                             onSectionSelect={setProjectShelfTab}
