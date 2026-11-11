@@ -46,7 +46,7 @@ const UNAVAILABLE_PROJECT_CONTEXT_BLOCK = [
 export function buildProjectContext(app: App, projectId: string): string {
   const record = getCachedProjectRecordById(projectId);
   if (!record) return UNAVAILABLE_PROJECT_CONTEXT_BLOCK;
-  const description = record.project.description ?? "";
+  const description = record.project.description;
   const contextSource = record.project.contextSource;
   if (!contextSource) return buildEmptyProjectContextBlock(description);
 
@@ -81,7 +81,7 @@ export function buildProjectContext(app: App, projectId: string): string {
   );
 }
 
-function buildEmptyProjectContextBlock(description: string): string {
+function buildEmptyProjectContextBlock(description: string | undefined): string {
   return [
     "<project_context>",
     ...projectContextPreamble(description),
@@ -92,13 +92,12 @@ function buildEmptyProjectContextBlock(description: string): string {
 
 // The edit form asks for the project's purpose and goals, so the agent needs it to act on them.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/901
-function projectContextPreamble(description: string): string[] {
-  const trimmed = description.trim();
-  if (!trimmed) return [PROJECT_WORKSPACE_POLICY];
-  return [PROJECT_WORKSPACE_POLICY, `Project description: ${trimmed}`];
+function projectContextPreamble(description: string | undefined): string[] {
+  if (!description) return [PROJECT_WORKSPACE_POLICY];
+  return [PROJECT_WORKSPACE_POLICY, `Project description: ${description}`];
 }
 
-export function buildProjectContextBlock(sources: ManifestSources, description = ""): string {
+export function buildProjectContextBlock(sources: ManifestSources, description?: string): string {
   const pathText = (entry: ManifestPathEntry): string => `\`${entry.absPath ?? entry.vaultPath}\``;
 
   const lines: ManifestLine[] = [

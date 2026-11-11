@@ -277,9 +277,7 @@ describe("projectContextBlock", () => {
     });
     it("states the project description right after the workspace policy, with or without context sources — https://github.com/Brevilabs/obsidian-copilot-private/issues/901", () => {
       const preamble = `<project_context>\n${PROJECT_WORKSPACE_POLICY}\nProject description: Plan the Q3 launch\n`;
-      getRecord.mockReturnValue(
-        record({ webUrls: "https://a.com" }, "p1", "  Plan the Q3 launch  ")
-      );
+      getRecord.mockReturnValue(record({ webUrls: "https://a.com" }, "p1", "Plan the Q3 launch"));
       const withSources = buildProjectContext(fakeApp(), "p1");
       getRecord.mockReturnValue(record({}, "p1", "Plan the Q3 launch"));
       const noSources = buildProjectContext(fakeApp(), "p1");
@@ -292,7 +290,7 @@ describe("projectContextBlock", () => {
     });
 
     it("leaves the description line out when the project description is blank — https://github.com/Brevilabs/obsidian-copilot-private/issues/901", () => {
-      getRecord.mockReturnValue(record({ webUrls: "https://a.com" }, "p1", "   "));
+      getRecord.mockReturnValue(record({ webUrls: "https://a.com" }, "p1", ""));
       const blank = buildProjectContext(fakeApp(), "p1");
       getRecord.mockReturnValue(record({}));
       const missing = buildProjectContext(fakeApp(), "p1");
