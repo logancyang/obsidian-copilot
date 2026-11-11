@@ -15,6 +15,7 @@ import { getSettings } from "@/settings/model";
 import { resolveAntigravityBinaryPath } from "./antigravityCli";
 import { readAntigravityArtifactWrite } from "./antigravityArtifactWrites";
 import { readAntigravityCopilotTools } from "./antigravityCopilotToolCalls";
+import { COPILOT_ACP_ENV, installAntigravityLateWorkGuard } from "./antigravityLateWorkGuard";
 import { readAntigravityOriginalFiles } from "./antigravityOriginalFiles";
 import { presentAntigravityToolTitle } from "./antigravityToolTitles";
 import {
@@ -51,7 +52,7 @@ export class AntigravityBackend implements AcpBackend {
     private readonly clientVersion = ""
   ) {}
 
-  async buildSpawnDescriptor(): Promise<AcpSpawnDescriptor> {
+  async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const settings = getSettings();
     const descriptor = buildSimpleSpawnDescriptor(
       resolveAntigravityBinaryPath(settings) ?? undefined,
@@ -59,8 +60,9 @@ export class AntigravityBackend implements AcpBackend {
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.antigravity?.envOverrides),
       await buildBuiltinSkillEnv(this.clientVersion)
     );
+    await installAntigravityLateWorkGuard(ctx.vaultBasePath);
     this.spawned = { ...descriptor, args: ["acp", "--process-per-session"] };
-    return this.spawned;
+    return { ...this.spawned, env: { ...this.spawned.env, [COPILOT_ACP_ENV]: "1" } };
   }
 
   newSessionMeta(): Record<string, unknown> {
