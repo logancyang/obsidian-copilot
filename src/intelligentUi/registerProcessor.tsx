@@ -1,3 +1,4 @@
+import { nativeUiSources } from "@/intelligentUi/nativeSources";
 import { parseIntelligentUi } from "@/intelligentUi/parser";
 import { IntelligentUi } from "@/intelligentUi/ui/IntelligentUi";
 import { App, MarkdownRenderChild, Plugin } from "obsidian";
@@ -37,6 +38,7 @@ class IntelligentUiRenderChild extends MarkdownRenderChild {
 
 export function registerIntelligentUiProcessor(plugin: Plugin): void {
   plugin.registerMarkdownCodeBlockProcessor("copilot-ui", (source, element, context) => {
+    nativeUiSources.set(element, source);
     context.addChild(new IntelligentUiRenderChild(element, plugin.app, source, context.sourcePath));
   });
 }

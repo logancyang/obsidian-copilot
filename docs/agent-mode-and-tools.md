@@ -366,3 +366,14 @@ Image-only messages appear as "Image attachment" in the queue. Chats with only i
 When Copilot loads, managed Codex and OpenCode runtimes update to the version shipped with Copilot before that agent starts. Agent Chat shows download progress, then opens a new chat when the agent is ready. Other agents remain usable during the download. A failed download leaves the previous supported runtime available and retries on a later load after 24 hours. Configure lets you retry immediately or select your own binary, which Copilot does not update automatically.
 
 Codex and OpenCode show **Update required** when the installed runtime is below the minimum supported by Copilot. An unsuccessful update keeps that installation unavailable until you upgrade it; only an older runtime that still meets the minimum remains usable. Configure lets you retry immediately. A new minimum requirement permits a fresh automatic update attempt even if a previous attempt was postponed. Custom binaries require a manual update.
+
+## Layouts in replies
+
+Replies containing a `copilot-ui` block display cards, steps, and other layouts.
+While a reply streams, completed content appears progressively and shimmering
+placeholders hold the space for the part still arriving. Ordinary prose stays in its original
+order around the layout.
+
+Copying, inserting, or saving a reply keeps its original fenced source. Saved
+blocks render in Reading view and Live Preview. If generation stops with an
+incomplete block, its full source remains readable so you can recover it.

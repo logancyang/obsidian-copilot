@@ -1,3 +1,6 @@
+import { splitUiFences } from "@/intelligentUi/splitUiFences";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import type { Root } from "react-dom/client";
 import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
@@ -316,6 +319,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const textFades = useRef(new Map<number, StreamingTextFade>());
+  const layoutRoots = useRef(new Map<number, { element: HTMLElement; root: Root }>());
   const isUnmountingRef = useRef<boolean>(false);
   const messageId = useRef(
     message.id ||
@@ -580,29 +584,60 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         });
 
         const textDivs = contentRef.current.querySelectorAll(".message-segment");
-        textDivs.forEach((div) => div.remove());
+        textDivs.forEach((div) => {
+          if (![...layoutRoots.current.values()].some((record) => record.element === div))
+            div.remove();
+        });
+        const currentLayouts = new Set<number>();
 
         let currentIndex = 0;
         parsedMessage.segments.forEach((segment, segmentIndex) => {
           if (segment.type === "text" && segment.content.trim()) {
             const insertBefore = contentRef.current!.children[currentIndex];
 
-            const textDiv = doc.win.createDiv("message-segment markdown-rendered");
+            // Layout roots survive stream updates so completed cards keep their DOM identity. https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+            const hasLayout = splitUiFences(segment.content, isStreaming).some(
+              (part) => part.kind === "layout"
+            );
+            const existingLayout = layoutRoots.current.get(segmentIndex);
+            const textDiv =
+              existingLayout?.element ?? doc.win.createDiv("message-segment markdown-rendered");
 
-            if (insertBefore) {
+            if (insertBefore && insertBefore !== textDiv) {
               contentRef.current!.insertBefore(textDiv, insertBefore);
-            } else {
+            } else if (!insertBefore) {
               contentRef.current!.appendChild(textDiv);
             }
 
-            if (isStreaming && !textFades.current.has(segmentIndex))
-              textFades.current.set(segmentIndex, new StreamingTextFade());
-            void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
-              .then(() => {
-                normalizeFootnoteRendering(textDiv);
-                textFades.current.get(segmentIndex)?.apply(textDiv);
-              })
-              .catch((err: unknown) => logError("renderMarkdown failed", err));
+            if (hasLayout || existingLayout) {
+              currentLayouts.add(segmentIndex);
+              const record = existingLayout ?? {
+                element: textDiv,
+                root: createPluginRoot(textDiv, app),
+              };
+              layoutRoots.current.set(segmentIndex, record);
+              record.root.render(
+                <Markdown
+                  text={segment.content}
+                  sourcePath={sourcePath}
+                  streaming={isStreaming}
+                  onRendered={(target) => {
+                    normalizeFootnoteRendering(target);
+                    // Retained React roots commit after this parent effect, including reopened replies. https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+                    if (!isStreaming && contentRef.current) linkInlineCitations(contentRef.current);
+                  }}
+                />
+              );
+            } else {
+              if (isStreaming && !textFades.current.has(segmentIndex))
+                textFades.current.set(segmentIndex, new StreamingTextFade());
+              void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
+                .then(() => {
+                  normalizeFootnoteRendering(textDiv);
+                  textFades.current.get(segmentIndex)?.apply(textDiv);
+                })
+                .catch((err: unknown) => logError("renderMarkdown failed", err));
+            }
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
@@ -675,6 +710,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
+        layoutRoots.current.forEach((record, index) => {
+          if (!currentLayouts.has(index)) {
+            record.root.unmount();
+            record.element.remove();
+            layoutRoots.current.delete(index);
+          }
+        });
+
         const currentToolCallIds = new Set(
           parsedMessage.segments
             .filter((s) => s.type === "toolCall" && s.toolCall)
@@ -712,7 +755,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
-        if (contentRef.current && !isStreaming) {
+        if (contentRef.current && !isStreaming && currentLayouts.size === 0) {
           linkInlineCitations(contentRef.current);
         }
       }
@@ -733,6 +776,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   useEffect(() => {
     const currentComponentRef = componentRef;
+    const currentLayoutRoots = layoutRoots.current;
     const currentMessageId = messageId.current;
     const messageRootsSnapshot = rootsRef.current;
     const errorRootsSnapshot = errorRootsRef.current;
@@ -749,6 +793,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       // eslint-disable-next-line @eslint-react/web-api/no-leaked-timeout -- fire-and-forget defer; no cleanup target available inside an effect-cleanup
       window.setTimeout(() => {
+        currentLayoutRoots.forEach((record) => record.root.unmount());
+        currentLayoutRoots.clear();
         if (currentComponentRef.current) {
           currentComponentRef.current.unload();
           currentComponentRef.current = null;

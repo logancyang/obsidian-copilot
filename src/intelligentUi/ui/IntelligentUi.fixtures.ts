@@ -27,6 +27,8 @@ const SOURCES = {
   Metrics: GOLDEN_EXAMPLES.metrics,
   GroupedConcepts: GOLDEN_EXAMPLES.groupedConcepts,
   Architecture: GOLDEN_EXAMPLES.architecture,
+  Pending:
+    '<grid columns="2"><card title="Capture"><text>Write the idea.</text></card><card title="Connect"><text>Find',
   Fallback: '<card title="Original idea"><text>Keep every word.</text><unknown/>\n```\n',
 };
 
