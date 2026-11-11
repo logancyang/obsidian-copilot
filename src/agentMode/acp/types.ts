@@ -1,4 +1,4 @@
-import type { BackendId, TurnDiff } from "@/agentMode/session/types";
+import type { BackendId, ToolCallDelta, TurnDiff } from "@/agentMode/session/types";
 import type { PlanUsage, PlanUsageReading } from "@/agentMode/session/planUsage";
 import type { CopilotToolUse } from "@/agentMode/session/copilotToolCalls";
 
@@ -26,4 +26,5 @@ export interface AcpBackend {
     promptResultMeta: Readonly<Record<string, unknown>> | null | undefined
   ): TurnDiff | null;
   readCopilotTools?(rawInput: unknown, toolName?: string): CopilotToolUse | null;
+  readOriginalFiles?(update: ToolCallDelta): Readonly<Record<string, string | null>> | null;
 }

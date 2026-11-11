@@ -481,6 +481,42 @@ describe("AcpBackendProcess", () => {
         );
       });
 
+      it("attaches the file texts from before a write that the backend reads from a tool call update, and only to updates", async () => {
+        const readOriginalFiles = jest.fn((update: { toolCallId: string }) =>
+          update.toolCallId === "edit" ? { "/vault/a.md": "before\n" } : null
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          { ...buildStubBackend(), readOriginalFiles },
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const handler = jest.fn();
+        backend.registerSessionHandler("s1", handler);
+        const client = getVaultClient(backend);
+        const send = (update: Record<string, unknown>) =>
+          client.sessionUpdate({ sessionId: "s1", update } as unknown as Parameters<
+            typeof client.sessionUpdate
+          >[0]);
+
+        await send({ sessionUpdate: "tool_call", toolCallId: "edit", title: "File a.md" });
+        await send({ sessionUpdate: "tool_call_update", toolCallId: "edit", status: "completed" });
+        await send({ sessionUpdate: "tool_call_update", toolCallId: "read", status: "completed" });
+
+        expect(
+          handler.mock.calls.map(([event]) => [
+            event.update.sessionUpdate,
+            event.update.toolCallId,
+            event.update.originalFiles,
+          ])
+        ).toEqual([
+          ["tool_call", "edit", undefined],
+          ["tool_call_update", "edit", { "/vault/a.md": "before\n" }],
+          ["tool_call_update", "read", undefined],
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/735 tags each tool call, live or replayed, with the Copilot tools the backend reads from its input", async () => {
         const uses = { calls: [{ name: "notion_search", args: {} }] };
         const readCopilotTools = jest.fn((input: unknown) =>

@@ -293,7 +293,7 @@ export class AcpBackendProcess implements BackendProcess {
             this.todoToolCallIdsFor(sessionId),
             this.compactionTriggerFor(sessionId)
           ))
-            handler(this.withCopilotTools(event));
+            handler(this.withBackendToolReadings(event));
         } catch (e) {
           logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
         }
@@ -810,17 +810,29 @@ export class AcpBackendProcess implements BackendProcess {
       this.todoToolCallIdsFor(sessionId),
       this.compactionTriggerFor(sessionId)
     ))
-      handler(this.withBackendContextWindow(this.withCopilotTools(event)));
+      handler(this.withBackendContextWindow(this.withBackendToolReadings(event)));
   }
 
-  private withCopilotTools(event: SessionEvent): SessionEvent {
+  private withBackendToolReadings(event: SessionEvent): SessionEvent {
     const update = event.update;
     if (update.sessionUpdate !== "tool_call" && update.sessionUpdate !== "tool_call_update") {
       return event;
     }
-    if (!this.backend.readCopilotTools || update.rawInput === undefined) return event;
-    const copilotTools = this.backend.readCopilotTools(update.rawInput, update.title);
-    return copilotTools ? { ...event, update: { ...update, copilotTools } } : event;
+    const copilotTools =
+      this.backend.readCopilotTools && update.rawInput !== undefined
+        ? this.backend.readCopilotTools(update.rawInput, update.title)
+        : null;
+    const originalFiles =
+      update.sessionUpdate === "tool_call_update" ? this.backend.readOriginalFiles?.(update) : null;
+    if (!copilotTools && !originalFiles) return event;
+    return {
+      ...event,
+      update: {
+        ...update,
+        ...(copilotTools ? { copilotTools } : {}),
+        ...(originalFiles ? { originalFiles } : {}),
+      },
+    };
   }
 
   private withBackendContextWindow(event: SessionEvent): SessionEvent {

@@ -14,6 +14,7 @@ import {
 import { getSettings } from "@/settings/model";
 import { resolveAntigravityBinaryPath } from "./antigravityCli";
 import { readAntigravityCopilotTools } from "./antigravityCopilotToolCalls";
+import { readAntigravityOriginalFiles } from "./antigravityOriginalFiles";
 import {
   planUsageForModel,
   readAntigravityQuotaGroups,
@@ -30,6 +31,7 @@ export class AntigravityBackend implements AcpBackend {
   readonly id = "antigravity" as const;
   readonly displayName = "Antigravity";
   readonly readCopilotTools = readAntigravityCopilotTools;
+  readonly readOriginalFiles = readAntigravityOriginalFiles;
   readonly synthesizesManualCompaction = true;
   readonly reopensWithResume = true;
   readonly acceptsStandardElicitationForms = true;

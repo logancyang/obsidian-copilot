@@ -113,6 +113,18 @@ describe("AntigravityBackend", () => {
       });
     });
 
+    describe("readOriginalFiles()", () => {
+      it("reads a completed edit's file text from before the write out of its full-file diff", () => {
+        expect(
+          new AntigravityBackend(APP).readOriginalFiles({
+            toolCallId: "edit",
+            status: "completed",
+            content: [{ type: "diff", path: "/v/a.md", oldText: "old\n\n", newText: "new\n\n" }],
+          })
+        ).toEqual({ "/v/a.md": "old\n" });
+      });
+    });
+
     describe("readPlanUsage()", () => {
       let home: TempHome;
 
