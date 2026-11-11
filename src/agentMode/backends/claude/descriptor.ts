@@ -260,6 +260,18 @@ function gitRoot(dir: string): string | null {
   }
 }
 
+// Claude Code ignores a memory folder that is not an absolute path below the root and keeps using
+// its default one, so the settings must not show the ignored path. https://github.com/logancyang/obsidian-copilot/issues/2892
+function validMemoryFolder(configured: unknown): string | null {
+  if (typeof configured !== "string") return null;
+  const os = requireNodeModule<typeof import("node:os")>("os");
+  const path = requireNodeModule<typeof import("node:path")>("path");
+  const folder = path
+    .normalize(configured.replace(/^~(?=[/\\])/, os.homedir()))
+    .replace(/[/\\]+$/, "");
+  return path.isAbsolute(folder) && folder.length >= 3 ? folder : null;
+}
+
 // Claude Code keeps memory per git repository or chat folder, outside the vault, so the settings
 // list every folder this vault's chats can use. A folder set by autoMemoryDirectory can be any
 // path, even one a shared vault's settings chose, so it is never cleared. https://github.com/logancyang/obsidian-copilot/issues/2892
@@ -269,7 +281,6 @@ export async function readClaudeAutoMemory(
   chatFolders: readonly string[]
 ): Promise<ClaudeAutoMemory> {
   const fs = requireNodeModule<typeof import("node:fs")>("fs");
-  const os = requireNodeModule<typeof import("node:os")>("os");
   const path = requireNodeModule<typeof import("node:path")>("path");
   const env = claudeChildEnv(settings);
   const [user, , local] = await Promise.all(
@@ -280,9 +291,10 @@ export async function readClaudeAutoMemory(
       )
     )
   );
-  const customFolder = [local, user].find((file) => typeof file?.autoMemoryDirectory === "string");
+  const configured = [local, user].find((file) => file?.autoMemoryDirectory != null);
+  const customFolder = validMemoryFolder(configured?.autoMemoryDirectory);
   const candidates = customFolder
-    ? [(customFolder.autoMemoryDirectory as string).replace(/^~(?=$|[/\\])/, os.homedir())]
+    ? [customFolder]
     : [vaultBase, ...chatFolders].map((folder) =>
         path.join(
           claudeConfigDir(env),
@@ -298,7 +310,7 @@ export async function readClaudeAutoMemory(
   );
   return {
     folders: existing.filter((folder): folder is string => folder !== null),
-    folderSetInClaude: customFolder !== undefined,
+    folderSetInClaude: customFolder !== null,
   };
 }
 

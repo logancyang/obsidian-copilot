@@ -372,6 +372,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
       ...managedEnv,
       ...envOverrides,
+      // An inherited or overridden CLAUDE_CODE_DISABLE_AUTO_MEMORY=0 forces memory on over the setting, so Copilot's switch sets it last. https://github.com/logancyang/obsidian-copilot/issues/2892
+      ...(this.opts.getAutoMemoryEnabled?.() === false && { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" }),
     };
 
     if (this.sessions.get(sessionId) !== session) {

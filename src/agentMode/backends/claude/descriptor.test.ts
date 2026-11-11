@@ -582,6 +582,19 @@ describe("descriptor", () => {
         folderSetInClaude: true,
       });
     });
+
+    it.each([["/"], [""], ["relative/memory"], ["~"]])(
+      `lists Claude Code's default memory folder as clearable when the configured folder %j is one Claude Code ignores (${ISSUE})`,
+      async (ignored) => {
+        writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: ignored });
+        fs.mkdirSync(memoryFolder(vaultBase), { recursive: true });
+
+        await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
+          folders: [memoryFolder(vaultBase)],
+          folderSetInClaude: false,
+        });
+      }
+    );
   });
 
   describe("clearClaudeAutoMemory()", () => {
