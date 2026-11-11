@@ -131,6 +131,17 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual([]);
     });
 
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 starts a Shift-click range at the chat a plain click opened", () => {
+      const { result } = renderSelection();
+      act(() => {
+        result.current.handleClick("b", PLAIN);
+      });
+      act(() => {
+        result.current.handleClick("d", SHIFT);
+      });
+      expect(selectedIds(result)).toEqual(["b", "c", "d"]);
+    });
+
     it("lists selected chats in the order they are shown, not the order they were clicked", () => {
       const { result } = renderSelection();
       act(() => {

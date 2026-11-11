@@ -63,10 +63,11 @@ export function useChatSelection<T extends { id: string }>(
         setAnchorId(id);
         return true;
       }
-      clear();
+      setStoredIds(NO_IDS);
+      setAnchorId(id);
       return false;
     },
-    [anchorId, clear, selectedIds, visibleItems]
+    [anchorId, selectedIds, visibleItems]
   );
 
   const handleContextMenu = useCallback(
