@@ -35,6 +35,19 @@ const GOOGLE_CATALOG: CatalogProvider = {
   },
 };
 
+const OPENCODE_ZEN_CATALOG: CatalogProvider = {
+  id: "opencode",
+  displayName: "OpenCode Zen",
+  providerType: "openai-compatible",
+  models: {
+    "big-pickle": {
+      id: "big-pickle",
+      displayName: "Big Pickle",
+      modalities: { input: ["text"], output: ["text"] },
+    },
+  },
+};
+
 interface Harness extends TestRegistries {
   api: AgentSetupApi;
   ensureLoaded: jest.Mock;
@@ -209,6 +222,25 @@ describe("AgentSetupApi", () => {
 
       const miss = h.models.getByWireId(result.providerId, "unknown-model")!;
       expect(miss.info).toEqual({ id: "unknown-model", displayName: "Unknown Model" });
+    });
+
+    it("takes a provider-qualified wire id's input modalities from that catalog provider so an image-only send can be stopped (https://github.com/logancyang/obsidian-copilot/issues/4282)", async () => {
+      const h = makeHarness([OPENCODE_ZEN_CATALOG]);
+      const result = await h.api.registerAgentProvider({
+        agentType: "opencode",
+        providerType: "openai-compatible",
+        displayName: "OpenCode",
+        apiKey: null,
+        wireModelIds: ["opencode/big-pickle"],
+        fallbackDisplayNames: { "opencode/big-pickle": "opencode/Big Pickle" },
+      });
+
+      const row = h.models.getByWireId(result.providerId, "opencode/big-pickle")!;
+      expect(row.info).toMatchObject({
+        id: "opencode/big-pickle",
+        displayName: "opencode/Big Pickle",
+        modalities: { input: ["text"], output: ["text"] },
+      });
     });
 
     it("uses the fallback description for a wire id the catalog does not know", async () => {
@@ -441,6 +473,29 @@ describe("AgentSetupApi", () => {
       expect(result).toEqual({ added: [], removed: [] });
       expect(h.models.list()).toBe(modelsBefore);
       expect(h.backends.get("claude")).toBe(backendsBefore);
+    });
+
+    it("fills in the catalog's input modalities for a model enrolled without them (https://github.com/logancyang/obsidian-copilot/issues/4282)", async () => {
+      const catalogProviders: CatalogProvider[] = [];
+      const h = makeHarness(catalogProviders);
+      const reg = await h.api.registerAgentProvider({
+        agentType: "opencode",
+        providerType: "openai-compatible",
+        displayName: "OpenCode",
+        apiKey: null,
+        wireModelIds: ["opencode/big-pickle"],
+      });
+      const idBefore = h.configuredModelId(reg.providerId, "opencode/big-pickle");
+      catalogProviders.push(OPENCODE_ZEN_CATALOG);
+
+      await h.api.syncAgentModels({
+        agentType: "opencode",
+        wireModelIds: ["opencode/big-pickle"],
+      });
+
+      const row = h.models.getByWireId(reg.providerId, "opencode/big-pickle")!;
+      expect(row.configuredModelId).toBe(idBefore);
+      expect(row.info.modalities).toEqual({ input: ["text"], output: ["text"] });
     });
 
     it("does nothing when no agent provider exists for the agent type", async () => {

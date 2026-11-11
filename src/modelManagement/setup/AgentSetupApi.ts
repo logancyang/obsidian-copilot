@@ -263,6 +263,12 @@ export class AgentSetupApi {
     }
     const lookup = new Map<string, ModelInfo>();
     for (const catalogProvider of this.#catalog.getAllProviders()) {
+      // OpenCode names models "<provider>/<model>", so a bare-id lookup misses and Copilot
+      // can't stop an image sent to a text-only model. https://github.com/logancyang/obsidian-copilot/issues/4282
+      for (const [modelId, info] of Object.entries(catalogProvider.models)) {
+        const qualifiedId = `${catalogProvider.id}/${modelId}`;
+        lookup.set(qualifiedId, { ...info, id: qualifiedId });
+      }
       if (catalogProvider.providerType !== providerType) continue;
       for (const [wireId, info] of Object.entries(catalogProvider.models)) {
         if (!lookup.has(wireId)) lookup.set(wireId, info);
@@ -298,10 +304,15 @@ export class AgentSetupApi {
       }
       if (
         current.info.displayName !== info.displayName ||
-        current.info.description !== info.description
+        current.info.description !== info.description ||
+        JSON.stringify(current.info.modalities) !== JSON.stringify(info.modalities)
       ) {
         await this.#models.update(current.configuredModelId, {
-          info: { displayName: info.displayName, description: info.description },
+          info: {
+            displayName: info.displayName,
+            description: info.description,
+            modalities: info.modalities,
+          },
         });
       }
     }
