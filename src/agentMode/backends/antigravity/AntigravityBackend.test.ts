@@ -1,3 +1,4 @@
+import { readFileSync } from "fs";
 import type { App } from "obsidian";
 import { COPILOT_PROMPT_BASE } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { resetSettings, setSettings } from "@/settings/model";
@@ -155,6 +156,54 @@ describe("AntigravityBackend", () => {
         const backend = await spawnedBackend("exit 1\n");
 
         await expect(backend.readPlanUsage()).resolves.toEqual({ kind: "unavailable" });
+      });
+
+      it("reuses the last reading without running agy again until a minute has passed", async () => {
+        const calls = `${home.homeDir}/usage-calls`;
+        const backend = await spawnedBackend(
+          `echo run >> '${calls}'\necho '${JSON.stringify(PRO_USAGE)}'\n`
+        );
+        const now = jest.spyOn(Date, "now").mockReturnValue(1_000_000);
+
+        const first = await backend.readPlanUsage();
+        now.mockReturnValue(1_000_000 + 59_000);
+        const cached = await backend.readPlanUsage();
+        now.mockReturnValue(1_000_000 + 61_000);
+        await backend.readPlanUsage();
+
+        expect(cached).toEqual(first);
+        expect(readFileSync(calls, "utf8").split("\n").filter(Boolean)).toHaveLength(2);
+        now.mockRestore();
+      });
+
+      it("waits twice as long before each retry after a failed read, up to half an hour", async () => {
+        const calls = `${home.homeDir}/usage-calls`;
+        const backend = await spawnedBackend(`echo run >> '${calls}'\nexit 1\n`);
+        const now = jest.spyOn(Date, "now").mockReturnValue(0);
+        const runs = () => readFileSync(calls, "utf8").split("\n").filter(Boolean).length;
+
+        await backend.readPlanUsage();
+        now.mockReturnValue(119_000);
+        await backend.readPlanUsage();
+        const runsWithinFirstBackoff = runs();
+        now.mockReturnValue(120_000);
+        await backend.readPlanUsage();
+        now.mockReturnValue(120_000 + 239_000);
+        await backend.readPlanUsage();
+
+        expect(runsWithinFirstBackoff).toBe(1);
+        expect(runs()).toBe(2);
+        now.mockRestore();
+      });
+
+      it("abandons a read in flight when its signal is aborted", async () => {
+        const backend = await spawnedBackend("sleep 30\n");
+        const controller = new AbortController();
+
+        const reading = backend.readPlanUsage(controller.signal);
+        controller.abort();
+
+        await expect(reading).resolves.toEqual({ kind: "unavailable" });
       });
 
       it("reports usage as unavailable before agy has been launched", async () => {

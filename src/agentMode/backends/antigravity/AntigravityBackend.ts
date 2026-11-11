@@ -23,6 +23,9 @@ import {
 export const ANTIGRAVITY_NOT_SET_UP_MESSAGE =
   "Antigravity isn't set up. Install the Antigravity CLI (agy), then detect it in Settings → Copilot → Basic → Agents.";
 
+const USAGE_READ_INTERVAL_MS = 60_000;
+const USAGE_MAX_BACKOFF_MS = 30 * 60_000;
+
 export class AntigravityBackend implements AcpBackend {
   readonly id = "antigravity" as const;
   readonly displayName = "Antigravity";
@@ -32,6 +35,9 @@ export class AntigravityBackend implements AcpBackend {
 
   private spawned: AcpSpawnDescriptor | null = null;
   private quotaGroups: ReadonlyArray<AntigravityQuotaGroup> = [];
+  private lastUsageReading: PlanUsageReading = { kind: "unavailable" };
+  private nextUsageReadAt = 0;
+  private failedUsageReads = 0;
 
   constructor(
     private readonly app: App,
@@ -56,12 +62,21 @@ export class AntigravityBackend implements AcpBackend {
     };
   }
 
-  async readPlanUsage(): Promise<PlanUsageReading> {
-    if (!this.spawned) return { kind: "unavailable" };
-    const groups = await readAntigravityQuotaGroups(this.spawned.command, this.spawned.env);
-    if (!groups) return { kind: "unavailable" };
+  async readPlanUsage(signal?: AbortSignal): Promise<PlanUsageReading> {
+    if (!this.spawned || Date.now() < this.nextUsageReadAt) return this.lastUsageReading;
+    const groups = await readAntigravityQuotaGroups(this.spawned.command, this.spawned.env, signal);
+    if (!groups) {
+      this.failedUsageReads++;
+      this.nextUsageReadAt =
+        Date.now() +
+        Math.min(USAGE_READ_INTERVAL_MS * 2 ** this.failedUsageReads, USAGE_MAX_BACKOFF_MS);
+      return { kind: "unavailable" };
+    }
+    this.failedUsageReads = 0;
+    this.nextUsageReadAt = Date.now() + USAGE_READ_INTERVAL_MS;
     this.quotaGroups = groups;
-    return planUsageReading(groups.flatMap((group) => group.windows));
+    this.lastUsageReading = planUsageReading(groups.flatMap((group) => group.windows));
+    return this.lastUsageReading;
   }
 
   selectPlanUsage(planUsage: PlanUsage, wireModelId: string | null | undefined): PlanUsage | null {

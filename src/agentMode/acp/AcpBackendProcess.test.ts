@@ -754,6 +754,21 @@ describe("AcpBackendProcess", () => {
           }
         });
 
+        it("abandons a plan usage read still in flight when the backend shuts down", async () => {
+          let readSignal: AbortSignal | undefined;
+          const readPlanUsage = jest.fn((signal?: AbortSignal) => {
+            readSignal = signal;
+            return new Promise<never>(() => undefined);
+          });
+          const backend = await makeBackend(readPlanUsage);
+          backend.registerSessionHandler("s1", jest.fn());
+
+          await backend.shutdown();
+
+          expect(readPlanUsage).toHaveBeenCalledTimes(1);
+          expect(readSignal?.aborted).toBe(true);
+        });
+
         it("replays the last caps to a session that attaches later, without re-reading", async () => {
           const readPlanUsage = jest.fn().mockResolvedValue(USAGE_READING);
           const backend = await makeBackend(readPlanUsage);

@@ -13,7 +13,7 @@ export interface AcpBackend {
   readonly id: BackendId;
   readonly displayName: string;
   buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor>;
-  readPlanUsage?(): Promise<PlanUsageReading>;
+  readPlanUsage?(signal?: AbortSignal): Promise<PlanUsageReading>;
   planUsageAppliesTo?(wireModelId: string | null | undefined): boolean;
   selectPlanUsage?(planUsage: PlanUsage, wireModelId: string | null | undefined): PlanUsage | null;
   readContextWindow?(wireModelId: string | null | undefined): Promise<number | null>;

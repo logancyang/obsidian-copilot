@@ -108,7 +108,8 @@ export function planUsageForModel(
 
 export async function readAntigravityQuotaGroups(
   binaryPath: string,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal
 ): Promise<AntigravityQuotaGroup[] | null> {
   const { execFile } = requireNodeModule<typeof import("node:child_process")>("child_process");
   const { promisify } = requireNodeModule<typeof import("node:util")>("util");
@@ -116,7 +117,7 @@ export async function readAntigravityQuotaGroups(
     const { stdout } = await promisify(execFile)(
       binaryPath,
       ["-p", "/usage", "--output-format", "json"],
-      { timeout: USAGE_READ_TIMEOUT_MS, env }
+      { timeout: USAGE_READ_TIMEOUT_MS, env, signal }
     );
     return parseAntigravityQuotaGroups(stdout);
   } catch (error) {

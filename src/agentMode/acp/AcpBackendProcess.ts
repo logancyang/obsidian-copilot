@@ -124,6 +124,7 @@ export class AcpBackendProcess implements BackendProcess {
   private lastPlanUsage: PlanUsage | null = null;
   private planUsageRead: Promise<void> | null = null;
   private planUsageReadQueued = false;
+  private planUsageAbort = new AbortController();
   private readonly backendContextWindows = new Map<string, number>();
 
   constructor(
@@ -446,7 +447,7 @@ export class AcpBackendProcess implements BackendProcess {
     if (!this.backend.readPlanUsage) return;
     let reading: PlanUsageReading;
     try {
-      reading = await this.backend.readPlanUsage();
+      reading = await this.backend.readPlanUsage(this.planUsageAbort.signal);
     } catch (e) {
       logWarn(`[AgentMode] ${this.backend.id} plan usage read threw`, e);
       return;
@@ -664,6 +665,8 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async shutdown(): Promise<void> {
+    this.planUsageAbort.abort();
+    this.planUsageAbort = new AbortController();
     this.connection = null;
     this.domainHandlers.clear();
     this.pendingUpdates.clear();
