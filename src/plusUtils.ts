@@ -306,20 +306,23 @@ export async function applyEntitlement(token: string): Promise<boolean> {
   if (!claims) {
     return false;
   }
-  setVerified({
+  // Announcing a renewed token before it is stored reads as unverified, which open agent chats took for a connector change and answered with Reload.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/903
+  verified = {
     token,
     licenseKey: plusLicenseKey,
     features: new Set(claims.features),
     plan: claims.plan,
     expiresAt: claims.exp * 1000,
     paid: claims.tier !== "free",
-  });
+  };
   setSettings({
     entitlementToken: token,
     entitlementExpiresAt: verified.expiresAt,
     isPaidUser: verified.paid,
     isPlusUser: verified.features.has("multi_agent"),
   });
+  setVerified(verified);
   return true;
 }
 
