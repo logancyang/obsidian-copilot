@@ -90,19 +90,33 @@ describe("providerSideFailure", () => {
 
     it.each([
       [
+        "a file type the model's API cannot take (https://github.com/logancyang/obsidian-copilot/issues/4116)",
+        "Internal error: 'file part media type application/pdf' functionality not supported.",
+        "provider.unknown",
+      ],
+      [
+        "a model without function calling (https://github.com/logancyang/obsidian-copilot/issues/4268)",
+        "Internal error: Function calling is not enabled for models/antigravity-preview-latest",
+        "provider.invalid-request",
+      ],
+    ])("recognizes %s by OpenCode's provider category", (_label, message, errorName) => {
+      const error = acpFailure(message, { service: "session", errorName });
+
+      expect(isProviderSideFailure(error, error.message)).toBe(true);
+    });
+
+    it.each([
+      [
         "a tool error mentioning authentication (https://github.com/logancyang/obsidian-copilot/issues/4244)",
         new Error("Copilot tool failed: authentication required"),
       ],
       ["a backend crash", acpFailure("Internal error", { errorName: "ClientError" })],
       [
-        "an unsupported model capability",
-        acpFailure(
-          "Internal error: registry.ollama.ai/library/gemma:latest does not support tools",
-          {
-            service: "session",
-            errorName: "provider.invalid-request",
-          }
-        ),
+        "an OpenCode failure outside the model call",
+        acpFailure("Internal error: Agent not found: copilot-build", {
+          service: "session",
+          errorName: "unknown",
+        }),
       ],
       ["a missing model", new Error("model not supported: gemini-4")],
       ["a request id containing 429", new Error("Internal error: request req_4291 failed")],
