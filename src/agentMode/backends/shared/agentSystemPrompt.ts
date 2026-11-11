@@ -48,6 +48,11 @@ export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vaul
 // https://github.com/logancyang/obsidian-copilot/issues/3868
 export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes.`;
 
+// Windows agents lost quotes passing inline code through PowerShell 5.1, broke on paths with a curly apostrophe, and missed the py launcher.
+// https://github.com/logancyang/obsidian-copilot/issues/3867
+export const COPILOT_WINDOWS_SHELL_STEERING =
+  "Windows shell is PowerShell: run multi-line or quoted code from a script file or a here-string piped to the interpreter, not -e/-c; double-quote paths; save scripts with non-ASCII text as UTF-8 with BOM; Python may be `py`.";
+
 // Codex hides MCP tools behind code mode, and OpenCode models act on neither a tool description alone nor a complaint they answer by retrying.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 // Agents filed cards about their own slips and about complaints over their answers, which the Copilot team can't act on, so only Copilot's own failures qualify.
@@ -76,7 +81,8 @@ function buildFileEditPolicy(backendId: BackendId): string {
 export function buildAgentSystemPrompt(
   backendId: BackendId,
   app: App,
-  backendSteering?: string
+  backendSteering?: string,
+  platform: NodeJS.Platform = process.platform
 ): string {
   const settings = getSettings();
   const builtinPrompt = !getDisableBuiltinSystemPrompt();
@@ -87,6 +93,7 @@ export function buildAgentSystemPrompt(
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
   parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
   if (builtinPrompt) parts.push(COPILOT_VAULT_HYGIENE);
+  if (builtinPrompt && platform === "win32") parts.push(COPILOT_WINDOWS_SHELL_STEERING);
   if (backendSteering) parts.push(backendSteering);
   if (settings.agentMode.offerFeedbackCards) parts.push(COPILOT_FEEDBACK_POINTER);
   if (builtinPrompt && isMiyoParseActive(settings)) parts.push(COPILOT_MIYO_DOCUMENT_STEERING);
