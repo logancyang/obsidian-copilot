@@ -77,6 +77,17 @@ describe("AgentSessionIndex", () => {
       await index.mergeDiscoveredSessions([entry({ title: "Agent original" })]);
       expect((await index.getEntry("opencode", "s1"))?.title).toBe("Tab rename");
     });
+
+    it("keeps the model a chat last ran when a later record names none (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.recordSession(entry({ model: { baseModelId: "sonnet", effort: "high" } }));
+      await index.recordSession(entry({ model: { baseModelId: "opus", effort: "high" } }));
+      await index.recordSession(entry({ lastAccessedAtMs: 9_000 }));
+      expect((await index.getEntry("opencode", "s1"))?.model).toEqual({
+        baseModelId: "opus",
+        effort: "high",
+      });
+    });
   });
 
   describe("mergeDiscoveredSessions()", () => {
@@ -121,6 +132,18 @@ describe("AgentSessionIndex", () => {
         entry({ sessionId: "s2", projectId: "proj-2", lastAccessedAtMs: 9_000 }),
       ]);
       expect((await index.getEntry("opencode", "s2"))?.projectId).toBe("proj-2");
+    });
+
+    it("keeps a chat's recorded model when a sweep rediscovers the chat (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
+      const index = new AgentSessionIndex(makeStorage(), INDEX_PATH);
+      await index.recordSession(entry({ model: { baseModelId: "opus", effort: "high" } }));
+      await index.mergeDiscoveredSessions([
+        entry({ title: "Sweep title", lastAccessedAtMs: 9_000 }),
+      ]);
+      expect((await index.getEntry("opencode", "s1"))?.model).toEqual({
+        baseModelId: "opus",
+        effort: "high",
+      });
     });
   });
 
@@ -189,6 +212,22 @@ describe("AgentSessionIndex", () => {
       const second = new AgentSessionIndex(storage, INDEX_PATH);
       expect((await second.getEntry("opencode", "s1"))?.projectId).toBe("proj-1");
       expect((await second.getEntry("opencode", "global-chat"))?.projectId).toBeUndefined();
+    });
+
+    it("restores each chat's recorded model after reload and drops a malformed one (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
+      const storage = makeStorage();
+      const first = new AgentSessionIndex(storage, INDEX_PATH);
+      await first.recordSession(entry({ model: { baseModelId: "opus", effort: null } }));
+      await first.recordSession(
+        entry({ sessionId: "bad-model", model: { effort: "high" } as never })
+      );
+      await first.flush();
+      const second = new AgentSessionIndex(storage, INDEX_PATH);
+      expect((await second.getEntry("opencode", "s1"))?.model).toEqual({
+        baseModelId: "opus",
+        effort: null,
+      });
+      expect((await second.getEntry("opencode", "bad-model"))?.model).toBeUndefined();
     });
   });
 

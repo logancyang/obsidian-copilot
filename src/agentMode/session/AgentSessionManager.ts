@@ -2182,8 +2182,13 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    seedSelection?: ModelSelection
+    carriedSelection?: ModelSelection
   ): Promise<AgentSession | null> {
+    // A reopened chat continues on the model it last ran, not the agent's default.
+    // https://github.com/logancyang/obsidian-copilot/issues/4274
+    const lastModel = (await this.opts.sessionIndex?.getEntry(backendId, sessionId))?.model;
+    const seedSelection =
+      carriedSelection ?? (lastModel && (this.getSeedSelection(backendId, lastModel) ?? undefined));
     await this.ensureScopeInstructions(
       projectId,
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
@@ -2417,6 +2422,7 @@ export class AgentSessionManager {
       createdAtMs: messages[0]?.timestamp?.epoch ?? now,
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
+      model: session.getState()?.model?.current,
     });
     // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/902

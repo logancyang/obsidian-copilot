@@ -794,6 +794,7 @@ function buildHistoryHarness(opts?: {
   installState?: InstallState;
   createBackendProcess?: jest.Mock;
   applyInitialSessionConfig?: BackendDescriptor["applyInitialSessionConfig"];
+  applySelection?: BackendDescriptor["applySelection"];
 }) {
   const frontmatterByPath = opts?.files ?? {};
   const hiddenByPath = opts?.hiddenFiles ?? {};
@@ -850,6 +851,7 @@ function buildHistoryHarness(opts?: {
     summarizesSessionTitle: opts?.summarizesSessionTitle ?? true,
     getProbeSessionId: jest.fn(() => opts?.probeSessionId),
     applyInitialSessionConfig: opts?.applyInitialSessionConfig,
+    applySelection: opts?.applySelection,
     ...(opts?.createBackendProcess
       ? { createBackendProcess: opts.createBackendProcess }
       : opts?.listSessions
@@ -6108,6 +6110,52 @@ describe("AgentSessionManager", () => {
     });
 
     describe("loadNativeSessionFromHistory()", () => {
+      it("reopens a shut-down chat on the model and effort it last ran instead of the agent's default (https://github.com/logancyang/obsidian-copilot/issues/4274)", async () => {
+        jest.useFakeTimers();
+        getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: false });
+        const state = (baseModelId: string, effort: string): BackendState => ({
+          model: {
+            current: { baseModelId, effort },
+            availableModels: [],
+            apply: { kind: "setModel" },
+          },
+          mode: null,
+        });
+        const replay = buildReplayingBackend({
+          loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+            sessionId,
+            state: state("sonnet", "high"),
+          })),
+        });
+        const backend = {
+          ...replay.backend,
+          setSessionModel: jest.fn(async ({ modelId }: { modelId: string }) => {
+            const selection = JSON.parse(modelId);
+            return state(selection.baseModelId, selection.effort);
+          }),
+        };
+        const { manager } = buildHistoryHarness({
+          backendId: "claude",
+          createBackendProcess: jest.fn(() => backend),
+          applySelection: async (session, selection) =>
+            session.applyModelWireId(JSON.stringify(selection)),
+        });
+        const chat = await manager.createSession("claude");
+        const sessionId = chat.getBackendSessionId()!;
+        jest.spyOn(chat, "getState").mockReturnValue(state("opus", "high"));
+        getSessionTestHandle(chat).setMessages([{ message: "Read the PNG" }], true);
+        await jest.advanceTimersByTimeAsync(2000);
+        await manager.closeChatSession(buildNativeChatId("claude", sessionId));
+
+        const reopened = await manager.loadNativeSessionFromHistory("claude", sessionId);
+
+        expect(reopened).not.toBe(chat);
+        expect(reopened.getState()?.model?.current).toEqual({
+          baseModelId: "opus",
+          effort: "high",
+        });
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 keeps the frames replayed before the load response as history bubbles and drops out-of-turn frames that arrive after it", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {

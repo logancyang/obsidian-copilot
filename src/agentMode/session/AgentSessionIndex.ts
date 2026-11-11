@@ -1,5 +1,5 @@
 import { logWarn } from "@/logger";
-import type { BackendId } from "./types";
+import type { BackendId, ModelSelection } from "./types";
 
 export interface AgentSessionIndexEntry {
   backendId: BackendId;
@@ -9,6 +9,7 @@ export interface AgentSessionIndexEntry {
   createdAtMs: number;
   lastAccessedAtMs: number;
   projectId?: string;
+  model?: ModelSelection;
 }
 
 interface AgentSessionIndexFile {
@@ -50,7 +51,15 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
     createdAtMs: createdAtMs ?? lastAccessedAtMs!,
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
     projectId: typeof r.projectId === "string" && r.projectId.trim() ? r.projectId : undefined,
+    model: sanitizeModel(r.model),
   };
+}
+
+function sanitizeModel(raw: unknown): ModelSelection | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const { baseModelId, effort } = raw as Record<string, unknown>;
+  if (typeof baseModelId !== "string" || !baseModelId) return undefined;
+  return { baseModelId, effort: typeof effort === "string" ? effort : null };
 }
 
 export class AgentSessionIndex {
@@ -92,6 +101,7 @@ export class AgentSessionIndex {
         existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
       ),
       projectId: entry.projectId ?? existing?.projectId,
+      model: entry.model ?? existing?.model,
     });
     this.scheduleSave();
   }
@@ -115,6 +125,7 @@ export class AgentSessionIndex {
           existing?.lastAccessedAtMs ?? entry.lastAccessedAtMs
         ),
         projectId: existing?.projectId ?? entry.projectId,
+        model: existing?.model,
       };
       if (
         !existing ||
