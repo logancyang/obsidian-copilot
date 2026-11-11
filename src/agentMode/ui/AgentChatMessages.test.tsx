@@ -403,21 +403,14 @@ describe("AgentChatMessages", () => {
       expect(screen.getByTestId("agent-trail-timestamp").textContent).toBe(timestamp);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 hands a failed structured turn's error to its trail, which shows no error text for a message without parts", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2921 hands a failed turn's error to its trail without the partial reply it streamed", () => {
       renderMessages(
         [
           assistantMessage("failed-1", 62_000, {
-            message: "**Error:** stream error",
+            message: "Partial answer.\n\n**Error:** stream error",
             isErrorMessage: true,
-            parts: [
-              {
-                kind: "compaction",
-                id: "c1",
-                status: "completed",
-                trigger: "manual",
-                startedAtMs: 0,
-              },
-            ],
+            errorText: "stream error",
+            parts: [{ kind: "text", text: "Partial answer." }],
           }),
           assistantMessage("ok-1", 63_000, {
             parts: [{ kind: "thought", text: "Fine." }],
@@ -427,7 +420,7 @@ describe("AgentChatMessages", () => {
       );
 
       expect(screen.getAllByTestId("agent-trail-error").map((el) => el.textContent)).toEqual([
-        "**Error:** stream error",
+        "stream error",
       ]);
     });
 

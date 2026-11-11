@@ -24,6 +24,7 @@ interface StoredAgentMessage {
   timestamp: FormattedDateTime | null;
   isVisible: boolean;
   isErrorMessage?: boolean;
+  errorText?: string;
   parts?: AgentMessagePart[];
   context?: MessageContext;
   content?: unknown[];
@@ -428,6 +429,7 @@ export class AgentMessageStore {
     if (!msg) return false;
     this.finishTrailingThought(msg);
     msg.isErrorMessage = true;
+    msg.errorText = errorText;
     if (durationMs !== undefined) msg.turnDurationMs = Math.max(0, durationMs);
     const suffix = msg.displayText.length > 0 ? "\n\n" : "";
     msg.displayText += `${suffix}**Error:** ${errorText}`;
@@ -506,6 +508,7 @@ export class AgentMessageStore {
         context: msg.context,
         isVisible: msg.isVisible !== false,
         isErrorMessage: msg.isErrorMessage,
+        errorText: msg.errorText,
         content: msg.content,
         parts: msg.parts,
         turnStopReason: msg.turnStopReason,
@@ -526,6 +529,7 @@ export class AgentMessageStore {
       isVisible: m.isVisible,
       context: m.context,
       isErrorMessage: m.isErrorMessage,
+      errorText: m.errorText,
       content: m.content,
       parts: m.parts,
       turnStopReason: m.turnStopReason,

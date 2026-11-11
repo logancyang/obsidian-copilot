@@ -171,12 +171,14 @@ const TrailDemo: React.FC<{
   showCompletedDuration?: boolean;
   fileChanges?: TurnFileChange[];
   stopReason?: StopReason;
+  errorText?: string;
 }> = ({
   parts,
   isStreaming = false,
   showCompletedDuration = true,
   fileChanges,
   stopReason = "end_turn",
+  errorText,
 }) => {
   const app = useApp();
   return (
@@ -190,6 +192,7 @@ const TrailDemo: React.FC<{
         app={app}
         turnStopReason={isStreaming ? undefined : stopReason}
         fileChanges={fileChanges}
+        errorText={errorText}
       />
     </TooltipProvider>
   );
@@ -236,6 +239,17 @@ export const StoppedAtOutputLimit: StoryObj<AgentTrailProps> = {
         }),
       ]}
       stopReason="max_tokens"
+    />
+  ),
+};
+
+export const FailedAfterPartialAnswer: StoryObj<AgentTrailProps> = {
+  render: () => (
+    <TrailDemo
+      parts={[say("The sky looks blue because")]}
+      errorText={
+        'Internal error: Type validation failed: Value: {"choices":[{"delta":{"content":" air"}}]}. Error message: Invalid input: expected "assistant" at choices[0].delta.role'
+      }
     />
   ),
 };

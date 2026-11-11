@@ -615,6 +615,20 @@ describe("AgentMessageStore", () => {
       expect(msg?.message).toContain("**Error:** boom");
       expect(msg?.turnDurationMs).toBe(12_345);
     });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2921 keeps the error apart from the partial reply, so the chat can show it without repeating the reply", () => {
+      const store = new AgentMessageStore();
+      const id = store.addMessage({
+        message: "partial reply",
+        sender: AI_SENDER,
+        timestamp: formatDateTime(new Date()),
+        isVisible: true,
+      });
+
+      store.markMessageError(id, "boom");
+
+      expect(store.getMessage(id)?.errorText).toBe("boom");
+    });
   });
 
   describe("loadMessages()", () => {
@@ -626,6 +640,24 @@ describe("AgentMessageStore", () => {
       ]);
 
       expect(store.getDisplayMessages()[0].timestamp).toBeNull();
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2921 keeps a failed reply's error when the chat reloads its messages", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "a1",
+          sender: AI_SENDER,
+          message: "partial reply\n\n**Error:** boom",
+          isErrorMessage: true,
+          errorText: "boom",
+          timestamp: null,
+          isVisible: true,
+        },
+      ]);
+
+      expect(store.getMessage("a1")?.errorText).toBe("boom");
     });
 
     it("keeps the send time a message arrived with", () => {

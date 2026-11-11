@@ -562,6 +562,7 @@ export interface AgentChatMessage {
   timestamp: FormattedDateTime | null;
   isVisible: boolean;
   isErrorMessage?: boolean;
+  errorText?: string;
   message: string;
   parts?: AgentMessagePart[];
   context?: MessageContext;

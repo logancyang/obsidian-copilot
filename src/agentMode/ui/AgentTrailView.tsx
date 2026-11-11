@@ -87,12 +87,12 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   onOpenFileChange = noopOpenFileChange,
 }) => {
   const answer = agentResponseText(parts);
-  // A failed turn's error is stored as message text, which a reply with parts never shows.
+  // A reply with parts never shows its message text, so a failed turn's error, even under a partial answer, renders here.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633
-  const notice =
-    errorText && answer.length === 0
-      ? errorText
-      : stopReasonNotice(turnStopReason, agentCancelCause);
+  // https://github.com/logancyang/obsidian-copilot/issues/2921
+  const notice = errorText
+    ? `**Error:** ${errorText}`
+    : stopReasonNotice(turnStopReason, agentCancelCause);
   const hasRunningDuration = isStreaming && turnStartedAtMs !== undefined;
   // A compaction row reports its own progress and is not a reply to time or copy.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/633

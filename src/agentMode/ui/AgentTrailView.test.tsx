@@ -341,7 +341,7 @@ describe("AgentTrail", () => {
   it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 shows a failed turn's error under a reply that holds parts but no answer text", () => {
     renderTrail({
       parts: [compaction()],
-      errorText: "**Error:** stream error",
+      errorText: "stream error",
       turnDurationMs: 4_000,
     });
 
@@ -349,14 +349,15 @@ describe("AgentTrail", () => {
     expect(screen.getByTestId("agent-md").textContent).toBe("**Error:** stream error");
   });
 
-  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/633 leaves a reply that has answer text alone, since its error text would repeat the answer", () => {
+  it("https://github.com/logancyang/obsidian-copilot/issues/2921 shows a failed turn's error under the partial answer it streamed, rendering the answer once", () => {
     renderTrail({
       parts: [text("Partial answer."), compaction()],
-      errorText: "Partial answer.\n\n**Error:** stream error",
+      errorText: "stream error",
     });
 
     expect(screen.getAllByTestId("agent-md").map((el) => el.textContent)).toEqual([
       "Partial answer.",
+      "**Error:** stream error",
     ]);
   });
 
