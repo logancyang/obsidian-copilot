@@ -5,6 +5,7 @@ import {
   updateChatTranscript,
 } from "@/utils/chatImagePersistence";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
+import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -25,6 +26,7 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
 import { joinPosix } from "@/utils/pathUtils";
+import { getVaultBase } from "@/utils/vaultPath";
 import { TFile, type App } from "obsidian";
 import {
   coerceProjectId,
@@ -38,6 +40,9 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
+// Tool cards are not saved, so each reply keeps the tools it used in a hidden block that a reopened chat sends the agent as history.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+const TOOLS_USED_BLOCK = /(?:^|\r?\n)<!-- copilot-tools\r?\n([\s\S]*?)\r?\n-->$/;
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
   const epoch = Number(raw);
@@ -271,7 +276,9 @@ export class AgentChatPersistenceManager {
           m.message.length === 0 && m.fanout
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
-        return `${formatChatNoteMessage(m.sender, body)}\n[Timestamp: ${ts}]`;
+        const tools = toolsUsedLines(m, getVaultBase(this.app));
+        const toolsBlock = tools.length > 0 ? `\n<!-- copilot-tools\n${tools.join("\n")}\n-->` : "";
+        return `${formatChatNoteMessage(m.sender, body)}${toolsBlock}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
@@ -297,7 +304,9 @@ export class AgentChatPersistenceManager {
         }
       }
 
-      const messageText = lines.slice(0, endIndex).join("\n").trim();
+      const savedText = lines.slice(0, endIndex).join("\n").trim();
+      const toolsBlock = TOOLS_USED_BLOCK.exec(savedText);
+      const messageText = toolsBlock ? savedText.slice(0, toolsBlock.index).trim() : savedText;
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -325,6 +334,7 @@ export class AgentChatPersistenceManager {
         sender,
         isVisible: true,
         timestamp,
+        ...(toolsBlock ? { toolsUsed: toolsBlock[1].split(/\r?\n/).filter(Boolean) } : {}),
       });
     }
     return messages;

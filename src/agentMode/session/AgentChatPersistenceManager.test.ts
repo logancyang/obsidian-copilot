@@ -649,6 +649,88 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("loadFile()", () => {
+    it("restores the tools a reply used from its note without showing them in the message (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const reply: AgentChatMessage = {
+        ...makeMessage(AI_SENDER, "Here is the summary.", 1735732800001),
+        parts: [
+          { kind: "text", text: "Here is the summary." },
+          {
+            kind: "tool_call",
+            id: "tc1",
+            title: "Read a.md",
+            toolKind: "read",
+            status: "completed",
+            locations: [{ path: "notes/a.md" }],
+            output: [{ type: "text", text: "SECRET NOTE BODY" }],
+          },
+          {
+            kind: "tool_call",
+            id: "tc2",
+            title: 'Search "budget"',
+            toolKind: "search",
+            status: "completed",
+          },
+        ],
+      };
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "Summarize my notes."), reply],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        [
+          "**ai**: Here is the summary.",
+          "<!-- copilot-tools",
+          "Read a.md (read): notes/a.md",
+          'Search "budget" (search)',
+          "-->",
+          "[Timestamp: 2026/01/01 12:00:00]",
+        ].join("\n")
+      );
+      expect(file.contents).not.toContain("SECRET NOTE BODY");
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[1].message).toBe("Here is the summary.");
+      expect(loaded.messages[1].parts).toBeUndefined();
+      expect(loaded.messages[1].toolsUsed).toEqual([
+        "Read a.md (read): notes/a.md",
+        'Search "budget" (search)',
+      ]);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it("loads a note saved without a tools block as before", async () => {
+      const path = "test-folder/agent__no-tools.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1789109351267",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+          "[Timestamp: 2026/09/10 23:49:11]",
+          "",
+          "**ai**: hello <!-- a comment the user wrote -->",
+          "[Timestamp: 2026/09/10 23:49:15]",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.messages.map((m) => m.message)).toEqual([
+        "hi",
+        "hello <!-- a comment the user wrote -->",
+      ]);
+      expect(loaded.messages.map((m) => m.toolsUsed)).toEqual([undefined, undefined]);
+    });
+
     it("throws on missing backendId instead of silently defaulting", async () => {
       const path = "test-folder/agent__broken.md";
       await app.vault.adapter.write(

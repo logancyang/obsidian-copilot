@@ -913,10 +913,7 @@ export class AgentSession implements ChatStateHost, ChatView {
           );
         }
 
-        const historyBlock = buildConversationHistoryBlock(
-          this.priorDisplayMessages(userMessageId),
-          CONVERSATION_HISTORY_MAX_CHARS
-        );
+        const historyBlock = this.priorHistoryBlock(userMessageId);
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -932,12 +929,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
-      const historyBlock = sendsSavedHistory
-        ? buildConversationHistoryBlock(
-            this.priorDisplayMessages(userMessageId),
-            CONVERSATION_HISTORY_MAX_CHARS
-          )
-        : null;
+      const historyBlock = sendsSavedHistory ? this.priorHistoryBlock(userMessageId) : null;
       // A feature card's tool call returns before the user answers it, so the answer rides their next message.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
       const promptNotes = sendsCompact ? [] : this.takePromptNotes();
@@ -1060,8 +1052,13 @@ export class AgentSession implements ChatStateHost, ChatView {
     return stopReason;
   }
 
-  private priorDisplayMessages(userMessageId: string): readonly AgentChatMessage[] {
-    return this.store.getDisplayMessages().filter((m) => m.id !== userMessageId);
+  private priorHistoryBlock(userMessageId: string): string | null {
+    const app = this.getApp?.();
+    return buildConversationHistoryBlock(
+      this.store.getDisplayMessages().filter((m) => m.id !== userMessageId),
+      CONVERSATION_HISTORY_MAX_CHARS,
+      app ? getVaultBase(app) : null
+    );
   }
 
   private displayNameFor(backendId: BackendId): string {

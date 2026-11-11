@@ -662,6 +662,23 @@ describe("AgentMessageStore", () => {
       expect(display.find((m) => m.id === "u1")?.fanout).toBeUndefined();
     });
 
+    it("keeps the tools list a reply restored from its note", () => {
+      const store = new AgentMessageStore();
+
+      store.loadMessages([
+        {
+          id: "a1",
+          sender: AI_SENDER,
+          message: "summary",
+          timestamp: null,
+          isVisible: true,
+          toolsUsed: ["Read a.md (read): notes/a.md"],
+        },
+      ]);
+
+      expect(store.getDisplayMessages()[0].toolsUsed).toEqual(["Read a.md (read): notes/a.md"]);
+    });
+
     it("drops file changes from a loaded chat so a reopened turn shows none", () => {
       const store = new AgentMessageStore();
       const id = store.addMessage(placeholder());

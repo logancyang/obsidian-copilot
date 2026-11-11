@@ -571,6 +571,7 @@ export interface AgentChatMessage {
   turnDurationMs?: number;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
+  toolsUsed?: readonly string[];
 }
 
 export interface TurnFileChange {
