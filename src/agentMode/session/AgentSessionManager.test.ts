@@ -5870,16 +5870,35 @@ describe("AgentSessionManager", () => {
         const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/814";
         const NOTE = "chats/agent__browsed.md";
 
-        async function openBrowsedChat() {
+        async function openBrowsedChat(goneSessionId?: string) {
           jest.useFakeTimers();
           getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
           const files: Record<string, FakeFrontmatter> = {
             [NOTE]: { epoch: 1_000, topic: "Browsed", backendId: "opencode" },
           };
-          const harness = buildHistoryHarness({ files });
+          if (goneSessionId) files[NOTE].sessionId = goneSessionId;
+          const { backend } = buildReplayingBackend({
+            loadSession: jest.fn(async () => {
+              throw new Error(`Invalid params: session not found: ${goneSessionId}`);
+            }),
+          });
+          const harness = buildHistoryHarness({
+            files,
+            createBackendProcess: jest.fn(() => backend),
+          });
+          if (goneSessionId) {
+            await harness.index.recordSession({
+              backendId: "opencode",
+              sessionId: goneSessionId,
+              title: "Browsed",
+              createdAtMs: 1_000,
+              lastAccessedAtMs: 1_000,
+            });
+          }
           Object.assign(harness.persistence, {
             loadFile: jest.fn(async () => ({
               backendId: "opencode",
+              sessionId: goneSessionId,
               projectId: GLOBAL_SCOPE,
               messages: savedTurn,
             })),
@@ -5918,6 +5937,26 @@ describe("AgentSessionManager", () => {
           await autosave(session);
 
           expect(files[NOTE].sessionId).toBe(session.getBackendSessionId());
+          expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/902 lists the chat once in history and forgets its unresumable session once a message is sent in the session that replaced it", async () => {
+          const { manager, index, session } = await openBrowsedChat("gone-1");
+          getSessionTestHandle(session).sendPrompt();
+          await autosave(session);
+
+          expect((await index.getEntries()).map((e) => e.sessionId)).toEqual([
+            session.getBackendSessionId(),
+          ]);
+          expect(await index.isTombstoned("opencode", "gone-1")).toBe(true);
+          expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
+        });
+
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/902 keeps its unresumable session in the session index when it is opened and left before a message is sent", async () => {
+          const { manager, index, session } = await openBrowsedChat("gone-1");
+          await autosave(session);
+
+          expect((await index.getEntries()).map((e) => e.sessionId)).toEqual(["gone-1"]);
           expect((await manager.getChatHistoryItems()).map((i) => i.id)).toEqual([NOTE]);
         });
       });
