@@ -106,6 +106,24 @@ describe("excalidrawTools", () => {
       expect(points).toMatchObject({ minItems: 2, maxItems: 100 });
     });
 
+    it("declares only string enums, since Gemini rejects every request that lists a tool with a numeric enum", () => {
+      const enums: unknown[] = [];
+      const collect = (node: unknown): void => {
+        if (Array.isArray(node)) return node.forEach(collect);
+        if (!node || typeof node !== "object") return;
+        for (const [key, value] of Object.entries(node)) {
+          if (key === "enum" && Array.isArray(value)) enums.push(...(value as unknown[]));
+          else collect(value);
+        }
+      };
+      [EXCALIDRAW_READ_TOOL, EXCALIDRAW_RENDER_TOOL, EXCALIDRAW_WRITE_TOOL].forEach((tool) =>
+        collect(tool.inputSchema)
+      );
+
+      expect(enums.length).toBeGreaterThan(0);
+      expect(enums.filter((value) => typeof value !== "string")).toEqual([]);
+    });
+
     it(`${ISSUE_816} tells agents an icon's id works only in groups and icons, and how to reach its members in a later call`, () => {
       expect(EXCALIDRAW_WRITE_TOOL.description).toContain(
         "Other operations can't take an icon's id or group id"

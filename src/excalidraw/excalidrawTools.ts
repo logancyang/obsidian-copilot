@@ -90,7 +90,7 @@ const ELEMENT = {
     ...STYLE,
     roundness: {
       type: ["object", "null"],
-      properties: { type: { enum: [2, 3] } },
+      properties: { type: { type: "integer", minimum: 2, maximum: 3 } },
       description: "Rounded corners: {type: 3} for rectangles, {type: 2} for other shapes.",
     },
     name: {
