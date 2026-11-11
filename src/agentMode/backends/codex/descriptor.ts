@@ -1,8 +1,9 @@
+import { agentChildEnv, agentUserPath } from "@/agentMode/backends/shared/agentUserDirs";
 import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import { Notice } from "obsidian";
 import { resolveEffort } from "@/lib/model-effort";
 import { codexAuth } from "./codexAuth";
-import { codexApprovedRules } from "./codexApprovedRules";
+import { codexApprovedRules, codexHomeDir } from "./codexApprovedRules";
 import type CopilotPlugin from "@/main";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { detectBinary } from "@/utils/detectBinary";
@@ -98,6 +99,11 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     "OpenAI models, billed to your ChatGPT subscription. Runs the codex-acp adapter on your machine.",
   skillsProjectDir: ".agents/skills",
   crossDiscoveredAgents: [],
+  userSkillsDirs: (settings) => {
+    const env = agentChildEnv(settings, "codex");
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    return [agentUserPath(env, ".agents", "skills"), path.join(codexHomeDir(env), "skills")];
+  },
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: true,

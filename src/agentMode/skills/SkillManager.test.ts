@@ -7,10 +7,15 @@ import { FileSystemAdapter, type App, type EventRef } from "obsidian";
 import { useSkillLoadErrorCount } from "@/settings/skillLoadErrorState";
 import { discoverManagedSkills } from "./discoverManagedSkills";
 import { reconcile } from "./reconcile";
+import { discoverReadOnlySkills } from "./discoverReadOnlySkills";
+import { logWarn } from "@/logger";
+import { makeReadOnlySkill } from "./testing/readOnlySkillFixtures";
 import {
   computeSkillSetSignature,
   getManagedSkills,
+  getReadOnlySkills,
   SkillManager,
+  subscribeToReadOnlySkills,
   type RefreshResult,
   useRejectedSkills,
 } from "./SkillManager";
@@ -59,6 +64,13 @@ jest.mock("./nodeFsAdapters", () => ({
   createNodeMigrateSkillFs: jest.fn(() => ({})),
   createNodeProjectDiscoveryFs: jest.fn(() => ({})),
   createNodeReconcileFs: jest.fn(() => ({})),
+  createNodeReadOnlyDiscoveryFs: jest.fn(() => ({
+    realpath: async (p: string) => p.replace("/vault/copilot", "/real/copilot"),
+  })),
+}));
+
+jest.mock("./discoverReadOnlySkills", () => ({
+  discoverReadOnlySkills: jest.fn(async () => []),
 }));
 
 jest.mock("./discoverProjectSkills", () => ({
@@ -85,6 +97,11 @@ const mockedRunUpdateProperties = runUpdateProperties as jest.MockedFunction<
 const mockedRunToggleAgent = runToggleAgent as jest.MockedFunction<typeof runToggleAgent>;
 const mockedRunDeleteSkill = runDeleteSkill as jest.MockedFunction<typeof runDeleteSkill>;
 const mockedReconcile = reconcile as jest.MockedFunction<typeof reconcile>;
+const mockedDiscoverReadOnlySkills = jest.mocked(discoverReadOnlySkills);
+const ISSUE_3659 = "https://github.com/logancyang/obsidian-copilot/issues/3659";
+const AGENT_ROOTS = [
+  { dirPath: "/home/me/.claude/skills", agents: ["claude"], scope: "computer" as const },
+];
 
 describe("SkillManager", () => {
   beforeEach(() => {
@@ -92,6 +109,7 @@ describe("SkillManager", () => {
     preferences = {};
     mockedDiscoverManagedSkills.mockReset();
     mockedReconcile.mockClear();
+    mockedDiscoverReadOnlySkills.mockReset().mockResolvedValue([]);
     mockedRunRenameSkill.mockReset();
     mockedRunUpdateProperties.mockReset();
     mockedRunToggleAgent.mockReset();
@@ -241,6 +259,65 @@ describe("SkillManager", () => {
         expect(f.prepare).toHaveBeenCalledTimes(2);
         expect(f.prepare.mock.invocationCallOrder[0]).toBeLessThan(
           (discoverManagedSkills as jest.Mock).mock.invocationCallOrder[0]
+        );
+      });
+      it(`${ISSUE_3659} publishes skills from agent folders, skipping links into Copilot's own skills folder`, async () => {
+        const roots = jest.fn(() => AGENT_ROOTS);
+        const manager = SkillManager.initialize(
+          makeApp(),
+          { claude: ".claude/skills" },
+          undefined,
+          roots
+        );
+        const fromComputer = makeReadOnlySkill({ name: "release-notes" });
+        mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult());
+        mockedDiscoverReadOnlySkills.mockResolvedValue([fromComputer]);
+
+        await manager.refresh();
+
+        expect(roots).toHaveBeenCalledWith("/vault");
+        expect(mockedDiscoverReadOnlySkills).toHaveBeenCalledWith(
+          expect.objectContaining({ roots: AGENT_ROOTS, excludedDirs: ["/real/copilot/skills"] })
+        );
+        expect(getReadOnlySkills()).toEqual([fromComputer]);
+      });
+      it(`${ISSUE_3659} keeps your skills and leaves skills from agent folders empty when those folders cannot be read`, async () => {
+        const manager = SkillManager.initialize(
+          makeApp(),
+          { claude: ".claude/skills" },
+          undefined,
+          () => AGENT_ROOTS
+        );
+        mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult([makeSkill()]));
+        mockedDiscoverReadOnlySkills.mockRejectedValue(new Error("EPERM: operation not permitted"));
+
+        const result = await manager.refresh();
+
+        expect(result.ok).toBe(true);
+        expect(getManagedSkills()).toHaveLength(1);
+        expect(getReadOnlySkills()).toEqual([]);
+        expect(logWarn).toHaveBeenCalledWith(expect.stringContaining("EPERM"));
+      });
+      it("lists no skills from agent folders when no folder provider is given", async () => {
+        const manager = SkillManager.initialize(makeApp(), { claude: ".claude/skills" });
+        mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult());
+        await manager.refresh();
+        expect(mockedDiscoverReadOnlySkills).not.toHaveBeenCalled();
+        expect(getReadOnlySkills()).toEqual([]);
+      });
+      it(`${ISSUE_3659} reads agent folders only after reconcile repoints stale links to managed skills`, async () => {
+        const manager = SkillManager.initialize(
+          makeApp(),
+          { claude: ".claude/skills" },
+          undefined,
+          () => AGENT_ROOTS
+        );
+        mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult([makeSkill()]));
+
+        await manager.refresh();
+
+        expect(mockedReconcile.mock.invocationCallOrder[0]).toBeLessThan(
+          mockedDiscoverReadOnlySkills.mock.invocationCallOrder[0]
         );
       });
     });
@@ -680,6 +757,40 @@ describe("SkillManager", () => {
         expect(preferences[builtinSkill.name].disabledAgents).toEqual(["claude"]);
         expect(getManagedSkills()[0].enabledAgents).toEqual(["opencode"]);
       });
+    });
+  });
+  describe("getReadOnlySkills()", () => {
+    it("returns the skills from agent folders found by the latest refresh", async () => {
+      const manager = SkillManager.initialize(
+        makeApp(),
+        { claude: ".claude/skills" },
+        undefined,
+        () => AGENT_ROOTS
+      );
+      mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult());
+      mockedDiscoverReadOnlySkills.mockResolvedValue([makeReadOnlySkill({ name: "plan" })]);
+      await manager.refresh();
+      expect(getReadOnlySkills().map((skill) => skill.name)).toEqual(["plan"]);
+    });
+  });
+  describe("subscribeToReadOnlySkills()", () => {
+    it("notifies the listener when a refresh publishes skills from agent folders, until it unsubscribes", async () => {
+      const manager = SkillManager.initialize(
+        makeApp(),
+        { claude: ".claude/skills" },
+        undefined,
+        () => AGENT_ROOTS
+      );
+      const listener = jest.fn();
+      const unsubscribe = subscribeToReadOnlySkills(listener);
+      mockedDiscoverManagedSkills.mockResolvedValue(discoveryResult());
+      mockedDiscoverReadOnlySkills.mockResolvedValue([makeReadOnlySkill({ name: "plan" })]);
+      await manager.refresh();
+      expect(listener).toHaveBeenCalledTimes(1);
+      unsubscribe();
+      mockedDiscoverReadOnlySkills.mockResolvedValue([makeReadOnlySkill({ name: "other" })]);
+      await manager.refresh();
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
   describe("computeSkillSetSignature()", () => {

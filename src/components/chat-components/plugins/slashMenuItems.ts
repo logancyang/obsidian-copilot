@@ -1,8 +1,12 @@
 import fuzzysort from "fuzzysort";
 import { $getSelection, $isRangeSelection, $isRootNode, type LexicalNode } from "lexical";
-import type { BackendId, Skill } from "@/agentMode";
+import React from "react";
+import type { BackendId, ReadOnlySkill, Skill } from "@/agentMode";
+import { Badge } from "@/components/ui/badge";
 import { COMPACT_COMMAND_NAME } from "@/commands/compactCommand";
 import type { CustomCommand } from "@/commands/type";
+
+export type SlashMenuSource = "Built-in" | "Vault" | "Computer" | "Command";
 
 export type SlashMenuItem =
   | {
@@ -18,7 +22,8 @@ export type SlashMenuItem =
       name: string;
       description: string;
       body: string;
-      skill: Skill;
+      source: SlashMenuSource;
+      skill: Skill | ReadOnlySkill;
     }
   | {
       kind: "command";
@@ -26,8 +31,11 @@ export type SlashMenuItem =
       name: string;
       description: string;
       body: string;
+      source: "Command";
       command: CustomCommand;
     };
+
+const NO_READ_ONLY_SKILLS: ReadonlyArray<ReadOnlySkill> = Object.freeze([]);
 
 const COMPACT_ITEM: SlashMenuItem = {
   kind: "builtin",
@@ -41,7 +49,8 @@ export function composeSlashMenuItems(
   skills: Skill[],
   commands: CustomCommand[],
   activeBackend: BackendId | null,
-  isAgentMode = false
+  isAgentMode = false,
+  readOnlySkills: ReadonlyArray<ReadOnlySkill> = NO_READ_ONLY_SKILLS
 ): SlashMenuItem[] {
   // The send path treats exactly /compact as the built-in, so only that exact name is shadowed.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -56,6 +65,20 @@ export function composeSlashMenuItems(
 
   const skillNames = new Set(visibleSkills.map((s) => s.name.toLowerCase()));
 
+  // Agents run skills from their own folders that Copilot does not manage, so the menu offers them
+  // too, behind any vault skill of the same name. https://github.com/logancyang/obsidian-copilot/issues/3659
+  const vaultFirst = (skill: ReadOnlySkill) => (skill.scope === "vault" ? 0 : 1);
+  const visibleReadOnlySkills = [...readOnlySkills]
+    .sort((a, b) => vaultFirst(a) - vaultFirst(b))
+    .filter((skill) => {
+      if (skill.userInvocable === false || isBuiltinName(skill.name)) return false;
+      if (activeBackend !== null && !skill.agents.includes(activeBackend)) return false;
+      const key = skill.name.toLowerCase();
+      if (skillNames.has(key)) return false;
+      skillNames.add(key);
+      return true;
+    });
+
   const visibleCommands = commands.filter((cmd) => {
     if (!cmd.showInSlashMenu) return false;
     return !skillNames.has(cmd.title.toLowerCase()) && !isBuiltinName(cmd.title);
@@ -69,6 +92,16 @@ export function composeSlashMenuItems(
       name: skill.name,
       description: skill.description,
       body: skill.body,
+      source: skill.builtin ? "Built-in" : "Vault",
+      skill,
+    })),
+    ...visibleReadOnlySkills.map<SlashMenuItem>((skill, index) => ({
+      kind: "skill",
+      key: `skill:${skill.scope}:${skill.name}:${index}`,
+      name: skill.name,
+      description: skill.description,
+      body: skill.body,
+      source: skill.scope === "vault" ? "Vault" : "Computer",
       skill,
     })),
     ...visibleCommands.map<SlashMenuItem>((command, index) => ({
@@ -77,9 +110,35 @@ export function composeSlashMenuItems(
       name: command.title,
       description: "",
       body: command.content,
+      source: "Command",
       command,
     })),
   ];
+}
+
+export function slashMenuOption(item: SlashMenuItem): {
+  key: string;
+  title: string;
+  subtitle?: string;
+  content: string;
+  trailingContent?: React.ReactNode;
+  item: SlashMenuItem;
+} {
+  return {
+    key: item.key,
+    title: item.name,
+    subtitle: item.description || undefined,
+    content: item.body,
+    trailingContent:
+      item.kind === "builtin"
+        ? undefined
+        : React.createElement(
+            Badge,
+            { variant: "outline", className: "tw-shrink-0 tw-px-1.5 tw-py-0 tw-text-faint" },
+            item.source
+          ),
+    item,
+  };
 }
 
 export function filterSlashMenuOptions<T extends { title: string; content?: string }>(

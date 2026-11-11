@@ -1,5 +1,5 @@
 import type { ApprovedRule, ApprovedRuleStore } from "@/agentMode/session/types";
-import { sanitizeBuiltinSkillEnvOverrides } from "@/agentMode/backends/shared/builtinSkillEnv";
+import { agentChildEnv, agentUserPath } from "@/agentMode/backends/shared/agentUserDirs";
 import { getSettings } from "@/settings/model";
 import { requireNodeModule } from "@/utils/desktopRuntime";
 import { codexCliInvocation } from "./codexAuth";
@@ -30,15 +30,11 @@ function os(): typeof import("node:os") {
 }
 
 function rulesFile(): string {
-  const env = {
-    ...process.env,
-    ...sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.codex?.envOverrides),
-  };
-  // Without CODEX_HOME, Codex uses the HOME it runs with, which its env overrides can change;
-  // Windows Codex reads the profile folder instead.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/868
-  const home = (process.platform !== "win32" && env.HOME) || os().homedir();
-  return path().join(env.CODEX_HOME || path().join(home, ".codex"), "rules", "default.rules");
+  return path().join(codexHomeDir(agentChildEnv(getSettings(), "codex")), "rules", "default.rules");
+}
+
+export function codexHomeDir(env: NodeJS.ProcessEnv): string {
+  return env.CODEX_HOME || agentUserPath(env, ".codex");
 }
 
 function parseJson(text: string): unknown {

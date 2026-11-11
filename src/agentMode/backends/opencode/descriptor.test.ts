@@ -441,6 +441,34 @@ describe("descriptor", () => {
         expect(callback).toHaveBeenCalledTimes(3);
       });
     });
+
+    describe("userSkillsDirs()", () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3659 reads OpenCode's own skills folder plus the Claude and shared agent folders it also loads", () => {
+        const settings = {
+          agentMode: {
+            backends: { opencode: { envOverrides: { HOME: "/home/me", XDG_CONFIG_HOME: "" } } },
+          },
+        } as unknown as CopilotSettings;
+        expect(OpencodeBackendDescriptor.userSkillsDirs?.(settings)).toEqual([
+          "/home/me/.config/opencode/skills",
+          "/home/me/.claude/skills",
+          "/home/me/.agents/skills",
+        ]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3659 follows the XDG_CONFIG_HOME set for OpenCode", () => {
+        const settings = {
+          agentMode: {
+            backends: {
+              opencode: { envOverrides: { HOME: "/home/me", XDG_CONFIG_HOME: "/config" } },
+            },
+          },
+        } as unknown as CopilotSettings;
+        expect(OpencodeBackendDescriptor.userSkillsDirs?.(settings)[0]).toBe(
+          "/config/opencode/skills"
+        );
+      });
+    });
   });
 
   const CONFIG_DIR = "my-config";

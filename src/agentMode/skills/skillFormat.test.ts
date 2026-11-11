@@ -1,5 +1,6 @@
 import {
   parseSkillFile,
+  readSkillSummary,
   serializeSkillFile,
   SkillFormatError,
   validateDescription,
@@ -199,6 +200,44 @@ describe("skillFormat", () => {
       );
       expect(error.message).toBe("Skill `description` must be a string");
       expect(error.offendingText).toBe("description: []");
+    });
+  });
+
+  describe("readSkillSummary()", () => {
+    it("reads the name, description, body, and user-invocable flag from the frontmatter", () => {
+      const summary = readSkillSummary(
+        "---\nname: review\ndescription: Review a diff\nuser-invocable: false\n---\nCheck it.",
+        "review"
+      );
+      expect(summary).toEqual({
+        name: "review",
+        description: "Review a diff",
+        body: "Check it.",
+        userInvocable: false,
+      });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 keeps a frontmatter name that differs from the folder and allows a missing description, as agents do", () => {
+      expect(readSkillSummary("---\nname: Release Notes\n---\nWrite them.", "release")).toEqual({
+        name: "Release Notes",
+        description: "",
+        body: "Write them.",
+        userInvocable: undefined,
+      });
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 names the skill after its folder when the frontmatter has no name, is invalid YAML, or is missing", () => {
+      expect(readSkillSummary("---\ndescription: Plan\n---\nPlan it.", "plan").name).toBe("plan");
+      expect(readSkillSummary("---\nname: [oops\n---\nPlan it.", "plan")).toEqual({
+        name: "plan",
+        description: "",
+        body: "Plan it.",
+      });
+      expect(readSkillSummary("Just instructions.", "plan")).toEqual({
+        name: "plan",
+        description: "",
+        body: "Just instructions.",
+      });
     });
   });
 

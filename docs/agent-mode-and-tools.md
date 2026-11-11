@@ -260,7 +260,7 @@ Skills are reusable instruction packets built around a `SKILL.md` file. One Skil
 2. Find a Skill and toggle the OpenCode, Claude, or Codex icons for the agents that should use it.
 3. Type `/` in Agent Chat to choose it, or describe the task and let the agent select an enabled Skill.
 
-Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list.
+Shared Skills live under `<Copilot folder>/skills/`. Copilot links them into the native folders used by each agent: `.opencode/skills/`, `.claude/skills/`, and `.agents/skills/`. Skills already present in those native folders also appear in the settings list. The `/` menu also lists skills each agent loads from its own folders outside the vault, such as `~/.claude/skills/`. Each entry in the `/` menu is tagged **Vault**, **Built-in**, **Computer**, or **Command** to show where it comes from.
 
 The **Built-in skills** table contains Copilot's bundled skills with read-only previews. Turn off a whole skill to remove its generated files, or turn off an individual agent to exclude it. These choices survive restarts and updates. Copilot generates built-in skills only when an available agent can use them. Setting up another agent enables eligible built-ins for that agent unless you previously opted out. Your own skills remain editable in **Your skills**.
 

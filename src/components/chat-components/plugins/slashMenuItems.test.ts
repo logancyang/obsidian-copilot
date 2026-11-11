@@ -1,10 +1,12 @@
 import type { Skill } from "@/agentMode";
 import type { CustomCommand } from "@/commands/type";
 import { $createParagraphNode, $createTextNode, $getRoot, createEditor } from "lexical";
+import { makeReadOnlySkill } from "@/agentMode/skills/testing/readOnlySkillFixtures";
 import {
   $slashStartsPrompt,
   composeSlashMenuItems,
   filterSlashMenuOptions,
+  slashMenuOption,
 } from "./slashMenuItems";
 
 function makeSkill(overrides: Partial<Skill> & { name: string }): Skill {
@@ -144,6 +146,97 @@ describe("slashMenuItems", () => {
         ["command", "Compact"],
         ["command", "polish"],
       ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 lists vault skills, then skills linked into vault agent folders, then skills from agent folders on this computer, then commands, each tagged with where it comes from", () => {
+      const items = composeSlashMenuItems(
+        [
+          makeSkill({ name: "summarize", enabledAgents: ["claude"] }),
+          makeSkill({ name: "obsidian-markdown", enabledAgents: ["claude"], builtin: true }),
+        ],
+        [makeCommand({ title: "polish" })],
+        "claude",
+        false,
+        [
+          makeReadOnlySkill({ name: "release-notes" }),
+          makeReadOnlySkill({ name: "linked", scope: "vault", folders: ["/vault/.claude/skills"] }),
+        ]
+      );
+      expect(items.map((i) => [i.name, i.kind === "builtin" ? null : i.source])).toEqual([
+        ["summarize", "Vault"],
+        ["obsidian-markdown", "Built-in"],
+        ["linked", "Vault"],
+        ["release-notes", "Computer"],
+        ["polish", "Command"],
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 hides a skill from an agent folder when the active agent does not load that folder", () => {
+      const readOnly = [
+        makeReadOnlySkill({ name: "claude-only", agents: ["claude"] }),
+        makeReadOnlySkill({ name: "shared", agents: ["claude", "opencode"] }),
+      ];
+      expect(composeSlashMenuItems([], [], "opencode", false, readOnly).map((i) => i.name)).toEqual(
+        ["shared"]
+      );
+      expect(composeSlashMenuItems([], [], null, false, readOnly).map((i) => i.name)).toEqual([
+        "claude-only",
+        "shared",
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 hides skills from agent folders marked user-invocable: false", () => {
+      const items = composeSlashMenuItems([], [], "claude", false, [
+        makeReadOnlySkill({ name: "background", userInvocable: false }),
+      ]);
+      expect(items).toEqual([]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 keeps one skill per name, case-insensitively, preferring vault skills over skills on this computer, and shadows commands with that name", () => {
+      const items = composeSlashMenuItems(
+        [makeSkill({ name: "review", enabledAgents: ["claude"] })],
+        [makeCommand({ title: "Deploy" })],
+        "claude",
+        false,
+        [
+          makeReadOnlySkill({ name: "Review" }),
+          makeReadOnlySkill({ name: "deploy", folders: ["/home/me/.agents/skills"] }),
+          makeReadOnlySkill({ name: "deploy", scope: "vault" }),
+        ]
+      );
+      expect(items.map((i) => [i.name, i.kind === "builtin" ? null : i.source])).toEqual([
+        ["review", "Vault"],
+        ["deploy", "Vault"],
+      ]);
+    });
+  });
+
+  describe("slashMenuOption()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 shows each skill's and command's source as a tag next to its name", () => {
+      const [skill, command] = composeSlashMenuItems(
+        [],
+        [makeCommand({ title: "polish" })],
+        "claude",
+        false,
+        [makeReadOnlySkill({ name: "release-notes" })]
+      );
+      const skillOption = slashMenuOption(skill);
+      expect(skillOption).toMatchObject({
+        key: skill.key,
+        title: "release-notes",
+        subtitle: "desc for release-notes",
+        content: "body for release-notes",
+        item: skill,
+      });
+      expect((skillOption.trailingContent as React.ReactElement).props.children).toBe("Computer");
+      expect((slashMenuOption(command).trailingContent as React.ReactElement).props.children).toBe(
+        "Command"
+      );
+    });
+
+    it("leaves the built-in compact item untagged", () => {
+      const [compact] = composeSlashMenuItems([], [], "claude", true);
+      expect(slashMenuOption(compact).trailingContent).toBeUndefined();
     });
   });
 

@@ -35,3 +35,23 @@ export interface SkillDiscoveryResult<T> {
   accepted: T[];
   rejected: RejectedSkill[];
 }
+
+export type ReadOnlySkillScope = "vault" | "computer";
+
+export interface ReadOnlySkillRoot {
+  dirPath: string;
+  agents: readonly BackendId[];
+  scope: ReadOnlySkillScope;
+}
+
+export interface ReadOnlySkill {
+  name: string;
+  description: string;
+  body: string;
+  filePath: string;
+  dirPath: string;
+  folders: string[];
+  agents: BackendId[];
+  scope: ReadOnlySkillScope;
+  userInvocable?: boolean;
+}

@@ -598,5 +598,31 @@ describe("descriptor", () => {
         expect(CodexBackendDescriptor.presentPermissionOption?.(option, metadata)).toBe(option);
       });
     });
+
+    describe("userSkillsDirs()", () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/3659 reads ~/.agents/skills and the skills folder in Codex's home, which Codex still loads", () => {
+        const settings = {
+          agentMode: {
+            backends: { codex: { envOverrides: { HOME: "/home/me", CODEX_HOME: "" } } },
+          },
+        } as unknown as CopilotSettings;
+        expect(CodexBackendDescriptor.userSkillsDirs?.(settings)).toEqual([
+          "/home/me/.agents/skills",
+          "/home/me/.codex/skills",
+        ]);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/3659 follows the CODEX_HOME set for Codex", () => {
+        const settings = {
+          agentMode: {
+            backends: { codex: { envOverrides: { HOME: "/home/me", CODEX_HOME: "/data/codex" } } },
+          },
+        } as unknown as CopilotSettings;
+        expect(CodexBackendDescriptor.userSkillsDirs?.(settings)).toEqual([
+          "/home/me/.agents/skills",
+          "/data/codex/skills",
+        ]);
+      });
+    });
   });
 });
