@@ -14,12 +14,13 @@ import {
   useTypeaheadPlugin,
   TypeaheadState,
 } from "@/components/chat-components/hooks/useTypeaheadPlugin";
-import type { BackendId, Skill } from "@/agentMode";
+import type { BackendId, ReadOnlySkill, Skill } from "@/agentMode";
 
 import {
   $slashStartsPrompt,
   composeSlashMenuItems,
   filterSlashMenuOptions,
+  slashMenuOption,
   type SlashMenuItem,
 } from "./slashMenuItems";
 
@@ -30,13 +31,16 @@ interface SlashCommandOption extends TypeaheadOption {
 interface AgentSlashData {
   enabled: boolean;
   skills: Skill[];
+  readOnlySkills: ReadOnlySkill[];
   backendIds: ReadonlySet<BackendId> | null;
 }
 
 const EMPTY_SKILLS = Object.freeze([]) as unknown as Skill[];
+const EMPTY_READ_ONLY_SKILLS = Object.freeze([]) as unknown as ReadOnlySkill[];
 const EMPTY_AGENT_SLASH_DATA: AgentSlashData = Object.freeze({
   enabled: false,
   skills: EMPTY_SKILLS,
+  readOnlySkills: EMPTY_READ_ONLY_SKILLS,
   backendIds: null,
 });
 
@@ -47,25 +51,33 @@ function useAgentSlashData(): AgentSlashData {
     if (!isDesktopRuntime()) return;
 
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
+    const unsubscribers: Array<() => void> = [];
 
     async function loadAgentSlashData(): Promise<void> {
-      const { getManagedSkills, SkillManager, listBackendDescriptors } =
-        await import("@/agentMode");
+      const {
+        getManagedSkills,
+        getReadOnlySkills,
+        SkillManager,
+        listBackendDescriptors,
+        subscribeToReadOnlySkills,
+      } = await import("@/agentMode");
 
       const update = () => {
         if (cancelled) return;
         setData({
           enabled: true,
           skills: getManagedSkills(),
+          readOnlySkills: getReadOnlySkills(),
           backendIds: new Set(listBackendDescriptors().map((descriptor) => descriptor.id)),
         });
       };
 
       update();
 
+      if (cancelled) return;
+      unsubscribers.push(subscribeToReadOnlySkills(update));
       if (SkillManager.hasInstance()) {
-        unsubscribe = SkillManager.getInstance().subscribeToSkillSetChange(update);
+        unsubscribers.push(SkillManager.getInstance().subscribeToSkillSetChange(update));
       }
     }
 
@@ -77,7 +89,7 @@ function useAgentSlashData(): AgentSlashData {
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, []);
 
@@ -115,16 +127,18 @@ export function SlashCommandPlugin({ isAgentMode = false }: SlashCommandPluginPr
       agentSlashData.skills,
       sortedCommands,
       activeBackend,
-      isAgentMode && slashStartsPrompt
+      isAgentMode && slashStartsPrompt,
+      agentSlashData.readOnlySkills
     );
-    return items.map((item) => ({
-      key: item.key,
-      title: item.name,
-      subtitle: item.description || undefined,
-      content: item.body,
-      item,
-    }));
-  }, [agentSlashData.skills, sortedCommands, activeBackend, isAgentMode, slashStartsPrompt]);
+    return items.map(slashMenuOption);
+  }, [
+    agentSlashData.skills,
+    agentSlashData.readOnlySkills,
+    sortedCommands,
+    activeBackend,
+    isAgentMode,
+    slashStartsPrompt,
+  ]);
 
   const filteredOptions = useMemo(
     () => filterSlashMenuOptions(allOptions, currentQuery),

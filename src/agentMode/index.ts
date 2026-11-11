@@ -56,6 +56,7 @@ import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { SkillManager } from "./skills";
+import { collectReadOnlySkillRoots } from "./skills/discoverReadOnlySkills";
 import {
   availableBuiltinAgents,
   reconcileBuiltinSkills,
@@ -99,8 +100,14 @@ export {
 } from "./backends/registry";
 export { frameSink as acpFrameSink, setFrameSinkVaultBasePath } from "./session/debugSink";
 export { MAX_PROVIDED_TOOL_NAME_LENGTH } from "./session/copilotMcpServer";
-export { getManagedSkills, SkillManager, SkillsSettings } from "./skills";
-export type { Skill } from "./skills";
+export {
+  getManagedSkills,
+  getReadOnlySkills,
+  SkillManager,
+  SkillsSettings,
+  subscribeToReadOnlySkills,
+} from "./skills";
+export type { ReadOnlySkill, Skill } from "./skills";
 function isAgentModeEnabled(): boolean {
   return !Platform.isMobile;
 }
@@ -191,19 +198,36 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   };
   const saveSkillPreferences = (update: BuiltinPreferencesUpdate) =>
     saveBuiltinPreferences(update, (data) => plugin.saveData(data));
-  const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel(), {
-    availableAgents: availableSkillAgents,
-    savePreferences: saveSkillPreferences,
-    prepare: async (folder) => {
-      await reconcileBuiltinSkills({
-        folder,
-        fs: buildBuiltinSeedFs(app),
-        settings: getSettings(),
-        availableAgents: availableSkillAgents(),
-        registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
-      });
+  const readOnlySkillRoots = (vaultRootAbs: string | null) => {
+    const settings = getSettings();
+    return collectReadOnlySkillRoots(
+      listBackendDescriptors().map((descriptor) => ({
+        id: descriptor.id,
+        skillsProjectDir: descriptor.skillsProjectDir,
+        crossDiscoveredAgents: descriptor.crossDiscoveredAgents,
+        userSkillsDirs: descriptor.userSkillsDirs?.(settings) ?? [],
+      })),
+      vaultRootAbs
+    );
+  };
+  const skillManager = SkillManager.initialize(
+    app,
+    collectAgentSkillsDirsProjectRel(),
+    {
+      availableAgents: availableSkillAgents,
+      savePreferences: saveSkillPreferences,
+      prepare: async (folder) => {
+        await reconcileBuiltinSkills({
+          folder,
+          fs: buildBuiltinSeedFs(app),
+          settings: getSettings(),
+          availableAgents: availableSkillAgents(),
+          registeredAgents: Object.keys(collectAgentSkillsDirsProjectRel()),
+        });
+      },
     },
-  });
+    readOnlySkillRoots
+  );
   const initializing = new Map<BackendId, Promise<void>>();
   const beforeBackendStart = async (id: BackendId): Promise<void> => {
     await initializing.get(id);

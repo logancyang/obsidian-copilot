@@ -1,3 +1,5 @@
+import { agentChildEnv, agentUserPath } from "@/agentMode/backends/shared/agentUserDirs";
+import { requireNodeModule } from "@/utils/desktopRuntime";
 import { Notice } from "obsidian";
 import { OPENCODE_PINNED_VERSION, OPENCODE_MIN_VERSION } from "./ui/opencodeVersion";
 import { resolveEffort } from "@/lib/model-effort";
@@ -85,6 +87,16 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     "Copilot Plus models, or any model on your own provider key. Copilot can download and manage the binary for you.",
   skillsProjectDir: ".opencode/skills",
   crossDiscoveredAgents: ["claude", "codex"],
+  userSkillsDirs: (settings) => {
+    const env = agentChildEnv(settings, "opencode");
+    const path = requireNodeModule<typeof import("node:path")>("path");
+    const configDir = env.XDG_CONFIG_HOME || agentUserPath(env, ".config");
+    return [
+      path.join(configDir, "opencode", "skills"),
+      agentUserPath(env, ".claude", "skills"),
+      agentUserPath(env, ".agents", "skills"),
+    ];
+  },
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
   restartOnSystemPromptChange: true,

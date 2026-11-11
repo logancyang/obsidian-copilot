@@ -156,6 +156,29 @@ export function parseSkillFile(content: string, parentDirName: string): ParsedSk
   return { frontmatter, body, doc };
 }
 
+export interface SkillSummary {
+  name: string;
+  description: string;
+  body: string;
+  userInvocable?: boolean;
+}
+
+// Agents load skills Copilot's own format would reject, so listing them must not apply Copilot's
+// validation. https://github.com/logancyang/obsidian-copilot/issues/3659
+export function readSkillSummary(content: string, parentDirName: string): SkillSummary {
+  const match = FRONTMATTER_RE.exec(content);
+  const doc = match ? parseDocument(match[1] ?? "") : null;
+  if (!doc || doc.errors.length > 0 || !isMap(doc.contents)) {
+    return { name: parentDirName, description: "", body: match?.[2] ?? content };
+  }
+  return {
+    name: readString(doc, "name") || parentDirName,
+    description: readString(doc, "description") ?? "",
+    body: match?.[2] ?? "",
+    userInvocable: readBoolean(doc, "user-invocable"),
+  };
+}
+
 export function validateName(name: string, parentDirName: string, offendingText?: string): void {
   if (typeof name !== "string" || name.length === 0) {
     throw new SkillFormatError("Skill `name` must be a non-empty string", offendingText);

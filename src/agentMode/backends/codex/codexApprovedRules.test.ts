@@ -4,7 +4,7 @@ import * as path from "node:path";
 import type CopilotPlugin from "@/main";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { getSettings, resetSettings, setSettings } from "@/settings/model";
-import { codexApprovedRules } from "./codexApprovedRules";
+import { codexApprovedRules, codexHomeDir } from "./codexApprovedRules";
 
 jest.mock("os", () => ({ ...jest.requireActual<object>("os"), homedir: jest.fn() }));
 
@@ -450,6 +450,16 @@ describe("codexApprovedRules", () => {
       ]);
 
       expect(readRules()).toBe(`${erasedLine(GH_API)}${erasedLine(COMMIT)}${GITHUB_HOST}\n`);
+    });
+  });
+
+  describe("codexHomeDir()", () => {
+    it("uses CODEX_HOME when it is set", () => {
+      expect(codexHomeDir({ CODEX_HOME: "/data/codex", HOME: "/home/me" })).toBe("/data/codex");
+    });
+
+    it(`falls back to .codex under the HOME Codex runs with ${ISSUE}`, () => {
+      expect(codexHomeDir({ HOME: "/home/me" })).toBe(path.join("/home/me", ".codex"));
     });
   });
 });

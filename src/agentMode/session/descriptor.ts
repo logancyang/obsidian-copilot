@@ -103,6 +103,10 @@ export interface BackendDescriptor {
 
   readonly crossDiscoveredAgents: ReadonlyArray<BackendId>;
 
+  // Each agent also loads skills from its own folders outside the vault, which Settings and the
+  // slash menu list read-only. https://github.com/logancyang/obsidian-copilot/issues/3659
+  readonly userSkillsDirs?: (settings: CopilotSettings) => string[];
+
   readonly restartOnManagedSkillsChange: boolean;
 
   readonly restartOnProviderConfigChange: boolean;

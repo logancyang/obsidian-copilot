@@ -1,5 +1,6 @@
 import { logWarn } from "@/logger";
 import type { ProjectDiscoveryFs } from "./discoverProjectSkills";
+import type { ReadOnlyDiscoveryFs } from "./discoverReadOnlySkills";
 import type { MigrateSkillFs } from "./migrateProjectSkill";
 import { errCode } from "@/utils/errorUtils";
 import { requireNodeModule } from "@/utils/desktopRuntime";
@@ -117,5 +118,17 @@ export function createNodeReconcileFs(): ReconcileFs {
     async writeFile(p, content) {
       await fs.promises.writeFile(p, content, "utf-8");
     },
+  };
+}
+
+export function createNodeReadOnlyDiscoveryFs(): ReadOnlyDiscoveryFs {
+  const fs = requireNodeModule<typeof import("node:fs")>("fs");
+  const symlinks = createNodeSymlinksFs();
+  return {
+    list: (p) => fs.promises.readdir(p),
+    isSymlink: (p) => symlinks.isSymlink(p),
+    isDirectory: (p) => symlinks.isDirectory(p),
+    realpath: (p) => fs.promises.realpath(p),
+    readFile: (p) => fs.promises.readFile(p, "utf-8"),
   };
 }

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@/lib/story";
-import { composeSlashMenuItems } from "./plugins/slashMenuItems";
+import { composeSlashMenuItems, slashMenuOption } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
 
 const agentSlashOptions = composeSlashMenuItems(
@@ -26,13 +26,20 @@ const agentSlashOptions = composeSlashMenuItems(
     },
   ],
   "claude",
-  true
-).map((item) => ({
-  key: item.key,
-  title: item.name,
-  subtitle: item.description || undefined,
-  content: item.body,
-}));
+  true,
+  [
+    {
+      name: "release-notes",
+      description: "Draft release notes from the merged pull requests",
+      body: "Draft release notes from the merged pull requests.",
+      filePath: "/Users/me/.claude/skills/release-notes/SKILL.md",
+      dirPath: "/Users/me/.claude/skills/release-notes",
+      folders: ["/Users/me/.claude/skills"],
+      agents: ["claude"],
+      scope: "computer",
+    },
+  ]
+).map(slashMenuOption);
 
 const meta = {
   title: "Chat/Typeahead Menu",

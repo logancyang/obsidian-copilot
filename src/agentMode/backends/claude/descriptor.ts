@@ -1,3 +1,4 @@
+import { agentUserPath } from "@/agentMode/backends/shared/agentUserDirs";
 import { resolveEffort } from "@/lib/model-effort";
 import type { ModelSelectionSession } from "@/agentMode/session/types";
 import { logWarn } from "@/logger";
@@ -323,6 +324,11 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
     "Anthropic models, billed to your Claude Code subscription. Runs the claude CLI already on your machine.",
   skillsProjectDir: ".claude/skills",
   crossDiscoveredAgents: [],
+  userSkillsDirs: (settings) => {
+    const env = claudeChildEnv(settings);
+    const configDir = env.CLAUDE_CONFIG_DIR || agentUserPath(env, ".claude");
+    return [requireNodeModule<typeof import("node:path")>("path").join(configDir, "skills")];
+  },
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
   restartOnSystemPromptChange: false,

@@ -108,6 +108,30 @@ describe("descriptor", () => {
     });
   });
 
+  describe("ClaudeBackendDescriptor.userSkillsDirs()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 reads ~/.claude/skills under the home folder Claude runs with", () => {
+      const settings = {
+        agentMode: {
+          backends: { claude: { envOverrides: { HOME: "/home/me", CLAUDE_CONFIG_DIR: "" } } },
+        },
+      } as unknown as CopilotSettings;
+      expect(ClaudeBackendDescriptor.userSkillsDirs?.(settings)).toEqual([
+        "/home/me/.claude/skills",
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3659 follows the CLAUDE_CONFIG_DIR set for Claude", () => {
+      const settings = {
+        agentMode: {
+          backends: {
+            claude: { envOverrides: { HOME: "/home/me", CLAUDE_CONFIG_DIR: "/config/claude" } },
+          },
+        },
+      } as unknown as CopilotSettings;
+      expect(ClaudeBackendDescriptor.userSkillsDirs?.(settings)).toEqual(["/config/claude/skills"]);
+    });
+  });
+
   describe("ClaudeBackendDescriptor.auth.signOut()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/379 signs out using the session CLI and profile and preserves the resulting account label", async () => {
       mockResolveClaudeBinary.mockReturnValue("/custom/claude");

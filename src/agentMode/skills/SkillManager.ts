@@ -10,6 +10,7 @@ import { normalizeAbsPath, parentDir } from "@/utils/pathUtils";
 import { agentSkillsDirAbs, DEFAULT_SKILLS_FOLDER } from "./agentPaths";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
 import { discoverProjectSkills, type ProjectSkillCandidate } from "./discoverProjectSkills";
+import { discoverReadOnlySkills } from "./discoverReadOnlySkills";
 import { compareSkills, mergeDiscovery } from "./mergeDiscovery";
 import {
   duplicateSourceDirsFor,
@@ -20,13 +21,14 @@ import { suffixOnCollision } from "./suffixOnCollision";
 import {
   createNodeMigrateSkillFs,
   createNodeProjectDiscoveryFs,
+  createNodeReadOnlyDiscoveryFs,
   createNodeReconcileFs,
 } from "./nodeFsAdapters";
 import { reconcile, type ReconcileReport } from "./reconcile";
 import type { SkillFrontmatterPatch } from "./skillFormat";
 import { removeAgentLinksPointingTo } from "./symlinks";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
-import type { BackendId, RejectedSkill, Skill } from "./types";
+import type { BackendId, ReadOnlySkill, ReadOnlySkillRoot, RejectedSkill, Skill } from "./types";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
 import {
   buildDeleteExpectations,
@@ -53,6 +55,8 @@ const skillManagerStore = createStore();
 const skillsAtom = atom<Skill[]>([]);
 const EMPTY_REJECTED_SKILLS = Object.freeze([]) as unknown as RejectedSkill[];
 const rejectedSkillsAtom = atom<RejectedSkill[]>(EMPTY_REJECTED_SKILLS);
+const EMPTY_READ_ONLY_SKILLS: ReadOnlySkill[] = Object.freeze([]) as unknown as ReadOnlySkill[];
+const readOnlySkillsAtom = atom<ReadOnlySkill[]>(EMPTY_READ_ONLY_SKILLS);
 const lastScannedFolderAtom = atom<string>(DEFAULT_SKILLS_FOLDER);
 const epermSeenAtom = atom<boolean>(false);
 
@@ -107,7 +111,8 @@ export class SkillManager {
   private constructor(
     private readonly app: App,
     private readonly agentDirsProjectRel: Readonly<Record<BackendId, string>>,
-    private readonly builtinRuntime?: BuiltinSkillRuntime
+    private readonly builtinRuntime?: BuiltinSkillRuntime,
+    private readonly readOnlySkillRoots?: (vaultRootAbs: string | null) => ReadOnlySkillRoot[]
   ) {
     this.normalizedAgentDirs = Object.values(agentDirsProjectRel).map(normalizeRelPath);
   }
@@ -115,10 +120,16 @@ export class SkillManager {
   static initialize(
     app: App,
     agentDirsProjectRel: Readonly<Record<BackendId, string>>,
-    builtinRuntime?: BuiltinSkillRuntime
+    builtinRuntime?: BuiltinSkillRuntime,
+    readOnlySkillRoots?: (vaultRootAbs: string | null) => ReadOnlySkillRoot[]
   ): SkillManager {
     if (SkillManager.instance === null) {
-      SkillManager.instance = new SkillManager(app, agentDirsProjectRel, builtinRuntime);
+      SkillManager.instance = new SkillManager(
+        app,
+        agentDirsProjectRel,
+        builtinRuntime,
+        readOnlySkillRoots
+      );
       SkillManager.instance.subscribeToVaultEvents();
     }
     return SkillManager.instance;
@@ -146,6 +157,7 @@ export class SkillManager {
     SkillManager.instance = null;
     skillManagerStore.set(skillsAtom, []);
     skillManagerStore.set(rejectedSkillsAtom, EMPTY_REJECTED_SKILLS);
+    skillManagerStore.set(readOnlySkillsAtom, EMPTY_READ_ONLY_SKILLS);
     publishSkillLoadErrorCount(0);
     skillManagerStore.set(lastScannedFolderAtom, DEFAULT_SKILLS_FOLDER);
     skillManagerStore.set(epermSeenAtom, false);
@@ -293,8 +305,12 @@ export class SkillManager {
         }
       }
 
+      // Reconcile repoints stale links to managed skills, so links still left are the user's own.
+      // https://github.com/logancyang/obsidian-copilot/issues/3659
+      const readOnlySkills = await this.discoverReadOnly(vaultRoot, absRoot);
       skillManagerStore.set(skillsAtom, skills);
       skillManagerStore.set(rejectedSkillsAtom, rejectedSkills);
+      skillManagerStore.set(readOnlySkillsAtom, readOnlySkills);
       publishSkillLoadErrorCount(rejectedSkills.length);
       skillManagerStore.set(lastScannedFolderAtom, folder);
       this.publishSkillSetChanges(skills);
@@ -811,6 +827,33 @@ export class SkillManager {
     return this.normalizedAgentDirs.some((root) => path === root || path.startsWith(`${root}/`));
   }
 
+  // A folder an agent cannot read must leave its section empty, never fail the skill refresh.
+  // https://github.com/logancyang/obsidian-copilot/issues/3659
+  private async discoverReadOnly(
+    vaultRoot: string | null,
+    canonicalAbsRoot: string | null
+  ): Promise<ReadOnlySkill[]> {
+    if (this.readOnlySkillRoots === undefined) return EMPTY_READ_ONLY_SKILLS;
+    try {
+      const fs = createNodeReadOnlyDiscoveryFs();
+      const excludedDirs =
+        canonicalAbsRoot === null
+          ? []
+          : [await fs.realpath(canonicalAbsRoot).catch(() => canonicalAbsRoot)];
+      const skills = await discoverReadOnlySkills({
+        roots: this.readOnlySkillRoots(vaultRoot),
+        excludedDirs,
+        fs,
+      });
+      return skills.length === 0 ? EMPTY_READ_ONLY_SKILLS : skills;
+    } catch (err) {
+      logWarn(
+        `[skills] Agent skill folders could not be read: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return EMPTY_READ_ONLY_SKILLS;
+    }
+  }
+
   private resolveAgentDirAbs(vaultRootAbs: string, agent: BackendId): string | null {
     const rel = this.agentDirsProjectRel[agent];
     if (rel === undefined) return null;
@@ -872,6 +915,14 @@ export function useEpermSeen(): boolean {
 
 export function dismissEpermBanner(): void {
   skillManagerStore.set(epermSeenAtom, false);
+}
+
+export function getReadOnlySkills(): ReadOnlySkill[] {
+  return skillManagerStore.get(readOnlySkillsAtom);
+}
+
+export function subscribeToReadOnlySkills(listener: () => void): () => void {
+  return skillManagerStore.sub(readOnlySkillsAtom, listener);
 }
 
 export function getManagedSkills(): Skill[] {
