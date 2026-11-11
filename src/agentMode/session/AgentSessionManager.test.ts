@@ -4647,6 +4647,44 @@ describe("AgentSessionManager", () => {
         expect(saveSession).toHaveBeenCalledWith(messages, session.backendId, expect.anything());
       });
 
+      it("saves the chat's model, effort and mode with its note only when the backend saves chat selections", async () => {
+        jest.useFakeTimers();
+        const saveSession = jest.fn(
+          async (_messages: unknown, _backendId: string, _options: Record<string, unknown>) => ({
+            path: "chats/saved.md",
+          })
+        );
+        const state: BackendState = {
+          model: {
+            current: { baseModelId: "gemini-3.8-flash", effort: "low" },
+            availableModels: [],
+            apply: { kind: "setModel" },
+          },
+          mode: { current: "plan", options: [], apply: {} },
+        };
+        const saveWith = async (savesChatSelection: boolean) => {
+          const mgr = buildManager({
+            persistence: { saveSession },
+            descriptor: buildDescriptor({ savesChatSelection }),
+          });
+          const session = await mgr.createSession();
+          jest.spyOn(session, "getState").mockReturnValue(state);
+          getSessionTestHandle(session).setMessages([{ message: "Question" }]);
+          await mgr.saveActiveSession();
+          return saveSession.mock.calls.at(-1)![2];
+        };
+
+        expect(await saveWith(true)).toEqual(
+          expect.objectContaining({
+            chatSelection: {
+              model: { baseModelId: "gemini-3.8-flash", effort: "low" },
+              mode: "plan",
+            },
+          })
+        );
+        expect(await saveWith(false)).not.toHaveProperty("chatSelection");
+      });
+
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         let finishSave!: (result: { path: string }) => void;
@@ -5832,6 +5870,55 @@ describe("AgentSessionManager", () => {
           ["replayed question", savedAt],
           ["replayed answer", savedAt],
         ]);
+      });
+
+      it("reopens a chat on the model, effort and mode saved in its note instead of the backend's defaults", async () => {
+        const state: BackendState = {
+          model: {
+            current: { baseModelId: "gemini-4-argon", effort: "medium" },
+            availableModels: [],
+            apply: { kind: "setModel" },
+          },
+          mode: {
+            current: "default",
+            options: [],
+            apply: {
+              default: { kind: "setMode", nativeId: "default" },
+              plan: { kind: "setMode", nativeId: "planning" },
+            },
+          },
+        };
+        const backend = {
+          ...makeMockBackendProcess(),
+          loadSession: jest.fn(async ({ sessionId }: { sessionId: string }) => ({
+            sessionId,
+            state,
+          })),
+          setSessionMode: jest.fn(async () => state),
+        };
+        const applySelection = jest.fn(async () => undefined);
+
+        await buildManager({
+          persistence: {
+            loadFile: jest.fn().mockResolvedValue({
+              backendId: "opencode",
+              sessionId: "native-1",
+              projectId: GLOBAL_SCOPE,
+              messages: savedTurn,
+              modelSelection: { baseModelId: "gemini-3.8-flash", effort: "low" },
+              copilotMode: "plan",
+            }),
+          },
+          descriptor: buildDescriptor({ createBackendProcess: () => backend, applySelection }),
+        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+
+        expect(applySelection).toHaveBeenCalledWith(expect.anything(), {
+          baseModelId: "gemini-3.8-flash",
+          effort: "low",
+        });
+        expect(backend.setSessionMode).toHaveBeenCalledWith(
+          expect.objectContaining({ modeId: "planning" })
+        );
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 opens a fresh session that sends the note's turns to the agent when the backend's store does not know the saved session", async () => {

@@ -171,6 +171,8 @@ export interface BackendDescriptor {
 
   readonly reportsPartialModelLists?: boolean;
 
+  readonly savesChatSelection?: boolean;
+
   applySelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void>;
 
   getModeMapping?(

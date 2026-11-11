@@ -34,7 +34,14 @@ import {
   unescapeYamlString,
 } from "./agentChatYaml";
 import { GLOBAL_SCOPE } from "./scope";
-import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
+import {
+  COPILOT_MODES,
+  type AgentChatMessage,
+  type BackendId,
+  type CopilotMode,
+  type ModelSelection,
+  type SessionUsage,
+} from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
@@ -68,6 +75,13 @@ export interface LoadedAgentChat {
   sessionId?: string;
   projectId: string;
   usage?: SessionUsage;
+  modelSelection?: ModelSelection;
+  copilotMode?: CopilotMode;
+}
+
+export interface SavedChatSelection {
+  model: ModelSelection | null;
+  mode: CopilotMode | null;
 }
 
 export class AgentChatPersistenceManager {
@@ -96,6 +110,7 @@ export class AgentChatPersistenceManager {
       sessionId?: string | null;
       projectId?: string;
       usage?: SessionUsage;
+      chatSelection?: SavedChatSelection;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -134,6 +149,7 @@ export class AgentChatPersistenceManager {
         sessionId: options?.sessionId,
         projectId: options?.projectId,
         usage: options?.usage,
+        chatSelection: options?.chatSelection,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -200,11 +216,25 @@ export class AgentChatPersistenceManager {
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
     const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
+    const agentModel = frontmatter.agentModel?.trim();
+    const modelSelection = agentModel
+      ? { baseModelId: agentModel, effort: frontmatter.agentEffort?.trim() || null }
+      : undefined;
+    const copilotMode = COPILOT_MODES.find((mode) => mode === frontmatter.agentMode?.trim());
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, label, sessionId, projectId, usage };
+    return {
+      messages,
+      backendId,
+      label,
+      sessionId,
+      projectId,
+      usage,
+      modelSelection,
+      copilotMode,
+    };
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
@@ -425,10 +455,13 @@ export class AgentChatPersistenceManager {
     sessionId?: string | null;
     projectId?: string;
     usage?: SessionUsage;
+    chatSelection?: SavedChatSelection;
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
       value ? `${key}: "${escapeYamlString(value)}"` : undefined;
+    const selectionField = (key: string, value: string | null | undefined) =>
+      args.chatSelection ? (quoted(key, value) ?? null) : undefined;
     // A merged save keeps keys it omits, so leaving global scope must delete the stale projectId explicitly.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/698
     return [
@@ -440,6 +473,9 @@ export class AgentChatPersistenceManager {
       ["topic", quoted("topic", args.label)],
       ["modelKey", quoted("modelKey", args.modelKey)],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
+      ["agentModel", selectionField("agentModel", args.chatSelection?.model?.baseModelId)],
+      ["agentEffort", selectionField("agentEffort", args.chatSelection?.model?.effort)],
+      ["agentMode", selectionField("agentMode", args.chatSelection?.mode)],
       ["tags", `tags:\n  - ${COPILOT_CONVERSATION_TAG}`],
     ];
   }

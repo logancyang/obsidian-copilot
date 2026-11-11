@@ -1,7 +1,6 @@
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { prefetchConfigEfforts } from "@/agentMode/backends/shared/prefetchConfigEfforts";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   BackendDescriptor,
   BackendProcess,
@@ -49,6 +48,7 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
   restartOnSystemPromptChange: false,
   summarizesSessionTitle: false,
   reportsPartialModelLists: true,
+  savesChatSelection: true,
   wire: antigravityWire,
 
   getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
@@ -108,16 +108,6 @@ export const AntigravityBackendDescriptor: BackendDescriptor = {
     ) {
       await session.setConfigOption(model.apply.effortConfigId, effort);
     }
-  },
-
-  async applyInitialSessionConfig(
-    session: AgentSession,
-    settings: CopilotSettings,
-    seededSelection?: ModelSelection
-  ): Promise<void> {
-    const saved = settings.agentMode?.backends?.antigravity?.defaultModel;
-    if (seededSelection || !saved) return;
-    await AntigravityBackendDescriptor.applySelection(session, saved);
   },
 
   prefetchEffortCatalog: prefetchConfigEfforts,

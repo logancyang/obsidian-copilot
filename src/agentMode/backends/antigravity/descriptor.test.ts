@@ -180,46 +180,6 @@ describe("descriptor", () => {
       });
     });
 
-    describe("applyInitialSessionConfig()", () => {
-      function agentSession(state: BackendState, afterModelSwitch?: BackendState) {
-        return fakeSession(state, afterModelSwitch) as unknown as Parameters<
-          NonNullable<typeof AntigravityBackendDescriptor.applyInitialSessionConfig>
-        >[0] &
-          ReturnType<typeof fakeSession>;
-      }
-
-      const SAVED_LOW = settingsWith({
-        agentMode: {
-          backends: {
-            antigravity: { defaultModel: { baseModelId: "gemini-3.8-flash", effort: "low" } },
-          },
-        },
-      } as unknown as Partial<CopilotSettings>);
-
-      it("puts a reopened chat back on the saved model and thinking level, which the agent resets to its own default", async () => {
-        const session = agentSession(
-          stateFor("gemini-4-argon", ["low", "medium", "high"], "high"),
-          stateFor("gemini-3.8-flash", ["low", "medium", "high"], "high")
-        );
-
-        await AntigravityBackendDescriptor.applyInitialSessionConfig!(session, SAVED_LOW);
-
-        expect(session.applyModelWireId).toHaveBeenCalledWith("gemini-3.8-flash");
-        expect(session.setConfigOption).toHaveBeenCalledWith("thought_level", "low");
-      });
-
-      it("leaves a chat alone when it was started from a seeded selection", async () => {
-        const session = agentSession(stateFor("gemini-3.8-flash", ["low", "medium", "high"]));
-
-        await AntigravityBackendDescriptor.applyInitialSessionConfig!(session, SAVED_LOW, {
-          baseModelId: "gemini-3.8-flash",
-          effort: "high",
-        });
-
-        expect(session.setConfigOption).not.toHaveBeenCalled();
-      });
-    });
-
     describe("getModeMapping()", () => {
       it("offers Default, Plan and Auto through Antigravity's matching session modes", () => {
         const mode = stateFor("gemini-3.8-flash", null).mode;

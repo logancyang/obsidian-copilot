@@ -37,6 +37,8 @@ export type SessionId = string;
 
 export type CopilotMode = "default" | "plan" | "auto";
 
+export const COPILOT_MODES: readonly CopilotMode[] = ["default", "plan", "auto"];
+
 export interface ModeMapping {
   kind: "setMode" | "configOption";
   configId?: string;

@@ -2000,9 +2000,17 @@ export class AgentSessionManager {
     let resumed: AgentSession | null;
     try {
       resumed = loaded.sessionId
-        ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
+        ? await this.tryResumeSessionFromHistory(
+            loaded.backendId,
+            loaded.sessionId,
+            projectId,
+            undefined,
+            loaded.modelSelection,
+            loaded.copilotMode
+          )
         : null;
-      session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+      session =
+        resumed ?? (await this.createSession(loaded.backendId, projectId, loaded.modelSelection));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
@@ -2139,7 +2147,8 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    seedMode?: CopilotMode
   ): Promise<AgentSession | null> {
     // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
@@ -2156,7 +2165,8 @@ export class AgentSessionManager {
       sessionId,
       projectId,
       chatInputId,
-      seedSelection
+      seedSelection,
+      seedMode
     ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
@@ -2178,8 +2188,10 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    seedMode?: CopilotMode
   ): Promise<AgentSession | null> {
+    const mode = seedMode ?? this.getDefaultMode(backendId);
     await this.ensureScopeInstructions(
       projectId,
       projectId === GLOBAL_SCOPE ? undefined : getCachedProjectRecordById(projectId)
@@ -2221,7 +2233,7 @@ export class AgentSessionManager {
       backendId,
       projectId,
       defaultModelSelection: seedSelection,
-      defaultMode: this.getDefaultMode(backendId),
+      defaultMode: mode,
       cwd,
       getDescriptor: () => this.opts.resolveDescriptor(backendId),
       runFanoutTurn: (input) => this.runFanoutTurn(input),
@@ -2291,7 +2303,7 @@ export class AgentSessionManager {
         );
       }
     }
-    await replayPersistedMode(session, this.getDefaultMode(backendId));
+    await replayPersistedMode(session, mode);
     if (this.disposed) {
       await session.dispose();
       this.finishPendingCreate();
@@ -2474,6 +2486,12 @@ export class AgentSessionManager {
     const label = session.getLabel();
     const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
+    const chatSelection = this.opts.resolveDescriptor(session.backendId)?.savesChatSelection
+      ? {
+          model: session.getState()?.model?.current ?? null,
+          mode: session.getState()?.mode?.current ?? null,
+        }
+      : undefined;
     const last = messages[messages.length - 1];
     const fanoutSig = last?.fanout
       ? Object.values(last.fanout.answers)
@@ -2482,7 +2500,7 @@ export class AgentSessionManager {
       : "";
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
+    }-${fanoutSig}-${usage?.updatedAt ?? ""}-${JSON.stringify(chatSelection ?? null)}`;
     if (state.signature === signature) {
       return state.source ?? null;
     }
@@ -2493,6 +2511,7 @@ export class AgentSessionManager {
       sessionId,
       projectId: session.projectId,
       usage: usage ?? undefined,
+      ...(chatSelection ? { chatSelection } : {}),
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;

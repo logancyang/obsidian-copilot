@@ -429,6 +429,43 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.usage).toEqual(usage);
     });
 
+    it("round-trips the chat's model, effort and mode through save/load", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "antigravity", {
+        chatSelection: { model: { baseModelId: "gemini-3.8-flash", effort: "low" }, mode: "plan" },
+      });
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+
+      expect(loaded.modelSelection).toEqual({ baseModelId: "gemini-3.8-flash", effort: "low" });
+      expect(loaded.copilotMode).toBe("plan");
+    });
+
+    it("drops a saved effort and mode when a later save's chat has none", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "antigravity", {
+        chatSelection: { model: { baseModelId: "claude-opus-5.5", effort: "high" }, mode: "auto" },
+      });
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "antigravity", {
+        existingPath: first!.path,
+        chatSelection: { model: { baseModelId: "gpt-oss-120b", effort: null }, mode: null },
+      });
+
+      const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
+
+      expect(loaded.modelSelection).toEqual({ baseModelId: "gpt-oss-120b", effort: null });
+      expect(loaded.copilotMode).toBeUndefined();
+    });
+
+    it("writes no model or mode for a chat saved without a chat selection", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const raw = app.files.get(saved!.path)!.contents!;
+
+      expect(raw).not.toMatch(/agentModel|agentEffort|agentMode/);
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.modelSelection).toBeUndefined();
+      expect(loaded.copilotMode).toBeUndefined();
+    });
+
     it("leaves usage undefined for a chat saved without it", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
       const raw = app.files.get(saved!.path)!.contents!;
