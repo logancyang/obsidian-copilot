@@ -57,7 +57,7 @@ export const AgentProjectHeader = memo(
           >
             <ProjectFolderIcon />
             <TruncatedText
-              className="tw-min-w-0 tw-text-ui-small tw-font-medium tw-underline-offset-4 group-hover:tw-text-accent group-hover:tw-underline group-focus-visible:tw-text-accent group-focus-visible:tw-underline"
+              className="tw-min-w-0 tw-text-ui-small tw-font-medium group-hover:tw-text-accent group-hover:tw-underline group-focus-visible:tw-text-accent group-focus-visible:tw-underline"
               tooltipContent={projectName}
             >
               {projectName}
