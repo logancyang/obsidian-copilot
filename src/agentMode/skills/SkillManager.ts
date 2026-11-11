@@ -917,6 +917,10 @@ export function dismissEpermBanner(): void {
   skillManagerStore.set(epermSeenAtom, false);
 }
 
+export function useReadOnlySkills(): ReadOnlySkill[] {
+  return useAtomValue(readOnlySkillsAtom, { store: skillManagerStore });
+}
+
 export function getReadOnlySkills(): ReadOnlySkill[] {
   return skillManagerStore.get(readOnlySkillsAtom);
 }

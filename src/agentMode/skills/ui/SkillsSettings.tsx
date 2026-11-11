@@ -28,13 +28,16 @@ import {
   SkillManager,
   useEpermSeen,
   useManagedSkills,
+  useReadOnlySkills,
   useRejectedSkills,
 } from "@/agentMode/skills/SkillManager";
+import { ReadOnlySkillRow } from "./ReadOnlySkillRow";
 import { SkillRow } from "./SkillRow";
-import { type Skill } from "@/agentMode/skills/types";
+import { type ReadOnlySkill, type Skill } from "@/agentMode/skills/types";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { deriveSkillsFolder } from "@/settings/copilotFolder";
+import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { openVaultPath } from "@/utils/openVaultPath";
 import { revealFolderInExplorer } from "@/utils/revealFolderInExplorer";
@@ -75,6 +78,7 @@ export const SkillsSettings: React.FC = () => {
   );
   const skills = useManagedSkills();
   const rejectedSkills = useRejectedSkills();
+  const readOnlySkills = useReadOnlySkills();
   const epermSeen = useEpermSeen();
 
   const [searchValue, setSearchValue] = useState("");
@@ -232,6 +236,55 @@ export const SkillsSettings: React.FC = () => {
     () => filterSkills(userSkills, searchValue),
     [userSkills, searchValue]
   );
+  const vaultLinkedSkills = useMemo(
+    () => readOnlySkills.filter((skill) => skill.scope === "vault"),
+    [readOnlySkills]
+  );
+  const computerSkills = useMemo(
+    () => readOnlySkills.filter((skill) => skill.scope === "computer"),
+    [readOnlySkills]
+  );
+  const yourSkillRows = useMemo(
+    () =>
+      [
+        ...filteredSkills.map((skill) => ({ kind: "managed" as const, skill })),
+        ...filterSkills(vaultLinkedSkills, searchValue).map((skill) => ({
+          kind: "readOnly" as const,
+          skill,
+        })),
+      ].sort((a, b) => a.skill.name.localeCompare(b.skill.name)),
+    [filteredSkills, vaultLinkedSkills, searchValue]
+  );
+  const filteredComputerSkills = useMemo(
+    () => filterSkills(computerSkills, searchValue),
+    [computerSkills, searchValue]
+  );
+  const yourSkillCount = userSkills.length + vaultLinkedSkills.length;
+
+  const renderReadOnlyRow = (skill: ReadOnlySkill) => {
+    const vaultBase = getVaultBase(app);
+    const indexed =
+      app.vault.getAbstractFileByPath(toVaultRelative(skill.dirPath, vaultBase)) instanceof TFolder;
+    const locationLabel = skill.folders
+      .map((folder) =>
+        skill.scope === "vault"
+          ? toVaultRelative(folder, vaultBase)
+          : formatBinaryPathForDisplay(folder)
+      )
+      .join(", ");
+    return (
+      <ReadOnlySkillRow
+        key={`${skill.scope}:${skill.dirPath}`}
+        skill={skill}
+        agents={agents}
+        locationLabel={locationLabel}
+        revealLabel={indexed ? "Reveal in vault" : "Show in folder"}
+        onOpenSkillMd={() => openVaultPath(app, skill.filePath)}
+        onReveal={() => handleRevealSkillFolder(skill.dirPath)}
+        containerRef={containerRef}
+      />
+    );
+  };
 
   const displayFolder = skillsFolder;
 
@@ -340,7 +393,7 @@ export const SkillsSettings: React.FC = () => {
               aria-label="Search skills"
             />
           </div>
-          <span className="tw-text-xs tw-text-muted">{userSkills.length} loaded</span>
+          <span className="tw-text-xs tw-text-muted">{yourSkillCount} loaded</span>
         </div>
 
         <div className="tw-mt-4" role="region" aria-label="Your skills">
@@ -351,7 +404,7 @@ export const SkillsSettings: React.FC = () => {
           >
             Your skills
           </div>
-          {userSkills.length === 0 ? (
+          {yourSkillCount === 0 ? (
             // Rejected files prove skills exist; the empty state would claim there are none. https://github.com/Brevilabs/obsidian-copilot-private/issues/166
             rejectedSkills.length > 0 ? (
               <AllSkillsNotLoaded />
@@ -360,25 +413,50 @@ export const SkillsSettings: React.FC = () => {
             )
           ) : (
             <div className="tw-flex tw-flex-col tw-gap-1.5">
-              {filteredSkills.length === 0 ? (
+              {yourSkillRows.length === 0 ? (
                 <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
                   No skills match &ldquo;{searchValue}&rdquo;.
                 </div>
               ) : (
-                filteredSkills.map((skill) => (
-                  <SkillRow
-                    key={skill.dirPath}
-                    skill={skill}
-                    agents={agents}
-                    agentDirsProjectRel={SkillManager.getInstance().getAgentDirsProjectRel()}
-                    onEditSkillMd={() => handleEditSkillMd(skill)}
-                    onEditProperties={() => handleEditProperties(skill)}
-                    onRevealInVault={() => handleRevealSkillFolder(skill.dirPath)}
-                    onDelete={() => handleAskDelete(skill)}
-                    containerRef={containerRef}
-                  />
-                ))
+                yourSkillRows.map((row) =>
+                  row.kind === "readOnly" ? (
+                    renderReadOnlyRow(row.skill)
+                  ) : (
+                    <SkillRow
+                      key={row.skill.dirPath}
+                      skill={row.skill}
+                      agents={agents}
+                      agentDirsProjectRel={SkillManager.getInstance().getAgentDirsProjectRel()}
+                      onEditSkillMd={() => handleEditSkillMd(row.skill)}
+                      onEditProperties={() => handleEditProperties(row.skill)}
+                      onRevealInVault={() => handleRevealSkillFolder(row.skill.dirPath)}
+                      onDelete={() => handleAskDelete(row.skill)}
+                      containerRef={containerRef}
+                    />
+                  )
+                )
               )}
+            </div>
+          )}
+        </div>
+
+        <div className="tw-mt-6" role="region" aria-label="On this computer">
+          <div role="heading" aria-level={3} className="tw-text-left tw-text-base tw-font-semibold">
+            On this computer
+          </div>
+          <div className="tw-mb-3 tw-mt-1 tw-text-ui-smaller tw-text-muted">
+            Skills your agents load from their own folders on this computer, in every vault. Edit
+            them in those folders.
+          </div>
+          {filteredComputerSkills.length === 0 ? (
+            <div className="tw-rounded-sm tw-border tw-border-dashed tw-border-border tw-bg-primary tw-px-3 tw-py-6 tw-text-center tw-text-ui-smaller tw-text-muted">
+              {computerSkills.length === 0
+                ? "No skills found in your agents' folders on this computer."
+                : `No skills match \u201c${searchValue}\u201d.`}
+            </div>
+          ) : (
+            <div className="tw-flex tw-flex-col tw-gap-1.5">
+              {filteredComputerSkills.map(renderReadOnlyRow)}
             </div>
           )}
         </div>
@@ -464,12 +542,12 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
   );
 };
 
-function filterSkills(skills: Skill[], query: string): Skill[] {
+function filterSkills<T extends Skill | ReadOnlySkill>(skills: T[], query: string): T[] {
   const trimmed = query.trim().toLowerCase();
   if (trimmed.length === 0) return skills;
   return skills.filter(
     (s) =>
-      formatSkillDisplayName(s).toLowerCase().includes(trimmed) ||
+      ("location" in s ? formatSkillDisplayName(s) : s.name).toLowerCase().includes(trimmed) ||
       s.description.toLowerCase().includes(trimmed)
   );
 }

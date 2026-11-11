@@ -48,6 +48,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [projects](projects.md): create, enter, project header and info, project files and context.
 - [relevant-notes](relevant-notes.md): Relevant Notes in the start screen's shelf and in its own pane.
 - [builtin-skills](builtin-skills.md): bundled skills, Plus availability, and saved agent choices.
+- [skills-on-this-computer](skills-on-this-computer.md): read-only skills agents load from their own folders, and skills linked into the vault's agent folders.
 - [agent-setup](agent-setup.md): choose and install an agent, sign in, default model and effort.
 - [report-issue](report-issue.md): the Report an issue flow.
 
