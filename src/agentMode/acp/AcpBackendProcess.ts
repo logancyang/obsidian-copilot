@@ -836,13 +836,15 @@ export class AcpBackendProcess implements BackendProcess {
         : null;
     const originalFiles =
       update.sessionUpdate === "tool_call_update" ? this.backend.readOriginalFiles?.(update) : null;
-    if (!copilotTools && !originalFiles) return event;
+    const title = update.title === undefined ? undefined : this.backend.presentToolTitle?.(update);
+    if (!copilotTools && !originalFiles && !title) return event;
     return {
       ...event,
       update: {
         ...update,
         ...(copilotTools ? { copilotTools } : {}),
         ...(originalFiles ? { originalFiles } : {}),
+        ...(title ? { title } : {}),
       },
     };
   }
@@ -912,11 +914,13 @@ export class AcpBackendProcess implements BackendProcess {
       logWarn(`[AgentMode] permission requested but no prompter is registered; auto-cancelling`);
       return { outcome: { outcome: "cancelled" } };
     }
+    const prompt = acpPermissionRequestToPrompt(
+      req,
+      (option, metadata) => this.descriptor.presentPermissionOption?.(option, metadata) ?? option
+    );
+    const title = this.backend.presentToolTitle?.(prompt.toolCall);
     const decision = await this.permissionPrompter(
-      acpPermissionRequestToPrompt(
-        req,
-        (option, metadata) => this.descriptor.presentPermissionOption?.(option, metadata) ?? option
-      )
+      title ? { ...prompt, toolCall: { ...prompt.toolCall, title } } : prompt
     );
     const outcome = decision.outcome;
     const chosen =

@@ -1204,6 +1204,51 @@ describe("AcpBackendProcess", () => {
       });
     });
 
+    describe("tool titles presented by the backend", () => {
+      it("shows the backend's title for a tool call and its permission request, keeping the agent's title otherwise", async () => {
+        const presentToolTitle = jest.fn((call: { kind?: string }) =>
+          call.kind === "edit" ? "Edit notes/a.md" : undefined
+        );
+        const backend = new AcpBackendProcess(
+          buildApp(),
+          buildStubBackend({ presentToolTitle }),
+          "1.0.0",
+          buildStubDescriptor()
+        );
+        await backend.start();
+        const prompter = jest.fn().mockResolvedValue({ outcome: { outcome: "cancelled" } });
+        backend.setPermissionPrompter(prompter);
+        const handler = jest.fn();
+        backend.registerSessionHandler("s1", handler);
+        const client = getVaultClient(backend);
+        const edit = {
+          toolCallId: "edit",
+          title: "File vault/notes/a.md",
+          kind: "edit",
+          locations: [{ path: "/vault/notes/a.md" }],
+        };
+        await client.sessionUpdate({
+          sessionId: "s1",
+          update: { sessionUpdate: "tool_call", ...edit },
+        } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+        await client.sessionUpdate({
+          sessionId: "s1",
+          update: { sessionUpdate: "tool_call", toolCallId: "cmd", title: "ls", kind: "execute" },
+        } as unknown as Parameters<typeof client.sessionUpdate>[0]);
+        await client.requestPermission({
+          sessionId: "s1",
+          toolCall: edit,
+          options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }],
+        } as unknown as Parameters<typeof client.requestPermission>[0]);
+
+        expect(handler.mock.calls.map(([event]) => event.update.title)).toEqual([
+          "Edit notes/a.md",
+          "ls",
+        ]);
+        expect(prompter.mock.calls[0][0].toolCall.title).toBe("Edit notes/a.md");
+      });
+    });
+
     describe("setAskUserQuestionPrompter()", () => {
       const form = {
         mode: "form",

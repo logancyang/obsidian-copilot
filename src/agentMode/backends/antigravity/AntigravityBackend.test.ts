@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import type { App } from "obsidian";
 import { COPILOT_PROMPT_BASE } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { resetSettings, setSettings } from "@/settings/model";
+import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { ANTIGRAVITY_NOT_SET_UP_MESSAGE, AntigravityBackend } from "./AntigravityBackend";
 import { pinTempHome, type TempHome } from "./testing/tempHome";
 
@@ -120,6 +121,19 @@ describe("AntigravityBackend", () => {
         const backend = new AntigravityBackend(APP);
 
         expect(backend.resumeSessionMeta()).toEqual(backend.newSessionMeta());
+      });
+    });
+
+    describe("presentToolTitle()", () => {
+      it("names an edit by the note it changes", () => {
+        __resetVaultBaseCache();
+
+        expect(
+          new AntigravityBackend(APP).presentToolTitle({
+            kind: "edit",
+            locations: [{ path: "/v/a.md" }],
+          })
+        ).toBe("Edit /v/a.md");
       });
     });
 

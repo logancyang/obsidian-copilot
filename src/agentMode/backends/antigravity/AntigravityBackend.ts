@@ -15,6 +15,7 @@ import { getSettings } from "@/settings/model";
 import { resolveAntigravityBinaryPath } from "./antigravityCli";
 import { readAntigravityCopilotTools } from "./antigravityCopilotToolCalls";
 import { readAntigravityOriginalFiles } from "./antigravityOriginalFiles";
+import { presentAntigravityToolTitle } from "./antigravityToolTitles";
 import {
   planUsageForModel,
   readAntigravityQuotaGroups,
@@ -68,6 +69,10 @@ export class AntigravityBackend implements AcpBackend {
 
   resumeSessionMeta(): Record<string, unknown> {
     return this.newSessionMeta();
+  }
+
+  presentToolTitle(call: Parameters<NonNullable<AcpBackend["presentToolTitle"]>>[0]) {
+    return presentAntigravityToolTitle(this.app, call);
   }
 
   async readPlanUsage(signal?: AbortSignal): Promise<PlanUsageReading> {
