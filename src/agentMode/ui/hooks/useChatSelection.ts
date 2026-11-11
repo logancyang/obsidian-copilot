@@ -48,6 +48,8 @@ export function useChatSelection<T extends { id: string }>(
     (id: string, click: SelectionClick): boolean => {
       const ids = visibleItems.map((item) => item.id);
       const anchorIndex = anchorId === null ? -1 : ids.indexOf(anchorId);
+      // Cleaning up a long run of chats one row at a time is tedious, so Shift-click takes the whole run.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
       if (click.shiftKey && anchorIndex !== -1) {
         const index = ids.indexOf(id);
         setStoredIds(
@@ -55,6 +57,8 @@ export function useChatSelection<T extends { id: string }>(
         );
         return true;
       }
+      // Chats to archive or delete together are rarely adjacent, so Cmd/Ctrl-click picks them one by one without opening them.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
       if (click.shiftKey || click.metaKey || click.ctrlKey) {
         const next = new Set(selectedIds);
         if (next.has(id) && !click.shiftKey) next.delete(id);

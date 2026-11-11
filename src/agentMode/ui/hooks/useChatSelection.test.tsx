@@ -56,7 +56,7 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual([]);
     });
 
-    it("adds a Cmd-clicked or Ctrl-clicked chat to the selection and keeps the click from opening it", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 adds a Cmd-clicked or Ctrl-clicked chat to the selection and keeps the click from opening it", () => {
       const { result } = renderSelection();
       let handled = false;
       act(() => {
@@ -69,7 +69,7 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual(["b", "d"]);
     });
 
-    it("removes a selected chat when it is Cmd-clicked again", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 removes a selected chat when it is Cmd-clicked again", () => {
       const { result } = renderSelection();
       act(() => {
         result.current.handleClick("b", CMD);
@@ -83,7 +83,7 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual(["d"]);
     });
 
-    it("selects every listed chat between the last clicked chat and a Shift-clicked one, in either direction", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 selects every listed chat between the last clicked chat and a Shift-clicked one, in either direction", () => {
       const { result } = renderSelection();
       act(() => {
         result.current.handleClick("d", CMD);
@@ -94,7 +94,7 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual(["b", "c", "d"]);
     });
 
-    it("replaces the previous range when Shift-clicking a different chat from the same starting chat", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 replaces the previous range when Shift-clicking a different chat from the same starting chat", () => {
       const { result } = renderSelection();
       act(() => {
         result.current.handleClick("b", CMD);
@@ -108,7 +108,7 @@ describe("useChatSelection", () => {
       expect(selectedIds(result)).toEqual(["b", "c"]);
     });
 
-    it("selects just the Shift-clicked chat and starts a range there when no chat was clicked before", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 selects just the Shift-clicked chat and starts a range there when no chat was clicked before", () => {
       const { result } = renderSelection();
       act(() => {
         result.current.handleClick("c", SHIFT);
