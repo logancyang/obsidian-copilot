@@ -23,6 +23,7 @@ import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agen
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
@@ -462,7 +463,10 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       getEnvOverrides: () =>
         sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
-      getManagedEnv: () => buildBuiltinSkillEnv(args.clientVersion),
+      getManagedEnv: async () => ({
+        ...pythonUtf8Env(),
+        ...(await buildBuiltinSkillEnv(args.clientVersion)),
+      }),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

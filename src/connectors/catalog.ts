@@ -152,6 +152,13 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
     serverUrl: "https://mcp.make.com",
   },
   {
+    id: "mercury",
+    name: "Mercury",
+    description: "Bank accounts, transactions and cards",
+    category: "Business",
+    serverUrl: "https://mcp.mercury.com/mcp",
+  },
+  {
     id: "miro",
     name: "Miro",
     description: "Boards and diagrams",

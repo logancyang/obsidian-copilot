@@ -20,6 +20,7 @@ import {
   COPILOT_SKILL_FALLBACK,
   COPILOT_VAULT_HYGIENE,
   COPILOT_WEB_RESEARCH_STEERING,
+  COPILOT_WINDOWS_SHELL_STEERING,
 } from "./agentSystemPrompt";
 
 jest.mock("@/logger", () => ({
@@ -46,6 +47,7 @@ const ISSUE_740 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/
 const ISSUE_833 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/833";
 const ISSUE_3816 = "https://github.com/logancyang/obsidian-copilot/issues/3816";
 const ISSUE_3868 = "https://github.com/logancyang/obsidian-copilot/issues/3868";
+const ISSUE_3867 = "https://github.com/logancyang/obsidian-copilot/issues/3867";
 const AGENT = "opencode";
 const APP = {} as App;
 const EXCALIDRAW_APP = {
@@ -88,7 +90,7 @@ describe("agentSystemPrompt", () => {
         updateSetting("enableMiyoDocumentProcessing", enableMiyoDocumentProcessing);
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
-          const prompt = buildAgentSystemPrompt(AGENT, APP);
+          const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
           expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
@@ -150,7 +152,7 @@ describe("agentSystemPrompt", () => {
 
     it(`places a backend's own steering after the always-on lines and before the settings-dependent ones (${ISSUE_441})`, () => {
       const steering = "Backend-specific steering.";
-      const prompt = buildAgentSystemPrompt(AGENT, APP, steering);
+      const prompt = buildAgentSystemPrompt(AGENT, APP, steering, "darwin");
 
       expect(prompt).toContain(
         `${COPILOT_FOLDER_MENTION_DIRECTIVE}\n\n${COPILOT_VAULT_HYGIENE}\n\n${steering}\n\n${COPILOT_FEEDBACK_POINTER}`
@@ -198,6 +200,33 @@ describe("agentSystemPrompt", () => {
       }
       setDisableBuiltinSystemPrompt(true);
       expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(COPILOT_VAULT_HYGIENE);
+    });
+
+    it(`tells every agent on Windows to run code from a file or here-string, double-quote paths and save non-ASCII scripts as UTF-8 with BOM, right after the vault hygiene line (${ISSUE_3867})`, () => {
+      const steering = "Backend-specific steering.";
+      for (const backendId of ["claude", "codex", "opencode"] as const) {
+        expect(buildAgentSystemPrompt(backendId, APP, steering, "win32")).toContain(
+          `${COPILOT_VAULT_HYGIENE}\n\nPowerShell: run code from a file or piped here-string, not -e/-c; double-quote paths; save non-ASCII scripts as UTF-8 with BOM.\n\n${steering}`
+        );
+      }
+    });
+
+    it.each(["darwin", "linux"] as const)(
+      `leaves the %s prompt exactly as it is without the Windows shell line (${ISSUE_3867})`,
+      (platform) => {
+        const windows = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
+        const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, platform);
+
+        expect(prompt).not.toContain(COPILOT_WINDOWS_SHELL_STEERING);
+        expect(prompt).toBe(windows.replace(`\n\n${COPILOT_WINDOWS_SHELL_STEERING}`, ""));
+      }
+    );
+
+    it(`drops the Windows shell line when the builtin prompt is disabled (${ISSUE_3867})`, () => {
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT, APP, undefined, "win32")).not.toContain(
+        COPILOT_WINDOWS_SHELL_STEERING
+      );
     });
 
     it("keeps the edit-tool policy when the builtin prompt is disabled, because turn diffs depend on it (https://github.com/Brevilabs/obsidian-copilot-private/issues/701)", () => {

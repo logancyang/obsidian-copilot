@@ -52,6 +52,10 @@ Windows may block creation of these links. Enable **Windows Settings → Privacy
 
 If a sync service replaces a folder link and a Skill disappears from an agent, toggle that agent off and on again to recreate the link.
 
+## Python scripts
+
+Agents run Python in UTF-8 mode (`PYTHONUTF8=1`). To use a different value, set `PYTHONUTF8` in Windows or under the agent's **Environment variables** in Settings.
+
 ## Open Agent Chat
 
 Select the **Agent Chat** ribbon icon or run **Open Copilot Agent Chat window** from the command palette. Choose an installed agent and select **Start chat**.

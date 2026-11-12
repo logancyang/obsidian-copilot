@@ -1,4 +1,6 @@
+import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
+import { FileText, Folder, Hash } from "lucide-react";
 import { composeSlashMenuItems } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
 
@@ -48,5 +50,22 @@ export const AgentSlashMenu: StoryObj<TypeaheadMenuContentProps> = {
     onSelect: () => undefined,
     onHighlight: () => undefined,
     showPreview: true,
+  },
+};
+
+export const AddContextSearch: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    options: [
+      { key: "notes", title: "Notes", icon: <FileText className="tw-size-4" /> },
+      { key: "folders", title: "Folders", icon: <Folder className="tw-size-4" /> },
+      { key: "tags", title: "Tags", icon: <Hash className="tw-size-4" /> },
+    ],
+    selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
+    mode: "category",
+    searchBarMode: true,
+    searchQuery: "",
+    onSearchChange: () => undefined,
   },
 };
