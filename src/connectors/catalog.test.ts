@@ -8,12 +8,6 @@ describe("catalog", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/913 limits Mercury to read access that can refresh, because its default login also grants transaction and transfer requests", () => {
-      expect(CONNECTOR_CATALOG.find(({ id }) => id === "mercury")).toMatchObject({
-        scope: "read offline_access",
-      });
-    });
-
     it("lists services alphabetically by display name, ignoring case", () => {
       const names = CONNECTOR_CATALOG.map((entry) => entry.name);
 

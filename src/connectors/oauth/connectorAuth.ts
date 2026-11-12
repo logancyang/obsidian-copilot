@@ -38,7 +38,6 @@ export interface ConnectorLoginTarget {
   serviceName: string;
   logoUrl?: string;
   useDynamicClientRegistration?: boolean;
-  scope?: string;
 }
 
 export type LoginFailureReason = "cancelled-on-service" | "timed-out" | "rejected" | "unreachable";
@@ -337,11 +336,7 @@ function startLogin(
   void (async () => {
     try {
       redirectUrl = `${await server.origin}${CALLBACK_PATH}`;
-      await auth(provider, {
-        serverUrl: target.serverUrl,
-        scope: target.scope,
-        fetchFn: requestUrlFetch,
-      });
+      await auth(provider, { serverUrl: target.serverUrl, fetchFn: requestUrlFetch });
     } catch (error) {
       finish(loginFailure(error));
     }

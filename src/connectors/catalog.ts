@@ -25,7 +25,6 @@ export interface ConnectorCatalogEntry {
   readonly serverUrl: string;
   readonly logoUrl?: string;
   readonly useDynamicClientRegistration?: boolean;
-  readonly scope?: string;
 }
 
 const LOGO_BASE_URL = "https://images.brevilabs.com/newsletters/copilot-plugin/connectors";
@@ -158,8 +157,6 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
     description: "Bank accounts, transactions and cards",
     category: "Business",
     serverUrl: "https://mcp.mercury.com/mcp",
-    // Mercury's default login also grants transaction and transfer requests: https://github.com/Brevilabs/obsidian-copilot-private/issues/913
-    scope: "read offline_access",
   },
   {
     id: "miro",
