@@ -31,6 +31,7 @@ const renderHeader: StoryObj<AgentProjectHeaderProps>["render"] = (args) => (
       onRevealFolder={args.onRevealFolder}
       menu={args.menu}
       isProjectHome={args.isProjectHome}
+      navigatorOpen={args.navigatorOpen}
       orphaned={args.orphaned}
       className={args.className}
     />
@@ -55,6 +56,16 @@ export const ProjectHome: StoryObj<AgentProjectHeaderProps> = {
 
 export const InChat: StoryObj<AgentProjectHeaderProps> = {
   args: { menu: popoverTrigger },
+  render: renderHeader,
+};
+
+export const ProjectHomeWithNavigator: StoryObj<AgentProjectHeaderProps> = {
+  args: { menu: popoverTrigger, isProjectHome: true, navigatorOpen: true },
+  render: renderHeader,
+};
+
+export const InChatWithNavigator: StoryObj<AgentProjectHeaderProps> = {
+  args: { menu: popoverTrigger, navigatorOpen: true },
   render: renderHeader,
 };
 

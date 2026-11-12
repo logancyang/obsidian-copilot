@@ -8,7 +8,9 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - project-list: the `Projects` tab on the [start screen](agent-home.md) lists projects, filtered by `Search projects...`; choose one to enter it.
 - project-row-actions: a project row offers `Reveal in vault`, `Edit project`, `Archive`, and `Delete`. Archiving moves the project under `View archived`; deleting asks first and keeps the notes in the vault.
 - project-enter: inside a project, the start screen reads `Chat in <project>` and opens on the tab last chosen in any project, `Files` at first; `Recent chats` lists only its chats. It has its own [chat tabs](chat-tabs.md).
-- project-header: the header shows the project name, `Project settings`, and `Reveal project folder in vault`. Choosing the name opens the project home. Inside a chat it also shows `Project info for <project>`.
+- project-header: the header shows the project name, `Project settings`, and `Reveal project folder in vault`. Inside a chat it also shows `Project info for <project>`. Its leading control differs between the two layouts below.
+- project-header-tabs: with the [chat tabs](chat-tabs.md) showing, the header starts with `Leave project`, a Back button that returns to the [start screen](agent-home.md). The project name is plain text and cannot be chosen.
+- project-header-navigator: with the [Copilot Navigator](copilot-navigator.md) open, the header has no `Leave project`. Choosing the project name opens the project home.
 - project-info: inside a project chat, `Project info for <project>` shows `Changed in this chat`, followed by `Project folder` and `Linked` to browse. It has no `Link context` and takes no drops.
 - project-edit: `Edit project` opens `Project name`, `Description`, and `Project instructions`, with `Cancel` and `Save`. The agent reads the description at the start of each new chat in the project.
 - project-files: the project info lists files created, edited, or deleted in the chat, with `new`, `edited`, or `deleted` and lines added and removed.
@@ -27,8 +29,10 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Create: in `Projects`, choose `New project`, type a name, and choose `Create`. Agent Chat enters the new project: the header shows its name and the greeting reads `Chat in <project>`.
 - List: type part of a project name into `Search projects...`. Only matching projects remain.
 - Enter: choose a project in `Projects`. The header shows its name, and the home opens on `Files`. Choose `Recent chats` to see only that project's chats; enter another project and its home opens on `Recent chats` too.
-- Project home: inside a project chat, choose the project name in the header. The project home returns with `Chat in <project>`.
-- Leave: choose `New chat` in the [Copilot Navigator](copilot-navigator.md). The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf.
+- Leave with tabs: with the chat tabs showing, choose `Leave project` at the left of the header, from the project home or a project chat. The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf. Click the project name: nothing happens, and hovering it shows no link.
+- Project home with the Navigator: open the [Copilot Navigator](copilot-navigator.md). `Leave project` disappears from the header. Inside a project chat, choose the project name: the project home returns with `Chat in <project>`.
+- Leave with the Navigator: choose `New chat` in the Navigator. The global start screen returns.
+- Switch layouts: inside a project, open and close the Navigator. `Leave project` disappears and returns without reopening Agent Chat.
 - Header reveal: choose `Reveal project folder in vault` in the header. The file explorer selects the project folder.
 - Info: ask the agent to create or edit a project file, then choose `Project info for <project>`. `Changed in this chat` shows the file and its line counts. Choose the row: the file opens and the popover closes.
 - Folder tree: on the project home, ask the agent to generate a file: it appears at the top of the project folder. Expand a folder and its nested folders, then choose a file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.

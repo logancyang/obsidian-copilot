@@ -40,6 +40,7 @@ import { useRelevantNotesPaneOpen } from "@/agentMode/ui/useRelevantNotesPaneOpe
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
 import { useManagerSetSnapshot } from "@/agentMode/ui/hooks/useManagerSetSnapshot";
 import { openSessionsSidebar } from "@/agentMode/navigator/openSessionsSidebar";
+import { useSessionsSidebarOpen } from "@/agentMode/navigator/hooks/useSessionsSidebarOpen";
 import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { useAgentInputDrafts } from "@/agentMode/ui/hooks/useAgentInputDrafts";
 import { useAttentionChatIds } from "@/agentMode/ui/hooks/useAttentionChatIds";
@@ -284,6 +285,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleOpenSessionsSidebar = useCallback(() => {
     openSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
   }, [plugin]);
+
+  const navigatorOpen = useSessionsSidebarOpen(app);
 
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
@@ -711,6 +714,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onOpenSettings={headerProjectActions?.edit}
             onRevealFolder={headerProjectActions?.reveal}
             isProjectHome={isProjectLanding}
+            navigatorOpen={navigatorOpen}
             menu={
               activeProject ? (
                 <ProjectInfoPopover
