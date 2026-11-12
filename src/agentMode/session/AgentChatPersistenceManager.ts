@@ -277,7 +277,12 @@ export class AgentChatPersistenceManager {
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
-        const toolsBlock = tools.length > 0 ? `\n<!-- copilot-tools\n${tools.join("\n")}\n-->` : "";
+        // A message ending in a literal tools block gets an empty one after it, so loading keeps that text.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+        const toolsBlock =
+          tools.length > 0 || TOOLS_USED_BLOCK.test(body.trim())
+            ? `\n<!-- copilot-tools\n${tools.join("\n")}\n-->`
+            : "";
         return `${formatChatNoteMessage(m.sender, body)}${toolsBlock}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");

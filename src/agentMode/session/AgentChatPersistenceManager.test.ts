@@ -723,6 +723,23 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.messages[1].toolsUsed).toEqual(["Read b.md"]);
     });
 
+    it("keeps a message that ends with a literal tools block and used no tools, across saves (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const literal = "Each reply ends with:\n<!-- copilot-tools\nRead (read): a.md\n-->";
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, literal), makeMessage(AI_SENDER, "Noted.", 1735732800001)],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toBe(literal);
+      expect(loaded.messages[0].toolsUsed).toEqual([]);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
     it("loads a note saved without a tools block as before", async () => {
       const path = "test-folder/agent__no-tools.md";
       await app.vault.adapter.write(

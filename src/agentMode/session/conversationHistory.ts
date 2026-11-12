@@ -103,6 +103,23 @@ function toolsUsedText(text: string): string {
   return text.replace(/\s+/g, " ").replace(/-->/g, "-- >").trim();
 }
 
+// Codex and Claude titles name files by absolute path, which would put the user's home folder into a synced note; only paths the call reports are shortened, never guessed from the text.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+function savedTitle(
+  title: string,
+  outsidePaths: readonly string[],
+  vaultBase: string | null
+): string {
+  const base = vaultBase?.replace(/[\\/]+$/, "");
+  if (base && title === base) return ".";
+  let saved = base ? title.split(`${base}/`).join("").split(`${base}\\`).join("") : title;
+  for (const path of outsidePaths) {
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    saved = saved.split(path).join(name).split(path.replace(/\//g, "\\")).join(name);
+  }
+  return saved;
+}
+
 export function toolsUsedLines(
   message: AgentChatMessage,
   vaultBase: string | null
@@ -111,12 +128,13 @@ export function toolsUsedLines(
   const lines = new Set<string>();
   for (const part of message.parts ?? []) {
     if (part.kind !== "tool_call") continue;
-    const title = toolsUsedText(part.title);
-    const kind = part.toolKind ? ` (${part.toolKind})` : "";
-    const paths = editTargetPaths(
+    const reported = editTargetPaths(
       { locations: part.locations, input: part.input, diffPaths: diffTargetPaths(part.output) },
       vaultBase
-    )
+    );
+    const title = toolsUsedText(savedTitle(part.title, reported.filter(isAbsolutePath), vaultBase));
+    const kind = part.toolKind ? ` (${part.toolKind})` : "";
+    const paths = reported
       // A path outside the vault would put the user's home folder into a synced note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
       .filter((path) => !isAbsolutePath(path))

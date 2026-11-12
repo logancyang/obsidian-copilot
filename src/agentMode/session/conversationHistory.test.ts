@@ -88,6 +88,65 @@ describe("conversationHistory", () => {
       expect(toolsUsedLines(reply, "/vault")).toEqual(["Read (read)", "Glob (read)"]);
     });
 
+    it("makes vault paths inside a title vault-relative and then drops the path the title names (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", () => {
+      const vault = "/Users/ana/My Vault";
+      const reply = replyWithTools("Summary.", [
+        toolCall({
+          title: `Read file '${vault}/notes/herons.md'`,
+          toolKind: "read",
+          locations: [{ path: `${vault}/notes/herons.md` }],
+        }),
+        toolCall({
+          id: "tc2",
+          title: `Read ${vault}/notes/owls.md`,
+          toolKind: "read",
+          input: { file_path: `${vault}/notes/owls.md` },
+        }),
+        toolCall({ id: "tc3", title: vault, toolKind: "read" }),
+        toolCall({ id: "tc4", title: `Read ${vault}2/other.md`, toolKind: "read" }),
+      ]);
+
+      const expected = [
+        "Read file 'notes/herons.md' (read)",
+        "Read notes/owls.md (read)",
+        ". (read)",
+        `Read ${vault}2/other.md (read)`,
+      ];
+      expect(toolsUsedLines(reply, vault)).toEqual(expected);
+      expect(toolsUsedLines(reply, `${vault}/`)).toEqual(expected);
+    });
+
+    it("shortens a path outside the vault that the call reports to its file name in the title, and leaves unreported paths alone (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", () => {
+      const reply = replyWithTools("Summary.", [
+        toolCall({
+          title: "Read /home/ana/.claude/skills/notes/SKILL.md",
+          toolKind: "read",
+          input: { file_path: "/home/ana/.claude/skills/notes/SKILL.md" },
+        }),
+        toolCall({
+          id: "tc2",
+          title: "Read C:\\Users\\ana\\notes.md",
+          toolKind: "read",
+          input: { file_path: "C:\\Users\\ana\\notes.md" },
+        }),
+        toolCall({ id: "tc3", title: "cat /home/ana/todo.txt", toolKind: "execute" }),
+      ]);
+
+      expect(toolsUsedLines(reply, "/vault")).toEqual([
+        "Read SKILL.md (read)",
+        "Read notes.md (read)",
+        "cat /home/ana/todo.txt (execute)",
+      ]);
+    });
+
+    it("makes Windows vault paths inside a title vault-relative (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", () => {
+      const reply = replyWithTools("Summary.", [
+        toolCall({ title: "Read C:\\Users\\ana\\vault\\notes\\a.md", toolKind: "read" }),
+      ]);
+
+      expect(toolsUsedLines(reply, "C:\\Users\\ana\\vault")).toEqual(["Read notes\\a.md (read)"]);
+    });
+
     it("returns the shared empty list for a reply without tool calls", () => {
       const plain = histMsg(AI_SENDER, "No tools here.");
       const thinking = replyWithTools("Thought about it.", [{ kind: "thought", text: "hmm" }]);
