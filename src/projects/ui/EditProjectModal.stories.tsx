@@ -8,7 +8,7 @@ const meta = {
     name: "Fall product launch",
     description: "Plan the launch, track open questions and draft the announcement",
     instructions:
-      "Put new drafts in outputs/ and link each one to the launch brief. Ask before editing notes outside the project folder.",
+      "Start each draft's file name with the date and link each one to the launch brief. Ask before editing notes outside the project folder.",
     showNameError: false,
     isSubmitting: false,
     onNameChange: () => {},
