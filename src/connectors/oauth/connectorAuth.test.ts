@@ -206,6 +206,14 @@ describe("connectorAuth", () => {
         });
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/913 asks the service only for the target's scope, so a bank login does not gain write access", async () => {
+        const { startLogin } = setUp();
+
+        const { authorizationUrl } = await startLogin({ ...NOTION, scope: "read offline_access" });
+
+        expect(authorizationUrl.searchParams.get("scope")).toBe("read offline_access");
+      });
+
       it("https://github.com/NangoHQ/nango/issues/7142 registers the actual callback and connects with the issued client ID when dynamic registration is selected despite advertised metadata support", async () => {
         const { service, startLogin, storedLogin, connectorAuth } = setUp({
           supportsClientMetadataDocuments: true,
