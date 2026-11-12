@@ -122,6 +122,23 @@ describe("ProjectPickerList", () => {
       expect(screen.getByText("No matching projects")).toBeTruthy();
     });
 
+    it("places New project after the project list so it sits at the bottom of the panel", () => {
+      render(
+        <ProjectPickerList
+          projects={[projectA, projectB]}
+          onSelect={noop}
+          onCreate={noop}
+          app={app}
+        />
+      );
+      const create = screen.getByRole("button", { name: "New project" });
+      for (const name of ["A", "B"]) {
+        expect(
+          screen.getByText(name).compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING
+        ).toBeTruthy();
+      }
+    });
+
     it("keeps create available in the empty state and selects search results by keyboard (https://github.com/Brevilabs/obsidian-copilot-private/issues/372)", () => {
       const onCreate = jest.fn();
       const onSelect = jest.fn();
