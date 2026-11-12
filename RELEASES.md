@@ -1,5 +1,63 @@
 # Release Notes
 
+# v4.0.20 - Project Files tab, continue a chat from any reply, approved rules
+
+Projects get a big update. You can now see every file in a project, along with the notes, folders and tags you linked to it, right from the new **Files** tab.
+
+Agent Chat is easier to steer too. When a chat drifts, branch off from any earlier reply and carry on in a new chat, with a different agent if you like. Take back any "always allow" you gave an agent. And chats with days of history now reopen with about 96% less memory.
+
+## 🗂️ Projects
+
+A project now opens on a **Files** tab, so you can see what is in it without digging through your vault. The project folder shows as a tree, and whatever your agents write lands at the top of it, ready to open with a click or drag into a message.
+
+![The Files tab of a project home in Agent Chat, showing the Project folder tree with the research folder expanded, a Linked section with a folder, a note, the #launch tag with 5 notes, the property status: active with 4 notes and a web link, and Link context at the bottom](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/project-files-4330f033.png)
+
+Give a project more to work from by linking notes, folders, tags, properties and web links with **Link context**, or by dropping notes and folders on the tab. A linked tag or property always shows the notes it covers right now. Agents also read the project's description, so they start each chat knowing what the project is for. ([#4058](https://github.com/logancyang/obsidian-copilot/pull/4058), [#4061](https://github.com/logancyang/obsidian-copilot/pull/4061), [#4068](https://github.com/logancyang/obsidian-copilot/pull/4068), [#4076](https://github.com/logancyang/obsidian-copilot/pull/4076), [#4077](https://github.com/logancyang/obsidian-copilot/pull/4077), [#4321](https://github.com/logancyang/obsidian-copilot/pull/4321), [#4281](https://github.com/logancyang/obsidian-copilot/pull/4281), @zeroliu)
+
+## ✨ Enhancements
+
+- A chat that went off track no longer means starting over. Choose **Continue from here in a new chat** under any reply to branch off from that point, and switch the new chat to another agent from the model picker. ([#4313](https://github.com/logancyang/obsidian-copilot/pull/4313), [#4314](https://github.com/logancyang/obsidian-copilot/pull/4314), @zeroliu)
+  ![A Claude reply in Agent Chat listing three tagline ideas, with the Continue from here in a new chat button hovered under it and its tooltip showing the label](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/continue-chat-ba95de12.png)
+- Changed your mind about an "always allow"? **Edit approved rules** on each agent's settings tab lists everything you let Claude Code, Codex or OpenCode do without asking. Remove any rule in one click. ([#4150](https://github.com/logancyang/obsidian-copilot/pull/4150), [#4155](https://github.com/logancyang/obsidian-copilot/pull/4155), [#4165](https://github.com/logancyang/obsidian-copilot/pull/4165), [#4166](https://github.com/logancyang/obsidian-copilot/pull/4166), @zeroliu)
+  ![The Approved rules page for Claude in Copilot settings, with a Back button, a search box, and five saved rules such as Bash(git status) and WebFetch(domain:docs.obsidian.md), each with the file it is saved in and a Remove button](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/approved-rules-09601a0c.png)
+- Clean up your chat list in seconds. Cmd-click (Ctrl-click on Windows) or Shift-click chats in **Recent chats** or the Copilot Navigator, then archive or delete them together. ([#4298](https://github.com/logancyang/obsidian-copilot/pull/4298), @zeroliu)
+  ![Recent chats on the Agent Chat start screen with three chats selected and outlined, and a right-click menu offering Archive 3 chats and Delete 3 chats](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/select-chats-7943aa68.png)
+- See and control what Claude remembers. **Auto memory** on Claude's settings tab turns Claude's memory on or off for the vault, and **Memory files** opens what it has saved. ([#4296](https://github.com/logancyang/obsidian-copilot/pull/4296), @zeroliu)
+  ![Claude's settings in Copilot with the Auto memory dropdown set to On and, below it, a Memory files row with an Open button](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/auto-memory-5aa0c54f.png)
+- Drag files from other apps straight into chat, such as a PDF from a WeChat conversation. ([#4267](https://github.com/logancyang/obsidian-copilot/pull/4267), @zeroliu)
+- Reopening a long Agent Chat got a huge performance boost. In our test a chat with days of history loaded with about 96% less memory: 40 MB, down from 1.1 GB. ([#4260](https://github.com/logancyang/obsidian-copilot/pull/4260), [#4264](https://github.com/logancyang/obsidian-copilot/pull/4264), @zeroliu)
+- Pick up a chat on another computer without losing the thread. The agent knows which files earlier replies read and changed, can open the images you sent, and gets about four times more of a long chat's history. ([#4309](https://github.com/logancyang/obsidian-copilot/pull/4309), [#4310](https://github.com/logancyang/obsidian-copilot/pull/4310), [#4311](https://github.com/logancyang/obsidian-copilot/pull/4311), @zeroliu)
+- More connectors: Mercury joins **Browse connectors**, and Airtable now connects as expected. ([#4318](https://github.com/logancyang/obsidian-copilot/pull/4318), [#4319](https://github.com/logancyang/obsidian-copilot/pull/4319), [#4236](https://github.com/logancyang/obsidian-copilot/pull/4236), @zeroliu)
+- Agent edits are easier to review. When an agent rewrites a sentence, its diff tab shows the old sentence and then the new one as two clean pieces. ([#4323](https://github.com/logancyang/obsidian-copilot/pull/4323), @zeroliu)
+- Jump straight to a note an agent changed by clicking its name in the reply's list of changed files. ([#4325](https://github.com/logancyang/obsidian-copilot/pull/4325), @zeroliu)
+- OpenCode runs each connector and MCP tool as its own step, so you see and approve every call separately. ([#4234](https://github.com/logancyang/obsidian-copilot/pull/4234), @zeroliu)
+- Agent Chat's home keeps **Recent chats** and **Projects** while the Copilot Navigator is open. ([#4261](https://github.com/logancyang/obsidian-copilot/pull/4261), @zeroliu)
+- Agents on Windows waste fewer turns on PowerShell commands that fail. ([#4303](https://github.com/logancyang/obsidian-copilot/pull/4303), @zeroliu)
+
+## 🛠️ Bug Fixes
+
+- A chat you reopen keeps the model and effort it last ran on. ([#4285](https://github.com/logancyang/obsidian-copilot/pull/4285), @zeroliu)
+- Agent chats ask you to **Reload** only when their settings changed. ([#4286](https://github.com/logancyang/obsidian-copilot/pull/4286), @zeroliu)
+- A saved chat appears once in chat history after its project folder is renamed. ([#4287](https://github.com/logancyang/obsidian-copilot/pull/4287), @zeroliu)
+- Models from the Perplexity provider reply in Quick Chat. ([#4266](https://github.com/logancyang/obsidian-copilot/pull/4266), @zeroliu)
+- In Agent Chat on OpenCode, Perplexity Sonar Pro replies finish and GitHub Copilot models can read PDFs. ([#4280](https://github.com/logancyang/obsidian-copilot/pull/4280), @zeroliu)
+- OpenCode installs more reliably on Windows while antivirus scans the download. ([#4271](https://github.com/logancyang/obsidian-copilot/pull/4271), @zeroliu)
+- Agents see the Copilot Plus web, YouTube and X skills only while your Plus membership is active. ([#4242](https://github.com/logancyang/obsidian-copilot/pull/4242), @zeroliu)
+- Copilot offers to report a failed reply only for problems the Copilot team can fix. A reply your model provider rejected shows its error alone. ([#4245](https://github.com/logancyang/obsidian-copilot/pull/4245), [#4275](https://github.com/logancyang/obsidian-copilot/pull/4275), @zeroliu)
+- Cleaned up **Advanced** settings by removing the **API key storage** row, which is no longer needed. ([#4187](https://github.com/logancyang/obsidian-copilot/pull/4187), @zeroliu)
+
+## ⚠️ Compatibility Notes
+
+- Projects no longer use file-type patterns or **Ignore files** exclusions. If a project relied on them, link the notes, folders, tags or properties you want with **Link context** on the **Files** tab, and use the Project instructions to keep the agent out of a folder. ([#4079](https://github.com/logancyang/obsidian-copilot/pull/4079), @zeroliu)
+- If Copilot installed OpenCode for you, it updates to 2.2.7 the next time the plugin loads. ([#4280](https://github.com/logancyang/obsidian-copilot/pull/4280), @zeroliu)
+
+## 🧰 Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # v4.0.19 - Connectors preview
 
 [![Demo video: Obsidian Copilot 4.0.19: Connect Notion, Linear and More](https://images.brevilabs.com/newsletters/copilot-releases/4.0.19/connectors-hub-a3fb3a04.webp)](https://youtube.com/shorts/gDEfqUwzTm0)
