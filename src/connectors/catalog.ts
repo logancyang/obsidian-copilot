@@ -159,7 +159,8 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
     category: "Business",
     serverUrl: "https://mcp.mercury.com/mcp",
     // Mercury's default login also grants transaction and transfer requests: https://github.com/Brevilabs/obsidian-copilot-private/issues/913
-    scope: "read offline_access",
+    scope:
+      "read offline_access transactions:update receipts:manage categories:create categories:edit budgets:manage",
   },
   {
     id: "miro",
