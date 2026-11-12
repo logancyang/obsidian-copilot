@@ -14,6 +14,14 @@ export const WORDING_CHANGE: RenderedDiffFixture = {
     "The pilot runs for eight weeks with three design partners.\nWe report progress every Friday.\n",
 };
 
+export const SENTENCE_REWRITTEN: RenderedDiffFixture = {
+  path: "projects/Alpha/Project brief.md",
+  before:
+    "The project root holds the docs under review, plus any open discussion doc. One-time artifacts go in the folder for their type: session prep in `session-prep/`, drawings in `excalidraw/`, reference material and exports in `resources/`. This project has no `outputs/` folder, so do not create one.\n",
+  after:
+    "The project root holds the docs under review, plus any open discussion doc. Everything made for one session goes in that session's folder under `sessions/`. Reference material and exports go in `resources/`. This project has no `outputs/` folder, so do not create one.\n",
+};
+
 export const HEADING_LEVEL_CHANGE: RenderedDiffFixture = {
   path: "projects/Alpha/Project brief.md",
   before: "## Rollout plan\n\nStaged by region, starting with EMEA.\n",
@@ -315,6 +323,10 @@ export const RECORDED_PARSES: ReadonlyMap<
   [
     WORDING_CHANGE,
     { before: { sections: [["paragraph", 0, 1]] }, after: { sections: [["paragraph", 0, 1]] } },
+  ],
+  [
+    SENTENCE_REWRITTEN,
+    { before: { sections: [["paragraph", 0, 0]] }, after: { sections: [["paragraph", 0, 0]] } },
   ],
   [
     HEADING_LEVEL_CHANGE,

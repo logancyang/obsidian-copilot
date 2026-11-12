@@ -16,6 +16,7 @@ import {
   NON_MARKDOWN_FILE,
   ORDERED_LIST_ITEM_APPENDED,
   REMOVED_LIST_ITEM,
+  SENTENCE_REWRITTEN,
   SPACED_WORDING_CHANGE,
   TABLE_CELL_EDIT,
   TABLE_ROW_ADDED,
@@ -44,6 +45,8 @@ const story = (fixture: RenderedDiffFixture): StoryObj<RenderedDiffProps> => ({ 
 export const WholeNote: StoryObj<RenderedDiffProps> = story(WHOLE_NOTE);
 
 export const WordingChange: StoryObj<RenderedDiffProps> = story(WORDING_CHANGE);
+
+export const SentenceRewritten: StoryObj<RenderedDiffProps> = story(SENTENCE_REWRITTEN);
 
 export const SpacedWordingChange: StoryObj<RenderedDiffProps> = story(SPACED_WORDING_CHANGE);
 
