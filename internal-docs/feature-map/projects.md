@@ -31,7 +31,7 @@ A project groups chats with its own instructions and context. Agent Chat shows t
 - Leave: choose `New chat` in the [Copilot Navigator](copilot-navigator.md). The global start screen returns with its `Recent chats`, `Relevant Notes`, and `Projects` shelf.
 - Header reveal: choose `Reveal project folder in vault` in the header. The file explorer selects the project folder.
 - Info: ask the agent to create or edit a project file, then choose `Project info for <project>`. `Changed in this chat` shows the file and its line counts. Choose the row: the file opens and the popover closes.
-- Folder tree: on the project home, expand `outputs` and its nested folders, then choose a generated file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
+- Folder tree: on the project home, ask the agent to generate a file: it appears at the top of the project folder. Expand a folder and its nested folders, then choose a file. It opens in a tab. Create, rename, or delete a file in the folder: the tree updates without restarting.
 - Files: in project info, expand nested folders under `Project folder` or `Linked` and choose a file to open it. The popover offers no `Link context`. In a narrow chat pane, expand a long tree: the popover fits the pane and scrolls.
 - Context: choose `Link context` → `Files` and select a note outside the project folder. It appears under `Linked` with its parent folder. Choose `Folders`, select a nested folder, and expand its row to browse its contents.
 - Tag: choose `Link context` → `Tags` and pick a tag. Its row shows the matching-note count. Expand it to open matching notes; tag or untag a note and the list and count update.
