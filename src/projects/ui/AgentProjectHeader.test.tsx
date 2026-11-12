@@ -23,6 +23,7 @@ function renderHeader(props: Partial<React.ComponentProps<typeof AgentProjectHea
         onRevealFolder={onRevealFolder}
         menu={menu}
         isProjectHome={props.isProjectHome}
+        navigatorOpen={props.navigatorOpen}
         orphaned={props.orphaned}
       />
     </TooltipProvider>
@@ -37,15 +38,40 @@ describe("AgentProjectHeader", () => {
       expect(screen.getByText("My Research")).toBeTruthy();
     });
 
-    it("goes to the project home when the project name is clicked", () => {
+    it("leaves the project from the Back button while the chat tabs show, since nothing else there leads to the Agent Chat home — https://github.com/Brevilabs/obsidian-copilot-private/issues/916", () => {
+      const { onExit, onOpenHome } = renderHeader({ projectName: "My Research" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
+
+      expect(onExit).toHaveBeenCalledTimes(1);
+      expect(onOpenHome).not.toHaveBeenCalled();
+    });
+
+    it("shows the project name as plain text that cannot be clicked while the chat tabs show — https://github.com/Brevilabs/obsidian-copilot-private/issues/916", () => {
       const { onOpenHome, onExit } = renderHeader({ projectName: "My Research" });
+
+      fireEvent.click(screen.getByText("My Research"));
+
+      expect(screen.queryByRole("button", { name: "Go to My Research home" })).toBeNull();
+      expect(onOpenHome).not.toHaveBeenCalled();
+      expect(onExit).not.toHaveBeenCalled();
+    });
+
+    it("goes to the project home when the project name is clicked while the Navigator is open — https://github.com/Brevilabs/obsidian-copilot-private/issues/916", () => {
+      const { onOpenHome, onExit } = renderHeader({
+        projectName: "My Research",
+        navigatorOpen: true,
+      });
+
       fireEvent.click(screen.getByRole("button", { name: "Go to My Research home" }));
+
       expect(onOpenHome).toHaveBeenCalledTimes(1);
       expect(onExit).not.toHaveBeenCalled();
     });
 
-    it("offers no way to leave the project while the project exists", () => {
-      renderHeader();
+    it("has no Back button while the Navigator is open, because the Navigator leads out of the project — https://github.com/Brevilabs/obsidian-copilot-private/issues/916", () => {
+      renderHeader({ navigatorOpen: true });
+
       expect(screen.queryByRole("button", { name: "Leave project" })).toBeNull();
     });
 
@@ -72,7 +98,7 @@ describe("AgentProjectHeader", () => {
 
       expect(
         screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
-      ).toEqual(["Go to Demo home", "Project settings", "Reveal project folder in vault"]);
+      ).toEqual(["Leave project", "Project settings", "Reveal project folder in vault"]);
     });
 
     it("shows the given menu after settings and reveal in a project chat, for https://github.com/Brevilabs/obsidian-copilot-private/issues/840", () => {
@@ -81,7 +107,7 @@ describe("AgentProjectHeader", () => {
       expect(
         screen.getAllByRole("button").map((button) => button.getAttribute("aria-label"))
       ).toEqual([
-        "Go to Demo home",
+        "Leave project",
         "Project settings",
         "Reveal project folder in vault",
         "Project options",
@@ -93,15 +119,21 @@ describe("AgentProjectHeader", () => {
       expect(screen.getByLabelText("Project options")).toBeTruthy();
     });
 
-    it("offers only Leave project when the project is orphaned", () => {
-      const { onExit } = renderHeader({ projectName: "Gone", orphaned: true });
-      expect(screen.queryByText("Gone")).toBeNull();
-      expect(screen.queryByLabelText("Project options")).toBeNull();
-      expect(screen.queryByRole("button", { name: "Project settings" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Reveal project folder in vault" })).toBeNull();
-      expect(screen.getByText("This project no longer exists")).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
-      expect(onExit).toHaveBeenCalledTimes(1);
-    });
+    it.each([
+      ["the chat tabs show", false],
+      ["the Navigator is open", true],
+    ])(
+      "offers only Leave project when the project is orphaned and %s",
+      (_layout, navigatorOpen) => {
+        const { onExit } = renderHeader({ projectName: "Gone", orphaned: true, navigatorOpen });
+        expect(screen.queryByText("Gone")).toBeNull();
+        expect(screen.queryByLabelText("Project options")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Project settings" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Reveal project folder in vault" })).toBeNull();
+        expect(screen.getByText("This project no longer exists")).toBeTruthy();
+        fireEvent.click(screen.getByRole("button", { name: "Leave project" }));
+        expect(onExit).toHaveBeenCalledTimes(1);
+      }
+    );
   });
 });
