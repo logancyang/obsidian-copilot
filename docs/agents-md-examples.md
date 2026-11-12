@@ -50,7 +50,7 @@ For a project, keep the override short. For example:
 ```markdown
 # Project instructions
 
-- Write deliverables to `outputs/`.
+- Start each deliverable's file name with the date, like `2026-03-01 Launch brief.md`.
 - Use a concise, client-ready tone.
 - Cite the project sources used for factual claims.
 - Do not modify source notes unless I ask.
