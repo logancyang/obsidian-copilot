@@ -1,4 +1,6 @@
+import { nativeUiSources } from "@/intelligentUi/nativeSources";
 import React from "react";
+import { splitUiFences } from "@/intelligentUi/splitUiFences";
 import { AppContext } from "@/context";
 import { fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
@@ -140,6 +142,81 @@ describe("ChatSingleMessage", () => {
       timestamp: { epoch: Date.now(), display: "now", fileName: "now" },
       isVisible: true,
     };
+
+    it("retains completed layout elements through legacy chat streaming and finalization (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, target: HTMLElement) => {
+          for (const segment of splitUiFences(text, true)) {
+            if (segment.kind === "layout") {
+              const block = target.createDiv({ cls: "block-language-copilot-ui" });
+              nativeUiSources.set(block, segment.source.replace(/\n$/, ""));
+            } else target.createDiv({ text: segment.source });
+          }
+        }
+      );
+      const tree = (message: string, isStreaming: boolean) => (
+        <AppContext.Provider value={testApp}>
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{ ...baseMessage, message }}
+              app={testApp}
+              isStreaming={isStreaming}
+            />
+          </TooltipProvider>
+        </AppContext.Provider>
+      );
+      const prefix =
+        'Before\n\n```copilot-ui\n<grid columns="2"><card title="Done"><text>Keep this</text></card>';
+      const view = renderComponent(tree(prefix, true));
+      const card = await screen.findByRole("region", { name: "Done" });
+      expect(await screen.findByText("Receiving layout…")).toBeTruthy();
+      view.rerender(
+        tree(prefix + '<card title="Next"><text>More</text></card></grid>\n```\nAfter', false)
+      );
+      await screen.findByRole("region", { name: "Next" });
+      expect(screen.getByRole("region", { name: "Done" })).toBe(card);
+      expect(view.container.textContent).toMatch(/Before[\s\S]*Keep this[\s\S]*More[\s\S]*After/);
+      expect(screen.queryByText("Receiving layout…")).toBeNull();
+      view.rerender(tree("Ordinary replacement", false));
+      await screen.findByText("Ordinary replacement");
+      expect(screen.queryByRole("region", { name: "Done" })).toBeNull();
+      view.unmount();
+    });
+
+    it("links numbered Sources references after asynchronous layout Markdown commits (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
+      renderMarkdownMock.mockImplementation(
+        async (_app: unknown, text: string, target: HTMLElement) => {
+          const block = target.createDiv({ cls: "block-language-copilot-ui" });
+          nativeUiSources.set(block, "<text>Layout</text>");
+          target.createEl("p", { text: "Supported claim [1]." });
+          const item = target
+            .createDiv({ cls: "copilot-sources" })
+            .createDiv({ cls: "copilot-sources__item" });
+          item.createSpan({ cls: "copilot-sources__index", text: "[1]" });
+          item
+            .createSpan({ cls: "copilot-sources__text" })
+            .createEl("a", { text: "Source", href: "https://example.com" });
+        }
+      );
+      renderComponent(
+        <AppContext.Provider value={testApp}>
+          <TooltipProvider>
+            <ChatSingleMessage
+              message={{
+                ...baseMessage,
+                message: "```copilot-ui\n<text>Layout</text>\n```\nSupported claim [1].",
+              }}
+              app={testApp}
+              isStreaming={false}
+            />
+          </TooltipProvider>
+        </AppContext.Provider>
+      );
+      await screen.findByText("Supported claim [1].");
+      expect((await screen.findByLabelText("Source 1")).getAttribute("href")).toBe(
+        "https://example.com"
+      );
+    });
 
     const createAppStub = (): App =>
       ({

@@ -33,3 +33,5 @@ export const Metrics: StoryObj<StoryProps> = { args: UI_STORIES.Metrics };
 export const GroupedConcepts: StoryObj<StoryProps> = { args: UI_STORIES.GroupedConcepts };
 export const Architecture: StoryObj<StoryProps> = { args: UI_STORIES.Architecture };
 export const Fallback: StoryObj<StoryProps> = { args: UI_STORIES.Fallback };
+
+export const Pending: StoryObj<StoryProps> = { args: UI_STORIES.Pending };

@@ -1,3 +1,6 @@
+import { nativeUiSources } from "@/intelligentUi/nativeSources";
+import { splitUiFences } from "@/intelligentUi/splitUiFences";
+import { GOLDEN_EXAMPLES } from "@/intelligentUi/testing/golden";
 import { Markdown } from "@/components/Markdown";
 import { AppContext } from "@/context";
 import { renderMarkdown } from "@/utils/renderMarkdown";
@@ -9,6 +12,10 @@ jest.mock("@/utils/renderMarkdown", () => ({
   renderMarkdown: jest.fn(),
 }));
 
+jest.mock("obsidian", () => ({
+  ...jest.requireActual<typeof import("obsidian")>("obsidian"),
+  setIcon: jest.fn(),
+}));
 const ISSUE_URL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/317";
 
 describe("Markdown", () => {
@@ -111,6 +118,76 @@ describe("Markdown", () => {
 
       expect(screen.getByText("Current release notes")).not.toBeNull();
       expect(screen.queryByText("Old release notes")).toBeNull();
+    });
+
+    it.each(Object.entries(GOLDEN_EXAMPLES))(
+      "keeps completed %s layout nodes and prose order across streamed fence chunks (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)",
+      async (_name, source) => {
+        jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
+          for (const segment of splitUiFences(text, true)) {
+            if (segment.kind === "layout") {
+              const block = target.createDiv({ cls: "block-language-copilot-ui" });
+              nativeUiSources.set(block, segment.source.replace(/\n$/, ""));
+            } else target.createDiv({ text: segment.source });
+          }
+        });
+        const app = new App();
+        const content = `Before\n\n\`\`\`copilot-ui\n${source}\n\`\`\`\n\nAfter`;
+        const tree = (text: string, streaming: boolean) => (
+          <AppContext.Provider value={app}>
+            <Markdown text={text} sourcePath="" streaming={streaming} />
+          </AppContext.Provider>
+        );
+        const view = render(tree("", true));
+        let completed: Element[] = [];
+        for (let end = 1; end <= content.length; end += 7) {
+          view.rerender(tree(content.slice(0, end), true));
+          await act(async () => {
+            await Promise.allSettled(
+              jest.mocked(renderMarkdown).mock.results.map((r) => r.value as Promise<void>)
+            );
+          });
+          for (const element of completed) expect(view.container.contains(element)).toBe(true);
+          completed = Array.from(view.container.querySelectorAll("[role]:not([role=status])"));
+          expect(view.container.querySelector("pre")).toBeNull();
+        }
+        view.rerender(tree(content, false));
+        await act(async () => {
+          await Promise.allSettled(
+            jest.mocked(renderMarkdown).mock.results.map((r) => r.value as Promise<void>)
+          );
+        });
+        for (const element of completed) expect(view.container.contains(element)).toBe(true);
+        expect(view.container.textContent).toMatch(/^Before[\s\S]*After$/);
+        expect(view.container.querySelector('[role="status"]')).toBeNull();
+        const fixed = render(tree(content, false));
+        await act(async () => {
+          await Promise.allSettled(
+            jest.mocked(renderMarkdown).mock.results.map((r) => r.value as Promise<void>)
+          );
+        });
+        const html = (element: HTMLElement) => element.innerHTML.replace(/:r\w+:/g, "ID");
+        expect(html(view.container)).toBe(html(fixed.container));
+        fixed.unmount();
+        view.unmount();
+      }
+    );
+    it("keeps an ordinary streamed reply on the existing Markdown renderer (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
+      jest.mocked(renderMarkdown).mockImplementation(async (_app, text, target) => {
+        target.textContent = text;
+      });
+      const app = new App();
+      const tree = (text: string) => (
+        <AppContext.Provider value={app}>
+          <Markdown text={text} sourcePath="Topic.md" streaming />
+        </AppContext.Provider>
+      );
+      const view = render(tree("**Hello"));
+      expect(await screen.findByText("**Hello")).toBeTruthy();
+      view.rerender(tree("**Hello world**"));
+      expect(await screen.findByText("**Hello world**")).toBeTruthy();
+      expect(view.container.children).toHaveLength(1);
+      expect(view.container.querySelector('[role="status"]')).toBeNull();
     });
   });
 });

@@ -1,3 +1,4 @@
+import { nativeUiSources } from "@/intelligentUi/nativeSources";
 import { registerIntelligentUiProcessor } from "@/intelligentUi/registerProcessor";
 import { renderMarkdown } from "@/utils/renderMarkdown";
 import { act } from "@testing-library/react";
@@ -49,6 +50,7 @@ describe("registerProcessor", () => {
       const { element, children, process } = setup();
       await act(async () => process('<card title="Hello"><text>World</text></card>'));
       expect(element.textContent).toBe("HelloWorld");
+      expect(nativeUiSources.get(element)).toBe('<card title="Hello"><text>World</text></card>');
       expect(children).toHaveLength(1);
       await act(async () => children[0].onunload());
       expect(element.textContent).toBe("");

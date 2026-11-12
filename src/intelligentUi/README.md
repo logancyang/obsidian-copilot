@@ -61,3 +61,17 @@ so the theme supplies their colour and icon. Tabs keep the selected tab while
 more tabs stream in. The gallery has every primitive, all five golden examples and
 rejected-source fallback under `Intelligent UI/Primitives`; verify at 300px and
 600px in both Obsidian themes.
+
+## Streaming chat
+
+Chat fence segmentation keeps ordinary Markdown on its existing renderer and
+holds one React layout subtree at each fence offset. `UiFence` supplies the
+active stream lifecycle: validated completed descendants appear immediately,
+unfinished text leaves stay withheld behind placeholder lines, the innermost
+open container shows a placeholder where its next content arrives (after a
+finished child, only once a new element's opening tag has started), and an open
+grid holds its declared columns with placeholder cards. New elements fade in
+unless the reader prefers reduced motion. A screen-reader status announces
+that the layout is still arriving until the fence closes. Stable child positions retain completed DOM and Markdown
+resources across parser snapshots. A stopped or closed incomplete block shows
+its complete original body, matching the static code-block processor.

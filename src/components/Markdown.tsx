@@ -1,3 +1,5 @@
+import { splitUiFences } from "@/intelligentUi/splitUiFences";
+import { LayoutMarkdown } from "@/intelligentUi/ui/LayoutMarkdown";
 import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
@@ -16,7 +18,7 @@ export interface MarkdownProps {
   streaming?: boolean;
 }
 
-export function Markdown({
+function MarkdownBody({
   className,
   nested,
   onRendered,
@@ -59,4 +61,13 @@ export function Markdown({
   }, [app, nested, onRendered, runDataviewQueries, sourcePath, text]);
 
   return <div className={cn(className)} ref={targetRef} />;
+}
+
+export function Markdown(props: MarkdownProps): React.ReactElement {
+  if (
+    splitUiFences(props.text, props.streaming ?? false).some((segment) => segment.kind === "layout")
+  ) {
+    return <LayoutMarkdown {...props} />;
+  }
+  return <MarkdownBody {...props} />;
 }
