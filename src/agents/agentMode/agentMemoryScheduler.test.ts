@@ -126,6 +126,16 @@ describe("agentMemoryScheduler", () => {
         expect(flushChat).not.toHaveBeenCalled();
         expect(consolidate).not.toHaveBeenCalled();
       });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 arms nothing for a turn that ends after unload began, so no pass starts once the plugin is gone", () => {
+        scheduler.dispose();
+        scheduler.noteTurnEnded("chat-a");
+
+        jest.advanceTimersByTime(CONSOLIDATE_MS * 2);
+
+        expect(flushChat).not.toHaveBeenCalled();
+        expect(consolidate).not.toHaveBeenCalled();
+      });
     });
   });
 

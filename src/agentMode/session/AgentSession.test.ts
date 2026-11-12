@@ -20,7 +20,7 @@ import {
 import { getSettings } from "@/settings/model";
 import { ContextProcessor } from "@/contextProcessor";
 import { GLOBAL_SCOPE } from "./scope";
-import { defineChatExtension, type ChatStateKey } from "./chatExtension";
+import { defineChatExtension, type ChatStateKey, type PromptNote } from "./chatExtension";
 import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
@@ -1433,7 +1433,7 @@ describe("AgentSession", () => {
         expect(promptText(sent[1])).toBe("and then?");
       });
 
-      it("waits for a chat extension that reads its note from disk, handing it the chat, and records the note delivered", async () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 waits for a chat extension that reads its note from disk, handing it the chat, and records the note delivered", async () => {
         const mock = makeMockBackend();
         const beforePrompt = jest.fn(async () => ({
           note: "<memory>kept</memory>",
@@ -1451,6 +1451,27 @@ describe("AgentSession", () => {
           "<memory>kept</memory>\n\n<user-message>\ngo on\n</user-message>"
         );
         expect(session.readChatState(COUNTER)).toBe(1);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 sends nothing and records no note delivered when the user stops while a chat extension reads its note", async () => {
+        const mock = makeMockBackend();
+        let release!: (note: PromptNote<number>) => void;
+        const session = makeSession(mock, {
+          chatExtensions: [
+            defineChatExtension({
+              key: COUNTER,
+              beforePrompt: () => new Promise<PromptNote<number>>((resolve) => (release = resolve)),
+            }),
+          ],
+        });
+
+        const { turn } = session.sendPrompt("go on");
+        await session.cancel();
+        release({ note: "<memory>kept</memory>", delivered: (count) => count + 1 });
+
+        await expect(turn).resolves.toBe("cancelled");
+        expect(mock.prompt).not.toHaveBeenCalled();
+        expect(session.readChatState(COUNTER)).toBe(0);
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 sends a chat extension's note again after the prompt that carried it failed", async () => {
@@ -6409,7 +6430,7 @@ describe("AgentSession", () => {
     });
 
     describe("getNoteFields()", () => {
-      it("collects each extension's note field from its state, leaving out one with nothing to save", () => {
+      it("collects each extension's note field from its state, leaving out one with nothing to save and sharing one empty result", () => {
         const session = makeSession(makeMockBackend(), {
           chatExtensions: [
             defineChatExtension({
@@ -6423,6 +6444,7 @@ describe("AgentSession", () => {
           ],
         });
         expect(session.getNoteFields()).toEqual({});
+        expect(session.getNoteFields()).toBe(session.getNoteFields());
 
         session.updateChatState(COUNTER, () => 3);
 
@@ -6468,6 +6490,27 @@ describe("AgentSession", () => {
 
         expect(after.readChatState(NEWS)).toEqual(["notion connected"]);
         expect(onMessagesChanged).toHaveBeenCalled();
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 keeps the state the replacing session already restored from the chat's note fields", () => {
+        const before = makeSession(makeMockBackend(), {
+          chatExtensions: [defineChatExtension({ key: NEWS, keepOnReload: true })],
+        });
+        before.updateChatState(NEWS, () => ["notion connected"]);
+        const after = makeSession(makeMockBackend(), {
+          chatExtensions: [
+            defineChatExtension({
+              key: COUNTER,
+              noteField: { key: "counted", save: (count) => count, restore: (_, saved) => saved },
+            }),
+          ],
+        });
+        after.restoreNoteFields({ counted: "4" });
+
+        after.restoreChatStates(before.getReloadableChatStates());
+
+        expect(after.readChatState(COUNTER)).toBe(4);
+        expect(after.readChatState(NEWS)).toEqual(["notion connected"]);
       });
     });
 

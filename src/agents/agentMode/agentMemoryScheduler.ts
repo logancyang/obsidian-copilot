@@ -16,6 +16,7 @@ export class AgentMemoryScheduler {
   private readonly flushTimers = new Map<string, number>();
   private consolidationTimer: number | null = null;
   private readonly running = new Set<string>();
+  private disposed = false;
 
   private readonly flushIdleMs: number;
   private readonly consolidationIdleMs: number;
@@ -35,6 +36,9 @@ export class AgentMemoryScheduler {
   }
 
   noteTurnEnded(internalId: string): void {
+    // A turn can end while shutdown waits for the last memory passes, and a timer armed then would run a pass after unload.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/668
+    if (this.disposed) return;
     this.running.delete(internalId);
     this.cancelFlush(internalId);
     this.flushTimers.set(
@@ -55,6 +59,7 @@ export class AgentMemoryScheduler {
   }
 
   dispose(): void {
+    this.disposed = true;
     for (const timer of this.flushTimers.values()) window.clearTimeout(timer);
     this.flushTimers.clear();
     this.cancelConsolidation();

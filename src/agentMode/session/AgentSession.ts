@@ -131,6 +131,8 @@ interface TakenPromptNote {
 
 const NO_PROMPT_NOTES: readonly TakenPromptNote[] = Object.freeze([]);
 
+const NO_NOTE_FIELDS: Readonly<Record<string, number>> = Object.freeze({});
+
 function keepPromptNotes(
   offered: readonly {
     extension: ChatExtension<unknown>;
@@ -1221,18 +1223,18 @@ export class AgentSession implements ChatStateHost, ChatView {
   }
 
   restoreChatStates(states: ChatStates): void {
-    this.chatStates = states;
+    // A restarted chat restores its note fields before its kept states arrive, so the kept states join them rather than replace them.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/668
+    this.chatStates = Object.freeze(new Map([...this.chatStates, ...states]));
     this.notifyMessages();
   }
 
   getNoteFields(): Readonly<Record<string, number>> {
-    const fields: Record<string, number> = {};
-    for (const { key, noteField } of this.chatExtensions) {
-      if (!noteField) continue;
-      const saved = noteField.save(this.readChatState(key));
-      if (saved !== null) fields[noteField.key] = saved;
-    }
-    return fields;
+    const fields = this.chatExtensions.flatMap(({ key, noteField }) => {
+      const saved = noteField?.save(this.readChatState(key)) ?? null;
+      return noteField && saved !== null ? [[noteField.key, saved] as const] : [];
+    });
+    return fields.length > 0 ? Object.fromEntries(fields) : NO_NOTE_FIELDS;
   }
 
   restoreNoteFields(frontmatter: Readonly<Record<string, unknown>>): void {
