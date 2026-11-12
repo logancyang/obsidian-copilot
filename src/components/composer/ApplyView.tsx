@@ -508,7 +508,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           Accept
         </Button>
       </div>
-      <div className="tw-flex tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2">
+      <div className="tw-flex tw-items-center tw-justify-between tw-border-0 tw-border-b tw-border-solid tw-border-border tw-p-2">
         <div className="tw-text-sm tw-font-medium">{state.path}</div>
         <div className="tw-flex tw-items-center tw-gap-2">
           <span

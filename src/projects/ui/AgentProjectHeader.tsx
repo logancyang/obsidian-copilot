@@ -13,6 +13,7 @@ interface AgentProjectHeaderProps {
   onRevealFolder?: () => void;
   menu?: React.ReactNode;
   isProjectHome?: boolean;
+  navigatorOpen?: boolean;
   orphaned?: boolean;
   className?: string;
 }
@@ -26,43 +27,58 @@ export const AgentProjectHeader = memo(
     onRevealFolder,
     menu,
     isProjectHome = false,
+    navigatorOpen = false,
     orphaned = false,
     className,
   }: AgentProjectHeaderProps): React.ReactElement => (
     <div className={cn("tw-flex tw-w-full tw-items-center tw-gap-1 tw-px-2 tw-py-1.5", className)}>
+      {/* The Navigator already leads out of a project; with the chat tabs showing, only this button does.
+          https://github.com/Brevilabs/obsidian-copilot-private/issues/916 */}
+      {(orphaned || !navigatorOpen) && (
+        <Button
+          variant="ghost2"
+          size="sm"
+          onClick={onExit}
+          aria-label="Leave project"
+          title="Leave project"
+          className="tw-flex tw-shrink-0 tw-items-center tw-px-1.5 tw-text-muted hover:tw-text-normal"
+        >
+          <ChevronLeft className="tw-size-4" />
+        </Button>
+      )}
       {orphaned ? (
-        <>
-          <Button
-            variant="ghost2"
-            size="sm"
-            onClick={onExit}
-            aria-label="Leave project"
-            title="Leave project"
-            className="tw-flex tw-shrink-0 tw-items-center tw-px-1.5 tw-text-muted hover:tw-text-normal"
-          >
-            <ChevronLeft className="tw-size-4" />
-          </Button>
-          <span className="tw-min-w-0 tw-flex-1 tw-text-ui-small tw-text-muted">
-            This project no longer exists
-          </span>
-        </>
+        <span className="tw-min-w-0 tw-flex-1 tw-text-ui-small tw-text-muted">
+          This project no longer exists
+        </span>
       ) : (
         <>
-          <Button
-            variant="ghost2"
-            size="sm"
-            onClick={onOpenHome}
-            aria-label={`Go to ${projectName} home`}
-            className="tw-group tw-min-w-0 tw-cursor-pointer tw-justify-start tw-gap-1.5 tw-px-1.5 tw-text-normal"
-          >
-            <ProjectFolderIcon />
-            <TruncatedText
-              className="tw-min-w-0 tw-text-ui-small tw-font-medium group-hover:tw-text-accent group-hover:tw-underline group-focus-visible:tw-text-accent group-focus-visible:tw-underline"
-              tooltipContent={projectName}
+          {navigatorOpen ? (
+            <Button
+              variant="ghost2"
+              size="sm"
+              onClick={onOpenHome}
+              aria-label={`Go to ${projectName} home`}
+              className="tw-group tw-min-w-0 tw-cursor-pointer tw-justify-start tw-gap-1.5 tw-px-1.5 tw-text-normal"
             >
-              {projectName}
-            </TruncatedText>
-          </Button>
+              <ProjectFolderIcon />
+              <TruncatedText
+                className="tw-min-w-0 tw-text-ui-small tw-font-medium group-hover:tw-text-accent group-hover:tw-underline group-focus-visible:tw-text-accent group-focus-visible:tw-underline"
+                tooltipContent={projectName}
+              >
+                {projectName}
+              </TruncatedText>
+            </Button>
+          ) : (
+            <>
+              <ProjectFolderIcon />
+              <TruncatedText
+                className="tw-min-w-0 tw-text-ui-small tw-font-medium tw-text-normal"
+                tooltipContent={projectName}
+              >
+                {projectName}
+              </TruncatedText>
+            </>
+          )}
           <div className="tw-flex-1" />
 
           {onOpenSettings && (

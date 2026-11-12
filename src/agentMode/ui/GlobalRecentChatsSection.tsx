@@ -5,9 +5,11 @@ import {
   isPinned,
   RecentChatMenu,
   RowActionButton,
+  SELECTED_CHAT_ROW_CLASS,
   type RecentChatActions,
 } from "@/agentMode/ui/RecentChatMenu";
 import type { ChatBookmarkState } from "@/agentMode/ui/hooks/useAgentHistoryControls";
+import { useChatSelection, type ChatSelection } from "@/agentMode/ui/hooks/useChatSelection";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -35,6 +37,8 @@ interface GlobalRecentChatsSectionProps {
   onCopyChatLink: (id: string) => Promise<void>;
   onSetChatPinned: (id: string, pinned: boolean) => Promise<void>;
   onSetChatArchived: (id: string, archived: boolean) => Promise<void>;
+  onDeleteChats: (ids: readonly string[]) => Promise<void>;
+  onArchiveChats: (ids: readonly string[]) => Promise<void>;
   onViewArchived?: () => void;
   getChatBookmarkState: (id: string) => Promise<ChatBookmarkState>;
   onSetChatBookmarked: (id: string, title: string, bookmarked: boolean) => Promise<void>;
@@ -100,6 +104,7 @@ interface RecentChatRowProps {
   projectName?: string;
   onOpen: (id: string) => void;
   actions: RecentChatActions;
+  selection: ChatSelection<ChatHistoryItem>;
   isNoteBacked: boolean;
   isRunning: boolean;
   isSessionOpen: boolean;
@@ -111,6 +116,7 @@ const RecentChatRow = memo(function RecentChatRow({
   projectName,
   onOpen,
   actions,
+  selection,
   isNoteBacked,
   isRunning,
   isSessionOpen,
@@ -120,18 +126,23 @@ const RecentChatRow = memo(function RecentChatRow({
   const Icon = chatBackendIcon(item);
   const [menuOpen, setMenuOpen] = useState(false);
   const pinned = isPinned(item);
+  const selected = selection.isSelected(item.id);
 
   return (
     <div
       role="button"
       tabIndex={0}
       className={cn(
-        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
-        "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover"
+        "tw-group tw-flex tw-min-h-9 tw-cursor-pointer tw-select-none tw-items-center tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5",
+        "tw-text-left tw-transition-colors hover:tw-bg-modifier-hover",
+        selected && SELECTED_CHAT_ROW_CLASS
       )}
-      onClick={() => onOpen(item.id)}
+      onClick={(event) => {
+        if (!selection.handleClick(item.id, event)) onOpen(item.id);
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
+        selection.handleContextMenu(item.id);
         setMenuOpen(true);
       }}
       onKeyDown={(e) => {
@@ -202,6 +213,7 @@ const RecentChatRow = memo(function RecentChatRow({
             open={menuOpen}
             onOpenChange={setMenuOpen}
             actions={actions}
+            selectedItems={selected ? selection.selectedItems : undefined}
           />
         </div>
       </div>
@@ -220,6 +232,8 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
   onCopyChatLink,
   onSetChatPinned,
   onSetChatArchived,
+  onDeleteChats,
+  onArchiveChats,
   onViewArchived,
   getChatBookmarkState,
   onSetChatBookmarked,
@@ -250,6 +264,15 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
     [displayCount, filteredItems]
   );
   const visiblePinnedCount = useMemo(() => visibleItems.filter(isPinned).length, [visibleItems]);
+  const selection = useChatSelection(visibleItems);
+  const { clear: clearSelection } = selection;
+  const handleQueryChange = useCallback(
+    (next: string) => {
+      setQuery(next);
+      clearSelection();
+    },
+    [clearSelection]
+  );
 
   const handleOpenSourceFile = useCallback(
     (id: string) => {
@@ -271,8 +294,12 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       onCloseSession,
       onSetChatPinned,
       onSetChatArchived,
+      onDeleteChats,
+      onArchiveChats,
     }),
     [
+      onArchiveChats,
+      onDeleteChats,
       getChatBookmarkState,
       handleOpenSourceFile,
       onCloseSession,
@@ -296,6 +323,7 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       projectName={getProjectName(item)}
       onOpen={handleOpen}
       actions={actions}
+      selection={selection}
       isNoteBacked={!isNativeChatId(item.id)}
       isRunning={runningChatIds?.has(item.id) ?? false}
       isSessionOpen={openChatIds?.has(item.id) ?? false}
@@ -307,12 +335,13 @@ export const GlobalRecentChatsSection = memo(function GlobalRecentChatsSection({
       role={title ? "group" : undefined}
       aria-label={title}
       className={cn("tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2", className)}
+      onKeyDown={selection.handleKeyDown}
     >
       {items.length > 0 && (
         <div className="tw-p-1">
           <SearchBar
             value={query}
-            onChange={setQuery}
+            onChange={handleQueryChange}
             placeholder="Search chats..."
             inputClassName="!tw-h-7"
           />

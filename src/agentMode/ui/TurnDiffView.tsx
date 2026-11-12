@@ -9,13 +9,13 @@ import { markedSelectionText } from "@/agentMode/ui/renderedDiff/markedSelection
 import type { DiffRun } from "@/agentMode/ui/renderedDiff/mergeMarkdown";
 import { RenderedDiff } from "@/agentMode/ui/renderedDiff/RenderedDiff";
 import { revokeRun } from "@/agentMode/ui/renderedDiff/revokeRun";
+import { openChangedNote } from "@/agentMode/ui/openChangedNote";
 import { TurnDiffHeader } from "@/agentMode/ui/TurnDiffHeader";
 import { COMMAND_IDS, COMMAND_NAMES, TURN_DIFF_VIEW_TYPE } from "@/constants";
 import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { SelectionReport } from "@/selection/selectionStore";
 import { ensureFolderExists } from "@/utils";
-import { openFileInTab, type OpenPane } from "@/utils/openVaultPath";
 import { parentDir } from "@/utils/pathUtils";
 import { trashFile } from "@/utils/vaultAdapterUtils";
 import { mountPluginViewRoot, type PluginViewRootHandle } from "@/utils/react/mountPluginViewRoot";
@@ -253,7 +253,9 @@ const TurnDiffPane: React.FC<TurnDiffPaneProps> = ({
                   ),
               }
         }
-        onOpenNote={state.after === null ? undefined : (pane) => openNote(app, state.path, pane)}
+        onOpenNote={
+          state.after === null ? undefined : (pane) => openChangedNote(app, state.path, pane)
+        }
       />
       <ChangeScroller navigation={navigation}>
         <RenderedDiff
@@ -361,19 +363,6 @@ export async function openTurnDiff(
 
 function turnDiffKey(turnId: string, path: string): string {
   return `${turnId}\n${path}`;
-}
-
-function openNote(app: App, path: string, pane: OpenPane): void {
-  const file = app.vault.getAbstractFileByPath(path);
-  // Opening a path whose file was renamed or deleted after the turn would create an empty note.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
-  if (!(file instanceof TFile)) {
-    new Notice(`${path} no longer exists.`);
-    return;
-  }
-  void openFileInTab(app, file, pane).catch((error: unknown) =>
-    logError("[TurnDiffView] failed to open the note", error)
-  );
 }
 
 function basename(path: string): string {

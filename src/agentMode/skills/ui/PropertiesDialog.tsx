@@ -201,7 +201,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
         </div>
       </div>
 
-      <div className="tw-mt-4 tw-flex tw-justify-end tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-pt-3">
+      <div className="tw-mt-4 tw-flex tw-justify-end tw-gap-2 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-pt-3">
         <Button variant="secondary" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>

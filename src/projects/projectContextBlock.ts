@@ -29,7 +29,7 @@ const EMPTY_MANIFEST_ENTRIES: ManifestPathEntry[] = Object.freeze(
 
 // The system prompt is shared by every chat on a backend, so this policy rides the block only project chats get.
 // https://github.com/logancyang/obsidian-copilot/issues/3801
-export const PROJECT_WORKSPACE_POLICY = `The working directory is this project's workspace. Write generated files, drafts and intermediates to outputs/ there (create it as needed), unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
+export const PROJECT_WORKSPACE_POLICY = `The working directory is this project's workspace. Write generated files, drafts and intermediates directly in it, unless the user specifies another destination. Read/search there and in configured context sources, including external sources. Access other locations only when instructions or the user name them.`;
 
 // A tag or property can match thousands of notes, so the manifest names it and the agent resolves its notes on demand.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/838

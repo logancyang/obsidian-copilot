@@ -31,8 +31,10 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
     loadChat,
     updateChatTitle,
     deleteChat,
+    deleteChats,
     setChatPinned,
     setChatArchived,
+    archiveChats,
     openSourceFile,
     copyChatLink,
     getChatBookmarkState,
@@ -143,6 +145,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       onCloseSession: handleCloseSession,
       onSetChatPinned: setChatPinned,
       onSetChatArchived: setChatArchived,
+      onDeleteChats: deleteChats,
+      onArchiveChats: archiveChats,
     }),
     [
       updateChatTitle,
@@ -154,6 +158,8 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({ manager, plugi
       handleCloseSession,
       setChatPinned,
       setChatArchived,
+      deleteChats,
+      archiveChats,
     ]
   );
 

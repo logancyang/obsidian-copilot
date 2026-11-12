@@ -5,6 +5,7 @@ import {
   sidebarProject,
 } from "@/agentMode/navigator/ui/testing/sessionsSidebarFixtures";
 import type { Meta, StoryObj } from "@/lib/story";
+import { useStepsAcrossRenders } from "@/agentMode/ui/testing/useStepsAcrossRenders";
 import React, { useEffect, useRef, useState } from "react";
 
 type SessionsSidebarPanelProps = React.ComponentProps<typeof SessionsSidebarPanel>;
@@ -304,4 +305,48 @@ export const DraggingExpandedProject: StoryObj<SessionsSidebarPanelProps> = {
     rowsDown: 4,
   } as Partial<SessionsSidebarPanelProps>,
   render: MidDragPanel as React.ComponentType<Partial<SessionsSidebarPanelProps>>,
+};
+
+function rowNamed(root: HTMLElement | null, title: string): HTMLElement | undefined {
+  return Array.from(root?.querySelectorAll<HTMLElement>("button[type=button]") ?? []).find(
+    (button) => button.textContent?.trim() === title
+  );
+}
+
+function SelectedChatsMenuPanel(args: Partial<SessionsSidebarPanelProps>) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [steps] = useState(() => {
+    const dispatch = (title: string, event: () => MouseEvent) => () =>
+      rowNamed(containerRef.current, title)?.dispatchEvent(event());
+    return [
+      dispatch(
+        "Pricing page copyFall product launch",
+        () => new MouseEvent("click", { bubbles: true, metaKey: true })
+      ),
+      dispatch(
+        "Summarize the Q3 interview notes",
+        () => new MouseEvent("click", { bubbles: true, shiftKey: true })
+      ),
+      dispatch(
+        "garden chat 1",
+        () => new MouseEvent("contextmenu", { bubbles: true, cancelable: true })
+      ),
+    ];
+  });
+  useStepsAcrossRenders(steps);
+  return (
+    <div ref={containerRef} className="tw-size-full">
+      <WithToggleableFolders {...args} />
+    </div>
+  );
+}
+
+export const SelectedChatsMenu: StoryObj<SessionsSidebarPanelProps> = {
+  args: {
+    items: everyGroupItems,
+    projects,
+    expandedProjectIds: new Set(["garden"]),
+    activeChatIds: new Set(["chats/recent-2.md"]),
+  },
+  render: SelectedChatsMenuPanel,
 };
