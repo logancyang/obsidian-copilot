@@ -6,7 +6,7 @@ import {
   hasUnconsolidatedNotes,
   readNotesAfter,
   runAgentMemoryConsolidation,
-} from "@/agentMode/session/agentMemoryConsolidation";
+} from "@/agents/agentMode/agentMemoryConsolidation";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));

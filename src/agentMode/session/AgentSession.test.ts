@@ -1433,6 +1433,26 @@ describe("AgentSession", () => {
         expect(promptText(sent[1])).toBe("and then?");
       });
 
+      it("waits for a chat extension that reads its note from disk, handing it the chat, and records the note delivered", async () => {
+        const mock = makeMockBackend();
+        const beforePrompt = jest.fn(async () => ({
+          note: "<memory>kept</memory>",
+          delivered: (count: number) => count + 1,
+        }));
+        const session = makeSession(mock, {
+          chatExtensions: [defineChatExtension({ key: COUNTER, beforePrompt })],
+        });
+
+        await session.sendPrompt("go on").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(beforePrompt).toHaveBeenCalledWith(0, session);
+        expect(promptText(sent[0])).toBe(
+          "<memory>kept</memory>\n\n<user-message>\ngo on\n</user-message>"
+        );
+        expect(session.readChatState(COUNTER)).toBe(1);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 sends a chat extension's note again after the prompt that carried it failed", async () => {
         const mock = makeMockBackend();
         mock.prompt.mockRejectedValueOnce(new Error("transport down"));
@@ -2921,7 +2941,7 @@ describe("AgentSession", () => {
 
         beforeEach(() => {
           mockedEnsure.mockReset();
-          mockedEnsure.mockResolvedValue(true);
+          jest.mocked(ensureMultiAgentEntitlement).mockResolvedValue(true);
           mockedUpgradePrompt.mockReset();
         });
 
@@ -2964,7 +2984,7 @@ describe("AgentSession", () => {
           expect(mock.prompt).not.toHaveBeenCalled();
           expect(runFanoutTurn.mock.calls[0][0].agentSlugs).toEqual(BOTH_AGENTS);
           expect(runFanoutTurn.mock.calls[0][0].sessionBackendId).toBe("opencode");
-          expect(runFanoutTurn.mock.calls[0][0].summarizerPersonaBlock).toBeNull();
+          expect(runFanoutTurn.mock.calls[0][0].summarizer.slug).toBeNull();
           expect(fanoutPromptText(runFanoutTurn)).toContain("read-only");
           expect(fanoutPromptText(runFanoutTurn)).toContain("review");
           expect(aiMessage(session)?.fanout?.answers.claude.text).toBe("claude answer");
@@ -3047,7 +3067,6 @@ describe("AgentSession", () => {
             name: "Jennifer",
             icon: "🪶",
             personaBlock: null,
-            memory: null,
           });
           await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
@@ -3143,10 +3162,6 @@ describe("AgentSession", () => {
           name: "Jennifer",
           icon: "🪶",
           personaBlock: '<agent_persona name="Jennifer">You are Jennifer.</agent_persona>',
-          memory: {
-            block: '<agent_memory name="Jennifer">knows the newsletter</agent_memory>',
-            fingerprint: "fp-1",
-          },
         };
 
         function promptText(mock: MockBackend, call: number): string {
@@ -3154,18 +3169,7 @@ describe("AgentSession", () => {
           return input.prompt[0].text ?? "";
         }
 
-        it("sends the persona and what the agent knows on the first turn", async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
-          session.setAgent(JENNIFER);
-
-          await session.sendPrompt("hi").turn;
-
-          expect(promptText(mock, 0)).toContain("<agent_persona");
-          expect(promptText(mock, 0)).toContain("knows the newsletter");
-        });
-
-        it("repeats neither block on a later turn while the memory files are unchanged", async () => {
+        it("sends the persona on the first turn only", async () => {
           const mock = makeMockBackend();
           const session = makeSession(mock);
           session.setAgent(JENNIFER);
@@ -3173,64 +3177,36 @@ describe("AgentSession", () => {
           await session.sendPrompt("hi").turn;
           await session.sendPrompt("again").turn;
 
-          expect(promptText(mock, 1)).not.toContain("<agent_persona");
-          expect(promptText(mock, 1)).not.toContain("<agent_memory");
-        });
-
-        it("prepends a fresh memory block, and only that, once the files have changed", async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
-          session.setAgent(JENNIFER);
-          await session.sendPrompt("hi").turn;
-
-          session.setAgentMemory({
-            block: '<agent_memory name="Jennifer">renamed to Grid Notes Weekly</agent_memory>',
-            fingerprint: "fp-2",
-          });
-          await session.sendPrompt("and now").turn;
-
-          expect(promptText(mock, 1)).toContain("renamed to Grid Notes Weekly");
-          expect(promptText(mock, 1)).not.toContain("<agent_persona");
-        });
-
-        it("sends nothing extra when a refresh found the same files as last time", async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
-          session.setAgent(JENNIFER);
-          await session.sendPrompt("hi").turn;
-
-          session.setAgentMemory({ ...JENNIFER.memory!, fingerprint: "fp-1" });
-          await session.sendPrompt("again").turn;
-
-          expect(promptText(mock, 1)).not.toContain("<agent_memory");
-        });
-
-        it("sends no memory block for an agent whose memory is off", async () => {
-          const mock = makeMockBackend();
-          const session = makeSession(mock);
-          session.setAgent({ ...JENNIFER, memory: null });
-
-          await session.sendPrompt("hi").turn;
-
           expect(promptText(mock, 0)).toContain("<agent_persona");
-          expect(promptText(mock, 0)).not.toContain("<agent_memory");
+          expect(promptText(mock, 1)).not.toContain("<agent_persona");
         });
 
-        it("sends neither block for a chat whose agent was deleted", async () => {
+        it("sends no persona for a chat whose agent was deleted", async () => {
           const mock = makeMockBackend();
           const session = makeSession(mock);
-          session.setAgent({
-            slug: "gone",
-            name: "Gone",
-            icon: "",
-            personaBlock: null,
-            memory: null,
-          });
+          session.setAgent({ slug: "gone", name: "Gone", icon: "", personaBlock: null });
 
           await session.sendPrompt("hi").turn;
 
           expect(promptText(mock, 0)).not.toContain("<agent_persona");
-          expect(promptText(mock, 0)).not.toContain("<agent_memory");
+        });
+
+        it("hands a fan-out turn the chat's own agent to summarize as", async () => {
+          const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest) => {
+            const turn: FanoutTurn = {
+              answers: {},
+              summary: { status: "done", text: "summary", complete: true },
+            };
+            request.onChange(turn);
+            return turn;
+          });
+          jest.mocked(ensureMultiAgentEntitlement).mockResolvedValue(true);
+          const session = makeSession(makeMockBackend(), { runFanoutTurn });
+          session.setAgent(JENNIFER);
+
+          await session.sendPrompt("what do you both think?", undefined, undefined, ["sage"]).turn;
+
+          expect(runFanoutTurn.mock.calls[0][0].summarizer).toBe(JENNIFER);
         });
       });
 
@@ -6432,6 +6408,52 @@ describe("AgentSession", () => {
       });
     });
 
+    describe("getNoteFields()", () => {
+      it("collects each extension's note field from its state, leaving out one with nothing to save", () => {
+        const session = makeSession(makeMockBackend(), {
+          chatExtensions: [
+            defineChatExtension({
+              key: COUNTER,
+              noteField: {
+                key: "counted",
+                save: (count) => (count > 0 ? count : null),
+                restore: (_, saved) => saved,
+              },
+            }),
+          ],
+        });
+        expect(session.getNoteFields()).toEqual({});
+
+        session.updateChatState(COUNTER, () => 3);
+
+        expect(session.getNoteFields()).toEqual({ counted: 3 });
+      });
+    });
+
+    describe("restoreNoteFields()", () => {
+      const COUNTED = defineChatExtension({
+        key: COUNTER,
+        noteField: { key: "counted", save: (count) => count, restore: (_, saved) => saved },
+      });
+
+      it("restores an extension's state from the number its field holds in a reopened chat's frontmatter", () => {
+        const session = makeSession(makeMockBackend(), { chatExtensions: [COUNTED] });
+
+        session.restoreNoteFields({ counted: "4", topic: "Newsletter" });
+
+        expect(session.readChatState(COUNTER)).toBe(4);
+      });
+
+      it("leaves the state alone when the field is missing or not a number", () => {
+        const session = makeSession(makeMockBackend(), { chatExtensions: [COUNTED] });
+
+        session.restoreNoteFields({});
+        session.restoreNoteFields({ counted: "soon" });
+
+        expect(session.readChatState(COUNTER)).toBe(0);
+      });
+    });
+
     describe("restoreChatStates()", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 carries a chat's kept state into the session that replaces it on Reload, and redraws", () => {
         const before = makeSession(makeMockBackend(), {
@@ -7061,31 +7083,6 @@ describe("AgentSession", () => {
           expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
           expect.objectContaining({ id: "tool-write", status: "completed" }),
         ]);
-      });
-    });
-
-    describe("promotePendingMemoryNotice()", () => {
-      it("shows a held line only once a turn has ended", () => {
-        const session = makeSession(makeMockBackend());
-        const notice = {
-          kind: "consolidation" as const,
-          agentName: "Jennifer",
-          path: "copilot/agents/jennifer/MEMORY.md",
-        };
-
-        session.setPendingMemoryNotice(notice);
-        expect(session.getMemoryNotice()).toBeNull();
-
-        session.promotePendingMemoryNotice();
-        expect(session.getMemoryNotice()).toEqual(notice);
-      });
-
-      it("does nothing when no line is waiting", () => {
-        const session = makeSession(makeMockBackend());
-
-        session.promotePendingMemoryNotice();
-
-        expect(session.getMemoryNotice()).toBeNull();
       });
     });
   });

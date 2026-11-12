@@ -30,6 +30,8 @@ import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentFileManager } from "@/agents/AgentFileManager";
+import { createAgentMemoryExtension } from "@/agents/agentMode/agentMemoryChat";
+import { AgentMemoryKeeper } from "@/agents/agentMode/AgentMemoryKeeper";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
@@ -78,6 +80,7 @@ export { openSessionsSidebar } from "./navigator/openSessionsSidebar";
 export { default as SessionsSidebarView } from "./navigator/ui/SessionsSidebarView";
 export { useBackendInstallState, useManagedInstallActionState } from "./ui/useBackendDescriptor";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
+export type { AgentMemoryKeeper } from "@/agents/agentMode/AgentMemoryKeeper";
 export type {
   ApprovedRule,
   ApprovedRuleStore,
@@ -295,6 +298,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const askUserQuestionPrompter = createDefaultAskUserQuestionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
+  const agentFiles = new AgentFileManager(app);
   const manager = new AgentSessionManager(app, plugin, {
     permissionPrompter: prompter,
     askUserQuestionPrompter,
@@ -303,9 +307,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
-    agentFileManager: new AgentFileManager(app),
+    agentFileManager: agentFiles,
     chatExtensions: [
       FEEDBACK_OFFER_EXTENSION,
+      createAgentMemoryExtension(agentFiles),
       ...(connectionManager
         ? [
             // A stored login without the entitlement gives agents no tools, so its card must not report it connected.
@@ -320,7 +325,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     copilotMcpServer,
   });
   managerRef = manager;
-  void manager
+  const agentMemory = new AgentMemoryKeeper(app, manager, agentFiles);
+  manager.subscribeChatLifecycle(agentMemory);
+  plugin.agentMemory = agentMemory;
+  void agentMemory
     .consolidateStaleAgentsOnLoad()
     .catch((error) => logError("[Agents] Load-time consolidation failed", error));
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.

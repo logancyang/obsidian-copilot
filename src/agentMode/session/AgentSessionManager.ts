@@ -26,7 +26,7 @@ import {
   parseChatTimestamp,
   readChatPathProjectId,
 } from "@/utils/chatHistoryUtils";
-import { patchFrontmatter, readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
+import { readFrontmatterViaAdapter } from "@/utils/vaultAdapterUtils";
 import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES, DEFAULT_TITLE_PREFIX } from "./AgentSession";
@@ -40,23 +40,12 @@ import type { AgentFileManager } from "@/agents/AgentFileManager";
 import { BUILTIN_AGENT, BUILTIN_AGENT_SLUG, toAgentEntry } from "@/agents/types";
 import { formatMissingAgentLabel } from "@/agents/agentDisplay";
 import type { AgentEntry, AgentRecord, CustomAgent } from "@/agents/types";
-import { formatMemoryEntryDate } from "@/agents/agentMemory";
-import {
-  hasUnconsolidatedNotes,
-  runAgentMemoryConsolidation,
-  type AgentMemoryConsolidationOutcome,
-} from "./agentMemoryConsolidation";
-import {
-  buildFanoutMemoryTranscript,
-  runAgentMemoryFlush,
-  type AgentMemoryFlushOutcome,
-} from "./agentMemoryPass";
-import { AgentMemoryScheduler, isConsolidationStaleAtLoad } from "./agentMemoryScheduler";
 import { ReadOnlySubSessionRunner } from "./readOnlySubSession";
+import type { ChatLifecycleListener } from "./chatLifecycle";
 import {
   COPILOT_SESSION_AGENT,
-  loadAgentMemoryInjection,
-  loadSessionAgent,
+  toSessionAgent,
+  withAgentMemory,
   missingSessionAgent,
   type SessionAgent,
 } from "./sessionAgent";
@@ -211,10 +200,6 @@ export interface AgentSessionManagerOptions {
   agentFileManager?: AgentFileManager;
 }
 
-const MEMORY_PASS_UNLOAD_GRACE_MS = 10_000;
-
-const FANOUT_FLUSH_HEADING = "Asked in passing";
-
 export class AgentSessionManager {
   private backends = new Map<BackendId, BackendProcess>();
   private starting = new Map<BackendId, Promise<BackendProcess>>();
@@ -298,15 +283,8 @@ export class AgentSessionManager {
   private readonly readOnlyFanoutSessions = new Set<SessionId>();
   private readonly defaultApplyChains = new Map<string, Promise<void>>();
   private readonly fanoutOrchestrator: FanoutOrchestrator;
-  private readonly subSessions: ReadOnlySubSessionRunner;
-  private readonly memoryPassesInFlight = new Set<string>();
-  private readonly memoryScheduler = new AgentMemoryScheduler({
-    flushChat: (internalId) => {
-      const session = this.sessions.get(internalId);
-      if (session) void this.beginMemoryFlush(session);
-    },
-    consolidate: () => void this.consolidateIdleAgents(),
-  });
+  readonly subSessions: ReadOnlySubSessionRunner;
+  private readonly lifecycleListeners = new Set<ChatLifecycleListener>();
   private readonly continuingSessionIds = new Set<string>();
   private selectedAgentSlug: string = BUILTIN_AGENT_SLUG;
   private agentRoster: readonly CustomAgent[] = EMPTY_CUSTOM_AGENTS;
@@ -390,13 +368,33 @@ export class AgentSessionManager {
   }
 
   async runFanoutTurn(request: FanoutTurnRequest): Promise<FanoutTurn> {
-    const { agentSlugs, ...context } = request;
-    const answerers = await Promise.all(
-      agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug, context.sessionBackendId))
-    );
-    const turn = await this.fanoutOrchestrator.run({ ...context, answerers });
-    this.beginFanoutMemoryPasses(answerers, turn, request);
+    const { agentSlugs, summarizer, ...context } = request;
+    const [summarizerPersonaBlock, answerers] = await Promise.all([
+      this.resolveSummarizerPersona(summarizer),
+      Promise.all(
+        agentSlugs.map((slug) => this.resolveFanoutAnswerer(slug, context.sessionBackendId))
+      ),
+    ]);
+    const turn = await this.fanoutOrchestrator.run({
+      ...context,
+      summarizerPersonaBlock,
+      answerers,
+    });
+    for (const listener of this.lifecycleListeners) listener.onFanoutTurn?.(turn, request);
     return turn;
+  }
+
+  private async resolveSummarizerPersona(summarizer: SessionAgent): Promise<string | null> {
+    const files = this.opts.agentFileManager;
+    if (!files || !summarizer.slug) return summarizer.personaBlock;
+    try {
+      const record = await files.readAgent(summarizer.slug);
+      if (!record) return summarizer.personaBlock;
+      return await withAgentMemory(files, record.agent, summarizer.personaBlock);
+    } catch (error) {
+      logWarn(`[Agents] Could not read agent "${summarizer.slug}" for a fan-out summary`, error);
+      return summarizer.personaBlock;
+    }
   }
 
   private async resolveFanoutAnswerer(
@@ -410,7 +408,6 @@ export class AgentSessionManager {
       backendId: null,
       selection: null,
       personaBlock: null,
-      memoryEnabled: false,
       missing: true,
     };
     const files = this.opts.agentFileManager;
@@ -419,7 +416,6 @@ export class AgentSessionManager {
       const record = await files.readAgent(slug);
       if (!record) return gone;
       const { agent } = record;
-      const session = await loadSessionAgent(files, agent, { writable: false });
       const answeringOn = agent.backendId ?? sessionBackendId;
       return {
         slug,
@@ -431,11 +427,11 @@ export class AgentSessionManager {
           answeringOn,
           this.getSeedSelection(answeringOn)
         ),
-        personaBlock:
-          [session.personaBlock, session.memory?.block]
-            .filter((part): part is string => Boolean(part))
-            .join("\n\n") || null,
-        memoryEnabled: agent.memoryEnabled,
+        personaBlock: await withAgentMemory(
+          files,
+          agent,
+          toSessionAgent(files, agent, { writable: false }).personaBlock
+        ),
       };
     } catch (error) {
       logWarn(`[Agents] Could not read agent "${slug}" for a fan-out turn`, error);
@@ -1241,7 +1237,7 @@ export class AgentSessionManager {
     try {
       const record = await files.readAgent(slug);
       if (!record) return { agent: missingSessionAgent(slug), source: null };
-      const agent = await loadSessionAgent(files, record.agent);
+      const agent = toSessionAgent(files, record.agent);
       return { agent: { ...agent, avatarSrc: record.avatarSrc }, source: record.agent };
     } catch (error) {
       logWarn(`[Agents] Could not read agent "${slug}"`, error);
@@ -1253,119 +1249,9 @@ export class AgentSessionManager {
     return (await this.bindSessionAgent(slug)).agent;
   }
 
-  private async refreshAgentMemory(slug: string): Promise<void> {
-    const files = this.opts.agentFileManager;
-    if (!files) return;
-    const open = () =>
-      Array.from(this.sessions.values()).filter(
-        (session) => session.getStatus() !== "closed" && session.getAgent().slug === slug
-      );
-    if (open().length === 0) return;
-    try {
-      const record = await files.readAgent(slug);
-      const memory = record ? await loadAgentMemoryInjection(files, record.agent) : null;
-      for (const session of open()) session.setAgentMemory(memory);
-    } catch (error) {
-      logWarn(`[Agents] Could not refresh memory for "${slug}"`, error);
-    }
-  }
-
-  private beginMemoryFlush(session: AgentSession): Promise<void> | null {
-    const files = this.opts.agentFileManager;
-    if (!files || !session.getAgent().slug) return null;
-    const internalId = session.internalId;
-    if (this.memoryPassesInFlight.has(internalId)) return null;
-
-    const messages = session.store.getDisplayMessages();
-    const newTurns = messages.slice(session.getMemorizedThroughTurn());
-    if (newTurns.length === 0) return null;
-
-    const agentSlug = session.getAgent().slug!;
-    const sessionBackendId = session.backendId;
-    const throughTurn = messages.length;
-    const notePath = this.sessionState.get(internalId)?.source?.path;
-    this.memoryScheduler.cancelFlush(internalId);
-
-    this.memoryPassesInFlight.add(internalId);
-    const pass = runAgentMemoryFlush(
-      { files, subSessions: this.subSessions },
-      {
-        agentSlug,
-        sessionBackendId,
-        messages: newTurns,
-        chatTitle: session.getLabel() ?? "",
-        signal: new AbortController().signal,
-      }
-    )
-      .then((outcome) => {
-        if (outcome.status === "failed") return;
-        if (outcome.status === "skipped" && outcome.reason === "no-turns") return;
-        this.recordMemoryFlush(internalId, throughTurn, notePath, outcome);
-        void this.refreshAgentMemory(agentSlug);
-      })
-      .finally(() => this.memoryPassesInFlight.delete(internalId));
-    return pass;
-  }
-
-  private beginFanoutMemoryPasses(
-    answerers: ReadonlyArray<FanoutAnswerer>,
-    turn: FanoutTurn,
-    context: { originalPromptText: string; sessionBackendId: BackendId }
-  ): void {
-    const files = this.opts.agentFileManager;
-    if (!files) return;
-    for (const answerer of answerers) {
-      if (answerer.missing || !answerer.memoryEnabled) continue;
-      const slot = turn.answers[answerer.slug];
-      if (!slot || slot.status !== "done") continue;
-      const answer = slot.text.trim();
-      if (!answer) continue;
-      const key = `fanout:${answerer.slug}`;
-      if (this.memoryPassesInFlight.has(key)) continue;
-      this.memoryPassesInFlight.add(key);
-      void runAgentMemoryFlush(
-        { files, subSessions: this.subSessions },
-        {
-          agentSlug: answerer.slug,
-          sessionBackendId: answerer.backendId ?? context.sessionBackendId,
-          messages: buildFanoutMemoryTranscript(context.originalPromptText, answer),
-          chatTitle: FANOUT_FLUSH_HEADING,
-          signal: new AbortController().signal,
-        }
-      )
-        .then((outcome) => {
-          if (outcome.status !== "written") return;
-          void this.refreshAgentMemory(answerer.slug);
-        })
-        .finally(() => this.memoryPassesInFlight.delete(key));
-    }
-  }
-
-  private recordMemoryFlush(
-    internalId: string,
-    throughTurn: number,
-    notePath: string | undefined,
-    outcome: AgentMemoryFlushOutcome
-  ): void {
-    const session = this.sessions.get(internalId);
-    if (session) {
-      session.setMemorizedThroughTurn(throughTurn);
-      if (outcome.status === "written") {
-        session.setMemoryNotice({
-          kind: "flush",
-          agentName: outcome.agentName,
-          path: outcome.notePath,
-        });
-      }
-      this.scheduleAutoSave(session);
-      this.notify();
-      return;
-    }
-    if (!notePath) return;
-    void patchFrontmatter(this.app, notePath, { memorizedThroughTurn: throughTurn }).catch(
-      (error: unknown) =>
-        logWarn(`[Agents] Could not record memorizedThroughTurn on ${notePath}`, error)
-    );
+  subscribeChatLifecycle(listener: ChatLifecycleListener): () => void {
+    this.lifecycleListeners.add(listener);
+    return () => this.lifecycleListeners.delete(listener);
   }
 
   private endConversationOfActiveSession(incoming: AgentSession): void {
@@ -1373,87 +1259,11 @@ export class AgentSessionManager {
     if (!activeId || activeId === incoming.internalId) return;
     if (this.continuingSessionIds.has(activeId)) return;
     const leaving = this.sessions.get(activeId);
-    if (leaving) void this.beginMemoryFlush(leaving);
+    if (leaving) this.emitChatLeft(leaving);
   }
 
-  updateMemoryNow(internalId: string): boolean {
-    const session = this.sessions.get(internalId);
-    if (!session) return false;
-    return this.beginMemoryFlush(session) !== null;
-  }
-
-  async consolidateMemoryNow(slug: string): Promise<AgentMemoryConsolidationOutcome> {
-    const files = this.opts.agentFileManager;
-    if (!files) return { status: "skipped", reason: "no-agent" };
-    return this.runConsolidation(files, slug);
-  }
-
-  private async consolidateIdleAgents(): Promise<void> {
-    const files = this.opts.agentFileManager;
-    if (!files || this.disposed) return;
-    try {
-      for (const record of await files.listAgents()) {
-        if (!record.agent.memoryEnabled) continue;
-        if (!(await hasUnconsolidatedNotes(files, record.agent.slug))) continue;
-        await this.runConsolidation(files, record.agent.slug);
-      }
-    } catch (error) {
-      logWarn("[Agents] Idle consolidation sweep failed", error);
-    }
-  }
-
-  async consolidateStaleAgentsOnLoad(): Promise<void> {
-    const files = this.opts.agentFileManager;
-    if (!files || this.disposed) return;
-    const today = formatMemoryEntryDate(new Date());
-    try {
-      for (const record of await files.listAgents()) {
-        if (!record.agent.memoryEnabled) continue;
-        const slug = record.agent.slug;
-        if (!(await hasUnconsolidatedNotes(files, slug))) continue;
-        const stored = await files.readMemoryDocument(slug);
-        if (!isConsolidationStaleAtLoad(stored?.consolidatedThrough ?? null, today)) continue;
-        await this.runConsolidation(files, slug);
-      }
-    } catch (error) {
-      logWarn("[Agents] Load-time consolidation sweep failed", error);
-    }
-  }
-
-  private async runConsolidation(
-    files: AgentFileManager,
-    slug: string
-  ): Promise<AgentMemoryConsolidationOutcome> {
-    const key = `consolidate:${slug}`;
-    if (this.memoryPassesInFlight.has(key)) return { status: "skipped", reason: "no-new-notes" };
-    this.memoryPassesInFlight.add(key);
-    try {
-      const outcome = await runAgentMemoryConsolidation(
-        { files, subSessions: this.subSessions },
-        {
-          agentSlug: slug,
-          sessionBackendId: getSettings().agentMode?.activeBackend ?? "opencode",
-          signal: new AbortController().signal,
-        }
-      );
-      if (outcome.status === "written") {
-        await this.refreshAgentMemory(slug);
-        this.showConsolidationNotice(slug, outcome.agentName, outcome.memoryPath);
-      }
-      return outcome;
-    } finally {
-      this.memoryPassesInFlight.delete(key);
-    }
-  }
-
-  private showConsolidationNotice(slug: string, agentName: string, memoryPath: string): void {
-    let shown = false;
-    for (const session of this.sessions.values()) {
-      if (session.getStatus() === "closed" || session.getAgent().slug !== slug) continue;
-      session.setPendingMemoryNotice({ kind: "consolidation", agentName, path: memoryPath });
-      shown = true;
-    }
-    if (shown) this.notify();
+  private emitChatLeft(session: AgentSession): void {
+    for (const listener of this.lifecycleListeners) listener.onChatLeft?.(session);
   }
 
   getActiveProjectId(): ProjectScopeId {
@@ -2033,8 +1843,7 @@ export class AgentSessionManager {
   private async closeSessionOnce(id: string, options?: { releaseBackend: boolean }): Promise<void> {
     const session = this.sessions.get(id);
     if (!session) return;
-    if (!this.continuingSessionIds.delete(id)) void this.beginMemoryFlush(session);
-    this.memoryScheduler.cancelFlush(id);
+    if (!this.continuingSessionIds.delete(id)) this.emitChatLeft(session);
     const closedScope = session.projectId;
     const scopeIdsBefore = this.getSessionIdsForScope(closedScope);
     const closedIdx = scopeIdsBefore.indexOf(id);
@@ -2343,17 +2152,10 @@ export class AgentSessionManager {
       `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
     );
 
-    this.memoryScheduler.dispose();
+    await Promise.allSettled(
+      Array.from(this.lifecycleListeners).flatMap((listener) => listener.beforeShutdown?.() ?? [])
+    );
     const allSessions = Array.from(this.sessions.values());
-    const memoryPasses = allSessions
-      .map((session) => this.beginMemoryFlush(session))
-      .filter((pass): pass is Promise<void> => pass !== null);
-    if (memoryPasses.length > 0) {
-      await Promise.race([
-        Promise.allSettled(memoryPasses),
-        new Promise((resolve) => window.setTimeout(resolve, MEMORY_PASS_UNLOAD_GRACE_MS)),
-      ]);
-    }
     await Promise.allSettled(allSessions.map((s) => this.drainAutoSave(s)));
     for (const id of Array.from(this.sessionState.keys())) {
       this.detachAutoSave(id);
@@ -2490,7 +2292,7 @@ export class AgentSessionManager {
       if (!resumed) session.resendSavedHistoryOnNextTurn();
     }
     session.seedSessionUsage(loaded.usage);
-    if (loaded.memorizedThroughTurn) session.setMemorizedThroughTurn(loaded.memorizedThroughTurn);
+    session.restoreNoteFields(loaded.frontmatter);
     const state = this.getSessionState(session.internalId);
     state.source = file;
     state.savedLabel = loaded.label;
@@ -2942,10 +2744,10 @@ export class AgentSessionManager {
           .map((a) => `${a.status}:${a.text.length}`)
           .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
       : "";
-    const memorizedThroughTurn = session.getMemorizedThroughTurn();
+    const noteFields = session.getNoteFields();
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}-${memorizedThroughTurn}`;
+    }-${fanoutSig}-${usage?.updatedAt ?? ""}-${JSON.stringify(noteFields)}`;
     if (state.signature === signature) {
       return state.source ?? null;
     }
@@ -2957,7 +2759,7 @@ export class AgentSessionManager {
       projectId: session.projectId,
       usage: usage ?? undefined,
       agentSlug: session.getAgent().slug,
-      memorizedThroughTurn,
+      noteFields,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -3032,12 +2834,9 @@ export class AgentSessionManager {
         const wasRunning = prev === "running";
         const isRunning = next === "running";
         prev = next;
-        if (isRunning && !wasRunning) this.memoryScheduler.noteTurnStarted(session.internalId);
-        if (wasRunning && !isRunning) {
-          this.memoryScheduler.noteTurnEnded(session.internalId);
-          session.promotePendingMemoryNotice();
-          const slug = session.getAgent().slug;
-          if (slug) void this.refreshAgentMemory(slug);
+        for (const listener of this.lifecycleListeners) {
+          if (isRunning && !wasRunning) listener.onTurnStarted?.(session);
+          if (wasRunning && !isRunning) listener.onTurnEnded?.(session);
         }
         void this.flushDeferredBackendRestartIfReady(session.backendId);
         // Only a turn that actually ran can newly demand attention.

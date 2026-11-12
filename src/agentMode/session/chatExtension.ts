@@ -1,4 +1,5 @@
 import type { FeedbackEvidence } from "@/agentMode/session/feedback/feedbackOffer";
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import type { AgentChatMessage, BackendId } from "@/agentMode/session/types";
 
 export interface ChatStateKey<S> {
@@ -8,6 +9,7 @@ export interface ChatStateKey<S> {
 
 export interface ChatView {
   readonly backendId: BackendId;
+  getAgent(): SessionAgent;
   getReportEvidence(): FeedbackEvidence;
   getDisplayMessages(): readonly AgentChatMessage[];
 }
@@ -27,10 +29,17 @@ export interface PromptNote<S> {
   delivered: (latest: S) => S;
 }
 
+export interface ChatNoteField<S> {
+  readonly key: string;
+  save(state: S): number | null;
+  restore(state: S, saved: number): S;
+}
+
 export interface ChatExtension<S> {
   readonly key: ChatStateKey<S>;
   readonly keepOnReload?: boolean;
-  beforePrompt?(state: S): PromptNote<S> | null;
+  readonly noteField?: ChatNoteField<S>;
+  beforePrompt?(state: S, chat: ChatView): PromptNote<S> | null | Promise<PromptNote<S> | null>;
   onTurnFailed?(state: S, chat: ChatView, failure: TurnFailure): S;
 }
 

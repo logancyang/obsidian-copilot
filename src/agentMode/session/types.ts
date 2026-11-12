@@ -582,11 +582,3 @@ export interface TurnFileChange {
 }
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };
-
-export type AgentMemoryNoticeKind = "flush" | "consolidation";
-
-export interface AgentMemoryNotice {
-  kind: AgentMemoryNoticeKind;
-  agentName: string;
-  path: string;
-}

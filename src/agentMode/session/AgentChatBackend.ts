@@ -3,7 +3,6 @@ import type { MessageContext } from "@/types/message";
 import type { AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
-  AgentMemoryNotice,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
   BackendId,
@@ -39,8 +38,6 @@ export interface AgentChatBackend extends ChatStateHost {
   getTaskMessages(toolCallId: string): readonly AgentChatMessage[];
   canStopTasks(): boolean;
   stopTask(taskId: string): Promise<void>;
-
-  getMemoryNotice(): AgentMemoryNotice | null;
 
   isStarting(): boolean;
   isTurnInFlight(): boolean;

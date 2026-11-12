@@ -13,7 +13,6 @@ export interface SessionAgent {
   icon: string;
   avatarSrc?: string | null;
   personaBlock: string | null;
-  memory: AgentMemoryInjection | null;
 }
 
 export interface AgentMemoryInjection {
@@ -26,7 +25,6 @@ export const COPILOT_SESSION_AGENT: SessionAgent = Object.freeze({
   name: BUILTIN_AGENT.name,
   icon: BUILTIN_AGENT.icon,
   personaBlock: null,
-  memory: null,
 });
 
 export async function loadAgentMemoryInjection(
@@ -55,11 +53,23 @@ export async function loadAgentMemoryInjection(
   }
 }
 
-export async function loadSessionAgent(
+export async function withAgentMemory(
+  files: AgentFileManager,
+  agent: CustomAgent,
+  personaBlock: string | null
+): Promise<string | null> {
+  const memory = await loadAgentMemoryInjection(files, agent);
+  return (
+    [personaBlock, memory?.block].filter((part): part is string => Boolean(part)).join("\n\n") ||
+    null
+  );
+}
+
+export function toSessionAgent(
   files: AgentFileManager,
   agent: CustomAgent,
   options: { writable?: boolean } = {}
-): Promise<SessionAgent> {
+): SessionAgent {
   const writable = options.writable !== false;
   const writeTargets =
     writable && agent.memoryEnabled
@@ -77,10 +87,9 @@ export async function loadSessionAgent(
       instructions: agent.instructions,
       writeTargets,
     }),
-    memory: await loadAgentMemoryInjection(files, agent),
   };
 }
 
 export function missingSessionAgent(slug: string): SessionAgent {
-  return { slug, name: formatMissingAgentLabel(slug), icon: "", personaBlock: null, memory: null };
+  return { slug, name: formatMissingAgentLabel(slug), icon: "", personaBlock: null };
 }

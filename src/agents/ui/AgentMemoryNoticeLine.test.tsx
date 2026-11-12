@@ -1,4 +1,4 @@
-import { AgentMemoryNoticeLine } from "@/agentMode/ui/AgentMemoryNoticeLine";
+import { AgentMemoryNoticeLine } from "@/agents/ui/AgentMemoryNoticeLine";
 import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 

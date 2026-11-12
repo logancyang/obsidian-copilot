@@ -3,7 +3,8 @@ import type { CustomAgent } from "@/agents/types";
 import {
   COPILOT_SESSION_AGENT,
   loadAgentMemoryInjection,
-  loadSessionAgent,
+  toSessionAgent,
+  withAgentMemory,
   missingSessionAgent,
 } from "@/agentMode/session/sessionAgent";
 
@@ -238,44 +239,68 @@ describe("sessionAgent", () => {
     });
   });
 
-  describe("loadSessionAgent()", () => {
-    it("carries the agent's display fields, its persona block, and what it knows", async () => {
+  describe("withAgentMemory()", () => {
+    it("follows the persona with what the agent knows, for a read-only sub-session", async () => {
       const { files } = buildFiles();
 
-      const agent = await loadSessionAgent(files, jennifer());
+      const block = await withAgentMemory(files, jennifer(), "<agent_persona>…</agent_persona>");
+
+      expect(block).toMatch(/^<agent_persona>…<\/agent_persona>\n\n<agent_memory name="Jennifer"/);
+      expect(block).toContain("Writes a climate newsletter.");
+    });
+
+    it("carries what the agent knows alone when there is no persona block", async () => {
+      const { files } = buildFiles();
+
+      expect(await withAgentMemory(files, jennifer(), null)).toMatch(/^<agent_memory/);
+    });
+
+    it("keeps the persona alone when the agent's memory toggle is off", async () => {
+      const { files } = buildFiles();
+
+      expect(await withAgentMemory(files, jennifer({ memoryEnabled: false }), "<p/>")).toBe("<p/>");
+    });
+
+    it("returns null when there is neither a persona nor anything remembered", async () => {
+      const { files } = buildFiles();
+
+      expect(await withAgentMemory(files, jennifer({ memoryEnabled: false }), null)).toBeNull();
+    });
+  });
+
+  describe("toSessionAgent()", () => {
+    it("carries the agent's display fields and its persona block", () => {
+      const { files } = buildFiles();
+
+      const agent = toSessionAgent(files, jennifer());
 
       expect(agent).toMatchObject({ slug: "jennifer", name: "Jennifer", icon: "🪶" });
       expect(agent.personaBlock).toContain('<agent_persona name="Jennifer">');
-      expect(agent.memory?.block).toContain('<agent_memory name="Jennifer"');
-      expect(agent.memory?.block).toContain("Writes a climate newsletter.");
     });
 
-    it("tells a writable chat's agent where to keep its notes", async () => {
+    it("tells a writable chat's agent where to keep its notes", () => {
       const { files } = buildFiles();
 
-      const agent = await loadSessionAgent(files, jennifer());
+      const agent = toSessionAgent(files, jennifer());
 
       expect(agent.personaBlock).toContain("copilot/agents/jennifer/memory/");
       expect(agent.personaBlock).toContain("open a day's file when a question reaches past");
       expect(agent.personaBlock).toContain("Never edit your MEMORY.md.");
     });
 
-    it("says nothing about notes for a read-only fan-out answerer", async () => {
+    it("says nothing about notes for a read-only fan-out answerer", () => {
       const { files } = buildFiles();
 
-      const agent = await loadSessionAgent(files, jennifer(), { writable: false });
+      const agent = toSessionAgent(files, jennifer(), { writable: false });
 
       expect(agent.personaBlock).not.toContain("Keeping your own notes");
-      expect(agent.memory?.block).toContain("Writes a climate newsletter.");
     });
 
-    it("carries no memory and no note-keeping when the agent's memory toggle is off", async () => {
-      const { files, readMemoryDocument } = buildFiles();
+    it("says nothing about notes when the agent's memory toggle is off", () => {
+      const { files } = buildFiles();
 
-      const agent = await loadSessionAgent(files, jennifer({ memoryEnabled: false }));
+      const agent = toSessionAgent(files, jennifer({ memoryEnabled: false }));
 
-      expect(readMemoryDocument).not.toHaveBeenCalled();
-      expect(agent.memory).toBeNull();
       expect(agent.personaBlock).not.toContain("Keeping your own notes");
     });
   });
@@ -287,17 +312,15 @@ describe("sessionAgent", () => {
         name: "Night Editor",
         icon: "",
         personaBlock: null,
-        memory: null,
       });
     });
   });
 
   describe("COPILOT_SESSION_AGENT", () => {
-    it("names no agent and carries no persona or memory, which is today's assistant", () => {
+    it("names no agent and carries no persona, which is today's assistant", () => {
       expect(COPILOT_SESSION_AGENT.slug).toBeNull();
       expect(COPILOT_SESSION_AGENT.name).toBe("Copilot");
       expect(COPILOT_SESSION_AGENT.personaBlock).toBeNull();
-      expect(COPILOT_SESSION_AGENT.memory).toBeNull();
     });
   });
 });

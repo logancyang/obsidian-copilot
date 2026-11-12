@@ -13,7 +13,6 @@ import { useAgentTasks } from "@/agentMode/ui/AgentTasksContext";
 import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
-import { AgentMemoryNoticeLine } from "@/agentMode/ui/AgentMemoryNoticeLine";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
 import { USER_SENDER } from "@/constants";
@@ -22,7 +21,6 @@ import { useTailPaging } from "@/hooks/useTailPaging";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
-  AgentMemoryNotice,
   AgentMessagePart,
   AskUserQuestionPrompt,
   CurrentPlan,
@@ -44,8 +42,6 @@ interface AgentChatMessagesProps {
   pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   isLoading: boolean;
-  memoryNotice?: AgentMemoryNotice | null;
-  onOpenMemory?: (memoryPath: string) => void;
   chatStates: ChatStates;
 }
 
@@ -181,8 +177,6 @@ const AgentChatMessages = memo(
     pendingAskUserQuestions,
     chatBackend,
     isLoading,
-    memoryNotice,
-    onOpenMemory,
     chatStates,
   }: AgentChatMessagesProps) => {
     const { app } = plugin;
@@ -294,13 +288,6 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
-          {memoryNotice ? (
-            <AgentMemoryNoticeLine
-              kind={memoryNotice.kind}
-              agentName={memoryNotice.agentName}
-              onOpen={() => onOpenMemory?.(memoryNotice.path)}
-            />
-          ) : null}
         </ChatTranscriptViewport>
         {pendingActionId ? (
           <div

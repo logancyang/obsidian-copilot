@@ -19,12 +19,12 @@ import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/Agent
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, PanelLeft, Plus, X } from "lucide-react";
-import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
   manager: AgentSessionManager;
   onOpenSidebar: () => void;
+  onUpdateMemory: (sessionId: string) => void;
 }
 
 const TAB_GAP_PX = 4;
@@ -61,7 +61,7 @@ function useSessionDisplay(session: AgentSession) {
   };
 }
 
-export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
+export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar, onUpdateMemory }) => {
   const isHidden = useSessionsSidebarOpen(useApp());
   const [, setTick] = React.useState(0);
   React.useEffect(() => manager.subscribe(() => setTick((v) => v + 1)), [manager]);
@@ -112,13 +112,6 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
     manager.createSession().catch((e) => logError("[AgentMode] createSession failed", e));
   }, [manager]);
 
-  const handleUpdateMemory = React.useCallback(
-    (id: string) => {
-      if (manager.updateMemoryNow(id)) new Notice("Updating memory…");
-    },
-    [manager]
-  );
-
   const handleClose = React.useCallback(
     (id: string) => {
       manager.detachSessionFromTab(id);
@@ -157,7 +150,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
               isRenaming={renamingId === session.internalId}
               onActivate={() => manager.setActiveSession(session.internalId)}
               onClose={() => handleClose(session.internalId)}
-              onUpdateMemory={() => handleUpdateMemory(session.internalId)}
+              onUpdateMemory={() => onUpdateMemory(session.internalId)}
               onStartRename={() => setRenamingId(session.internalId)}
               onSubmitRename={(label) => {
                 manager.renameSession(session.internalId, label);

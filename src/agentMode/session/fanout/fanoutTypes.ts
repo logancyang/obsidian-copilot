@@ -24,7 +24,6 @@ export interface FanoutAnswerer {
   backendId: BackendId | null;
   selection: ModelSelection | null;
   personaBlock: string | null;
-  memoryEnabled: boolean;
   missing?: boolean;
 }
 

@@ -4,6 +4,7 @@ import {
   ReadOnlySubSessionRunner,
   type ReadOnlySubSessionHost,
 } from "@/agentMode/session/readOnlySubSession";
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import type { BackendId, PromptContent } from "@/agentMode/session/types";
 import {
   buildSummaryUserPrompt,
@@ -20,7 +21,6 @@ export type FanoutHost = ReadOnlySubSessionHost;
 
 interface FanoutTurnContext {
   sessionBackendId: BackendId;
-  summarizerPersonaBlock: string | null;
   prompt: PromptContent[];
   originalPromptText: string;
   signal: AbortSignal;
@@ -29,10 +29,12 @@ interface FanoutTurnContext {
 
 export interface FanoutTurnRequest extends FanoutTurnContext {
   agentSlugs: ReadonlyArray<string>;
+  summarizer: SessionAgent;
 }
 
 export interface FanoutRunInput extends FanoutTurnContext {
   answerers: ReadonlyArray<FanoutAnswerer>;
+  summarizerPersonaBlock: string | null;
 }
 
 export function createFanoutTurn(answerers: ReadonlyArray<FanoutAnswerer>): FanoutTurn {

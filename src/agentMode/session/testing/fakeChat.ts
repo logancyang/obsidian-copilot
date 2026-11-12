@@ -7,6 +7,7 @@ import {
   type ChatStates,
   type ChatView,
 } from "@/agentMode/session/chatExtension";
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 
 export const FAKE_EVIDENCE = Object.freeze({
@@ -16,9 +17,20 @@ export const FAKE_EVIDENCE = Object.freeze({
   raisedAt: "2026-11-08T00:00:00.000Z",
 });
 
-export function fakeChatView(messages: readonly AgentChatMessage[] = []): ChatView {
+const FAKE_COPILOT_AGENT: SessionAgent = Object.freeze({
+  slug: null,
+  name: "Copilot",
+  icon: "",
+  personaBlock: null,
+});
+
+export function fakeChatView(
+  messages: readonly AgentChatMessage[] = [],
+  agent: SessionAgent = FAKE_COPILOT_AGENT
+): ChatView {
   return {
     backendId: "claude",
+    getAgent: () => agent,
     getReportEvidence: () => FAKE_EVIDENCE,
     getDisplayMessages: () => messages,
   };

@@ -3,7 +3,7 @@ import type { CustomAgent } from "@/agents/types";
 import {
   buildFanoutMemoryTranscript,
   runAgentMemoryFlush,
-} from "@/agentMode/session/agentMemoryPass";
+} from "@/agents/agentMode/agentMemoryPass";
 import type { ReadOnlySubSessionRunner } from "@/agentMode/session/readOnlySubSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";

@@ -2,15 +2,10 @@ import { AI_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
-import {
-  COPILOT_SESSION_AGENT,
-  type AgentMemoryInjection,
-  type SessionAgent,
-} from "@/agentMode/session/sessionAgent";
+import { COPILOT_SESSION_AGENT, type SessionAgent } from "@/agentMode/session/sessionAgent";
 import {
   AgentChatMessage,
   AgentMcpServer,
-  AgentMemoryNotice,
   AgentMessagePart,
   AgentToolKind,
   AgentQuestionAnswers,
@@ -128,6 +123,24 @@ export type RunFanoutTurn = (request: FanoutTurnRequest) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
+
+interface TakenPromptNote {
+  extension: ChatExtension<unknown>;
+  note: PromptNote<unknown>;
+}
+
+const NO_PROMPT_NOTES: readonly TakenPromptNote[] = Object.freeze([]);
+
+function keepPromptNotes(
+  offered: readonly {
+    extension: ChatExtension<unknown>;
+    note: PromptNote<unknown> | null | Promise<PromptNote<unknown> | null>;
+  }[]
+): readonly TakenPromptNote[] {
+  return offered.flatMap(({ extension, note }) =>
+    note && !(note instanceof Promise) ? [{ extension, note }] : []
+  );
+}
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
@@ -258,10 +271,6 @@ export class AgentSession implements ChatStateHost, ChatView {
   private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
   private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
-  private injectedMemoryFingerprint: string | null = null;
-  private memorizedThroughTurn = 0;
-  private memoryNotice: AgentMemoryNotice | null = null;
-  private pendingMemoryNotice: AgentMemoryNotice | null = null;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
@@ -675,65 +684,14 @@ export class AgentSession implements ChatStateHost, ChatView {
     return this.sessionAgent;
   }
 
-  getMemorizedThroughTurn(): number {
-    return this.memorizedThroughTurn;
-  }
-
-  setMemorizedThroughTurn(count: number): void {
-    if (!Number.isFinite(count) || count <= this.memorizedThroughTurn) return;
-    this.memorizedThroughTurn = Math.floor(count);
-  }
-
-  setAgentMemory(memory: AgentMemoryInjection | null): void {
-    if (memory?.fingerprint === this.sessionAgent.memory?.fingerprint) return;
-    this.sessionAgent = { ...this.sessionAgent, memory };
-  }
-
-  private takeAgentMemoryBlock(): string | null {
-    const memory = this.sessionAgent.memory;
-    if (!memory || memory.fingerprint === this.injectedMemoryFingerprint) return null;
-    this.injectedMemoryFingerprint = memory.fingerprint;
-    return memory.block;
-  }
-
-  private buildSummarizerPersonaBlock(): string | null {
-    const parts = [this.sessionAgent.personaBlock, this.sessionAgent.memory?.block].filter(
-      (part): part is string => Boolean(part)
-    );
-    return parts.length > 0 ? parts.join("\n\n") : null;
-  }
-
-  getMemoryNotice(): AgentMemoryNotice | null {
-    return this.memoryNotice;
-  }
-
-  setMemoryNotice(notice: AgentMemoryNotice | null): void {
-    if (this.memoryNotice === notice) return;
-    this.memoryNotice = notice;
-    this.notifyMessages();
-  }
-
-  setPendingMemoryNotice(notice: AgentMemoryNotice): void {
-    this.pendingMemoryNotice = notice;
-  }
-
-  promotePendingMemoryNotice(): void {
-    const notice = this.pendingMemoryNotice;
-    if (!notice) return;
-    this.pendingMemoryNotice = null;
-    this.setMemoryNotice(notice);
-  }
-
   setAgent(agent: SessionAgent): void {
     if (
       agent.slug === this.sessionAgent.slug &&
       agent.name === this.sessionAgent.name &&
-      agent.personaBlock === this.sessionAgent.personaBlock &&
-      agent.memory?.fingerprint === this.sessionAgent.memory?.fingerprint
+      agent.personaBlock === this.sessionAgent.personaBlock
     ) {
       return;
     }
-    if (agent.slug !== this.sessionAgent.slug) this.injectedMemoryFingerprint = null;
     this.sessionAgent = agent;
     this.notifyLabelChanged();
   }
@@ -827,7 +785,6 @@ export class AgentSession implements ChatStateHost, ChatView {
     const userMessageId = this.store.addMessage(
       buildUserMessage(promptId, displayText, context, promptContent)
     );
-    this.memoryNotice = null;
     this.notifyPromptSent();
     this.turns.openReply();
 
@@ -965,6 +922,12 @@ export class AgentSession implements ChatStateHost, ChatView {
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
+      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      const takenNotes = sendsCompact ? NO_PROMPT_NOTES : this.takePromptNotes();
+      // Only a note read from disk, such as an agent's memory, may hold the prompt back.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/668
+      const promptNotes = takenNotes instanceof Promise ? await takenNotes : takenNotes;
       // Stop already closed this prompt's reply, so nothing after it may run or open another. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       if (this.isOnModelNotEnabled()) {
@@ -1017,9 +980,6 @@ export class AgentSession implements ChatStateHost, ChatView {
             CONVERSATION_HISTORY_MAX_CHARS
           )
         : null;
-      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
-      const promptNotes = sendsCompact ? [] : this.takePromptNotes();
       const leadingContextBlock = sendsCompact
         ? null
         : [
@@ -1032,7 +992,6 @@ export class AgentSession implements ChatStateHost, ChatView {
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
-      const agentMemoryBlock = sendsCompact ? null : this.takeAgentMemoryBlock();
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
@@ -1041,8 +1000,7 @@ export class AgentSession implements ChatStateHost, ChatView {
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock,
-        agentPersonaBlock,
-        agentMemoryBlock
+        agentPersonaBlock
       );
 
       const outcome = await this.turns.submit(
@@ -1100,7 +1058,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     const request: FanoutTurnRequest = {
       agentSlugs: this.lastMentionedAgents,
       sessionBackendId: this.backendId,
-      summarizerPersonaBlock: this.buildSummarizerPersonaBlock(),
+      summarizer: this.sessionAgent,
       prompt: withReadOnlyPreamble(promptBlocks),
       originalPromptText,
       signal,
@@ -1267,11 +1225,34 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.notifyMessages();
   }
 
-  private takePromptNotes(): { extension: ChatExtension<unknown>; note: PromptNote<unknown> }[] {
-    return this.chatExtensions.flatMap((extension) => {
-      const note = extension.beforePrompt?.(this.readChatState(extension.key));
-      return note ? [{ extension, note }] : [];
-    });
+  getNoteFields(): Readonly<Record<string, number>> {
+    const fields: Record<string, number> = {};
+    for (const { key, noteField } of this.chatExtensions) {
+      if (!noteField) continue;
+      const saved = noteField.save(this.readChatState(key));
+      if (saved !== null) fields[noteField.key] = saved;
+    }
+    return fields;
+  }
+
+  restoreNoteFields(frontmatter: Readonly<Record<string, unknown>>): void {
+    for (const { key, noteField } of this.chatExtensions) {
+      if (!noteField) continue;
+      const saved = Number(frontmatter[noteField.key]);
+      if (Number.isFinite(saved))
+        this.updateChatState(key, (state) => noteField.restore(state, saved));
+    }
+  }
+
+  private takePromptNotes(): readonly TakenPromptNote[] | Promise<readonly TakenPromptNote[]> {
+    const offered = this.chatExtensions.map((extension) => ({
+      extension,
+      note: extension.beforePrompt?.(this.readChatState(extension.key), this) ?? null,
+    }));
+    if (!offered.some(({ note }) => note instanceof Promise)) return keepPromptNotes(offered);
+    return Promise.all(
+      offered.map(async ({ extension, note }) => ({ extension, note: await note }))
+    ).then(keepPromptNotes);
   }
 
   getSessionUsage(): SessionUsage | null {

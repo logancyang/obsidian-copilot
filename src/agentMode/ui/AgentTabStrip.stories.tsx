@@ -20,7 +20,6 @@ const COPILOT: SessionAgent = {
   name: "Copilot",
   icon: "",
   personaBlock: null,
-  memory: null,
 };
 
 const JENNIFER: SessionAgent = {
@@ -28,7 +27,6 @@ const JENNIFER: SessionAgent = {
   name: "Jennifer",
   icon: "",
   personaBlock: '<agent_persona name="Jennifer">…</agent_persona>',
-  memory: null,
 };
 
 function makeManager(chats: StoryChat[], activeIndex = 0): AgentSessionManager {
@@ -59,7 +57,7 @@ const WithTooltips: React.FC<Partial<AgentTabStripProps>> = (props) => (
 const meta = {
   title: "Agent Mode/Tab Strip",
   component: AgentTabStrip,
-  args: { onOpenSidebar: () => {} },
+  args: { onOpenSidebar: () => {}, onUpdateMemory: () => {} },
   parameters: { gallery: { host: "leaf", layout: "padded" } },
 } satisfies Meta<AgentTabStripProps>;
 export default meta;

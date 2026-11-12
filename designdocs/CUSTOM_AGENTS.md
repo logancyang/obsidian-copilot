@@ -428,22 +428,28 @@ boundary.
    `copilot-agent-*` frontmatter keys, and `agentMemory.ts` for the read, the
    update pass, and the safety checks.
 3. `src/agentMode/session/promptEnvelope.ts` and the manifest builder: emit
-   `<agent_persona>` and `<agent_memory>` beside `<project_context>`.
+   `<agent_persona>` beside `<project_context>`.
 4. `src/agentMode/backends/shared/agentSystemPrompt.ts`: one constant paragraph
    describing how to treat the two blocks.
-5. `AgentSessionManager`: hold the selected agent alongside the active scope,
-   thread it into new-session creation, run the memory pass at the existing
-   conversation-boundary hooks.
-6. `AgentChatPersistenceManager`: the two new frontmatter fields.
-7. `src/agentMode/session/fanout/answerers.ts`, `FanoutOrchestrator.ts`, and
+5. `AgentSessionManager`: hold the selected agent alongside the active scope
+   and thread it into new-session creation.
+6. `src/agents/agentMode/`: the memory pieces of the chat. A chat extension
+   holds each chat's memory state (`memorizedThroughTurn`, the trust line) and
+   adds `<agent_memory>` to the next message through `beforePrompt`; a card
+   slot draws the trust line; `AgentMemoryKeeper` listens to the chat
+   lifecycle (turn started and ended, chat left, fan-out turn, shutdown) and
+   runs the flush, fan-out and consolidation passes.
+7. `AgentChatPersistenceManager`: `agentSlug` in the frontmatter, and the
+   extension's `memorizedThroughTurn` through the generic note-field seam.
+8. `src/agentMode/session/fanout/answerers.ts`, `FanoutOrchestrator.ts`, and
    the `AgentPillNode` / `useAtMentionCategories` typeahead: change the answerer
    type from backend id to agent slug, delete the brand answerer path and its
    typeahead group, and label answer tabs by agent. Net deletion, not an
    addition — the brand code should be gone when this step is done.
-8. `src/settings/settingsTabs.ts` and `SettingsMainV2.tsx`: register the tab;
+9. `src/settings/settingsTabs.ts` and `SettingsMainV2.tsx`: register the tab;
    `src/agents/ui/AgentsSettings.tsx` modeled on `SkillsSettings.tsx`.
-9. The model picker popover in the chat composer: the Agent section at the top.
-10. Stories for the model picker with its Agent section, the settings editor, and the fan-out card with a
+10. The model picker popover in the chat composer: the Agent section at the top.
+11. Stories for the model picker with its Agent section, the settings editor, and the fan-out card with a
     custom agent tab. Unit tests per the testing guide, including the memory
     safety rails as the boundary cases.
 

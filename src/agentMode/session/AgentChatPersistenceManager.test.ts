@@ -875,41 +875,32 @@ describe("AgentChatPersistenceManager", () => {
     });
   });
 
-  describe("memorizedThroughTurn frontmatter", () => {
-    it("round-trips how far the agent has memorized (CUSTOM_AGENTS.md §5)", async () => {
+  describe("chat extension note fields", () => {
+    it("writes each note field into the frontmatter and loads it back with the rest of the frontmatter", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
         agentSlug: "jennifer",
-        memorizedThroughTurn: 4,
+        noteFields: { memorizedThroughTurn: 4 },
       });
       expect(app.files.get(saved!.path)!.contents!).toContain("memorizedThroughTurn: 4");
 
       const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
-      expect(loaded.memorizedThroughTurn).toBe(4);
+      expect(loaded.frontmatter.memorizedThroughTurn).toBe("4");
     });
 
-    it("writes no field before anything is memorized (CUSTOM_AGENTS.md §8)", async () => {
-      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
-        agentSlug: "jennifer",
-        memorizedThroughTurn: 0,
-      });
-
-      expect(app.files.get(saved!.path)!.contents!).not.toContain("memorizedThroughTurn");
-    });
-
-    it("keeps the marker when a later save omits it, so memorized turns are not re-read", async () => {
+    it("keeps a field a later save leaves out, so an extension's saved state survives", async () => {
       const messages = [makeMessage(USER_SENDER, "hi")];
       const first = await manager.saveSession(messages, "claude", {
         agentSlug: "jennifer",
-        memorizedThroughTurn: 2,
+        noteFields: { memorizedThroughTurn: 2 },
       });
 
       const second = await manager.saveSession(messages, "claude", { existingPath: first!.path });
 
       const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
-      expect(loaded.memorizedThroughTurn).toBe(2);
+      expect(loaded.frontmatter.memorizedThroughTurn).toBe("2");
     });
 
-    it("loads a chat written before the field existed as never memorized", async () => {
+    it("loads a chat written before a field existed without it", async () => {
       const path = "test-folder/agent__legacy-unmemorized.md";
       await app.vault.adapter.write(
         path,
@@ -926,29 +917,8 @@ describe("AgentChatPersistenceManager", () => {
 
       const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
 
-      expect(loaded.memorizedThroughTurn).toBeUndefined();
+      expect(loaded.frontmatter.memorizedThroughTurn).toBeUndefined();
       expect(loaded.messages).toHaveLength(1);
-    });
-
-    it("ignores a hand-edited marker that is not a positive whole number", async () => {
-      const path = "test-folder/agent__bad-marker.md";
-      await app.vault.adapter.write(
-        path,
-        [
-          "---",
-          "epoch: 1735732800000",
-          "mode: agent",
-          "backendId: claude",
-          "memorizedThroughTurn: soon",
-          "---",
-          "",
-          "**user**: hi",
-        ].join("\n")
-      );
-
-      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
-
-      expect(loaded.memorizedThroughTurn).toBeUndefined();
     });
   });
 });

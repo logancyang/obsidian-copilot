@@ -1,4 +1,4 @@
-import type { AgentMemoryNoticeKind } from "@/agentMode/session/types";
+import type { AgentMemoryNoticeKind } from "@/agents/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BookOpen, NotebookPen } from "lucide-react";

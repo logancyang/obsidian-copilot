@@ -77,7 +77,6 @@ import {
 import { useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
-import { openVaultPath } from "@/utils/openVaultPath";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -122,15 +121,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     queuedPrompts,
     tasks,
     isReplyRunning,
-    memoryNotice,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
   const replyRunning = draft.loading || isReplyRunning;
-
-  const handleOpenMemory = useCallback(
-    (memoryPath: string) => openVaultPath(app, memoryPath, { pane: "tab" }),
-    [app]
-  );
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [openedTask, setOpenedTask] = useState<{ sessionId: string; toolCallId: string } | null>(
@@ -291,6 +284,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const handleOpenSessionsSidebar = useCallback(() => {
     openSessionsSidebar(plugin).catch((e) => logError("[AgentMode] open sidebar failed", e));
   }, [plugin]);
+
+  const handleUpdateMemory = useCallback(
+    (sessionId: string) => {
+      if (plugin.agentMemory?.updateNow(sessionId)) new Notice("Updating memory…");
+    },
+    [plugin]
+  );
 
   const handleExitProject = useCallback(() => {
     manager.exitProject().catch((e) => {
@@ -741,7 +741,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           />
         </div>
       </div>
-      <AgentTabStrip manager={manager} onOpenSidebar={handleOpenSessionsSidebar} />
+      <AgentTabStrip
+        manager={manager}
+        onOpenSidebar={handleOpenSessionsSidebar}
+        onUpdateMemory={handleUpdateMemory}
+      />
       {createAnchor && (
         <CreateProjectPanel
           anchorEl={createAnchor}
@@ -839,8 +843,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         chatBackend={backend}
                         isLoading={isLoading}
                         chatStates={chatStates}
-                        memoryNotice={memoryNotice}
-                        onOpenMemory={handleOpenMemory}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

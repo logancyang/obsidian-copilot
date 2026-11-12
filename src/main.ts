@@ -1,7 +1,7 @@
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
-import type { AgentSessionManager, SkillManager } from "@/agentMode";
+import type { AgentMemoryKeeper, AgentSessionManager, SkillManager } from "@/agentMode";
 import { isNativeChatId, parseNativeChatId } from "@/utils/nativeChatId";
 import {
   buildChatDeepLink,
@@ -179,6 +179,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  agentMemory?: AgentMemoryKeeper;
   connectionManager?: ConnectionManager;
   connectorTools?: ConnectorTools;
   customConnectors?: CustomConnectors;

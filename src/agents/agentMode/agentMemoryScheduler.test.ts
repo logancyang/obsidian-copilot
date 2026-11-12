@@ -1,7 +1,7 @@
 import {
   AgentMemoryScheduler,
   isConsolidationStaleAtLoad,
-} from "@/agentMode/session/agentMemoryScheduler";
+} from "@/agents/agentMode/agentMemoryScheduler";
 
 describe("agentMemoryScheduler", () => {
   describe("AgentMemoryScheduler", () => {
@@ -14,8 +14,8 @@ describe("agentMemoryScheduler", () => {
 
     beforeEach(() => {
       jest.useFakeTimers();
-      flushChat = jest.fn();
-      consolidate = jest.fn();
+      flushChat = jest.fn<void, [string]>();
+      consolidate = jest.fn<void, []>();
       scheduler = new AgentMemoryScheduler(
         { flushChat, consolidate },
         { flushIdleMs: FLUSH_MS, consolidationIdleMs: CONSOLIDATE_MS }

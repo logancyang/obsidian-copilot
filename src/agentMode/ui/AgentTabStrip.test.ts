@@ -28,6 +28,7 @@ function renderStrip(
         React.createElement(AgentTabStrip, {
           manager: manager as AgentSessionManager,
           onOpenSidebar,
+          onUpdateMemory: jest.fn(),
         })
       )
     )

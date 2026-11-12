@@ -314,11 +314,11 @@ export const AgentsSettings: React.FC = () => {
 
   const handleConsolidate = useCallback(
     (slug: string) => {
-      const sessions = plugin.agentSessionManager;
-      if (!sessions) return;
+      const agentMemory = plugin.agentMemory;
+      if (!agentMemory) return;
       new Notice("Consolidating memory…");
-      void sessions
-        .consolidateMemoryNow(slug)
+      void agentMemory
+        .consolidateNow(slug)
         .then(async (outcome) => {
           await reload();
           if (outcome.status === "written") new Notice("Memory consolidated.");

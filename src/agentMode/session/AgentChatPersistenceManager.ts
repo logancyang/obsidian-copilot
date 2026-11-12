@@ -61,12 +61,6 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
   }
 }
 
-function parsePositiveInt(raw: unknown): number | undefined {
-  const value = typeof raw === "number" ? raw : Number(typeof raw === "string" ? raw.trim() : NaN);
-  if (!Number.isFinite(value) || value <= 0) return undefined;
-  return Math.floor(value);
-}
-
 export interface LoadedAgentChat {
   messages: AgentChatMessage[];
   backendId: BackendId;
@@ -75,7 +69,7 @@ export interface LoadedAgentChat {
   projectId: string;
   usage?: SessionUsage;
   agentSlug?: string;
-  memorizedThroughTurn?: number;
+  frontmatter: Readonly<Record<string, string>>;
 }
 
 export class AgentChatPersistenceManager {
@@ -105,7 +99,7 @@ export class AgentChatPersistenceManager {
       projectId?: string;
       usage?: SessionUsage;
       agentSlug?: string | null;
-      memorizedThroughTurn?: number;
+      noteFields?: Readonly<Record<string, number>>;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -145,7 +139,7 @@ export class AgentChatPersistenceManager {
         projectId: options?.projectId,
         usage: options?.usage,
         agentSlug: options?.agentSlug,
-        memorizedThroughTurn: options?.memorizedThroughTurn,
+        noteFields: options?.noteFields,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -212,7 +206,6 @@ export class AgentChatPersistenceManager {
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
     const agentSlug = frontmatter.agentSlug?.trim() || undefined;
-    const memorizedThroughTurn = parsePositiveInt(frontmatter.memorizedThroughTurn);
     const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
 
     logInfo(
@@ -226,7 +219,7 @@ export class AgentChatPersistenceManager {
       projectId,
       usage,
       agentSlug,
-      memorizedThroughTurn,
+      frontmatter,
     };
   }
 
@@ -447,7 +440,7 @@ export class AgentChatPersistenceManager {
     projectId?: string;
     usage?: SessionUsage;
     agentSlug?: string | null;
-    memorizedThroughTurn?: number;
+    noteFields?: Readonly<Record<string, number>>;
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
@@ -461,12 +454,10 @@ export class AgentChatPersistenceManager {
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
       ["agentSlug", quoted("agentSlug", args.agentSlug)],
-      [
-        "memorizedThroughTurn",
-        args.memorizedThroughTurn
-          ? `memorizedThroughTurn: ${args.memorizedThroughTurn}`
-          : undefined,
-      ],
+      ...Object.entries(args.noteFields ?? {}).map(([key, value]): FrontmatterUpdates[number] => [
+        key,
+        `${key}: ${value}`,
+      ]),
       ["topic", quoted("topic", args.label)],
       ["modelKey", quoted("modelKey", args.modelKey)],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],

@@ -11,6 +11,8 @@ import { BackendConfigRegistry } from "@/modelManagement";
 import { isObsidianCliEnabled } from "@/services/obsidianCli/ObsidianCliClient";
 import { createCopilotMcpServer } from "./session/copilotMcpServer";
 import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
+import { AgentMemoryKeeper } from "@/agents/agentMode/AgentMemoryKeeper";
+import { fakeChatView } from "./session/testing/fakeChat";
 
 jest.mock("@/constants", () => ({}));
 jest.mock("@/logger", () => ({ logError: jest.fn() }));
@@ -49,6 +51,9 @@ jest.mock("./backends/registry", () => ({
   listBackendDescriptors: () => mockDescriptors,
 }));
 jest.mock("@/agents/AgentFileManager", () => ({ AgentFileManager: jest.fn() }));
+jest.mock("@/agents/agentMode/AgentMemoryKeeper", () => ({
+  AgentMemoryKeeper: jest.fn(() => ({ consolidateStaleAgentsOnLoad: jest.fn(async () => {}) })),
+}));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
 }));
@@ -107,10 +112,12 @@ function connectorCardsExtension() {
     .mock.calls[0][2].chatExtensions?.find(({ key }) => key.id === "connector-cards");
 }
 
-function connectorCardNote(serviceId: string): string | undefined {
-  return connectorCardsExtension()?.beforePrompt?.([
-    { serviceId, afterUserTurn: 1, dismissed: false, reported: null },
-  ])?.note;
+async function connectorCardNote(serviceId: string): Promise<string | undefined> {
+  const note = await connectorCardsExtension()?.beforePrompt?.(
+    [{ serviceId, afterUserTurn: 1, dismissed: false, reported: null }],
+    fakeChatView()
+  );
+  return note?.note;
 }
 const LINEUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/319";
 const RELOAD_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/475";
@@ -138,7 +145,7 @@ const mockManager = {
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
-  consolidateStaleAgentsOnLoad: jest.fn(async () => {}),
+  subscribeChatLifecycle: jest.fn(() => () => {}),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);
@@ -218,6 +225,16 @@ describe("agentMode", () => {
       expect(reconcile).toHaveBeenLastCalledWith(
         expect.objectContaining({ settings: expect.objectContaining({ plusLicenseKey: "" }) })
       );
+    });
+
+    it("hands every chat's lifecycle to the agent memory keeper, which the plugin exposes, and catches up stale memory on load", () => {
+      const manager = createAgentSessionManager({} as App, plugin);
+
+      const keeper = jest.mocked(AgentMemoryKeeper).mock.results[0].value;
+      expect(jest.mocked(AgentMemoryKeeper).mock.calls[0][1]).toBe(manager);
+      expect(mockManager.subscribeChatLifecycle).toHaveBeenCalledWith(keeper);
+      expect(plugin.agentMemory).toBe(keeper);
+      expect(keeper.consolidateStaleAgentsOnLoad).toHaveBeenCalledTimes(1);
     });
 
     it("tells the manager whether a tab strip holds its chats as the workspace layout changes for https://github.com/Brevilabs/obsidian-copilot-private/issues/849", () => {
@@ -647,7 +664,7 @@ describe("agentMode", () => {
       ]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers agents suggest_connector on a device with connectors, and reports connected services in a chat's card outcomes", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers agents suggest_connector on a device with connectors, and reports connected services in a chat's card outcomes", async () => {
       jest.mocked(isConnectorsEnabled).mockReturnValue(true);
       createAgentSessionManager(
         {} as App,
@@ -666,11 +683,11 @@ describe("agentMode", () => {
 
       const hosted = jest.mocked(createCopilotMcpServer).mock.calls[0][1];
       expect(hosted.map(({ definition }) => definition.name)).toContain("suggest_connector");
-      expect(connectorCardNote("notion")).toContain("The user connected Notion.");
-      expect(connectorCardNote("linear")).toContain("without connecting Linear");
+      expect(await connectorCardNote("notion")).toContain("The user connected Notion.");
+      expect(await connectorCardNote("linear")).toContain("without connecting Linear");
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 reports no service connected in a chat's card outcomes while the connectors entitlement is off, even with a stored login", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 reports no service connected in a chat's card outcomes while the connectors entitlement is off, even with a stored login", async () => {
       jest.mocked(isConnectorsEnabled).mockReturnValue(false);
       createAgentSessionManager(
         {} as App,
@@ -684,7 +701,7 @@ describe("agentMode", () => {
         } as unknown as CopilotPlugin
       );
 
-      expect(connectorCardNote("notion")).toContain("without connecting Notion");
+      expect(await connectorCardNote("notion")).toContain("without connecting Notion");
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/860 offers no suggest_connector or connector cards where connectors aren't available, such as mobile", () => {

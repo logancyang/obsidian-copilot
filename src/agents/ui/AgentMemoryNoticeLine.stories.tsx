@@ -1,11 +1,11 @@
-import { AgentMemoryNoticeLine } from "@/agentMode/ui/AgentMemoryNoticeLine";
+import { AgentMemoryNoticeLine } from "@/agents/ui/AgentMemoryNoticeLine";
 import type { Meta, StoryObj } from "@/lib/story";
 import React from "react";
 
 type AgentMemoryNoticeLineProps = React.ComponentProps<typeof AgentMemoryNoticeLine>;
 
 const meta = {
-  title: "Agent Mode/Memory Notice Line",
+  title: "Agents/Memory Notice Line",
   component: AgentMemoryNoticeLine,
   args: { kind: "flush", agentName: "Jennifer", onOpen: () => {} },
   parameters: { gallery: { host: "leaf", layout: "padded" } },

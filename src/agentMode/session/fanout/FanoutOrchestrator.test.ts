@@ -211,7 +211,6 @@ function answerer(backendId: BackendId, overrides: Partial<FanoutAnswerer> = {})
     backendId,
     selection: null,
     personaBlock: null,
-    memoryEnabled: false,
     ...overrides,
   };
 }

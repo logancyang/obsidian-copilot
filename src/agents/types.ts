@@ -23,6 +23,8 @@ export interface AgentRecord {
 
 export type AgentDraft = Omit<CustomAgent, "slug" | "created">;
 
+export type AgentMemoryNoticeKind = "flush" | "consolidation";
+
 export interface BuiltinAgentEntry {
   kind: "builtin";
   slug: string;

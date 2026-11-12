@@ -32,13 +32,18 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    It may import `ui/` and `session/`; only `ui/` and the Agent Mode entry
    (`index.ts`) import it, so the rest of `src/connectors` stays free of Agent
    Mode.
-10. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
+10. **`src/agents/agentMode/`** — custom agents' memory in the chat: its chat
+    state and extension, its card slot, and `AgentMemoryKeeper`, which runs
+    the flush and consolidation passes from the chat lifecycle. It may import
+    `ui/` and `session/`; only `ui/` and the Agent Mode entry (`index.ts`)
+    import it, so the rest of `src/agents` stays free of Agent Mode.
+11. **`navigator/`** — Copilot Navigator, the sessions sidebar: its view,
     components, hooks, and stories. It may import `ui/` and `session/`; only
     `ui/` and the Agent Mode entry (`index.ts`) import it, so removing the
     Navigator means deleting the folder and those imports. Code whose purpose
     is the Navigator belongs here; generic helpers it uses belong in shared
     modules even when the Navigator is their only caller.
-11. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
+12. **`src/projects/ui/` and `src/projects/hooks/`** — the Projects feature's
     UI and hooks: the project home and its Files tab, the project header and
     popover, and the create and edit forms. They may import `ui/` and
     `session/`; only `ui/` and `navigator/` import them. The rest of
@@ -125,6 +130,10 @@ Then in either case:
   `ChatCardSlot` (`ui/chatCards.tsx`) in the feature's module; list the
   extension in `index.ts` and the slot in `ui/chatCardSlots.ts`. Never add
   feature methods to `AgentSession`, `AgentChatBackend` or `AgentChatMessages`.
+- "A feature that acts when a turn starts or ends, the user leaves a chat, a
+  fan-out turn finishes, or the plugin unloads" → a `ChatLifecycleListener`
+  (`session/chatLifecycle.ts`) in the feature's module, subscribed with
+  `AgentSessionManager.subscribeChatLifecycle` in `index.ts`
 - "Plugin-level wiring" → `index.ts` only
 
 ## Modals and dialogs

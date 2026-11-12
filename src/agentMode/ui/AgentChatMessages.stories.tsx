@@ -410,35 +410,6 @@ export const PlanResponses: StoryObj<AgentChatMessagesProps> = {
   render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
 };
 
-export const MemoryTrustLine: StoryObj<AgentChatMessagesProps> = {
-  args: {
-    ...actionRailArgs,
-    pendingToolPermissions: [],
-    pendingAskUserQuestions: [],
-    isLoading: false,
-    messages: [
-      {
-        ...message,
-        id: "memory-request",
-        sender: "user",
-        message: "Cut the hydrogen section, and show me edits as a diff from now on.",
-      },
-      {
-        ...message,
-        id: "memory-response",
-        message: "Understood. The hydrogen section is out, and edits come as diffs from here.",
-        turnDurationMs: 4100,
-      },
-    ],
-    memoryNotice: {
-      kind: "flush",
-      agentName: "Jennifer",
-      path: "copilot/agents/jennifer/memory/2026-09-17.md",
-    },
-  },
-  render: (props) => <QueuedActionsDemo {...actionRailArgs} {...props} />,
-};
-
 export const FeedbackAfterFileChanges: StoryObj<AgentChatMessagesProps> = {
   args: {
     ...actionRailArgs,

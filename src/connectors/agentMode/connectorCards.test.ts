@@ -248,24 +248,24 @@ describe("connectorCards", () => {
     });
 
     describe("beforePrompt()", () => {
-      it(`${ISSUE} adds what the user did with each card to their next message, and marks it told once delivered`, () => {
+      it(`${ISSUE} adds what the user did with each card to their next message, and marks it told once delivered`, async () => {
         const extension = createConnectorCardsExtension((serviceId) => serviceId === "notion");
         const cards = [card("notion")];
 
-        const prompt = extension.beforePrompt!(cards)!;
+        const prompt = (await extension.beforePrompt!(cards, fakeChatView()))!;
 
         expect(prompt.note).toContain("The user connected Notion.");
         const delivered = prompt.delivered(cards) as readonly ConnectorCard[];
         expect(delivered).toEqual([card("notion", { reported: "connected" })]);
-        expect(extension.beforePrompt!(delivered)).toBeNull();
+        expect(await extension.beforePrompt!(delivered, fakeChatView())).toBeNull();
       });
 
-      it(`${ISSUE} keeps a card shown while the agent replied unreported, so its news reaches the next message`, () => {
+      it(`${ISSUE} keeps a card shown while the agent replied unreported, so its news reaches the next message`, async () => {
         const extension = createConnectorCardsExtension(() => false);
         const cards = [card("notion")];
         const shownMidTurn = card("linear", { afterUserTurn: 2 });
 
-        const delivered = extension.beforePrompt!(cards)!.delivered([
+        const delivered = (await extension.beforePrompt!(cards, fakeChatView()))!.delivered([
           ...cards,
           shownMidTurn,
         ]) as readonly ConnectorCard[];
@@ -273,8 +273,10 @@ describe("connectorCards", () => {
         expect(delivered).toEqual([card("notion", { reported: "ignored" }), shownMidTurn]);
       });
 
-      it("adds nothing when no card has news", () => {
-        expect(createConnectorCardsExtension(() => false).beforePrompt!([])).toBeNull();
+      it("adds nothing when no card has news", async () => {
+        expect(
+          await createConnectorCardsExtension(() => false).beforePrompt!([], fakeChatView())
+        ).toBeNull();
       });
     });
   });

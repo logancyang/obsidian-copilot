@@ -7,7 +7,7 @@ import {
   reviewMemoryUpdate,
   type MemoryUpdateRejection,
 } from "@/agents/agentMemory";
-import type { AgentMemoryPassDeps } from "@/agentMode/session/agentMemoryPass";
+import type { AgentMemoryPassDeps } from "@/agents/agentMode/agentMemoryPass";
 import type { BackendId } from "@/agentMode/session/types";
 import { logInfo, logWarn } from "@/logger";
 import { err2String } from "@/utils";
