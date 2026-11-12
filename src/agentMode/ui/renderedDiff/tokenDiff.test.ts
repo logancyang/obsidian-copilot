@@ -227,6 +227,77 @@ describe("tokenDiff", () => {
       );
     });
 
+    it("replaces a rewritten sentence whole and leaves the sentences around it unmarked https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const opening = "The project root holds the docs under review, plus any open discussion doc.";
+      const closing = "This project has no `outputs/` folder, so do not create one.";
+      const oldSentence =
+        "One-time artifacts go in the folder for their type: session prep in `session-prep/`, drawings in `excalidraw/`, reference material and exports in `resources/`.";
+      const newSentences =
+        "Everything made for one session goes in that session's folder under `sessions/`. Reference material and exports go in `resources/`.";
+
+      const merged = diffTextBlock(
+        `${opening} ${oldSentence} ${closing}`,
+        `${opening} ${newSentences} ${closing}`
+      );
+
+      expect(merged).toBe(`${opening} ${deleted(oldSentence)}${inserted(newSentences)} ${closing}`);
+    });
+
+    it("keeps word marks inside a lightly edited sentence of a multi-sentence line", () => {
+      const merged = diffTextBlock(
+        "Kickoff is Monday. The pilot runs for six weeks. Results follow.",
+        "Kickoff is Monday. The pilot runs for eight weeks. Results follow."
+      );
+
+      expect(merged).toBe(
+        `Kickoff is Monday. The pilot runs for ${deleted("six")}${inserted("eight")} weeks. Results follow.`
+      );
+    });
+
+    it("marks a sentence added to the end of a line without touching the sentence before it", () => {
+      const merged = diffTextBlock(
+        "The pilot runs for six weeks.",
+        "The pilot runs for six weeks. Results follow in the quarterly review."
+      );
+
+      expect(merged).toBe(
+        `The pilot runs for six weeks. ${inserted("Results follow in the quarterly review.")}`
+      );
+    });
+
+    it("marks a sentence removed from the middle of a line in place", () => {
+      const merged = diffTextBlock(
+        "Kickoff is Monday. The pilot runs for six weeks. Results follow.",
+        "Kickoff is Monday. Results follow."
+      );
+
+      expect(merged).toBe(
+        `Kickoff is Monday. ${deleted("The pilot runs for six weeks.")} Results follow.`
+      );
+    });
+
+    it("replaces a rewritten bold passage whole instead of splitting it between its sentences, which would leave unclosed emphasis inside a mark https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+      const merged = diffTextBlock(
+        "Read this first. **Stop the rollout. Page the owner.** Then file a report.",
+        "Read this first. **Pause every deploy. Tell the incident channel.** Then file a report."
+      );
+
+      expect(merged).toBe(
+        `Read this first. ${deleted("**Stop the rollout. Page the owner.**")}${inserted("**Pause every deploy. Tell the incident channel.**")} Then file a report.`
+      );
+    });
+
+    it("replaces a rewritten sentence whole in text that ends sentences without spaces", () => {
+      const merged = diffTextBlock(
+        "项目从周一开始。试点持续六周。结果随后公布。",
+        "项目从周一开始。我们改为先做内部评审。结果随后公布。"
+      );
+
+      expect(merged).toBe(
+        `项目从周一开始。${deleted("试点持续六周。")}${inserted("我们改为先做内部评审。")}结果随后公布。`
+      );
+    });
+
     it("marks a removed list item in place so the reader sees where it was", () => {
       const merged = diffTextBlock("- One\n- Two\n- Three", "- One\n- Three");
 

@@ -178,11 +178,105 @@ function visibleLength(text: string): number {
   return text.replace(/\s/g, "").length;
 }
 
+function isMostlyRewritten(
+  parts: readonly ArrayChange<string>[],
+  before: string,
+  after: string
+): boolean {
+  const keptLength = visibleLength(
+    parts.flatMap((part) => (part.added || part.removed ? [] : part.value)).join("")
+  );
+  return keptLength * 2 < Math.max(visibleLength(before), visibleLength(after));
+}
+
+const SENTENCE_END = /[.!?]["')\]]*$/;
+
+const UNSPACED_SENTENCE_END = /^[。！？]$/;
+
+const WHITESPACE = /^[ \t]+$/;
+
+// A sentence never ends inside an emphasis span: a mark around half of one would hold an unclosed
+// delimiter and break the rendered formatting.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+function splitSentences(text: string): string[] {
+  const pieces: string[] = [];
+  const openEmphasis: string[] = [];
+  let sentence = "";
+  let terminated = false;
+  for (const token of tokenizeInline(text)) {
+    const closed = openEmphasis.length === 0;
+    if (closed && terminated && WHITESPACE.test(token)) {
+      pieces.push(sentence);
+      sentence = token;
+      terminated = false;
+      continue;
+    }
+    sentence += token;
+    if (EMPHASIS_DELIMITER.test(token)) {
+      if (openEmphasis[openEmphasis.length - 1] === token) openEmphasis.pop();
+      else openEmphasis.push(token);
+      continue;
+    }
+    terminated = SENTENCE_END.test(token);
+    if (closed && UNSPACED_SENTENCE_END.test(token)) {
+      pieces.push(sentence);
+      sentence = "";
+    }
+  }
+  if (sentence !== "") pieces.push(sentence);
+  return pieces;
+}
+
+// Common words shared by a rewritten sentence and its replacement chop the rewrite into scattered
+// word marks, so each changed stretch of sentences is judged alone and replaced whole once most of
+// it is rewritten, however much unchanged text surrounds it on the line.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+function diffSentences(before: string, after: string): string | null {
+  const parts = diffArrays(splitSentences(before), splitSentences(after));
+  if (parts.every((part) => part.added || part.removed)) return null;
+  let merged = "";
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
+    if (!part.added && !part.removed) {
+      merged += part.value.join("");
+      continue;
+    }
+    const next = parts[index + 1];
+    const replacement = part.removed && next?.added ? next : undefined;
+    if (replacement) index++;
+    merged += diffStretch(
+      part.removed ? part.value.join("") : "",
+      (replacement ?? (part.added ? part : undefined))?.value.join("") ?? ""
+    );
+  }
+  return merged;
+}
+
+function diffStretch(before: string, after: string): string {
+  const parts = diffArrays(tokenizeInline(before), tokenizeInline(after));
+  if (!isMostlyRewritten(parts, before, after)) return renderInline(parts);
+  const framing = after.trim() === "" ? before : after;
+  const body = framing.trim();
+  const start = framing.indexOf(body);
+  return (
+    framing.slice(0, start) +
+    markStretch(before, DEL_OPEN, DEL_CLOSE) +
+    markStretch(after, INS_OPEN, INS_CLOSE) +
+    framing.slice(start + body.length)
+  );
+}
+
+function markStretch(text: string, open: string, close: string): string {
+  const body = text.trim();
+  return body === "" ? "" : open + body + close;
+}
+
 function diffModifiedLine(beforeLine: string, afterLine: string): string {
   const before = splitStructuralPrefix(beforeLine);
   const after = splitStructuralPrefix(afterLine);
+  const beforeBody = before.content.trimEnd();
   const afterBody = after.content.trimEnd();
-  const parts = diffArrays(tokenizeInline(before.content.trimEnd()), tokenizeInline(afterBody));
+  const parts = diffArrays(tokenizeInline(beforeBody), tokenizeInline(afterBody));
   // Renumbering an ordered list is not a content change, so item numbers are ignored when comparing prefixes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const samePrefix =
@@ -192,14 +286,18 @@ function diffModifiedLine(beforeLine: string, afterLine: string): string {
   // gained or lost break is shown like other syntax the renderer consumes.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/348
   const sameBreak = HARD_BREAK.test(beforeLine) === HARD_BREAK.test(afterLine);
-  // Interleaved word marks are unreadable once most of a line is rewritten, so such a line is shown whole twice.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
-  const keptLength = visibleLength(
-    parts.flatMap((part) => (part.added || part.removed ? [] : part.value)).join("")
-  );
-  const mostlyRewritten =
-    keptLength * 2 < Math.max(visibleLength(before.content), visibleLength(after.content));
-  if (!samePrefix || !sameBreak || changesEmphasis(parts) || mostlyRewritten)
-    return `${markDeletedLine(beforeLine)}\n${markInsertedLine(afterLine)}`;
-  return after.prefix + renderInline(parts) + after.content.slice(afterBody.length);
+  if (!samePrefix || !sameBreak || changesEmphasis(parts))
+    return markedLines(beforeLine, afterLine);
+  let merged = diffSentences(beforeBody, afterBody);
+  if (merged === null) {
+    // Interleaved word marks are unreadable once most of a line is rewritten, so such a line is shown whole twice.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+    if (isMostlyRewritten(parts, beforeBody, afterBody)) return markedLines(beforeLine, afterLine);
+    merged = renderInline(parts);
+  }
+  return after.prefix + merged + after.content.slice(afterBody.length);
+}
+
+function markedLines(beforeLine: string, afterLine: string): string {
+  return `${markDeletedLine(beforeLine)}\n${markInsertedLine(afterLine)}`;
 }
