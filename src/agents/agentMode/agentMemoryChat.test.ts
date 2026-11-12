@@ -95,7 +95,7 @@ describe("agentMemoryChat", () => {
       expect(noteField?.restore(state(), -1)).toEqual(state());
     });
 
-    it("adds what the agent knows in front of the chat's next message, and records it told once delivered", async () => {
+    it("leads the chat's next message with what the agent knows, and records it told once delivered", async () => {
       const { typed } = buildFiles(jennifer());
       const extension = createAgentMemoryExtension(typed);
 
@@ -106,6 +106,7 @@ describe("agentMemoryChat", () => {
 
       expect(note.note).toContain('<agent_memory name="Jennifer"');
       expect(note.note).toContain("Writes a newsletter.");
+      expect(note.leads).toBe(true);
       const delivered = note.delivered(state());
       expect(delivered.injectedFingerprint).not.toBeNull();
       expect(await extension.beforePrompt!(delivered, fakeChatView([], JENNIFER_CHAT))).toBeNull();

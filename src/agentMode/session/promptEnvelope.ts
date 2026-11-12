@@ -170,10 +170,10 @@ export function buildPromptBlocks(
   projectContextBlock?: string | null,
   leadingContextBlock?: string | null,
   projectContextUpdatesBlock?: string | null,
-  agentPersonaBlock?: string | null
+  leadBlock?: string | null
 ): PromptContent[] {
   const sections = [
-    agentPersonaBlock?.trim() || null,
+    leadBlock?.trim() || null,
     projectContextBlock?.trim() || null,
     projectContextUpdatesBlock?.trim() || null,
     leadingContextBlock?.trim() || null,

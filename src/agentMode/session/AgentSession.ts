@@ -924,12 +924,6 @@ export class AgentSession implements ChatStateHost, ChatView {
 
       const hasWebTabs = (context?.webTabs?.length ?? 0) > 0;
       const webTabBlock = hasWebTabs ? await serializeWebTabContext(context) : "";
-      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
-      const takenNotes = sendsCompact ? NO_PROMPT_NOTES : this.takePromptNotes();
-      // Only a note read from disk, such as an agent's memory, may hold the prompt back.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/668
-      const promptNotes = takenNotes instanceof Promise ? await takenNotes : takenNotes;
       // Stop already closed this prompt's reply, so nothing after it may run or open another. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
       if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       if (this.isOnModelNotEnabled()) {
@@ -973,6 +967,13 @@ export class AgentSession implements ChatStateHost, ChatView {
         return { stopReason: await this.runFanoutPath(displayText, promptBlocks, signal) };
       }
 
+      // A feature card's tool call returns before the user answers it, so the answer rides their next message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
+      const takenNotes = sendsCompact ? NO_PROMPT_NOTES : this.takePromptNotes();
+      // Only a note read from disk, such as an agent's memory, may hold the prompt back, and a Stop meanwhile still wins.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/668
+      const promptNotes = takenNotes instanceof Promise ? await takenNotes : takenNotes;
+      if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
@@ -987,7 +988,7 @@ export class AgentSession implements ChatStateHost, ChatView {
         : [
             historyBlock,
             buildPriorFanoutContextBlock(this.pendingFanoutContext),
-            ...promptNotes.map(({ note }) => note.note),
+            ...promptNotes.filter(({ note }) => !note.leads).map(({ note }) => note.note),
           ]
             .filter(Boolean)
             .join("\n\n") || null;
@@ -1002,7 +1003,12 @@ export class AgentSession implements ChatStateHost, ChatView {
         projectContextBlock,
         leadingContextBlock,
         projectContextUpdatesBlock,
-        agentPersonaBlock
+        [
+          agentPersonaBlock,
+          ...promptNotes.filter(({ note }) => note.leads).map(({ note }) => note.note),
+        ]
+          .filter(Boolean)
+          .join("\n\n") || null
       );
 
       const outcome = await this.turns.submit(

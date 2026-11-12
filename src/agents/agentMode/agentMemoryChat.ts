@@ -65,6 +65,7 @@ async function takeMemoryNote(
     if (!memory || memory.fingerprint === injectedFingerprint) return null;
     return {
       note: memory.block,
+      leads: true,
       delivered: (latest) => ({ ...latest, injectedFingerprint: memory.fingerprint }),
     };
   } catch (error) {

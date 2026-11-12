@@ -26,6 +26,7 @@ export interface TurnFailure {
 
 export interface PromptNote<S> {
   note: string;
+  leads?: boolean;
   delivered: (latest: S) => S;
 }
 

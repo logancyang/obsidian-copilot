@@ -239,6 +239,31 @@ describe("promptEnvelope", () => {
     // eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- test fixture; not a real TFile
     const makeFile = (path: string) => ({ path }) as unknown as TFile;
 
+    it("puts the lead block first, ahead of project context, its updates and other context", () => {
+      const [block] = buildPromptBlocks(
+        "go",
+        undefined,
+        undefined,
+        undefined,
+        "<project_context/>",
+        "<notes/>",
+        "<project_updates/>",
+        "<agent_persona/>\n\n<agent_memory/>"
+      );
+
+      expect(block).toEqual({
+        type: "text",
+        text: [
+          "<agent_persona/>",
+          "<agent_memory/>",
+          "<project_context/>",
+          "<project_updates/>",
+          "<notes/>",
+          "<user-message>\ngo\n</user-message>",
+        ].join("\n\n"),
+      });
+    });
+
     it("returns the message as plain text when no context, or only empty context, is attached", () => {
       expect(buildPromptBlocks("hello")).toEqual([{ type: "text", text: "hello" }]);
       expect(buildPromptBlocks("hello", { notes: [], urls: [] })).toEqual([

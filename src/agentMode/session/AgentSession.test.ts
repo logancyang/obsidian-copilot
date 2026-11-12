@@ -1453,6 +1453,54 @@ describe("AgentSession", () => {
         expect(session.readChatState(COUNTER)).toBe(1);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 puts a note that leads right after the persona, ahead of project context and other notes, and first on later turns", async () => {
+        const mock = makeMockBackend();
+        const session = startSession(mock, {
+          getProjectContextBlock: () => "<project_context>p</project_context>",
+          chatExtensions: [
+            NEWS_EXTENSION,
+            defineChatExtension({
+              key: COUNTER,
+              beforePrompt: () => ({
+                note: "<memory>kept</memory>",
+                leads: true,
+                delivered: (count: number) => count,
+              }),
+            }),
+          ],
+        });
+        await session.ready;
+        session.setAgent({
+          slug: "jennifer",
+          name: "Jennifer",
+          icon: "",
+          personaBlock: "<agent_persona>p</agent_persona>",
+        });
+        session.updateChatState(NEWS, () => ["notion connected"]);
+
+        await session.sendPrompt("go on").turn;
+        session.updateChatState(NEWS, () => ["linear ignored"]);
+        await session.sendPrompt("and then?").turn;
+
+        const sent = mock.prompt.mock.calls.map(([input]) => input as PromptInput);
+        expect(promptText(sent[0])).toBe(
+          [
+            "<agent_persona>p</agent_persona>",
+            "<memory>kept</memory>",
+            "<project_context>p</project_context>",
+            "<news>notion connected</news>",
+            "<user-message>\ngo on\n</user-message>",
+          ].join("\n\n")
+        );
+        expect(promptText(sent[1])).toBe(
+          [
+            "<memory>kept</memory>",
+            "<news>linear ignored</news>",
+            "<user-message>\nand then?\n</user-message>",
+          ].join("\n\n")
+        );
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/668 sends nothing and records no note delivered when the user stops while a chat extension reads its note", async () => {
         const mock = makeMockBackend();
         let release!: (note: PromptNote<number>) => void;
