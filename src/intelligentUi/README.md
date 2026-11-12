@@ -36,3 +36,22 @@ Reaching a limit is valid; exceeding it returns its typed limit error.
 
 `testing/golden.ts` supplies comparison, steps, metrics, grouped-concepts and
 architecture fixtures for the renderer, integration and evaluation steps.
+
+## React renderer
+
+`ui/IntelligentUi` renders a validated result and takes the unchanged original
+source for its rejected-block code fallback. Callers supply `sourcePath` and an
+`AppContext` provider; Markdown bodies use the existing Obsidian renderer and
+own their component lifecycle. Plain text and attributes remain React text.
+The renderer does not register a Markdown processor or connect chat surfaces.
+
+Row and grid layouts query their own container width: below 32rem they stack
+in source order. Grid cells in one line share a height. In a row, boxes share
+the width while icons, badges and dividers keep their own size; dividers turn
+vertical and arrow icons turn downward when the row stacks. Cards, panels and
+callouts mark their contents as boxed, so headings inside them become labels
+and metrics drop their own tile border. Callouts use Obsidian's callout markup,
+so the theme supplies their colour and icon. Tabs keep the selected tab while
+more tabs stream in. The gallery has every primitive, all five golden examples and
+rejected-source fallback under `Intelligent UI/Primitives`; verify at 300px and
+600px in both Obsidian themes.
