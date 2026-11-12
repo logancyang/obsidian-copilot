@@ -2,20 +2,16 @@ import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSet
 import { ClaudeAutoMemorySetting } from "@/agentMode/backends/claude/ui/ClaudeAutoMemorySetting";
 import { ClaudeAutoModePermissionSetting } from "@/agentMode/backends/claude/ui/ClaudeAutoModePermissionSetting";
 import { SettingItem } from "@/components/ui/setting-item";
-import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { getCachedProjectRecords } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
-import { requireNodeModule } from "@/utils/desktopRuntime";
 import { openWithSystemDefault } from "@/utils/openWithSystemDefault";
 import { getVaultBase } from "@/utils/vaultPath";
 import type { App } from "obsidian";
 import React from "react";
 import {
-  readClaudeAutoMemory,
+  findClaudeAutoMemoryFolder,
   resolveClaudeAutoModePermission,
   updateClaudeFields,
-  type ClaudeAutoMemory,
 } from "./descriptor";
 
 interface Props {
@@ -23,27 +19,23 @@ interface Props {
   app: App;
 }
 
-export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
+export const ClaudeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
   const settings = useSettingsValue();
   const vaultBase = getVaultBase(app);
-  const [memory, setMemory] = React.useState<ClaudeAutoMemory | null>(null);
+  const autoMemory = settings.agentMode?.backends?.claude?.autoMemory;
+  const envOverridesKey = JSON.stringify(settings.agentMode?.backends?.claude?.envOverrides ?? {});
+  const [memoryFolder, setMemoryFolder] = React.useState<string | undefined>();
 
   React.useEffect(() => {
     if (!vaultBase) return;
     let current = true;
-    const path = requireNodeModule<typeof import("node:path")>("path");
-    const chatFolders = getCachedProjectRecords().map((record) =>
-      path.join(vaultBase, path.dirname(record.filePath))
-    );
-    readClaudeAutoMemory(settings, vaultBase, chatFolders)
-      .then((next) => {
-        if (current) setMemory(next);
-      })
-      .catch((error: unknown) => logError("[Claude] could not read auto memory:", error));
+    void findClaudeAutoMemoryFolder(vaultBase, plugin.manifest.version).then((folder) => {
+      if (current) setMemoryFolder(folder);
+    });
     return () => {
       current = false;
     };
-  }, [settings, vaultBase]);
+  }, [vaultBase, plugin, autoMemory, envOverridesKey]);
 
   return (
     <>
@@ -61,10 +53,10 @@ export const ClaudeSettingsPanel: React.FC<Props> = ({ app }) => {
       />
 
       <ClaudeAutoMemorySetting
-        value={settings.agentMode?.backends?.claude?.autoMemory}
-        onChange={(autoMemory) => updateClaudeFields({ autoMemory })}
-        memory={memory}
-        onOpen={() => memory?.folders.forEach((folder) => void openWithSystemDefault(folder))}
+        value={autoMemory}
+        onChange={(next) => updateClaudeFields({ autoMemory: next })}
+        memoryFolder={memoryFolder}
+        onOpen={(folder) => void openWithSystemDefault(folder)}
       />
 
       <EnvOverridesSetting

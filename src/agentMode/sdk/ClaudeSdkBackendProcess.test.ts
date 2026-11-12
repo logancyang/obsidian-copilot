@@ -73,6 +73,7 @@ jest.mock("./effortOption", () => ({
 import {
   ClaudeSdkBackendProcess,
   type ClaudeSdkBackendProcessOptions,
+  probeClaudeAutoMemoryFolder,
   promptInputToAnthropicContent,
   runSubagentsInBackground,
 } from "./ClaudeSdkBackendProcess";
@@ -489,6 +490,76 @@ describe("ClaudeSdkBackendProcess", () => {
           updatedInput: { run_in_background: true },
         },
       });
+    });
+  });
+
+  describe("probeClaudeAutoMemoryFolder()", () => {
+    const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2892";
+    const close = jest.fn();
+    function probeAnswering(getContextUsage: () => Promise<unknown>) {
+      queryMock.mockReturnValue({
+        initializationResult: jest.fn(async () => ({ models: [] })),
+        getContextUsage: jest.fn(getContextUsage),
+        close,
+      });
+    }
+
+    it(`returns the folder of the auto memory index Claude Code loads for the folder, then stops the probe (${ISSUE})`, async () => {
+      probeAnswering(async () => ({
+        memoryFiles: [
+          { path: "/vault/CLAUDE.md", type: "Project", tokens: 10 },
+          { path: "/home/.claude/projects/-repo/memory/MEMORY.md", type: "AutoMem", tokens: 20 },
+        ],
+      }));
+
+      await expect(
+        probeClaudeAutoMemoryFolder(
+          {
+            pathToClaudeCodeExecutable: "/bin/claude",
+            getManagedEnv: async () => ({ MANAGED: "1" }),
+            getEnvOverrides: () => ({ HTTPS_PROXY: "http://proxy" }),
+            getAutoMemoryEnabled: () => false,
+          },
+          "/vault"
+        )
+      ).resolves.toBe("/home/.claude/projects/-repo/memory");
+
+      const { options } = queryMock.mock.calls[0][0] as {
+        options: { cwd: string; pathToClaudeCodeExecutable: string; env: Record<string, string> };
+      };
+      expect(options.cwd).toBe("/vault");
+      expect(options.pathToClaudeCodeExecutable).toBe("/bin/claude");
+      expect(options.env).toMatchObject({
+        MANAGED: "1",
+        HTTPS_PROXY: "http://proxy",
+        CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+      });
+      expect(close).toHaveBeenCalled();
+    });
+
+    it(`returns nothing when Claude Code loads no auto memory index, as when nothing is saved or memory is off (${ISSUE})`, async () => {
+      probeAnswering(async () => ({
+        memoryFiles: [{ path: "/vault/CLAUDE.md", type: "Project", tokens: 10 }],
+      }));
+
+      await expect(
+        probeClaudeAutoMemoryFolder({ pathToClaudeCodeExecutable: "/bin/claude" }, "/vault")
+      ).resolves.toBeUndefined();
+    });
+
+    it(`returns nothing, logs the failure, and stops the probe when Claude Code cannot answer (${ISSUE})`, async () => {
+      probeAnswering(async () => {
+        throw new Error("Claude exited");
+      });
+
+      await expect(
+        probeClaudeAutoMemoryFolder({ pathToClaudeCodeExecutable: "/bin/claude" }, "/vault")
+      ).resolves.toBeUndefined();
+      expect(logWarn).toHaveBeenCalledWith(
+        "[AgentMode] Claude auto memory probe failed",
+        expect.any(Error)
+      );
+      expect(close).toHaveBeenCalled();
     });
   });
 

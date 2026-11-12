@@ -16,10 +16,11 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { probeClaudeVersion } from "./claudeVersion";
+import { probeClaudeAutoMemoryFolder } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import {
   ClaudeBackendDescriptor,
+  findClaudeAutoMemoryFolder,
   getClaudeInstallState,
-  readClaudeAutoMemory,
   refreshClaudeInstallState,
   resolveClaudeAutoModePermission,
   subscribeClaudeInstallState,
@@ -36,6 +37,12 @@ jest.mock("./claudeVersion", () => ({
   probeClaudeVersion: jest.fn(),
 }));
 
+jest.mock("@/agentMode/sdk/ClaudeSdkBackendProcess", () => ({
+  ...jest.requireActual("@/agentMode/sdk/ClaudeSdkBackendProcess"),
+  probeClaudeAutoMemoryFolder: jest.fn(),
+}));
+
+const mockProbeClaudeAutoMemoryFolder = jest.mocked(probeClaudeAutoMemoryFolder);
 const mockResolveClaudeBinary = resolveClaudeBinary as jest.MockedFunction<
   typeof resolveClaudeBinary
 >;
@@ -492,141 +499,6 @@ describe("descriptor", () => {
     });
   });
 
-  describe("readClaudeAutoMemory()", () => {
-    const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2892";
-    let root: string;
-    let configDir: string;
-    let vaultBase: string;
-    const settings = (): CopilotSettings =>
-      settingsWithClaudeRuntime({ envOverrides: { CLAUDE_CONFIG_DIR: configDir } });
-    const memoryFolder = (folder: string) =>
-      path.join(configDir, "projects", folder.replace(/[^a-zA-Z0-9]/g, "-"), "memory");
-    const writeJson = (file: string, value: unknown) => {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, JSON.stringify(value));
-    };
-
-    beforeEach(() => {
-      root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "claude-memory-")));
-      jest.mocked(os.homedir).mockReturnValue(path.join(root, "home"));
-      configDir = path.join(root, "config");
-      vaultBase = path.join(root, "vault");
-      fs.mkdirSync(vaultBase, { recursive: true });
-    });
-    afterEach(() => {
-      jest.mocked(os.homedir).mockReset();
-      fs.rmSync(root, { recursive: true, force: true });
-    });
-
-    it(`lists the memory folders Claude Code keeps for the vault and its project chats, skipping ones never written (${ISSUE})`, async () => {
-      const research = path.join(vaultBase, "Projects", "Research");
-      const travel = path.join(vaultBase, "Projects", "Travel");
-      fs.mkdirSync(memoryFolder(vaultBase), { recursive: true });
-      fs.mkdirSync(memoryFolder(research), { recursive: true });
-
-      await expect(
-        readClaudeAutoMemory(settings(), vaultBase, [research, travel])
-      ).resolves.toEqual({
-        onByDefault: true,
-        folders: [memoryFolder(vaultBase), memoryFolder(research)],
-      });
-    });
-
-    it.each([
-      ["nothing sets it", [], {}, true],
-      ["the user settings turn it off", [["user", { autoMemoryEnabled: false }]], {}, false],
-      [
-        "the vault's local settings turn it back on over the user settings",
-        [
-          ["user", { autoMemoryEnabled: false }],
-          ["local", { autoMemoryEnabled: true }],
-        ],
-        {},
-        true,
-      ],
-      [
-        "a settings file's env turns it off",
-        [["user", { env: { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" } }]],
-        {},
-        false,
-      ],
-      [
-        "the environment forces it on over settings that turn it off",
-        [["user", { autoMemoryEnabled: false }]],
-        { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "0" },
-        true,
-      ],
-    ] as const)(
-      `reports Claude Code's own auto memory as on by default when %s, so the default option names the value Claude would use (${ISSUE})`,
-      async (_when, files, env, onByDefault) => {
-        for (const [where, content] of files) {
-          writeJson(
-            where === "user"
-              ? path.join(configDir, "settings.json")
-              : path.join(vaultBase, ".claude", "settings.local.json"),
-            content
-          );
-        }
-
-        const memory = await readClaudeAutoMemory(
-          settingsWithClaudeRuntime({ envOverrides: { CLAUDE_CONFIG_DIR: configDir, ...env } }),
-          vaultBase,
-          []
-        );
-
-        expect(memory.onByDefault).toBe(onByDefault);
-      }
-    );
-
-    it(`lists one folder named for the git repository when the vault is inside one, as Claude Code keys memory by repository (${ISSUE})`, async () => {
-      fs.mkdirSync(path.join(root, ".git"));
-      fs.mkdirSync(memoryFolder(root), { recursive: true });
-
-      const memory = await readClaudeAutoMemory(settings(), vaultBase, [
-        path.join(vaultBase, "Projects", "Research"),
-      ]);
-
-      expect(memory.folders).toEqual([memoryFolder(root)]);
-    });
-
-    it(`lists a memory folder set in the user settings, expanding ~ (${ISSUE})`, async () => {
-      writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
-      fs.mkdirSync(path.join(root, "home", "notes-memory"), { recursive: true });
-
-      await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
-        onByDefault: true,
-        folders: [path.join(root, "home", "notes-memory")],
-      });
-    });
-
-    it(`lists the memory folder the vault's local settings set over the user settings' one (${ISSUE})`, async () => {
-      const folder = path.join(root, "vault-memory");
-      writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: "~/notes-memory" });
-      writeJson(path.join(vaultBase, ".claude", "settings.local.json"), {
-        autoMemoryDirectory: folder,
-      });
-      fs.mkdirSync(folder);
-
-      await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
-        onByDefault: true,
-        folders: [folder],
-      });
-    });
-
-    it.each([["/"], [""], ["relative/memory"], ["~"]])(
-      `lists Claude Code's default memory folder as clearable when the configured folder %j is one Claude Code ignores (${ISSUE})`,
-      async (ignored) => {
-        writeJson(path.join(configDir, "settings.json"), { autoMemoryDirectory: ignored });
-        fs.mkdirSync(memoryFolder(vaultBase), { recursive: true });
-
-        await expect(readClaudeAutoMemory(settings(), vaultBase, [])).resolves.toEqual({
-          onByDefault: true,
-          folders: [memoryFolder(vaultBase)],
-        });
-      }
-    );
-  });
-
   describe("ClaudeBackendDescriptor.createBackendProcess()", () => {
     afterEach(() => {
       resetSettings();
@@ -670,7 +542,7 @@ describe("descriptor", () => {
       expect(env).toEqual({});
     });
 
-    it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for the Claude Code default", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for Default", () => {
       mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
       const process = ClaudeBackendDescriptor.createBackendProcess({
         plugin: {} as never,
@@ -685,6 +557,37 @@ describe("descriptor", () => {
       expect(process.opts.getAutoMemoryEnabled()).toBe(true);
       updateClaudeFields({ autoMemory: undefined });
       expect(process.opts.getAutoMemoryEnabled()).toBeUndefined();
+    });
+  });
+
+  describe("findClaudeAutoMemoryFolder()", () => {
+    const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2892";
+    afterEach(() => {
+      resetSettings();
+    });
+
+    it(`asks Claude Code in the vault folder, with the environment a new chat gets, for the folder holding its memory (${ISSUE})`, async () => {
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      mockProbeClaudeAutoMemoryFolder.mockResolvedValue("/home/.claude/projects/-vault/memory");
+      updateClaudeFields({ autoMemory: true, envOverrides: { HTTPS_PROXY: "http://proxy" } });
+
+      await expect(findClaudeAutoMemoryFolder("/vault", "4.0.0")).resolves.toBe(
+        "/home/.claude/projects/-vault/memory"
+      );
+
+      const [opts, cwd] = mockProbeClaudeAutoMemoryFolder.mock.calls[0];
+      expect(cwd).toBe("/vault");
+      expect(opts.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
+      expect(opts.getAutoMemoryEnabled?.()).toBe(true);
+      expect(opts.getEnvOverrides?.()).toEqual({ HTTPS_PROXY: "http://proxy" });
+      await expect(opts.getManagedEnv?.()).resolves.toEqual({});
+    });
+
+    it(`finds no memory folder, without starting Claude Code, when Claude Code is not installed (${ISSUE})`, async () => {
+      mockResolveClaudeBinary.mockReturnValue(null);
+
+      await expect(findClaudeAutoMemoryFolder("/vault", "4.0.0")).resolves.toBeUndefined();
+      expect(mockProbeClaudeAutoMemoryFolder).not.toHaveBeenCalled();
     });
   });
 
