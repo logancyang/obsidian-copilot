@@ -25,6 +25,7 @@ import {
   subscribeClaudeInstallState,
   updateClaudeFields,
 } from "./descriptor";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 
 jest.mock("./claudeBinaryResolver", () => ({
   claudeBinarySearchDirs: jest.fn(() => []),
@@ -667,7 +668,7 @@ describe("descriptor", () => {
       };
 
       const env = await process.opts.getManagedEnv?.();
-      expect(env).toEqual({});
+      expect(env).toEqual(pythonUtf8Env());
     });
 
     it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for the Claude Code default", () => {

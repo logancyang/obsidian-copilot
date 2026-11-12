@@ -5,6 +5,7 @@ import { detectBinary } from "@/utils/detectBinary";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
@@ -45,6 +46,7 @@ export class CodexBackend implements AcpBackend {
       "Codex isn't set up. Install or detect it in Settings → Copilot → Basic → Agents.",
       sanitizeBuiltinSkillEnvOverrides(settings.agentMode?.backends?.codex?.envOverrides),
       {
+        ...pythonUtf8Env(),
         ...(await buildBuiltinSkillEnv(this.clientVersion)),
         // The supported adapter derives its initial ACP mode from this variable.
         // User env overrides still win.
