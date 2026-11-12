@@ -11,7 +11,6 @@ import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
 import { AgentProjectHeader } from "@/projects/ui/AgentProjectHeader";
 import { listMentionableAgents } from "@/agentMode/ui/mentionedAgents";
-import { openAgentScratchpad } from "@/agents/openAgentScratchpad";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { openAgentSettings } from "@/settings/openSettings";
 import { useAgentTalkingTo } from "@/agentMode/ui/useAgentTalkingTo";
@@ -437,14 +436,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [app, rootEl]
   );
 
-  const handleOpenScratchpad = useCallback(
-    (row: { slug: string; name: string }) => {
-      const path = manager.getAgentScratchpadPath(row.slug);
-      if (path) openAgentScratchpad(app, path, row.name);
-    },
-    [app, manager]
-  );
-
   const { entries: agentEntries, selectedSlug, select: selectAgent } = talkingTo;
   const agentSection = useMemo<AgentPickerSection>(
     () => ({
@@ -454,11 +445,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     }),
     [agentEntries, selectedSlug, selectAgent]
   );
-  const agentRow = agentEntries.find((entry) => entry.slug === selectedSlug);
-  const scratchpad =
-    agentRow && agentRow.kind === "custom"
-      ? { agentName: agentRow.name, onOpen: () => handleOpenScratchpad(agentRow) }
-      : undefined;
 
   useEffect(() => {
     if (isLanding) void handleLoadChatHistory();
@@ -683,7 +669,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       section={agentSection}
       onCreateAgent={handleCreateAgent}
       onOpenAgent={handleOpenAgent}
-      onOpenScratchpad={handleOpenScratchpad}
     />
   );
 
@@ -859,7 +844,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                       />
                       {queuedMessagesNode}
                       <AgentChatControls
-                        scratchpad={scratchpad}
                         onCopyChatLink={
                           activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
                         }

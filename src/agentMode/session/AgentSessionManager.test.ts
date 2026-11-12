@@ -6954,15 +6954,12 @@ describe("AgentSessionManager talking-to selection", () => {
       readDailyNote: jest.fn(async () => null),
       listDailyNoteDates: jest.fn(() => []),
       readDailyNotesAfter: jest.fn(async () => []),
-      readScratchpad: jest.fn(async () => null),
       appendDailyNote: jest.fn(
         async (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`
       ),
       writeConsolidatedMemory: jest.fn(async () => "written"),
       getDailyNotePath: (slug: string, date: string) => `copilot/agents/${slug}/memory/${date}.md`,
       getMemoryFolderPath: (slug: string) => `copilot/agents/${slug}/memory`,
-      getScratchpadPath: (slug: string) => `copilot/agents/${slug}/Scratchpad.md`,
-      getAgentFolderPath: (slug: string) => `copilot/agents/${slug}`,
     } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["agentFileManager"];
   }
 
@@ -7239,20 +7236,6 @@ describe("AgentSessionManager talking-to selection", () => {
     await manager.refreshAgents();
 
     expect(manager.getSelectedAgentSlug()).toBe(BUILTIN_AGENT_SLUG);
-  });
-
-  describe("getAgentScratchpadPath()", () => {
-    it("names the agent's scratchpad inside its own folder", () => {
-      const manager = buildManager({ agentFiles: buildAgentFiles([jennifer()]) });
-
-      expect(manager.getAgentScratchpadPath("jennifer")).toBe(
-        "copilot/agents/jennifer/Scratchpad.md"
-      );
-    });
-
-    it("has no scratchpad to name when agent files are unavailable", () => {
-      expect(buildManager().getAgentScratchpadPath("jennifer")).toBeNull();
-    });
   });
 
   describe("self-maintained memory", () => {

@@ -68,7 +68,6 @@ function SpotlightCanvas({ rows, initial }: CanvasProps) {
       section={{ rows, selectedSlug, onSelect: (picked) => setSelectedSlug(picked.slug) }}
       onCreateAgent={() => {}}
       onOpenAgent={() => {}}
-      onOpenScratchpad={() => {}}
     />
   );
 }
@@ -106,6 +105,6 @@ export const LongDescription: StoryObj<CanvasProps> = {
 };
 
 export const LongName: StoryObj<CanvasProps> = {
-  name: "Spotlight — long name truncates beside the scratchpad icon",
+  name: "Spotlight — long name truncates",
   args: { rows: [COPILOT, ...TEAM, LONG_NAME], initial: "marguerite" },
 };

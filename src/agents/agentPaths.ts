@@ -2,7 +2,6 @@ import {
   AGENT_FILE_NAME,
   AGENT_MEMORY_FILE_NAME,
   AGENT_MEMORY_FOLDER_NAME,
-  AGENT_SCRATCHPAD_FILE_NAME,
 } from "@/agents/constants";
 import { BUILTIN_AGENT_SLUG } from "@/agents/types";
 import { normalizePath } from "obsidian";
@@ -44,10 +43,6 @@ export function getAgentFilePath(agentsFolder: string, slug: string): string {
 
 export function getAgentMemoryPath(agentsFolder: string, slug: string): string {
   return normalizePath(`${getAgentFolderPath(agentsFolder, slug)}/${AGENT_MEMORY_FILE_NAME}`);
-}
-
-export function getAgentScratchpadPath(agentsFolder: string, slug: string): string {
-  return normalizePath(`${getAgentFolderPath(agentsFolder, slug)}/${AGENT_SCRATCHPAD_FILE_NAME}`);
 }
 
 export function getAgentMemoryFolderPath(agentsFolder: string, slug: string): string {

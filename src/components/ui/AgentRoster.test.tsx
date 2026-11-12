@@ -69,7 +69,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "sage", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -87,7 +86,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -102,7 +100,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -120,7 +117,6 @@ describe("AgentRoster", () => {
           }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -138,7 +134,6 @@ describe("AgentRoster", () => {
           }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -153,7 +148,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE, REX], selectedSlug: "copilot", onSelect }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -170,7 +164,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE], selectedSlug: "sage", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={onOpenAgent}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
@@ -185,40 +178,10 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT, SAGE], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={jest.fn()}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
       expect(screen.queryByRole("button", { name: /^Edit / })).toBeNull();
-    });
-
-    it("opens a custom agent's scratchpad from the icon beside its name", () => {
-      const onOpenScratchpad = jest.fn();
-      render(
-        <AgentSpotlight
-          section={{ rows: [COPILOT, SAGE], selectedSlug: "sage", onSelect: jest.fn() }}
-          onCreateAgent={jest.fn()}
-          onOpenAgent={jest.fn()}
-          onOpenScratchpad={onOpenScratchpad}
-        />
-      );
-
-      fireEvent.click(screen.getByRole("button", { name: "Open Sage's scratchpad" }));
-
-      expect(onOpenScratchpad).toHaveBeenCalledWith(SAGE);
-    });
-
-    it("offers no scratchpad for Copilot, which keeps none", () => {
-      render(
-        <AgentSpotlight
-          section={{ rows: [COPILOT, SAGE], selectedSlug: "copilot", onSelect: jest.fn() }}
-          onCreateAgent={jest.fn()}
-          onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
-        />
-      );
-
-      expect(screen.queryByRole("button", { name: /scratchpad/ })).toBeNull();
     });
 
     it("opens agent creation from New", () => {
@@ -228,7 +191,6 @@ describe("AgentRoster", () => {
           section={{ rows: [COPILOT], selectedSlug: "copilot", onSelect: jest.fn() }}
           onCreateAgent={onCreateAgent}
           onOpenAgent={jest.fn()}
-          onOpenScratchpad={jest.fn()}
         />
       );
 
