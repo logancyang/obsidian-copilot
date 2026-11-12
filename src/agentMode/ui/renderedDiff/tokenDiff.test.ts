@@ -227,7 +227,7 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("replaces a rewritten sentence whole and leaves the sentences around it unmarked https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+    it("replaces a rewritten sentence whole and leaves the sentences around it unmarked https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const opening = "The project root holds the docs under review, plus any open discussion doc.";
       const closing = "This project has no `outputs/` folder, so do not create one.";
       const oldSentence =
@@ -243,7 +243,7 @@ describe("tokenDiff", () => {
       expect(merged).toBe(`${opening} ${deleted(oldSentence)}${inserted(newSentences)} ${closing}`);
     });
 
-    it("keeps word marks inside a lightly edited sentence of a multi-sentence line", () => {
+    it("keeps word marks inside a lightly edited sentence of a multi-sentence line https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const merged = diffTextBlock(
         "Kickoff is Monday. The pilot runs for six weeks. Results follow.",
         "Kickoff is Monday. The pilot runs for eight weeks. Results follow."
@@ -254,7 +254,7 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("marks a sentence added to the end of a line without touching the sentence before it", () => {
+    it("marks a sentence added to the end of a line without touching the sentence before it https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const merged = diffTextBlock(
         "The pilot runs for six weeks.",
         "The pilot runs for six weeks. Results follow in the quarterly review."
@@ -265,7 +265,7 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("marks a sentence removed from the middle of a line in place", () => {
+    it("marks a sentence removed from the middle of a line in place https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const merged = diffTextBlock(
         "Kickoff is Monday. The pilot runs for six weeks. Results follow.",
         "Kickoff is Monday. Results follow."
@@ -276,7 +276,7 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("replaces a rewritten bold passage whole instead of splitting it between its sentences, which would leave unclosed emphasis inside a mark https://github.com/Brevilabs/obsidian-copilot-private/issues/349", () => {
+    it("replaces a rewritten bold passage whole instead of splitting it between its sentences, which would leave unclosed emphasis inside a mark https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const merged = diffTextBlock(
         "Read this first. **Stop the rollout. Page the owner.** Then file a report.",
         "Read this first. **Pause every deploy. Tell the incident channel.** Then file a report."
@@ -287,7 +287,7 @@ describe("tokenDiff", () => {
       );
     });
 
-    it("replaces a rewritten sentence whole in text that ends sentences without spaces", () => {
+    it("replaces a rewritten sentence whole in text that ends sentences without spaces https://github.com/Brevilabs/obsidian-copilot-private/issues/917", () => {
       const merged = diffTextBlock(
         "项目从周一开始。试点持续六周。结果随后公布。",
         "项目从周一开始。我们改为先做内部评审。结果随后公布。"

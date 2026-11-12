@@ -197,7 +197,7 @@ const WHITESPACE = /^[ \t]+$/;
 
 // A sentence never ends inside an emphasis span: a mark around half of one would hold an unclosed
 // delimiter and break the rendered formatting.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/917
 function splitSentences(text: string): string[] {
   const pieces: string[] = [];
   const openEmphasis: string[] = [];
@@ -230,7 +230,7 @@ function splitSentences(text: string): string[] {
 // Common words shared by a rewritten sentence and its replacement chop the rewrite into scattered
 // word marks, so each changed stretch of sentences is judged alone and replaced whole once most of
 // it is rewritten, however much unchanged text surrounds it on the line.
-// https://github.com/Brevilabs/obsidian-copilot-private/issues/349
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/917
 function diffSentences(before: string, after: string): string | null {
   const parts = diffArrays(splitSentences(before), splitSentences(after));
   if (parts.every((part) => part.added || part.removed)) return null;
