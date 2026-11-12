@@ -100,13 +100,7 @@ export const ProjectPickerList = memo(
     const visibleProjects = filteredProjects.slice(0, displayCount);
 
     return (
-      <div
-        className={cn(
-          "tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-divide-y tw-divide-border",
-          className
-        )}
-      >
-        {onCreate && <AgentHomeCreateRow label="New project" onClick={onCreate} />}
+      <div className={cn("tw-flex tw-h-full tw-min-h-0 tw-flex-col tw-gap-2", className)}>
         {projects.length > 0 && (
           <div className="tw-p-1">
             <SearchBar
@@ -140,6 +134,7 @@ export const ProjectPickerList = memo(
             </div>
           </AgentHomePreviewList>
         )}
+        {onCreate && <AgentHomeCreateRow label="New project" onClick={onCreate} />}
       </div>
     );
   }

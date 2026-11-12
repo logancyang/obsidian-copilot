@@ -18,14 +18,13 @@ export const AgentHomeCreateRow = memo(function AgentHomeCreateRow({
     <Button
       type="button"
       variant="ghost2"
+      size="sm"
       onClick={(e) => onClick(e.currentTarget)}
       aria-label={label}
-      className="tw-h-auto tw-min-h-9 tw-w-full tw-justify-start tw-gap-2 tw-rounded-md tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover"
+      className="tw-mt-1 tw-w-full tw-shrink-0 tw-text-accent hover:tw-text-accent"
     >
-      <span className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-interactive-accent-hsl/10">
-        <Plus className="tw-size-4 tw-text-accent" />
-      </span>
-      <span className="tw-text-ui-small tw-font-medium tw-text-accent">{label}</span>
+      <Plus className="tw-size-3" aria-hidden="true" />
+      {label}
     </Button>
   );
 });
