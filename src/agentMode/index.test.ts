@@ -48,6 +48,7 @@ jest.mock("./backends/registry", () => ({
   backendRegistry: {},
   listBackendDescriptors: () => mockDescriptors,
 }));
+jest.mock("@/agents/AgentFileManager", () => ({ AgentFileManager: jest.fn() }));
 jest.mock("./session/AgentChatPersistenceManager", () => ({
   AgentChatPersistenceManager: jest.fn(),
 }));
@@ -137,6 +138,7 @@ const mockManager = {
   noteSpawnConfigChanged: jest.fn(async (_id: string, _reason: string) => {}),
   registerPreload: jest.fn<void, [string, Promise<void>]>(),
   onInstallStateChanged: jest.fn(async (_id: string) => {}),
+  consolidateStaleAgentsOnLoad: jest.fn(async () => {}),
 };
 let plugin: CopilotPlugin;
 const reconcile = jest.mocked(reconcileBuiltinSkills);

@@ -9,6 +9,12 @@ import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ModelDisplay } from "@/components/ui/model-display";
+import {
+  HIGHLIGHT_ROW_BG,
+  ROW_CLASS,
+  SELECTED_ROW_BG,
+  SELECTED_ROW_NAME,
+} from "@/components/ui/picker-rows";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
@@ -32,17 +38,20 @@ export interface ModelEffortPickerOverride {
 interface ModelEffortPickerProps {
   override: ModelEffortPickerOverride;
   className?: string;
+  defaultOpen?: boolean;
 }
+
+const GROUP_HEADING_CLASS = "tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide";
 
 interface EffortOpt {
   label: string;
   value: string | null;
 }
 
-export function ModelEffortPicker({ override, className }: ModelEffortPickerProps) {
+export function ModelEffortPicker({ override, className, defaultOpen }: ModelEffortPickerProps) {
   const { models, value, effort, effortOptionsByModelKey, commitSelection, disabled } = override;
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
   const [draftModelKey, setDraftModelKey] = useState<string | null>(null);
   const [draftEffort, setDraftEffort] = useState<string | null>(null);
@@ -203,76 +212,75 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
         sideOffset={4}
         onKeyDown={handleKeyDown}
       >
-        <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1" role="listbox" aria-label="Model">
-          {models.map((entry) => {
-            const Row = entry._needsLicense ? "a" : "div";
-            const key = getModelKeyFromModel(entry);
-            const disabledReason = entry._disabledReason;
-            const itemDisabled = Boolean(disabledReason);
-            const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
-            const isHighlight = key === highlightKey;
-            const isActive = key === draftModelKey;
-            const showHeader = entry._group !== undefined && entry._group !== lastGroup;
-            const headerKey = `__group__${entry._group}__${key}`;
-            lastGroup = entry._group;
-            return (
-              <React.Fragment key={key}>
-                {showHeader && (
-                  <div
-                    key={headerKey}
-                    className="tw-px-3 tw-pb-1 tw-pt-2 tw-text-xs tw-uppercase tw-tracking-wide tw-text-faint"
-                  >
-                    {entry._group}
-                  </div>
-                )}
-                <Row
-                  href={entry._needsLicense ? PICKER_PRICING_URL : undefined}
-                  target={entry._needsLicense ? "_blank" : undefined}
-                  rel={entry._needsLicense ? "noopener noreferrer" : undefined}
-                  role={entry._needsLicense ? undefined : "option"}
-                  aria-selected={entry._needsLicense ? undefined : isActive}
-                  aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
-                  className={cn(
-                    "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-1.5 tw-text-sm",
-                    isHighlight && !itemDisabled && "tw-bg-interactive-hover",
-                    itemDisabled && "tw-opacity-50",
-                    itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
-                    entry._needsLicense &&
-                      "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
+        <div className="tw-max-h-72 tw-overflow-y-auto tw-py-1">
+          <div role="listbox" aria-label="Model">
+            {models.map((entry) => {
+              const Row = entry._needsLicense ? "a" : "div";
+              const key = getModelKeyFromModel(entry);
+              const disabledReason = entry._disabledReason;
+              const itemDisabled = Boolean(disabledReason);
+              const rightLabel = entry._needsLicense ? null : (disabledReason ?? null);
+              const isHighlight = key === highlightKey;
+              const isActive = key === draftModelKey;
+              const showHeader = entry._group !== undefined && entry._group !== lastGroup;
+              const headerKey = `__group__${entry._group}__${key}`;
+              lastGroup = entry._group;
+              return (
+                <React.Fragment key={key}>
+                  {showHeader && (
+                    <div key={headerKey} className={cn(GROUP_HEADING_CLASS, "tw-text-faint")}>
+                      {entry._group}
+                    </div>
                   )}
-                  // Enter must follow the pricing link, not draft the highlighted model.
-                  // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
-                  onKeyDown={
-                    entry._needsLicense
-                      ? (event) => {
-                          if (event.key === "Enter") event.stopPropagation();
-                        }
-                      : undefined
-                  }
-                  onAuxClick={(event) => {
-                    // Middle-click follows the link without firing onClick.
+                  <Row
+                    href={entry._needsLicense ? PICKER_PRICING_URL : undefined}
+                    target={entry._needsLicense ? "_blank" : undefined}
+                    rel={entry._needsLicense ? "noopener noreferrer" : undefined}
+                    role={entry._needsLicense ? undefined : "option"}
+                    aria-selected={entry._needsLicense ? undefined : isActive}
+                    aria-disabled={(!entry._needsLicense && itemDisabled) || undefined}
+                    className={cn(
+                      ROW_CLASS,
+                      isActive ? SELECTED_ROW_BG : isHighlight && !itemDisabled && HIGHLIGHT_ROW_BG,
+                      itemDisabled && "tw-opacity-50",
+                      itemDisabled && !entry._needsLicense && "tw-cursor-not-allowed",
+                      entry._needsLicense &&
+                        "tw-text-normal tw-no-underline hover:tw-bg-interactive-hover hover:tw-text-normal hover:tw-no-underline focus-visible:tw-bg-interactive-hover"
+                    )}
+                    // Enter must follow the pricing link, not draft the highlighted model.
                     // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
-                    if (entry._needsLicense && event.button === 1) setOpen(false);
-                  }}
-                  onClick={() => {
-                    if (entry._needsLicense) {
-                      setOpen(false);
-                      return;
+                    onKeyDown={
+                      entry._needsLicense
+                        ? (event) => {
+                            if (event.key === "Enter") event.stopPropagation();
+                          }
+                        : undefined
                     }
-                    if (itemDisabled) return;
-                    pickDraft(key);
-                  }}
-                  title={entry._disabledHint}
-                >
-                  <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                    <span
-                      className="tw-flex tw-w-3 tw-shrink-0 tw-items-center tw-justify-center tw-text-xs tw-text-muted"
-                      aria-hidden
-                    >
-                      {isActive ? "✓" : isHighlight ? "›" : ""}
-                    </span>
+                    onPointerMove={() => {
+                      if (!isHighlight && !itemDisabled) setHighlightKey(key);
+                    }}
+                    onAuxClick={(event) => {
+                      // Middle-click follows the link without firing onClick.
+                      // https://github.com/Brevilabs/obsidian-copilot-private/issues/476
+                      if (entry._needsLicense && event.button === 1) setOpen(false);
+                    }}
+                    onClick={() => {
+                      if (entry._needsLicense) {
+                        setOpen(false);
+                        return;
+                      }
+                      if (itemDisabled) return;
+                      pickDraft(key);
+                    }}
+                    title={entry._disabledHint}
+                  >
                     <div className="tw-min-w-0">
-                      <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
+                      <div
+                        className={cn(
+                          "tw-flex tw-min-w-0 tw-items-center tw-gap-1",
+                          isActive && SELECTED_ROW_NAME
+                        )}
+                      >
                         <ModelDisplay model={entry} iconSize={12} />
                         {entry._needsLicense && <LicenseRequiredIcon />}
                         {entry._isFree && <FreeModelWarningIcon />}
@@ -284,14 +292,14 @@ export function ModelEffortPicker({ override, className }: ModelEffortPickerProp
                         </div>
                       )}
                     </div>
-                  </div>
-                  {rightLabel && (
-                    <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
-                  )}
-                </Row>
-              </React.Fragment>
-            );
-          })}
+                    {rightLabel && (
+                      <span className="tw-shrink-0 tw-text-xs tw-text-faint">{rightLabel}</span>
+                    )}
+                  </Row>
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
         <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-bg-secondary tw-px-3 tw-py-2">
           <EffortFooter options={draftOptions} value={draftEffort} onChange={setDraftEffort} />

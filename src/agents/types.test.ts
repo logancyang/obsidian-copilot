@@ -1,0 +1,61 @@
+import { BUILTIN_AGENT, resolveAgentEntry, toAgentEntry, type CustomAgent } from "@/agents/types";
+
+const JENNIFER: CustomAgent = {
+  slug: "jennifer",
+  name: "Jennifer",
+  description: "Skeptical editor.",
+  icon: "🪶",
+  backendId: null,
+  modelId: null,
+  effort: null,
+  memoryEnabled: true,
+  created: "2026-09-16T10:00:00Z",
+  instructions: "",
+};
+
+describe("agents/types", () => {
+  describe("toAgentEntry()", () => {
+    it("presents a custom agent with the same fields the built-in entry offers", () => {
+      expect(toAgentEntry(JENNIFER)).toEqual({
+        kind: "custom",
+        slug: "jennifer",
+        name: "Jennifer",
+        description: "Skeptical editor.",
+        icon: "🪶",
+        avatarSrc: null,
+        agent: JENNIFER,
+      });
+    });
+
+    it("carries the agent's profile image URL when its folder has one", () => {
+      expect(toAgentEntry(JENNIFER, "app://jennifer/avatar.webp").avatarSrc).toBe(
+        "app://jennifer/avatar.webp"
+      );
+    });
+  });
+
+  describe("resolveAgentEntry()", () => {
+    it("returns the named agent when it exists", () => {
+      expect(resolveAgentEntry("jennifer", [JENNIFER])).toEqual(toAgentEntry(JENNIFER));
+    });
+
+    it("returns the built-in Copilot entry when no agent is named", () => {
+      expect(resolveAgentEntry(null, [JENNIFER])).toBe(BUILTIN_AGENT);
+      expect(resolveAgentEntry(undefined, [JENNIFER])).toBe(BUILTIN_AGENT);
+    });
+
+    it("returns the built-in entry for its own reserved slug", () => {
+      expect(resolveAgentEntry("copilot", [JENNIFER])).toBe(BUILTIN_AGENT);
+    });
+
+    it("falls back to the built-in entry when the named agent was deleted", () => {
+      expect(resolveAgentEntry("vancat", [JENNIFER])).toBe(BUILTIN_AGENT);
+    });
+  });
+
+  describe("BUILTIN_AGENT", () => {
+    it("is frozen, so no caller can turn the shared entry into per-vault state", () => {
+      expect(Object.isFrozen(BUILTIN_AGENT)).toBe(true);
+    });
+  });
+});

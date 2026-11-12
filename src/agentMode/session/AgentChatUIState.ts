@@ -3,6 +3,7 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession, AgentTask } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
   BackendId,
@@ -121,6 +122,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  getMemoryNotice(): AgentMemoryNotice | null {
+    return this.session.getMemoryNotice();
   }
 
   getTasks(): readonly AgentTask[] {

@@ -9,6 +9,7 @@ import type { UserSystemPrompt } from "@/system-prompts/type";
 import type { App } from "obsidian";
 import {
   buildAgentSystemPrompt,
+  COPILOT_AGENT_PERSONA_POLICY,
   COPILOT_EXCALIDRAW_STEERING,
   COPILOT_FOLDER_MENTION_DIRECTIVE,
   COPILOT_MIYO_DOCUMENT_STEERING,
@@ -91,7 +92,9 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(
+            3000 + Buffer.byteLength(`${COPILOT_AGENT_PERSONA_POLICY}\n\n`, "utf8")
+          );
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -469,6 +472,29 @@ describe("agentSystemPrompt", () => {
     it("drops the send_feedback pointer when the user turns feedback cards off", () => {
       updateSetting("agentMode", { ...getSettings().agentMode, offerFeedbackCards: false });
       expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain(COPILOT_FEEDBACK_POINTER);
+    });
+
+    it("tells the agent to adopt an <agent_persona> block and trust <agent_memory>", () => {
+      const prompt = buildAgentSystemPrompt(AGENT, APP);
+      expect(prompt).toContain(COPILOT_AGENT_PERSONA_POLICY);
+      expect(prompt).toContain("<agent_persona");
+      expect(prompt).toContain("<agent_memory>");
+    });
+
+    it("keeps the persona policy through the builtin toggle and names no specific agent", () => {
+      setDisableBuiltinSystemPrompt(true);
+      expect(buildAgentSystemPrompt(AGENT, APP)).toContain(COPILOT_AGENT_PERSONA_POLICY);
+      expect(COPILOT_AGENT_PERSONA_POLICY).not.toMatch(/Jennifer/);
+    });
+
+    it("confines an agent to its own memory block so a consulted agent cannot recite another's file", () => {
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/only memory that is yours/i);
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/do not open them/i);
+    });
+
+    it("subordinates a persona to safety and tool policy, not to the generic framing", () => {
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/the block wins/i);
+      expect(COPILOT_AGENT_PERSONA_POLICY).toMatch(/neither block overrides your safety/i);
     });
 
     it("emits identical bytes no matter which Chat prompt is selected", () => {

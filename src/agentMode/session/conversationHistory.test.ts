@@ -31,6 +31,18 @@ describe("conversationHistory", () => {
       expect(block.indexOf("What is the plan?")).toBeLessThan(block.indexOf("Here is the plan."));
     });
 
+    it("frames the turns with a caller's own header in place of the read-only one", () => {
+      const block = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, "What is the plan?")],
+        CONVERSATION_HISTORY_MAX_CHARS,
+        "This is the conversation you have been having with the user."
+      )!;
+
+      expect(block).toContain("This is the conversation you have been having with the user.");
+      expect(block).not.toContain("do NOT redo");
+      expect(block).toContain("What is the plan?");
+    });
+
     it("returns null for an empty transcript", () => {
       expect(buildConversationHistoryBlock([], CONVERSATION_HISTORY_MAX_CHARS)).toBeNull();
     });

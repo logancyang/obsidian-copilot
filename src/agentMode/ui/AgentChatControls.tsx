@@ -48,6 +48,7 @@ const NeedsMessageMenuItem: React.FC<{ children: React.ReactNode }> = ({ childre
 );
 
 interface AgentChatControlsProps {
+  scratchpad?: { agentName: string; onOpen: () => void };
   onNewChat?: () => void;
   onSaveAsNote?: () => void | Promise<void>;
   chatHistoryItems?: ChatHistoryItem[];
@@ -69,6 +70,7 @@ interface AgentChatControlsProps {
 }
 
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
+  scratchpad,
   onNewChat,
   onSaveAsNote,
   chatHistoryItems,
@@ -105,6 +107,21 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         {usageMeter}
+        {scratchpad && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost2"
+                size="icon"
+                title={`${scratchpad.agentName}'s scratchpad`}
+                onClick={scratchpad.onOpen}
+              >
+                <FileText className="tw-size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{`${scratchpad.agentName}'s scratchpad`}</TooltipContent>
+          </Tooltip>
+        )}
         {onNewChat && (
           <Tooltip>
             <TooltipTrigger asChild>

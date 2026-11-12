@@ -124,3 +124,7 @@ export const BelowQueuedMessages: Story = {
     </div>
   ),
 };
+
+export const WithAgentScratchpad: Story = {
+  args: { scratchpad: { agentName: "Venkat", onOpen: () => undefined } },
+};

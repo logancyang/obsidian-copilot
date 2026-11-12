@@ -683,5 +683,21 @@ describe("AgentChatMessages", () => {
       expect(screen.getByTestId("chat-messages").textContent).toContain("Plan plan-1");
       expect(screen.queryByTestId("agent-action-rail")).toBeNull();
     });
+
+    it("shows a memory trust line under the last turn that opens the note it names", () => {
+      const onOpenMemory = jest.fn();
+      renderMessages([assistantMessage("answer", 100_000)], false, {
+        memoryNotice: {
+          kind: "flush" as const,
+          agentName: "Jennifer",
+          path: "copilot/agents/jennifer/memory/2026-09-17.md",
+        },
+        onOpenMemory,
+      });
+
+      expect(screen.getByText("Jennifer added to today's notes")).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Open" }));
+      expect(onOpenMemory).toHaveBeenCalledWith("copilot/agents/jennifer/memory/2026-09-17.md");
+    });
   });
 });

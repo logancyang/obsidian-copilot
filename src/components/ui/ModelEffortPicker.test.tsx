@@ -33,6 +33,28 @@ describe("ModelEffortPicker", () => {
       expect(commitSelection).toHaveBeenCalledWith("other|agent", null);
     });
 
+    it("tints the active model row and reserves no marker column for it (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [...models, { name: "other", provider: "agent", enabled: true }],
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+
+      const [active, other] = await screen.findAllByRole("option");
+      expect(active.getAttribute("aria-selected")).toBe("true");
+      expect(active.className).toContain("tw-bg-interactive-accent-hsl/10");
+      expect(active.querySelector(".tw-font-medium")?.textContent).toBe("model");
+      expect(active.textContent).toBe("model");
+      expect(other.className).not.toContain("tw-bg-interactive-accent-hsl/10");
+      expect(other.textContent).toBe("other");
+    });
+
     it.each(["row", "icon", "keyboard", "Tab", "Shift+Tab", "middle-click"])(
       "preserves native pricing navigation and discards pending edits after %s interaction with a locked row (https://github.com/Brevilabs/obsidian-copilot-private/issues/476)",
       async (action) => {
@@ -116,6 +138,28 @@ describe("ModelEffortPicker", () => {
         expect(onChange).not.toHaveBeenCalled();
       }
     );
+
+    it("paints the row under the pointer as highlighted and leaves it when the pointer moves on", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models: [...models, { name: "other", provider: "agent", enabled: true }],
+            value: "model|agent",
+            effortOptionsByModelKey: {},
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      await screen.findByRole("option", { name: /other/ });
+
+      const [first, second] = screen.getAllByRole("option");
+      fireEvent.pointerMove(second);
+      expect(second.className).toContain("tw-bg-interactive-hover");
+      expect(first.className).not.toContain("tw-bg-interactive-hover");
+      fireEvent.pointerMove(first);
+      expect(second.className).not.toContain("tw-bg-interactive-hover");
+    });
 
     it("keeps models disabled for other reasons unavailable", async () => {
       const commitSelection = jest.fn();
@@ -217,6 +261,28 @@ describe("ModelEffortPicker", () => {
       fireEvent.click(screen.getByTitle("Model · effort"));
       fireEvent.keyDown(await screen.findByRole("dialog"), { key: "Escape" });
       expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it("lists models and effort only, with no agent row anywhere in the popover (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+      render(
+        <ModelEffortPicker
+          override={{
+            models,
+            value: "model|agent",
+            effort: { options, value: "high", onChange: jest.fn() },
+            effortOptionsByModelKey: { "model|agent": options },
+            commitSelection: jest.fn(),
+          }}
+        />
+      );
+      fireEvent.click(screen.getByTitle("Model · effort"));
+
+      const popover = await screen.findByRole("dialog");
+      expect(within(popover).getByRole("listbox", { name: "Model" })).toBeTruthy();
+      expect(within(popover).getByText("Effort")).toBeTruthy();
+      expect(within(popover).queryByRole("listbox", { name: "Agent" })).toBeNull();
+      expect(within(popover).queryByTitle("Agent")).toBeNull();
+      expect(popover.textContent).not.toContain("Agent");
     });
   });
 });

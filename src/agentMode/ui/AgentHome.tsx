@@ -10,6 +10,12 @@ import { CreateProjectPanel } from "@/projects/ui/CreateProjectPanel";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { ConnectorsAttentionBanner } from "@/agentMode/ui/ConnectorsAttentionBanner";
 import { AgentProjectHeader } from "@/projects/ui/AgentProjectHeader";
+import { listMentionableAgents } from "@/agentMode/ui/mentionedAgents";
+import { openAgentScratchpad } from "@/agents/openAgentScratchpad";
+import { BUILTIN_AGENT_SLUG } from "@/agents/types";
+import { openAgentSettings } from "@/settings/openSettings";
+import { useAgentTalkingTo } from "@/agentMode/ui/useAgentTalkingTo";
+import { AgentSpotlight, type AgentPickerSection } from "@/components/ui/AgentRoster";
 import { ProjectFilesView } from "@/projects/ui/ProjectFilesView";
 import { ProjectInfoPopover } from "@/projects/ui/ProjectInfoPopover";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
@@ -20,7 +26,6 @@ import { TaskDetailView } from "@/agentMode/ui/TaskDetailView";
 import { taskDisplayStatus } from "@/agentMode/ui/taskDisplay";
 import { AgentHomeReleaseUpdate } from "@/components/release-update/AgentHomeReleaseUpdate";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
-import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import {
   nextProjectLandingPlacement,
   type ProjectLandingPlacement,
@@ -50,13 +55,11 @@ import { useRefreshEmptyLandingOnContextSourceChange } from "@/projects/hooks/us
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
-import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { type ProjectConfig } from "@/aiParams";
 import { createProjectAndEnter } from "@/projects/ui/AgentProjectCreateForm";
-import { TruncatedText } from "@/components/TruncatedText";
 import { AppContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
@@ -75,6 +78,7 @@ import {
 import { useSettingsValue } from "@/settings/model";
 import { FileSearch, Files, Folder, MessageSquare } from "lucide-react";
 import { Notice } from "obsidian";
+import { openVaultPath } from "@/utils/openVaultPath";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 
@@ -119,9 +123,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     queuedPrompts,
     tasks,
     isReplyRunning,
+    memoryNotice,
   } = useAgentChatRuntimeState(backend);
   const isLoading = draft.loading || isTurnInFlight;
   const replyRunning = draft.loading || isReplyRunning;
+
+  const handleOpenMemory = useCallback(
+    (memoryPath: string) => openVaultPath(app, memoryPath, { pane: "tab" }),
+    [app]
+  );
 
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [openedTask, setOpenedTask] = useState<{ sessionId: string; toolCallId: string } | null>(
@@ -329,6 +339,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     if (isOrphanedProject) new Notice("This project no longer exists.");
   }, [isOrphanedProject]);
 
+  const talkingTo = useAgentTalkingTo(manager);
+
   const modelPickerOverride = useAgentModelPicker(manager, plugin);
   const modePickerOverride = useAgentModePicker(manager);
 
@@ -409,11 +421,44 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const projectPlacement = placementRef.current;
   const isProjectContextInline = projectPlacement?.standalone === true;
 
-  const mainAgentId =
-    manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
+  const ownAgentSlug =
+    manager.getActiveSession()?.getAgent().slug ??
+    (talkingTo.selectedSlug === BUILTIN_AGENT_SLUG ? null : talkingTo.selectedSlug);
+  const mentionableAgents = useMemo(
+    () => listMentionableAgents(talkingTo.entries),
+    [talkingTo.entries]
+  );
+  const handleCreateAgent = useCallback(() => {
+    openAgentSettings(app, rootEl?.win ?? window, { kind: "create" });
+  }, [app, rootEl]);
+  const handleOpenAgent = useCallback(
+    (row: { slug: string }) =>
+      openAgentSettings(app, rootEl?.win ?? window, { kind: "edit", slug: row.slug }),
+    [app, rootEl]
+  );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- sessionId intentionally re-rolls the otherwise argument-free greeting factory
-  const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
+  const handleOpenScratchpad = useCallback(
+    (row: { slug: string; name: string }) => {
+      const path = manager.getAgentScratchpadPath(row.slug);
+      if (path) openAgentScratchpad(app, path, row.name);
+    },
+    [app, manager]
+  );
+
+  const { entries: agentEntries, selectedSlug, select: selectAgent } = talkingTo;
+  const agentSection = useMemo<AgentPickerSection>(
+    () => ({
+      rows: agentEntries,
+      selectedSlug,
+      onSelect: (row) => selectAgent(row.slug),
+    }),
+    [agentEntries, selectedSlug, selectAgent]
+  );
+  const agentRow = agentEntries.find((entry) => entry.slug === selectedSlug);
+  const scratchpad =
+    agentRow && agentRow.kind === "custom"
+      ? { agentName: agentRow.name, onOpen: () => handleOpenScratchpad(agentRow) }
+      : undefined;
 
   useEffect(() => {
     if (isLanding) void handleLoadChatHistory();
@@ -589,7 +634,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       chatInputId={chatInputId}
       draft={draft}
       app={app}
-      mainAgentId={mainAgentId}
+      ownAgentSlug={ownAgentSlug}
+      mentionableAgents={mentionableAgents}
+      onCreateAgent={handleCreateAgent}
       updateUserMessageHistory={updateUserMessageHistory}
       isStarting={isStarting}
       isLoading={isLoading}
@@ -631,18 +678,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       />
     ) : null;
 
-  const showProjectHero = isProjectLanding && !isOrphanedProject;
-  const heroText = showProjectHero ? `Chat in ${projectName}` : greeting;
   const hero = (
-    <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
-      <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />
-      <TruncatedText
-        className="tw-min-w-0 tw-text-3xl tw-font-[330] tw-text-normal"
-        tooltipContent={heroText}
-      >
-        {heroText}
-      </TruncatedText>
-    </div>
+    <AgentSpotlight
+      section={agentSection}
+      onCreateAgent={handleCreateAgent}
+      onOpenAgent={handleOpenAgent}
+      onOpenScratchpad={handleOpenScratchpad}
+    />
   );
 
   const activeSession = manager.getSession(sessionId);
@@ -812,9 +854,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         chatBackend={backend}
                         isLoading={isLoading}
                         chatStates={chatStates}
+                        memoryNotice={memoryNotice}
+                        onOpenMemory={handleOpenMemory}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls
+                        scratchpad={scratchpad}
                         onCopyChatLink={
                           activeSession?.hasUserVisibleMessages() ? handleCopyChatLink : undefined
                         }

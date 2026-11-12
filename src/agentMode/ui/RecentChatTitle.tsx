@@ -1,3 +1,4 @@
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import React from "react";
@@ -21,10 +22,15 @@ export function RecentChatProjectBadge({ name }: RecentChatProjectBadgeProps): R
 
 export interface RecentChatTitleProps {
   title: string;
+  agentFace?: { name: string; avatarSrc: string | null };
   className?: string;
 }
 
-export function RecentChatTitle({ title, className }: RecentChatTitleProps): React.ReactElement {
+export function RecentChatTitle({
+  title,
+  agentFace,
+  className,
+}: RecentChatTitleProps): React.ReactElement {
   return (
     <span
       className={cn(
@@ -33,6 +39,13 @@ export function RecentChatTitle({ title, className }: RecentChatTitleProps): Rea
       )}
       title={title}
     >
+      {agentFace && (
+        <AgentGlyph
+          name={agentFace.name}
+          avatarSrc={agentFace.avatarSrc}
+          className="tw-mr-1 tw-inline-flex tw-align-text-bottom"
+        />
+      )}
       {title}
     </span>
   );

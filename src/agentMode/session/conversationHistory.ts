@@ -14,6 +14,11 @@ import {
 
 export const CONVERSATION_HISTORY_MAX_CHARS = 48_000;
 
+const CONVERSATION_HISTORY_HEADER =
+  "Earlier in this conversation the following was said. Treat this as " +
+  "read-only context to inform your answer; do NOT redo or re-answer these " +
+  "earlier turns. Answer only the current question that follows.";
+
 const CONVERSATION_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
 
 const CONVERSATION_HISTORY_TURN_TRUNCATION_MARKER = "[turn truncated]";
@@ -72,7 +77,7 @@ function renderMessageContext(context: MessageContext | undefined): string[] {
 
 function historyProse(message: AgentChatMessage): string {
   const turn = message.fanout ?? parseFanoutComposite(message.message);
-  return turn ? renderFanoutComposite(turn, (id) => id) : message.message;
+  return turn ? renderFanoutComposite(turn) : message.message;
 }
 
 function renderTurnContent(message: AgentChatMessage): string | null {
@@ -91,7 +96,8 @@ function renderTurnContent(message: AgentChatMessage): string | null {
 
 export function buildConversationHistoryBlock(
   messages: readonly AgentChatMessage[],
-  maxChars: number
+  maxChars: number,
+  header: string = CONVERSATION_HISTORY_HEADER
 ): string | null {
   const rendered: string[] = [];
   for (const m of messages) {
@@ -115,10 +121,6 @@ export function buildConversationHistoryBlock(
     truncated = true;
   }
 
-  const header =
-    "Earlier in this conversation the following was said. Treat this as " +
-    "read-only context to inform your answer; do NOT redo or re-answer these " +
-    "earlier turns. Answer only the current question that follows.";
   if (truncated) body = `${CONVERSATION_HISTORY_TRUNCATION_MARKER}\n${body}`;
   return `<conversation_history>\n${header}\n${body}\n</conversation_history>`;
 }

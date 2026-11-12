@@ -4,7 +4,6 @@ import {
   backendNeedsSelfHostWarning,
   backendRegistry,
   getActiveBackendDescriptor,
-  getCloudAgentIds,
   listBackendDescriptors,
   RECOMMENDED_BACKEND_ID,
 } from "./registry";
@@ -110,14 +109,6 @@ describe("registry", () => {
       expect(backendNeedsSelfHostWarning(OpencodeBackendDescriptor, on)).toBe(false);
       expect(backendNeedsSelfHostWarning(ClaudeBackendDescriptor, on)).toBe(true);
       expect(backendNeedsSelfHostWarning(CodexBackendDescriptor, on)).toBe(true);
-    });
-  });
-
-  describe("getCloudAgentIds()", () => {
-    it("contains exactly the non-self-hostable backends and returns the same set on every call", () => {
-      const ids = getCloudAgentIds();
-      expect([...ids].sort()).toEqual(["claude", "codex"]);
-      expect(getCloudAgentIds()).toBe(ids);
     });
   });
 });

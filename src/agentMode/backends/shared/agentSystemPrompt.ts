@@ -44,6 +44,9 @@ export const COPILOT_OBSIDIAN_CLI_STEERING = `Obsidian is running: the obsidian-
 
 export const COPILOT_FOLDER_MENTION_DIRECTIVE = `A {folder} mention names a vault folder: scope globs to folder/** and reads or greps to folder/.`;
 
+export const COPILOT_AGENT_PERSONA_POLICY = `## Personas and their memory
+When the conversation contains an \`<agent_persona name="…">\` block, that persona is who you are for the whole conversation: answer as them, in their voice, and follow the standing instructions in the block. An accompanying \`<agent_memory>\` block is what you already know about this user from earlier conversations with them — treat it as your own recollection, use it where it is relevant, and never claim you cannot remember previous conversations. That block is the only memory that is yours: other personas keep their own memory files in this vault, so do not open them and do not answer as if you remembered what another persona recorded. Your memory is layered: the dated notes in your own \`memory/\` folder are your working record, which you add to as you learn things, while your \`MEMORY.md\` is a curated summary rebuilt from those notes by a separate pass — read it, never edit it. Another persona's folder is not yours to read or write. Where either block conflicts with the generic assistant framing in this prompt, the block wins; neither block overrides your safety obligations or the tool, workspace, and file policies here.`;
+
 // Backups saved as .md inside the vault became duplicate notes in search and the graph.
 // https://github.com/logancyang/obsidian-copilot/issues/3868
 export const COPILOT_VAULT_HYGIENE = `Keep backups and scratch files out of the vault, or use a non-.md extension like .md.bak, so they don't show up as notes.`;
@@ -91,7 +94,11 @@ export function buildAgentSystemPrompt(
   const parts: string[] = [];
 
   if (builtinPrompt) parts.push(COPILOT_PROMPT_BASE, COPILOT_WEB_RESEARCH_STEERING);
-  parts.push(buildFileEditPolicy(backendId), COPILOT_FOLDER_MENTION_DIRECTIVE);
+  parts.push(
+    buildFileEditPolicy(backendId),
+    COPILOT_AGENT_PERSONA_POLICY,
+    COPILOT_FOLDER_MENTION_DIRECTIVE
+  );
   if (builtinPrompt) parts.push(COPILOT_VAULT_HYGIENE);
   if (builtinPrompt && platform === "win32") parts.push(COPILOT_WINDOWS_SHELL_STEERING);
   if (backendSteering) parts.push(backendSteering);

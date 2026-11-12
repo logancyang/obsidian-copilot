@@ -45,10 +45,11 @@ export interface PillData {
   type: PillType;
   title?: string;
   data?: PillDataValue;
+  icon?: string;
 }
 
 function $createPillNode(pillData: PillData) {
-  const { type, title, data } = pillData;
+  const { type, title, data, icon } = pillData;
 
   switch (type) {
     case "active-note":
@@ -77,7 +78,7 @@ function $createPillNode(pillData: PillData) {
       return $createActiveWebTabPillNode();
     case "agents":
       if (typeof data === "string") {
-        return $createAgentPillNode(data, title ?? data);
+        return $createAgentPillNode(data, title ?? data, icon ?? "");
       }
       break;
   }

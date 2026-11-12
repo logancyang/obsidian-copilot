@@ -1,3 +1,4 @@
+import { COPILOT_SESSION_AGENT } from "@/agentMode/session/sessionAgent";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,6 +40,7 @@ function makeManagerWithOneChat() {
     backendId: "test",
     subscribe: () => () => {},
     getLabel: () => "Existing chat",
+    getAgent: () => COPILOT_SESSION_AGENT,
     getStatus: () => "idle",
     getNeedsAttention: () => false,
   };
@@ -62,6 +64,7 @@ describe("AgentTabStrip", () => {
         backendId: "test",
         subscribe: () => () => {},
         getLabel: () => label,
+        getAgent: () => COPILOT_SESSION_AGENT,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       }));
@@ -87,6 +90,7 @@ describe("AgentTabStrip", () => {
         backendId: "test",
         subscribe: () => () => {},
         getLabel: () => "Existing chat",
+        getAgent: () => COPILOT_SESSION_AGENT,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       };
@@ -113,6 +117,7 @@ describe("AgentTabStrip", () => {
         backendId: "test",
         subscribe: () => () => {},
         getLabel: () => "Existing chat",
+        getAgent: () => COPILOT_SESSION_AGENT,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       };
@@ -140,6 +145,7 @@ describe("AgentTabStrip", () => {
         backendId: "test",
         subscribe: () => () => {},
         getLabel: () => "Existing chat",
+        getAgent: () => COPILOT_SESSION_AGENT,
         getStatus: () => "idle",
         getNeedsAttention: () => false,
       };

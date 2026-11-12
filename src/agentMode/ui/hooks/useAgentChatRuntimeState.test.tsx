@@ -53,6 +53,7 @@ function makeFakeBackend(initial: Partial<FakeBackendState> = {}) {
     isReplyRunning: () => state.isReplyRunning,
     hasPendingPlanPermission: () => state.hasPendingPlanPermission,
     getCurrentPlan: () => state.currentPlan,
+    getMemoryNotice: () => null,
     getPendingToolPermissions: () => state.pendingToolPermissions,
     getPendingAskUserQuestions: () => state.pendingAskUserQuestions,
     getChatStates: () => state.chatStates ?? EMPTY_CHAT_STATES,

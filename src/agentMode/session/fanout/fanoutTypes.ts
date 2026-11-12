@@ -1,4 +1,9 @@
-import type { AgentToolKind, BackendId, PromptContent } from "@/agentMode/session/types";
+import type {
+  AgentToolKind,
+  BackendId,
+  ModelSelection,
+  PromptContent,
+} from "@/agentMode/session/types";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 
 export const FANOUT_READONLY_PREAMBLE =
@@ -8,9 +13,22 @@ export const FANOUT_READONLY_PREAMBLE =
   "Respond with your analysis directly.";
 
 export interface FanoutTurn {
-  answers: Record<BackendId, AgentAnswer>;
+  answers: Record<string, AgentAnswer>;
   summary: FanoutSummary;
 }
+
+export interface FanoutAnswerer {
+  slug: string;
+  name: string;
+  icon: string;
+  backendId: BackendId | null;
+  selection: ModelSelection | null;
+  personaBlock: string | null;
+  memoryEnabled: boolean;
+  missing?: boolean;
+}
+
+export const FANOUT_MISSING_AGENT_ERROR = "This agent no longer exists.";
 
 /**
  * A one-answer turn with persisted summary text predates direct routing and keeps that summary.
@@ -23,7 +41,9 @@ export function isDirectAnswerTurn(turn: FanoutTurn): boolean {
 export type AgentAnswerStatus = "running" | "done" | "error" | "cancelled";
 
 export interface AgentAnswer {
-  backendId: BackendId;
+  agentSlug: string;
+  name: string;
+  icon: string;
   status: AgentAnswerStatus;
   text: string;
   error?: string;
@@ -56,9 +76,9 @@ export function isVaultWriteToolKind(kind: AgentToolKind | undefined): boolean {
 }
 
 export function snapshotFanoutTurn(turn: FanoutTurn): FanoutTurn {
-  const answers: Record<BackendId, AgentAnswer> = {};
-  for (const backendId of Object.keys(turn.answers)) {
-    answers[backendId] = { ...turn.answers[backendId] };
+  const answers: Record<string, AgentAnswer> = {};
+  for (const slug of Object.keys(turn.answers)) {
+    answers[slug] = { ...turn.answers[slug] };
   }
   return { answers, summary: { ...turn.summary } };
 }
@@ -111,6 +131,16 @@ export const FANOUT_SUMMARY_INSTRUCTION =
   "describe the approach only.\n\n" +
   "Do NOT modify any files or run write/shell tools.";
 
+export function prependPromptText(blocks: PromptContent[], text: string): PromptContent[] {
+  if (!text.trim()) return blocks;
+  const i = blocks.findIndex((b) => b.type === "text");
+  if (i === -1) return [{ type: "text", text }, ...blocks];
+  const block = blocks[i] as Extract<PromptContent, { type: "text" }>;
+  const out = blocks.slice();
+  out[i] = { type: "text", text: `${text}\n\n${block.text}` };
+  return out;
+}
+
 export const FANOUT_ALL_FAILED_SUMMARY =
   "All agents failed to answer; no summary could be generated.";
 
@@ -147,25 +177,26 @@ export function trimHead(s: string, max: number, marker: string): string {
 }
 
 export interface SucceededAnswer {
-  backendId: BackendId;
+  agentSlug: string;
+  name: string;
   text: string;
 }
 
 export interface SummaryInputs {
   succeeded: SucceededAnswer[];
-  failed: BackendId[];
+  failed: string[];
 }
 
 export function selectSummaryInputs(turn: FanoutTurn): SummaryInputs {
   const succeeded: SucceededAnswer[] = [];
-  const failed: BackendId[] = [];
-  for (const backendId of Object.keys(turn.answers)) {
-    const slot = turn.answers[backendId];
+  const failed: string[] = [];
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
     const text = slot.text.trim();
     if (slot.status === "done" && text.length > 0) {
-      succeeded.push({ backendId, text });
+      succeeded.push({ agentSlug: slug, name: slot.name, text });
     } else {
-      failed.push(backendId);
+      failed.push(slug);
     }
   }
   return { succeeded, failed };
@@ -176,13 +207,12 @@ const FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER = "[answer truncated]";
 
 export function buildSummaryUserPrompt(
   originalPrompt: string,
-  inputs: SummaryInputs,
-  displayNameFor: (backendId: BackendId) => string
+  inputs: SummaryInputs
 ): PromptContent[] | null {
   if (inputs.succeeded.length === 0) return null;
   const sections = inputs.succeeded.map(
-    ({ backendId, text }) =>
-      `### ${displayNameFor(backendId)}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
+    ({ name, text }) =>
+      `### ${name}\n${trimHead(text, FANOUT_SUMMARY_ANSWER_MAX_CHARS, FANOUT_SUMMARY_ANSWER_TRUNCATION_MARKER)}`
   );
   const parts = [
     FANOUT_SUMMARY_INSTRUCTION,
@@ -235,25 +265,24 @@ function capPersistedAnswer(text: string): string {
 
 const FANOUT_NO_ANSWER_NOTE = "did not answer";
 
-export function serializeFanoutComposite(
-  turn: FanoutTurn,
-  displayName: (backendId: BackendId) => string
-): string {
+export function serializeFanoutComposite(turn: FanoutTurn): string {
   const { succeeded } = selectSummaryInputs(turn);
-  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const succeededSlugs = new Set(succeeded.map((s) => s.agentSlug));
   const summaryText = turn.summary.text.trim();
   const shouldCapAnswers = !isDirectAnswerTurn(turn);
 
   const lines: string[] = [FANOUT_MARKER_OPEN, FANOUT_MARKER_SUMMARY, "### Summary"];
   if (summaryText.length > 0) lines.push(escapeFanoutMarkers(summaryText));
 
-  for (const backendId of Object.keys(turn.answers)) {
-    const name = displayName(backendId);
-    const nameAttr = ` name="${escapeMarkerAttr(name)}"`;
-    const slot = turn.answers[backendId];
-    if (succeededIds.has(backendId)) {
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
+    const name = slot.name;
+    const identity =
+      `id="${escapeMarkerAttr(slug)}" name="${escapeMarkerAttr(name)}"` +
+      (slot.icon ? ` icon="${escapeMarkerAttr(slot.icon)}"` : "");
+    if (succeededSlugs.has(slug)) {
       lines.push(
-        `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr} status="done"-->`,
+        `<!--copilot:agent ${identity} status="done"-->`,
         `### ${name}`,
         escapeFanoutMarkers(
           shouldCapAnswers ? capPersistedAnswer(slot.text.trim()) : slot.text.trim()
@@ -266,13 +295,13 @@ export function serializeFanoutComposite(
       const partial = slot.text.trim();
       if (partial.length > 0) {
         lines.push(
-          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr}-->`,
+          `<!--copilot:agent ${identity}${statusAttr}${errorAttr}-->`,
           `### ${name}`,
           escapeFanoutMarkers(shouldCapAnswers ? capPersistedAnswer(partial) : partial)
         );
       } else {
         lines.push(
-          `<!--copilot:agent id="${escapeMarkerAttr(backendId)}"${nameAttr}${statusAttr}${errorAttr} note="${FANOUT_NO_ANSWER_NOTE}"-->`
+          `<!--copilot:agent ${identity}${statusAttr}${errorAttr} note="${FANOUT_NO_ANSWER_NOTE}"-->`
         );
       }
     }
@@ -282,12 +311,9 @@ export function serializeFanoutComposite(
   return lines.join("\n");
 }
 
-export function renderFanoutComposite(
-  turn: FanoutTurn,
-  displayName: (backendId: BackendId) => string
-): string {
+export function renderFanoutComposite(turn: FanoutTurn): string {
   const { succeeded } = selectSummaryInputs(turn);
-  const succeededIds = new Set(succeeded.map((s) => s.backendId));
+  const succeededSlugs = new Set(succeeded.map((s) => s.agentSlug));
   const sections: string[] = [];
 
   const summaryText = turn.summary.text.trim();
@@ -298,10 +324,10 @@ export function renderFanoutComposite(
     sections.push(summaryText.length > 0 ? `### Summary\n${summaryText}` : "### Summary");
   }
 
-  for (const backendId of Object.keys(turn.answers)) {
-    const name = displayName(backendId);
-    const slot = turn.answers[backendId];
-    if (succeededIds.has(backendId)) {
+  for (const slug of Object.keys(turn.answers)) {
+    const slot = turn.answers[slug];
+    const name = slot.name;
+    if (succeededSlugs.has(slug)) {
       sections.push(`### ${name}\n${slot.text.trim()}`);
     } else {
       const partial = slot.text.trim();
@@ -331,7 +357,7 @@ function statusFromMarker(raw: string | undefined): AgentAnswerStatus {
 export function parseFanoutComposite(body: string): FanoutTurn | null {
   if (!FANOUT_MARKER_OPEN_RE.test(body) || !body.includes(FANOUT_MARKER_CLOSE)) return null;
 
-  const answers: Record<BackendId, AgentAnswer> = {};
+  const answers: Record<string, AgentAnswer> = {};
   let summaryText = "";
 
   const markerRe = /<!--copilot:(summary|agent[^>]*|multi-agent(?:-end)?[^>]*)-->/g;
@@ -362,7 +388,9 @@ export function parseFanoutComposite(body: string): FanoutTurn | null {
     const note = readMarkerAttr(section.marker, "note");
     const errorReason = readMarkerAttr(section.marker, "error");
     answers[id] = {
-      backendId: id,
+      agentSlug: id,
+      name: readMarkerAttr(section.marker, "name") || id,
+      icon: readMarkerAttr(section.marker, "icon") ?? "",
       status,
       text: note !== undefined ? "" : inner,
       ...(errorReason !== undefined ? { error: errorReason } : {}),

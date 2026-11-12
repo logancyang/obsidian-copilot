@@ -1,5 +1,6 @@
 import {
   COPILOT_SUBFOLDER,
+  deriveAgentsFolder,
   deriveConversationAttachmentsFolder,
   deriveConversationsFolder,
   deriveCustomPromptsFolder,
@@ -8,6 +9,7 @@ import {
   deriveSkillsFolder,
   deriveSystemPromptsFolder,
   ensureCopilotSubfolders,
+  getEffectiveAgentsFolder,
   getEffectiveConversationsFolder,
   getEffectiveCopilotFolder,
   getEffectiveCustomPromptsFolder,
@@ -135,6 +137,16 @@ describe("copilotFolder", () => {
     });
   });
 
+  describe("deriveAgentsFolder()", () => {
+    it("derives copilot/agents for the default root", () => {
+      expect(deriveAgentsFolder(settingsWithRoot("copilot"))).toBe("copilot/agents");
+    });
+
+    it("re-roots the agents folder under a custom root", () => {
+      expect(deriveAgentsFolder(settingsWithRoot("team/ai"))).toBe("team/ai/agents");
+    });
+  });
+
   describe("COPILOT_SUBFOLDER", () => {
     it("pins the sub-folder names to the historical hardcoded defaults", () => {
       expect(COPILOT_SUBFOLDER).toEqual({
@@ -144,6 +156,7 @@ describe("copilotFolder", () => {
         skills: "skills",
         memory: "memory",
         projects: "projects",
+        agents: "agents",
       });
     });
   });
@@ -164,6 +177,7 @@ describe("copilotFolder", () => {
     ["getEffectiveSkillsFolder", getEffectiveSkillsFolder, "team/ai/skills"],
     ["getEffectiveMemoryFolder", getEffectiveMemoryFolder, "team/ai/memory"],
     ["getEffectiveProjectsFolder", getEffectiveProjectsFolder, "team/ai/projects"],
+    ["getEffectiveAgentsFolder", getEffectiveAgentsFolder, "team/ai/agents"],
   ])("%s()", (_name, getEffective, expected) => {
     it("derives the folder from the current global copilotFolder", () => {
       setGlobalRoot("team/ai");
@@ -180,7 +194,7 @@ describe("copilotFolder", () => {
 
     beforeEach(() => ensureFolderExists.mockClear());
 
-    it("creates all six derived sub-folders under the given root", async () => {
+    it("creates every derived sub-folder under the given root", async () => {
       await ensureCopilotSubfolders(fakeVault, settingsWithRoot("team/ai"));
       const created = ensureFolderExists.mock.calls.map((call) => call[1]);
       expect(created).toEqual([
@@ -190,6 +204,7 @@ describe("copilotFolder", () => {
         "team/ai/skills",
         "team/ai/memory",
         "team/ai/projects",
+        "team/ai/agents",
       ]);
     });
 
@@ -200,7 +215,7 @@ describe("copilotFolder", () => {
       await expect(
         ensureCopilotSubfolders(fakeVault, settingsWithRoot("copilot"))
       ).resolves.toBeUndefined();
-      expect(ensureFolderExists).toHaveBeenCalledTimes(6);
+      expect(ensureFolderExists).toHaveBeenCalledTimes(7);
     });
   });
 });

@@ -1,6 +1,6 @@
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import type { Meta, StoryObj } from "@/lib/story";
-import type { ComponentProps } from "react";
+import { type ComponentProps } from "react";
 
 type Props = ComponentProps<typeof ModelEffortPicker>;
 const meta = {

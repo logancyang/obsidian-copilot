@@ -1,4 +1,5 @@
 import { backendRegistry } from "@/agentMode/backends/registry";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
 import { TruncatedText } from "@/components/TruncatedText";
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import type { AgentSession, AgentSessionStatus } from "@/agentMode/session/Agent
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 import { Loader2, MoreHorizontal, PanelLeft, Plus, X } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 
 interface Props {
@@ -44,12 +46,18 @@ function useSessionDisplay(session: AgentSession) {
   );
   const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
+  const agent = session.getAgent();
   return {
     status: session.getStatus(),
     label,
     needsAttention: session.getNeedsAttention(),
     descriptor,
-    displayLabel: label ?? descriptor?.displayName ?? "Chat",
+    hasAgentMemory: agent.slug !== null,
+    agentFace: agent.slug ? { name: agent.name, avatarSrc: agent.avatarSrc ?? null } : null,
+    displayLabel: label ?? (agent.slug ? agent.name : (descriptor?.displayName ?? "Chat")),
+    tooltipLabel: agent.slug
+      ? `${agent.name}${label ? ` · ${label}` : ""}`
+      : (label ?? descriptor?.displayName ?? "Chat"),
   };
 }
 
@@ -104,6 +112,13 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
     manager.createSession().catch((e) => logError("[AgentMode] createSession failed", e));
   }, [manager]);
 
+  const handleUpdateMemory = React.useCallback(
+    (id: string) => {
+      if (manager.updateMemoryNow(id)) new Notice("Updating memory…");
+    },
+    [manager]
+  );
+
   const handleClose = React.useCallback(
     (id: string) => {
       manager.detachSessionFromTab(id);
@@ -142,6 +157,7 @@ export const AgentTabStrip: React.FC<Props> = ({ manager, onOpenSidebar }) => {
               isRenaming={renamingId === session.internalId}
               onActivate={() => manager.setActiveSession(session.internalId)}
               onClose={() => handleClose(session.internalId)}
+              onUpdateMemory={() => handleUpdateMemory(session.internalId)}
               onStartRename={() => setRenamingId(session.internalId)}
               onSubmitRename={(label) => {
                 manager.renameSession(session.internalId, label);
@@ -185,6 +201,7 @@ interface TabProps {
   isRenaming: boolean;
   onActivate: () => void;
   onClose: () => void;
+  onUpdateMemory: () => void;
   onStartRename: () => void;
   onSubmitRename: (label: string) => void;
   onCancelRename: () => void;
@@ -196,11 +213,21 @@ const SessionTab: React.FC<TabProps> = ({
   isRenaming,
   onActivate,
   onClose,
+  onUpdateMemory,
   onStartRename,
   onSubmitRename,
   onCancelRename,
 }) => {
-  const { status, label, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const {
+    status,
+    label,
+    needsAttention,
+    descriptor,
+    hasAgentMemory,
+    agentFace,
+    displayLabel,
+    tooltipLabel,
+  } = useSessionDisplay(session);
 
   const [menuOpen, setMenuOpen] = React.useState(false);
 
@@ -250,20 +277,24 @@ const SessionTab: React.FC<TabProps> = ({
         >
           <BrandIcon
             descriptor={descriptor}
+            agentFace={agentFace}
             status={status}
             needsAttention={needsAttention}
             onCloseOnHover={onClose}
           />
           <TruncatedText
             className="tw-min-w-0 tw-flex-1 !tw-text-current"
-            tooltipContent={displayLabel}
+            tooltipContent={tooltipLabel}
           >
             {displayLabel}
           </TruncatedText>
         </div>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="tw-w-32">
+      <DropdownMenuContent align="start" className="tw-w-44">
         <DropdownMenuItem onSelect={onStartRename}>Rename</DropdownMenuItem>
+        {hasAgentMemory && (
+          <DropdownMenuItem onSelect={onUpdateMemory}>Update memory now</DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={onClose}>Close</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -305,6 +336,7 @@ const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCan
 
 interface BrandIconProps {
   descriptor: BackendDescriptor | undefined;
+  agentFace?: { name: string; avatarSrc: string | null } | null;
   status: AgentSessionStatus;
   needsAttention?: boolean;
   onCloseOnHover?: () => void;
@@ -312,6 +344,7 @@ interface BrandIconProps {
 
 const BrandIcon: React.FC<BrandIconProps> = ({
   descriptor,
+  agentFace,
   status,
   needsAttention,
   onCloseOnHover,
@@ -331,6 +364,12 @@ const BrandIcon: React.FC<BrandIconProps> = ({
             "tw-size-4 tw-animate-spin tw-text-loading",
             onCloseOnHover && "group-hover:tw-hidden"
           )}
+        />
+      ) : agentFace ? (
+        <AgentGlyph
+          name={agentFace.name}
+          avatarSrc={agentFace.avatarSrc}
+          className={cn(onCloseOnHover && "group-hover:tw-hidden")}
         />
       ) : Icon ? (
         <Icon className={cn("tw-size-4", onCloseOnHover && "group-hover:tw-hidden")} />
@@ -417,7 +456,8 @@ interface OverflowRowProps {
 }
 
 const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate, onClose }) => {
-  const { status, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
+  const { status, needsAttention, descriptor, agentFace, displayLabel, tooltipLabel } =
+    useSessionDisplay(session);
 
   return (
     <div
@@ -429,10 +469,15 @@ const OverflowRow: React.FC<OverflowRowProps> = ({ session, isActive, onActivate
         isActive && "tw-bg-interactive-accent/10"
       )}
     >
-      <BrandIcon descriptor={descriptor} status={status} needsAttention={needsAttention} />
+      <BrandIcon
+        descriptor={descriptor}
+        agentFace={agentFace}
+        status={status}
+        needsAttention={needsAttention}
+      />
       <TruncatedText
         className="tw-min-w-0 tw-flex-1 !tw-text-current"
-        tooltipContent={displayLabel}
+        tooltipContent={tooltipLabel}
       >
         {displayLabel}
       </TruncatedText>

@@ -1,5 +1,5 @@
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
+import { NO_AGENT_MENTIONS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import { AgentInputDraftStore } from "@/agentMode/session/AgentInputDraftStore";
@@ -26,15 +26,16 @@ jest.mock("@/plusUtils", () => ({
   navigateToPlusPage: jest.fn(),
 }));
 
-const FAKE_BRANDS = Object.freeze([{ id: "claude", displayName: "Claude", Icon: () => null }]);
+const FAKE_AGENTS = Object.freeze([
+  { slug: "jennifer", name: "Jennifer", description: "Skeptical editor.", icon: "🪶" },
+]);
 jest.mock("@/agentMode/ui/mentionedAgents", () => ({
   EMPTY_ANSWERERS: Object.freeze([]),
   isFanout: () => false,
   resolveAnswerers: () => [],
-  useInstalledAgentBrands: () => FAKE_BRANDS,
 }));
 
-let capturedAgentBrands: ReadonlyArray<unknown> | undefined;
+let capturedAgentMentions: unknown;
 const mockPrependContent = jest.fn();
 jest.mock("@/components/chat-components/ChatInput", () => ({
   __esModule: true,
@@ -42,7 +43,8 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
     (
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
-        agentBrands?: ReadonlyArray<unknown>;
+        agentMentions?: unknown;
+        topRightAccessory?: React.ReactNode;
         handleSendMessage?: () => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
@@ -58,7 +60,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           );
         },
       }));
-      capturedAgentBrands = props.agentBrands;
+      capturedAgentMentions = props.agentMentions;
       return (
         <>
           <span data-testid="generating-state">{props.isGenerating ? "running" : "idle"}</span>
@@ -154,7 +156,9 @@ function inputNode(
       chatInputId="input-1"
       draft={draft}
       app={makeApp()}
-      mainAgentId={null}
+      ownAgentSlug={null}
+      mentionableAgents={FAKE_AGENTS}
+      onCreateAgent={jest.fn()}
       updateUserMessageHistory={jest.fn()}
       isStarting={false}
       isLoading={draft.loading}
@@ -210,9 +214,9 @@ function setupCancellation() {
 describe("AgentChatInput", () => {
   beforeEach(() => {
     mockSelectedTextContexts = [];
+    capturedAgentMentions = undefined;
     mockActiveWebTab = undefined;
     mockActiveFile = null;
-    capturedAgentBrands = undefined;
     mockUseCanUseMultiAgent.mockReturnValue(true);
   });
 
@@ -798,7 +802,7 @@ describe("AgentChatInput", () => {
       await waitFor(() => expect(draft.setLoading).toHaveBeenCalledWith(false));
     });
 
-    it("passes the real installed-agent list when entitled", () => {
+    it("offers the roster's agents to the typeahead when entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(true);
       renderInput(
         {
@@ -808,7 +812,7 @@ describe("AgentChatInput", () => {
         } as unknown as AgentChatBackend,
         makeDraft()
       );
-      expect(capturedAgentBrands).toBe(FAKE_BRANDS);
+      expect(capturedAgentMentions).toMatchObject({ entries: FAKE_AGENTS, enabled: true });
     });
 
     it("clears input-scoped context only when the logical chat input changes", () => {
@@ -829,7 +833,7 @@ describe("AgentChatInput", () => {
       expect(clearSelection).toHaveBeenCalledTimes(1);
     });
 
-    it("passes the frozen empty list (not a fresh []) when not entitled", () => {
+    it("hides the whole Agents group (the frozen constant, not a fresh object) when not entitled", () => {
       mockUseCanUseMultiAgent.mockReturnValue(false);
       renderInput(
         {
@@ -839,7 +843,7 @@ describe("AgentChatInput", () => {
         } as unknown as AgentChatBackend,
         makeDraft()
       );
-      expect(capturedAgentBrands).toBe(EMPTY_AGENT_MENTION_BRANDS);
+      expect(capturedAgentMentions).toBe(NO_AGENT_MENTIONS);
     });
 
     it("shows the running state while a plan-approved turn continues after the composer send settles (https://github.com/Brevilabs/obsidian-copilot-private/issues/41)", () => {

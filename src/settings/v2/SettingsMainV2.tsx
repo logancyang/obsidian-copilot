@@ -19,7 +19,7 @@ import { ConnectorsSettings } from "@/settings/v2/components/ConnectorsSettings"
 import { useIsConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { useConnectorsSnapshot } from "@/connectors/ui/useConnectorsSnapshot";
 import { usePlugin } from "@/contexts/PluginContext";
-import { Cog, Command, Cpu, Plug, ShieldCheck, Sparkle, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Plug, ShieldCheck, Sparkle, Users, Wrench } from "lucide-react";
 import React from "react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { AdvancedSettings } from "./components/AdvancedSettings";
@@ -33,6 +33,10 @@ const LazySkillsSettings = React.lazy(() =>
   import("@/agentMode").then((module) => ({ default: module.SkillsSettings }))
 );
 
+const LazyAgentsSettings = React.lazy(() =>
+  import("@/agents").then((module) => ({ default: module.AgentsSettings }))
+);
+
 const SkillsSettingsPanel: React.FC = () => {
   if (!isDesktopRuntime()) {
     return <DesktopOnlySettingsPanel message="Skills are available on desktop." />;
@@ -40,6 +44,17 @@ const SkillsSettingsPanel: React.FC = () => {
   return (
     <React.Suspense fallback={null}>
       <LazySkillsSettings />
+    </React.Suspense>
+  );
+};
+
+const AgentsSettingsPanel: React.FC = () => {
+  if (!isDesktopRuntime()) {
+    return <DesktopOnlySettingsPanel message="Agents are available on desktop." />;
+  }
+  return (
+    <React.Suspense fallback={null}>
+      <LazyAgentsSettings />
     </React.Suspense>
   );
 };
@@ -52,6 +67,7 @@ const icons: Record<CopilotSettingsTabId, JSX.Element> = {
   command: <Command className="tw-size-5" />,
   skills: <Sparkle className="tw-size-5" />,
   connectors: <Plug className="tw-size-5" />,
+  agents: <Users className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -63,6 +79,7 @@ const components: Record<CopilotSettingsTabId, React.FC> = {
   command: () => <CommandSettings />,
   skills: SkillsSettingsPanel,
   connectors: ConnectorsSettings,
+  agents: AgentsSettingsPanel,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -74,6 +91,7 @@ const TAB_LABELS: Record<CopilotSettingsTabId, string> = {
   command: "Commands",
   skills: "Skills",
   connectors: "Connectors",
+  agents: "Agents",
   advanced: "Advanced",
 };
 

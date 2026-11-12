@@ -1,6 +1,7 @@
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type {
   AgentChatMessage,
+  AgentMemoryNotice,
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
@@ -19,6 +20,7 @@ export interface AgentChatRuntimeState {
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   pendingAskUserQuestions: AskUserQuestionPrompt[];
+  memoryNotice: AgentMemoryNotice | null;
   chatStates: ChatStates;
   queuedPrompts: readonly QueuedPrompt[];
   tasks: readonly AgentTask[];
@@ -41,6 +43,7 @@ function readBackendRuntimeSnapshot(backend: AgentChatBackend): BackendRuntimeSn
       currentPlan: backend.getCurrentPlan(),
       pendingToolPermissions: backend.getPendingToolPermissions(),
       pendingAskUserQuestions: backend.getPendingAskUserQuestions(),
+      memoryNotice: backend.getMemoryNotice(),
       chatStates: backend.getChatStates(),
       queuedPrompts: backend.getQueuedPrompts(),
       tasks: backend.getTasks(),

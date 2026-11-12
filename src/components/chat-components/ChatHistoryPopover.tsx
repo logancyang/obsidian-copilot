@@ -32,6 +32,7 @@ export interface ChatHistoryItem {
   backendId?: string;
   projectId?: string;
   needsAttention?: boolean;
+  agentFace?: { name: string; avatarSrc: string | null };
   pinnedAt?: number;
   archivedAt?: number;
 }

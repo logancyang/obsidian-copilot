@@ -17,6 +17,8 @@ import {
   FANOUT_AGENT_TIMEOUT_ERROR,
   FANOUT_AGENT_TIMEOUT_MS,
   FANOUT_ALL_FAILED_SUMMARY,
+  FANOUT_MISSING_AGENT_ERROR,
+  type FanoutAnswerer,
 } from "./fanoutTypes";
 
 jest.mock("@/logger", () => ({
@@ -182,12 +184,11 @@ function makeHost(
   const readOnlyUnregistered: string[] = [];
   const excludedFromHistory: Array<{ backendId: BackendId; sessionId: string }> = [];
   const host: FanoutHost = {
-    ensureBackendForFanout: async (backendId) => ({
+    ensureBackendForSubSession: async (backendId) => ({
       proc: procs.get(backendId)!.proc,
       descriptor: descriptors.get(backendId)!,
     }),
     getDefaultSelection: () => null,
-    getDisplayName: (backendId) => backendId.toUpperCase(),
     getCwd: () => "/vault",
     registerReadOnlySession: (sessionId) => {
       readOnlyRegistered.push(sessionId);
@@ -202,13 +203,27 @@ function makeHost(
 
 const flush = () => new Promise((r) => window.setTimeout(r, 0));
 
+function answerer(backendId: BackendId, overrides: Partial<FanoutAnswerer> = {}): FanoutAnswerer {
+  return {
+    slug: backendId,
+    name: backendId.toUpperCase(),
+    icon: "",
+    backendId,
+    selection: null,
+    personaBlock: null,
+    memoryEnabled: false,
+    ...overrides,
+  };
+}
+
 function runInput(
   agents: BackendId[],
   overrides: Partial<Parameters<FanoutOrchestrator["run"]>[0]> = {}
 ): Parameters<FanoutOrchestrator["run"]>[0] {
   return {
-    agents,
-    mainAgent: agents[0],
+    answerers: agents.map((id) => answerer(id)),
+    sessionBackendId: agents[0],
+    summarizerPersonaBlock: null,
     prompt: [{ type: "text", text: "q" }],
     originalPromptText: "the original question",
     signal: new AbortController().signal,
@@ -219,10 +234,20 @@ function runInput(
 
 describe("FanoutOrchestrator", () => {
   describe("createFanoutTurn()", () => {
-    it("seeds one running slot per agent (insertion order) plus a pending summary", () => {
-      const turn = createFanoutTurn(["opencode", "claude", "codex"]);
-      expect(Object.keys(turn.answers)).toEqual(["opencode", "claude", "codex"]);
-      expect(turn.answers.claude).toEqual({ backendId: "claude", status: "running", text: "" });
+    it("seeds one running slot per agent (mention order), labeled with its name and icon", () => {
+      const turn = createFanoutTurn([
+        answerer("opencode"),
+        answerer("claude", { slug: "jennifer", name: "Jennifer", icon: "🪶" }),
+        answerer("codex"),
+      ]);
+      expect(Object.keys(turn.answers)).toEqual(["opencode", "jennifer", "codex"]);
+      expect(turn.answers.jennifer).toEqual({
+        agentSlug: "jennifer",
+        name: "Jennifer",
+        icon: "🪶",
+        status: "running",
+        text: "",
+      });
       expect(turn.summary).toEqual({ status: "pending", text: "" });
     });
   });
@@ -257,13 +282,11 @@ describe("FanoutOrchestrator", () => {
         procs.get("claude")!.resolvePrompt();
 
         const turn = await runPromise;
-        expect(turn.answers.claude).toEqual({
-          backendId: "claude",
+        expect(turn.answers.claude).toMatchObject({
           status: "done",
           text: "Claude says hi",
         });
-        expect(turn.answers.codex).toEqual({
-          backendId: "codex",
+        expect(turn.answers.codex).toMatchObject({
           status: "done",
           text: "Codex says hi",
         });
@@ -421,8 +444,7 @@ describe("FanoutOrchestrator", () => {
         claude.resolvePrompt();
         const turn = await runPromise;
 
-        expect(turn.answers.claude).toEqual({
-          backendId: "claude",
+        expect(turn.answers.claude).toMatchObject({
           status: "done",
           text: "Launched a helper.\n\nREPORT: it says hello.",
         });
@@ -450,8 +472,7 @@ describe("FanoutOrchestrator", () => {
           await jest.advanceTimersByTimeAsync(FANOUT_AGENT_TIMEOUT_MS);
           const turn = await runPromise;
 
-          expect(turn.answers.claude).toEqual({
-            backendId: "claude",
+          expect(turn.answers.claude).toMatchObject({
             status: "error",
             text: "Launched a helper.",
             error: expect.stringContaining(FANOUT_AGENT_TIMEOUT_ERROR),
@@ -490,8 +511,7 @@ describe("FanoutOrchestrator", () => {
         );
         const turn = await runPromise;
 
-        expect(turn.answers.claude).toEqual({
-          backendId: "claude",
+        expect(turn.answers.claude).toMatchObject({
           status: "error",
           text: "Launched a helper.",
           error: expect.stringContaining("Claude exited"),
@@ -571,7 +591,7 @@ describe("FanoutOrchestrator", () => {
         proc.endTurnsAtOnce(() => proc.emit(textChunk("s-claude", "Claude answered directly")));
 
         const turn = await new FanoutOrchestrator(host).run(
-          runInput(["claude"], { mainAgent: "opencode" })
+          runInput(["claude"], { sessionBackendId: "opencode" })
         );
 
         expect(proc.proc.prompt).toHaveBeenCalledTimes(1);
@@ -618,7 +638,7 @@ describe("FanoutOrchestrator", () => {
         });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -649,7 +669,10 @@ describe("FanoutOrchestrator", () => {
         const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: CodexBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: CodexBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: "example", effort: null });
         jest.mocked(proc.setSessionConfigOption).mockRejectedValue(new Error("Model unavailable"));
         const result = await new FanoutOrchestrator(host).run(runInput(["codex"]));
@@ -666,7 +689,7 @@ describe("FanoutOrchestrator", () => {
         });
         const proc = procs.get("codex")!.proc;
         configureCodex(proc);
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "codex"
             ? { proc, descriptor: CodexBackendDescriptor }
             : {
@@ -724,7 +747,7 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         };
-        host.ensureBackendForFanout = async (backendId) =>
+        host.ensureBackendForSubSession = async (backendId) =>
           backendId === "opencode"
             ? { proc, descriptor: opencodeEnabling(["provider/model"]) }
             : {
@@ -794,7 +817,7 @@ describe("FanoutOrchestrator", () => {
             },
             mode: null,
           };
-          host.ensureBackendForFanout = async () => ({
+          host.ensureBackendForSubSession = async () => ({
             proc,
             descriptor: opencodeEnabling(["provider/new"]),
           });
@@ -833,7 +856,7 @@ describe("FanoutOrchestrator", () => {
           },
           mode: null,
         });
-        host.ensureBackendForFanout = async () => ({
+        host.ensureBackendForSubSession = async () => ({
           proc: mock.proc,
           descriptor: opencodeEnabling(["provider/enabled"]),
         });
@@ -870,7 +893,7 @@ describe("FanoutOrchestrator", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/625 fails an OpenCode slot without prompting when the user enabled no model, rather than running OpenCode's own", async () => {
         const { host, procs } = makeHost({ opencode: { sessionId: "s-opencode" } });
         const mock = procs.get("opencode")!;
-        host.ensureBackendForFanout = async () => ({
+        host.ensureBackendForSubSession = async () => ({
           proc: mock.proc,
           descriptor: opencodeEnabling([]),
         });
@@ -907,7 +930,10 @@ describe("FanoutOrchestrator", () => {
         const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
         const proc = procs.get("claude")!.proc;
         const modelId = "claude-sonnet-4-5";
-        host.ensureBackendForFanout = async () => ({ proc, descriptor: ClaudeBackendDescriptor });
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: ClaudeBackendDescriptor,
+        });
         host.getDefaultSelection = () => ({ baseModelId: modelId, effort: "high" });
         const effortOption = ClaudeBackendDescriptor.wire.effortConfigFor?.(modelId);
         expect(effortOption).toBeTruthy();
@@ -921,6 +947,115 @@ describe("FanoutOrchestrator", () => {
           configId: effortOption!.id,
           value: "high",
         });
+      });
+      it("runs an answerer on its agent's own pinned model and effort, not the backend default (designdocs/CUSTOM_AGENTS.md §3)", async () => {
+        const { host, procs } = makeHost({ codex: { sessionId: "s-codex" } });
+        const proc = procs.get("codex")!.proc;
+        configureCodex(proc);
+        host.ensureBackendForSubSession = async () => ({
+          proc,
+          descriptor: CodexBackendDescriptor,
+        });
+        host.getDefaultSelection = () => ({ baseModelId: "example", effort: "low" });
+        procs
+          .get("codex")!
+          .endTurnsAtOnce(() => procs.get("codex")!.emit(textChunk("s-codex", "answer")));
+
+        await new FanoutOrchestrator(host).run(
+          runInput(["codex"], {
+            answerers: [
+              answerer("codex", { selection: { baseModelId: "example", effort: "high" } }),
+            ],
+          })
+        );
+
+        expect(proc.setSessionConfigOption).toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "reasoning_effort",
+          value: "high",
+        });
+        expect(proc.setSessionConfigOption).not.toHaveBeenCalledWith({
+          sessionId: "s-codex",
+          configId: "reasoning_effort",
+          value: "low",
+        });
+      });
+
+      it("leads each answerer's prompt with its own persona and memory, on the backend it pinned", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        procs.get("claude")!.endTurnsAtOnce();
+        procs.get("codex")!.endTurnsAtOnce();
+
+        await new FanoutOrchestrator(host).run(
+          runInput([], {
+            sessionBackendId: "claude",
+            answerers: [
+              answerer("codex", {
+                slug: "jennifer",
+                name: "Jennifer",
+                personaBlock: "<agent_persona>Jennifer</agent_persona>",
+              }),
+              answerer("claude", {
+                slug: "vancat",
+                name: "Vancat",
+                backendId: null,
+                personaBlock: "<agent_persona>Vancat</agent_persona>",
+              }),
+            ],
+          })
+        );
+
+        const jenniferPrompt = jest.mocked(procs.get("codex")!.proc.prompt).mock.calls[0][0];
+        expect((jenniferPrompt.prompt[0] as { text: string }).text).toBe(
+          "<agent_persona>Jennifer</agent_persona>\n\nq"
+        );
+        const vancatPrompt = jest.mocked(procs.get("claude")!.proc.prompt).mock.calls[0][0];
+        expect((vancatPrompt.prompt[0] as { text: string }).text).toBe(
+          "<agent_persona>Vancat</agent_persona>\n\nq"
+        );
+      });
+
+      it("has the chat's own persona write the summary, in its own voice", async () => {
+        const { host, procs } = makeHost({
+          claude: { sessionId: "s-claude" },
+          codex: { sessionId: "s-codex" },
+        });
+        for (const id of ["claude", "codex"]) {
+          procs
+            .get(id)!
+            .endTurnsAtOnce(() => procs.get(id)!.emit(textChunk(`s-${id}`, `${id} answer`)));
+        }
+
+        await new FanoutOrchestrator(host).run(
+          runInput(["claude", "codex"], {
+            summarizerPersonaBlock: "<agent_persona>Jennifer</agent_persona>",
+          })
+        );
+
+        const summaryPrompt = jest.mocked(procs.get("claude")!.proc.prompt).mock.calls[1][0];
+        const text = (summaryPrompt.prompt[0] as { text: string }).text;
+        expect(text.startsWith("<agent_persona>Jennifer</agent_persona>\n\n")).toBe(true);
+        expect(text).toContain("the original question");
+      });
+
+      it("reports an agent deleted between composing and sending instead of answering as nobody", async () => {
+        const { host, procs } = makeHost({ claude: { sessionId: "s-claude" } });
+
+        const turn = await new FanoutOrchestrator(host).run(
+          runInput([], {
+            sessionBackendId: "claude",
+            answerers: [answerer("claude", { slug: "ghost", name: "Ghost", missing: true })],
+          })
+        );
+
+        expect(turn.answers.ghost).toMatchObject({
+          status: "error",
+          error: FANOUT_MISSING_AGENT_ERROR,
+        });
+        expect(procs.get("claude")!.proc.newSession).not.toHaveBeenCalled();
       });
     });
   });

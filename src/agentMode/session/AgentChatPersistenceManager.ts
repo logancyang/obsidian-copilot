@@ -61,6 +61,12 @@ function parseUsageJson(raw: unknown): SessionUsage | undefined {
   }
 }
 
+function parsePositiveInt(raw: unknown): number | undefined {
+  const value = typeof raw === "number" ? raw : Number(typeof raw === "string" ? raw.trim() : NaN);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return Math.floor(value);
+}
+
 export interface LoadedAgentChat {
   messages: AgentChatMessage[];
   backendId: BackendId;
@@ -68,6 +74,8 @@ export interface LoadedAgentChat {
   sessionId?: string;
   projectId: string;
   usage?: SessionUsage;
+  agentSlug?: string;
+  memorizedThroughTurn?: number;
 }
 
 export class AgentChatPersistenceManager {
@@ -96,6 +104,8 @@ export class AgentChatPersistenceManager {
       sessionId?: string | null;
       projectId?: string;
       usage?: SessionUsage;
+      agentSlug?: string | null;
+      memorizedThroughTurn?: number;
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -134,6 +144,8 @@ export class AgentChatPersistenceManager {
         sessionId: options?.sessionId,
         projectId: options?.projectId,
         usage: options?.usage,
+        agentSlug: options?.agentSlug,
+        memorizedThroughTurn: options?.memorizedThroughTurn,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -199,12 +211,23 @@ export class AgentChatPersistenceManager {
     const sessionId = frontmatter.sessionId?.trim() || undefined;
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
+    const agentSlug = frontmatter.agentSlug?.trim() || undefined;
+    const memorizedThroughTurn = parsePositiveInt(frontmatter.memorizedThroughTurn);
     const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, label, sessionId, projectId, usage };
+    return {
+      messages,
+      backendId,
+      label,
+      sessionId,
+      projectId,
+      usage,
+      agentSlug,
+      memorizedThroughTurn,
+    };
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
@@ -268,9 +291,7 @@ export class AgentChatPersistenceManager {
       .map((m) => {
         const ts = m.timestamp ? m.timestamp.display : "Unknown time";
         const body =
-          m.message.length === 0 && m.fanout
-            ? serializeFanoutComposite(m.fanout, (id) => id)
-            : m.message;
+          m.message.length === 0 && m.fanout ? serializeFanoutComposite(m.fanout) : m.message;
         return `${formatChatNoteMessage(m.sender, body)}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
@@ -425,6 +446,8 @@ export class AgentChatPersistenceManager {
     sessionId?: string | null;
     projectId?: string;
     usage?: SessionUsage;
+    agentSlug?: string | null;
+    memorizedThroughTurn?: number;
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
@@ -437,6 +460,13 @@ export class AgentChatPersistenceManager {
       ["backendId", `backendId: ${args.backendId}`],
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
+      ["agentSlug", quoted("agentSlug", args.agentSlug)],
+      [
+        "memorizedThroughTurn",
+        args.memorizedThroughTurn
+          ? `memorizedThroughTurn: ${args.memorizedThroughTurn}`
+          : undefined,
+      ],
       ["topic", quoted("topic", args.label)],
       ["modelKey", quoted("modelKey", args.modelKey)],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],

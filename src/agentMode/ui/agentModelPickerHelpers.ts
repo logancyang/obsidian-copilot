@@ -1,4 +1,3 @@
-import { sortEffortOptions } from "@/lib/model-effort";
 import { Notice } from "obsidian";
 import { logError } from "@/logger";
 import type { ModelCapability } from "@/constants";
@@ -8,6 +7,7 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { resolveEffortOptions } from "@/agentMode/session/effortOptions";
 import { backendNeedsSelfHostWarning, backendRegistry } from "@/agentMode/backends/registry";
 import { getModelKeyFromModel } from "@/settings/model";
 import type { CopilotSettings } from "@/settings/model";
@@ -23,8 +23,6 @@ import type {
   ModelState,
 } from "@/agentMode/session/types";
 import type { AgentModelPickerOverride } from "./useAgentModelPicker";
-
-export const EMPTY_EFFORT_OPTIONS = Object.freeze([]) as unknown as EffortOption[];
 
 export const MISSING_KEY_LABEL = "Add API key";
 
@@ -415,21 +413,7 @@ export function buildEffortOptionsByModelKey(
   return out;
 }
 
-export function resolveEffortOptions(
-  manager: AgentSessionManager,
-  backendId: BackendId,
-  baseModelId: string
-): EffortOption[] {
-  const models = manager.getCachedModelCatalog(backendId)?.availableModels ?? null;
-  const found = models?.find((m) => m.baseModelId === baseModelId);
-  const reported = found?.effortOptions ?? [];
-  if (reported.length > 0) return sortEffortOptions(reported);
-  return sortEffortOptions(
-    manager.getEffortCatalog(backendId)?.[baseModelId] ?? EMPTY_EFFORT_OPTIONS
-  );
-}
-
-function buildCommitSelection(
+export function buildCommitSelection(
   manager: AgentSessionManager,
   ctx: ModelActiveContext,
   entries: ModelSelectorEntry[],
@@ -481,13 +465,16 @@ export function buildAgentModelPicker(args: {
   const ctx = collectModelActiveContext(manager);
   const { entries, valueKey } = buildPickerEntries(manager, descriptors, ctx, settings);
   const onChange = buildModelOnChange(manager, ctx, entries);
+  const effort = buildEffortSibling(manager, ctx);
+  const effortOptionsByModelKey = buildEffortOptionsByModelKey(manager, entries);
+  const commitSelection = buildCommitSelection(manager, ctx, entries, onChange);
   return {
     models: entries,
     value: valueKey,
     disabled: false,
-    effort: buildEffortSibling(manager, ctx),
-    effortOptionsByModelKey: buildEffortOptionsByModelKey(manager, entries),
+    effort,
+    effortOptionsByModelKey,
     onChange,
-    commitSelection: buildCommitSelection(manager, ctx, entries, onChange),
+    commitSelection,
   };
 }

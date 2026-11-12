@@ -315,7 +315,13 @@ describe("AgentChatPersistenceManager", () => {
         timestamp: { epoch: 2, display: "2026/01/01 12:00:00", fileName: "20260101_120000" },
         fanout: {
           answers: {
-            opencode: { backendId: "opencode", status: "running", text: "partial opencode answer" },
+            opencode: {
+              agentSlug: "opencode",
+              name: "Opencode",
+              icon: "",
+              status: "running",
+              text: "partial opencode answer",
+            },
           },
           summary: { status: "streaming", text: "" },
         },
@@ -811,6 +817,138 @@ describe("AgentChatPersistenceManager", () => {
       const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
       expect(loaded.usage).toBeUndefined();
       expect(loaded.backendId).toBe("claude");
+    });
+  });
+
+  describe("agentSlug frontmatter", () => {
+    it("round-trips the agent a chat was held with", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: "jennifer",
+      });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).toContain('agentSlug: "jennifer"');
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBe("jennifer");
+    });
+
+    it("writes no field for a Copilot chat, so it matches one saved before agents existed", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: null,
+      });
+      const raw = app.files.get(saved!.path)!.contents!;
+      expect(raw).not.toContain("agentSlug:");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBeUndefined();
+    });
+
+    it("keeps the persisted slug when a later save omits it", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const first = await manager.saveSession(messages, "claude", { agentSlug: "jennifer" });
+
+      const second = await manager.saveSession(messages, "claude", { existingPath: first!.path });
+
+      const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
+      expect(loaded.agentSlug).toBe("jennifer");
+    });
+
+    it("loads a chat written before the field existed with no agent named", async () => {
+      const path = "test-folder/agent__legacy-agentless.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.agentSlug).toBeUndefined();
+      expect(loaded.backendId).toBe("claude");
+    });
+  });
+
+  describe("memorizedThroughTurn frontmatter", () => {
+    it("round-trips how far the agent has memorized (CUSTOM_AGENTS.md §5)", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: "jennifer",
+        memorizedThroughTurn: 4,
+      });
+      expect(app.files.get(saved!.path)!.contents!).toContain("memorizedThroughTurn: 4");
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path) as unknown as TFile);
+      expect(loaded.memorizedThroughTurn).toBe(4);
+    });
+
+    it("writes no field before anything is memorized (CUSTOM_AGENTS.md §8)", async () => {
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        agentSlug: "jennifer",
+        memorizedThroughTurn: 0,
+      });
+
+      expect(app.files.get(saved!.path)!.contents!).not.toContain("memorizedThroughTurn");
+    });
+
+    it("keeps the marker when a later save omits it, so memorized turns are not re-read", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const first = await manager.saveSession(messages, "claude", {
+        agentSlug: "jennifer",
+        memorizedThroughTurn: 2,
+      });
+
+      const second = await manager.saveSession(messages, "claude", { existingPath: first!.path });
+
+      const loaded = await manager.loadFile(app.files.get(second!.path) as unknown as TFile);
+      expect(loaded.memorizedThroughTurn).toBe(2);
+    });
+
+    it("loads a chat written before the field existed as never memorized", async () => {
+      const path = "test-folder/agent__legacy-unmemorized.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.memorizedThroughTurn).toBeUndefined();
+      expect(loaded.messages).toHaveLength(1);
+    });
+
+    it("ignores a hand-edited marker that is not a positive whole number", async () => {
+      const path = "test-folder/agent__bad-marker.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "memorizedThroughTurn: soon",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.memorizedThroughTurn).toBeUndefined();
     });
   });
 });

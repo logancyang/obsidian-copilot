@@ -3,8 +3,14 @@ import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import { GLOBAL_SCOPE, type ProjectScopeId } from "@/agentMode/session/scope";
 import {
+  COPILOT_SESSION_AGENT,
+  type AgentMemoryInjection,
+  type SessionAgent,
+} from "@/agentMode/session/sessionAgent";
+import {
   AgentChatMessage,
   AgentMcpServer,
+  AgentMemoryNotice,
   AgentMessagePart,
   AgentToolKind,
   AgentQuestionAnswers,
@@ -61,8 +67,8 @@ import { TurnTracker, type TurnOutcome, type TurnSend } from "@/agentMode/sessio
 import { getVaultBase } from "@/utils/vaultPath";
 import { deriveChatTitleFromMessages } from "@/agentMode/session/chatHistoryMerge";
 import { isCompactCommand } from "@/commands/compactCommand";
-import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrator";
-import { isFanout } from "@/agentMode/session/fanout/answerers";
+import type { FanoutTurnRequest } from "@/agentMode/session/fanout/FanoutOrchestrator";
+import { EMPTY_ANSWERERS, isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
   CONVERSATION_HISTORY_MAX_CHARS,
@@ -118,10 +124,9 @@ import {
   type TurnFailure,
 } from "@/agentMode/session/chatExtension";
 
-export type RunFanoutTurn = (input: FanoutRunInput) => Promise<FanoutTurn>;
+export type RunFanoutTurn = (request: FanoutTurnRequest) => Promise<FanoutTurn>;
 
 export const DEFAULT_TITLE_PREFIX = "New session";
-const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
 const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
@@ -252,6 +257,11 @@ export class AgentSession implements ChatStateHost, ChatView {
   readonly cwd: string | null;
   private readonly getProjectContextBlockFn: (() => string) | null;
   private firstPromptSent = false;
+  private sessionAgent: SessionAgent = COPILOT_SESSION_AGENT;
+  private injectedMemoryFingerprint: string | null = null;
+  private memorizedThroughTurn = 0;
+  private memoryNotice: AgentMemoryNotice | null = null;
+  private pendingMemoryNotice: AgentMemoryNotice | null = null;
   private lastSentWebTabBlock: string | null = null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private readonly runFanoutTurn: RunFanoutTurn | null;
@@ -264,7 +274,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   private startupFailed = false;
   private startupSettled = false;
   private agentBusy = false;
-  private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
+  private lastMentionedAgents: ReadonlyArray<string> = EMPTY_ANSWERERS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
   private readonly turns: TurnTracker;
@@ -661,6 +671,73 @@ export class AgentSession implements ChatStateHost, ChatView {
     return this.label;
   }
 
+  getAgent(): SessionAgent {
+    return this.sessionAgent;
+  }
+
+  getMemorizedThroughTurn(): number {
+    return this.memorizedThroughTurn;
+  }
+
+  setMemorizedThroughTurn(count: number): void {
+    if (!Number.isFinite(count) || count <= this.memorizedThroughTurn) return;
+    this.memorizedThroughTurn = Math.floor(count);
+  }
+
+  setAgentMemory(memory: AgentMemoryInjection | null): void {
+    if (memory?.fingerprint === this.sessionAgent.memory?.fingerprint) return;
+    this.sessionAgent = { ...this.sessionAgent, memory };
+  }
+
+  private takeAgentMemoryBlock(): string | null {
+    const memory = this.sessionAgent.memory;
+    if (!memory || memory.fingerprint === this.injectedMemoryFingerprint) return null;
+    this.injectedMemoryFingerprint = memory.fingerprint;
+    return memory.block;
+  }
+
+  private buildSummarizerPersonaBlock(): string | null {
+    const parts = [this.sessionAgent.personaBlock, this.sessionAgent.memory?.block].filter(
+      (part): part is string => Boolean(part)
+    );
+    return parts.length > 0 ? parts.join("\n\n") : null;
+  }
+
+  getMemoryNotice(): AgentMemoryNotice | null {
+    return this.memoryNotice;
+  }
+
+  setMemoryNotice(notice: AgentMemoryNotice | null): void {
+    if (this.memoryNotice === notice) return;
+    this.memoryNotice = notice;
+    this.notifyMessages();
+  }
+
+  setPendingMemoryNotice(notice: AgentMemoryNotice): void {
+    this.pendingMemoryNotice = notice;
+  }
+
+  promotePendingMemoryNotice(): void {
+    const notice = this.pendingMemoryNotice;
+    if (!notice) return;
+    this.pendingMemoryNotice = null;
+    this.setMemoryNotice(notice);
+  }
+
+  setAgent(agent: SessionAgent): void {
+    if (
+      agent.slug === this.sessionAgent.slug &&
+      agent.name === this.sessionAgent.name &&
+      agent.personaBlock === this.sessionAgent.personaBlock &&
+      agent.memory?.fingerprint === this.sessionAgent.memory?.fingerprint
+    ) {
+      return;
+    }
+    if (agent.slug !== this.sessionAgent.slug) this.injectedMemoryFingerprint = null;
+    this.sessionAgent = agent;
+    this.notifyLabelChanged();
+  }
+
   getLabelSource(): "user" | "agent" | null {
     return this.labelSource;
   }
@@ -710,7 +787,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     displayText: string,
     context?: MessageContext,
     promptContent?: PromptContent[],
-    mentionedAgents?: ReadonlyArray<BackendId>
+    mentionedAgents?: ReadonlyArray<string>
   ): { userMessageId: string; turn: Promise<StopReason> } {
     // Agents only compact when /compact is the whole prompt, so nothing rides along with it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
@@ -737,7 +814,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       if (
         !this.acceptsMidTurnPrompts() ||
         sendsCompact ||
-        isFanout(mentionedAgents ?? EMPTY_BACKEND_IDS, this.backendId)
+        isFanout(mentionedAgents ?? EMPTY_ANSWERERS, this.sessionAgent.slug)
       ) {
         throw new Error("Session already has a turn in flight");
       }
@@ -750,6 +827,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     const userMessageId = this.store.addMessage(
       buildUserMessage(promptId, displayText, context, promptContent)
     );
+    this.memoryNotice = null;
     this.notifyPromptSent();
     this.turns.openReply();
 
@@ -758,7 +836,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     }
 
     this.lastMentionedAgents =
-      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_BACKEND_IDS;
+      mentionedAgents && mentionedAgents.length > 0 ? mentionedAgents : EMPTY_ANSWERERS;
 
     const send = this.turns.startSend();
     const turn = this.runTurn(
@@ -777,7 +855,7 @@ export class AgentSession implements ChatStateHost, ChatView {
     const fanoutRunning =
       this.turns.isSending() &&
       this.runFanoutTurn !== null &&
-      isFanout(this.lastMentionedAgents, this.backendId);
+      isFanout(this.lastMentionedAgents, this.sessionAgent.slug);
     return !fanoutRunning && this.getDescriptor?.()?.midTurnDelivery === true;
   }
 
@@ -898,12 +976,13 @@ export class AgentSession implements ChatStateHost, ChatView {
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
       const isFirstTurn = !this.firstPromptSent && !sendsCompact;
       const projectContextBlock = isFirstTurn ? (this.getProjectContextBlockFn?.() ?? null) : null;
+      const agentPersonaBlock = isFirstTurn ? this.sessionAgent.personaBlock : null;
       const projectContextUpdates = sendsCompact
         ? null
         : (this.getProjectContextUpdatesFn?.() ?? null);
       const projectContextUpdatesBlock = projectContextUpdates?.block ?? null;
 
-      if (this.runFanoutTurn && isFanout(this.lastMentionedAgents, this.backendId)) {
+      if (this.runFanoutTurn && isFanout(this.lastMentionedAgents, this.sessionAgent.slug)) {
         const entitled = await this.ensureMultiAgentEntitlement();
         if (signal.aborted || this.disposed) return { stopReason: "cancelled" };
         if (!entitled) {
@@ -953,6 +1032,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       // The agent keeps every earlier turn, so resending an unchanged page fills its context
       // window with copies. https://github.com/Brevilabs/obsidian-copilot-private/issues/667
       const webTabPromptBlock = webTabBlock === this.lastSentWebTabBlock ? "" : webTabBlock;
+      const agentMemoryBlock = sendsCompact ? null : this.takeAgentMemoryBlock();
       const promptBlocks = buildPromptBlocks(
         displayText,
         context,
@@ -960,7 +1040,9 @@ export class AgentSession implements ChatStateHost, ChatView {
         webTabPromptBlock,
         projectContextBlock,
         leadingContextBlock,
-        projectContextUpdatesBlock
+        projectContextUpdatesBlock,
+        agentPersonaBlock,
+        agentMemoryBlock
       );
 
       const outcome = await this.turns.submit(
@@ -1015,9 +1097,10 @@ export class AgentSession implements ChatStateHost, ChatView {
   ): Promise<StopReason> {
     const placeholderId = this.turns.getReplyId()!;
     const turnStartedAtMs = this.turns.getReplyStartedAtMs();
-    const input: FanoutRunInput = {
-      agents: this.lastMentionedAgents,
-      mainAgent: this.backendId,
+    const request: FanoutTurnRequest = {
+      agentSlugs: this.lastMentionedAgents,
+      sessionBackendId: this.backendId,
+      summarizerPersonaBlock: this.buildSummarizerPersonaBlock(),
       prompt: withReadOnlyPreamble(promptBlocks),
       originalPromptText,
       signal,
@@ -1026,7 +1109,7 @@ export class AgentSession implements ChatStateHost, ChatView {
         this.scheduleNotifyMessages();
       },
     };
-    const turn = await this.runFanoutTurn!(input);
+    const turn = await this.runFanoutTurn!(request);
     this.store.setFanout(placeholderId, turn);
 
     const stopReason: StopReason = signal.aborted ? "cancelled" : "end_turn";
@@ -1040,14 +1123,14 @@ export class AgentSession implements ChatStateHost, ChatView {
     const hasContent =
       turn.summary.text.trim().length > 0 || hasAnswerText || isDirectAnswerTurn(turn);
     if (hasContent) {
-      const composite = serializeFanoutComposite(turn, (id) => this.displayNameFor(id));
+      const composite = serializeFanoutComposite(turn);
       this.store.appendAgentText(placeholderId, composite);
       const summaryText = turn.summary.text.trim();
       const replay =
         turn.summary.complete && summaryText.length > 0
           ? summaryText
           : hasAnswerText
-            ? renderFanoutComposite(turn, (id) => this.displayNameFor(id))
+            ? renderFanoutComposite(turn)
             : "";
       if (replay) {
         this.pendingFanoutContext.push({ question: originalPromptText, summary: replay });

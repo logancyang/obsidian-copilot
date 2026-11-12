@@ -14,13 +14,31 @@ function makeEditor(): LexicalEditor {
 describe("AgentPillNode", () => {
   describe("AgentPillNode", () => {
     describe("getTextContent()", () => {
-      it("contributes empty text content so the backend id never reaches the prompt", () => {
+      it("contributes empty text content so the agent slug never reaches the prompt", () => {
         const editor = makeEditor();
         editor.update(
           () => {
-            const node = $createAgentPillNode("claude", "Claude");
+            const node = $createAgentPillNode("jennifer", "Jennifer", "🪶");
             expect(node.getTextContent()).toBe("");
-            expect(node.getBackendId()).toBe("claude");
+            expect(node.getAgentSlug()).toBe("jennifer");
+          },
+          { discrete: true }
+        );
+      });
+    });
+
+    describe("importJSON()", () => {
+      it("round-trips the agent's name and icon through serialization, so render needs no roster", () => {
+        const editor = makeEditor();
+        editor.update(
+          () => {
+            const node = $createAgentPillNode("jennifer", "Jennifer", "🪶");
+            const restored = AgentPillNode.importJSON(node.exportJSON());
+            expect(restored.exportJSON()).toMatchObject({
+              value: "jennifer",
+              label: "Jennifer",
+              icon: "🪶",
+            });
           },
           { discrete: true }
         );

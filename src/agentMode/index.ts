@@ -29,6 +29,7 @@ import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
+import { AgentFileManager } from "@/agents/AgentFileManager";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
@@ -87,6 +88,7 @@ export { partitionOpencodeOnlyWireIds } from "./backends/opencode/opencodeProbeP
 export { mapProviderToOpencodeId } from "./backends/opencode/opencodeModelResolve";
 export type { CopilotMode, ModelSelection } from "./session/types";
 export { AgentDefaultModelSetting } from "./ui/AgentDefaultModelSetting";
+export { resolveEffortOptions } from "./session/effortOptions";
 export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView } from "./ui/PlanPreviewView";
@@ -301,6 +303,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     beforeBackendStart,
     persistenceManager,
     sessionIndex,
+    agentFileManager: new AgentFileManager(app),
     chatExtensions: [
       FEEDBACK_OFFER_EXTENSION,
       ...(connectionManager
@@ -317,6 +320,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     copilotMcpServer,
   });
   managerRef = manager;
+  void manager
+    .consolidateStaleAgentsOnLoad()
+    .catch((error) => logError("[Agents] Load-time consolidation failed", error));
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/857
   connectorTools?.subscribeToToolSetChange((affectsBackend) => {

@@ -30,7 +30,6 @@ export interface AgentBrand {
   readonly id: BackendId;
   readonly displayName: string;
   readonly Icon: React.ComponentType<{ className?: string }>;
-  readonly needsSelfHostWarning?: boolean;
 }
 
 export type SessionId = string;
@@ -583,3 +582,11 @@ export interface TurnFileChange {
 }
 
 export type NewAgentChatMessage = Omit<AgentChatMessage, "id"> & { id?: string };
+
+export type AgentMemoryNoticeKind = "flush" | "consolidation";
+
+export interface AgentMemoryNotice {
+  kind: AgentMemoryNoticeKind;
+  agentName: string;
+  path: string;
+}

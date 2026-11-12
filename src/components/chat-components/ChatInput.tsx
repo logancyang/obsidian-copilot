@@ -48,8 +48,7 @@ import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNod
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
-import { type AgentMentionBrand, EMPTY_AGENT_MENTION_BRANDS } from "./hooks/useAtMentionCategories";
-import { EMPTY_CLOUD_AGENT_IDS } from "./context/CloudAgentContext";
+import { type AgentMentionState, NO_AGENT_MENTIONS } from "./hooks/useAtMentionCategories";
 import { $createAgentPillNode } from "./pills/AgentPillNode";
 
 const ACCENT_CIRCLE_BUTTON_CLASS =
@@ -138,11 +137,9 @@ export interface ChatInputProps {
   isAgentMode?: boolean;
   projectFolderPath?: string;
 
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  agentMentions?: AgentMentionState;
 
-  cloudAgentIds?: ReadonlySet<string>;
-
-  onMentionedAgentsChange?: (backendIds: string[]) => void;
+  onMentionedAgentsChange?: (slugs: string[]) => void;
 }
 
 interface SelectedImagePreviewProps {
@@ -198,8 +195,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     initialContext,
     isAgentMode = false,
     projectFolderPath,
-    agentBrands = EMPTY_AGENT_MENTION_BRANDS,
-    cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
+    agentMentions = NO_AGENT_MENTIONS,
     onMentionedAgentsChange,
   },
   ref
@@ -282,8 +278,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   };
 
   const handleAgentsChange = useCallback(
-    (backendIds: string[]) => {
-      onMentionedAgentsChange?.(backendIds);
+    (slugs: string[]) => {
+      onMentionedAgentsChange?.(slugs);
     },
     [onMentionedAgentsChange]
   );
@@ -370,11 +366,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         break;
       case "agents":
         if (typeof data === "string" && lexicalEditorRef.current) {
-          const label = agentBrands.find((b) => b.id === data)?.displayName ?? data;
+          const agent = agentMentions.entries.find((entry) => entry.slug === data);
           lexicalEditorRef.current.update(() => {
             const selection = $getSelection();
             if ($isRangeSelection(selection)) {
-              selection.insertNodes([$createAgentPillNode(data, label)]);
+              selection.insertNodes([
+                $createAgentPillNode(data, agent?.name ?? data, agent?.icon ?? ""),
+              ]);
             }
           });
         }
@@ -615,16 +613,17 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   useImperativeHandle(
     ref,
     () => ({
-      prependContent(text, agentIds, webTabs) {
+      prependContent(text, agentSlugs, webTabs) {
         setContextWebTabs((previous) => mergeWebTabContexts([...webTabs, ...previous]));
         lexicalEditorRef.current?.update(
           () => {
             // Preserve the current draft's structured pills when restoring a stopped queue.
             // https://github.com/Brevilabs/obsidian-copilot-private/issues/485
             const root = $getRoot();
-            const pills = agentIds.map((id) =>
-              $createAgentPillNode(id, agentBrands.find((b) => b.id === id)?.displayName ?? id)
-            );
+            const pills = agentSlugs.map((slug) => {
+              const agent = agentMentions.entries.find((entry) => entry.slug === slug);
+              return $createAgentPillNode(slug, agent?.name ?? slug, agent?.icon ?? "");
+            });
             const separator = root.getTextContent().trim() ? "\n\n" : "";
             root.selectStart().insertNodes([...pills, $createTextNode(text + separator)]);
             setInputMessage(root.getTextContent());
@@ -639,7 +638,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         });
       },
     }),
-    [agentBrands, setInputMessage]
+    [agentMentions, setInputMessage]
   );
 
   const handleActiveNoteAdded = useCallback(() => {
@@ -724,8 +723,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onWebTabsChange={setWebTabsFromPills}
               onActiveWebTabAdded={handleActiveWebTabAdded}
               onActiveWebTabRemoved={handleActiveWebTabRemoved}
-              agentBrands={agentBrands}
-              cloudAgentIds={cloudAgentIds}
+              agentMentions={agentMentions}
               onAgentsChange={handleAgentsChange}
               onEditorReady={onEditorReady}
               onImagePaste={onAddImage}

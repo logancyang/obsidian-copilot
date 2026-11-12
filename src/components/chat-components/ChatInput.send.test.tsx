@@ -134,7 +134,7 @@ describe("ChatInput", () => {
             ),
         }));
         expect(restored.text).toBe("Review these changes" + (current ? "\n\n" + current : ""));
-        expect(restored.nodes.filter($isAgentPillNode).map((node) => node.getBackendId())).toEqual([
+        expect(restored.nodes.filter($isAgentPillNode).map((node) => node.getAgentSlug())).toEqual([
           "claude",
           "codex",
         ]);

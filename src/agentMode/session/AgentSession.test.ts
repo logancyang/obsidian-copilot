@@ -1,4 +1,5 @@
 import { mockTFile } from "@/__tests__/mockObsidian";
+import type { SessionAgent } from "@/agentMode/session/sessionAgent";
 import { resolveEffort } from "@/lib/model-effort";
 import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
 import { logWarn } from "@/logger";
@@ -24,7 +25,7 @@ import { writePermissionRequest } from "./testing/permissionPrompts";
 import { OUTPUT_LIMIT_CONTINUATION_PROMPT } from "./promptEnvelope";
 import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { AuthRequiredError, MethodUnsupportedError } from "./errors";
-import type { FanoutRunInput } from "./fanout/FanoutOrchestrator";
+import type { FanoutTurnRequest } from "./fanout/FanoutOrchestrator";
 import type { FanoutTurn } from "./fanout/fanoutTypes";
 import type {
   AgentChatMessage,
@@ -1750,13 +1751,19 @@ describe("AgentSession", () => {
         const mock = makeMockBackend();
         const fanoutTurn: FanoutTurn = {
           answers: {
-            opencode: { backendId: "opencode", status: "done", text: "a" },
-            claude: { backendId: "claude", status: "done", text: "b" },
+            opencode: {
+              agentSlug: "opencode",
+              name: "opencode",
+              icon: "",
+              status: "done",
+              text: "a",
+            },
+            claude: { agentSlug: "claude", name: "claude", icon: "", status: "done", text: "b" },
           },
           summary: { status: "done", text: "the fan-out summary", complete: true },
         };
-        const runFanoutTurn = jest.fn(async (input: FanoutRunInput) => {
-          input.onChange(fanoutTurn);
+        const runFanoutTurn = jest.fn(async (request: FanoutTurnRequest) => {
+          request.onChange(fanoutTurn);
           return fanoutTurn;
         });
         const session = makeSession(mock, { runFanoutTurn });
@@ -2168,8 +2175,14 @@ describe("AgentSession", () => {
         const mock = makeMockBackend();
         const answered: FanoutTurn = {
           answers: {
-            opencode: { backendId: "opencode", status: "done", text: "a" },
-            claude: { backendId: "claude", status: "done", text: "b" },
+            opencode: {
+              agentSlug: "opencode",
+              name: "opencode",
+              icon: "",
+              status: "done",
+              text: "a",
+            },
+            claude: { agentSlug: "claude", name: "claude", icon: "", status: "done", text: "b" },
           },
           summary: { status: "done", text: "the fan-out summary", complete: true },
         };
@@ -2870,8 +2883,8 @@ describe("AgentSession", () => {
         const BOTH_AGENTS = ["opencode", "claude"];
 
         const fanoutRunner = (turn: FanoutTurn) =>
-          jest.fn(async (input: FanoutRunInput): Promise<FanoutTurn> => {
-            input.onChange(turn);
+          jest.fn(async (request: FanoutTurnRequest): Promise<FanoutTurn> => {
+            request.onChange(turn);
             return turn;
           });
 
@@ -2880,8 +2893,20 @@ describe("AgentSession", () => {
           summary: FanoutTurn["summary"] = { status: "done", text: "summary" }
         ): FanoutTurn => ({
           answers: {
-            opencode: { backendId: "opencode", status: "done", text: answers[0] },
-            claude: { backendId: "claude", status: "done", text: answers[1] },
+            opencode: {
+              agentSlug: "opencode",
+              name: "Opencode",
+              icon: "",
+              status: "done",
+              text: answers[0],
+            },
+            claude: {
+              agentSlug: "claude",
+              name: "Claude",
+              icon: "",
+              status: "done",
+              text: answers[1],
+            },
           },
           summary,
         });
@@ -2937,8 +2962,9 @@ describe("AgentSession", () => {
           expect(mockedUpgradePrompt).not.toHaveBeenCalled();
           expect(runFanoutTurn).toHaveBeenCalledTimes(1);
           expect(mock.prompt).not.toHaveBeenCalled();
-          expect(runFanoutTurn.mock.calls[0][0].agents).toEqual(BOTH_AGENTS);
-          expect(runFanoutTurn.mock.calls[0][0].mainAgent).toBe("opencode");
+          expect(runFanoutTurn.mock.calls[0][0].agentSlugs).toEqual(BOTH_AGENTS);
+          expect(runFanoutTurn.mock.calls[0][0].sessionBackendId).toBe("opencode");
+          expect(runFanoutTurn.mock.calls[0][0].summarizerPersonaBlock).toBeNull();
           expect(fanoutPromptText(runFanoutTurn)).toContain("read-only");
           expect(fanoutPromptText(runFanoutTurn)).toContain("review");
           expect(aiMessage(session)?.fanout?.answers.claude.text).toBe("claude answer");
@@ -2968,7 +2994,14 @@ describe("AgentSession", () => {
           const mock = makeMockBackend();
           const runFanoutTurn = fanoutRunner({
             answers: {
-              claude: { backendId: "claude", status: "error", text: "", error: "backend boom" },
+              claude: {
+                agentSlug: "claude",
+                name: "Claude",
+                icon: "",
+                status: "error",
+                text: "",
+                error: "backend boom",
+              },
             },
             summary: { status: "done", text: "" },
           });
@@ -3003,13 +3036,20 @@ describe("AgentSession", () => {
           expect(placeholder?.fanout).toBeUndefined();
         });
 
-        it("skips the entitlement gate when no other agent is mentioned", async () => {
+        it("skips the entitlement gate when no agent other than the chat's own is mentioned", async () => {
           const mock = makeMockBackend();
           const runFanoutTurn = jest.fn();
           const session = makeSession(mock, { runFanoutTurn });
 
           await session.sendPrompt("hi").turn;
-          await session.sendPrompt("hi again", undefined, undefined, ["opencode"]).turn;
+          session.setAgent({
+            slug: "jennifer",
+            name: "Jennifer",
+            icon: "🪶",
+            personaBlock: null,
+            memory: null,
+          });
+          await session.sendPrompt("hi again", undefined, undefined, ["jennifer"]).turn;
 
           expect(mockedEnsure).not.toHaveBeenCalled();
           expect(runFanoutTurn).not.toHaveBeenCalled();
@@ -3094,6 +3134,103 @@ describe("AgentSession", () => {
           expect(text).toContain("answer a");
           expect(text).toContain("answer b");
           expect(text).not.toContain("a combined summary could not be generated");
+        });
+      });
+
+      describe("with a custom agent", () => {
+        const JENNIFER: SessionAgent = {
+          slug: "jennifer",
+          name: "Jennifer",
+          icon: "🪶",
+          personaBlock: '<agent_persona name="Jennifer">You are Jennifer.</agent_persona>',
+          memory: {
+            block: '<agent_memory name="Jennifer">knows the newsletter</agent_memory>',
+            fingerprint: "fp-1",
+          },
+        };
+
+        function promptText(mock: MockBackend, call: number): string {
+          const input = mock.prompt.mock.calls[call][0] as { prompt: Array<{ text?: string }> };
+          return input.prompt[0].text ?? "";
+        }
+
+        it("sends the persona and what the agent knows on the first turn", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).toContain("<agent_persona");
+          expect(promptText(mock, 0)).toContain("knows the newsletter");
+        });
+
+        it("repeats neither block on a later turn while the memory files are unchanged", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+
+          await session.sendPrompt("hi").turn;
+          await session.sendPrompt("again").turn;
+
+          expect(promptText(mock, 1)).not.toContain("<agent_persona");
+          expect(promptText(mock, 1)).not.toContain("<agent_memory");
+        });
+
+        it("prepends a fresh memory block, and only that, once the files have changed", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+          await session.sendPrompt("hi").turn;
+
+          session.setAgentMemory({
+            block: '<agent_memory name="Jennifer">renamed to Grid Notes Weekly</agent_memory>',
+            fingerprint: "fp-2",
+          });
+          await session.sendPrompt("and now").turn;
+
+          expect(promptText(mock, 1)).toContain("renamed to Grid Notes Weekly");
+          expect(promptText(mock, 1)).not.toContain("<agent_persona");
+        });
+
+        it("sends nothing extra when a refresh found the same files as last time", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent(JENNIFER);
+          await session.sendPrompt("hi").turn;
+
+          session.setAgentMemory({ ...JENNIFER.memory!, fingerprint: "fp-1" });
+          await session.sendPrompt("again").turn;
+
+          expect(promptText(mock, 1)).not.toContain("<agent_memory");
+        });
+
+        it("sends no memory block for an agent whose memory is off", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent({ ...JENNIFER, memory: null });
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).toContain("<agent_persona");
+          expect(promptText(mock, 0)).not.toContain("<agent_memory");
+        });
+
+        it("sends neither block for a chat whose agent was deleted", async () => {
+          const mock = makeMockBackend();
+          const session = makeSession(mock);
+          session.setAgent({
+            slug: "gone",
+            name: "Gone",
+            icon: "",
+            personaBlock: null,
+            memory: null,
+          });
+
+          await session.sendPrompt("hi").turn;
+
+          expect(promptText(mock, 0)).not.toContain("<agent_persona");
+          expect(promptText(mock, 0)).not.toContain("<agent_memory");
         });
       });
 
@@ -6924,6 +7061,31 @@ describe("AgentSession", () => {
           expect.objectContaining({ id: "tool-bash", status: "cancelled" }),
           expect.objectContaining({ id: "tool-write", status: "completed" }),
         ]);
+      });
+    });
+
+    describe("promotePendingMemoryNotice()", () => {
+      it("shows a held line only once a turn has ended", () => {
+        const session = makeSession(makeMockBackend());
+        const notice = {
+          kind: "consolidation" as const,
+          agentName: "Jennifer",
+          path: "copilot/agents/jennifer/MEMORY.md",
+        };
+
+        session.setPendingMemoryNotice(notice);
+        expect(session.getMemoryNotice()).toBeNull();
+
+        session.promotePendingMemoryNotice();
+        expect(session.getMemoryNotice()).toEqual(notice);
+      });
+
+      it("does nothing when no line is waiting", () => {
+        const session = makeSession(makeMockBackend());
+
+        session.promotePendingMemoryNotice();
+
+        expect(session.getMemoryNotice()).toBeNull();
       });
     });
   });

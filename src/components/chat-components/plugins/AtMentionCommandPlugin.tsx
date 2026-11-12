@@ -10,24 +10,27 @@ import {
 } from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
-  AgentMentionBrand,
+  AgentMentionState,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-  EMPTY_AGENT_MENTION_BRANDS,
+  NO_AGENT_MENTIONS,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
-import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
+import {
+  CREATE_AGENT_OPTION_KEY,
+  useAtMentionSearch,
+} from "@/components/chat-components/hooks/useAtMentionSearch";
 
 interface AtMentionCommandPluginProps {
   showTools?: boolean;
   currentActiveFile?: TFile | null;
-  agentBrands?: ReadonlyArray<AgentMentionBrand>;
+  agentMentions?: AgentMentionState;
 }
 
 export function AtMentionCommandPlugin({
   showTools = false,
   currentActiveFile = null,
-  agentBrands = EMPTY_AGENT_MENTION_BRANDS,
+  agentMentions = NO_AGENT_MENTIONS,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -40,7 +43,7 @@ export function AtMentionCommandPlugin({
 
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  const allCategoryOptions = useAtMentionCategories(showTools, agentBrands.length > 0);
+  const allCategoryOptions = useAtMentionCategories(showTools, agentMentions.enabled);
   const availableCategoryOptions = useMemo(
     () => allCategoryOptions.filter((c) => !c.isAction),
     [allCategoryOptions]
@@ -84,7 +87,7 @@ export function AtMentionCommandPlugin({
     showTools,
     availableCategoryOptions,
     currentActiveFile,
-    agentBrands
+    agentMentions
   );
 
   const isAtMentionOption = useCallback(
@@ -112,6 +115,11 @@ export function AtMentionCommandPlugin({
         return;
       }
 
+      if (option.key === CREATE_AGENT_OPTION_KEY) {
+        agentMentions.onCreateAgent?.();
+        return;
+      }
+
       if (isAtMentionOption(option)) {
         if (option.category === "activeNote") {
           editor.update(() => {
@@ -122,6 +130,7 @@ export function AtMentionCommandPlugin({
             type: option.category as PillData["type"],
             title: option.title,
             data: option.data,
+            icon: option.pillIcon,
           };
 
           editor.update(() => {
@@ -130,7 +139,7 @@ export function AtMentionCommandPlugin({
         }
       }
     },
-    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]
+    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor, agentMentions]
   );
 
   const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {

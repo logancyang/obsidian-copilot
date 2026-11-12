@@ -1,4 +1,4 @@
-import type { BackendId, PromptContent } from "@/agentMode/session/types";
+import type { PromptContent } from "@/agentMode/session/types";
 import { getSettings } from "@/settings/model";
 import type { MessageContext } from "@/types/message";
 import type { App, TFile } from "obsidian";
@@ -9,7 +9,7 @@ export interface QueuedAgentMessage {
   rawInput: string;
   context?: MessageContext;
   promptContent?: PromptContent[];
-  mentionedAgents?: ReadonlyArray<BackendId>;
+  mentionedAgents?: ReadonlyArray<string>;
 }
 
 export interface AgentInputDraft {

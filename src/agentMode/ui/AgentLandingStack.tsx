@@ -15,7 +15,7 @@ export function AgentLandingStack({
     <>
       {/* Without a shelf, the greeting and message box center in the view instead of leaving its lower part empty.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/804 */}
-      <div className={shelf ? "tw-h-1/5 tw-shrink-0" : "tw-flex-1"} />
+      <div className={shelf ? "tw-h-[8%] tw-shrink-0" : "tw-flex-1"} />
       <div className="tw-shrink-0 tw-pb-7">{hero}</div>
       <div className="tw-shrink-0">{composer}</div>
       {shelf ? (

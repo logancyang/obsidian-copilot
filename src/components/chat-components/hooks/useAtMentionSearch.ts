@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { TFolder, TFile } from "obsidian";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
+import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed, Plus } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
@@ -10,14 +10,16 @@ import { useAllFolders } from "./useAllFolders";
 import { useOpenWebTabs } from "./useOpenWebTabs";
 import { useActiveWebTabState } from "./useActiveWebTabState";
 import {
-  AgentMentionBrand,
+  AgentMentionState,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-  EMPTY_AGENT_MENTION_BRANDS,
+  NO_AGENT_MENTIONS,
 } from "./useAtMentionCategories";
 import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
-import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
+import { AgentGlyph } from "@/components/ui/AgentGlyph";
+
+export const CREATE_AGENT_OPTION_KEY = "agent-create";
 
 const MAX_SEARCH_RESULTS = 30;
 
@@ -28,7 +30,7 @@ export function useAtMentionSearch(
   showTools: boolean,
   availableCategoryOptions: CategoryOption[],
   currentActiveFile: TFile | null = null,
-  agentBrands: ReadonlyArray<AgentMentionBrand> = EMPTY_AGENT_MENTION_BRANDS
+  agentMentions: AgentMentionState = NO_AGENT_MENTIONS
 ): (CategoryOption | AtMentionOption)[] {
   const allNotes = useAllNotes();
   const allFolders = useAllFolders();
@@ -111,23 +113,35 @@ export function useAtMentionSearch(
     [openWebTabs]
   );
 
-  const agentItems: AtMentionOption[] = useMemo(
-    () =>
-      agentBrands.map((brand) => ({
-        key: `agent-${brand.id}`,
-        title: brand.displayName,
-        subtitle: undefined,
-        category: "agents",
-        data: brand.id,
-        content: undefined,
-        icon: React.createElement(brand.Icon, { className: "tw-size-4" }),
-        trailingContent: brand.needsSelfHostWarning
-          ? React.createElement(SelfHostCloudWarningIcon)
-          : undefined,
-        searchKeyword: `${brand.displayName} ${brand.id}`,
-      })),
-    [agentBrands]
-  );
+  const agentItems: AtMentionOption[] = useMemo(() => {
+    if (!agentMentions.enabled) return [];
+    if (agentMentions.entries.length === 0) {
+      return [
+        {
+          key: CREATE_AGENT_OPTION_KEY,
+          title: "Create an agent",
+          subtitle: "Set one up in Settings",
+          category: "agents",
+          data: "",
+          content: undefined,
+          isAction: true,
+          icon: React.createElement(Plus, { className: "tw-size-4" }),
+          searchKeyword: "create an agent new",
+        },
+      ];
+    }
+    return agentMentions.entries.map((agent) => ({
+      key: `agent-${agent.slug}`,
+      title: agent.name,
+      subtitle: agent.description || undefined,
+      category: "agents",
+      data: agent.slug,
+      content: undefined,
+      icon: React.createElement(AgentGlyph, { name: agent.name, avatarSrc: agent.avatarSrc }),
+      pillIcon: agent.icon,
+      searchKeyword: `${agent.name} ${agent.slug}`,
+    }));
+  }, [agentMentions]);
 
   return useMemo(() => {
     if (mode === "category") {
