@@ -241,13 +241,14 @@ function diffSentences(before: string, after: string): string | null {
       merged += part.value.join("");
       continue;
     }
-    const next = parts[index + 1];
-    const replacement = part.removed && next?.added ? next : undefined;
-    if (replacement) index++;
-    merged += diffStretch(
-      part.removed ? part.value.join("") : "",
-      (replacement ?? (part.added ? part : undefined))?.value.join("") ?? ""
-    );
+    let removed = "";
+    let added = "";
+    if (part.added) added = part.value.join("");
+    else {
+      removed = part.value.join("");
+      if (parts[index + 1]?.added) added = parts[++index].value.join("");
+    }
+    merged += diffStretch(removed, added);
   }
   return merged;
 }
@@ -255,14 +256,11 @@ function diffSentences(before: string, after: string): string | null {
 function diffStretch(before: string, after: string): string {
   const parts = diffArrays(tokenizeInline(before), tokenizeInline(after));
   if (!isMostlyRewritten(parts, before, after)) return renderInline(parts);
-  const framing = after.trim() === "" ? before : after;
-  const body = framing.trim();
-  const start = framing.indexOf(body);
+  const leadingSpace = /^\s*/.exec(after.trim() === "" ? before : after)?.[0] ?? "";
   return (
-    framing.slice(0, start) +
+    leadingSpace +
     markStretch(before, DEL_OPEN, DEL_CLOSE) +
-    markStretch(after, INS_OPEN, INS_CLOSE) +
-    framing.slice(start + body.length)
+    markStretch(after, INS_OPEN, INS_CLOSE)
   );
 }
 
