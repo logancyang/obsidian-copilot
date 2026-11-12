@@ -26,6 +26,7 @@ import {
 } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
@@ -284,7 +285,10 @@ function claudeChatEnvOptions(clientVersion: string) {
     getAutoMemoryEnabled: () => getSettings().agentMode?.backends?.claude?.autoMemory,
     getEnvOverrides: () =>
       sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
-    getManagedEnv: () => buildBuiltinSkillEnv(clientVersion),
+    getManagedEnv: async () => ({
+      ...pythonUtf8Env(),
+      ...(await buildBuiltinSkillEnv(clientVersion)),
+    }),
   };
 }
 

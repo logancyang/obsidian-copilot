@@ -15,6 +15,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
 import {
   buildBuiltinSkillEnv,
   sanitizeBuiltinSkillEnvOverrides,
@@ -162,6 +163,7 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         PATH: await agentShellPath(),
+        ...pythonUtf8Env(),
         ...builtinSkillEnv,
         // OpenCode's level filters its file log and stderr together, and its
         // server logs request-failure causes at INFO, so WARN hid every cause.
