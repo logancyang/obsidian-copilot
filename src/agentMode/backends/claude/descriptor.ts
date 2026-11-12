@@ -20,7 +20,10 @@ import { CLAUDE_INSTALL_COMMAND } from "./cliSetup";
 import { getClaudeAuthStatus, signInToClaude, signOutFromClaude } from "./claudeAuth";
 import { assertClaudeVersionSupported } from "./claudeVersion";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
-import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
+import {
+  ClaudeSdkBackendProcess,
+  probeClaudeAutoMemoryFolder,
+} from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { pythonUtf8Env } from "@/agentMode/backends/shared/pythonUtf8Env";
@@ -277,6 +280,30 @@ function resolveClaudeCliPath(settings: CopilotSettings): string | null {
   });
 }
 
+function claudeChatEnvOptions(clientVersion: string) {
+  return {
+    getAutoMemoryEnabled: () => getSettings().agentMode?.backends?.claude?.autoMemory,
+    getEnvOverrides: () =>
+      sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
+    getManagedEnv: async () => ({
+      ...pythonUtf8Env(),
+      ...(await buildBuiltinSkillEnv(clientVersion)),
+    }),
+  };
+}
+
+export async function findClaudeAutoMemoryFolder(
+  vaultBase: string,
+  clientVersion: string
+): Promise<string | undefined> {
+  const claudePath = resolveClaudeCliPath(getSettings());
+  if (!claudePath) return undefined;
+  return probeClaudeAutoMemoryFolder(
+    { pathToClaudeCodeExecutable: claudePath, ...claudeChatEnvOptions(clientVersion) },
+    vaultBase
+  );
+}
+
 export function detectClaudeCliPath(): string | null {
   return resolveClaudeBinary({ override: undefined, ...claudeResolverEnv() });
 }
@@ -461,12 +488,7 @@ export const ClaudeBackendDescriptor: ClaudeDescriptor = {
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
-      getEnvOverrides: () =>
-        sanitizeBuiltinSkillEnvOverrides(getSettings().agentMode?.backends?.claude?.envOverrides),
-      getManagedEnv: async () => ({
-        ...pythonUtf8Env(),
-        ...(await buildBuiltinSkillEnv(args.clientVersion)),
-      }),
+      ...claudeChatEnvOptions(args.clientVersion),
       checkAuth: async () =>
         (await getClaudeAuthStatus(claudePath, claudeChildEnv(getSettings()))).loggedIn,
       checkCompatibility: () =>

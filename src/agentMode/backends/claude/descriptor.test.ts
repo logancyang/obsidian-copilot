@@ -16,8 +16,10 @@ import { __resetVaultBaseCache } from "@/utils/vaultPath";
 import { FileSystemAdapter, type App } from "obsidian";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { probeClaudeVersion } from "./claudeVersion";
+import { probeClaudeAutoMemoryFolder } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import {
   ClaudeBackendDescriptor,
+  findClaudeAutoMemoryFolder,
   getClaudeInstallState,
   refreshClaudeInstallState,
   resolveClaudeAutoModePermission,
@@ -36,6 +38,12 @@ jest.mock("./claudeVersion", () => ({
   probeClaudeVersion: jest.fn(),
 }));
 
+jest.mock("@/agentMode/sdk/ClaudeSdkBackendProcess", () => ({
+  ...jest.requireActual("@/agentMode/sdk/ClaudeSdkBackendProcess"),
+  probeClaudeAutoMemoryFolder: jest.fn(),
+}));
+
+const mockProbeClaudeAutoMemoryFolder = jest.mocked(probeClaudeAutoMemoryFolder);
 const mockResolveClaudeBinary = resolveClaudeBinary as jest.MockedFunction<
   typeof resolveClaudeBinary
 >;
@@ -533,6 +541,54 @@ describe("descriptor", () => {
 
       const env = await process.opts.getManagedEnv?.();
       expect(env).toEqual(pythonUtf8Env());
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/2892 hands new chats the current auto memory choice, with no value for Default", () => {
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      const process = ClaudeBackendDescriptor.createBackendProcess({
+        plugin: {} as never,
+        app: {} as App,
+        clientVersion: "4.0.0",
+        descriptor: ClaudeBackendDescriptor,
+      }) as unknown as { opts: { getAutoMemoryEnabled: () => boolean | undefined } };
+
+      updateClaudeFields({ autoMemory: false });
+      expect(process.opts.getAutoMemoryEnabled()).toBe(false);
+      updateClaudeFields({ autoMemory: true });
+      expect(process.opts.getAutoMemoryEnabled()).toBe(true);
+      updateClaudeFields({ autoMemory: undefined });
+      expect(process.opts.getAutoMemoryEnabled()).toBeUndefined();
+    });
+  });
+
+  describe("findClaudeAutoMemoryFolder()", () => {
+    const ISSUE = "https://github.com/logancyang/obsidian-copilot/issues/2892";
+    afterEach(() => {
+      resetSettings();
+    });
+
+    it(`asks Claude Code in the vault folder, with the environment a new chat gets, for the folder holding its memory (${ISSUE})`, async () => {
+      mockResolveClaudeBinary.mockReturnValue("/usr/local/bin/claude");
+      mockProbeClaudeAutoMemoryFolder.mockResolvedValue("/home/.claude/projects/-vault/memory");
+      updateClaudeFields({ autoMemory: true, envOverrides: { HTTPS_PROXY: "http://proxy" } });
+
+      await expect(findClaudeAutoMemoryFolder("/vault", "4.0.0")).resolves.toBe(
+        "/home/.claude/projects/-vault/memory"
+      );
+
+      const [opts, cwd] = mockProbeClaudeAutoMemoryFolder.mock.calls[0];
+      expect(cwd).toBe("/vault");
+      expect(opts.pathToClaudeCodeExecutable).toBe("/usr/local/bin/claude");
+      expect(opts.getAutoMemoryEnabled?.()).toBe(true);
+      expect(opts.getEnvOverrides?.()).toEqual({ HTTPS_PROXY: "http://proxy" });
+      await expect(opts.getManagedEnv?.()).resolves.toEqual(pythonUtf8Env());
+    });
+
+    it(`finds no memory folder, without starting Claude Code, when Claude Code is not installed (${ISSUE})`, async () => {
+      mockResolveClaudeBinary.mockReturnValue(null);
+
+      await expect(findClaudeAutoMemoryFolder("/vault", "4.0.0")).resolves.toBeUndefined();
+      expect(mockProbeClaudeAutoMemoryFolder).not.toHaveBeenCalled();
     });
   });
 

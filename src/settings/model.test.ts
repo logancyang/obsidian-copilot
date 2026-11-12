@@ -563,6 +563,21 @@ describe("model", () => {
       expect(sanitized.agentMode.backends.claude?.autoModePermission).toBeUndefined();
     });
 
+    it.each([
+      [false, false],
+      ["off", undefined],
+    ])(
+      "keeps a Claude auto memory choice of %p as %p, dropping a non-boolean so the Claude Code default applies",
+      (autoMemory, kept) => {
+        const sanitized = sanitizeSettings({
+          ...DEFAULT_SETTINGS,
+          agentMode: { enabled: true, byok: {}, backends: { claude: { autoMemory } } },
+        } as unknown as CopilotSettings);
+
+        expect(sanitized.agentMode.backends.claude?.autoMemory).toBe(kept);
+      }
+    );
+
     it("coerces a retired `project` defaultChainType so chain construction never sees it (https://github.com/logancyang/obsidian-copilot-preview/issues/310)", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,
