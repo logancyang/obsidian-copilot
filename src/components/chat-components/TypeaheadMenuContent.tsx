@@ -194,7 +194,7 @@ export function TypeaheadMenuContent({
         </div>
 
         {searchBarMode && (
-          <div className="tw-border-t tw-border-solid tw-border-border tw-p-0.5">
+          <div className="tw-border-0 tw-border-t tw-border-solid tw-border-border tw-p-0.5">
             <input
               ref={searchInputRef}
               type="text"

@@ -59,7 +59,7 @@ const relevantNotesSections: AgentHomeShelfSection[] = [
           </span>
           <span className="tw-shrink-0 tw-text-normal">Open pane</span>
         </div>
-        <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2 tw-text-ui-small">
+        <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-between tw-border-0 tw-border-b tw-border-solid tw-border-border tw-p-2 tw-text-ui-small">
           <span className="tw-text-normal">
             Relevant to <span className="tw-font-medium tw-text-normal">Weekend Food Trip</span>
           </span>
