@@ -5,6 +5,7 @@ import { UiFence } from "@/intelligentUi/ui/UiFence";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { renderMarkdown } from "@/utils/renderMarkdown";
+import { UI_HOST_ATTRIBUTE, type StreamingTextFade } from "@/utils/streamingTextFade";
 import { Component } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -17,6 +18,7 @@ export interface LayoutMarkdownProps {
   nested?: boolean;
   runDataviewQueries?: boolean;
   onRendered?: (container: HTMLElement) => void;
+  textFade?: StreamingTextFade;
 }
 interface LayoutHost {
   source: string;
@@ -34,6 +36,7 @@ export function LayoutMarkdown({
   nested,
   runDataviewQueries = false,
   onRendered,
+  textFade,
 }: LayoutMarkdownProps) {
   const app = useApp();
   const targetRef = useRef<HTMLDivElement>(null);
@@ -64,7 +67,9 @@ export function LayoutMarkdown({
             index === blocks.length - 1 &&
             activeSource !== undefined &&
             source.startsWith(activeSource);
-          const element = currentHosts.current[index]?.element ?? target.doc.win.createDiv();
+          const element =
+            currentHosts.current[index]?.element ??
+            target.doc.win.createDiv({ attr: { [UI_HOST_ATTRIBUTE]: "" } });
           block.replaceWith(element);
           next.push({
             source: receiving ? activeSource : source,
@@ -75,6 +80,7 @@ export function LayoutMarkdown({
         });
         currentHosts.current = next;
         target.replaceChildren(staging);
+        textFade?.apply(target);
         setHosts(next);
       })
       .catch((error: unknown) => {
@@ -93,7 +99,7 @@ export function LayoutMarkdown({
       cancelled = true;
       if (settled) owner.unload();
     };
-  }, [app, text, sourcePath, streaming, runDataviewQueries]);
+  }, [app, text, sourcePath, streaming, runDataviewQueries, textFade]);
   useEffect(() => {
     if (hosts !== EMPTY_HOSTS) onRendered?.(targetRef.current!);
   }, [hosts, onRendered]);

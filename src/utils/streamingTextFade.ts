@@ -1,5 +1,7 @@
 export const TEXT_FADE_MS = 500;
-const UNTOUCHED = "pre, code, svg, .math, mjx-container";
+export const UI_HOST_ATTRIBUTE = "data-ui-host";
+// Layout hosts fade their own elements in as each one completes. https://github.com/Brevilabs/obsidian-copilot-private/issues/883
+const UNTOUCHED = `pre, code, svg, .math, mjx-container, [${UI_HOST_ATTRIBUTE}]`;
 
 interface FadeRange {
   start: number;

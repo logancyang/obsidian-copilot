@@ -2,7 +2,8 @@ import { nativeUiSources } from "@/intelligentUi/nativeSources";
 import React from "react";
 import { splitUiFences } from "@/intelligentUi/splitUiFences";
 import { AppContext } from "@/context";
-import { fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render as renderComponent, screen, waitFor } from "@testing-library/react";
+import { TEXT_FADE_MS } from "@/utils/streamingTextFade";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -181,6 +182,47 @@ describe("ChatSingleMessage", () => {
       await screen.findByText("Ordinary replacement");
       expect(screen.queryByRole("region", { name: "Done" })).toBeNull();
       view.unmount();
+    });
+
+    it("keeps prose already faded in when a streaming legacy chat segment turns into a layout (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {
+      jest.useFakeTimers();
+      try {
+        renderMarkdownMock.mockImplementation(
+          async (_app: unknown, text: string, target: HTMLElement) => {
+            for (const segment of splitUiFences(text, true)) {
+              if (segment.kind === "layout") {
+                const block = target.createDiv({ cls: "block-language-copilot-ui" });
+                nativeUiSources.set(block, segment.source.replace(/\n$/, ""));
+              } else target.createDiv({ text: segment.source });
+            }
+          }
+        );
+        const tree = (message: string) => (
+          <AppContext.Provider value={testApp}>
+            <TooltipProvider>
+              <ChatSingleMessage message={{ ...baseMessage, message }} app={testApp} isStreaming />
+            </TooltipProvider>
+          </AppContext.Provider>
+        );
+        const settle = () =>
+          act(async () => {
+            await Promise.allSettled(
+              renderMarkdownMock.mock.results.map((r) => r.value as Promise<void>)
+            );
+          });
+        const view = renderComponent(tree("Before"));
+        await settle();
+        jest.advanceTimersByTime(TEXT_FADE_MS);
+        view.rerender(tree("Before\n\n```copilot-ui\n<text>Card</text>\n```\n\nAfter"));
+        await settle();
+
+        expect(view.container.textContent).toMatch(/Before[\s\S]*Card[\s\S]*After/);
+        const faded = [...view.container.querySelectorAll(".message-segment span:not([class])")];
+        expect(faded.map((span) => span.textContent?.trim()).filter(Boolean)).toEqual(["After"]);
+        view.unmount();
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it("links numbered Sources references after asynchronous layout Markdown commits (https://github.com/Brevilabs/obsidian-copilot-private/issues/883)", async () => {

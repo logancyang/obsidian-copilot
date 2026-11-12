@@ -609,6 +609,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               contentRef.current!.appendChild(textDiv);
             }
 
+            if (isStreaming && !textFades.current.has(segmentIndex))
+              textFades.current.set(segmentIndex, new StreamingTextFade());
             if (hasLayout || existingLayout) {
               currentLayouts.add(segmentIndex);
               const record = existingLayout ?? {
@@ -621,6 +623,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   text={segment.content}
                   sourcePath={sourcePath}
                   streaming={isStreaming}
+                  textFade={textFades.current.get(segmentIndex)}
                   onRendered={(target) => {
                     normalizeFootnoteRendering(target);
                     // Retained React roots commit after this parent effect, including reopened replies. https://github.com/Brevilabs/obsidian-copilot-private/issues/883
@@ -629,8 +632,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 />
               );
             } else {
-              if (isStreaming && !textFades.current.has(segmentIndex))
-                textFades.current.set(segmentIndex, new StreamingTextFade());
               void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
                 .then(() => {
                   normalizeFootnoteRendering(textDiv);
