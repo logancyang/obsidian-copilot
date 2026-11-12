@@ -232,8 +232,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     loadChat: handleLoadChat,
     updateChatTitle: handleUpdateChatTitle,
     deleteChat: handleDeleteChat,
+    deleteChats: handleDeleteChats,
     setChatPinned: handleSetChatPinned,
     setChatArchived: handleSetChatArchived,
+    archiveChats: handleArchiveChats,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
     getChatBookmarkState,
@@ -440,6 +442,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
             onSetChatArchived={handleSetChatArchived}
+            onDeleteChats={handleDeleteChats}
+            onArchiveChats={handleArchiveChats}
             onViewArchived={handleViewArchived}
             getChatBookmarkState={getChatBookmarkState}
             onSetChatBookmarked={handleSetChatBookmarked}
@@ -497,6 +501,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleDeleteChats,
+      handleArchiveChats,
       handleSetChatPinned,
       handleSetChatArchived,
       handleViewArchived,
@@ -540,6 +546,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
             onCopyChatLink={handleCopyHistoryChatLink}
             onSetChatPinned={handleSetChatPinned}
             onSetChatArchived={handleSetChatArchived}
+            onDeleteChats={handleDeleteChats}
+            onArchiveChats={handleArchiveChats}
             onViewArchived={handleViewArchived}
             getChatBookmarkState={getChatBookmarkState}
             onSetChatBookmarked={handleSetChatBookmarked}
@@ -557,6 +565,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleLoadChat,
       handleUpdateChatTitle,
       handleDeleteChat,
+      handleDeleteChats,
+      handleArchiveChats,
       handleSetChatPinned,
       handleSetChatArchived,
       handleViewArchived,

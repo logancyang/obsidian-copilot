@@ -1,4 +1,5 @@
 import { CreateProjectPanel } from "@/projects/ui/CreateProjectPanel";
+import { useChatSelection } from "@/agentMode/ui/hooks/useChatSelection";
 import type { RecentChatActions } from "@/agentMode/ui/RecentChatMenu";
 import { RowActionButton } from "@/agentMode/ui/RecentChatMenu";
 import { SessionsSidebarFolderRow } from "@/agentMode/navigator/ui/SessionsSidebarFolderRow";
@@ -294,18 +295,51 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
     RECENTS_PAGE_SIZE
   );
 
+  const visibleProjects = allProjectsShown
+    ? groups.projects
+    : groups.projects.slice(0, VISIBLE_PROJECTS);
+  const shownChatCount = (projectId: string, chatCount: number) =>
+    !expandedProjectIds.has(projectId)
+      ? 0
+      : fullyShownProjectIds.has(projectId)
+        ? chatCount
+        : VISIBLE_CHATS_PER_PROJECT;
+  const visibleChats = matches
+    ? matches.slice(0, matchDisplayCount)
+    : [
+        ...(collapsedGroups.has("pinned") ? [] : groups.pinned),
+        ...(collapsedGroups.has("projects")
+          ? []
+          : visibleProjects.flatMap(({ project, chats }) =>
+              chats.slice(0, shownChatCount(project.id, chats.length))
+            )),
+        ...(collapsedGroups.has("recents") ? [] : groups.recents.slice(0, displayCount)),
+      ];
+  const selection = useChatSelection(visibleChats);
+  const { clear: clearSelection } = selection;
+  const changeQuery = useCallback(
+    (next: string) => {
+      setQuery(next);
+      clearSelection();
+    },
+    [clearSelection]
+  );
+
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const toggleSearch = useCallback(() => {
     setSearchOpen((open) => !open);
-    setQuery("");
-  }, []);
-  const closeSearchOnEscape = useCallback((event: React.KeyboardEvent) => {
-    if (event.key !== "Escape") return;
-    event.stopPropagation();
-    setSearchOpen(false);
-    setQuery("");
-    searchButtonRef.current?.focus();
-  }, []);
+    changeQuery("");
+  }, [changeQuery]);
+  const closeSearchOnEscape = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setSearchOpen(false);
+      changeQuery("");
+      searchButtonRef.current?.focus();
+    },
+    [changeQuery]
+  );
 
   const closeCreateProject = useCallback(() => setCreateAnchor(null), []);
   const saveNewProject = useCallback(
@@ -336,12 +370,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       }
       actions={actions}
       onSelect={() => onOpenChat(item.id)}
+      selection={selection}
     />
   );
 
-  const visibleProjects = allProjectsShown
-    ? groups.projects
-    : groups.projects.slice(0, VISIBLE_PROJECTS);
   const pinnedIds = groups.pinned.map((item) => item.id);
   const projectIds = groups.projects.map(({ project }) => project.id);
 
@@ -403,7 +435,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
         <div onKeyDown={closeSearchOnEscape}>
           <SearchBar
             value={query}
-            onChange={setQuery}
+            onChange={changeQuery}
             placeholder="Search chats..."
             autoFocus
             inputClassName="!tw-h-7"
@@ -412,7 +444,10 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
       )}
       {/* The list reaches into the panel's right padding so its scrollbar sits at the pane edge, as in Relevant Notes.
           https://github.com/Brevilabs/obsidian-copilot-private/issues/801 */}
-      <div className="-tw-mr-2 tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-pr-2">
+      <div
+        className="-tw-mr-2 tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-pr-2"
+        onKeyDown={selection.handleKeyDown}
+      >
         {matches ? (
           matches.length === 0 ? (
             <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No matching chats</div>
@@ -475,12 +510,7 @@ export const SessionsSidebarPanel: React.FC<SessionsSidebarPanelProps> = ({
               >
                 {visibleProjects.map(({ project, chats }) => {
                   const expanded = expandedProjectIds.has(project.id);
-                  const fullyShown = fullyShownProjectIds.has(project.id);
-                  const shownCount = !expanded
-                    ? 0
-                    : fullyShown
-                      ? chats.length
-                      : VISIBLE_CHATS_PER_PROJECT;
+                  const shownCount = shownChatCount(project.id, chats.length);
                   return (
                     <SortableItem key={project.id} id={project.id}>
                       {(handle) => (

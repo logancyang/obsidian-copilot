@@ -850,4 +850,124 @@ describe("useAgentHistoryControls", () => {
       expect(result.current.chatHistoryItems).toEqual([{ id: "chats/saved.md" }]);
     });
   });
+
+  describe("deleteChats()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 deletes every given chat, shows one notice with the count, and reloads the history once", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager, "project-1");
+
+      await act(async () => {
+        await result.current.deleteChats(["a", "b"]);
+      });
+
+      expect(manager.deleteChatHistory.mock.calls).toEqual([["a"], ["b"]]);
+      expect(Notice).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("2 chats deleted from Copilot.");
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+      expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 keeps deleting the rest when one chat fails, and reports what was and was not deleted in one notice", async () => {
+      const manager = makeManager();
+      manager.deleteChatHistory.mockImplementation(async (id: string) => {
+        if (id === "a") throw new Error("file is locked");
+      });
+      const { result } = renderControls(manager);
+
+      await act(async () => {
+        await result.current.deleteChats(["a", "b"]);
+      });
+
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("b");
+      expect((Notice as unknown as jest.Mock).mock.calls).toEqual([
+        ["1 chat deleted from Copilot. 1 chat could not be deleted."],
+      ]);
+      expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 reports in one notice when no chat could be deleted", async () => {
+      const manager = makeManager();
+      manager.deleteChatHistory.mockRejectedValue(new Error("file is locked"));
+      const { result } = renderControls(manager);
+
+      await act(async () => {
+        await result.current.deleteChats(["a", "b"]);
+      });
+
+      expect((Notice as unknown as jest.Mock).mock.calls).toEqual([
+        ["2 chats could not be deleted."],
+      ]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 shows only the one result notice when removing the deleted chats' bookmarks throws", async () => {
+      const plugin = makeBookmarkingPlugin(makeBookmarks([LINK_A, LINK_SAVED]));
+      (
+        plugin.app as unknown as { internalPlugins: { getEnabledPluginById: jest.Mock } }
+      ).internalPlugins.getEnabledPluginById.mockImplementation(() => {
+        throw new Error("internal plugin API changed");
+      });
+      const { result } = renderHook(() => useAgentHistoryControls(makeManager(), plugin));
+
+      await act(async () => {
+        await result.current.deleteChats(["chats/agent__a.md", "chats/saved.md"]);
+      });
+
+      expect((Notice as unknown as jest.Mock).mock.calls).toEqual([
+        ["2 chats deleted from Copilot."],
+      ]);
+    });
+
+    it("removes the bookmark of every deleted chat", async () => {
+      const bookmarks = makeBookmarks([LINK_A, LINK_SAVED]);
+      const { result } = renderHook(() =>
+        useAgentHistoryControls(makeManager(), makeBookmarkingPlugin(bookmarks))
+      );
+
+      await act(async () => {
+        await result.current.deleteChats(["chats/agent__a.md", "chats/saved.md"]);
+      });
+
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([]);
+    });
+  });
+
+  describe("archiveChats()", () => {
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 moves every given chat from the chat list to the archived list and says how many in one notice", async () => {
+      const manager = makeManager();
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.archiveChats(["a", "b"]);
+      });
+
+      expect(result.current.chatHistoryItems).toEqual([]);
+      expect(result.current.archivedChatItems.map((chat) => chat.id)).toEqual(["a", "b"]);
+      expect((Notice as unknown as jest.Mock).mock.calls).toEqual([["2 chats archived."]]);
+    });
+
+    it("https://github.com/logancyang/obsidian-copilot/issues/3553 keeps archiving the rest when one chat fails, and reports what was and was not archived in one notice", async () => {
+      const manager = makeManager();
+      manager.setChatArchived.mockImplementation(async (id: string) => {
+        if (id === "a") throw new Error("Chat note not found");
+        return { id, archivedAt: 7_000 };
+      });
+      const { result } = renderControls(manager);
+      await act(async () => {
+        await result.current.loadChatHistory();
+      });
+
+      await act(async () => {
+        await result.current.archiveChats(["a", "b"]);
+      });
+
+      expect((Notice as unknown as jest.Mock).mock.calls).toEqual([
+        ["1 chat archived. 1 chat could not be archived."],
+      ]);
+      expect(result.current.chatHistoryItems).toEqual([item("a")]);
+      expect(result.current.archivedChatItems.map((chat) => chat.id)).toEqual(["b"]);
+    });
+  });
 });

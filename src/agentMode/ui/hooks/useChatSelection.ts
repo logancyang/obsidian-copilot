@@ -1,0 +1,102 @@
+import type React from "react";
+import { useCallback, useMemo, useState } from "react";
+
+export interface SelectionClick {
+  shiftKey: boolean;
+  metaKey: boolean;
+  ctrlKey: boolean;
+}
+
+export type SelectionKeyDown = Pick<
+  React.KeyboardEvent<Element>,
+  "key" | "stopPropagation" | "target" | "currentTarget"
+>;
+
+export interface ChatSelection<T extends { id: string }> {
+  selectedItems: readonly T[];
+  isSelected: (id: string) => boolean;
+  handleClick: (id: string, click: SelectionClick) => boolean;
+  handleContextMenu: (id: string) => void;
+  handleKeyDown: (event: SelectionKeyDown) => void;
+  clear: () => void;
+}
+
+const NO_IDS: ReadonlySet<string> = new Set();
+const NO_ITEMS: readonly never[] = Object.freeze([]);
+
+export function useChatSelection<T extends { id: string }>(
+  visibleItems: readonly T[]
+): ChatSelection<T> {
+  const [storedIds, setStoredIds] = useState<ReadonlySet<string>>(NO_IDS);
+  const [anchorId, setAnchorId] = useState<string | null>(null);
+
+  const selectedItems = useMemo(() => {
+    const items = visibleItems.filter((item) => storedIds.has(item.id));
+    return items.length === 0 ? NO_ITEMS : items;
+  }, [visibleItems, storedIds]);
+  const selectedIds = useMemo(
+    () => (selectedItems.length === 0 ? NO_IDS : new Set(selectedItems.map((item) => item.id))),
+    [selectedItems]
+  );
+
+  const clear = useCallback(() => {
+    setStoredIds(NO_IDS);
+    setAnchorId(null);
+  }, []);
+
+  const handleClick = useCallback(
+    (id: string, click: SelectionClick): boolean => {
+      const ids = visibleItems.map((item) => item.id);
+      const anchorIndex = anchorId === null ? -1 : ids.indexOf(anchorId);
+      // Cleaning up a long run of chats one row at a time is tedious, so Shift-click takes the whole run.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
+      if (click.shiftKey && anchorIndex !== -1) {
+        const index = ids.indexOf(id);
+        setStoredIds(
+          new Set(ids.slice(Math.min(anchorIndex, index), Math.max(anchorIndex, index) + 1))
+        );
+        return true;
+      }
+      // Chats to archive or delete together are rarely adjacent, so Cmd/Ctrl-click picks them one by one without opening them.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
+      if (click.shiftKey || click.metaKey || click.ctrlKey) {
+        const next = new Set(selectedIds);
+        if (next.has(id) && !click.shiftKey) next.delete(id);
+        else next.add(id);
+        setStoredIds(next);
+        setAnchorId(id);
+        return true;
+      }
+      setStoredIds(NO_IDS);
+      setAnchorId(id);
+      return false;
+    },
+    [anchorId, selectedIds, visibleItems]
+  );
+
+  const handleContextMenu = useCallback(
+    (id: string) => {
+      if (!selectedIds.has(id)) clear();
+    },
+    [clear, selectedIds]
+  );
+
+  const handleKeyDown = useCallback(
+    (event: SelectionKeyDown) => {
+      if (event.key !== "Escape" || selectedIds.size === 0) return;
+      // Escape in a row's menu bubbles here through the menu's portal; it should only close the menu.
+      // https://github.com/logancyang/obsidian-copilot/issues/3553
+      if (!event.currentTarget.contains(event.target as Node)) return;
+      event.stopPropagation();
+      clear();
+    },
+    [clear, selectedIds]
+  );
+
+  const isSelected = useCallback((id: string) => selectedIds.has(id), [selectedIds]);
+
+  return useMemo(
+    () => ({ selectedItems, isSelected, handleClick, handleContextMenu, handleKeyDown, clear }),
+    [selectedItems, isSelected, handleClick, handleContextMenu, handleKeyDown, clear]
+  );
+}
