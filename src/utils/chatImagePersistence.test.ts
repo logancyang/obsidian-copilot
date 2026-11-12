@@ -118,6 +118,22 @@ describe("chatImagePersistence", () => {
       expect(savedChatImagePath(app, CHATS, `![](/bad%zz/${name})`)).toBe(`/vault/${saved}`);
     });
 
+    it(`finds a collision-suffixed file from the percent-encoded embed a save wrote for it (${PATH_ISSUE})`, async () => {
+      const { app: saveApp, files } = makeApp();
+      files.set(saved, base64ToArrayBuffer("AQID"));
+      const [message] = await prepareChatImagesForSave(
+        saveApp,
+        [{ message: "", content: [IMAGE] }],
+        CHATS
+      );
+      const embed = visibleMessage(message.message);
+      const suffixed = saved.replace(".png", " 1.png");
+      expect(embed).toContain("%201.png");
+      expect(savedChatImagePath(vaultWithFiles([suffixed]), CHATS, embed)).toBe(
+        `/vault/${suffixed}`
+      );
+    });
+
     it(`returns null when the hash-named file's size differs from the live image's data (${PATH_ISSUE})`, () => {
       expect(
         savedChatImagePath(vaultWithFiles([saved], undefined, 1), CHATS, IMAGE.image_url.url)

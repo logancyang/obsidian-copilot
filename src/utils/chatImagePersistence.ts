@@ -68,9 +68,11 @@ export function savedChatImagePath(
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
     if (file instanceof TFile && file.stat.size === upload?.bytes.byteLength) path = file.path;
   } else {
-    // Saved image names are unique by content hash, so the name alone finds the file, and a hand-edited link with a broken percent escape cannot fail the send.
+    // Saved image names are unique by content hash, so the name alone finds the file (a Markdown embed spells a collision suffix's space as %20), and a hand-edited link with a broken percent escape cannot fail the send.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
-    const name = /copilot-image-[a-f0-9]{64}(?: \d+)?\.[a-z0-9]+/.exec(image)?.[0];
+    const name = /copilot-image-[a-f0-9]{64}(?:(?: |%20)\d+)?\.[a-z0-9]+/
+      .exec(image)?.[0]
+      .replace("%20", " ");
     path = (name && app.metadataCache.getFirstLinkpathDest(name, "")?.path) || null;
   }
   const adapter = app.vault.adapter;
