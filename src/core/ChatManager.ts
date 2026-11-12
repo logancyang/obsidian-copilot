@@ -89,8 +89,10 @@ export class ChatManager {
       );
     }
 
-    if (systemPromptWithoutMemory === userCustomPrompt) {
-      return processedUserCustomPrompt;
+    // Custom-only instructions may precede layout guidance, which must survive template expansion.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+    if (systemPromptWithoutMemory.startsWith(userCustomPrompt)) {
+      return `${processedUserCustomPrompt}${systemPromptWithoutMemory.slice(userCustomPrompt.length)}`;
     }
 
     logInfo(

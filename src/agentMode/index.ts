@@ -392,6 +392,23 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     }
   };
   subscribeToSystemPromptChange(refreshSystemPromptAffected);
+  subscribeToSettingsChange((prev, next) => {
+    if (prev.enableIntelligentUi === next.enableIntelligentUi) return;
+    // Every backend caches instructions, so resume open chats with current guidance after the active turn. https://github.com/Brevilabs/obsidian-copilot-private/issues/884
+    for (const descriptor of listBackendDescriptors()) {
+      if (descriptor.restartOnSystemPromptChange) {
+        lastSystemPromptKeys.set(descriptor.id, buildAgentSystemPrompt(descriptor.id, app));
+      }
+      void manager
+        .restartBackend(descriptor.id, "Intelligent UI changed")
+        .catch((error) =>
+          logError(
+            `[AgentMode] restart after Intelligent UI change failed: ${descriptor.id}`,
+            error
+          )
+        );
+    }
+  });
   // Codex and OpenCode bake the feedback pointer into their prompt at spawn, so toggling cards must reach a running backend.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
   subscribeToSettingsChange((prev, next) => {

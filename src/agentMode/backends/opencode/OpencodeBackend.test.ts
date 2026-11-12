@@ -987,6 +987,19 @@ describe("OpencodeBackend", () => {
       expect(cfg.agents.build.permissions).toBeUndefined();
     });
 
+    it("adds Intelligent UI to both OpenCode agents only when enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", async () => {
+      updateSetting("enableIntelligentUi", false);
+      const before = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+      updateSetting("enableIntelligentUi", true);
+      const enabled = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+      expect(enabled.agents["copilot-build"].system).toContain("copilot-ui");
+      expect(enabled.agents.build.system).toContain("copilot-ui");
+      updateSetting("enableIntelligentUi", false);
+      const after = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
+      expect(after.agents["copilot-build"].system).toBe(before.agents["copilot-build"].system);
+      expect(after.agents.build.system).toBe(before.agents.build.system);
+    });
+
     it("gives both agents the shared product prompt, byte for byte", async () => {
       const cfg = await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS);
 

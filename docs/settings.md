@@ -141,6 +141,12 @@ Quick Ask uses an enabled Quick Chat model, starting with **Default quick comman
 
 Changing the Copilot folder does not move existing files. The old root remains treated as Copilot data, and a new root that already contains notes becomes excluded from Copilot search. Move files yourself after the change. Copilot applies the new root to its own search results immediately. Adjust the registered folder's scope in the Miyo app if you want Miyo and any enabled Relay clients to skip other content.
 
+### AI answers
+
+**Intelligent UI** is on by default. It lets Copilot chat and Agent Chat include cards, step flows and metric tiles when visual grouping helps. Simple answers stay prose; tables and Mermaid remain available. The preference applies from the next message, including open agent chats. A reply already running finishes before its agent refreshes.
+
+Turning it off stops requesting layouts in later replies. An agent may still use layouts from the existing chat context. Layouts already saved in chats and notes keep rendering. Copied, inserted and saved answers retain their Markdown source. This preference also applies when the built-in system prompt is disabled.
+
 ### Custom instructions
 
 | Control                       | Default                              | What it does                                                                                                                                                                                                                                                                                    |

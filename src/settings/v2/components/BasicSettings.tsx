@@ -1,3 +1,4 @@
+import { IntelligentUiSetting } from "@/settings/v2/components/IntelligentUiSetting";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -282,6 +283,13 @@ export const BasicSettings: React.FC = () => {
             </Button>
           </div>
         </SettingItem>
+      </SettingSection>
+
+      <SettingSection label="AI answers">
+        <IntelligentUiSetting
+          checked={settings.enableIntelligentUi}
+          onCheckedChange={(checked) => updateSetting("enableIntelligentUi", checked)}
+        />
       </SettingSection>
 
       <SettingSection label="Custom instructions">

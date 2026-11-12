@@ -69,6 +69,20 @@ const APP = {} as App;
 describe("CodexBackend", () => {
   describe("CodexBackend", () => {
     describe("buildSpawnDescriptor()", () => {
+      it("carries Intelligent UI guidance through CODEX_CONFIG only when enabled (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", async () => {
+        const backend = new CodexBackend(APP);
+        updateSetting("enableIntelligentUi", false);
+        const before = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        updateSetting("enableIntelligentUi", true);
+        const enabled = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        expect(JSON.parse(enabled.env.CODEX_CONFIG as string).developer_instructions).toContain(
+          "copilot-ui"
+        );
+        updateSetting("enableIntelligentUi", false);
+        const after = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+        expect(after.env.CODEX_CONFIG).toBe(before.env.CODEX_CONFIG);
+      });
+
       const hostPlatform = process.platform;
       afterEach(() => Object.defineProperty(process, "platform", { value: hostPlatform }));
       beforeEach(() => {

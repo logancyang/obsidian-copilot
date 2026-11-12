@@ -1,3 +1,4 @@
+import { INTELLIGENT_UI_GUIDANCE } from "@/intelligentUi/guidance";
 import { App, TFile } from "obsidian";
 import { DEFAULT_SYSTEM_PROMPT } from "@/constants";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -13,8 +14,10 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 
+let mockEnableIntelligentUi = false;
 jest.mock("@/settings/model", () => ({
   getSettings: () => ({
+    enableIntelligentUi: mockEnableIntelligentUi,
     defaultSystemPromptTitle: "Old default",
     userSystemPrompt: "Legacy instructions",
   }),
@@ -27,6 +30,7 @@ describe("systemPromptBuilder", () => {
   let content: string | undefined;
   let app: App;
   beforeEach(() => {
+    mockEnableIntelligentUi = false;
     content = "Use concise answers.";
     const file = new (TFile as unknown as new (path: string) => TFile)("AGENTS.md");
     app = {
@@ -81,6 +85,17 @@ describe("systemPromptBuilder", () => {
     });
   });
   describe("getSystemPrompt()", () => {
+    it("adds layout guidance only while enabled, preserving the original prompt bytes when off (https://github.com/Brevilabs/obsidian-copilot-private/issues/884)", () => {
+      const before = getSystemPrompt("Be concise.");
+      mockEnableIntelligentUi = true;
+      expect(getSystemPrompt("Be concise.")).toContain(INTELLIGENT_UI_GUIDANCE);
+      setDisableBuiltinSystemPrompt(true);
+      expect(getSystemPrompt("Be concise.")).toBe(`Be concise.\n\n${INTELLIGENT_UI_GUIDANCE}`);
+      setDisableBuiltinSystemPrompt(false);
+      mockEnableIntelligentUi = false;
+      expect(getSystemPrompt("Be concise.")).toBe(before);
+    });
+
     it("composes built-in instructions with the resolved multiline user prompt", () => {
       expect(getSystemPrompt("First line\nSecond line")).toBe(
         `${DEFAULT_SYSTEM_PROMPT}\n<user_custom_instructions>\nFirst line\nSecond line\n</user_custom_instructions>`
