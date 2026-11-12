@@ -637,7 +637,10 @@ describe("TurnDiffView", () => {
         fireEvent.click(within(header(view)).getByText("Open note"));
 
         await waitFor(() =>
-          expect(logError).toHaveBeenCalledWith("[TurnDiffView] failed to open the note", failure)
+          expect(logError).toHaveBeenCalledWith(
+            "[openChangedNote] failed to open the note",
+            failure
+          )
         );
       });
 

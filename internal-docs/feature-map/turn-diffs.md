@@ -11,22 +11,24 @@ The file changes an agent made in each turn, and Revoke.
 - diff-revoke-all: `Revoke all` puts the note back as it was before the turn.
 - diff-revoke-blocked: Revoke is blocked when that text changed after the turn ("This text changed in the note after the turn."); Revoke all is blocked when anything in the note changed ("This note changed after the turn.").
 - diff-open-note: `Open note` opens the changed note itself.
+- diff-summary-open-note: choose a file's name in the list to open the note itself, skipping the diff; a deleted file's name is plain text.
 - diff-selection: text selected in a diff is added to the [chat input](chat-input.md) as a `Selection` badge.
 
 ## How to get to it
 
-- The list of changed files at the end of a turn in the [agent's reply](agent-replies.md); choose a file to open its diff.
+- The list of changed files at the end of a turn in the [agent's reply](agent-replies.md); choose a file's row to open its diff, or its name to open the note.
 - In an open diff, the `Go to next change in file diff` and `Go to previous change in file diff` commands step between changes.
 
 ## Driving it
 
 - Summary: ask the agent to change two words in a note and create a new note. The reply ends with `Files changed (2)` and the totals, the new note marked `new`, and each file's added and removed lines.
-- Open: choose the edited note. A tab named after the file opens with the note, the old words struck through and the new ones highlighted, and `1 of 2` in the header.
+- Open: choose the edited note's row, beside its name. A tab named after the file opens with the note, the old words struck through and the new ones highlighted, and `1 of 2` in the header.
 - Step: choose `Next change`. The header shows `2 of 2`; choose it again and it shows `1 of 2`.
 - Revoke: choose `Revoke` on the first change. The note has the old word again, and the diff shows that change as unchanged and `1 of 1`.
 - Blocked: edit the remaining changed text in the note. `Revoke` on that change and `Revoke all` stop working and show "This text changed in the note after the turn." and "This note changed after the turn." Undo the edit; both work again.
 - Revoke all: choose `Revoke all`. The note is back as it was before the turn and the diff shows `+0 −0`.
 - Open note: choose `Open note`. The note itself shows.
+- Note from the list: choose the edited note's name in the reply's list. The note itself shows, with no diff tab opened.
 - Selection: select a line in the diff. A `Selection` badge with that text shows in the chat input.
 
 ## Gotchas
