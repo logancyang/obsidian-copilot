@@ -243,14 +243,6 @@ describe("connectionManager", () => {
         expect(fake.pendingLogin()?.target).toMatchObject({ useDynamicClientRegistration: true });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/913 passes the catalog's scope to the login", () => {
-        const fake = setUp({ catalog: [{ ...NOTION, scope: "read offline_access" }] });
-
-        void fake.manager.connect("notion");
-
-        expect(fake.pendingLogin()?.target).toMatchObject({ scope: "read offline_access" });
-      });
-
       it("waits for the browser with the login link and a cancel, without adding a connection yet, and gives the login the service's name and logo", () => {
         const fake = setUp();
 

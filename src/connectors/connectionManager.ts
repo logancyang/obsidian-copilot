@@ -151,7 +151,6 @@ export class ConnectionManager {
       serviceName: service.name,
       logoUrl: service.logoUrl,
       useDynamicClientRegistration: service.useDynamicClientRegistration,
-      scope: service.scope,
     });
     this.waitingLogin = Object.freeze({
       connectionId,

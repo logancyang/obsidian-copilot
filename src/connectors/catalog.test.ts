@@ -8,20 +8,6 @@ describe("catalog", () => {
       });
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/913 lets agents read and do bookkeeping in Mercury without the transaction and transfer requests its default login grants", () => {
-      const scopes = CONNECTOR_CATALOG.find(({ id }) => id === "mercury")?.scope?.split(" ");
-
-      expect(scopes).toEqual([
-        "read",
-        "offline_access",
-        "transactions:update",
-        "receipts:manage",
-        "categories:create",
-        "categories:edit",
-        "budgets:manage",
-      ]);
-    });
-
     it("lists services alphabetically by display name, ignoring case", () => {
       const names = CONNECTOR_CATALOG.map((entry) => entry.name);
 

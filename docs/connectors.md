@@ -15,8 +15,6 @@ If no browser window opens, click **Copy the login link** and open it yourself. 
 
 If Airtable shows "invalid client_id or mismatched redirect_uri", update Copilot and start a new login with **Connect** or **Reconnect**.
 
-Mercury connects without access to move money. Agents can look up accounts, update transactions, attach receipts, and manage categories and budgets, but can't request payments or transfers.
-
 New chats can use the service right away. A chat that is already open shows **settings changed** with **Reload**; click **Reload** to give that chat the service. See [Applying a settings change](agent-mode-and-tools.md#applying-a-settings-change).
 
 ## See what agents can do with a service
