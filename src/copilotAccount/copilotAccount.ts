@@ -7,6 +7,7 @@ import type {
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { requestUrlFetch } from "@/connectors/oauth/requestUrlFetch";
 import { signInFailureMessage, type SignInFailure } from "@/copilotAccount/signInMessages";
+import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logWarn } from "@/logger";
 import {
   applyAccountLicense,
@@ -253,10 +254,21 @@ export class CopilotAccount {
     announce: boolean,
     generation: number
   ): Promise<void> {
-    const settings = getSettings();
-    // A key the user pasted wins over the account's and is never replaced.
+    const stored = getSettings();
+    // A pasted key wins over the account's unless the license server refuses it; a key not marked paid is asked about
+    // first, so one whose check never ran or couldn't reach the server stays.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-    if (settings.plusLicenseKey !== "" && !isAccountLicense(settings)) return;
+    if (stored.plusLicenseKey !== "" && !isAccountLicense(stored)) {
+      if (stored.isPaidUser) return;
+      const { isValid } = await BrevilabsClient.getInstance()
+        .validateLicenseKey(this.deps.app, { trigger: "manual" })
+        .catch((error) => {
+          logWarn("[Account] Couldn't check the pasted license key.", error);
+          return { isValid: undefined };
+        });
+      if (isValid !== false || generation !== this.loginGeneration) return;
+    }
+    const settings = getSettings();
     // A refused key is removed, so the account's key still stored without paid features means its last check couldn't
     // run; it is checked again. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
     const isStored = settings.plusLicenseKey === licenseKey;

@@ -10,7 +10,7 @@ import {
 } from "@/copilotAccount/copilotAccount";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { FAKE_SERVICE_ORIGIN, FakeOAuthService } from "@/connectors/oauth/testing/fakeOAuthService";
-import { applyAccountLicense, checkIsPaidUser, removeLicense } from "@/plusUtils";
+import { applyAccountLicense, checkIsPaidUser, isAccountLicense, removeLicense } from "@/plusUtils";
 import { getSettings, setSettings } from "@/settings/model";
 import { get as httpGet } from "node:http";
 import * as obsidian from "obsidian";
@@ -165,12 +165,20 @@ function setUp({
     supportsClientMetadataDocuments: true,
     publishesRevocation: true,
   });
-  const licenseServer = { refuses: false, unavailable: false, checks: 0 };
+  const licenseServer = {
+    refuses: false,
+    refusedKeys: new Set<string>(),
+    unavailable: false,
+    checks: 0,
+  };
   const respond = async (request: RequestUrlParam) => {
     if (!request.url.endsWith("/license")) return service.requestUrl(request);
     licenseServer.checks += 1;
     if (licenseServer.unavailable) return { status: 503, headers: {}, text: "Service Unavailable" };
-    return licenseServer.refuses
+    const { license_key: licenseKey } = JSON.parse(request.body as string) as {
+      license_key: string;
+    };
+    return licenseServer.refuses || licenseServer.refusedKeys.has(licenseKey)
       ? {
           status: 403,
           headers: {},
@@ -263,6 +271,10 @@ function signedIn(
 
 function pasteLicenseKey(): void {
   setSettings({ plusLicenseKey: PASTED_KEY, isPaidUser: true });
+}
+
+function pasteInactiveLicenseKey(): void {
+  setSettings({ plusLicenseKey: PASTED_KEY, isPaidUser: false });
 }
 
 describe("copilotAccount", () => {
@@ -461,15 +473,67 @@ describe("copilotAccount", () => {
         expect(getSettings().isPaidUser).toBe(false);
       });
 
-      it("leaves a pasted license key in place when a paid account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
-        const { account, service, signIn } = setUp();
+      it("leaves an active pasted license key in place, without checking it, when a paid account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, licenseServer, service, signIn } = setUp();
         pasteLicenseKey();
         service.account = paidAccount(service);
 
         await signIn();
 
         expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(licenseServer.checks).toBe(0);
         expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+      });
+
+      it("replaces a pasted key the license server refuses with a paid account's key, quietly, which then counts as the account's license — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, licenseServer, service, signIn } = setUp();
+        pasteInactiveLicenseKey();
+        licenseServer.refusedKeys.add(PASTED_KEY);
+        service.account = paidAccount(service);
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(isAccountLicense(getSettings())).toBe(true);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+        expect(mockOpenExpired).not.toHaveBeenCalled();
+      });
+
+      it("keeps a pasted key that was not yet marked paid when the license server accepts it as a paid account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { service, signIn } = setUp();
+        pasteInactiveLicenseKey();
+        service.account = paidAccount(service);
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(isAccountLicense(getSettings())).toBe(false);
+        expect(getSettings().isPaidUser).toBe(true);
+      });
+
+      it("keeps an inactive pasted key whose license check can't reach the license server when a paid account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { licenseServer, service, signIn } = setUp();
+        pasteInactiveLicenseKey();
+        licenseServer.unavailable = true;
+        service.account = paidAccount(service);
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(isAccountLicense(getSettings())).toBe(false);
+      });
+
+      it("leaves a pasted key the license server refuses in place when a free account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { licenseServer, signIn } = setUp();
+        pasteInactiveLicenseKey();
+        licenseServer.refusedKeys.add(PASTED_KEY);
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(licenseServer.checks).toBe(0);
       });
 
       it("clears the previous failure when the user tries again", async () => {
@@ -686,6 +750,24 @@ describe("copilotAccount", () => {
         expect(getSettings().isPaidUser).toBe(true);
         expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
         expect(mockOpenWelcome).not.toHaveBeenCalled();
+        expect(mockOpenExpired).not.toHaveBeenCalled();
+      });
+
+      it("replaces a pasted key the license server refuses with the account's key, confirming it and opening the welcome, when Refresh plan finds the account turned paid — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, licenseServer, service, signIn } = setUp();
+        pasteInactiveLicenseKey();
+        licenseServer.refusedKeys.add(PASTED_KEY);
+        await signIn();
+        service.account = paidAccount(service);
+
+        await account.refreshProfile();
+
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(isAccountLicense(getSettings())).toBe(true);
+        expect(account.getSnapshot()).toEqual(
+          signedIn(PLUS_PROFILE, { kind: "applied", plan: "plus" })
+        );
+        expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
         expect(mockOpenExpired).not.toHaveBeenCalled();
       });
 
