@@ -1,4 +1,3 @@
-import { COPILOT_WEBSITE_ORIGIN } from "@/constants";
 import type {
   ConnectorAuth,
   ConnectorLogin,
@@ -9,7 +8,6 @@ import { requestUrlFetch } from "@/connectors/oauth/requestUrlFetch";
 import { signInFailureMessage, type SignInFailure } from "@/copilotAccount/signInMessages";
 import { logWarn } from "@/logger";
 
-const WEBSITE_ORIGIN_STORAGE_KEY = "obsidian-copilot:website-origin";
 const LOGIN_ID = "copilot-account";
 const ACCOUNT_PATH = "/api/plugin/account";
 
@@ -34,13 +32,6 @@ export interface CopilotAccountDeps {
 
 const SIGNED_OUT: CopilotAccountState = Object.freeze({ status: "signed-out", failure: null });
 const SIGNING_IN: CopilotAccountState = Object.freeze({ status: "signing-in" });
-
-export function copilotWebsiteOrigin(storage: { loadLocalStorage(key: string): unknown }): string {
-  const saved = storage.loadLocalStorage(WEBSITE_ORIGIN_STORAGE_KEY);
-  // A test vault signs in to a local build of the website by saving its origin on the device.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
-  return typeof saved === "string" && saved ? saved : COPILOT_WEBSITE_ORIGIN;
-}
 
 function signInResultCopy(result: LoginOutcome): LoginResultCopy {
   if (result.status === "failed") {

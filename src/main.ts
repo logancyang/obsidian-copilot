@@ -38,6 +38,7 @@ import {
   COPILOT_AGENT_ICON_ID,
   APPLY_VIEW_TYPE,
   COPILOT_AGENT_ICON_SVG,
+  COPILOT_WEBSITE_ORIGIN,
   DEFAULT_OPEN_AREA,
   DESKTOP_VIEW_TYPES,
   EVENT_NAMES,
@@ -64,7 +65,7 @@ import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
-import { CopilotAccount, copilotWebsiteOrigin } from "@/copilotAccount/copilotAccount";
+import { CopilotAccount } from "@/copilotAccount/copilotAccount";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -370,7 +371,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       };
       const copilotAccount = new CopilotAccount({
         auth: new ConnectorAuth({ keychain: KeychainService.getInstance(), openUrl }),
-        websiteOrigin: copilotWebsiteOrigin(this.app),
+        websiteOrigin: COPILOT_WEBSITE_ORIGIN,
         installId: () => getPersistedDeviceId(this.app),
         openUrl,
       });

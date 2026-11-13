@@ -3,7 +3,6 @@
  */
 import {
   CopilotAccount,
-  copilotWebsiteOrigin,
   type AccountProfile,
   type CopilotAccountState,
 } from "@/copilotAccount/copilotAccount";
@@ -398,23 +397,6 @@ describe("copilotAccount", () => {
           /ECONNREFUSED/
         );
       });
-    });
-  });
-
-  describe("copilotWebsiteOrigin()", () => {
-    it("signs in to the Copilot website by default", () => {
-      expect(copilotWebsiteOrigin({ loadLocalStorage: () => null })).toBe(
-        "https://www.obsidiancopilot.com"
-      );
-    });
-
-    it("signs in to the website origin saved on this device, so a test vault can use a local site — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", () => {
-      const storage = {
-        loadLocalStorage: (key: string) =>
-          key === "obsidian-copilot:website-origin" ? "http://localhost:3923" : null,
-      };
-
-      expect(copilotWebsiteOrigin(storage)).toBe("http://localhost:3923");
     });
   });
 });
