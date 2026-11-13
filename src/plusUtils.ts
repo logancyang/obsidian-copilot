@@ -140,7 +140,9 @@ export async function checkIsPaidUser(
   context: LicenseCheckContext
 ): Promise<boolean | undefined> {
   if (!getSettings().plusLicenseKey) {
-    turnOffPaid(app);
+    // The paid mark syncs between devices but the key stays on each one, so a device with no key has no plan that ended.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    clearEntitlement();
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
