@@ -377,7 +377,6 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       });
       this.copilotAccount = copilotAccount;
       this.register(() => copilotAccount.dispose());
-      void copilotAccount.refreshProfile();
     }
     this.registerInterval(
       window.setInterval(

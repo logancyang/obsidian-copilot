@@ -37,7 +37,7 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 
 ## Gotchas
 
-- The sign-in stays across restarts. The account's plan is read when Copilot starts and each time the settings open; a sign-in the website has ended shows as signed out at the next read.
+- The sign-in stays across restarts. The account's plan is read each time the settings open; a sign-in the website has ended shows as signed out at the next read.
 - The account's plan only labels the pill; a paid account still needs its license key applied for paid features.
 - Mobile shows no `Sign in`.
 - Usage is read each time the settings open; it does not update while they stay open.

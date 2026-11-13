@@ -726,7 +726,7 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("gives the plugin a Copilot account on desktop, reads its plan once at startup, and disposes it when the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      it("gives the plugin a Copilot account on desktop without reading it at startup, and disposes it when the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
@@ -739,7 +739,7 @@ describe("main", () => {
 
         const account = jest.mocked(CopilotAccount).mock.instances[0];
         expect(plugin.copilotAccount).toBe(account);
-        expect(account.refreshProfile).toHaveBeenCalledTimes(1);
+        expect(account.refreshProfile).not.toHaveBeenCalled();
         expect(account.dispose).not.toHaveBeenCalled();
         for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
         expect(account.dispose).toHaveBeenCalledTimes(1);
