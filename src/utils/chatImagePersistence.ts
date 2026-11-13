@@ -2,7 +2,7 @@ import { deriveConversationAttachmentsFolder } from "@/settings/copilotFolder";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/base64";
 import { sha256 } from "@/utils/hash";
 import { isFileAlreadyExistsError } from "@/utils/vaultAdapterUtils";
-import { TFile, type App } from "obsidian";
+import { FileSystemAdapter, TFile, type App } from "obsidian";
 
 const IMAGE_EXTENSIONS = new Map([
   ["jpeg", "jpg"],
@@ -26,6 +26,58 @@ const RECEIPT =
   /<!-- copilot-image:([a-f0-9]{64}) -->\r?\n([\s\S]*?)\r?\n<!-- \/copilot-image -->/g;
 
 const EMBED = /^!\[\[[^\r\n]+\]\]$|^!\[[^\r\n]*\]\([^\r\n]+\)$/gm;
+
+export const CHAT_IMAGE_EMBED =
+  /^!\[\[[^\r\n]*copilot-image-[a-f0-9]{64}[^\r\n]*\]\]$|^!\[[^\r\n]*\]\([^\r\n]*copilot-image-[a-f0-9]{64}[^\r\n]*\)$/gm;
+
+function parseImageDataUrl(
+  url: string
+): { bytes: ArrayBuffer; base64: string; extension: string; hash: string } | null {
+  const match = /^data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(url);
+  if (!match) return null;
+  let bytes: ArrayBuffer;
+  try {
+    bytes = base64ToArrayBuffer(match[2]);
+  } catch {
+    // atob rejects malformed padding; a stricter regex instead fails to match multi-megabyte photos on iOS.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
+    return null;
+  }
+  const base64 = arrayBufferToBase64(bytes);
+  const subtype = match[1].toLowerCase();
+  const extension = IMAGE_EXTENSIONS.get(subtype) ?? subtype.replace(/[^a-z0-9]/g, "");
+  if (!bytes.byteLength || !extension || base64.replace(/=+$/, "") !== match[2].replace(/=+$/, ""))
+    return null;
+  return { bytes, base64, extension, hash: sha256(base64) };
+}
+
+// A project chat's agent works in the project folder, so earlier images are named by full path, which opens from any working folder.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+export function savedChatImagePath(
+  app: App,
+  conversationsFolder: string,
+  image: string
+): string | null {
+  let path: string | null = null;
+  if (image.startsWith("data:")) {
+    const upload = parseImageDataUrl(image);
+    const name = upload && `copilot-image-${upload.hash}.${upload.extension}`;
+    const saved = name && `${deriveConversationAttachmentsFolder(conversationsFolder)}/${name}`;
+    const file = saved ? app.vault.getAbstractFileByPath(saved) : null;
+    // A hash-named file of another size is not this image (a truncated write or a stranger's file), so the agent must not be sent to it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+    if (file instanceof TFile && file.stat.size === upload?.bytes.byteLength) path = file.path;
+  } else {
+    // Saved image names are unique by content hash, so the name alone finds the file (a Markdown embed spells a collision suffix's space as %20), and a hand-edited link with a broken percent escape cannot fail the send.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/907
+    const name = /copilot-image-[a-f0-9]{64}(?:(?: |%20)\d+)?\.[a-z0-9]+/
+      .exec(image)?.[0]
+      .replace("%20", " ");
+    path = (name && app.metadataCache.getFirstLinkpathDest(name, "")?.path) || null;
+  }
+  const adapter = app.vault.adapter;
+  return path && adapter instanceof FileSystemAdapter ? adapter.getFullPath(path) : path;
+}
 
 function restoreChatImageReceipts(next: string, loaded: string): string {
   const byEmbed = new Map([...loaded.matchAll(RECEIPT)].map((m) => [m[2], m[0]]));
@@ -138,27 +190,9 @@ export async function prepareChatImagesForSave<T extends MessageWithImages>(
       legacyEmbeds.every((embed) => /^!\[\[[^\n]+\]\]$|^!\[[^\n]*\]\([^\n]+\)$/.test(embed));
     const embeds: string[] = [];
     for (const image of uploads) {
-      const match = /^data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(image.url);
-      if (!match) throw new Error("Cannot save an invalid uploaded image.");
-      let bytes: ArrayBuffer;
-      try {
-        bytes = base64ToArrayBuffer(match[2]);
-      } catch {
-        // atob rejects malformed padding; a stricter regex instead fails to match multi-megabyte photos on iOS.
-        // https://github.com/Brevilabs/obsidian-copilot-private/issues/94
-        throw new Error("Cannot save an invalid uploaded image.");
-      }
-      const base64 = arrayBufferToBase64(bytes);
-      const subtype = match[1].toLowerCase();
-      const extension = IMAGE_EXTENSIONS.get(subtype) ?? subtype.replace(/[^a-z0-9]/g, "");
-      if (
-        !bytes.byteLength ||
-        !extension ||
-        base64.replace(/=+$/, "") !== match[2].replace(/=+$/, "")
-      ) {
-        throw new Error("Cannot save an invalid uploaded image.");
-      }
-      const hash = sha256(base64);
+      const upload = parseImageDataUrl(image.url);
+      if (!upload) throw new Error("Cannot save an invalid uploaded image.");
+      const { bytes, base64, extension, hash } = upload;
       const name = `copilot-image-${hash}`;
       const savedKey = `${sourcePath || conversationsFolder}\0${hash}`;
       let saved = savedImages.get(savedKey);
