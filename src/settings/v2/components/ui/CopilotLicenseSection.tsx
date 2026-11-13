@@ -94,31 +94,40 @@ interface DiscordInviteProps {
 
 function DiscordInvite({ onDismiss }: DiscordInviteProps) {
   return (
-    <div className="tw-flex tw-items-center tw-gap-2.5 tw-rounded-md tw-border tw-border-solid tw-border-discord/60 tw-bg-discord/20 tw-py-1.5 tw-pl-2 tw-pr-1.5">
-      <span
-        aria-hidden="true"
-        className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-discord tw-text-white"
-      >
-        <DiscordLogo className="tw-size-4" />
-      </span>
-      <span className="tw-min-w-0 tw-flex-1 tw-text-sm tw-text-normal">
-        You&apos;re invited to the Copilot Discord: help from the team and other users.
-      </span>
-      <a
-        href={COPILOT_DISCORD_INVITE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(event) => {
-          openLinkInSystemBrowser(event);
-          onDismiss();
-        }}
-        className="tw-flex tw-h-7 tw-shrink-0 tw-items-center tw-rounded-full tw-bg-discord tw-px-3 tw-text-ui-small tw-font-semibold tw-text-white tw-no-underline hover:tw-bg-discord/90 hover:tw-text-white"
-      >
-        Join Discord
-      </a>
-      <Button variant="ghost" size="icon" aria-label="Hide the Discord invite" onClick={onDismiss}>
-        <X className="tw-size-3.5" />
-      </Button>
+    <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2.5 tw-rounded-md tw-border tw-border-solid tw-border-discord/60 tw-bg-discord/20 tw-py-1.5 tw-pl-2 tw-pr-1.5">
+      <div className="tw-flex tw-min-w-0 tw-grow tw-basis-48 tw-items-center tw-gap-2.5">
+        <span
+          aria-hidden="true"
+          className="tw-flex tw-size-6 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-md tw-bg-discord tw-text-white"
+        >
+          <DiscordLogo className="tw-size-4" />
+        </span>
+        <span className="tw-text-sm tw-text-normal">
+          You&apos;re invited to the Copilot Discord: help from the team and other users.
+        </span>
+      </div>
+      <div className="tw-ml-auto tw-flex tw-items-center tw-gap-2.5">
+        <a
+          href={COPILOT_DISCORD_INVITE_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(event) => {
+            openLinkInSystemBrowser(event);
+            onDismiss();
+          }}
+          className="tw-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-discord tw-px-3 tw-text-ui-small tw-font-semibold tw-text-white tw-no-underline hover:tw-bg-discord/90 hover:tw-text-white hover:tw-no-underline"
+        >
+          Join Discord
+        </a>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Hide the Discord invite"
+          onClick={onDismiss}
+        >
+          <X className="tw-size-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }

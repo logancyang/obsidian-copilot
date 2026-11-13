@@ -306,8 +306,8 @@ describe("CopilotLicenseSection", () => {
     it("invites a signed-in user to the Copilot Discord at the bottom of the section — https://github.com/Brevilabs/obsidian-copilot-private/issues/925", () => {
       renderSection({ account: accountIn(SIGNED_IN_FREE), onDismissDiscordInvite: jest.fn() });
 
-      const banner = screen.getByText(DISCORD_INVITE_TEXT).parentElement;
-      expect(document.querySelector("section")?.lastElementChild).toBe(banner);
+      const lastRow = document.querySelector("section")?.lastElementChild;
+      expect(lastRow?.contains(screen.getByText(DISCORD_INVITE_TEXT))).toBe(true);
       expect(screen.getByRole("link", { name: "Join Discord" }).getAttribute("href")).toBe(
         "https://discord.gg/5byWwcq5Qq"
       );
