@@ -45,6 +45,16 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
   },
 }));
 
+const mockOpenExpired = jest.fn();
+
+jest.mock("@/components/modals/CopilotPlusExpiredModal", () => ({
+  CopilotPlusExpiredModal: class {
+    open() {
+      mockOpenExpired();
+    }
+  },
+}));
+
 const mockSetModelKey = jest.fn<void, [string]>();
 
 jest.mock("@/aiParams", () => ({
@@ -86,11 +96,12 @@ import {
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import { renderHook, waitFor } from "@testing-library/react";
-import { Notice } from "obsidian";
+import { Notice, type App } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
 const STORED_LICENSE_KEY = "key";
+const APP = {} as App;
 
 function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
@@ -155,6 +166,7 @@ describe("plusUtils", () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
     mockSetModelKey.mockClear();
+    mockOpenExpired.mockClear();
     mockVerifyEntitlement.mockReset();
     mockValidateLicenseKey.mockReset();
     mockApplyCopilotDefaultModel.mockReset().mockReturnValue([]);
@@ -701,6 +713,14 @@ describe("plusUtils", () => {
         entitlementExpiresAt: 0,
       });
     });
+
+    it("opens the plan-expired dialog when a paid user's stored license is turned off", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true }));
+
+      turnOffPaid(APP);
+
+      expect(mockOpenExpired).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("applyEntitlement()", () => {
@@ -889,6 +909,16 @@ describe("plusUtils", () => {
 
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
       expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+    });
+
+    it("turns paid features off without the plan-expired dialog when this device holds no license key, as on a synced device not yet signed in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "", isPaidUser: true }));
+
+      expect(await checkIsPaidUser(APP, { trigger: "startup" })).toBe(false);
+      expect(mockSetSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ isPaidUser: false, entitlementToken: "" })
+      );
+      expect(mockOpenExpired).not.toHaveBeenCalled();
     });
 
     it("returns the server's verdict when it answers", async () => {
