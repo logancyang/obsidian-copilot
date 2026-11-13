@@ -22,7 +22,7 @@ function useLicenseUsage(isLicenseActive: boolean): readonly UsageWindow[] | nul
 
   useEffect(() => {
     // The usage reader ships with Agent Mode, whose code cannot load on mobile.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/926
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
     if (!isLicenseActive || !isDesktopRuntime()) return;
     let cancelled = false;
     void import("@/agentMode")

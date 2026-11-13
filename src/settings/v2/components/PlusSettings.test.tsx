@@ -3,8 +3,8 @@ import type { ConnectorLogin, LoginOutcome } from "@/connectors/oauth/connectorA
 import { CopilotAccount, type CopilotAccountDeps } from "@/copilotAccount/copilotAccount";
 import { applyAccountLicense, isAccountLicense, removeLicense } from "@/plusUtils";
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
-import * as desktopRuntime from "@/utils/desktopRuntime";
 import type { App } from "obsidian";
+import * as desktopRuntime from "@/utils/desktopRuntime";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
@@ -225,7 +225,7 @@ describe("PlusSettings", () => {
       expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
     });
 
-    it("reads no usage on mobile, where the usage reader cannot load, and offers Remove license alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+    it("reads no usage on mobile, where the usage reader cannot load, and offers Remove license alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
       jest.spyOn(desktopRuntime, "isDesktopRuntime").mockReturnValue(false);
       storeActiveLicense();
 
