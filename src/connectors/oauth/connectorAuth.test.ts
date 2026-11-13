@@ -530,15 +530,17 @@ describe("connectorAuth", () => {
         expect(storedLogin().tokens.access_token).toMatch(/^access-/);
       });
 
-      it("ignores a link whose state is wrong or missing, exchanging only the code of the login's own link — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+      it("ignores a link whose state is wrong or missing, a denial included, exchanging only the code of the login's own link — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
         const { service, connectorAuth, startLogin } = setUp({}, { returnLink: RETURN_LINK });
         const { login, authorizationUrl } = await startLogin();
         const link = linkParams(service.approve(authorizationUrl.href));
         const forged = { ...link, code: "code-from-another-page", state: "forged" };
         const stateless = { action: link.action, code: "code-from-another-page" };
+        const forgedDenial = { action: link.action, error: "access_denied", state: "forged" };
 
         connectorAuth.receiveReturnLink(forged);
         connectorAuth.receiveReturnLink(stateless);
+        connectorAuth.receiveReturnLink(forgedDenial);
         connectorAuth.receiveReturnLink(link);
 
         await expect(login.outcome).resolves.toEqual({ status: "connected" });
