@@ -69,7 +69,7 @@ function AccountMenu({ profile, onRefreshPlan, onSignOut, defaultOpen }: Account
               "tw-h-9 tw-gap-2 tw-rounded-full tw-pl-1 tw-pr-2.5 tw-text-ui-small tw-font-semibold",
               profile &&
                 profile.plan !== FREE_PLAN &&
-                "clickable-icon tw-bg-success tw-text-success"
+                "clickable-icon tw-bg-success tw-text-success hover:tw-bg-success hover:tw-text-success"
             )}
           >
             <Avatar profile={profile} />
