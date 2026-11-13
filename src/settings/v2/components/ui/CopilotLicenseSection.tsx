@@ -102,25 +102,32 @@ export function CopilotLicenseSection({
       {status === "active" ? (
         <div className="tw-flex tw-items-center tw-gap-4 tw-border-0 tw-border-t tw-border-solid tw-border-border tw-pt-3 tw-text-sm">
           {/* A failed or empty usage read shows no numbers rather than stale or empty ones. https://github.com/Brevilabs/obsidian-copilot-private/issues/923 */}
-          {usageWindows && usageWindows.length > 0 && (
+          {usageWindows && (
             <ul
               aria-label="Usage"
               className="tw-m-0 tw-flex tw-list-none tw-flex-wrap tw-items-center tw-gap-3 tw-p-0 tw-text-muted"
             >
-              {usageWindows.map((window) => (
-                <li key={window.id} className="tw-m-0 tw-flex tw-items-center tw-gap-1.5">
-                  <span
-                    aria-hidden="true"
-                    className="tw-size-1.5 tw-rounded-full tw-bg-interactive-accent"
-                  />
-                  <span>
-                    {window.label}{" "}
-                    <strong className="tw-font-semibold tw-text-normal">
-                      {Math.round(window.percent)}%
-                    </strong>{" "}
-                    used
-                  </span>
-                </li>
+              {usageWindows.map((window, index) => (
+                <React.Fragment key={window.id}>
+                  {index > 0 && (
+                    <li aria-hidden="true" className="tw-m-0">
+                      ·
+                    </li>
+                  )}
+                  <li className="tw-m-0 tw-flex tw-items-center tw-gap-1.5">
+                    <span
+                      aria-hidden="true"
+                      className="tw-size-1.5 tw-rounded-full tw-bg-interactive-accent"
+                    />
+                    <span>
+                      {window.label}{" "}
+                      <strong className="tw-font-semibold tw-text-normal">
+                        {Math.round(window.percent)}%
+                      </strong>{" "}
+                      used
+                    </span>
+                  </li>
+                </React.Fragment>
               ))}
             </ul>
           )}
@@ -138,6 +145,7 @@ export function CopilotLicenseSection({
               onChange={onLicenseKeyChange}
             />
             <Button
+              variant="secondary"
               disabled={isApplying}
               onClick={onApply}
               className="tw-min-w-10 tw-text-xs md:tw-text-sm"

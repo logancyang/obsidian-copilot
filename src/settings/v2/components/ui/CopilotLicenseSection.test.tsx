@@ -62,7 +62,7 @@ describe("CopilotLicenseSection", () => {
       expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
     });
 
-    it("shows how much of each allowance window is used, in whole percents", () => {
+    it("shows how much of each allowance window is used, in whole percents, separated by a dot", () => {
       renderSection({
         license: { status: "active", plan: "plus" },
         usageWindows: [
@@ -72,6 +72,9 @@ describe("CopilotLicenseSection", () => {
       });
 
       expect(usageLineText()).toEqual(["5h 12% used", "Weekly 34% used"]);
+      expect(screen.getByRole("list", { name: "Usage" }).textContent).toBe(
+        "5h 12% used·Weekly 34% used"
+      );
     });
 
     it("shows Remove license without numbers when usage is unavailable — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", () => {
