@@ -620,6 +620,16 @@ describe("copilotAccount", () => {
         expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
       });
 
+      it("shares one account read between refreshes that overlap, so an older answer never lands after a newer one — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        const readsBefore = service.requestsTo("/api/plugin/account").length;
+
+        await Promise.all([account.refreshProfile(), account.refreshProfile()]);
+
+        expect(service.requestsTo("/api/plugin/account")).toHaveLength(readsBefore + 1);
+      });
+
       it("does nothing while signed out", async () => {
         const { account, service } = setUp();
 
@@ -708,15 +718,16 @@ describe("copilotAccount", () => {
         const win = fakeWindow();
         const reads = () => service.requestsTo("/api/plugin/account").length;
         const readsBefore = reads();
+        const refresh = jest.spyOn(account, "refreshProfile");
+        const latestRead = (): Promise<void> =>
+          refresh.mock.results[refresh.mock.results.length - 1].value as Promise<void>;
         account.watchForPurchase(win);
 
-        const firstRead = nextUpdate(account);
         win.returnToObsidian();
-        await firstRead;
+        await latestRead();
         for (let elapsed = 0; elapsed < ONE_MINUTE_MS; elapsed += RECHECK_INTERVAL_MS) {
-          const recheck = nextUpdate(account);
           jest.advanceTimersByTime(RECHECK_INTERVAL_MS);
-          await recheck;
+          await latestRead();
         }
 
         expect(reads() - readsBefore).toBe(7);
@@ -733,6 +744,25 @@ describe("copilotAccount", () => {
 
         expect(jest.getTimerCount()).toBe(0);
         expect(service.requestsTo("/api/plugin/account")).toHaveLength(readsBefore);
+      });
+
+      it("keeps a single watch, on the window of the latest See plans, when the user chooses it again", async () => {
+        const { account, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const firstWindow = fakeWindow();
+        const latestWindow = fakeWindow();
+        const refresh = jest.spyOn(account, "refreshProfile");
+        account.watchForPurchase(firstWindow);
+        account.watchForPurchase(latestWindow);
+
+        firstWindow.returnToObsidian();
+        expect(refresh).not.toHaveBeenCalled();
+        latestWindow.returnToObsidian();
+        await (refresh.mock.results[0].value as Promise<void>);
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(jest.getTimerCount()).toBe(1);
       });
 
       it("stops checking once the purchase is found", async () => {
@@ -783,6 +813,19 @@ describe("copilotAccount", () => {
         account.dispose();
 
         expect(jest.getTimerCount()).toBe(0);
+      });
+
+      it("changes no license and opens no dialog when an account read finishes after the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        service.account = paidAccount(service);
+
+        const reading = account.refreshProfile();
+        account.dispose();
+        await reading;
+
+        expect(getSettings().plusLicenseKey).toBe("");
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
       });
 
       it("cancels a sign-in in progress so its browser page stops answering", async () => {

@@ -102,6 +102,7 @@ export class CopilotAccount {
   private state: CopilotAccountState;
   private login: ConnectorLogin | null = null;
   private stopPurchaseWatch: (() => void) | null = null;
+  private reading: Promise<void> | null = null;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribeSettings: () => void;
 
@@ -153,7 +154,12 @@ export class CopilotAccount {
   }
 
   refreshProfile(): Promise<void> {
-    return this.read(true);
+    // Reads that overlap share one request, so an older answer never lands after a newer one and the purchase
+    // watch's reads cannot pile up behind a slow website. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    this.reading ??= this.read(true).finally(() => {
+      this.reading = null;
+    });
+    return this.reading;
   }
 
   async signOut(): Promise<void> {
@@ -193,6 +199,9 @@ export class CopilotAccount {
   }
 
   dispose(): void {
+    // A read still in flight when the plugin unloads must not change the license or open a dialog afterwards.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    this.state = SIGNED_OUT;
     this.login?.cancel();
     this.stopPurchaseWatch?.();
     this.unsubscribeSettings();
