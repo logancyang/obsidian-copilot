@@ -225,11 +225,14 @@ describe("PlusSettings", () => {
       expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
     });
 
-    it("reads no usage on mobile, where the usage reader cannot load, and offers Remove license alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", () => {
+    it("reads no usage on mobile, where the usage reader cannot load, and offers Remove license alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
       jest.spyOn(desktopRuntime, "isDesktopRuntime").mockReturnValue(false);
       storeActiveLicense();
 
       render(<PlusSettings />);
+      await act(async () => {
+        await import("@/agentMode");
+      });
 
       expect(mockReadPlanUsage).not.toHaveBeenCalled();
       expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
