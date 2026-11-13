@@ -59,6 +59,14 @@ const FREE_PROFILE: AccountProfile = {
 
 const PLUS_PROFILE: AccountProfile = { ...FREE_PROFILE, plan: "plus" };
 
+const OTHER_KEY = "other-account-issued-key";
+const OTHER_FREE_PROFILE: AccountProfile = {
+  email: "other@example.com",
+  name: "Other Name",
+  plan: "free",
+};
+const OTHER_PLUS_PROFILE: AccountProfile = { ...OTHER_FREE_PROFILE, plan: "plus" };
+
 interface PageVisit {
   status: number;
   body: string;
@@ -157,9 +165,11 @@ function setUp({
     supportsClientMetadataDocuments: true,
     publishesRevocation: true,
   });
-  const licenseServer = { refuses: false };
-  setRequestUrlImpl(async (request: RequestUrlParam) => {
+  const licenseServer = { refuses: false, unavailable: false, checks: 0 };
+  const respond = async (request: RequestUrlParam) => {
     if (!request.url.endsWith("/license")) return service.requestUrl(request);
+    licenseServer.checks += 1;
+    if (licenseServer.unavailable) return { status: 503, headers: {}, text: "Service Unavailable" };
     return licenseServer.refuses
       ? {
           status: 403,
@@ -167,7 +177,8 @@ function setUp({
           json: { detail: { reason: "Invalid license key", error: "INVALID_LICENSE" } },
         }
       : { status: 200, headers: {}, json: { is_valid: true, plan: "plus" } };
-  });
+  };
+  setRequestUrlImpl(respond);
   const keychain = fakeKeychain();
   const browser = fakeBrowser();
 
@@ -209,6 +220,7 @@ function setUp({
   return {
     service,
     licenseServer,
+    respond,
     keychain,
     browser,
     account,
@@ -217,6 +229,29 @@ function setUp({
     signIn,
     signInThroughLink,
   };
+}
+
+function holdNextRequest(
+  respond: (request: RequestUrlParam) => Promise<unknown>,
+  path: string
+): {
+  answered: Promise<void>;
+  release: () => void;
+} {
+  let answer!: () => void;
+  const answered = new Promise<void>((resolve) => (answer = resolve));
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let holding = true;
+  setRequestUrlImpl(async (request: RequestUrlParam) => {
+    if (!holding || !request.url.endsWith(path)) return respond(request);
+    holding = false;
+    const response = await respond(request);
+    answer();
+    await released;
+    return response;
+  });
+  return { answered, release };
 }
 
 function signedIn(
@@ -574,6 +609,24 @@ describe("copilotAccount", () => {
         expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
       });
 
+      it("checks the account's license again, quietly, when the check at sign-in couldn't reach the license server, and stops checking once it is active — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, licenseServer, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        licenseServer.unavailable = true;
+        await signIn();
+        licenseServer.unavailable = false;
+
+        await account.refreshProfile();
+        const checksOnceActive = licenseServer.checks;
+        await account.refreshProfile();
+
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(licenseServer.checks).toBe(checksOnceActive);
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+      });
+
       it("keeps the account's license as it is, without a confirmation, when a restart finds the same paid plan", async () => {
         const { service, signIn, createAccount } = setUp();
         service.account = paidAccount(service);
@@ -741,6 +794,67 @@ describe("copilotAccount", () => {
         await Promise.all([account.refreshProfile(), account.refreshProfile()]);
 
         expect(service.requestsTo("/api/plugin/account")).toHaveLength(readsBefore + 1);
+      });
+
+      it("applies only the license of the account signed in now when an earlier account's paid answer arrives after the user switched accounts — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, respond, service, signIn } = setUp();
+        await signIn();
+        service.account = paidAccount(service);
+        const firstAccount = holdNextRequest(respond, "/api/plugin/account");
+        const firstAccountRead = account.refreshProfile();
+        await firstAccount.answered;
+        await account.signOut();
+        service.account = { ...OTHER_PLUS_PROFILE, image: null, licenseKey: OTHER_KEY };
+        await signIn();
+
+        firstAccount.release();
+        await firstAccountRead;
+
+        expect(account.getSnapshot()).toEqual(signedIn(OTHER_PLUS_PROFILE));
+        expect(getSettings().plusLicenseKey).toBe(OTHER_KEY);
+        expect(getSettings().accountLicenseKey).toBe(OTHER_KEY);
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+      });
+
+      it("announces nothing when the user signs out and back in while the license check for an upgrade is still running — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, respond, service, signIn } = setUp();
+        await signIn();
+        service.account = paidAccount(service);
+        const upgradeLicenseCheck = holdNextRequest(respond, "/license");
+        const upgradeRead = account.refreshProfile();
+        await upgradeLicenseCheck.answered;
+        await account.signOut();
+        await signIn();
+
+        upgradeLicenseCheck.release();
+        await upgradeRead;
+
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+      });
+
+      it("sends its own account read after the user switched accounts instead of joining one still waiting for the earlier account — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, respond, service, signIn } = setUp();
+        await signIn();
+        const firstAccount = holdNextRequest(respond, "/api/plugin/account");
+        const firstAccountRead = account.refreshProfile();
+        await firstAccount.answered;
+        await account.signOut();
+        service.account = { ...OTHER_FREE_PROFILE, image: null, licenseKey: null };
+        await signIn();
+        service.account = { ...OTHER_PLUS_PROFILE, image: null, licenseKey: OTHER_KEY };
+        const readsBefore = service.requestsTo("/api/plugin/account").length;
+
+        const secondAccountRead = account.refreshProfile();
+        firstAccount.release();
+        await Promise.all([firstAccountRead, secondAccountRead]);
+
+        expect(service.requestsTo("/api/plugin/account")).toHaveLength(readsBefore + 1);
+        expect(account.getSnapshot()).toEqual(
+          signedIn(OTHER_PLUS_PROFILE, { kind: "applied", plan: "plus" })
+        );
+        expect(getSettings().plusLicenseKey).toBe(OTHER_KEY);
       });
 
       it("does nothing while signed out", async () => {

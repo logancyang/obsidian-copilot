@@ -107,7 +107,8 @@ export class CopilotAccount {
   private state: CopilotAccountState;
   private login: ConnectorLogin | null = null;
   private stopPurchaseWatch: (() => void) | null = null;
-  private reading: Promise<void> | null = null;
+  private reading: { generation: number; done: Promise<void> } | null = null;
+  private loginGeneration = 0;
   private readonly listeners = new Set<() => void>();
   private readonly unsubscribeSettings: () => void;
 
@@ -165,10 +166,15 @@ export class CopilotAccount {
   refreshProfile(): Promise<void> {
     // Reads that overlap share one request, so an older answer never lands after a newer one and the purchase
     // watch's reads cannot pile up behind a slow website. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-    this.reading ??= this.read(true).finally(() => {
-      this.reading = null;
-    });
-    return this.reading;
+    if (this.reading?.generation === this.loginGeneration) return this.reading.done;
+    const reading = {
+      generation: this.loginGeneration,
+      done: this.read(true).finally(() => {
+        if (this.reading === reading) this.reading = null;
+      }),
+    };
+    this.reading = reading;
+    return reading.done;
   }
 
   async signOut(): Promise<void> {
@@ -211,6 +217,7 @@ export class CopilotAccount {
     // A read still in flight when the plugin unloads must not change the license or open a dialog afterwards.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
     this.state = SIGNED_OUT;
+    this.loginGeneration += 1;
     this.login?.cancel();
     this.stopPurchaseWatch?.();
     this.unsubscribeSettings();
@@ -219,8 +226,9 @@ export class CopilotAccount {
 
   private async read(announceLicense: boolean): Promise<void> {
     if (this.state.status !== "signed-in") return;
+    const generation = this.loginGeneration;
     const account = await this.readAccount();
-    if (this.state.status !== "signed-in" || account === null) return;
+    if (generation !== this.loginGeneration || account === null) return;
     if (account === "needs-login") {
       this.endSignIn();
       return;
@@ -230,21 +238,42 @@ export class CopilotAccount {
     if (account.licenseKey === null && isAccountLicense(getSettings())) turnOffPaid(this.deps.app);
     this.setState(signedIn(account.profile, this.notice()));
     if (account.licenseKey !== null) {
-      await this.applyLicense(account.licenseKey, account.profile.plan, announceLicense);
+      await this.applyLicense(
+        account.licenseKey,
+        account.profile.plan,
+        announceLicense,
+        generation
+      );
     }
   }
 
-  private async applyLicense(licenseKey: string, plan: string, announce: boolean): Promise<void> {
+  private async applyLicense(
+    licenseKey: string,
+    plan: string,
+    announce: boolean,
+    generation: number
+  ): Promise<void> {
     const settings = getSettings();
     // A key the user pasted wins over the account's and is never replaced.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-    if (settings.plusLicenseKey === licenseKey) return;
     if (settings.plusLicenseKey !== "" && !isAccountLicense(settings)) return;
-    applyAccountLicense(licenseKey);
+    // A refused key is removed, so the account's key still stored without paid features means its last check couldn't
+    // run; it is checked again. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    const isStored = settings.plusLicenseKey === licenseKey;
+    if (isStored && settings.isPaidUser) return;
+    if (!isStored) applyAccountLicense(licenseKey);
     const paid = await checkIsPaidUser(this.deps.app, { trigger: "manual" });
-    // The first sign-in on a paid plan applies quietly; a plan bought while signed in is announced.
+    // The first sign-in on a paid plan applies quietly; a plan bought while signed in is announced, once.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-    if (!paid || !announce || this.state.status !== "signed-in") return;
+    if (
+      !paid ||
+      !announce ||
+      isStored ||
+      generation !== this.loginGeneration ||
+      this.state.status !== "signed-in"
+    ) {
+      return;
+    }
     this.setState(signedIn(this.state.profile, { kind: "applied", plan }));
     new CopilotPlusWelcomeModal(this.deps.app).open();
   }
@@ -307,6 +336,9 @@ export class CopilotAccount {
   }
 
   private setState(state: CopilotAccountState): void {
+    // Leaving signed in ends the login, so a read started under it can't answer for the next sign-in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+    if (state.status !== "signed-in") this.loginGeneration += 1;
     this.state = state;
     for (const listener of this.listeners) listener();
   }
