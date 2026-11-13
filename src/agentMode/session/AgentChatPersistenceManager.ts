@@ -10,7 +10,7 @@ import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } fro
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
-import { FormattedDateTime } from "@/types/message";
+import { FormattedDateTime, type MessageContext } from "@/types/message";
 import {
   ensureFolderExists,
   formatDateTime,
@@ -46,6 +46,10 @@ const MESSAGE_DATA_LINE = /(?:^|\r?\n)<!-- copilot-message ([^>\r\n]*) -->$/;
 
 interface SavedMessageData {
   tools?: readonly string[];
+  // A reopened or continued chat gets its attached context back only from the note; JSON keeps paths holding ", " or " | " whole.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/920
+  notes?: string[];
+  webTabs?: { url: string; title?: string }[];
 }
 
 function readMessageData(json: string): SavedMessageData {
@@ -54,6 +58,26 @@ function readMessageData(json: string): SavedMessageData {
   } catch {
     return {};
   }
+}
+
+function savedContext(context: MessageContext | undefined): SavedMessageData {
+  const saved: SavedMessageData = {};
+  if (context?.notes?.length) saved.notes = context.notes.map((note) => note.path);
+  if (context?.webTabs?.length)
+    saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
+  return saved;
+}
+
+function loadedContext(saved: SavedMessageData, app: App): MessageContext | undefined {
+  const notes = (Array.isArray(saved.notes) ? saved.notes : []).flatMap((path) => {
+    const file = typeof path === "string" ? app.vault.getAbstractFileByPath(path) : null;
+    return file instanceof TFile ? [file] : [];
+  });
+  const webTabs = (Array.isArray(saved.webTabs) ? saved.webTabs : []).filter(
+    (tab) => typeof tab?.url === "string"
+  );
+  if (notes.length === 0 && webTabs.length === 0) return undefined;
+  return { notes, urls: [], ...(webTabs.length > 0 ? { webTabs } : {}) };
 }
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
@@ -289,7 +313,10 @@ export class AgentChatPersistenceManager {
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
-        const data: SavedMessageData = tools.length > 0 ? { tools } : {};
+        const data: SavedMessageData = {
+          ...(tools.length > 0 ? { tools } : {}),
+          ...savedContext(m.context),
+        };
         // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
         const dataLine =
@@ -329,6 +356,7 @@ export class AgentChatPersistenceManager {
       const tools = Array.isArray(data.tools)
         ? data.tools.filter((tool) => typeof tool === "string")
         : [];
+      const context = loadedContext(data, this.app);
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -357,6 +385,7 @@ export class AgentChatPersistenceManager {
         isVisible: true,
         timestamp,
         ...(tools.length > 0 ? { toolsUsed: tools } : {}),
+        ...(context ? { context } : {}),
       });
     }
     return messages;

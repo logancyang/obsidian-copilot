@@ -338,6 +338,30 @@ describe("conversationHistory", () => {
       expect(block).toContain("the fan-out renderer drops context");
     });
 
+    it("names a reopened chat's attached notes by path with its web tabs (https://github.com/Brevilabs/obsidian-copilot-private/issues/920)", () => {
+      const msg = withContext(USER_SENDER, "compare these", {
+        notes: [{ path: "Projects/Plan, v2 | draft.md" } as MessageContext["notes"][number]],
+        urls: [],
+        webTabs: [{ url: "https://example.com/board", title: "Board" }],
+      });
+
+      const block = buildConversationHistoryBlock(
+        [msg],
+        SAVED_HISTORY_MAX_CHARS,
+        null,
+        noSavedImages
+      )!.text;
+
+      expect(block).toContain(
+        [
+          "compare these",
+          "[context]",
+          "[notes: Projects/Plan, v2 | draft.md]",
+          "[web tabs: Board (https://example.com/board)]",
+        ].join("\n")
+      );
+    });
+
     it("lists the tools each earlier reply used under that reply's text", () => {
       const block = buildConversationHistoryBlock(
         [

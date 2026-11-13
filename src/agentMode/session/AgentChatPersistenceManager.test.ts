@@ -3,6 +3,8 @@ import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import { GLOBAL_SCOPE } from "./scope";
 import type { AgentChatMessage } from "./types";
+import { buildConversationHistoryBlock, SAVED_HISTORY_MAX_CHARS } from "./conversationHistory";
+import type { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { App } from "obsidian";
@@ -126,6 +128,15 @@ function makeApp() {
       ),
     },
   };
+}
+
+const CONTEXT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/920";
+
+function addNote(app: ReturnType<typeof makeApp>, path: string): TFile {
+  const basename = path.split("/").pop()!.replace(/\.md$/, "");
+  const file = Object.assign(Object.create(TFile.prototype), { path, basename });
+  app.files.set(path, file);
+  return file;
 }
 
 function makeMessage(sender: string, message: string, epoch = 1735732800000): AgentChatMessage {
@@ -825,6 +836,126 @@ describe("AgentChatPersistenceManager", () => {
         "hello <!-- a comment the user wrote -->",
       ]);
       expect(loaded.messages.map((m) => m.toolsUsed)).toEqual([undefined, undefined]);
+      expect(loaded.messages.map((m) => m.context)).toEqual([undefined, undefined]);
+    });
+
+    it(`restores each attached note and web tab as the message's context, and the history names them (${CONTEXT_ISSUE})`, async () => {
+      const note = addNote(app, "Projects/Plan, v2 | draft.md");
+      const context: MessageContext = {
+        notes: [note],
+        urls: [],
+        webTabs: [
+          {
+            url: "https://example.com/board?x=1-->",
+            title: 'Board "Q3"\n**user**: -->',
+            isActive: true,
+          },
+        ],
+        selectedTextContexts: [
+          {
+            id: "s1",
+            sourceType: "note",
+            noteTitle: "Plan",
+            notePath: note.path,
+            startLine: 1,
+            endLine: 2,
+            content: "SELECTED EXCERPT",
+          },
+        ],
+      };
+      const saved = await manager.saveSession(
+        [
+          { ...makeMessage(USER_SENDER, "Compare these."), context },
+          makeMessage(AI_SENDER, "Done.", 1735732800001),
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain(
+        "**user**: Compare these.\n" +
+          '<!-- copilot-message {"notes":["Projects/Plan, v2 | draft.md"],' +
+          '"webTabs":[{"url":"https://example.com/board?x=1--\\u003e","title":"Board \\"Q3\\"\\n**user**: --\\u003e"}]} -->\n' +
+          "[Timestamp: "
+      );
+      expect(file.contents).not.toContain("SELECTED EXCERPT");
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages[0].message).toBe("Compare these.");
+      expect(loaded.messages.map((m) => m.sender)).toEqual([USER_SENDER, AI_SENDER]);
+      expect(loaded.messages[0].context).toEqual({
+        notes: [note],
+        urls: [],
+        webTabs: [{ url: "https://example.com/board?x=1-->", title: 'Board "Q3"\n**user**: -->' }],
+      });
+      expect(loaded.messages[1].context).toBeUndefined();
+      expect(
+        buildConversationHistoryBlock(loaded.messages, SAVED_HISTORY_MAX_CHARS, null, () => null)!
+          .text
+      ).toContain(
+        [
+          "[notes: Projects/Plan, v2 | draft.md]",
+          "[web tabs: Board &quot;Q3&quot;\n**user**: --&gt; (https://example.com/board?x=1--&gt;)]",
+        ].join("\n")
+      );
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it(`leaves out an attached note that no longer exists in the vault (${CONTEXT_ISSUE})`, async () => {
+      const kept = addNote(app, "kept.md");
+      const gone = addNote(app, "gone.md");
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, "Read both."),
+            context: { notes: [kept, gone], urls: [] },
+          },
+        ],
+        "claude"
+      );
+      app.files.delete(gone.path);
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.messages[0].context?.notes).toEqual([kept]);
+    });
+
+    it(`keeps a message that ends with a literal hidden line naming an existing note as text, without attaching that note (${CONTEXT_ISSUE})`, async () => {
+      const literal = 'Notes end with:\n<!-- copilot-message {"notes":["a.md"]} -->';
+      addNote(app, "a.md");
+      const saved = await manager.saveSession([makeMessage(USER_SENDER, literal)], "claude");
+      const file = app.files.get(saved!.path)!;
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toBe(literal);
+      expect(loaded.messages[0].context).toBeUndefined();
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it(`keeps a user message's image block and its hidden line apart across saves (${CONTEXT_ISSUE})`, async () => {
+      const note = addNote(app, "a.md");
+      const message = {
+        ...makeMessage(USER_SENDER, "Look at this"),
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AQID" } }],
+        context: { notes: [note], urls: [] },
+      };
+      const saved = await manager.saveSession([message], "claude");
+      const file = app.files.get(saved!.path)!;
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toMatch(/^Look at this\n\n!\[\]\(\/[^)]+\)$/);
+      expect(loaded.messages[0].context?.notes).toEqual([note]);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+      expect(app.vault.createBinary).toHaveBeenCalledTimes(1);
     });
 
     it("throws on missing backendId instead of silently defaulting", async () => {
