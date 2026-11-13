@@ -58,6 +58,7 @@ import {
   type FileCaptures,
 } from "@/agentMode/session/turnFileChanges";
 import { TurnTracker, type TurnOutcome, type TurnSend } from "@/agentMode/session/TurnTracker";
+import { joinPosix } from "@/utils/pathUtils";
 import { getVaultBase } from "@/utils/vaultPath";
 import { savedChatImagePath } from "@/utils/chatImagePersistence";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
@@ -128,6 +129,7 @@ export const DEFAULT_TITLE_PREFIX = "New session";
 const EMPTY_BACKEND_IDS: ReadonlyArray<BackendId> = Object.freeze([]);
 const EMPTY_TASKS: readonly AgentTask[] = Object.freeze([]);
 const EMPTY_MESSAGES: readonly AgentChatMessage[] = Object.freeze([]);
+const NO_EARLIER_CHATS: readonly string[] = Object.freeze([]);
 const EMPTY_TOOL_CALL_IDS: ReadonlySet<string> = new Set();
 const LAUNCH_CARD_STATUS: Record<TaskEndStatus, AgentToolStatus> = {
   completed: "completed",
@@ -271,6 +273,7 @@ export class AgentSession implements ChatStateHost, ChatView {
   private lastMentionedAgents: ReadonlyArray<BackendId> = EMPTY_BACKEND_IDS;
   private pendingFanoutContext: PendingFanoutContext[] = [];
   private resendSavedHistory = false;
+  private continuedFrom: readonly string[] = NO_EARLIER_CHATS;
   private readonly turns: TurnTracker;
   private readonly taskFiles = new Map<string, FileCaptures>();
   private readonly tasks = new Map<string, AgentTask>();
@@ -661,6 +664,10 @@ export class AgentSession implements ChatStateHost, ChatView {
     this.resendSavedHistory = true;
   }
 
+  setContinuedFrom(continuedFrom: readonly string[] = NO_EARLIER_CHATS): void {
+    this.continuedFrom = continuedFrom;
+  }
+
   getLabel(): string | null {
     return this.label;
   }
@@ -918,7 +925,8 @@ export class AgentSession implements ChatStateHost, ChatView {
         }
 
         const historyBlock =
-          this.priorHistoryBlock(userMessageId, MENTION_HISTORY_MAX_CHARS)?.text ?? null;
+          this.priorHistoryBlock(userMessageId, MENTION_HISTORY_MAX_CHARS, this.continuedFrom)
+            ?.text ?? null;
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -935,7 +943,7 @@ export class AgentSession implements ChatStateHost, ChatView {
       // https://github.com/logancyang/obsidian-copilot/issues/3643
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
       const savedHistory = sendsSavedHistory
-        ? this.priorHistoryBlock(userMessageId, SAVED_HISTORY_MAX_CHARS)
+        ? this.priorHistoryBlock(userMessageId, SAVED_HISTORY_MAX_CHARS, this.continuedFrom)
         : null;
       const historyBlock = savedHistory?.text ?? null;
       // A feature card's tool call returns before the user answers it, so the answer rides their next message.
@@ -1069,14 +1077,19 @@ export class AgentSession implements ChatStateHost, ChatView {
 
   private priorHistoryBlock(
     userMessageId: string,
-    maxChars: number
+    maxChars: number,
+    continuedFrom?: readonly string[]
   ): ConversationHistoryBlock | null {
     const app = this.getApp?.();
+    const vaultBase = app ? getVaultBase(app) : null;
     return buildConversationHistoryBlock(
       this.store.getDisplayMessages().filter((m) => m.id !== userMessageId),
       maxChars,
-      app ? getVaultBase(app) : null,
-      (image) => (app ? savedChatImagePath(app, getEffectiveConversationsFolder(), image) : null)
+      vaultBase,
+      (image) => (app ? savedChatImagePath(app, getEffectiveConversationsFolder(), image) : null),
+      // A project chat's agent works in the project folder, so the notes are named by full path.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+      continuedFrom?.map((note) => (vaultBase ? joinPosix(vaultBase, note) : note))
     );
   }
 

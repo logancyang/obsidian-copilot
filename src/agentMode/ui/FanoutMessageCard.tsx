@@ -20,10 +20,11 @@ interface FanoutMessageCardProps {
   turn: FanoutTurn;
   app: App;
   footerStart?: React.ReactNode;
+  onContinue?: () => void;
 }
 
 export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
-  ({ message, turn, app, footerStart }) => {
+  ({ message, turn, app, footerStart, onContinue }) => {
     const [selected, setSelected] = useState<FanoutOptionValue>(() => defaultFanoutOption(turn));
 
     const activeValue =
@@ -66,6 +67,7 @@ export const FanoutMessageCard: React.FC<FanoutMessageCardProps> = memo(
                 <ChatButtons
                   message={buttonsMessage}
                   onInsertIntoEditor={handleInsert}
+                  onContinue={onContinue}
                   hasSources={false}
                 />
               }

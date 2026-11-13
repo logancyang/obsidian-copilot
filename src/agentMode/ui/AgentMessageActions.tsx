@@ -4,7 +4,7 @@ import { MessageActionButton } from "@/components/chat-components/MessageActionB
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
 import { cn } from "@/lib/utils";
 import { insertAtCursor } from "@/utils";
-import { TextCursorInput } from "lucide-react";
+import { GitBranchPlus, TextCursorInput } from "lucide-react";
 import { App, Platform } from "obsidian";
 import React from "react";
 
@@ -13,6 +13,7 @@ interface AgentMessageActionsProps {
   app: App;
   durationMs?: number;
   timestamp?: string;
+  onContinue?: () => void;
 }
 
 export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
@@ -20,6 +21,7 @@ export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
   app,
   durationMs,
   timestamp,
+  onContinue,
 }) => (
   <AssistantResponseFooter
     leading={
@@ -40,6 +42,13 @@ export const AgentMessageActions: React.FC<AgentMessageActionsProps> = ({
           onClick={() => void insertAtCursor(app, text)}
         />
         <CopyButton text={text} />
+        {onContinue && (
+          <MessageActionButton
+            label="Continue from here in a new chat"
+            icon={GitBranchPlus}
+            onClick={onContinue}
+          />
+        )}
       </div>
     }
   />

@@ -184,6 +184,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     })();
   }, [manager]);
 
+  const handleContinueFrom = useCallback(
+    (messageId: string) =>
+      manager.continueChatFrom(sessionId, messageId).catch((e) => {
+        logError("[AgentMode] continue in a new chat failed", e);
+        new Notice("Failed to continue in a new chat. Please try again.");
+      }),
+    [manager, sessionId]
+  );
+
   const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
@@ -826,6 +835,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         chatBackend={backend}
                         isLoading={isLoading}
                         chatStates={chatStates}
+                        onContinueFrom={handleContinueFrom}
                       />
                       {queuedMessagesNode}
                       <AgentChatControls

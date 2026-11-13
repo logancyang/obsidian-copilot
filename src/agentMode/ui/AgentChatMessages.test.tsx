@@ -44,19 +44,35 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
     message,
     footerStart,
     sourcePath,
+    onContinue,
   }: {
     message: { message: string };
     footerStart?: React.ReactNode;
     sourcePath?: string;
+    onContinue?: () => void;
   }) => {
     mockSingleMessageRender(message);
     return (
       <div data-source-path={sourcePath}>
         {message.message}
         <div data-testid="single-message-footer">{footerStart}</div>
+        {onContinue ? (
+          <button type="button" onClick={onContinue}>
+            Continue {message.message}
+          </button>
+        ) : null}
       </div>
     );
   },
+}));
+
+jest.mock("@/agentMode/ui/FanoutMessageCard", () => ({
+  FanoutMessageCard: ({ onContinue }: { onContinue?: () => void }) =>
+    onContinue ? (
+      <button type="button" onClick={onContinue}>
+        Continue fanout
+      </button>
+    ) : null,
 }));
 
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
@@ -67,6 +83,7 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     agentCancelCause,
     fileChanges,
     onOpenFileChange,
+    onContinue,
   }: {
     timestamp?: string;
     parts: unknown[];
@@ -74,11 +91,17 @@ jest.mock("@/agentMode/ui/AgentTrailView", () => ({
     agentCancelCause?: string;
     fileChanges?: TurnFileChange[];
     onOpenFileChange?: (change: TurnFileChange) => void;
+    onContinue?: () => void;
   }) => {
     mockTrailRender(parts);
     return (
       <div data-testid="agent-trail-timestamp">
         {timestamp}
+        {onContinue ? (
+          <button type="button" onClick={onContinue}>
+            Continue trail
+          </button>
+        ) : null}
         {errorText ? <span data-testid="agent-trail-error">{errorText}</span> : null}
         {agentCancelCause ? (
           <span data-testid="agent-trail-cancel-cause">{agentCancelCause}</span>
@@ -483,6 +506,55 @@ describe("AgentChatMessages", () => {
       expect(mockTrailRender).toHaveBeenCalledTimes(3);
       expect(mockTrailRender.mock.calls[0][0]).toBe(originalCompletedParts);
       expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 offers to continue from each reply, text, with tool cards or from several agents, only while the chat is idle, and names the chosen reply", async () => {
+      const onContinueFrom = jest.fn().mockResolvedValue(undefined);
+      const messages = [
+        assistantMessage("user-1", 1_000, { sender: "user", message: "Question" }),
+        assistantMessage("text-reply", 2_000, { message: "Saved answer" }),
+        assistantMessage("trail-reply", 3_000, { parts: [{ kind: "text", text: "Live" }] }),
+        assistantMessage("fanout-reply", 4_000, {
+          message: "",
+          fanout: { answers: {}, summary: { status: "done", text: "Both agents agree" } },
+        }),
+      ];
+      const { rerender, props } = renderMessages(messages, false, { onContinueFrom });
+
+      expect(screen.queryByText("Continue Question")).toBeNull();
+      for (const label of ["Continue Saved answer", "Continue trail", "Continue fanout"]) {
+        await act(async () => fireEvent.click(screen.getByText(label)));
+      }
+      rerender(<AgentChatMessages {...props} isLoading />);
+
+      expect(onContinueFrom.mock.calls).toEqual([
+        ["text-reply"],
+        ["trail-reply"],
+        ["fanout-reply"],
+      ]);
+      expect(screen.queryByText(/^Continue /)).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 continues a chat once for a double click, and again once the new chat has opened", async () => {
+      let opened = () => {};
+      const onContinueFrom = jest.fn(() => new Promise<void>((resolve) => (opened = resolve)));
+      renderMessages(
+        [
+          assistantMessage("user-1", 1_000, { sender: "user", message: "Question" }),
+          assistantMessage("text-reply", 2_000, { message: "Saved answer" }),
+        ],
+        false,
+        { onContinueFrom }
+      );
+
+      fireEvent.click(screen.getByText("Continue Saved answer"));
+      fireEvent.click(screen.getByText("Continue Saved answer"));
+      const clicksWhileOpening = onContinueFrom.mock.calls.length;
+      await act(async () => opened());
+      fireEvent.click(screen.getByText("Continue Saved answer"));
+
+      expect(clicksWhileOpening).toBe(1);
+      expect(onContinueFrom).toHaveBeenCalledTimes(2);
     });
 
     it("lets the browser skip painting every turn that is scrolled out of view https://github.com/logancyang/obsidian-copilot/issues/3343", () => {

@@ -140,6 +140,17 @@ describe("AgentTrail", () => {
     expect(insertAtCursor).toHaveBeenCalledWith(app, "The final answer.");
   });
 
+  it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows Continue from here in a new chat beside Copy only when the chat offers it, and runs it on click", () => {
+    const onContinue = jest.fn();
+    const view = renderTrail();
+    expect(screen.queryByTitle("Continue from here in a new chat")).toBeNull();
+
+    view.rerenderTrail({ onContinue });
+    fireEvent.click(screen.getByTitle("Continue from here in a new chat"));
+
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
   const EDITED_NOTE: TurnFileChange = {
     path: "notes/diff-demo/alpha.md",
     status: "modified",

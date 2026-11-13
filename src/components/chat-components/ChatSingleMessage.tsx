@@ -281,6 +281,7 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete?: () => void;
+  onContinue?: () => void;
   footerStart?: React.ReactNode;
 }
 
@@ -292,6 +293,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
+  onContinue,
   footerStart,
 }) => {
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -901,6 +903,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                   onEdit={onEdit ? handleEdit : undefined}
                   onDelete={onDelete}
                   onShowSources={handleShowSources}
+                  onContinue={onContinue}
                   hasSources={message.sources && message.sources.length > 0 ? true : false}
                 />
               }

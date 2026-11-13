@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { USER_SENDER } from "@/constants";
@@ -66,6 +66,16 @@ describe("ChatButtons", () => {
       expect(screen.getByTitle("Copy")).toBeTruthy();
       expect(screen.queryByTitle("Regenerate")).toBeNull();
       expect(screen.queryByTitle("Delete")).toBeNull();
+      expect(screen.queryByTitle("Continue from here in a new chat")).toBeNull();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 shows Continue from here in a new chat after Copy when its handler is provided", () => {
+      const onContinue = jest.fn();
+      renderButtons({ message: message("AI"), onContinue });
+
+      fireEvent.click(screen.getByTitle("Continue from here in a new chat"));
+
+      expect(onContinue).toHaveBeenCalledTimes(1);
     });
   });
 });

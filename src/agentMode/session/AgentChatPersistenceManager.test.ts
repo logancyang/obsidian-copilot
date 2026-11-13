@@ -42,6 +42,8 @@ jest.mock("@/utils", () => ({
   }),
 }));
 jest.mock("@/utils/vaultAdapterUtils", () => ({
+  isFileAlreadyExistsError: jest.requireActual("@/utils/vaultAdapterUtils")
+    .isFileAlreadyExistsError,
   listMarkdownFiles: jest.fn().mockReturnValue([]),
   patchFrontmatter: jest.requireActual("@/utils/vaultAdapterUtils").patchFrontmatter,
 }));
@@ -63,6 +65,7 @@ function makeApp() {
       createFolder: jest.fn(),
       getAbstractFileByPath: jest.fn((path: string) => files.get(path) ?? null),
       create: jest.fn(async (path: string, content: string) => {
+        if (files.has(path)) throw new Error("File already exists.");
         const basename = path.split("/").pop()!.replace(/\.md$/, "");
         const file: FakeFile = Object.assign(Object.create(TFile.prototype), {
           path,
@@ -440,6 +443,42 @@ describe("AgentChatPersistenceManager", () => {
       expect(loaded.usage).toEqual(usage);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 round-trips how many leading messages the agent got as history and the model the chat runs, and keeps both when a save omits them", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const model = { baseModelId: "sonnet", effort: "high" };
+      const first = await manager.saveSession(messages, "claude", { carriedMessages: 4, model });
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      const saved = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+
+      await manager.saveSession(messages, "claude", { existingPath: first!.path });
+      const kept = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+
+      expect([saved.carriedMessages, saved.model]).toEqual([4, model]);
+      expect([kept.carriedMessages, kept.model]).toEqual([4, model]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 round-trips the notes of the chats a chat continues, and keeps them through saves that omit them or move the chat to another agent and model", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi")];
+      const continuedFrom = ["chats/first.md", 'chats/the "second", chat.md'];
+      const first = await manager.saveSession(messages, "claude", { continuedFrom });
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      const saved = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+
+      await manager.saveSession(messages, "claude", { existingPath: first!.path });
+      await manager.saveSession(messages, "opencode", {
+        existingPath: first!.path,
+        model: { baseModelId: "opencode/beam-free", effort: null },
+      });
+      const kept = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+      const plain = await manager.saveSession([makeMessage(USER_SENDER, "other", 1)], "claude");
+      Object.setPrototypeOf(app.files.get(plain!.path)!, TFile.prototype);
+      const ordinary = await manager.loadFile(app.files.get(plain!.path) as unknown as TFile);
+
+      expect(saved.continuedFrom).toEqual(continuedFrom);
+      expect([kept.backendId, kept.continuedFrom]).toEqual(["opencode", continuedFrom]);
+      expect(ordinary.continuedFrom).toBeUndefined();
+    });
+
     it("leaves usage undefined for a chat saved without it", async () => {
       const saved = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
       const raw = app.files.get(saved!.path)!.contents!;
@@ -519,21 +558,84 @@ describe("AgentChatPersistenceManager", () => {
 
       expect(app.files.get(first!.path)!.contents).not.toContain("projectId:");
     });
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/698 writes a new chat's own properties instead of keeping another chat's when their filenames collide", async () => {
-      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
-        sessionId: "old-session",
-        label: "Old agent",
-      });
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 saves a new chat whose note name another chat's note already has to a numbered note, leaving that note as it was", async () => {
+      const topicOnly = {
+        defaultSaveFolder: "test-folder",
+        defaultConversationTag: "copilot-conversation",
+        defaultConversationNoteName: "{$topic}",
+      };
+      (getSettings as jest.Mock)
+        .mockReturnValueOnce(topicOnly)
+        .mockReturnValueOnce(topicOnly)
+        .mockReturnValueOnce(topicOnly);
+      const first = await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "a later reply", 1735732900000)],
+        "claude",
+        { sessionId: "old-session", label: "Old agent" }
+      );
+      const original = app.files.get(first!.path)!.contents;
 
-      const second = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
-        sessionId: "new-session",
-      });
+      const second = await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi", 1735733000000)],
+        "claude",
+        { sessionId: "new-session" }
+      );
+      const third = await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi", 1735733100000)],
+        "claude"
+      );
 
-      expect(second!.path).toBe(first!.path);
+      expect([first!.path, second!.path, third!.path]).toEqual([
+        "test-folder/agent__hi.md",
+        "test-folder/agent__hi 1.md",
+        "test-folder/agent__hi 2.md",
+      ]);
+      expect(app.files.get(first!.path)!.contents).toBe(original);
       const contents = app.files.get(second!.path)!.contents!;
       expect(contents).toContain('sessionId: "new-session"\n');
       expect(contents).not.toContain("old-session");
       expect(contents).not.toContain("Old agent");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 fails a new chat's save instead of writing over a note another chat takes between the name check and the write, and saves it to a numbered note next time", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const original = app.files.get(first!.path)!.contents;
+      const second = [makeMessage(USER_SENDER, "hi", 1735733000000)];
+      app.vault.adapter.exists.mockResolvedValueOnce(false);
+
+      const raced = await manager.saveSession(second, "claude");
+      const retried = await manager.saveSession(second, "claude");
+
+      expect(raced).toBeNull();
+      expect(app.files.get(first!.path)!.contents).toBe(original);
+      expect(retried!.path).toBe("test-folder/agent__20260101_120000__hi 1.md");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 names a new note after the first message's text, never the image embed a chat opened from its note keeps in that text", async () => {
+      const embed = `![[copilot-image-${"c".repeat(64)}.png]]`;
+
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, `What is this?\n\n${embed}`)],
+        "claude"
+      );
+
+      expect(saved!.path).toBe("test-folder/agent__20260101_120000__What_is_this.md");
+    });
+
+    it("rewrites a chat's own note that Obsidian does not index, as in a hidden folder, instead of saving a numbered copy", async () => {
+      const first = await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude");
+      const hidden = app.files.get(first!.path)!;
+      app.vault.getAbstractFileByPath.mockImplementation(() => null);
+
+      const again = await manager.saveSession(
+        [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "hello")],
+        "claude",
+        { existingPath: first!.path }
+      );
+
+      expect(again!.path).toBe(first!.path);
+      expect(app.files.size).toBe(1);
+      expect(hidden.contents).toContain("**ai**: hello");
     });
   });
 

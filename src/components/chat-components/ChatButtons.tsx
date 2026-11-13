@@ -4,7 +4,14 @@ import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy } from "@/utils";
-import { LibraryBig, PenSquare, RotateCw, TextCursorInput, Trash2 } from "lucide-react";
+import {
+  GitBranchPlus,
+  LibraryBig,
+  PenSquare,
+  RotateCw,
+  TextCursorInput,
+  Trash2,
+} from "lucide-react";
 import { Platform } from "obsidian";
 import React from "react";
 
@@ -15,6 +22,7 @@ interface ChatButtonsProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onShowSources?: () => void;
+  onContinue?: () => void;
   hasSources: boolean;
 }
 
@@ -25,6 +33,7 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   onEdit,
   onDelete,
   onShowSources,
+  onContinue,
   hasSources,
 }) => {
   return (
@@ -50,6 +59,13 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
             onClick={onInsertIntoEditor}
           />
           <CopyButton text={cleanMessageForCopy(message.message)} />
+          {onContinue && (
+            <MessageActionButton
+              label="Continue from here in a new chat"
+              icon={GitBranchPlus}
+              onClick={onContinue}
+            />
+          )}
           {onRegenerate && (
             <MessageActionButton label="Regenerate" icon={RotateCw} onClick={onRegenerate} />
           )}
