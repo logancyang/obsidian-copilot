@@ -12,8 +12,12 @@ describe("productLinks", () => {
         "model_picker_lock",
         "https://www.obsidiancopilot.com/pricing",
       ],
-      [PRODUCT_URLS.COPILOT_DASHBOARD, "usage_footer", "https://www.obsidiancopilot.com/dashboard"],
-      [PRODUCT_URLS.MIYO, "pairing", "https://www.miyo.md/"],
+      [
+        PRODUCT_URLS.COPILOT_DASHBOARD,
+        "license_settings",
+        "https://www.obsidiancopilot.com/dashboard",
+      ],
+      [PRODUCT_URLS.MIYO, "miyo_settings", "https://www.miyo.md/"],
       [PRODUCT_URLS.OPENARTIFACTS, "welcome_modal", "https://openartifacts.ai/"],
     ] as const)(
       "tags %s from %s with the shared source and the placement",

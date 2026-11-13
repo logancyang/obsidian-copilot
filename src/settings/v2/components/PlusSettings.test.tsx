@@ -1,120 +1,186 @@
-import { DEFAULT_SETTINGS } from "@/constants";
-import { act, render, screen } from "@testing-library/react";
+import type { PlanUsageReading } from "@/agentMode";
+import { resetSettings, getSettings, setSettings } from "@/settings/model";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 
-const updateSetting = jest.fn<void, unknown[]>();
 const mockApp = {};
-let currentSettings = { ...DEFAULT_SETTINGS };
-jest.mock("@/settings/model", () => ({
-  updateSetting: (...a: unknown[]) => updateSetting(...a),
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook; name must match the export
-  useSettingsValue: () => currentSettings,
-}));
-
-let mockLicenseState: { status: string; plan?: string } = { status: "none" };
-let mockIsPaidUser: boolean | undefined = false;
-const checkIsPaidUser = jest.fn<Promise<boolean | undefined>, unknown[]>();
-jest.mock("@/plusUtils", () => ({
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
-  useLicenseState: () => mockLicenseState,
-  // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
-  useIsPaidUser: () => mockIsPaidUser,
-  checkIsPaidUser: (...a: unknown[]) => checkIsPaidUser(...a),
-  navigateToPlusPage: jest.fn(),
-}));
-
 jest.mock("@/context", () => ({
   // eslint-disable-next-line @eslint-react/hooks-extra/no-unnecessary-use-prefix -- mocks the real hook
   useApp: () => mockApp,
 }));
 
+const mockReadPlanUsage = jest.fn<Promise<PlanUsageReading>, []>();
+jest.mock("@/agentMode", () => ({
+  CopilotPlusUsageReader: class {
+    readPlanUsage() {
+      return mockReadPlanUsage();
+    }
+  },
+}));
+
+const mockValidateLicenseKey = jest.fn<Promise<{ isValid: boolean | undefined }>, unknown[]>();
+jest.mock("@/LLMProviders/brevilabsClient", () => ({
+  BrevilabsClient: {
+    getInstance: () => ({
+      validateLicenseKey: (...args: unknown[]) => mockValidateLicenseKey(...args),
+    }),
+  },
+}));
+
+const mockOpenWelcome = jest.fn();
 jest.mock("@/components/modals/CopilotPlusWelcomeModal", () => ({
   CopilotPlusWelcomeModal: class {
+    open() {
+      mockOpenWelcome();
+    }
+  },
+}));
+
+interface ConfirmRequest {
+  onConfirm: () => void;
+  content: string;
+  title: string;
+}
+const confirmRequests: ConfirmRequest[] = [];
+jest.mock("@/components/modals/ConfirmModal", () => ({
+  ConfirmModal: class {
+    constructor(_app: unknown, onConfirm: () => void, content: string, title: string) {
+      confirmRequests.push({ onConfirm, content, title });
+    }
     open() {}
   },
 }));
 
 import { PlusSettings } from "./PlusSettings";
 
+const KEY_FIELD_PLACEHOLDER = "Enter your license key";
+
+const USAGE_READING: PlanUsageReading = {
+  kind: "usage",
+  planUsage: {
+    windows: [
+      { id: "five_hour", label: "5h", percent: 12 },
+      { id: "weekly", label: "Weekly", percent: 34 },
+    ],
+    updatedAt: 1,
+  },
+};
+
+function storeActiveLicense(): void {
+  setSettings({ plusLicenseKey: "stored-key", isPaidUser: true, entitlementExpiresAt: 0 });
+}
+
 describe("PlusSettings", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    currentSettings = { ...DEFAULT_SETTINGS };
-    mockLicenseState = { status: "none" };
-    mockIsPaidUser = false;
+    confirmRequests.length = 0;
+    resetSettings();
+    mockReadPlanUsage.mockResolvedValue(USAGE_READING);
   });
 
   describe("PlusSettings()", () => {
-    it("attributes the license link and pairing CTA to distinct Copilot surfaces", () => {
+    it("offers the license key field, Apply and See plans while no license is stored", () => {
       render(<PlusSettings />);
 
-      expect(screen.getByRole("link", { name: "Miyo" }).getAttribute("href")).toBe(
-        "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=license_settings"
-      );
-      expect(
-        screen.getByRole("link", { name: "New: pair Copilot with Miyo" }).getAttribute("href")
-      ).toBe("https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=pairing");
+      expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "See plans" })).toBeTruthy();
+      expect(mockReadPlanUsage).not.toHaveBeenCalled();
     });
 
-    it("sends the paid plans link to pricing with settings attribution — https://github.com/Brevilabs/obsidian-copilot-private/issues/640", () => {
+    it("drops the key row and welcomes the user once an applied key turns out active — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      mockValidateLicenseKey.mockImplementation(async () => {
+        setSettings({ isPaidUser: true });
+        return { isValid: true };
+      });
       render(<PlusSettings />);
 
-      expect(screen.getByRole("link", { name: "Copilot paid plans" }).getAttribute("href")).toBe(
-        "https://www.obsidiancopilot.com/pricing?utm_source=obsidian_copilot&utm_medium=settings"
-      );
+      fireEvent.change(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER), {
+        target: { value: "fresh-key" },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+      });
+
+      expect(getSettings().plusLicenseKey).toBe("fresh-key");
+      expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
+      expect(screen.queryByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeNull();
+      expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
     });
 
-    it("names a lifetime purchase Lifetime rather than its stored plan", () => {
-      mockLicenseState = { status: "active", plan: "believer" };
-      mockIsPaidUser = true;
-
-      render(<PlusSettings />);
-
-      expect(screen.getByText("Lifetime")).toBeTruthy();
-      expect(screen.queryByText(/believer/i)).toBeNull();
-    });
-
-    it("shows a recurring plan under its own name", () => {
-      mockLicenseState = { status: "active", plan: "lite" };
-      mockIsPaidUser = true;
-
-      render(<PlusSettings />);
-
-      expect(screen.getByText("lite")).toBeTruthy();
-    });
-
-    it("reports a stored key that grants nothing as inactive, alongside the pitch", () => {
-      mockLicenseState = { status: "inactive" };
-
-      render(<PlusSettings />);
-
-      expect(screen.getByText("Inactive")).toBeTruthy();
-      expect(screen.getByText("All of it for a few dollars a month.")).toBeTruthy();
-    });
-
-    it("says nothing about a key while its validation is still in flight", async () => {
-      mockLicenseState = { status: "inactive" };
-      let resolveValidation: (value: boolean) => void = () => {};
-      checkIsPaidUser.mockReturnValue(
-        new Promise<boolean>((resolve) => {
+    it("says nothing about a key while its validation is still in flight, then reports the verdict", async () => {
+      setSettings({ plusLicenseKey: "lapsed-key", isPaidUser: false });
+      let resolveValidation: (result: { isValid: boolean }) => void = () => {};
+      mockValidateLicenseKey.mockReturnValue(
+        new Promise((resolve) => {
           resolveValidation = resolve;
         })
       );
-
       render(<PlusSettings />);
+      expect(screen.getByText("Inactive")).toBeTruthy();
+
       act(() => {
-        screen.getByRole("button", { name: "Apply" }).click();
+        fireEvent.click(screen.getByRole("button", { name: "Apply" }));
       });
 
-      expect(checkIsPaidUser).toHaveBeenCalledWith(mockApp, { trigger: "manual" });
+      expect(mockValidateLicenseKey).toHaveBeenCalledWith(mockApp, { trigger: "manual" });
       expect(screen.queryByText("Inactive")).toBeNull();
-      expect(screen.queryByText("All of it for a few dollars a month.")).toBeNull();
 
       await act(async () => {
-        resolveValidation(true);
+        resolveValidation({ isValid: false });
       });
 
       expect(screen.getByText("Inactive")).toBeTruthy();
+      expect(screen.getByText("Invalid license key")).toBeTruthy();
+    });
+
+    it("shows the 5-hour and weekly usage read when the settings open with an active license", async () => {
+      storeActiveLicense();
+
+      render(<PlusSettings />);
+
+      const usageLine = await screen.findByRole("list", { name: "Usage" });
+      expect(
+        within(usageLine)
+          .getAllByRole("listitem")
+          .map((item) => item.textContent)
+      ).toEqual(["5h 12% used", "Weekly 34% used"]);
+      expect(screen.queryByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeNull();
+    });
+
+    it("shows Remove license without numbers when the usage read has no allowance windows — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      mockReadPlanUsage.mockResolvedValue({ kind: "unavailable" });
+      storeActiveLicense();
+
+      render(<PlusSettings />);
+
+      await waitFor(() => expect(mockReadPlanUsage).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await mockReadPlanUsage.mock.results[0].value;
+      });
+      expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
+      expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
+    });
+
+    it("removes the license after a confirmation that the plan is unaffected, restoring an empty key row", async () => {
+      storeActiveLicense();
+      render(<PlusSettings />);
+      await screen.findByRole("list", { name: "Usage" });
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove license" }));
+      expect(confirmRequests).toHaveLength(1);
+      expect(confirmRequests[0].title).toBe("Remove license?");
+      expect(confirmRequests[0].content).toContain("Your plan itself is not affected.");
+      expect(getSettings().plusLicenseKey).toBe("stored-key");
+
+      act(() => {
+        confirmRequests[0].onConfirm();
+      });
+
+      expect(getSettings().plusLicenseKey).toBe("");
+      expect(getSettings().isPaidUser).toBe(false);
+      expect(screen.getByPlaceholderText<HTMLInputElement>(KEY_FIELD_PLACEHOLDER).value).toBe("");
+      expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
     });
   });
 });
