@@ -690,40 +690,158 @@ describe("AgentMessageStore", () => {
     });
   });
 
-  describe("fillMissingTimestamps()", () => {
-    const sentAt = formatDateTime(new Date("2026-01-02T03:04:05Z"));
-    const keptAt = formatDateTime(new Date("2026-03-04T05:06:07Z"));
-    const saved = (sender: string, id: string) => ({
-      id,
+  describe("adoptNoteRows()", () => {
+    const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/921";
+    const noteAt = formatDateTime(new Date("2026-01-02T03:04:05Z"));
+    const replayAt = formatDateTime(new Date("2026-03-04T05:06:07Z"));
+    const embed = `![[copilot-image-${"a".repeat(64)}.png]]`;
+    const noteRow = (sender: string, message = "saved", extra = {}) => ({
+      id: `s-${message}`,
       sender,
-      message: "saved",
-      timestamp: sentAt,
+      message,
+      timestamp: noteAt,
       isVisible: true,
+      ...extra,
+    });
+    const replayed = (sender: string, message: string, extra = {}) => ({
+      message,
+      sender,
+      timestamp: replayAt,
+      isVisible: true,
+      ...extra,
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 gives each undated message the saved time at its position and keeps a time it already has", () => {
+    it(`${issue} gives each replayed message the note's time at its position`, () => {
       const store = new AgentMessageStore();
-      store.addMessage({ message: "q", sender: USER_SENDER, timestamp: null, isVisible: true });
-      store.addMessage({ message: "a", sender: AI_SENDER, timestamp: keptAt, isVisible: true });
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
 
-      store.fillMissingTimestamps([saved(USER_SENDER, "s1"), saved(AI_SENDER, "s2")]);
+      store.adoptNoteRows([noteRow(USER_SENDER, "q"), noteRow(AI_SENDER, "a")]);
 
-      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([sentAt, keptAt]);
+      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([noteAt, noteAt]);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 leaves messages undated from the first position where the saved sender differs", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 dates an undated replayed message from the note and keeps a replay time the note lacks", () => {
       const store = new AgentMessageStore();
-      store.addMessage({ message: "q", sender: USER_SENDER, timestamp: null, isVisible: true });
-      store.addMessage({ message: "a", sender: AI_SENDER, timestamp: null, isVisible: true });
-      store.addMessage({ message: "q2", sender: USER_SENDER, timestamp: null, isVisible: true });
+      store.addMessage(replayed(USER_SENDER, "q", { timestamp: null }));
+      store.addMessage(replayed(AI_SENDER, "a"));
 
-      store.fillMissingTimestamps([
-        saved(USER_SENDER, "s1"),
-        saved(USER_SENDER, "s2"),
-        saved(USER_SENDER, "s3"),
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "a", { timestamp: null }),
       ]);
 
-      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([sentAt, null, null]);
+      expect(store.getDisplayMessages().map((m) => m.timestamp)).toEqual([noteAt, replayAt]);
+    });
+
+    it(`${issue} appends the image embeds saved under a user message to the replayed message`, () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "look at this"));
+
+      store.adoptNoteRows([noteRow(USER_SENDER, `look at this\n\n${embed}\n\n${embed}`)]);
+
+      expect(store.getDisplayMessages()[0].message).toBe(`look at this\n\n${embed}\n\n${embed}`);
+    });
+
+    it(`${issue} gives a replayed user message the context attached to it in the note`, () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "summarize"));
+      const context = {
+        notes: [],
+        urls: [],
+        webTabs: [{ url: "https://example.com/", title: "Example" }],
+      };
+
+      store.adoptNoteRows([noteRow(USER_SENDER, "summarize", { context })]);
+
+      expect(store.getDisplayMessages()[0].context).toEqual(context);
+    });
+
+    it(`${issue} gives a replayed reply the note's tools-used list and keeps its replayed tool steps`, () => {
+      const store = new AgentMessageStore();
+      const parts: AgentMessagePart[] = [
+        { kind: "tool_call", id: "t1", title: "Read /vault/a.md", status: "completed" },
+        { kind: "text", text: "done" },
+      ];
+      store.addMessage(replayed(AI_SENDER, "done", { parts }));
+
+      store.adoptNoteRows([noteRow(AI_SENDER, "done", { toolsUsed: ["Read (read): a.md"] })]);
+
+      const [reply] = store.getDisplayMessages();
+      expect(reply.toolsUsed).toEqual(["Read (read): a.md"]);
+      expect(reply.parts?.map((p) => p.kind)).toEqual(["tool_call", "text"]);
+    });
+
+    it(`${issue} leaves messages unchanged from the first position where the note's sender differs`, () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+      store.addMessage(replayed(USER_SENDER, "q2"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(USER_SENDER, `q2\n\n${embed}`),
+        noteRow(AI_SENDER, "a", { toolsUsed: ["Search (search)"] }),
+      ]);
+
+      expect(store.getDisplayMessages().map((m) => [m.message, m.timestamp, m.toolsUsed])).toEqual([
+        ["q", noteAt, undefined],
+        ["a", replayAt, undefined],
+        ["q2", replayAt, undefined],
+      ]);
+    });
+
+    it(`${issue} leaves messages unchanged from a note message the replay lacks, so its image and context never land on another message`, () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+      store.addMessage(replayed(USER_SENDER, "sent after the last save"));
+      store.addMessage(replayed(AI_SENDER, "a2"));
+      const context = {
+        notes: [],
+        urls: [],
+        webTabs: [{ url: "https://example.com/", title: "Example" }],
+      };
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "a"),
+        noteRow(USER_SENDER, `asked only in the note\n\n${embed}`, { context }),
+        noteRow(AI_SENDER, "answered only in the note", { toolsUsed: ["Search (search)"] }),
+      ]);
+
+      expect(
+        store.getDisplayMessages().map((m) => [m.message, m.timestamp, m.context, m.toolsUsed])
+      ).toEqual([
+        ["q", noteAt, undefined, undefined],
+        ["a", noteAt, undefined, undefined],
+        ["sent after the last save", replayAt, undefined, undefined],
+        ["a2", replayAt, undefined, undefined],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/635 skips a /compact turn the replay omits and keeps matching the turns after it", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(AI_SENDER, "a"));
+      store.addMessage(replayed(USER_SENDER, "q2"));
+      store.addMessage(replayed(AI_SENDER, "a2"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "a"),
+        noteRow(USER_SENDER, "/compact", { timestamp: replayAt }),
+        noteRow(AI_SENDER, "", { timestamp: replayAt }),
+        noteRow(USER_SENDER, `q2\n\n${embed}`),
+        noteRow(AI_SENDER, "a2", { toolsUsed: ["Search (search)"] }),
+      ]);
+
+      expect(store.getDisplayMessages().map((m) => [m.message, m.timestamp, m.toolsUsed])).toEqual([
+        ["q", noteAt, undefined],
+        ["a", noteAt, undefined],
+        [`q2\n\n${embed}`, noteAt, undefined],
+        ["a2", noteAt, ["Search (search)"]],
+      ]);
     });
   });
 

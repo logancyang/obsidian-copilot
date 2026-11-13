@@ -3590,12 +3590,9 @@ describe("AgentSessionManager", () => {
               emit(replayChunk("agent_message_chunk", "Two notes.", "a1"));
             },
           });
-          const { mgr, first, note, saveSession } = await restartSavedChat(replay);
+          const { mgr, note, saveSession, rebuilt } = await restartSavedChat(replay);
 
-          replay.emit(
-            first.getBackendSessionId()!,
-            replayChunk("agent_message_chunk", " Both are drafts.", "a1")
-          );
+          rebuilt.setLabel("Renamed after the restart");
           await jest.advanceTimersByTimeAsync(2000);
 
           const [messages, , options] = saveSession.mock.calls.at(-1)! as unknown as [
@@ -5849,7 +5846,7 @@ describe("AgentSessionManager", () => {
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/671 gives replayed messages without send times the note's times so the next autosave keeps them", async () => {
         const replay = buildReplayingBackend({
           onLoad: (emit) => {
-            emit(replayChunk("user_message_chunk", "replayed question", "u1"));
+            emit(replayChunk("user_message_chunk", "saved question", "u1"));
             emit(replayChunk("agent_message_chunk", "replayed answer", "a1"));
           },
         });
@@ -5857,9 +5854,131 @@ describe("AgentSessionManager", () => {
         const session = await openSavedChat(replay);
 
         expect(session.store.getDisplayMessages().map((m) => [m.message, m.timestamp])).toEqual([
-          ["replayed question", savedAt],
+          ["saved question", savedAt],
           ["replayed answer", savedAt],
         ]);
+      });
+
+      describe("a reattached chat whose replay matches its note", () => {
+        const issue = "https://github.com/Brevilabs/obsidian-copilot-private/issues/921";
+        const embed = `![[copilot-image-${"b".repeat(64)}.png]]`;
+        const noteTurn: AgentChatMessage[] = [
+          {
+            id: "s1",
+            sender: USER_SENDER,
+            message: `look at this\n\n${embed}`,
+            isVisible: true,
+            timestamp: savedAt,
+            context: {
+              notes: [],
+              urls: [],
+              webTabs: [{ url: "https://example.com/", title: "Example" }],
+            },
+          },
+          {
+            id: "s2",
+            sender: AI_SENDER,
+            message: "read it",
+            isVisible: true,
+            timestamp: savedAt,
+            toolsUsed: ["Read (read): note.md"],
+          },
+        ];
+        const replayOf = (...extra: ReplayFrame[]) =>
+          buildReplayingBackend({
+            onLoad: (emit) => {
+              emit(replayChunk("user_message_chunk", "look at this", "u1"));
+              emit({
+                sessionUpdate: "tool_call",
+                toolCallId: "tool-read",
+                title: "Read /vault/note.md",
+                kind: "read",
+                status: "completed",
+              });
+              emit(replayChunk("agent_message_chunk", "read it", "a1"));
+              for (const frame of extra) emit(frame);
+            },
+          });
+        async function reopenAndWait(replay: ReturnType<typeof buildReplayingBackend>) {
+          jest.useFakeTimers();
+          getSettingsMock.mockReturnValue({ ...getSettingsMock(), autosaveChat: true });
+          const saveSession = jest.fn(async () => ({ path: "chat/Saved.md" }));
+          const session = await buildManager({
+            persistence: {
+              loadFile: jest.fn().mockResolvedValue({
+                backendId: "opencode",
+                sessionId: "native-1",
+                projectId: GLOBAL_SCOPE,
+                label: "Look at this",
+                usage: { usedTokens: 10, updatedAt: 5 },
+                messages: noteTurn,
+              }),
+              saveSession,
+            },
+            descriptor: buildDescriptor({ createBackendProcess: () => replay.backend }),
+          }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
+          await jest.advanceTimersByTimeAsync(5000);
+          return { session, saveSession };
+        }
+
+        it(`${issue} shows the replayed tool steps with the note's times, the image and context saved under the message and the reply's saved tools-used list`, async () => {
+          const { session } = await reopenAndWait(replayOf());
+
+          const [question, reply] = session.store.getDisplayMessages();
+          expect([question.message, question.timestamp, question.context]).toEqual([
+            `look at this\n\n${embed}`,
+            savedAt,
+            noteTurn[0].context,
+          ]);
+          expect([reply.message, reply.timestamp, reply.toolsUsed]).toEqual([
+            "read it",
+            savedAt,
+            ["Read (read): note.md"],
+          ]);
+          expect(reply.parts?.map((p) => p.kind)).toEqual(["tool_call", "text"]);
+        });
+
+        it(`${issue} gives a replayed message that Codex sent with its image as a data URL the note's time and image embed, and leaves the note unwritten`, async () => {
+          const codexReplay = buildReplayingBackend({
+            onLoad: (emit) => {
+              emit(
+                replayChunk(
+                  "user_message_chunk",
+                  "look at this[@image](data:image/png;base64,iVBORw0KGgo=)",
+                  "u1"
+                )
+              );
+              emit(replayChunk("agent_message_chunk", "read it", "a1"));
+            },
+          });
+
+          const { session, saveSession } = await reopenAndWait(codexReplay);
+
+          const [question, reply] = session.store.getDisplayMessages();
+          expect([question.message, question.timestamp, reply.timestamp]).toEqual([
+            `look at this\n\n${embed}`,
+            savedAt,
+            savedAt,
+          ]);
+          expect(saveSession).not.toHaveBeenCalled();
+        });
+
+        it(`${issue} leaves the note unwritten when the chat is reopened and left unchanged`, async () => {
+          const { saveSession } = await reopenAndWait(replayOf());
+
+          expect(saveSession).not.toHaveBeenCalled();
+        });
+
+        it(`${issue} saves the chat when its replay holds a turn the note lacks`, async () => {
+          const { saveSession } = await reopenAndWait(
+            replayOf(
+              replayChunk("user_message_chunk", "later question", "u2"),
+              replayChunk("agent_message_chunk", "later answer", "a2")
+            )
+          );
+
+          expect(saveSession).toHaveBeenCalledTimes(1);
+        });
       });
 
       it("https://github.com/logancyang/obsidian-copilot/issues/3643 opens a fresh session that sends the note's turns to the agent when the backend's store does not know the saved session", async () => {

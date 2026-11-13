@@ -15,6 +15,10 @@ import type { CompactionSnapshot, SessionEvent } from "@/agentMode/session/types
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { formatDateTime, type FormattedDateTime } from "@/utils";
 
+// Codex replays a pasted image inside the user message's text as a data URL; the note keeps the image as a saved file, so the text must match the note and never carry the image bytes into it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/921
+const REPLAYED_DATA_URL_IMAGE = /\[[^\]\r\n]*\]\(data:image\/[^)\s]*\)/g;
+
 export interface SessionHistoryReplayDeps {
   store: AgentMessageStore;
   scheduleNotifyMessages(): void;
@@ -120,7 +124,7 @@ export class SessionHistoryReplay {
     // The plugin's own continuation is not something the user typed. https://github.com/Brevilabs/obsidian-copilot-private/issues/739
     if (stripUserMessageWrapper(pending.raw).trim() === OUTPUT_LIMIT_CONTINUATION_PROMPT) return;
     this.deps.store.addMessage({
-      message: stripUserMessageWrapper(pending.raw),
+      message: stripUserMessageWrapper(pending.raw).replace(REPLAYED_DATA_URL_IMAGE, ""),
       sender: USER_SENDER,
       timestamp: historyTimestamp(pending.occurredAt),
       isVisible: true,

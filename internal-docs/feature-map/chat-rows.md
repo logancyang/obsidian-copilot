@@ -4,7 +4,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 
 ## Sub-features
 
-- row-open: click a row to show its chat in Agent Chat.
+- row-open: click a row to show its chat in Agent Chat. A saved chat the agent still has shows its tool steps along with the times, images and attached context saved in its note, and opening it leaves the note's messages unchanged.
 - row-open-saved: a saved chat the agent no longer has, such as one saved on another computer, opens from its note. On the next message the agent is told the earlier messages, the notes and web tabs attached to each, which tools and files each reply used, and where each earlier image is saved. The chat shows the same messages and their attached context, with no tool steps. When the chat is too long to tell in full, the agent is told only the most recent messages and a notice says the oldest ones were left out.
 - row-status: the row shows `Running` (a green dot), a spinner while responding, `Waiting for permission`, or `Unread result`.
 - row-agent: in the Navigator, the row starts with the logo of the agent that runs the chat.
@@ -26,6 +26,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## Driving it
 
 - Open: choose a row in Recent chats. Its conversation shows in Agent Chat.
+- Open with an image: paste an image and attach a note to a message, ask Claude to read a note, then close the tab and reopen the chat from Recent chats. The message shows the image, the note's chip and its original time, the reply shows its tool step, and the chat note's messages are unchanged.
 - Open saved: ask Claude to read three notes and summarize them, then open the chat on another computer, or remove Claude's own record of it. Reopen it from Recent chats: the messages show without tool steps. Ask which notes the summary came from: Claude names all three with their paths.
 - Open saved, long chat: reopen the same way a chat whose saved note runs past about 200,000 characters, and send a message. A notice says the agent wasn't told the oldest messages; the next message shows none.
 - Open saved with an attached note: attach a note to a message and send it, then reopen the chat the same way. The earlier message shows the note's chip. Ask which note was attached earlier: the agent names it by path.
