@@ -36,23 +36,13 @@ interface AvatarProps {
 }
 
 function Avatar({ profile }: AvatarProps) {
-  const [imageFailed, setImageFailed] = useState(false);
   const initial = (profile?.name || profile?.email || "").charAt(0).toUpperCase();
   return (
     <span
       aria-hidden="true"
-      className="tw-flex tw-size-7 tw-shrink-0 tw-items-center tw-justify-center tw-overflow-hidden tw-rounded-full tw-bg-interactive-accent tw-text-ui-small tw-text-on-accent"
+      className="tw-flex tw-size-7 tw-shrink-0 tw-items-center tw-justify-center tw-rounded-full tw-bg-interactive-accent tw-text-ui-small tw-text-on-accent"
     >
-      {profile?.image && !imageFailed ? (
-        <img
-          src={profile.image}
-          alt=""
-          className="tw-size-full tw-object-cover"
-          onError={() => setImageFailed(true)}
-        />
-      ) : (
-        initial || <User className="tw-size-4" />
-      )}
+      {initial || <User className="tw-size-4" />}
     </span>
   );
 }

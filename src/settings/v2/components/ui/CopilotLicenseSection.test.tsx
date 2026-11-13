@@ -162,7 +162,7 @@ describe("CopilotLicenseSection", () => {
         license: { status: "active", plan: "plus" },
         account: accountIn({
           status: "signed-in",
-          profile: { email: "you@example.com", name: "You", image: null, plan: "free" },
+          profile: { email: "you@example.com", name: "You", plan: "free" },
         }),
       });
 

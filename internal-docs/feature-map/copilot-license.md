@@ -8,7 +8,7 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 - account-sign-in: on desktop, everyone signed out sees `Sign in` at the right of the title, next to the plan badge when a license key is applied. It opens the Copilot website in the browser.
 - account-signing-in: while the browser is open, that spot reads `Finish signing in in your browser` with `Open page` and `Cancel`.
 - account-sign-in-failure: a cancelled, failed or timed-out sign-in says what happened under the title and leaves any applied license as it was.
-- account-pill: once signed in, that spot is one pill with the account's picture or initial and its plan: `Free`, `Lite`, `Plus` or `Lifetime`. The plan badge is gone.
+- account-pill: once signed in, that spot is one pill with the account's initial and its plan: `Free`, `Lite`, `Plus` or `Lifetime`. The plan badge is gone.
 - account-menu: the pill opens a menu with the account's email, `Dashboard`, `Refresh plan` and `Sign out`. `Refresh plan` reads the account's plan again.
 - account-sign-out: `Sign out` brings back `Sign in` and ends the sign-in on the website too. A pasted license key stays.
 - license-key-row: while no license is active, the section ends with `Enter your license key`, `Apply` and `See plans`. `See plans` opens the pricing page.

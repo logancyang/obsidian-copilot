@@ -6,7 +6,6 @@ import { CopilotLicenseSection, type CopilotLicenseSectionProps } from "./Copilo
 const PROFILE: AccountProfile = {
   email: "you@example.com",
   name: "Your Name",
-  image: null,
   plan: "free",
 };
 

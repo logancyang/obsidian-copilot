@@ -14,7 +14,6 @@ const ACCOUNT_PATH = "/api/plugin/account";
 export interface AccountProfile {
   readonly email: string | null;
   readonly name: string | null;
-  readonly image: string | null;
   readonly plan: string;
 }
 
@@ -52,10 +51,10 @@ function isNullableString(value: unknown): value is string | null {
 
 function parseProfile(body: unknown): AccountProfile | null {
   if (typeof body !== "object" || body === null) return null;
-  const { email, name, image, plan } = body as Record<string, unknown>;
+  const { email, name, plan } = body as Record<string, unknown>;
   if (typeof plan !== "string") return null;
-  if (!isNullableString(email) || !isNullableString(name) || !isNullableString(image)) return null;
-  return Object.freeze({ email, name, image, plan });
+  if (!isNullableString(email) || !isNullableString(name)) return null;
+  return Object.freeze({ email, name, plan });
 }
 
 function signedIn(profile: AccountProfile | null): CopilotAccountState {

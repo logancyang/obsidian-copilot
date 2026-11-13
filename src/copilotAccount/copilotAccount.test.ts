@@ -25,7 +25,6 @@ const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 const FREE_PROFILE: AccountProfile = {
   email: "you@example.com",
   name: "Your Name",
-  image: null,
   plan: "free",
 };
 

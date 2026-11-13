@@ -14,7 +14,6 @@ jest.mock("@/utils/electronShell", () => ({
 const FREE_PROFILE: AccountProfile = {
   email: "you@example.com",
   name: "Your Name",
-  image: null,
   plan: "free",
 };
 
@@ -81,23 +80,6 @@ describe("AccountControl", () => {
       expect(screen.getByRole("button", { name: "Account, Plus plan" }).textContent).toContain(
         "Plus"
       );
-    });
-
-    it("shows the account's picture on the pill when it has one", () => {
-      renderControl(signedIn({ ...FREE_PROFILE, image: "https://example.com/you.png" }));
-
-      const pill = screen.getByRole("button", { name: "Account, Free plan" });
-      expect(pill.querySelector("img")?.getAttribute("src")).toBe("https://example.com/you.png");
-    });
-
-    it("falls back to the account's initial when its picture can't load", () => {
-      renderControl(signedIn({ ...FREE_PROFILE, image: "https://example.com/gone.png" }));
-      const pill = screen.getByRole("button", { name: "Account, Free plan" });
-
-      fireEvent.error(pill.querySelector("img") as HTMLImageElement);
-
-      expect(pill.querySelector("img")).toBeNull();
-      expect(pill.textContent).toBe("YFree");
     });
 
     it("reads Signed in on the pill until the account's plan has been read", () => {
