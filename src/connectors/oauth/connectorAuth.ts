@@ -285,8 +285,10 @@ function startLogin(
       // A login cancelled while Copilot was still contacting the service must not open the browser.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
       if (settled) return;
+      // Extra parameters only add to the address; the login's own state, PKCE and redirect stay as the SDK set them.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
       for (const [name, value] of Object.entries(target.authorizationParams ?? {})) {
-        url.searchParams.set(name, value);
+        if (!url.searchParams.has(name)) url.searchParams.set(name, value);
       }
       authorizationUrl = url;
       openUrl(url.href);
