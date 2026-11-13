@@ -162,6 +162,25 @@ describe("SessionHistoryReplay", () => {
         ]);
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/921 leaves out the images Codex replays inside a user message's text as data URLs, so a saved chat never writes them into its note", () => {
+        const { store, replay } = startReplay();
+
+        replay.append(
+          replayText(
+            "user_message_chunk",
+            "Read notes/a.md. Do not describe the image.[@image](data:image/png;base64,iVBORw0KGgo=)[@image](data:image/jpeg;base64,/9j/4AAQ)",
+            "u1"
+          ),
+          undefined
+        );
+        replay.append(replayText("agent_message_chunk", "Done.", "a1"), undefined);
+
+        expect(bubbles(store)).toEqual([
+          { sender: USER_SENDER, message: "Read notes/a.md. Do not describe the image." },
+          { sender: AI_SENDER, message: "Done." },
+        ]);
+      });
+
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/602 renders replayed thoughts, tool calls with their updates, and plans as parts of the agent bubble", () => {
         const { store, replay } = startReplay();
 

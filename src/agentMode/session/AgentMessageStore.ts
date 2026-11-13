@@ -13,9 +13,11 @@ import {
   StopReason,
   TurnFileChange,
 } from "@/agentMode/session/types";
+import { isCompactCommand } from "@/commands/compactCommand";
 import { USER_SENDER } from "@/constants";
 import { FormattedDateTime, MessageContext } from "@/types/message";
 import { formatDateTime } from "@/utils";
+import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
 
 interface StoredAgentMessage {
   id: string;
@@ -276,15 +278,37 @@ export class AgentMessageStore {
     return true;
   }
 
-  // OpenCode replays a chat without send times and autosave rewrites its note from these messages, so the note's times carry over while its turns line up. https://github.com/Brevilabs/obsidian-copilot-private/issues/671
-  fillMissingTimestamps(saved: readonly AgentChatMessage[]): void {
+  // A replay has its own times, no pasted images or attached context, and its own tool wording, and autosave rewrites the note from these messages, so each one the note lines up with takes the note's time, image embeds, attached context and tools-used list.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/921
+  adoptNoteRows(saved: readonly AgentChatMessage[]): void {
     const visible = this.messages.filter((m) => m.isVisible);
-    for (let i = 0; i < visible.length && i < saved.length; i++) {
-      const msg = visible[i];
-      if (msg.sender !== saved[i].sender) return;
-      const timestamp = saved[i].timestamp;
-      if (msg.timestamp || !timestamp) continue;
-      msg.timestamp = timestamp;
+    let next = 0;
+    let afterCompact = false;
+    for (const row of saved) {
+      // Claude's replay drops a /compact turn, which the note keeps.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
+      if (row.sender === USER_SENDER && isCompactCommand(row.message)) {
+        afterCompact = true;
+        continue;
+      }
+      const msg = visible[next];
+      if (!msg) return;
+      if (msg.sender !== row.sender) {
+        if (afterCompact && row.sender !== USER_SENDER) continue;
+        return;
+      }
+      const isUser = msg.sender === USER_SENDER;
+      // A note can hold a turn the agent never got (a multi-agent turn, a refused message) while the replay holds one sent after the last save, so a user message pairs only with the note's message of the same text and never takes another message's images.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/921
+      if (isUser && row.message.replace(CHAT_IMAGE_EMBED, "").trim() !== msg.displayText.trim()) {
+        return;
+      }
+      afterCompact = false;
+      next += 1;
+      if (row.timestamp) msg.timestamp = row.timestamp;
+      if (isUser) msg.displayText = row.message;
+      if (row.context) msg.context = row.context;
+      if (row.toolsUsed) msg.toolsUsed = row.toolsUsed;
       this.touch(msg);
     }
   }

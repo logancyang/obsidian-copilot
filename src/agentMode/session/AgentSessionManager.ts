@@ -1,7 +1,12 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { getVaultBase } from "@/utils/vaultPath";
-import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  AgentMcpServer,
+  BackendState,
+  SessionUsage,
+} from "@/agentMode/session/types";
 import type { ChatExtension } from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
 import { refreshLatestVersion } from "@/hooks/useLatestVersion";
@@ -2040,7 +2045,7 @@ export class AgentSessionManager {
       (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
-      session.store.fillMissingTimestamps(loaded.messages);
+      session.store.adoptNoteRows(loaded.messages);
     } else {
       session.loadDisplayMessages(loaded.messages);
       // The agent never saw this note's turns when its saved session is gone from this device.
@@ -2058,6 +2063,14 @@ export class AgentSessionManager {
       state.withholdsSessionId = true;
       state.replacedSessionId = loaded.sessionId;
     }
+    // The restored title and usage schedule a save, which must find the note current rather than rewrite it for being opened.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/921
+    state.signature = this.saveSignature(
+      loaded.label ?? null,
+      state.withholdsSessionId ? null : (loaded.sessionId ?? null),
+      loaded.messages,
+      loaded.usage ?? null
+    );
   }
 
   private absorbIntoEmptyActiveTab(loaded: AgentSession, previousActiveId: string | null): void {
@@ -2493,18 +2506,7 @@ export class AgentSessionManager {
     const label = session.getLabel();
     const sessionId = state.withholdsSessionId ? null : session.getBackendSessionId();
     const usage = session.getSessionUsage();
-    const last = messages[messages.length - 1];
-    const fanoutSig = last?.fanout
-      ? Object.values(last.fanout.answers)
-          .map((a) => `${a.status}:${a.text.length}`)
-          .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
-      : "";
-    // The note lists each reply's tools, so a tool call that adds no text still needs a save.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
-    const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
-    const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
-      last?.message ?? ""
-    }-${fanoutSig}-${toolsSig}-${usage?.updatedAt ?? ""}`;
+    const signature = this.saveSignature(label, sessionId, messages, usage);
     if (state.signature === signature) {
       return state.source ?? null;
     }
@@ -2527,6 +2529,26 @@ export class AgentSessionManager {
       if (previousSourcePath !== result.path) this.markHistoryChanged();
     }
     return result;
+  }
+
+  private saveSignature(
+    label: string | null,
+    sessionId: string | null,
+    messages: readonly AgentChatMessage[],
+    usage: SessionUsage | null
+  ): string {
+    const last = messages[messages.length - 1];
+    const fanoutSig = last?.fanout
+      ? Object.values(last.fanout.answers)
+          .map((a) => `${a.status}:${a.text.length}`)
+          .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
+      : "";
+    // The note lists each reply's tools, so a tool call that adds no text still needs a save.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+    const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
+    return `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
+      last?.message ?? ""
+    }-${fanoutSig}-${toolsSig}-${usage?.updatedAt ?? ""}`;
   }
 
   private async drainAutoSave(session: AgentSession): Promise<void> {
