@@ -19,6 +19,8 @@ import { getSettings, subscribeToSettingsChange, type CopilotSettings } from "@/
 import type { App } from "obsidian";
 
 const LOGIN_ID = "copilot-account";
+export const SIGN_IN_RETURN_ACTION = "copilot-auth";
+export const SIGN_IN_RETURN_LINK = `obsidian://${SIGN_IN_RETURN_ACTION}`;
 const ACCOUNT_PATH = "/api/plugin/account";
 const FREE_PLAN = "free";
 const PURCHASE_RECHECK_INTERVAL_MS = 10_000;
@@ -46,7 +48,10 @@ export type CopilotAccountState =
 
 export interface CopilotAccountDeps {
   app: App;
-  auth: Pick<ConnectorAuth, "login" | "accessToken" | "disconnect" | "hasLogin">;
+  auth: Pick<
+    ConnectorAuth,
+    "login" | "accessToken" | "disconnect" | "hasLogin" | "receiveReturnLink"
+  >;
   websiteOrigin: string;
   installId: () => string;
   openUrl: (url: string) => void;
@@ -147,6 +152,10 @@ export class CopilotAccount {
   openSignInPage(): void {
     const url = this.login?.loginUrl();
     if (url) this.deps.openUrl(url);
+  }
+
+  receiveReturnLink(params: Readonly<Record<string, string>>): void {
+    this.deps.auth.receiveReturnLink(params);
   }
 
   cancelSignIn(): void {

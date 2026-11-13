@@ -93,6 +93,7 @@ function accountAuth({ hasLogin }: { hasLogin: boolean }) {
     login: jest.fn(),
     accessToken: jest.fn(async () => ({ status: "unreachable" as const })),
     disconnect: jest.fn(async () => {}),
+    receiveReturnLink: jest.fn(),
   } satisfies CopilotAccountDeps["auth"];
 }
 
