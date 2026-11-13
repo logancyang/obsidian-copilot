@@ -62,7 +62,7 @@ export function CopilotLicenseSection({
   const status = isApplying ? "none" : license.status;
 
   return (
-    <section className="tw-flex tw-flex-col tw-gap-3 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
+    <section className="copilot-license-surface tw-flex tw-flex-col tw-gap-3 tw-rounded-xl tw-border tw-border-solid tw-border-transparent tw-p-4 tw-shadow-[shadow:var(--shadow-s)]">
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-2 tw-text-lg tw-font-semibold">
           <span className="tw-flex tw-size-8 tw-items-center tw-justify-center tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary">
