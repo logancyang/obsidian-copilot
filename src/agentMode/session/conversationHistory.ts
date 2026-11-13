@@ -176,12 +176,28 @@ export function toolsUsedLines(
   ];
 }
 
+const NO_EARLIER_CHATS: readonly string[] = Object.freeze([]);
+
+// Agents found a continued chat's earlier note by searching the vault and answered from turns after the chosen reply; named before the turns, the notes made Codex refuse to use the turns themselves.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+function continuedChatStatement(notes: readonly string[]): string {
+  return (
+    "The messages above are this conversation so far; use them to answer. " +
+    "This chat was continued from an earlier chat, whose saved note files also hold later messages that are not part of this conversation. " +
+    "Do not read, open or search these files, and ignore their content if a search returns them:\n" +
+    notes.map((note) => `- ${note}\n`).join("")
+  );
+}
+
 export function buildConversationHistoryBlock(
   messages: readonly AgentChatMessage[],
   maxChars: number,
   vaultBase: string | null,
-  savedImagePath: (image: string) => string | null
+  savedImagePath: (image: string) => string | null,
+  continuedFrom: readonly string[] = NO_EARLIER_CHATS
 ): ConversationHistoryBlock | null {
+  const statement = continuedFrom.length > 0 ? continuedChatStatement(continuedFrom) : "";
+  const turnChars = maxChars - statement.length;
   const rendered: string[] = [];
   for (const m of messages) {
     const content = renderTurnContent(m, vaultBase, savedImagePath);
@@ -193,14 +209,14 @@ export function buildConversationHistoryBlock(
 
   let total = rendered.reduce((n, t) => n + t.length + 1, -1);
   let truncated = false;
-  while (rendered.length > 1 && total > maxChars) {
+  while (rendered.length > 1 && total > turnChars) {
     total -= rendered.shift()!.length + 1;
     truncated = true;
   }
 
   let body = rendered.join("\n");
-  if (body.length > maxChars) {
-    body = trimHead(body, maxChars, CONVERSATION_HISTORY_TURN_TRUNCATION_MARKER);
+  if (body.length > turnChars) {
+    body = trimHead(body, turnChars, CONVERSATION_HISTORY_TURN_TRUNCATION_MARKER);
     truncated = true;
   }
 
@@ -209,5 +225,8 @@ export function buildConversationHistoryBlock(
     "read-only context to inform your answer; do NOT redo or re-answer these " +
     "earlier turns. Answer only the current question that follows.";
   if (truncated) body = `${CONVERSATION_HISTORY_TRUNCATION_MARKER}\n${body}`;
-  return { text: `<conversation_history>\n${header}\n${body}\n</conversation_history>`, truncated };
+  return {
+    text: `<conversation_history>\n${header}\n${body}\n${statement}</conversation_history>`,
+    truncated,
+  };
 }

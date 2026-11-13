@@ -266,6 +266,7 @@ export class AgentSessionManager {
       attentionUnsub?: () => void;
       withholdsSessionId?: boolean;
       replacedSessionId?: string;
+      carriedMessages?: number;
     }
   >();
 
@@ -1751,6 +1752,39 @@ export class AgentSessionManager {
     return created;
   }
 
+  async continueChatFrom(sourceId: string, messageId: string): Promise<AgentSession> {
+    const source = this.sessions.get(sourceId);
+    const persistence = this.opts.persistenceManager;
+    if (!source || !persistence) throw new Error(`No open chat ${sourceId} to continue from`);
+    const savedSource = await this.saveSessionNow(source);
+    const sourceNote = savedSource && this.app.vault.getAbstractFileByPath(savedSource.path);
+    if (!(sourceNote instanceof TFile)) {
+      throw new Error(`Could not save chat ${sourceId} before continuing it`);
+    }
+    // Every earlier chat's note holds messages after the point this chat continues from, and agents found them by searching the vault.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    const { continuedFrom = [] } = await persistence.loadFile(sourceNote);
+    const messages = source.store.getDisplayMessages();
+    const [first, ...rest] = messages.slice(0, messages.findIndex((m) => m.id === messageId) + 1);
+    // A chat link finds its note by the first message's time, so a continued chat that kept the original's would share the original's link.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    const startedAt = first.timestamp && { ...first.timestamp, epoch: Date.now() };
+    const saved = await persistence.saveSession(
+      [{ ...first, timestamp: startedAt }, ...rest],
+      source.backendId,
+      {
+        label: source.getLabel(),
+        projectId: source.projectId,
+        model: source.getState()?.model?.current,
+        continuedFrom: [...continuedFrom, sourceNote.path],
+      }
+    );
+    const note = saved && this.app.vault.getAbstractFileByPath(saved.path);
+    if (!(note instanceof TFile))
+      throw new Error(`Could not save the chat continued from ${sourceId}`);
+    return this.loadSessionFromHistory(note);
+  }
+
   private moveIntoTabSlot(id: string, slot: number): void {
     if (slot < 0) return;
     this.moveMapEntry(this.sessions, id, slot);
@@ -2010,7 +2044,11 @@ export class AgentSessionManager {
       resumed = loaded.sessionId
         ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
         : null;
-      session = resumed ?? (await this.createSession(loaded.backendId, projectId));
+      // A note with no agent session to resume keeps its own record of the model it ran.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+      const noteModel = loaded.model && this.getSeedSelection(loaded.backendId, loaded.model);
+      session =
+        resumed ?? (await this.createSession(loaded.backendId, projectId, noteModel ?? undefined));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
@@ -2041,19 +2079,32 @@ export class AgentSessionManager {
       .filter((m) => m.sender === USER_SENDER).length;
     // Claude's transcript keeps /compact only as command bookkeeping, which its replay drops.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-    const savedUserTurns = loaded.messages.filter(
+    // A chat's leading messages that its agent got only as history are not in the agent's replay, so they are left out of the comparison and shown before it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    const carried = loaded.messages.slice(0, loaded.carriedMessages ?? 0);
+    const ownMessages = loaded.messages.slice(carried.length);
+    const savedUserTurns = ownMessages.filter(
       (m) => m.isVisible && m.sender === USER_SENDER && !isCompactCommand(m.message)
     ).length;
+    const state = this.getSessionState(session.internalId);
+    // A multi-agent mention sends the history again on any later turn, including after the agent's own session reattaches.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    session.setContinuedFrom(loaded.continuedFrom);
     if (replayedUserTurns > 0 && replayedUserTurns >= savedUserTurns) {
-      session.store.adoptNoteRows(loaded.messages);
+      session.store.adoptNoteRows(ownMessages);
+      if (carried.length > 0) {
+        session.loadDisplayMessages([...carried, ...session.store.getDisplayMessages()]);
+      }
     } else {
       session.loadDisplayMessages(loaded.messages);
       // The agent never saw this note's turns when its saved session is gone from this device.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
-      if (!resumed) session.resendSavedHistoryOnNextTurn();
+      if (!resumed) {
+        session.resendSavedHistoryOnNextTurn();
+        state.carriedMessages = loaded.messages.length;
+      }
     }
     session.seedSessionUsage(loaded.usage);
-    const state = this.getSessionState(session.internalId);
     state.source = file;
     state.savedLabel = loaded.label;
     // A fresh session has no transcript until its first prompt; saving it earlier repoints the note away from the session
@@ -2517,6 +2568,8 @@ export class AgentSessionManager {
       sessionId,
       projectId: session.projectId,
       usage: usage ?? undefined,
+      model: session.getState()?.model?.current,
+      carriedMessages: state.withholdsSessionId ? undefined : state.carriedMessages,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -2828,7 +2881,9 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    return this.createSession(backendId, projectId, seedSelection, chatInputId);
+    const created = await this.createSession(backendId, projectId, seedSelection, chatInputId);
+    if (label) created.restoreLabel(label, labelSource ?? "agent");
+    return created;
   }
 
   private async restartBackendNow(
@@ -2873,7 +2928,11 @@ export class AgentSessionManager {
             internalId: session.internalId,
             projectId: session.projectId,
             chatInputId: session.chatInputId,
-            resumableSessionId: session.getBackendSessionId() ?? undefined,
+            // A chat whose agent has received no message has nothing to resume, and resuming its empty session would drop the history its first message owes the agent.
+            // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+            resumableSessionId: this.sessionState.get(session.internalId)?.withholdsSessionId
+              ? undefined
+              : (session.getBackendSessionId() ?? undefined),
             label: session.getLabel(),
             labelSource: session.getLabelSource(),
             // The displayed selection is otherwise lost when the process restarts.

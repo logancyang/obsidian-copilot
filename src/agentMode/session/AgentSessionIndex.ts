@@ -55,7 +55,7 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
   };
 }
 
-function sanitizeModel(raw: unknown): ModelSelection | undefined {
+export function sanitizeModel(raw: unknown): ModelSelection | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const { baseModelId, effort } = raw as Record<string, unknown>;
   if (typeof baseModelId !== "string" || !baseModelId) return undefined;

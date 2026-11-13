@@ -260,6 +260,59 @@ describe("conversationHistory", () => {
       expect(block.indexOf("What is the plan?")).toBeLessThan(block.indexOf("Here is the plan."));
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 ends a continued chat's history by telling the agent to answer from the turns above and naming the earlier chats' notes as files not to read", () => {
+      const block = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, "The codeword is HERON.")],
+        SAVED_HISTORY_MAX_CHARS,
+        null,
+        noSavedImages,
+        ["/vault/chats/first.md", "/vault/chats/second.md"]
+      )!.text;
+
+      expect(block).toContain(
+        "The codeword is HERON.\n</turn>\n" +
+          "The messages above are this conversation so far; use them to answer. " +
+          "This chat was continued from an earlier chat, whose saved note files also hold later messages that are not part of this conversation. " +
+          "Do not read, open or search these files, and ignore their content if a search returns them:\n" +
+          "- /vault/chats/first.md\n" +
+          "- /vault/chats/second.md\n" +
+          "</conversation_history>"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 sends a chat that continues no earlier chat with the header followed directly by its turns", () => {
+      const block = buildConversationHistoryBlock(
+        [histMsg(USER_SENDER, "The codeword is HERON.")],
+        SAVED_HISTORY_MAX_CHARS,
+        null,
+        noSavedImages
+      )!.text;
+
+      expect(block).toContain('Answer only the current question that follows.\n<turn role="user">');
+      expect(block).toContain("The codeword is HERON.\n</turn>\n</conversation_history>");
+      expect(block).not.toContain("continued from an earlier chat");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 keeps a continued chat's turns and the statement about its earlier chats together within the cap", () => {
+      const messages = Array.from({ length: 20 }, (_, i) =>
+        histMsg(i % 2 === 0 ? USER_SENDER : AI_SENDER, `turn-${i}-${"x".repeat(400)}`)
+      );
+
+      const history = buildConversationHistoryBlock(messages, 1000, null, noSavedImages, [
+        "/vault/chats/first.md",
+      ])!;
+      const inner = history.text.match(
+        /^<conversation_history>\n[^\n]*\n([\s\S]*)\n<\/conversation_history>$/
+      )![1];
+
+      expect(inner).toContain("continued from an earlier chat");
+      expect(inner).toContain("turn-19-");
+      expect(inner.replace("[earlier conversation truncated]\n", "").length).toBeLessThanOrEqual(
+        1000
+      );
+      expect(history.truncated).toBe(true);
+    });
+
     it("returns null for an empty transcript", () => {
       expect(
         buildConversationHistoryBlock([], SAVED_HISTORY_MAX_CHARS, null, noSavedImages)

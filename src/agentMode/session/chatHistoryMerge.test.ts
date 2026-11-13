@@ -174,6 +174,14 @@ describe("chatHistoryMerge", () => {
       expect(title!.length).toBeLessThanOrEqual(61);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 titles a chat opened from its note by the message text, never by the image embeds the note saves under it", () => {
+      const embed = `![[copilot-image-${"c".repeat(64)}.png]]`;
+      const asked = "Read notes/herons.md and describe this image in 5 words.";
+
+      expect(deriveChatTitleFromMessages([msg(USER_SENDER, `${asked}\n\n${embed}`)])).toBe(asked);
+      expect(deriveChatTitleFromMessages([msg(USER_SENDER, embed)])).toBe("Image attachment");
+    });
+
     it("returns null when there is no usable user text", () => {
       expect(deriveChatTitleFromMessages([])).toBeNull();
       expect(deriveChatTitleFromMessages([msg(AI_SENDER, "only assistant")])).toBeNull();

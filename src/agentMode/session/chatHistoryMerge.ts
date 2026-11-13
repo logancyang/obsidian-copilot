@@ -1,6 +1,7 @@
 import { isCompactCommand } from "@/commands/compactCommand";
 import { USER_SENDER } from "@/constants";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import { CHAT_IMAGE_EMBED } from "@/utils/chatImagePersistence";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import type { AgentSessionIndexEntry } from "./AgentSessionIndex";
 import type { AgentChatMessage } from "./types";
@@ -15,11 +16,17 @@ export const UNTITLED_NATIVE_CHAT = "Untitled chat";
 
 const MAX_DERIVED_TITLE_CHARS = 60;
 
+// A chat opened from its note has the image embeds the note saves under each message in its text.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+function titleText(message: AgentChatMessage): string {
+  return message.message.replace(CHAT_IMAGE_EMBED, "");
+}
+
 export function deriveChatTitleFromMessages(messages: AgentChatMessage[]): string | null {
   // A /compact command says nothing about what the chat is about.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/634
   const firstUser = messages.find(
-    (m) => m.sender === USER_SENDER && m.message.trim() && !isCompactCommand(m.message)
+    (m) => m.sender === USER_SENDER && titleText(m).trim() && !isCompactCommand(m.message)
   );
   if (!firstUser) {
     // Screenshot-only sessions still need a recognizable tab and history title.
@@ -27,18 +34,19 @@ export function deriveChatTitleFromMessages(messages: AgentChatMessage[]): strin
     return messages.some(
       (m) =>
         m.sender === USER_SENDER &&
-        m.content?.some(
-          (block) =>
-            typeof block === "object" &&
-            block !== null &&
-            "type" in block &&
-            block.type === "image_url"
-        )
+        (titleText(m) !== m.message ||
+          m.content?.some(
+            (block) =>
+              typeof block === "object" &&
+              block !== null &&
+              "type" in block &&
+              block.type === "image_url"
+          ))
     )
       ? "Image attachment"
       : null;
   }
-  const text = firstUser.message
+  const text = titleText(firstUser)
     .replace(/\[\[([^\]]+)\]\]/g, "$1")
     .replace(/\s+/g, " ")
     .trim();

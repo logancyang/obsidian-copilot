@@ -3079,6 +3079,28 @@ describe("AgentSession", () => {
           expect((text.match(/expand on that plan/g) ?? []).length).toBe(1);
         });
 
+        it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 tells agents mentioned in a continued chat which notes hold the earlier chat they must not read", async () => {
+          const mock = makeMockBackend();
+          const runFanoutTurn = fanoutRunner(twoAgentTurn());
+          const session = makeSession(mock, { runFanoutTurn });
+          session.loadDisplayMessages([
+            {
+              id: "m0",
+              sender: USER_SENDER,
+              message: "the plan is X",
+              isVisible: true,
+              timestamp: null,
+            },
+          ]);
+          session.setContinuedFrom(["chats/original.md"]);
+
+          await session.sendPrompt("expand on that plan", undefined, undefined, BOTH_AGENTS).turn;
+
+          expect(fanoutPromptText(runFanoutTurn)).toContain(
+            "ignore their content if a search returns them:\n- chats/original.md\n"
+          );
+        });
+
         it("injects the buffered question + summary on the next single-agent turn, then clears", async () => {
           const mock = makeMockBackend();
           const runFanoutTurn = fanoutRunner(
@@ -5081,6 +5103,23 @@ describe("AgentSession", () => {
         expect(Notice).toHaveBeenCalledWith(TRIM_NOTICE);
       });
 
+      it(`${ISSUE_908} tells the agent which notes hold the chat this one continues, with the saved turns, and never again`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(savedChat);
+        session.setContinuedFrom(["chats/original.md"]);
+        session.resendSavedHistoryOnNextTurn();
+
+        await session.sendPrompt("what is my secret word?").turn;
+        await session.sendPrompt("and backwards?").turn;
+
+        const [first, second] = promptTexts(mock);
+        expect(sentHistory(first)).toContain(
+          "ignore their content if a search returns them:\n- chats/original.md\n"
+        );
+        expect(second).toBe("and backwards?");
+      });
+
       it("sends no conversation_history when no saved history is queued", async () => {
         const mock = makeMockBackend();
         const session = makeSession(mock);
@@ -5089,6 +5128,31 @@ describe("AgentSession", () => {
         await session.sendPrompt("what is my secret word?").turn;
 
         expect(promptTexts(mock)).toEqual(["what is my secret word?"]);
+      });
+    });
+
+    describe("setContinuedFrom()", () => {
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 sends the chat's own agent an ordinary message unchanged when no saved history is queued", async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages([
+          {
+            id: "m0",
+            sender: USER_SENDER,
+            message: "the plan is X",
+            isVisible: true,
+            timestamp: null,
+          },
+        ]);
+        session.setContinuedFrom(["chats/original.md"]);
+
+        await session.sendPrompt("and then?").turn;
+
+        expect(
+          mock.prompt.mock.calls.map(
+            (call) => (call[0] as { prompt: Array<{ text: string }> }).prompt[0].text
+          )
+        ).toEqual(["and then?"]);
       });
     });
 

@@ -3,7 +3,7 @@ import type { AgentChatMessage } from "@/agentMode/session/types";
 import { FanoutMessageCard } from "@/agentMode/ui/FanoutMessageCard";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AI_SENDER } from "@/constants";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 jest.mock("@/agentMode/ui/AgentMarkdownText", () => ({
@@ -57,6 +57,35 @@ describe("FanoutMessageCard", () => {
         </TooltipProvider>
       );
       expect(screen.getByText(timestamp)).toBeTruthy();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 offers to continue from the multi-agent reply in a new chat only when given the action", () => {
+      const onContinue = jest.fn();
+      const message: AgentChatMessage = {
+        id: "fanout-1",
+        sender: AI_SENDER,
+        message: "",
+        timestamp: null,
+        isVisible: true,
+      };
+      const turn: FanoutTurn = { answers: {}, summary: { status: "done", text: "Both agree" } };
+      const card = (continueAction?: () => void) => (
+        <TooltipProvider>
+          <FanoutMessageCard
+            message={message}
+            turn={turn}
+            app={{} as never}
+            onContinue={continueAction}
+          />
+        </TooltipProvider>
+      );
+
+      const { rerender } = render(card(onContinue));
+      fireEvent.click(screen.getByTitle("Continue from here in a new chat"));
+      rerender(card());
+
+      expect(onContinue).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTitle("Continue from here in a new chat")).toBeNull();
     });
   });
 });

@@ -43,6 +43,7 @@ interface AgentTrailProps {
   errorText?: string;
   fileChanges?: TurnFileChange[];
   onOpenFileChange?: (change: TurnFileChange) => void;
+  onContinue?: () => void;
 }
 
 const noopOpenFileChange = () => {};
@@ -85,6 +86,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
   errorText,
   fileChanges,
   onOpenFileChange = noopOpenFileChange,
+  onContinue,
 }) => {
   const answer = agentResponseText(parts);
   // A failed turn's error is stored as message text, which a reply with parts never shows.
@@ -106,6 +108,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
         app={app}
         durationMs={turnDurationMs}
         timestamp={timestamp}
+        onContinue={onContinue}
       />
     ) : turnDurationMs !== undefined ? (
       <AssistantResponseFooter

@@ -1,5 +1,6 @@
 import type { TAbstractFile } from "obsidian";
 import {
+  CHAT_IMAGE_EMBED,
   prepareChatImagesForSave,
   stripChatImageReceipts,
   updateChatTranscript,
@@ -35,8 +36,9 @@ import {
   mergeFrontmatter,
   unescapeYamlString,
 } from "./agentChatYaml";
+import { sanitizeModel } from "./AgentSessionIndex";
 import { GLOBAL_SCOPE } from "./scope";
-import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
+import type { AgentChatMessage, BackendId, ModelSelection, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
@@ -85,6 +87,23 @@ function parseLinkableEpoch(raw: string | undefined): number | undefined {
   return Number.isSafeInteger(epoch) && epoch > 0 ? epoch : undefined;
 }
 
+function parseModelJson(raw: string | undefined): ModelSelection | undefined {
+  try {
+    return sanitizeModel(JSON.parse(raw ?? "null"));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseContinuedFrom(raw: string | undefined): string[] | undefined {
+  try {
+    const notes: unknown = JSON.parse(raw ?? "null");
+    return Array.isArray(notes) && notes.every((n) => typeof n === "string") ? notes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseUsageJson(raw: unknown): SessionUsage | undefined {
   if (typeof raw !== "string" || raw.trim().length === 0) return undefined;
   try {
@@ -109,6 +128,9 @@ export interface LoadedAgentChat {
   sessionId?: string;
   projectId: string;
   usage?: SessionUsage;
+  model?: ModelSelection;
+  carriedMessages?: number;
+  continuedFrom?: string[];
 }
 
 export class AgentChatPersistenceManager {
@@ -132,11 +154,13 @@ export class AgentChatPersistenceManager {
     backendId: BackendId,
     options?: {
       label?: string | null;
-      modelKey?: string;
+      model?: ModelSelection;
       existingPath?: string;
       sessionId?: string | null;
       projectId?: string;
       usage?: SessionUsage;
+      carriedMessages?: number;
+      continuedFrom?: readonly string[];
     }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
@@ -154,7 +178,10 @@ export class AgentChatPersistenceManager {
 
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(messages, firstMessageEpoch, conversationsFolder);
+        : await this.unclaimedNotePath(
+            this.generateFileName(messages, firstMessageEpoch, conversationsFolder),
+            options?.existingPath
+          );
 
       const preparedMessages = await prepareChatImagesForSave(
         this.app,
@@ -171,10 +198,12 @@ export class AgentChatPersistenceManager {
         firstMessageEpoch,
         backendId,
         label: options?.label,
-        modelKey: options?.modelKey,
+        model: options?.model,
         sessionId: options?.sessionId,
         projectId: options?.projectId,
         usage: options?.usage,
+        carriedMessages: options?.carriedMessages,
+        continuedFrom: options?.continuedFrom,
       });
       // A chat link finds its note by exact epoch, and a resumed Claude transcript starts at a later time than the note.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/744
@@ -199,7 +228,7 @@ export class AgentChatPersistenceManager {
         const created = await this.app.vault.create(preferredFileName, renderNote(""));
         return { path: created.path };
       } catch (err) {
-        if (isFileAlreadyExistsError(err)) {
+        if (isFileAlreadyExistsError(err) && preferredFileName === options?.existingPath) {
           await rewriteNote(preferredFileName);
           return { path: preferredFileName };
         }
@@ -240,12 +269,25 @@ export class AgentChatPersistenceManager {
     const sessionId = frontmatter.sessionId?.trim() || undefined;
     const projectId = frontmatter.projectId?.trim() || GLOBAL_SCOPE;
     const usage = parseUsageJson(frontmatter.usage);
+    const model = parseModelJson(frontmatter.model);
+    const carriedMessages = Number(frontmatter.carriedMessages) || undefined;
+    const continuedFrom = parseContinuedFrom(frontmatter.continuedFrom);
     const messages = this.parseChatBody(body, parseLinkableEpoch(frontmatter.epoch));
 
     logInfo(
       `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"}, projectId=${projectId})`
     );
-    return { messages, backendId, label, sessionId, projectId, usage };
+    return {
+      messages,
+      backendId,
+      label,
+      sessionId,
+      projectId,
+      usage,
+      model,
+      carriedMessages,
+      continuedFrom,
+    };
   }
 
   async getAgentChatHistoryFiles(): Promise<TFile[]> {
@@ -297,6 +339,21 @@ export class AgentChatPersistenceManager {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (!file) throw new Error("Chat file not found.");
     await trashFile(this.app, file);
+  }
+
+  // A note name can repeat across chats, as with a name format without the time or a continued chat's unchanged first message, and a chat saved under a taken name would replace the other chat's note.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+  private async unclaimedNotePath(path: string, ownPath?: string): Promise<string> {
+    const stem = path.slice(0, -".md".length);
+    let candidate = path;
+    for (
+      let n = 1;
+      candidate !== ownPath && (await this.app.vault.adapter.exists(candidate));
+      n++
+    ) {
+      candidate = `${stem} ${n}.md`;
+    }
+    return candidate;
   }
 
   private resolveExistingFile(path: string): TFile | null {
@@ -427,6 +484,9 @@ export class AgentChatPersistenceManager {
     const firstUser = messages.find((m) => m.sender === USER_SENDER);
     const topicForFilename = firstUser
       ? firstUser.message
+          // A chat continued from a reopened chat keeps the note's image embeds in its first message's text.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+          .replace(CHAT_IMAGE_EMBED, "")
           .replace(/\[\[([^\]]+)\]\]/g, "$1")
           .replace(/[{}[\]]/g, "")
           .split(/\s+/)
@@ -482,10 +542,12 @@ export class AgentChatPersistenceManager {
     firstMessageEpoch: number;
     backendId: BackendId;
     label?: string | null;
-    modelKey?: string;
+    model?: ModelSelection;
     sessionId?: string | null;
     projectId?: string;
     usage?: SessionUsage;
+    carriedMessages?: number;
+    continuedFrom?: readonly string[];
   }): FrontmatterUpdates {
     const projectId = coerceProjectId(args.projectId);
     const quoted = (key: string, value: string | null | undefined) =>
@@ -499,8 +561,16 @@ export class AgentChatPersistenceManager {
       ["projectId", projectId === GLOBAL_SCOPE ? null : quoted("projectId", projectId)],
       ["sessionId", quoted("sessionId", args.sessionId)],
       ["topic", quoted("topic", args.label)],
-      ["modelKey", quoted("modelKey", args.modelKey)],
+      ["model", args.model ? `model: '${JSON.stringify(args.model)}'` : undefined],
       ["usage", args.usage ? `usage: '${JSON.stringify(args.usage)}'` : undefined],
+      [
+        "carriedMessages",
+        args.carriedMessages ? `carriedMessages: ${args.carriedMessages}` : undefined,
+      ],
+      [
+        "continuedFrom",
+        quoted("continuedFrom", args.continuedFrom && JSON.stringify(args.continuedFrom)),
+      ],
       ["tags", `tags:\n  - ${COPILOT_CONVERSATION_TAG}`],
     ];
   }
