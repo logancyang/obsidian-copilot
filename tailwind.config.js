@@ -17,6 +17,7 @@ module.exports = {
       inherit: colors.inherit,
       current: colors.current,
       transparent: colors.transparent,
+      white: colors.white,
       normal: "var(--text-normal)",
       muted: "var(--text-muted)",
       faint: "var(--text-faint)",
@@ -60,6 +61,9 @@ module.exports = {
       current: colors.current,
       transparent: colors.transparent,
       white: colors.white,
+      // Discord's blurple is its brand color, so it stays the same in every theme.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/925
+      discord: "rgb(88 101 242 / <alpha-value>)",
       primary: "var(--background-primary)",
       "primary-alt": "var(--background-primary-alt)",
       secondary: "var(--background-secondary)",
@@ -123,6 +127,7 @@ module.exports = {
       "border-focus": "var(--background-modifier-border-focus)",
       "interactive-accent": "var(--interactive-accent)",
       error: "var(--text-error)",
+      discord: "rgb(88 101 242 / <alpha-value>)",
     },
     ringColor: {
       ring: "var(--interactive-accent)",

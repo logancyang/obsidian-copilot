@@ -49,7 +49,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [relevant-notes](relevant-notes.md): Relevant Notes in the start screen's shelf and in its own pane.
 - [builtin-skills](builtin-skills.md): bundled skills, Plus availability, and saved agent choices.
 - [agent-setup](agent-setup.md): choose and install an agent, sign in, default model and effort.
-- [copilot-license](copilot-license.md): the license section in settings: Sign in, the account pill and menu, the license from the account, license key, plan badge, usage, Remove license.
+- [copilot-license](copilot-license.md): the license section in settings: Sign in, the account pill and menu, the license from the account, the Discord invite, license key, plan badge, usage, Remove license.
 - [report-issue](report-issue.md): the Report an issue flow.
 
 ## Connectors
