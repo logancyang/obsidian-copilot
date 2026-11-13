@@ -40,9 +40,21 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
-// Tool cards are not saved, so each reply keeps the tools it used in a hidden block that a reopened chat sends the agent as history; its lines never hold "-->", so a block the reply quotes stays text.
+// Tool cards are not saved, so each reply keeps the tools it used in a hidden JSON line that a reopened chat sends the agent as history; escaping ">" keeps any value from closing the comment.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
-const TOOLS_USED_BLOCK = /(?:^|\r?\n)<!-- copilot-tools\r?\n((?:(?!-->)[\s\S])*?)\r?\n-->$/;
+const MESSAGE_DATA_LINE = /(?:^|\r?\n)<!-- copilot-message ([^>\r\n]*) -->$/;
+
+interface SavedMessageData {
+  tools?: readonly string[];
+}
+
+function readMessageData(json: string): SavedMessageData {
+  try {
+    return (JSON.parse(json) ?? {}) as SavedMessageData;
+  } catch {
+    return {};
+  }
+}
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
   const epoch = Number(raw);
@@ -277,13 +289,14 @@ export class AgentChatPersistenceManager {
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
         const tools = toolsUsedLines(m, getVaultBase(this.app));
-        // A message ending in a literal tools block gets an empty one after it, so loading keeps that text.
+        const data: SavedMessageData = tools.length > 0 ? { tools } : {};
+        // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
-        const toolsBlock =
-          tools.length > 0 || TOOLS_USED_BLOCK.test(body.trim())
-            ? `\n<!-- copilot-tools\n${tools.join("\n")}\n-->`
+        const dataLine =
+          Object.keys(data).length > 0 || MESSAGE_DATA_LINE.test(body.trim())
+            ? `\n<!-- copilot-message ${JSON.stringify(data).replace(/>/g, "\\u003e")} -->`
             : "";
-        return `${formatChatNoteMessage(m.sender, body)}${toolsBlock}\n[Timestamp: ${ts}]`;
+        return `${formatChatNoteMessage(m.sender, body)}${dataLine}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
@@ -310,8 +323,12 @@ export class AgentChatPersistenceManager {
       }
 
       const savedText = lines.slice(0, endIndex).join("\n").trim();
-      const toolsBlock = TOOLS_USED_BLOCK.exec(savedText);
-      const messageText = toolsBlock ? savedText.slice(0, toolsBlock.index).trim() : savedText;
+      const dataLine = MESSAGE_DATA_LINE.exec(savedText);
+      const messageText = dataLine ? savedText.slice(0, dataLine.index).trim() : savedText;
+      const data = dataLine ? readMessageData(dataLine[1]) : {};
+      const tools = Array.isArray(data.tools)
+        ? data.tools.filter((tool) => typeof tool === "string")
+        : [];
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -339,7 +356,7 @@ export class AgentChatPersistenceManager {
         sender,
         isVisible: true,
         timestamp,
-        ...(toolsBlock ? { toolsUsed: toolsBlock[1].split(/\r?\n/).filter(Boolean) } : {}),
+        ...(tools.length > 0 ? { toolsUsed: tools } : {}),
       });
     }
     return messages;

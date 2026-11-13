@@ -97,10 +97,10 @@ const TOOLS_USED_MAX_LINES = 20;
 
 const EMPTY_TOOLS_USED: readonly string[] = Object.freeze([]);
 
-// Lines are saved inside an HTML comment in the chat note, so they stay single-line and cannot close it; repeats merge and a reply keeps at most 20 lines.
+// The history block lists one call per line, so each line stays single-line; repeats merge and a reply keeps at most 20 lines.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
 function toolsUsedText(text: string): string {
-  return text.replace(/\s+/g, " ").replace(/-->/g, "-- >").trim();
+  return text.replace(/\s+/g, " ").trim();
 }
 
 // Codex and Claude titles name files by absolute path, which would put the user's home folder into a synced note; only paths the call reports are shortened, never guessed from the text.
