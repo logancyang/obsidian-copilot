@@ -64,6 +64,7 @@ function signedIn(profile: AccountProfile | null): CopilotAccountState {
 export class CopilotAccount {
   private state: CopilotAccountState;
   private login: ConnectorLogin | null = null;
+  private loginGeneration = 0;
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly deps: CopilotAccountDeps) {
@@ -110,8 +111,9 @@ export class CopilotAccount {
 
   async refreshProfile(): Promise<void> {
     if (this.state.status !== "signed-in") return;
+    const generation = this.loginGeneration;
     const profile = await this.readProfile();
-    if (this.state.status !== "signed-in" || profile === null) return;
+    if (generation !== this.loginGeneration || profile === null) return;
     this.setState(profile === "needs-login" ? SIGNED_OUT : signedIn(profile));
   }
 
@@ -163,6 +165,9 @@ export class CopilotAccount {
   }
 
   private setState(state: CopilotAccountState): void {
+    // Leaving signed in ends the login, so a read started under it can't answer for the next sign-in.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+    if (state.status !== "signed-in") this.loginGeneration += 1;
     this.state = state;
     for (const listener of this.listeners) listener();
   }

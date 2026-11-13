@@ -363,6 +363,37 @@ describe("copilotAccount", () => {
         expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
       });
 
+      it("ignores a read for an earlier sign-in that answers after the user signed out and signed in to another account — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        let answered!: () => void;
+        const firstAccountAnswered = new Promise<void>((resolve) => (answered = resolve));
+        let release!: () => void;
+        const released = new Promise<void>((resolve) => (release = resolve));
+        let holding = true;
+        setRequestUrlImpl(async (request: { url: string }) => {
+          if (!holding || !request.url.endsWith("/api/plugin/account")) {
+            return service.requestUrl(request);
+          }
+          holding = false;
+          const answer = await service.requestUrl(request);
+          answered();
+          await released;
+          return answer;
+        });
+        const secondProfile = { email: "other@example.com", name: "Other Name", plan: "plus" };
+
+        const firstAccountRead = account.refreshProfile();
+        await firstAccountAnswered;
+        await account.signOut();
+        service.account = { ...secondProfile, image: null, licenseKey: "key-2" };
+        await signIn();
+        release();
+        await firstAccountRead;
+
+        expect(account.getSnapshot()).toEqual(signedIn(secondProfile));
+      });
+
       it("does nothing while signed out", async () => {
         const { account, service } = setUp();
 
