@@ -208,6 +208,13 @@ const CATALOG_ENTRIES: readonly Omit<ConnectorCatalogEntry, "logoUrl">[] = [
     serverUrl: "https://api.dashboard.plaid.com/mcp/",
   },
   {
+    id: "podwise",
+    name: "Podwise",
+    description: "Podcast summaries and transcripts",
+    category: "Notes & docs",
+    serverUrl: "https://mcp.podwise.ai/mcp",
+  },
+  {
     id: "posthog",
     name: "PostHog",
     description: "Product analytics and feature flags",
