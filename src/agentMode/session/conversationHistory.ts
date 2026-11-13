@@ -15,7 +15,14 @@ import {
   type MessageContext,
 } from "@/types/message";
 
-export const CONVERSATION_HISTORY_MAX_CHARS = 48_000;
+export const MENTION_HISTORY_MAX_CHARS = 48_000;
+
+export const SAVED_HISTORY_MAX_CHARS = 200_000;
+
+export interface ConversationHistoryBlock {
+  text: string;
+  truncated: boolean;
+}
 
 const CONVERSATION_HISTORY_TRUNCATION_MARKER = "[earlier conversation truncated]";
 
@@ -174,7 +181,7 @@ export function buildConversationHistoryBlock(
   maxChars: number,
   vaultBase: string | null,
   savedImagePath: (image: string) => string | null
-): string | null {
+): ConversationHistoryBlock | null {
   const rendered: string[] = [];
   for (const m of messages) {
     const content = renderTurnContent(m, vaultBase, savedImagePath);
@@ -202,5 +209,5 @@ export function buildConversationHistoryBlock(
     "read-only context to inform your answer; do NOT redo or re-answer these " +
     "earlier turns. Answer only the current question that follows.";
   if (truncated) body = `${CONVERSATION_HISTORY_TRUNCATION_MARKER}\n${body}`;
-  return `<conversation_history>\n${header}\n${body}\n</conversation_history>`;
+  return { text: `<conversation_history>\n${header}\n${body}\n</conversation_history>`, truncated };
 }

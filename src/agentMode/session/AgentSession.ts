@@ -42,7 +42,7 @@ import {
   ensureMultiAgentEntitlement,
   showMultiAgentUpgradePrompt,
 } from "@/agentMode/session/fanout/multiAgentEntitlement";
-import type { App, DataAdapter } from "obsidian";
+import { Notice, type App, type DataAdapter } from "obsidian";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import {
   diffTargetPaths,
@@ -67,7 +67,9 @@ import type { FanoutRunInput } from "@/agentMode/session/fanout/FanoutOrchestrat
 import { isFanout } from "@/agentMode/session/fanout/answerers";
 import {
   buildConversationHistoryBlock,
-  CONVERSATION_HISTORY_MAX_CHARS,
+  type ConversationHistoryBlock,
+  MENTION_HISTORY_MAX_CHARS,
+  SAVED_HISTORY_MAX_CHARS,
 } from "@/agentMode/session/conversationHistory";
 import {
   buildPriorFanoutContextBlock,
@@ -915,7 +917,8 @@ export class AgentSession implements ChatStateHost, ChatView {
           );
         }
 
-        const historyBlock = this.priorHistoryBlock(userMessageId);
+        const historyBlock =
+          this.priorHistoryBlock(userMessageId, MENTION_HISTORY_MAX_CHARS)?.text ?? null;
         const promptBlocks = buildPromptBlocks(
           displayText,
           context,
@@ -931,7 +934,10 @@ export class AgentSession implements ChatStateHost, ChatView {
       // A reopened chat whose agent session is gone from this device sends its saved turns once.
       // https://github.com/logancyang/obsidian-copilot/issues/3643
       const sendsSavedHistory = this.resendSavedHistory && !sendsCompact;
-      const historyBlock = sendsSavedHistory ? this.priorHistoryBlock(userMessageId) : null;
+      const savedHistory = sendsSavedHistory
+        ? this.priorHistoryBlock(userMessageId, SAVED_HISTORY_MAX_CHARS)
+        : null;
+      const historyBlock = savedHistory?.text ?? null;
       // A feature card's tool call returns before the user answers it, so the answer rides their next message.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/860
       const promptNotes = sendsCompact ? [] : this.takePromptNotes();
@@ -957,6 +963,13 @@ export class AgentSession implements ChatStateHost, ChatView {
         projectContextUpdatesBlock
       );
 
+      // The agent answers without the oldest saved messages, so the user learns why it may not know them.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+      if (savedHistory?.truncated) {
+        new Notice(
+          "This chat is too long to send in full, so the agent wasn't told its oldest messages."
+        );
+      }
       const outcome = await this.turns.submit(
         { promptId: userMessageId, prompt: promptBlocks },
         true,
@@ -1054,11 +1067,14 @@ export class AgentSession implements ChatStateHost, ChatView {
     return stopReason;
   }
 
-  private priorHistoryBlock(userMessageId: string): string | null {
+  private priorHistoryBlock(
+    userMessageId: string,
+    maxChars: number
+  ): ConversationHistoryBlock | null {
     const app = this.getApp?.();
     return buildConversationHistoryBlock(
       this.store.getDisplayMessages().filter((m) => m.id !== userMessageId),
-      CONVERSATION_HISTORY_MAX_CHARS,
+      maxChars,
       app ? getVaultBase(app) : null,
       (image) => (app ? savedChatImagePath(app, getEffectiveConversationsFolder(), image) : null)
     );

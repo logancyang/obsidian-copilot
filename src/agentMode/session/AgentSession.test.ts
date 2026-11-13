@@ -2922,6 +2922,33 @@ describe("AgentSession", () => {
           }
         });
 
+        it("tells mentioned agents at most 48,000 characters of earlier turns, dropping the oldest, without a notice", async () => {
+          const mock = makeMockBackend();
+          const runFanoutTurn = fanoutRunner(twoAgentTurn());
+          const session = makeSession(mock, { runFanoutTurn });
+          session.loadDisplayMessages(
+            Array.from({ length: 20 }, (_, i) => ({
+              id: `h${i}`,
+              sender: i % 2 === 0 ? USER_SENDER : AI_SENDER,
+              message: `turn-${i}-${"x".repeat(5_000)}`,
+              isVisible: true,
+              timestamp: null,
+            }))
+          );
+          jest.mocked(Notice).mockClear();
+
+          await session.sendPrompt("review", undefined, undefined, BOTH_AGENTS).turn;
+
+          const history = fanoutPromptText(runFanoutTurn).match(
+            /<conversation_history>[\s\S]*<\/conversation_history>/
+          )![0];
+          expect(history.length).toBeLessThan(49_000);
+          expect(history).toContain("[earlier conversation truncated]");
+          expect(history).not.toContain("turn-0-");
+          expect(history).toContain("turn-19-");
+          expect(Notice).not.toHaveBeenCalled();
+        });
+
         it("hands the turn to the fan-out runner instead of backend.prompt for an entitled user", async () => {
           const mock = makeMockBackend();
           const runFanoutTurn = fanoutRunner(
@@ -4999,6 +5026,59 @@ describe("AgentSession", () => {
         expect(promptTexts(mock)[0]).toContain(
           `<turn role="user">\nwhat does this show?\n[image attachment saved at /vault/copilot/attachments/${name}]\n</turn>`
         );
+      });
+
+      const longSavedChat = (turns: number, turnChars: number): AgentChatMessage[] =>
+        Array.from({ length: turns }, (_, i) => ({
+          id: `h${i}`,
+          sender: i % 2 === 0 ? USER_SENDER : AI_SENDER,
+          message: `turn-${i}-${"x".repeat(turnChars)}`,
+          isVisible: true,
+          timestamp: null,
+        }));
+      const sentHistory = (text: string): string =>
+        text.match(/<conversation_history>[\s\S]*<\/conversation_history>/)![0];
+      const ISSUE_908 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/908";
+      const TRIM_NOTICE =
+        "This chat is too long to send in full, so the agent wasn't told its oldest messages.";
+
+      it(`${ISSUE_908} sends a saved history longer than 48,000 characters in full and raises no notice`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(longSavedChat(20, 5_000));
+        session.resendSavedHistoryOnNextTurn();
+        jest.mocked(Notice).mockClear();
+
+        await session.sendPrompt("what came first?").turn;
+
+        const history = sentHistory(promptTexts(mock)[0]);
+        expect(history.length).toBeGreaterThan(100_000);
+        expect(history).toContain("turn-0-");
+        expect(history).toContain("turn-19-");
+        expect(history).not.toContain("[earlier conversation truncated]");
+        expect(Notice).not.toHaveBeenCalled();
+      });
+
+      it(`${ISSUE_908} drops the oldest turns past 200,000 characters and tells the user once, when the trimmed history is sent`, async () => {
+        const mock = makeMockBackend();
+        const session = makeSession(mock);
+        session.loadDisplayMessages(longSavedChat(50, 5_000));
+        session.resendSavedHistoryOnNextTurn();
+        jest.mocked(Notice).mockClear();
+
+        await session.sendPrompt("what came first?").turn;
+        await session.sendPrompt("and then?").turn;
+
+        const [first, second] = promptTexts(mock);
+        const history = sentHistory(first);
+        expect(history.length).toBeLessThan(201_000);
+        expect(history.length).toBeGreaterThan(190_000);
+        expect(history).toContain("[earlier conversation truncated]");
+        expect(history).not.toContain("turn-0-");
+        expect(history).toContain("turn-49-");
+        expect(second).toBe("and then?");
+        expect(Notice).toHaveBeenCalledTimes(1);
+        expect(Notice).toHaveBeenCalledWith(TRIM_NOTICE);
       });
 
       it("sends no conversation_history when no saved history is queued", async () => {
