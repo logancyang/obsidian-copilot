@@ -38,6 +38,13 @@ export interface ConnectorLoginTarget {
   serviceName: string;
   logoUrl?: string;
   useDynamicClientRegistration?: boolean;
+  authorizationParams?: Readonly<Record<string, string>>;
+  resultCopy?: (result: LoginOutcome) => LoginResultCopy;
+}
+
+export interface LoginResultCopy {
+  heading: string;
+  body: string;
 }
 
 export type LoginFailureReason = "cancelled-on-service" | "timed-out" | "rejected" | "unreachable";
@@ -278,6 +285,9 @@ function startLogin(
       // A login cancelled while Copilot was still contacting the service must not open the browser.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/23
       if (settled) return;
+      for (const [name, value] of Object.entries(target.authorizationParams ?? {})) {
+        url.searchParams.set(name, value);
+      }
       authorizationUrl = url;
       openUrl(url.href);
     },
@@ -400,14 +410,17 @@ async function revoke(stored: StoredLogin): Promise<void> {
   if (!response.ok) logWarn(`[Connectors] Revocation answered HTTP ${response.status}.`);
 }
 
-function connectedBadges({ serviceName, logoUrl }: ConnectorLoginTarget): string {
+const COPILOT_TILE = `<div class="tile copilot"><svg width="32" height="32" viewBox="0 0 100 100">${COPILOT_AGENT_ICON_SVG}</svg></div>`;
+
+function connectedBadges({ serviceName, logoUrl, resultCopy }: ConnectorLoginTarget): string {
+  if (resultCopy) return `<div class="badges" aria-hidden="true">${COPILOT_TILE}</div>\n`;
   const initial = escapeHtml(serviceName[0] ?? "");
   // A logo that can't load (offline, blocked, gone from the CDN) shows the letter instead: https://github.com/Brevilabs/obsidian-copilot-private/issues/855
   const serviceMark = logoUrl
     ? `<img src="${escapeHtml(logoUrl)}" alt="${initial}" width="28" height="28" onerror="this.replaceWith(this.alt)">`
     : initial;
   return `<div class="badges" aria-hidden="true">
-<div class="tile copilot"><svg width="32" height="32" viewBox="0 0 100 100">${COPILOT_AGENT_ICON_SVG}</svg></div>
+${COPILOT_TILE}
 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1f8f4e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
 <div class="tile service">${serviceMark}</div>
 </div>
@@ -418,16 +431,23 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 }
 
+function connectorResultCopy(serviceName: string, result: LoginOutcome): LoginResultCopy {
+  if (result.status === "failed") {
+    return {
+      heading: `${serviceName} login didn't finish`,
+      body: `${loginFailureMessage(result.reason, serviceName)} Go back to Obsidian and click Try again.`,
+    };
+  }
+  return {
+    heading: `${serviceName} is connected to Copilot`,
+    body: "You can close this tab and go back to Obsidian.",
+  };
+}
+
 function resultPage(target: ConnectorLoginTarget, result: LoginOutcome): string {
-  const { serviceName } = target;
-  const connected = result.status !== "failed";
-  const heading = connected
-    ? `${serviceName} is connected to Copilot`
-    : `${serviceName} login didn't finish`;
-  const body = connected
-    ? "You can close this tab and go back to Obsidian."
-    : `${loginFailureMessage(result.reason, serviceName)} Go back to Obsidian and click Try again.`;
-  const badges = connected ? connectedBadges(target) : "";
+  const { heading, body } =
+    target.resultCopy?.(result) ?? connectorResultCopy(target.serviceName, result);
+  const badges = result.status === "failed" ? "" : connectedBadges(target);
   return `<!doctype html>
 <html lang="en">
 <head>

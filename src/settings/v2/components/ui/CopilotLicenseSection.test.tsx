@@ -1,6 +1,21 @@
+import type { CopilotAccountState } from "@/copilotAccount/copilotAccount";
+import type { AccountControlProps } from "@/copilotAccount/ui/AccountControl";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { CopilotLicenseSection, type CopilotLicenseSectionProps } from "./CopilotLicenseSection";
+
+function accountIn(state: CopilotAccountState): AccountControlProps {
+  return {
+    state,
+    onSignIn: jest.fn(),
+    onOpenSignInPage: jest.fn(),
+    onCancelSignIn: jest.fn(),
+    onRefreshPlan: jest.fn(),
+    onSignOut: jest.fn(),
+  };
+}
+
+const SIGNED_OUT: CopilotAccountState = { status: "signed-out", failure: null };
 
 const KEY_FIELD_PLACEHOLDER = "Enter your license key";
 
@@ -15,6 +30,7 @@ function renderSection(overrides: Partial<CopilotLicenseSectionProps> = {}) {
     onSeePlans: jest.fn(),
     usageWindows: null,
     onRemoveLicense: jest.fn(),
+    account: null,
     ...overrides,
   };
   render(<CopilotLicenseSection {...props} />);
@@ -118,6 +134,60 @@ describe("CopilotLicenseSection", () => {
 
       expect(screen.queryByText("Inactive")).toBeNull();
       expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
+    });
+
+    it("offers Sign in at the right of the title while signed out", () => {
+      const account = accountIn(SIGNED_OUT);
+      renderSection({ account });
+
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+      expect(account.onSignIn).toHaveBeenCalledTimes(1);
+      expect(screen.getByPlaceholderText(KEY_FIELD_PLACEHOLDER)).toBeTruthy();
+    });
+
+    it("offers Sign in beside the plan badge when a license key is applied while signed out", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        account: accountIn(SIGNED_OUT),
+      });
+
+      expect(screen.getByText("plus")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
+    });
+
+    it("shows the account pill alone in place of the license badge once signed in — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        account: accountIn({
+          status: "signed-in",
+          profile: { email: "you@example.com", name: "You", image: null, plan: "free" },
+        }),
+      });
+
+      expect(screen.getByRole("button", { name: "Account, Free plan" })).toBeTruthy();
+      expect(screen.queryByText("plus")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    });
+
+    it("says why the last sign-in didn't finish and keeps the applied license", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        account: accountIn({ status: "signed-out", failure: "timed-out" }),
+      });
+
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Sign-in timed out. Try again when you're ready."
+      );
+      expect(screen.getByText("plus")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    });
+
+    it("offers no Sign in where signing in isn't available", () => {
+      renderSection({ account: null });
+
+      expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
     });
 
     it("sends the paid plans link to pricing with settings attribution — https://github.com/Brevilabs/obsidian-copilot-private/issues/640", () => {

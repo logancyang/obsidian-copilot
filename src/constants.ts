@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
+export const COPILOT_WEBSITE_ORIGIN = "https://www.obsidiancopilot.com";
 export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
 export const COPILOT_OAUTH_CLIENT_METADATA_URL =
   "https://www.obsidiancopilot.com/oauth/client-metadata.json";

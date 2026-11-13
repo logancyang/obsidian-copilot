@@ -1,5 +1,7 @@
 import type { UsageWindow } from "@/agentMode";
 import { Badge } from "@/components/ui/badge";
+import { signInFailureMessage } from "@/copilotAccount/signInMessages";
+import { AccountControl, type AccountControlProps } from "@/copilotAccount/ui/AccountControl";
 import { Button } from "@/components/ui/button";
 import { CopilotBrandIcon } from "@/components/ui/CopilotBrandIcon";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -18,6 +20,7 @@ export interface CopilotLicenseSectionProps {
   onSeePlans: () => void;
   usageWindows: readonly UsageWindow[] | null;
   onRemoveLicense: () => void;
+  account: AccountControlProps | null;
 }
 
 const LIFETIME_PLAN = "believer";
@@ -58,29 +61,40 @@ export function CopilotLicenseSection({
   onSeePlans,
   usageWindows,
   onRemoveLicense,
+  account,
 }: CopilotLicenseSectionProps) {
   const status = isApplying ? "none" : license.status;
+  // Once signed in, the account pill is the section's only plan label. https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+  const showsLicenseBadge = account?.state.status !== "signed-in";
+  const signInFailure = account?.state.status === "signed-out" ? account.state.failure : null;
 
   return (
     <section className="tw-flex tw-flex-col tw-gap-3 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
-      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+      <div className="tw-flex tw-flex-wrap tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-2 tw-text-lg tw-font-semibold">
           <span className="tw-flex tw-size-8 tw-items-center tw-justify-center tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary">
             <CopilotBrandIcon className="tw-size-5 tw-text-normal" />
           </span>
           Copilot license
         </div>
-        <div className="tw-flex tw-items-center tw-gap-2">
-          {status === "active" && (
+        <div className="tw-ml-auto tw-flex tw-flex-wrap tw-items-center tw-justify-end tw-gap-2">
+          {showsLicenseBadge && status === "active" && (
             <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
               {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
             </Badge>
           )}
-          {status === "inactive" && (
+          {showsLicenseBadge && status === "inactive" && (
             <Badge className="tw-rounded-full tw-bg-error tw-text-error">Inactive</Badge>
           )}
+          {account && <AccountControl {...account} />}
         </div>
       </div>
+
+      {signInFailure && (
+        <div role="alert" className="tw-text-sm tw-text-error">
+          {signInFailureMessage(signInFailure)}
+        </div>
+      )}
 
       <div className="tw-text-sm tw-text-muted">
         <ProductLink href={createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "settings")}>
