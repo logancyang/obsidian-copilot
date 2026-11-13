@@ -14,7 +14,7 @@ A project now opens on a **Files** tab, so you can see what is in it without dig
 
 ![The Files tab of a project home in Agent Chat, showing the Project folder tree with the research folder expanded, a Linked section with a folder, a note, the #launch tag with 5 notes, the property status: active with 4 notes and a web link, and Link context at the bottom](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/project-files-4330f033.png)
 
-Give a project more to work from by linking notes, folders, tags, properties and web links with **Link context**, or by dropping notes and folders on the tab. A linked tag or property always shows the notes it covers right now. Agents also read the project's description, so they start each chat knowing what the project is for. ([#4058](https://github.com/logancyang/obsidian-copilot/pull/4058), [#4061](https://github.com/logancyang/obsidian-copilot/pull/4061), [#4068](https://github.com/logancyang/obsidian-copilot/pull/4068), [#4076](https://github.com/logancyang/obsidian-copilot/pull/4076), [#4077](https://github.com/logancyang/obsidian-copilot/pull/4077), [#4321](https://github.com/logancyang/obsidian-copilot/pull/4321), [#4281](https://github.com/logancyang/obsidian-copilot/pull/4281), @zeroliu)
+Give a project more to work from by linking notes, folders, tags, properties and web links with **Link context**, or by dropping notes and folders on the tab. A linked tag or property always shows the notes it covers right now. Agents also read the project's description, so they start each chat knowing what the project is for. ([#4058](https://github.com/logancyang/obsidian-copilot/pull/4058), [#4061](https://github.com/logancyang/obsidian-copilot/pull/4061), [#4068](https://github.com/logancyang/obsidian-copilot/pull/4068), [#4076](https://github.com/logancyang/obsidian-copilot/pull/4076), [#4077](https://github.com/logancyang/obsidian-copilot/pull/4077), [#4321](https://github.com/logancyang/obsidian-copilot/pull/4321), [#4281](https://github.com/logancyang/obsidian-copilot/pull/4281), [#4054](https://github.com/logancyang/obsidian-copilot/pull/4054), [#4078](https://github.com/logancyang/obsidian-copilot/pull/4078), [#4294](https://github.com/logancyang/obsidian-copilot/pull/4294), [#4302](https://github.com/logancyang/obsidian-copilot/pull/4302), [#4322](https://github.com/logancyang/obsidian-copilot/pull/4322), [#4324](https://github.com/logancyang/obsidian-copilot/pull/4324), @zeroliu)
 
 ## ✨ Enhancements
 
@@ -38,8 +38,7 @@ Give a project more to work from by linking notes, folders, tags, properties and
 
 ## 🛠️ Bug Fixes
 
-- A chat you reopen keeps the model and effort it last ran on. ([#4285](https://github.com/logancyang/obsidian-copilot/pull/4285), @zeroliu)
-- A chat you reopen shows the images and notes you attached, with each message's original time. ([#4337](https://github.com/logancyang/obsidian-copilot/pull/4337), @zeroliu)
+- A chat you reopen keeps the model and effort it last ran on, and shows the images and notes you attached. ([#4285](https://github.com/logancyang/obsidian-copilot/pull/4285), [#4337](https://github.com/logancyang/obsidian-copilot/pull/4337), @zeroliu)
 - Agent chats ask you to **Reload** only when their settings changed. ([#4286](https://github.com/logancyang/obsidian-copilot/pull/4286), @zeroliu)
 - A saved chat appears once in chat history after its project folder is renamed. ([#4287](https://github.com/logancyang/obsidian-copilot/pull/4287), @zeroliu)
 - Models from the Perplexity provider reply in Quick Chat. ([#4266](https://github.com/logancyang/obsidian-copilot/pull/4266), @zeroliu)
