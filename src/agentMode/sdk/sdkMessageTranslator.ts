@@ -43,6 +43,7 @@ export interface TranslatorState {
   tasks: ClaudeTaskTracker;
   claudeTasks: ClaudeTaskPlanState;
   lastAssistantUsage?: AssistantUsageSample;
+  streamedMessageId?: string;
   compactionTrigger: CompactionTrigger;
   openCompaction?: { id: string; trigger: CompactionTrigger };
 }
@@ -239,9 +240,12 @@ function translateStreamEvent(
     | { type: "content_block_stop"; index: number };
 
   switch (sdkEvent.type) {
-    case "message_start":
+    case "message_start": {
       state.toolUseBlocks.clear();
+      const id = (sdkEvent.message as { id?: unknown } | undefined)?.id;
+      if (parentToolUseId === undefined && typeof id === "string") state.streamedMessageId = id;
       return [];
+    }
     case "content_block_start": {
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
@@ -374,6 +378,7 @@ function translateAssistantMessage(
 ): SessionEvent[] {
   const out: SessionEvent[] = [];
   const message = msg.message as {
+    id: string;
     content?: unknown;
     model?: string;
     usage?: {
@@ -389,6 +394,11 @@ function translateAssistantMessage(
   }
   const content = message.content;
   if (!Array.isArray(content)) return out;
+  // Claude Code resends a reply whole after its stream goes silent, so text that never streamed comes from here; its own notices reach the user through the turn result. https://github.com/logancyang/obsidian-copilot/issues/4259
+  const neverStreamed = message.id !== state.streamedMessageId && message.model !== "<synthetic>";
+  if (parentToolUseId === undefined && neverStreamed) {
+    out.push(...replayAssistantText(content, sessionId));
+  }
   // A subagent's turns arrive whole, never as stream deltas, so its text comes from here. https://github.com/Brevilabs/obsidian-copilot-private/issues/175
   if (parentToolUseId !== undefined) {
     out.push(...replayAssistantText(content, sessionId));

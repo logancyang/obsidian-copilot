@@ -502,6 +502,50 @@ describe("claudeLiveQuery", () => {
         }
       });
 
+      it("https://github.com/logancyang/obsidian-copilot/issues/4259 keeps the interrupted reply's closing frames in the stalled turn, so no second turn opens with Claude's interrupt error", async () => {
+        jest.useFakeTimers();
+        try {
+          const { live, fake, recorder } = startLive(1_000);
+          live.push("prompt-1", "hi");
+          fake.echo(await fake.nextInput());
+          fake.emit(textDelta("half a sent"));
+          await recorder.waitFor("agent_message_chunk");
+
+          jest.advanceTimersByTime(1_000);
+          await recorder.waitFor("turn_ended");
+          fake.emit(
+            {
+              type: "assistant",
+              message: {
+                id: "msg-1",
+                role: "assistant",
+                content: [{ type: "text", text: "half" }],
+              },
+              parent_tool_use_id: null,
+              uuid: "uuid-assistant",
+              session_id: "irrelevant",
+            } as unknown as SDKMessage,
+            resultFrame({
+              subtype: "error_during_execution",
+              errors: ["[ede_diagnostic] result_type=user"],
+            })
+          );
+          live.push("prompt-2", "again");
+          fake.echo(await fake.nextInput(1));
+          await recorder.waitFor("message_delivered", (u) => u.promptId === "prompt-2");
+
+          expect(lifecycle(recorder.updates())).toEqual([
+            "delivered prompt-1",
+            "turn_started",
+            `turn_ended error: ${SDK_STREAM_STALL_MESSAGE}`,
+            "delivered prompt-2",
+            "turn_started",
+          ]);
+        } finally {
+          jest.useRealTimers();
+        }
+      });
+
       it(`closes the query and reports the disconnect when a stalled turn's interrupt gets no result either (${ISSUE_175})`, async () => {
         jest.useFakeTimers();
         try {

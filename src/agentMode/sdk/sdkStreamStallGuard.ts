@@ -1,10 +1,11 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
-export const SDK_STREAM_STALL_TIMEOUT_MS = 60_000;
+// Claude Code retries a silent stream itself after 3 to 5 minutes, so this backstop waits longer and never ends a reply Claude would still finish. https://github.com/logancyang/obsidian-copilot/issues/4259
+export const SDK_STREAM_STALL_TIMEOUT_MS = 10 * 60_000;
 
 export const SDK_STREAM_STALL_MESSAGE =
   `Claude stopped responding — the response stream stalled mid-reply (no output for ` +
-  `${SDK_STREAM_STALL_TIMEOUT_MS / 1000}s) and the turn was ended. Send your message again to continue.`;
+  `${SDK_STREAM_STALL_TIMEOUT_MS / 60_000} minutes) and the turn was ended. Send your message again to continue.`;
 
 function streamEventType(msg: SDKMessage): string | null {
   if (msg.type !== "stream_event") return null;
