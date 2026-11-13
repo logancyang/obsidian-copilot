@@ -65,8 +65,10 @@ jest.mock("@/agentMode", () => ({
 }));
 
 import {
+  applyAccountLicense,
   applyEntitlement,
   applyLicenseSettings,
+  isAccountLicense,
   isUsingLicensedModels,
   checkIsPaidUser,
   ensureEntitlement,
@@ -83,6 +85,7 @@ import {
   useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
+import { sha256 } from "@/utils/hash";
 import { renderHook, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 
@@ -622,7 +625,7 @@ describe("plusUtils", () => {
   });
 
   describe("removeLicense()", () => {
-    it("clears the stored key and its entitlement in one settings write", () => {
+    it("clears the stored key, its entitlement and any account mark in one settings write", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true, isPlusUser: true }));
 
       removeLicense();
@@ -630,6 +633,76 @@ describe("plusUtils", () => {
       expect(mockSetSettings).toHaveBeenCalledTimes(1);
       expect(mockSetSettings).toHaveBeenCalledWith({
         plusLicenseKey: "",
+        accountLicenseKeyHash: "",
+        isPaidUser: false,
+        isPlusUser: false,
+        entitlementToken: "",
+        entitlementExpiresAt: 0,
+      });
+    });
+  });
+
+  describe("isAccountLicense()", () => {
+    it("is true for the exact key the account applied", () => {
+      expect(
+        isAccountLicense({
+          plusLicenseKey: "account-key",
+          accountLicenseKeyHash: sha256("account-key"),
+        })
+      ).toBe(true);
+    });
+
+    it("is false for a key the user put in place of the account's, so it is never removed with the plan — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      expect(
+        isAccountLicense({
+          plusLicenseKey: "pasted-key",
+          accountLicenseKeyHash: sha256("account-key"),
+        })
+      ).toBe(false);
+    });
+
+    it("is false with no key stored, and for settings from versions without the account mark", () => {
+      expect(isAccountLicense({ plusLicenseKey: "", accountLicenseKeyHash: sha256("") })).toBe(
+        false
+      );
+      expect(isAccountLicense({ plusLicenseKey: "account-key" })).toBe(false);
+    });
+  });
+
+  describe("applyAccountLicense()", () => {
+    it("saves the account mark before the key, so a restart between the two writes never leaves the account's key looking pasted — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      applyAccountLicense("account-key");
+
+      expect(mockSetSettings.mock.calls).toEqual([
+        [{ accountLicenseKeyHash: sha256("account-key") }],
+        [{ plusLicenseKey: "account-key" }],
+      ]);
+    });
+  });
+
+  describe("turnOffPaid()", () => {
+    it("removes a license the account applied together with its entitlement — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({
+          plusLicenseKey: "account-key",
+          accountLicenseKeyHash: sha256("account-key"),
+          isPaidUser: true,
+        })
+      );
+
+      turnOffPaid();
+
+      expect(mockSetSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ plusLicenseKey: "", isPaidUser: false, entitlementToken: "" })
+      );
+    });
+
+    it("clears only the entitlement of a pasted key, leaving the key to fix or replace", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true }));
+
+      turnOffPaid();
+
+      expect(mockSetSettings).toHaveBeenCalledWith({
         isPaidUser: false,
         isPlusUser: false,
         entitlementToken: "",

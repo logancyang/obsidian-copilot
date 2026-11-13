@@ -5,13 +5,35 @@ import {
   CopilotAccount,
   type AccountProfile,
   type CopilotAccountState,
+  type LicenseNotice,
 } from "@/copilotAccount/copilotAccount";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { FAKE_SERVICE_ORIGIN, FakeOAuthService } from "@/connectors/oauth/testing/fakeOAuthService";
+import { applyAccountLicense, checkIsPaidUser, removeLicense } from "@/plusUtils";
+import { getSettings, setSettings } from "@/settings/model";
 import { get as httpGet } from "node:http";
 import * as obsidian from "obsidian";
+import type { App, RequestUrlParam } from "obsidian";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
+
+const mockOpenWelcome = jest.fn();
+jest.mock("@/components/modals/CopilotPlusWelcomeModal", () => ({
+  CopilotPlusWelcomeModal: class {
+    open() {
+      mockOpenWelcome();
+    }
+  },
+}));
+
+const mockOpenExpired = jest.fn();
+jest.mock("@/components/modals/CopilotPlusExpiredModal", () => ({
+  CopilotPlusExpiredModal: class {
+    open() {
+      mockOpenExpired();
+    }
+  },
+}));
 
 const setRequestUrlImpl = (obsidian as unknown as { __setRequestUrlImpl: (impl: unknown) => void })
   .__setRequestUrlImpl;
@@ -22,11 +44,19 @@ const INSTALL_ID = "0b7f1c5e-3f7a-4c2e-9d4b-1a2b3c4d5e6f";
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
+const ONE_MINUTE_MS = 60 * 1000;
+const RECHECK_INTERVAL_MS = 10 * 1000;
+const ACCOUNT_KEY = "account-issued-key";
+const PASTED_KEY = "pasted-key";
+const APP = {} as App;
+
 const FREE_PROFILE: AccountProfile = {
   email: "you@example.com",
   name: "Your Name",
   plan: "free",
 };
+
+const PLUS_PROFILE: AccountProfile = { ...FREE_PROFILE, plan: "plus" };
 
 interface PageVisit {
   status: number;
@@ -70,6 +100,47 @@ function fakeBrowser() {
   };
 }
 
+function fakeWindow(): Window & { returnToObsidian: () => void } {
+  const target = new EventTarget();
+  return Object.assign(target, {
+    setInterval,
+    clearInterval,
+    setTimeout,
+    clearTimeout,
+    returnToObsidian: () => void target.dispatchEvent(new Event("focus")),
+  }) as unknown as Window & { returnToObsidian: () => void };
+}
+
+function nextUpdate(account: CopilotAccount): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = account.subscribe(() => {
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+function untilState(
+  account: CopilotAccount,
+  isReached: (state: CopilotAccountState) => boolean
+): Promise<void> {
+  return new Promise((resolve) => {
+    const unsubscribe = account.subscribe(() => {
+      if (!isReached(account.getSnapshot())) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
+function paidAccount(service: FakeOAuthService): Record<string, unknown> {
+  return { ...service.account, plan: "plus", licenseKey: ACCOUNT_KEY };
+}
+
+function freeAccount(service: FakeOAuthService): Record<string, unknown> {
+  return { ...service.account, plan: "free", licenseKey: null };
+}
+
 const accounts: CopilotAccount[] = [];
 
 function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = {}) {
@@ -77,12 +148,23 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
     supportsClientMetadataDocuments: true,
     publishesRevocation: true,
   });
-  setRequestUrlImpl(service.requestUrl);
+  const licenseServer = { refuses: false };
+  setRequestUrlImpl(async (request: RequestUrlParam) => {
+    if (!request.url.endsWith("/license")) return service.requestUrl(request);
+    return licenseServer.refuses
+      ? {
+          status: 403,
+          headers: {},
+          json: { detail: { reason: "Invalid license key", error: "INVALID_LICENSE" } },
+        }
+      : { status: 200, headers: {}, json: { is_valid: true, plan: "plus" } };
+  });
   const keychain = fakeKeychain();
   const browser = fakeBrowser();
 
   function createAccount(): CopilotAccount {
     const account = new CopilotAccount({
+      app: APP,
       auth: new ConnectorAuth({ keychain, openUrl: browser.open }),
       websiteOrigin: FAKE_SERVICE_ORIGIN,
       installId,
@@ -107,14 +189,36 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
     return page;
   }
 
-  return { service, keychain, browser, account, createAccount, startSignIn, signIn };
+  return {
+    service,
+    licenseServer,
+    keychain,
+    browser,
+    account,
+    createAccount,
+    startSignIn,
+    signIn,
+  };
 }
 
-function signedIn(profile: AccountProfile | null): CopilotAccountState {
-  return { status: "signed-in", profile };
+function signedIn(
+  profile: AccountProfile | null,
+  notice: LicenseNotice | null = null
+): CopilotAccountState {
+  return { status: "signed-in", profile, notice };
+}
+
+function pasteLicenseKey(): void {
+  setSettings({ plusLicenseKey: PASTED_KEY, isPaidUser: true });
 }
 
 describe("copilotAccount", () => {
+  beforeEach(() => {
+    removeLicense();
+    mockOpenWelcome.mockClear();
+    mockOpenExpired.mockClear();
+  });
+
   afterEach(() => {
     for (const account of accounts.splice(0)) account.dispose();
     jest.useRealTimers();
@@ -135,6 +239,42 @@ describe("copilotAccount", () => {
         const afterRestart = createAccount();
 
         expect(afterRestart.getSnapshot()).toEqual(signedIn(null));
+      });
+
+      it("removes the account's license when a restart finds this device's login gone, as the interrupted Sign out would have — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+        const { createAccount } = setUp();
+        applyAccountLicense(ACCOUNT_KEY);
+
+        const afterRestart = createAccount();
+
+        expect(afterRestart.getSnapshot()).toEqual({ status: "signed-out", failure: null });
+        expect(getSettings().plusLicenseKey).toBe("");
+      });
+
+      it("keeps a pasted license key when a restart finds no login", () => {
+        const { createAccount } = setUp();
+        pasteLicenseKey();
+
+        createAccount();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+      });
+
+      it("shows Free and says the plan ended, still signed in, when a paid feature is refused because the account's license is no longer valid — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, keychain, licenseServer, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+        licenseServer.refuses = true;
+
+        await checkIsPaidUser(APP, { trigger: "tool_call" });
+
+        expect(account.getSnapshot()).toEqual(
+          signedIn({ ...PLUS_PROFILE, plan: "free" }, { kind: "ended", plan: "plus" })
+        );
+        expect(getSettings().plusLicenseKey).toBe("");
+        expect(getSettings().isPaidUser).toBe(false);
+        expect(mockOpenExpired).toHaveBeenCalledTimes(1);
+        expect([...keychain.secrets.keys()]).toEqual([LOGIN_KEYCHAIN_ID]);
       });
     });
 
@@ -234,6 +374,38 @@ describe("copilotAccount", () => {
         });
       });
 
+      it("applies a paid account's license key at sign-in, quietly, as the first sign-in on a paid plan shows no confirmation — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        service.account = paidAccount(service);
+
+        await signIn();
+
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+      });
+
+      it("applies no license when a free account signs in", async () => {
+        const { signIn } = setUp();
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe("");
+        expect(getSettings().isPaidUser).toBe(false);
+      });
+
+      it("leaves a pasted license key in place when a paid account signs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        pasteLicenseKey();
+        service.account = paidAccount(service);
+
+        await signIn();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+      });
+
       it("clears the previous failure when the user tries again", async () => {
         const { account, startSignIn } = setUp();
         const first = await startSignIn();
@@ -274,14 +446,93 @@ describe("copilotAccount", () => {
     });
 
     describe("refreshProfile()", () => {
-      it("shows the plan the account has now", async () => {
+      it("applies the license, confirms it under the plan's name and opens the welcome when a signed-in free account turns paid — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
         const { account, service, signIn } = setUp();
         await signIn();
-        service.account = { ...service.account, plan: "plus", licenseKey: "key-1" };
+        service.account = paidAccount(service);
 
         await account.refreshProfile();
 
-        expect(account.getSnapshot()).toEqual(signedIn({ ...FREE_PROFILE, plan: "plus" }));
+        expect(account.getSnapshot()).toEqual(
+          signedIn(PLUS_PROFILE, { kind: "applied", plan: "plus" })
+        );
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
+      });
+
+      it("keeps the account's license as it is, without a confirmation, when a restart finds the same paid plan", async () => {
+        const { service, signIn, createAccount } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+        const afterRestart = createAccount();
+
+        await afterRestart.refreshProfile();
+
+        expect(afterRestart.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+      });
+
+      it("removes the account's license, says the plan ended and opens the plan-expired dialog when the account turns free, keeping the login — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, keychain, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+        service.account = freeAccount(service);
+
+        await account.refreshProfile();
+
+        expect(account.getSnapshot()).toEqual(
+          signedIn(FREE_PROFILE, { kind: "ended", plan: "plus" })
+        );
+        expect(getSettings().plusLicenseKey).toBe("");
+        expect(getSettings().isPaidUser).toBe(false);
+        expect(mockOpenExpired).toHaveBeenCalledTimes(1);
+        expect([...keychain.secrets.keys()]).toEqual([LOGIN_KEYCHAIN_ID]);
+      });
+
+      it("says a plan ended without naming it when the first read after a restart finds the account free — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { service, signIn, createAccount } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+        service.account = freeAccount(service);
+        const afterRestart = createAccount();
+
+        await afterRestart.refreshProfile();
+
+        expect(afterRestart.getSnapshot()).toEqual(
+          signedIn(FREE_PROFILE, { kind: "ended", plan: null })
+        );
+        expect(getSettings().plusLicenseKey).toBe("");
+      });
+
+      it("leaves a pasted license key in place while the account's plan changes — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        pasteLicenseKey();
+        await signIn();
+
+        service.account = paidAccount(service);
+        await account.refreshProfile();
+        service.account = freeAccount(service);
+        await account.refreshProfile();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
+        expect(mockOpenExpired).not.toHaveBeenCalled();
+      });
+
+      it("takes a key the user replaced the account's with as pasted — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+        setSettings({ plusLicenseKey: PASTED_KEY });
+        service.account = freeAccount(service);
+
+        await account.refreshProfile();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
       });
 
       it("reads the account after a restart with the login this device kept", async () => {
@@ -317,8 +568,9 @@ describe("copilotAccount", () => {
         expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
       });
 
-      it("returns to signed out and drops the login when the website has ended it", async () => {
+      it("returns to signed out, dropping the login and the account's license, when the website has ended it — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
         const { account, keychain, service, signIn } = setUp();
+        service.account = paidAccount(service);
         await signIn();
         service.rejectAccessTokens();
         service.rejectRefreshTokens();
@@ -327,16 +579,21 @@ describe("copilotAccount", () => {
 
         expect(account.getSnapshot()).toEqual({ status: "signed-out", failure: null });
         expect(keychain.secrets.size).toBe(0);
+        expect(getSettings().plusLicenseKey).toBe("");
       });
 
-      it("keeps showing the last plan read when the website can't be reached", async () => {
+      it("keeps the license and the last plan read when the website can't be reached — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
         const { account, service, signIn } = setUp();
+        service.account = paidAccount(service);
         await signIn();
+        service.account = freeAccount(service);
         service.unreachable = true;
 
         await account.refreshProfile();
 
-        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
       });
 
       it("keeps the last plan read when the website answers with something other than an account", async () => {
@@ -386,6 +643,30 @@ describe("copilotAccount", () => {
         await expect(revocation).resolves.toMatch(/^refresh-/);
       });
 
+      it("removes the license that came from the account — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        await signIn();
+
+        await account.signOut();
+
+        expect(getSettings().plusLicenseKey).toBe("");
+        expect(getSettings().isPaidUser).toBe(false);
+        expect(mockOpenExpired).not.toHaveBeenCalled();
+      });
+
+      it("leaves a pasted license key in place — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        pasteLicenseKey();
+        service.account = paidAccount(service);
+        await signIn();
+
+        await account.signOut();
+
+        expect(getSettings().plusLicenseKey).toBe(PASTED_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+      });
+
       it("stays signed out when an account read in flight finishes after signing out", async () => {
         const { account, signIn } = setUp();
         await signIn();
@@ -398,7 +679,112 @@ describe("copilotAccount", () => {
       });
     });
 
+    describe("watchForPurchase()", () => {
+      it("picks up a purchase as soon as the user returns to Obsidian — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        const win = fakeWindow();
+        account.watchForPurchase(win);
+        service.account = paidAccount(service);
+
+        const applied = untilState(
+          account,
+          (state) => state.status === "signed-in" && !!state.notice
+        );
+        win.returnToObsidian();
+        await applied;
+
+        expect(account.getSnapshot()).toEqual(
+          signedIn(PLUS_PROFILE, { kind: "applied", plan: "plus" })
+        );
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
+      });
+
+      it("keeps checking the account every 10 seconds for one minute after the return, then stops — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const win = fakeWindow();
+        const reads = () => service.requestsTo("/api/plugin/account").length;
+        const readsBefore = reads();
+        account.watchForPurchase(win);
+
+        const firstRead = nextUpdate(account);
+        win.returnToObsidian();
+        await firstRead;
+        for (let elapsed = 0; elapsed < ONE_MINUTE_MS; elapsed += RECHECK_INTERVAL_MS) {
+          const recheck = nextUpdate(account);
+          jest.advanceTimersByTime(RECHECK_INTERVAL_MS);
+          await recheck;
+        }
+
+        expect(reads() - readsBefore).toBe(7);
+        expect(jest.getTimerCount()).toBe(0);
+      });
+
+      it("waits for the return to Obsidian before checking", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const readsBefore = service.requestsTo("/api/plugin/account").length;
+
+        account.watchForPurchase(fakeWindow());
+
+        expect(jest.getTimerCount()).toBe(0);
+        expect(service.requestsTo("/api/plugin/account")).toHaveLength(readsBefore);
+      });
+
+      it("stops checking once the purchase is found", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const win = fakeWindow();
+        account.watchForPurchase(win);
+        service.account = paidAccount(service);
+
+        const applied = untilState(
+          account,
+          (state) => state.status === "signed-in" && !!state.notice
+        );
+        win.returnToObsidian();
+        await applied;
+
+        expect(jest.getTimerCount()).toBe(0);
+      });
+
+      it("stops checking when the user signs out", async () => {
+        const { account, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const win = fakeWindow();
+        account.watchForPurchase(win);
+        const firstRead = nextUpdate(account);
+        win.returnToObsidian();
+        await firstRead;
+
+        await account.signOut();
+
+        expect(jest.getTimerCount()).toBe(0);
+      });
+    });
+
     describe("dispose()", () => {
+      it("stops checking for a purchase when the plugin unloads", async () => {
+        const { account, signIn } = setUp();
+        await signIn();
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const win = fakeWindow();
+        account.watchForPurchase(win);
+        const firstRead = nextUpdate(account);
+        win.returnToObsidian();
+        await firstRead;
+
+        account.dispose();
+
+        expect(jest.getTimerCount()).toBe(0);
+      });
+
       it("cancels a sign-in in progress so its browser page stops answering", async () => {
         const { account, startSignIn } = setUp();
         const { signingIn, signInUrl } = await startSignIn();

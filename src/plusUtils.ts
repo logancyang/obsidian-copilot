@@ -14,6 +14,7 @@ import {
   useSettingsValue,
 } from "@/settings/model";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
+import { sha256 } from "@/utils/hash";
 import { App, Notice } from "obsidian";
 import React from "react";
 
@@ -294,14 +295,38 @@ function clearEntitlement(): void {
   setSettings(CLEARED_ENTITLEMENT);
 }
 
+// The mark is the key's hash, not a flag: data.json syncs across devices while each keeps its own key, and
+// only the exact key the account issued may match, never a pasted one. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+export function isAccountLicense(
+  settings: Pick<CopilotSettings, "plusLicenseKey" | "accountLicenseKeyHash">
+): boolean {
+  return (
+    settings.plusLicenseKey !== "" &&
+    settings.accountLicenseKeyHash === sha256(settings.plusLicenseKey)
+  );
+}
+
+export function applyAccountLicense(licenseKey: string): void {
+  // The mark is saved before the key so a restart between the writes cannot leave the account's key looking pasted.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+  setSettings({ accountLicenseKeyHash: sha256(licenseKey) });
+  setSettings({ plusLicenseKey: licenseKey });
+}
+
 export function removeLicense(): void {
-  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "" });
+  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "", accountLicenseKeyHash: "" });
 }
 
 export function turnOffPaid(app?: App): void {
-  const previousIsPaidUser = getSettings().isPaidUser;
-  clearEntitlement();
-  if (previousIsPaidUser && app) {
+  const settings = getSettings();
+  // A refused license from the account goes with its plan; a pasted key stays for the user to fix.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+  if (isAccountLicense(settings)) {
+    removeLicense();
+  } else {
+    clearEntitlement();
+  }
+  if (settings.isPaidUser && app) {
     new CopilotPlusExpiredModal(app).open();
   }
 }

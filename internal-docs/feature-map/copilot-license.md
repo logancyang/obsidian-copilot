@@ -10,7 +10,10 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 - account-sign-in-failure: a cancelled, failed or timed-out sign-in says what happened under the title and leaves any applied license as it was.
 - account-pill: once signed in, that spot is one pill with the account's initial and its plan: `Free`, `Lite`, `Plus` or `Lifetime`. The plan badge is gone.
 - account-menu: the pill opens a menu with the account's email, `Dashboard`, `Refresh plan` and `Sign out`. `Refresh plan` reads the account's plan again.
-- account-sign-out: `Sign out` brings back `Sign in` and ends the sign-in on the website too. A pasted license key stays.
+- account-license: signing in to a paid account applies its license with no key to paste: the pill shows the plan and the usage line shows without `Remove license`. A license key the user pasted stays and is never replaced.
+- account-upgrade: a signed-in free user who buys a plan after `See plans` finds it applied on returning to Obsidian: the pill shows the plan, `You're on Plus. Your license was applied from your account.` shows under the description, and the welcome opens.
+- account-plan-ended: when the account's plan ends, or a paid feature is refused because its license is no longer valid, the account's license is removed. The user stays signed in, the pill reads `Free`, the key row returns, `Your Plus plan has ended. You're still signed in, now on the free plan.` shows, and the plan-expired dialog opens.
+- account-sign-out: `Sign out` brings back `Sign in` and ends the sign-in on the website too. It removes the license that came from the account; a pasted license key stays.
 - license-key-row: while no license is active, the section ends with `Enter your license key`, `Apply` and `See plans`. `See plans` opens the pricing page.
 - license-apply: `Apply` checks the key. A key that works shows the plan badge and a welcome; one that does not reads `Invalid license key` and the badge `Inactive`.
 - license-badge: an active license shows its plan at the right of the title, `Lifetime` for a lifetime purchase.
@@ -28,7 +31,10 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 - Signing in: choose `Sign in` and leave the browser page open. The section reads `Finish signing in in your browser`; `Open page` opens the same page again and `Cancel` brings back `Sign in` with `Sign-in cancelled.`
 - Account menu: choose the pill. The menu shows the account's email, `Dashboard`, `Refresh plan` and `Sign out`.
 - Refresh plan: change the account's plan on the website, then choose `Refresh plan`. The pill shows the new plan.
-- Sign out: choose `Sign out` from the menu. `Sign in` returns, and a pasted license key keeps its badge.
+- Account license: sign in to a paid account. The pill shows the plan, the key row is gone, and the usage line shows without `Remove license`.
+- Upgrade: signed in on a free account, choose `See plans`, buy a plan on the website, and go back to Obsidian. Within a minute the pill shows the plan, the confirmation line shows, and the welcome opens.
+- Plan ended: signed in on a paid account, end the plan on the website, then choose `Refresh plan`. The pill reads `Free`, the ended line shows, the key row returns, and the plan-expired dialog opens.
+- Sign out: choose `Sign out` from the menu. `Sign in` returns and the account's license is gone; a pasted license key keeps its badge.
 - Key row: with no license applied, open the Basic tab. The key row shows with `See plans`, and the Agents settings below are in view without scrolling.
 - Apply: enter a valid key and choose `Apply`. The plan badge shows, the key row is gone, and the usage line shows.
 - Invalid key: enter a wrong key and choose `Apply`. `Invalid license key` shows under the key row and the badge reads `Inactive`.
@@ -37,8 +43,9 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 
 ## Gotchas
 
-- The sign-in stays across restarts. The account's plan is read each time the settings open; a sign-in the website has ended shows as signed out at the next read.
-- The account's plan only labels the pill; a paid account still needs its license key applied for paid features.
+- The sign-in stays across restarts. The account is read when Obsidian starts, each time the settings open, on `Refresh plan`, with the daily license check, and for one minute after `See plans` once the user is back in Obsidian. A purchase that lands later shows at the next of these. A sign-in the website has ended shows as signed out at the next read, and its license goes with it.
+- A pasted key wins over the account: with one active, the pill shows the account's plan while the usage line and `Remove license` belong to the pasted key, whatever the account's plan.
+- When the website can't be reached, the license and the pill stay as they were.
 - Mobile shows no `Sign in`.
 - Usage is read each time the settings open; it does not update while they stay open.
 - Once applied, a key cannot be shown again in settings. Users who need it copy it from their Copilot dashboard.

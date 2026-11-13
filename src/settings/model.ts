@@ -43,6 +43,7 @@ export interface LegacyCommandSettings {
 export interface CopilotSettings {
   userId: string;
   plusLicenseKey: string;
+  accountLicenseKeyHash?: string;
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;

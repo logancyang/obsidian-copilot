@@ -1185,6 +1185,20 @@ describe("model", () => {
       expect(after.entitlementToken).toBe(DEFAULT_SETTINGS.entitlementToken);
     });
 
+    it("keeps the account's mark beside the license key it keeps, so the account's license never turns into a pasted one — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      settingsStore.set(settingsAtom, {
+        ...DEFAULT_SETTINGS,
+        plusLicenseKey: "account-key",
+        accountLicenseKeyHash: "account-key-hash",
+      });
+
+      resetSettings();
+
+      const after = settingsStore.get(settingsAtom);
+      expect(after.plusLicenseKey).toBe("account-key");
+      expect(after.accountLicenseKeyHash).toBe("account-key-hash");
+    });
+
     it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
