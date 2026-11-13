@@ -11,6 +11,7 @@ export interface AttachToChatOptions {
   setContextNotes: (update: (prev: TFile[]) => TFile[]) => void;
   acceptAnyFileType?: boolean;
   projectFolderPath?: string;
+  onAddFolders?: (folderPaths: string[]) => void;
 }
 
 export const CONTEXT_FILE_ACCEPT = [
@@ -97,14 +98,16 @@ export async function attachToChat(
   incoming: VaultSplit,
   options: AttachToChatOptions
 ): Promise<void> {
-  const folderNames = [
-    ...incoming.vaultItems.filter((item) => item instanceof TFolder).map((folder) => folder.name),
-    ...incoming.outsideFolderNames,
-  ];
-  if (folderNames.length > 0) {
-    // Chat attaches files only until folders can be mentioned in a message.
+  const folderPaths = incoming.vaultItems
+    .filter((item) => item instanceof TFolder)
+    .map((folder) => folder.path);
+  if (folderPaths.length > 0) options.onAddFolders?.(folderPaths);
+  if (incoming.outsideFolderNames.length > 0) {
+    // A message mentions a folder by its vault path, which a folder from the computer does not have.
     // https://github.com/logancyang/obsidian-copilot/issues/3858
-    new Notice(`Folders can't be attached to a message: ${folderNames.join(", ")}`);
+    new Notice(
+      `Folders from outside the vault can't be added to a message: ${incoming.outsideFolderNames.join(", ")}`
+    );
   }
   const files = [
     ...incoming.vaultItems.filter((item): item is TFile => item instanceof TFile),

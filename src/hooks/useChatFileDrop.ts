@@ -1,4 +1,5 @@
 import { attachToChat } from "@/components/chat-components/attachToChat";
+import { useChatInput } from "@/context/ChatInputContext";
 import { splitByVault } from "@/utils/splitByVault";
 import { App, TFile } from "obsidian";
 import { RefObject, useEffect, useState } from "react";
@@ -29,6 +30,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
     acceptAnyFileType = false,
     projectFolderPath,
   } = props;
+  const { insertFolderPills } = useChatInput();
   const [isDragActive, setIsDragActive] = useState(false);
 
   useEffect(() => {
@@ -84,6 +86,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         setContextNotes,
         acceptAnyFileType,
         projectFolderPath,
+        onAddFolders: insertFolderPills,
       });
     };
 
@@ -109,6 +112,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
     containerRef,
     acceptAnyFileType,
     projectFolderPath,
+    insertFolderPills,
   ]);
 
   return { isDragActive };

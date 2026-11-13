@@ -1,6 +1,9 @@
+import { FolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
-import { TFile, type App } from "obsidian";
+import { $createParagraphNode, $getRoot, createEditor, type LexicalEditor } from "lexical";
+import { TFile, TFolder, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
 interface FakeDrag {
@@ -54,15 +57,37 @@ function makeApp({ draggable = null }: { draggable?: unknown } = {}) {
   return { app, createBinary };
 }
 
+function vaultFolder(path: string): TFolder {
+  return new (TFolder as unknown as new (path: string) => TFolder)(path);
+}
+
 interface HarnessProps {
   app: App;
+  editor?: LexicalEditor;
   setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
   projectFolderPath?: string;
 }
 
 const ignoreContextNotes = jest.fn();
 
-function Harness({ app, setContextNotes = ignoreContextNotes, projectFolderPath }: HarnessProps) {
+function Harness(props: HarnessProps) {
+  return (
+    <ChatInputProvider>
+      <DropTarget {...props} />
+    </ChatInputProvider>
+  );
+}
+
+function DropTarget({
+  app,
+  editor,
+  setContextNotes = ignoreContextNotes,
+  projectFolderPath,
+}: HarnessProps) {
+  const { registerEditor } = useChatInput();
+  useEffect(() => {
+    if (editor) registerEditor(editor);
+  }, [registerEditor, editor]);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
@@ -129,6 +154,25 @@ describe("useChatFileDrop", () => {
       dispatchDrag("drop", overlay, drag);
 
       await expect(attached).resolves.toEqual([note]);
+    });
+
+    it("mentions a folder dragged from Obsidian's file explorer in the message by its full vault path (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const folder = vaultFolder("Projects/Alpha/docs");
+      const { app } = makeApp({ draggable: { type: "folder", file: folder } });
+      const editor = createEditor({ nodes: [FolderPillNode] });
+      editor.update(() => $getRoot().append($createParagraphNode()), { discrete: true });
+      render(<Harness app={app} editor={editor} />);
+      const message = new Promise<string>((resolve) => {
+        editor.registerUpdateListener(({ editorState }) =>
+          resolve(editorState.read(() => $getRoot().getTextContent()))
+        );
+      });
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["text/plain"],
+      });
+
+      await expect(message).resolves.toBe("{Projects/Alpha/docs} ");
     });
 
     it("copies and attaches a file dropped with its name as text, as WeChat sends it, reading the file before the drop event ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {

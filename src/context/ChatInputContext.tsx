@@ -8,10 +8,18 @@ import React, {
   useState,
 } from "react";
 import { INSERT_TEXT_WITH_PILLS_COMMAND } from "@/components/chat-components/utils/lexicalTextUtils";
-import { LexicalEditor } from "lexical";
+import { $createFolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
+import {
+  $createTextNode,
+  $getRoot,
+  $getSelection,
+  $isRangeSelection,
+  LexicalEditor,
+} from "lexical";
 
 interface ChatInputContextType {
   insertTextWithPills: (text: string, enableURLPills?: boolean) => void;
+  insertFolderPills: (folderPaths: readonly string[]) => void;
   focusInput: () => void;
   registerEditor: (editor: LexicalEditor) => void;
   registerFocusHandler: (handler: (() => void) | null) => void;
@@ -65,6 +73,21 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     [editor]
   );
 
+  const insertFolderPills = useCallback(
+    (folderPaths: readonly string[]) => {
+      editor?.update(() => {
+        const selection = $getSelection();
+        // A folder dropped before the message box was ever focused has no cursor, so its mention goes at the end.
+        // https://github.com/logancyang/obsidian-copilot/issues/3858
+        const target = $isRangeSelection(selection) ? selection : $getRoot().selectEnd();
+        target.insertNodes(
+          folderPaths.flatMap((path) => [$createFolderPillNode(path), $createTextNode(" ")])
+        );
+      });
+    },
+    [editor]
+  );
+
   useEffect(() => {
     if (!editor || !pendingInsertRef.current) return;
     const { text, enableURLPills } = pendingInsertRef.current;
@@ -86,11 +109,12 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
   const contextValue = useMemo<ChatInputContextType>(
     () => ({
       insertTextWithPills,
+      insertFolderPills,
       focusInput,
       registerEditor,
       registerFocusHandler,
     }),
-    [insertTextWithPills, focusInput, registerEditor, registerFocusHandler]
+    [insertTextWithPills, insertFolderPills, focusInput, registerEditor, registerFocusHandler]
   );
 
   return <ChatInputContext.Provider value={contextValue}>{children}</ChatInputContext.Provider>;
