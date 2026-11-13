@@ -115,7 +115,7 @@ function DiscordInvite({ onDismiss }: DiscordInviteProps) {
             openLinkInSystemBrowser(event);
             onDismiss();
           }}
-          className="tw-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-discord tw-px-3 tw-text-ui-small tw-font-semibold tw-text-white tw-no-underline hover:tw-bg-discord/90 hover:tw-text-white hover:tw-no-underline"
+          className="tw-flex tw-h-7 tw-items-center tw-rounded-full tw-bg-discord tw-px-3 tw-text-ui-small tw-font-semibold tw-text-white tw-no-underline hover:tw-text-white hover:tw-no-underline"
         >
           Join Discord
         </a>
