@@ -1,4 +1,4 @@
-import { CopilotPlusUsageReader, type UsageWindow } from "@/agentMode";
+import type { UsageWindow } from "@/agentMode";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
@@ -13,6 +13,7 @@ import {
 } from "@/plusUtils";
 import { setSettings, useSettingsValue } from "@/settings/model";
 import { CopilotLicenseSection } from "@/settings/v2/components/ui/CopilotLicenseSection";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import React, { useEffect, useState } from "react";
 
@@ -20,11 +21,16 @@ function useLicenseUsage(isLicenseActive: boolean): readonly UsageWindow[] | nul
   const [usageWindows, setUsageWindows] = useState<readonly UsageWindow[] | null>(null);
 
   useEffect(() => {
-    if (!isLicenseActive) return;
+    // The usage reader ships with Agent Mode, whose code cannot load on mobile.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/926
+    if (!isLicenseActive || !isDesktopRuntime()) return;
     let cancelled = false;
-    void new CopilotPlusUsageReader().readPlanUsage().then((reading) => {
-      if (!cancelled) setUsageWindows(reading.kind === "usage" ? reading.planUsage.windows : null);
-    });
+    void import("@/agentMode")
+      .then(({ CopilotPlusUsageReader }) => new CopilotPlusUsageReader().readPlanUsage())
+      .then((reading) => {
+        if (!cancelled)
+          setUsageWindows(reading.kind === "usage" ? reading.planUsage.windows : null);
+      });
     return () => {
       cancelled = true;
       setUsageWindows(null);

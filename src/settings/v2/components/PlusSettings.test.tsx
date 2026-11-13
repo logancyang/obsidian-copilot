@@ -3,6 +3,7 @@ import type { ConnectorLogin, LoginOutcome } from "@/connectors/oauth/connectorA
 import { CopilotAccount, type CopilotAccountDeps } from "@/copilotAccount/copilotAccount";
 import { applyAccountLicense, isAccountLicense, removeLicense } from "@/plusUtils";
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
+import * as desktopRuntime from "@/utils/desktopRuntime";
 import type { App } from "obsidian";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
@@ -137,6 +138,7 @@ describe("PlusSettings", () => {
 
   afterEach(() => {
     mockPlugin.copilotAccount?.dispose();
+    jest.restoreAllMocks();
   });
 
   describe("PlusSettings()", () => {
@@ -219,6 +221,17 @@ describe("PlusSettings", () => {
       await act(async () => {
         await mockReadPlanUsage.mock.results[0].value;
       });
+      expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
+      expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
+    });
+
+    it("reads no usage on mobile, where the usage reader cannot load, and offers Remove license alone — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", () => {
+      jest.spyOn(desktopRuntime, "isDesktopRuntime").mockReturnValue(false);
+      storeActiveLicense();
+
+      render(<PlusSettings />);
+
+      expect(mockReadPlanUsage).not.toHaveBeenCalled();
       expect(screen.getByRole("button", { name: "Remove license" })).toBeTruthy();
       expect(screen.queryByRole("list", { name: "Usage" })).toBeNull();
     });
