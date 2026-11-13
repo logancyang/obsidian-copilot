@@ -349,6 +349,20 @@ describe("copilotAccount", () => {
         expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
       });
 
+      it("keeps the last plan read when the website answers with a page that isn't JSON — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+        const { account, service, signIn } = setUp();
+        await signIn();
+        setRequestUrlImpl(async (request: { url: string }) =>
+          request.url.endsWith("/api/plugin/account")
+            ? { status: 200, headers: {}, text: "<html>Sign in to the network</html>" }
+            : service.requestUrl(request)
+        );
+
+        await account.refreshProfile();
+
+        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
+      });
+
       it("does nothing while signed out", async () => {
         const { account, service } = setUp();
 

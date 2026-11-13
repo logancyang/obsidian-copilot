@@ -153,7 +153,9 @@ export class CopilotAccount {
         return null;
       }
       if (response.status === 401) continue;
-      const profile = response.ok ? parseProfile(await response.json()) : null;
+      // A network login page can answer 200 with HTML; that reads as unreachable, not as a failure to throw.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+      const profile = response.ok ? parseProfile(await response.json().catch(() => null)) : null;
       if (!profile) logWarn(`[Account] The account read answered HTTP ${response.status}.`);
       return profile;
     }
