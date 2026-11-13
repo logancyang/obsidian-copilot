@@ -125,8 +125,9 @@ describe("RenderedDiff", () => {
       const { container } = render(diffElement(REMOVED_LIST_ITEM));
 
       await waitFor(() => expect(container.querySelector("[data-change=deleted]")).not.toBeNull());
-      const [first, deleted, last] = Array.from(container.firstElementChild!.children, (segment) =>
-        segment.hasAttribute("data-change") ? segment.firstElementChild! : segment
+      const [first, deleted, last] = Array.from(
+        container.firstElementChild!.children,
+        (child) => child.querySelector("[data-change]")?.firstElementChild ?? child
       );
       expect([first, deleted, last].map(listEdges)).toEqual([
         ["[&>:last-child]:tw-mb-0"],
@@ -190,6 +191,40 @@ describe("RenderedDiff", () => {
         expect(boxes.every((box) => box.disabled)).toBe(true);
       }
     );
+
+    it.each([
+      [
+        "a diff that offers Revoke",
+        { current: TWO_PARAGRAPHS_REWORDED.after, onRevoke: jest.fn() },
+      ],
+      ["a diff that offers no Revoke", undefined],
+    ])(
+      "draws a bar in the margin beside each run of changes and none beside unchanged blocks in %s, so a small change is easy to spot (https://github.com/Brevilabs/obsidian-copilot-private/issues/910)",
+      async (_name, revoke) => {
+        const { container } = render(diffElement(TWO_PARAGRAPHS_REWORDED, recordedApp, revoke));
+
+        await waitFor(() => expect(textOf(container, "del")).not.toEqual([]));
+        const marked = Array.from(container.querySelectorAll("[data-change-bar]")).map(
+          (bar) => bar.parentElement!.textContent
+        );
+
+        expect(marked).toEqual([
+          expect.stringContaining("The pilot runs for"),
+          expect.stringContaining("We report progress every"),
+        ]);
+        expect(marked.join("")).not.toContain("Budget is fixed");
+      }
+    );
+
+    it("draws one bar beside the changed lines of a non-Markdown file (https://github.com/Brevilabs/obsidian-copilot-private/issues/910)", async () => {
+      const { container } = render(diffElement(NON_MARKDOWN_FILE));
+
+      await waitFor(() => expect(container.querySelector("pre")).not.toBeNull());
+      const bars = container.querySelectorAll("pre [data-change-bar]");
+
+      expect(bars).toHaveLength(1);
+      expect(bars[0].parentElement!.querySelectorAll("[data-change=unchanged]")).toHaveLength(0);
+    });
 
     it("frames each run of changes with its own Revoke button, leaving unchanged blocks outside every frame (https://github.com/Brevilabs/obsidian-copilot-private/issues/823)", async () => {
       const revoke: RunRevoke = { current: TWO_PARAGRAPHS_REWORDED.after, onRevoke: jest.fn() };
