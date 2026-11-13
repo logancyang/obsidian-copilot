@@ -156,9 +156,11 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
     supportsClientMetadataDocuments: true,
     publishesRevocation: true,
   });
-  const licenseServer = { refuses: false };
+  const licenseServer = { refuses: false, unavailable: false, checks: 0 };
   const respond = async (request: RequestUrlParam) => {
     if (!request.url.endsWith("/license")) return service.requestUrl(request);
+    licenseServer.checks += 1;
+    if (licenseServer.unavailable) return { status: 503, headers: {}, text: "Service Unavailable" };
     return licenseServer.refuses
       ? {
           status: 403,
@@ -492,6 +494,24 @@ describe("copilotAccount", () => {
         expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
         expect(getSettings().isPaidUser).toBe(true);
         expect(mockOpenWelcome).toHaveBeenCalledTimes(1);
+      });
+
+      it("checks the account's license again, quietly, when the check at sign-in couldn't reach the license server, and stops checking once it is active — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+        const { account, licenseServer, service, signIn } = setUp();
+        service.account = paidAccount(service);
+        licenseServer.unavailable = true;
+        await signIn();
+        licenseServer.unavailable = false;
+
+        await account.refreshProfile();
+        const checksOnceActive = licenseServer.checks;
+        await account.refreshProfile();
+
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+        expect(licenseServer.checks).toBe(checksOnceActive);
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect(mockOpenWelcome).not.toHaveBeenCalled();
       });
 
       it("keeps the account's license as it is, without a confirmation, when a restart finds the same paid plan", async () => {

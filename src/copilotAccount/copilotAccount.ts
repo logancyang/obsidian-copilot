@@ -247,15 +247,19 @@ export class CopilotAccount {
     const settings = getSettings();
     // A key the user pasted wins over the account's and is never replaced.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-    if (settings.plusLicenseKey === licenseKey) return;
     if (settings.plusLicenseKey !== "" && !isAccountLicense(settings)) return;
-    applyAccountLicense(licenseKey);
+    // A refused key is removed, so the account's key still stored without paid features means its last check couldn't
+    // run; it is checked again. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+    const isStored = settings.plusLicenseKey === licenseKey;
+    if (isStored && settings.isPaidUser) return;
+    if (!isStored) applyAccountLicense(licenseKey);
     const paid = await checkIsPaidUser(this.deps.app, { trigger: "manual" });
-    // The first sign-in on a paid plan applies quietly; a plan bought while signed in is announced.
+    // The first sign-in on a paid plan applies quietly; a plan bought while signed in is announced, once.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
     if (
       !paid ||
       !announce ||
+      isStored ||
       generation !== this.loginGeneration ||
       this.state.status !== "signed-in"
     ) {
