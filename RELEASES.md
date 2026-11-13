@@ -2,6 +2,8 @@
 
 # v4.0.20 - Project Files tab, continue a chat from any reply, approved rules
 
+[![Demo video: Obsidian Copilot 4.0.20: Project Files, Branch Any Chat](https://images.brevilabs.com/newsletters/copilot-releases/4.0.20/github-thumbnail-97d4e013.png)](https://youtube.com/shorts/4EaHfVt2PpM)
+
 Projects get a big update. You can now see every file in a project, along with the notes, folders and tags you linked to it, right from the new **Files** tab.
 
 Agent Chat is easier to steer too. When a chat drifts, branch off from any earlier reply and carry on in a new chat, with a different agent if you like. Take back any "always allow" you gave an agent. And chats with days of history now reopen with about 96% less memory.
