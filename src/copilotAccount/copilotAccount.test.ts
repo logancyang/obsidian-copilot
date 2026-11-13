@@ -3,6 +3,7 @@
  */
 import {
   CopilotAccount,
+  SIGN_IN_RETURN_LINK,
   type AccountProfile,
   type CopilotAccountState,
   type LicenseNotice,
@@ -151,7 +152,15 @@ function freeAccount(service: FakeOAuthService): Record<string, unknown> {
 
 const accounts: CopilotAccount[] = [];
 
-function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = {}) {
+function linkParams(link: string): Record<string, string> {
+  const url = new URL(link);
+  return { action: url.host, ...Object.fromEntries(url.searchParams) };
+}
+
+function setUp({
+  installId = () => INSTALL_ID,
+  returnLink,
+}: { installId?: () => string; returnLink?: string } = {}) {
   const service = new FakeOAuthService({
     supportsClientMetadataDocuments: true,
     publishesRevocation: true,
@@ -184,7 +193,7 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
   function createAccount(): CopilotAccount {
     const account = new CopilotAccount({
       app: APP,
-      auth: new ConnectorAuth({ keychain, openUrl: browser.open }),
+      auth: new ConnectorAuth({ keychain, openUrl: browser.open, returnLink }),
       websiteOrigin: FAKE_SERVICE_ORIGIN,
       installId,
       openUrl: browser.open,
@@ -208,6 +217,14 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
     return page;
   }
 
+  async function signInThroughLink(): Promise<Record<string, string>> {
+    const { signingIn, signInUrl } = await startSignIn();
+    const link = linkParams(service.approve(signInUrl.href));
+    account.receiveReturnLink(link);
+    await signingIn;
+    return link;
+  }
+
   return {
     service,
     licenseServer,
@@ -218,6 +235,7 @@ function setUp({ installId = () => INSTALL_ID }: { installId?: () => string } = 
     createAccount,
     startSignIn,
     signIn,
+    signInThroughLink,
   };
 }
 
@@ -406,6 +424,19 @@ describe("copilotAccount", () => {
         expect(keychain.secrets.size).toBe(0);
       });
 
+      it("says the sign-in timed out, stores no login and offers Sign in again when the browser never returns through the link — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        jest.useFakeTimers({ doNotFake: ["nextTick", "setImmediate"] });
+        const { account, keychain, startSignIn } = setUp({ returnLink: SIGN_IN_RETURN_LINK });
+        const { signingIn, signInUrl } = await startSignIn();
+
+        jest.advanceTimersByTime(FIVE_MINUTES_MS);
+        await signingIn;
+
+        expect(signInUrl.searchParams.get("redirect_uri")).toBe("obsidian://copilot-auth");
+        expect(account.getSnapshot()).toEqual({ status: "signed-out", failure: "timed-out" });
+        expect(keychain.secrets.size).toBe(0);
+      });
+
       it("says the website refused, on the browser page and in settings, when it denies the sign-in", async () => {
         const { account, service, startSignIn } = setUp();
         const { signingIn, signInUrl } = await startSignIn();
@@ -541,6 +572,88 @@ describe("copilotAccount", () => {
         await expect(visit(signInUrl.searchParams.get("redirect_uri") ?? "")).rejects.toThrow(
           /ECONNREFUSED/
         );
+      });
+
+      it("brings back Sign in and ignores the link the browser returns with afterwards on a device that signs in through a link — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { account, keychain, service, startSignIn } = setUp({
+          returnLink: SIGN_IN_RETURN_LINK,
+        });
+        const { signingIn, signInUrl } = await startSignIn();
+
+        account.cancelSignIn();
+        await signingIn;
+        const requestsBefore = service.requests.length;
+        account.receiveReturnLink(linkParams(service.approve(signInUrl.href)));
+
+        expect(account.getSnapshot()).toEqual({ status: "signed-out", failure: "cancelled" });
+        expect(service.requests.length).toBe(requestsBefore);
+        expect(keychain.secrets.size).toBe(0);
+      });
+    });
+
+    describe("receiveReturnLink()", () => {
+      it("signs in and applies a paid account's license when the browser returns through the link with this sign-in's state — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { account, keychain, service, signInThroughLink } = setUp({
+          returnLink: SIGN_IN_RETURN_LINK,
+        });
+        service.account = paidAccount(service);
+
+        await signInThroughLink();
+
+        expect(account.getSnapshot()).toEqual(signedIn(PLUS_PROFILE));
+        expect([...keychain.secrets.keys()]).toEqual([LOGIN_KEYCHAIN_ID]);
+        expect(getSettings().plusLicenseKey).toBe(ACCOUNT_KEY);
+        expect(getSettings().isPaidUser).toBe(true);
+      });
+
+      it("ignores a link with another sign-in's state, staying in progress until its own link returns — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { account, service, startSignIn } = setUp({ returnLink: SIGN_IN_RETURN_LINK });
+        const { signingIn, signInUrl } = await startSignIn();
+        const link = linkParams(service.approve(signInUrl.href));
+
+        account.receiveReturnLink({ ...link, code: "code-from-another-page", state: "another" });
+
+        expect(account.getSnapshot()).toEqual({ status: "signing-in" });
+        account.receiveReturnLink(link);
+        await signingIn;
+        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
+        expect(service.requestsTo("/token")).toHaveLength(1);
+      });
+
+      it("ignores a link when no sign-in is in progress, and a replayed link once signed in, contacting no one — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { account, keychain, service, signInThroughLink } = setUp({
+          returnLink: SIGN_IN_RETURN_LINK,
+        });
+        account.receiveReturnLink({ action: "copilot-auth", code: "code-1", state: "state-1" });
+        expect(account.getSnapshot()).toEqual({ status: "signed-out", failure: null });
+        expect(service.requests).toEqual([]);
+        const link = await signInThroughLink();
+        const login = keychain.secrets.get(LOGIN_KEYCHAIN_ID);
+        const requestsBefore = service.requests.length;
+
+        account.receiveReturnLink(link);
+
+        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
+        expect(keychain.secrets.get(LOGIN_KEYCHAIN_ID)).toBe(login);
+        expect(service.requests.length).toBe(requestsBefore);
+      });
+
+      it("ignores a link carrying the sign-in's state on a device that signs in through a local address — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { account, service, startSignIn } = setUp();
+        const { signingIn, signInUrl } = await startSignIn();
+        const callback = new URL(service.approve(signInUrl.href));
+        const requestsBefore = service.requests.length;
+
+        account.receiveReturnLink({
+          action: "copilot-auth",
+          ...Object.fromEntries(callback.searchParams),
+        });
+
+        expect(account.getSnapshot()).toEqual({ status: "signing-in" });
+        expect(service.requests.length).toBe(requestsBefore);
+        await visit(callback.href);
+        await signingIn;
+        expect(account.getSnapshot()).toEqual(signedIn(FREE_PROFILE));
       });
     });
 

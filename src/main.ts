@@ -65,7 +65,11 @@ import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
-import { CopilotAccount } from "@/copilotAccount/copilotAccount";
+import {
+  CopilotAccount,
+  SIGN_IN_RETURN_ACTION,
+  SIGN_IN_RETURN_LINK,
+} from "@/copilotAccount/copilotAccount";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -260,6 +264,11 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         if (this.pluginLifecycleActive) void this.openChatDeepLink(params);
       });
     });
+    // Registered up front, and on desktop too, so an unexpected sign-in link is dropped quietly instead of Obsidian
+    // reporting an unknown action. https://github.com/Brevilabs/obsidian-copilot-private/issues/926
+    this.registerObsidianProtocolHandler(SIGN_IN_RETURN_ACTION, (params) => {
+      this.copilotAccount?.receiveReturnLink(params);
+    });
   }
 
   private async initialize(): Promise<void> {
@@ -361,25 +370,32 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     void verifyCachedEntitlement();
     if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
-    // Signing in waits for the browser on a local address, which only desktop can listen on.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
-    if (isDesktopRuntime()) {
-      const openUrl = (url: string) => {
-        getElectronShell()
-          ?.openExternal?.(url)
-          .catch((error) => logError("[Account] could not open the system browser:", error));
-      };
-      const copilotAccount = new CopilotAccount({
-        app: this.app,
-        auth: new ConnectorAuth({ keychain: KeychainService.getInstance(), openUrl }),
-        websiteOrigin: COPILOT_WEBSITE_ORIGIN,
-        installId: () => getPersistedDeviceId(this.app),
+    // Mobile cannot listen on a local address for the browser's answer, so its sign-in returns through an
+    // obsidian:// link. https://github.com/Brevilabs/obsidian-copilot-private/issues/926
+    const isDesktop = isDesktopRuntime();
+    const openUrl = isDesktop
+      ? (url: string) => {
+          getElectronShell()
+            ?.openExternal?.(url)
+            .catch((error) => logError("[Account] could not open the system browser:", error));
+        }
+      : (url: string) => {
+          window.open(url, "_blank");
+        };
+    const copilotAccount = new CopilotAccount({
+      app: this.app,
+      auth: new ConnectorAuth({
+        keychain: KeychainService.getInstance(),
         openUrl,
-      });
-      this.copilotAccount = copilotAccount;
-      this.register(() => copilotAccount.dispose());
-      void copilotAccount.refreshProfile();
-    }
+        returnLink: isDesktop ? undefined : SIGN_IN_RETURN_LINK,
+      }),
+      websiteOrigin: COPILOT_WEBSITE_ORIGIN,
+      installId: () => getPersistedDeviceId(this.app),
+      openUrl,
+    });
+    this.copilotAccount = copilotAccount;
+    this.register(() => copilotAccount.dispose());
+    void copilotAccount.refreshProfile();
     this.registerInterval(
       window.setInterval(() => {
         void checkIsPaidUser(this.app, { trigger: "refresh" });

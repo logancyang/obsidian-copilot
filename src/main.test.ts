@@ -81,6 +81,7 @@ jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: j
 jest.mock("@/connectors/connectionManager");
 jest.mock("@/connectors/custom/customConnectors");
 jest.mock("@/copilotAccount/copilotAccount");
+jest.mock("@/connectors/oauth/connectorAuth");
 
 import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -129,6 +130,7 @@ import { ConnectionManager } from "@/connectors/connectionManager";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { CopilotAccount } from "@/copilotAccount/copilotAccount";
+import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
 import { ENTITLEMENT_REFRESH_INTERVAL_MS } from "@/plusUtils";
 
 function createPluginUnderTest(calls: string[]) {
@@ -523,7 +525,10 @@ describe("main", () => {
           registerInterval: jest.fn(),
           registerView: jest.fn<void, [string, (leaf: WorkspaceLeaf) => unknown]>(),
           registerEditorExtension: jest.fn(),
-          registerObsidianProtocolHandler: jest.fn(),
+          registerObsidianProtocolHandler: jest.fn<
+            void,
+            [string, (params: Record<string, string>) => void]
+          >(),
           addSettingTab: jest.fn(),
           addRibbonIcon: jest.fn(),
           addCommand: jest.fn(),
@@ -550,11 +555,7 @@ describe("main", () => {
         const finishStartup = () =>
           (plugin as unknown as { initialization: Promise<void> }).initialization;
         const openCopilotChatLink = (params: Record<string, string>) =>
-          (
-            registrations.registerObsidianProtocolHandler.mock.calls[0][1] as (
-              params: Record<string, string>
-            ) => void
-          )(params);
+          registrations.registerObsidianProtocolHandler.mock.calls[0][1](params);
         const openRegisteredView = (viewType: string) => {
           const call = registrations.registerView.mock.calls.find(([type]) => type === viewType);
           return call?.[1]({} as WorkspaceLeaf);
@@ -669,7 +670,9 @@ describe("main", () => {
         expect(openRegisteredView(CHAT_VIEWTYPE)).toBeInstanceOf(CopilotView);
         expect(registrations.addCommand).toHaveBeenCalled();
         expect(registrations.addRibbonIcon).toHaveBeenCalledTimes(1);
-        expect(registrations.registerObsidianProtocolHandler).toHaveBeenCalledTimes(1);
+        expect(
+          registrations.registerObsidianProtocolHandler.mock.calls.map(([action]) => action)
+        ).toEqual(["copilot-chat", "copilot-auth"]);
       });
 
       it("keeps the active web tab when focus moves into Quick Chat or Agent Chat on desktop https://github.com/Brevilabs/obsidian-copilot-private/issues/667", async () => {
@@ -750,7 +753,49 @@ describe("main", () => {
         expect(account.dispose).not.toHaveBeenCalled();
         for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
         expect(account.dispose).toHaveBeenCalledTimes(1);
+        expect(jest.mocked(ConnectorAuth).mock.calls.map(([deps]) => deps.returnLink)).toEqual([
+          undefined,
+          undefined,
+        ]);
         setIntervalSpy.mockRestore();
+      });
+
+      it("gives the plugin a Copilot account on mobile whose sign-in opens the browser and returns through obsidian://copilot-auth — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const openSpy = jest.spyOn(window, "open").mockReturnValue(null);
+        const { plugin, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const account = jest.mocked(CopilotAccount).mock.instances[0];
+        expect(plugin.copilotAccount).toBe(account);
+        expect(account.refreshProfile).toHaveBeenCalledTimes(1);
+        const [authDeps] = jest.mocked(ConnectorAuth).mock.calls[0];
+        expect(authDeps.returnLink).toBe("obsidian://copilot-auth");
+        authDeps.openUrl("https://www.obsidiancopilot.com/oauth/authorize?state=s");
+        expect(openSpy).toHaveBeenCalledWith(
+          "https://www.obsidiancopilot.com/oauth/authorize?state=s",
+          "_blank"
+        );
+        openSpy.mockRestore();
+      });
+
+      it("hands an obsidian://copilot-auth link to the Copilot account, and drops one that arrives before startup finishes — https://github.com/Brevilabs/obsidian-copilot-private/issues/926", async () => {
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+        plugin.onload();
+        const [, receiveLink] =
+          registrations.registerObsidianProtocolHandler.mock.calls.find(
+            ([action]) => action === "copilot-auth"
+          ) ?? [];
+        const link = { action: "copilot-auth", code: "code-1", state: "state-1" };
+
+        expect(() => receiveLink?.(link)).not.toThrow();
+        await finishStartup();
+        receiveLink?.(link);
+
+        const account = jest.mocked(CopilotAccount).mock.instances[0];
+        expect(account.receiveReturnLink).toHaveBeenCalledTimes(1);
+        expect(account.receiveReturnLink).toHaveBeenCalledWith(link);
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {
@@ -763,7 +808,6 @@ describe("main", () => {
         expect(plugin.connectionManager).toBeUndefined();
         expect(plugin.connectorTools).toBeUndefined();
         expect(plugin.customConnectors).toBeUndefined();
-        expect(plugin.copilotAccount).toBeUndefined();
       });
 
       it.each([
