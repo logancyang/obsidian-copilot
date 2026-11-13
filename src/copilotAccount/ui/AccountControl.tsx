@@ -26,7 +26,7 @@ export interface AccountControlProps {
 const FREE_PLAN = "free";
 const LIFETIME_PLAN = "believer";
 
-function planName(plan: string): string {
+export function planName(plan: string): string {
   if (plan === LIFETIME_PLAN) return "Lifetime";
   return plan.charAt(0).toUpperCase() + plan.slice(1);
 }

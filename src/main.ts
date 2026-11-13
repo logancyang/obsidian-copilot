@@ -370,6 +370,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
           .catch((error) => logError("[Account] could not open the system browser:", error));
       };
       const copilotAccount = new CopilotAccount({
+        app: this.app,
         auth: new ConnectorAuth({ keychain: KeychainService.getInstance(), openUrl }),
         websiteOrigin: COPILOT_WEBSITE_ORIGIN,
         installId: () => getPersistedDeviceId(this.app),
@@ -377,12 +378,13 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       });
       this.copilotAccount = copilotAccount;
       this.register(() => copilotAccount.dispose());
+      void copilotAccount.refreshProfile();
     }
     this.registerInterval(
-      window.setInterval(
-        () => void checkIsPaidUser(this.app, { trigger: "refresh" }),
-        ENTITLEMENT_REFRESH_INTERVAL_MS
-      )
+      window.setInterval(() => {
+        void checkIsPaidUser(this.app, { trigger: "refresh" });
+        void this.copilotAccount?.refreshProfile();
+      }, ENTITLEMENT_REFRESH_INTERVAL_MS)
     );
 
     this.chainOwner = ChainOwner.getInstance(this.app, this.modelManagement);

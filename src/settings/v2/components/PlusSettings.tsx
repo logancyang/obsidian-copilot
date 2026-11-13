@@ -4,8 +4,14 @@ import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeM
 import { useApp } from "@/context";
 import { usePlugin } from "@/contexts/PluginContext";
 import { useAccountControl } from "@/copilotAccount/ui/useAccountControl";
-import { checkIsPaidUser, navigateToPlusPage, removeLicense, useLicenseState } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  checkIsPaidUser,
+  isAccountLicense,
+  navigateToPlusPage,
+  removeLicense,
+  useLicenseState,
+} from "@/plusUtils";
+import { setSettings, useSettingsValue } from "@/settings/model";
 import { CopilotLicenseSection } from "@/settings/v2/components/ui/CopilotLicenseSection";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
@@ -40,9 +46,15 @@ export function PlusSettings() {
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const license = useLicenseState();
-  const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
+  const isLicenseFromAccount = isAccountLicense(settings);
+  // The account's key is never shown, also not in the key row of an inactive license.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+  const [localLicenseKey, setLocalLicenseKey] = useState(
+    isLicenseFromAccount ? "" : settings.plusLicenseKey
+  );
   const usageWindows = useLicenseUsage(!isChecking && license.status === "active");
-  const account = useAccountControl(usePlugin().copilotAccount);
+  const { copilotAccount } = usePlugin();
+  const account = useAccountControl(copilotAccount);
 
   const confirmRemoveLicense = () => {
     new ConfirmModal(
@@ -68,7 +80,7 @@ export function PlusSettings() {
       onLicenseKeyChange={setLocalLicenseKey}
       isApplying={isChecking}
       onApply={safeAsyncHandler(async () => {
-        updateSetting("plusLicenseKey", localLicenseKey);
+        setSettings({ plusLicenseKey: localLicenseKey, accountLicenseKey: "" });
         setIsChecking(true);
         const result = await checkIsPaidUser(app, { trigger: "manual" });
         setIsChecking(false);
@@ -80,9 +92,12 @@ export function PlusSettings() {
         }
       })}
       applyError={error}
-      onSeePlans={() => navigateToPlusPage("settings")}
+      onSeePlans={(win) => {
+        navigateToPlusPage("settings");
+        copilotAccount?.watchForPurchase(win);
+      }}
       usageWindows={usageWindows}
-      onRemoveLicense={confirmRemoveLicense}
+      onRemoveLicense={isLicenseFromAccount ? null : confirmRemoveLicense}
       account={account}
     />
   );

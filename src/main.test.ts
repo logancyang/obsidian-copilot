@@ -129,6 +129,7 @@ import { ConnectionManager } from "@/connectors/connectionManager";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { CopilotAccount } from "@/copilotAccount/copilotAccount";
+import { ENTITLEMENT_REFRESH_INTERVAL_MS } from "@/plusUtils";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -726,12 +727,13 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
-      it("gives the plugin a Copilot account on desktop without reading it at startup, and disposes it when the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+      it("gives the plugin a Copilot account on desktop, reads it at startup and on the regular license refresh, and disposes it when the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
         (isDesktopRuntime as jest.Mock).mockReturnValue(true);
         (startActiveWebTabTracking as jest.Mock).mockReturnValue({
           activeLeafRef: {},
           layoutRef: {},
         });
+        const setIntervalSpy = jest.spyOn(window, "setInterval");
         const { plugin, registrations, finishStartup } = createLoadingPlugin();
 
         plugin.onload();
@@ -739,10 +741,16 @@ describe("main", () => {
 
         const account = jest.mocked(CopilotAccount).mock.instances[0];
         expect(plugin.copilotAccount).toBe(account);
-        expect(account.refreshProfile).not.toHaveBeenCalled();
+        expect(account.refreshProfile).toHaveBeenCalledTimes(1);
+        const licenseRefresh = setIntervalSpy.mock.calls.find(
+          ([, delay]) => delay === ENTITLEMENT_REFRESH_INTERVAL_MS
+        )?.[0] as () => void;
+        licenseRefresh();
+        expect(account.refreshProfile).toHaveBeenCalledTimes(2);
         expect(account.dispose).not.toHaveBeenCalled();
         for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
         expect(account.dispose).toHaveBeenCalledTimes(1);
+        setIntervalSpy.mockRestore();
       });
 
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {

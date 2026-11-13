@@ -45,6 +45,16 @@ jest.mock("@/LLMProviders/brevilabsClient", () => ({
   },
 }));
 
+const mockOpenExpired = jest.fn();
+
+jest.mock("@/components/modals/CopilotPlusExpiredModal", () => ({
+  CopilotPlusExpiredModal: class {
+    open() {
+      mockOpenExpired();
+    }
+  },
+}));
+
 const mockSetModelKey = jest.fn<void, [string]>();
 
 jest.mock("@/aiParams", () => ({
@@ -65,8 +75,10 @@ jest.mock("@/agentMode", () => ({
 }));
 
 import {
+  applyAccountLicense,
   applyEntitlement,
   applyLicenseSettings,
+  isAccountLicense,
   isUsingLicensedModels,
   checkIsPaidUser,
   ensureEntitlement,
@@ -84,11 +96,12 @@ import {
   verifyCachedEntitlement,
 } from "@/plusUtils";
 import { renderHook, waitFor } from "@testing-library/react";
-import { Notice } from "obsidian";
+import { Notice, type App } from "obsidian";
 
 const FUTURE_EXP_SECONDS = 9_999_999_999;
 const PAST_EXP_SECONDS = 1_000_000_000;
 const STORED_LICENSE_KEY = "key";
+const APP = {} as App;
 
 function buildSettings(overrides: Partial<CopilotSettings>): CopilotSettings {
   return { ...DEFAULT_SETTINGS, ...overrides };
@@ -153,6 +166,7 @@ describe("plusUtils", () => {
     mockSetSettings.mockClear();
     mockUpdateSetting.mockClear();
     mockSetModelKey.mockClear();
+    mockOpenExpired.mockClear();
     mockVerifyEntitlement.mockReset();
     mockValidateLicenseKey.mockReset();
     mockApplyCopilotDefaultModel.mockReset().mockReturnValue([]);
@@ -622,7 +636,7 @@ describe("plusUtils", () => {
   });
 
   describe("removeLicense()", () => {
-    it("clears the stored key and its entitlement in one settings write", () => {
+    it("clears the stored key, its entitlement and any account mark in one settings write", () => {
       mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true, isPlusUser: true }));
 
       removeLicense();
@@ -630,11 +644,82 @@ describe("plusUtils", () => {
       expect(mockSetSettings).toHaveBeenCalledTimes(1);
       expect(mockSetSettings).toHaveBeenCalledWith({
         plusLicenseKey: "",
+        accountLicenseKey: "",
         isPaidUser: false,
         isPlusUser: false,
         entitlementToken: "",
         entitlementExpiresAt: 0,
       });
+    });
+  });
+
+  describe("isAccountLicense()", () => {
+    it("is true for the exact key the account applied", () => {
+      expect(
+        isAccountLicense({ plusLicenseKey: "account-key", accountLicenseKey: "account-key" })
+      ).toBe(true);
+    });
+
+    it("is false for a key the user put in place of the account's, so it is never removed with the plan — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      expect(
+        isAccountLicense({ plusLicenseKey: "pasted-key", accountLicenseKey: "account-key" })
+      ).toBe(false);
+    });
+
+    it("is false with no key stored, and for settings from versions without the account mark", () => {
+      expect(isAccountLicense({ plusLicenseKey: "", accountLicenseKey: "" })).toBe(false);
+      expect(isAccountLicense({ plusLicenseKey: "account-key", accountLicenseKey: "" })).toBe(
+        false
+      );
+    });
+  });
+
+  describe("applyAccountLicense()", () => {
+    it("stores the key and marks it as the account's in one settings write", () => {
+      applyAccountLicense("account-key");
+
+      expect(mockSetSettings.mock.calls).toEqual([
+        [{ plusLicenseKey: "account-key", accountLicenseKey: "account-key" }],
+      ]);
+    });
+  });
+
+  describe("turnOffPaid()", () => {
+    it("removes a license the account applied together with its entitlement — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+      mockGetSettings.mockReturnValue(
+        tokenBackedSettings({
+          plusLicenseKey: "account-key",
+          accountLicenseKey: "account-key",
+          isPaidUser: true,
+        })
+      );
+
+      turnOffPaid();
+
+      expect(mockSetSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ plusLicenseKey: "", isPaidUser: false, entitlementToken: "" })
+      );
+    });
+
+    it("clears only the entitlement of a pasted key, leaving the key to fix or replace", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true }));
+
+      turnOffPaid();
+
+      expect(mockSetSettings).toHaveBeenCalledWith({
+        isPaidUser: false,
+        isPlusUser: false,
+        entitlementToken: "",
+        entitlementExpiresAt: 0,
+      });
+    });
+
+    it("opens the plan-expired dialog when a paid user's stored license is turned off", () => {
+      mockGetSettings.mockReturnValue(tokenBackedSettings({ isPaidUser: true }));
+
+      turnOffPaid(APP);
+
+      expect(mockOpenExpired).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -824,6 +909,16 @@ describe("plusUtils", () => {
 
       expect(await checkIsPaidUser(undefined, { trigger: "manual" })).toBe(false);
       expect(mockValidateLicenseKey).not.toHaveBeenCalled();
+    });
+
+    it("turns paid features off without the plan-expired dialog when this device holds no license key, as on a synced device not yet signed in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      mockGetSettings.mockReturnValue(buildSettings({ plusLicenseKey: "", isPaidUser: true }));
+
+      expect(await checkIsPaidUser(APP, { trigger: "startup" })).toBe(false);
+      expect(mockSetSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ isPaidUser: false, entitlementToken: "" })
+      );
+      expect(mockOpenExpired).not.toHaveBeenCalled();
     });
 
     it("returns the server's verdict when it answers", async () => {
