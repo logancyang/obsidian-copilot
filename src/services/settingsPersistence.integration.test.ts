@@ -3,7 +3,11 @@ import type { App } from "obsidian";
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { Provider } from "@/modelManagement";
 import { KeychainService } from "@/services/keychainService";
-import { loadSettingsWithKeychain, resetPersistenceState } from "@/services/settingsPersistence";
+import {
+  loadSettingsWithKeychain,
+  persistSettings,
+  resetPersistenceState,
+} from "@/services/settingsPersistence";
 import type { CopilotSettings } from "@/settings/model";
 
 jest.mock("@/logger", () => ({
@@ -76,6 +80,30 @@ async function load(
   return { settings, saved };
 }
 
+function switchToDevice(device: Map<string, string>): App {
+  secrets = device;
+  resetPersistenceState();
+  KeychainService.resetInstance();
+  const app = makeApp();
+  KeychainService.getInstance(app).setVaultId(VAULT_ID);
+  return app;
+}
+
+async function saveOn(
+  device: Map<string, string>,
+  license: Pick<CopilotSettings, "plusLicenseKey" | "accountLicenseKey">
+): Promise<CopilotSettings> {
+  switchToDevice(device);
+  let saved: CopilotSettings | undefined;
+  await persistSettings(
+    { ...structuredClone(DEFAULT_SETTINGS), _keychainVaultId: VAULT_ID, ...license },
+    async (data) => {
+      saved = structuredClone(data);
+    }
+  );
+  return saved!;
+}
+
 function apiKeyFor(app: App, settings: CopilotSettings): string | null {
   const pointer = settings.providers["row-anthropic"].apiKeyKeychainId!;
   return KeychainService.getInstance(app).getSecretById(pointer);
@@ -117,6 +145,31 @@ describe("settingsPersistence", () => {
       const { settings: loaded } = await load(app, diskSettings(STABLE_NAME));
 
       expect(apiKeyFor(app, loaded)).toBe("sk-ant-12345");
+    });
+
+    it("keeps which license came from the account on the device that applied it, whatever data.json another device syncs in — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
+      const deviceA = new Map<string, string>();
+      const deviceB = new Map<string, string>();
+      const deviceWithPastedKey = new Map<string, string>();
+      await saveOn(deviceA, { plusLicenseKey: "key-a", accountLicenseKey: "key-a" });
+      await saveOn(deviceWithPastedKey, { plusLicenseKey: "key-b", accountLicenseKey: "" });
+      const syncedFromB = await saveOn(deviceB, {
+        plusLicenseKey: "key-b",
+        accountLicenseKey: "key-b",
+      });
+
+      const { settings: onA } = await load(switchToDevice(deviceA), syncedFromB);
+      const { settings: onPastedDevice } = await load(
+        switchToDevice(deviceWithPastedKey),
+        syncedFromB
+      );
+
+      expect(syncedFromB.plusLicenseKey).toBe("");
+      expect(syncedFromB.accountLicenseKey).toBe("");
+      expect(onA.plusLicenseKey).toBe("key-a");
+      expect(onA.accountLicenseKey).toBe("key-a");
+      expect(onPastedDevice.plusLicenseKey).toBe("key-b");
+      expect(onPastedDevice.accountLicenseKey).toBe("");
     });
   });
 });

@@ -1189,14 +1189,14 @@ describe("model", () => {
       settingsStore.set(settingsAtom, {
         ...DEFAULT_SETTINGS,
         plusLicenseKey: "account-key",
-        accountLicenseKeyHash: "account-key-hash",
+        accountLicenseKey: "account-key",
       });
 
       resetSettings();
 
       const after = settingsStore.get(settingsAtom);
       expect(after.plusLicenseKey).toBe("account-key");
-      expect(after.accountLicenseKeyHash).toBe("account-key-hash");
+      expect(after.accountLicenseKey).toBe("account-key");
     });
 
     it("drops a bundle value whose type its consumer cannot handle (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {

@@ -3,7 +3,6 @@ import type { ConnectorLogin, LoginOutcome } from "@/connectors/oauth/connectorA
 import { CopilotAccount, type CopilotAccountDeps } from "@/copilotAccount/copilotAccount";
 import { applyAccountLicense, isAccountLicense, removeLicense } from "@/plusUtils";
 import { resetSettings, getSettings, setSettings } from "@/settings/model";
-import { sha256 } from "@/utils/hash";
 import type { App } from "obsidian";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
@@ -298,7 +297,7 @@ describe("PlusSettings", () => {
     });
 
     it("applies a typed key as the user's own, even one matching the key the account last applied — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", async () => {
-      setSettings({ accountLicenseKeyHash: sha256("typed-key") });
+      setSettings({ accountLicenseKey: "typed-key" });
       mockValidateLicenseKey.mockResolvedValue({ isValid: false });
       render(<PlusSettings />);
 

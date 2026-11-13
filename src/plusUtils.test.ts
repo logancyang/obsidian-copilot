@@ -85,7 +85,6 @@ import {
   useLicenseState,
   verifyCachedEntitlement,
 } from "@/plusUtils";
-import { sha256 } from "@/utils/hash";
 import { renderHook, waitFor } from "@testing-library/react";
 import { Notice } from "obsidian";
 
@@ -633,7 +632,7 @@ describe("plusUtils", () => {
       expect(mockSetSettings).toHaveBeenCalledTimes(1);
       expect(mockSetSettings).toHaveBeenCalledWith({
         plusLicenseKey: "",
-        accountLicenseKeyHash: "",
+        accountLicenseKey: "",
         isPaidUser: false,
         isPlusUser: false,
         entitlementToken: "",
@@ -645,37 +644,30 @@ describe("plusUtils", () => {
   describe("isAccountLicense()", () => {
     it("is true for the exact key the account applied", () => {
       expect(
-        isAccountLicense({
-          plusLicenseKey: "account-key",
-          accountLicenseKeyHash: sha256("account-key"),
-        })
+        isAccountLicense({ plusLicenseKey: "account-key", accountLicenseKey: "account-key" })
       ).toBe(true);
     });
 
     it("is false for a key the user put in place of the account's, so it is never removed with the plan — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
       expect(
-        isAccountLicense({
-          plusLicenseKey: "pasted-key",
-          accountLicenseKeyHash: sha256("account-key"),
-        })
+        isAccountLicense({ plusLicenseKey: "pasted-key", accountLicenseKey: "account-key" })
       ).toBe(false);
     });
 
     it("is false with no key stored, and for settings from versions without the account mark", () => {
-      expect(isAccountLicense({ plusLicenseKey: "", accountLicenseKeyHash: sha256("") })).toBe(
+      expect(isAccountLicense({ plusLicenseKey: "", accountLicenseKey: "" })).toBe(false);
+      expect(isAccountLicense({ plusLicenseKey: "account-key", accountLicenseKey: "" })).toBe(
         false
       );
-      expect(isAccountLicense({ plusLicenseKey: "account-key" })).toBe(false);
     });
   });
 
   describe("applyAccountLicense()", () => {
-    it("saves the account mark before the key, so a restart between the two writes never leaves the account's key looking pasted — https://github.com/Brevilabs/obsidian-copilot-private/issues/924", () => {
+    it("stores the key and marks it as the account's in one settings write", () => {
       applyAccountLicense("account-key");
 
       expect(mockSetSettings.mock.calls).toEqual([
-        [{ accountLicenseKeyHash: sha256("account-key") }],
-        [{ plusLicenseKey: "account-key" }],
+        [{ plusLicenseKey: "account-key", accountLicenseKey: "account-key" }],
       ]);
     });
   });
@@ -685,7 +677,7 @@ describe("plusUtils", () => {
       mockGetSettings.mockReturnValue(
         tokenBackedSettings({
           plusLicenseKey: "account-key",
-          accountLicenseKeyHash: sha256("account-key"),
+          accountLicenseKey: "account-key",
           isPaidUser: true,
         })
       );

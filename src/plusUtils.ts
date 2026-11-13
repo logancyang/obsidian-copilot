@@ -14,7 +14,6 @@ import {
   useSettingsValue,
 } from "@/settings/model";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { sha256 } from "@/utils/hash";
 import { App, Notice } from "obsidian";
 import React from "react";
 
@@ -295,26 +294,21 @@ function clearEntitlement(): void {
   setSettings(CLEARED_ENTITLEMENT);
 }
 
-// The mark is the key's hash, not a flag: data.json syncs across devices while each keeps its own key, and
-// only the exact key the account issued may match, never a pasted one. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
+// The account's key is a secret setting, kept in this device's secret storage beside the key: data.json syncs between
+// devices that each hold their own account key, so a synced mark would make one device's account key look pasted, or
+// another device's key pasted here look like the account's. https://github.com/Brevilabs/obsidian-copilot-private/issues/924
 export function isAccountLicense(
-  settings: Pick<CopilotSettings, "plusLicenseKey" | "accountLicenseKeyHash">
+  settings: Pick<CopilotSettings, "plusLicenseKey" | "accountLicenseKey">
 ): boolean {
-  return (
-    settings.plusLicenseKey !== "" &&
-    settings.accountLicenseKeyHash === sha256(settings.plusLicenseKey)
-  );
+  return settings.plusLicenseKey !== "" && settings.accountLicenseKey === settings.plusLicenseKey;
 }
 
 export function applyAccountLicense(licenseKey: string): void {
-  // The mark is saved before the key so a restart between the writes cannot leave the account's key looking pasted.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/924
-  setSettings({ accountLicenseKeyHash: sha256(licenseKey) });
-  setSettings({ plusLicenseKey: licenseKey });
+  setSettings({ plusLicenseKey: licenseKey, accountLicenseKey: licenseKey });
 }
 
 export function removeLicense(): void {
-  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "", accountLicenseKeyHash: "" });
+  setSettings({ ...CLEARED_ENTITLEMENT, plusLicenseKey: "", accountLicenseKey: "" });
 }
 
 export function turnOffPaid(app?: App): void {

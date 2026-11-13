@@ -74,7 +74,7 @@ export function PlusSettings() {
       onLicenseKeyChange={setLocalLicenseKey}
       isApplying={isChecking}
       onApply={safeAsyncHandler(async () => {
-        setSettings({ plusLicenseKey: localLicenseKey, accountLicenseKeyHash: "" });
+        setSettings({ plusLicenseKey: localLicenseKey, accountLicenseKey: "" });
         setIsChecking(true);
         const result = await checkIsPaidUser(app, { trigger: "manual" });
         setIsChecking(false);
