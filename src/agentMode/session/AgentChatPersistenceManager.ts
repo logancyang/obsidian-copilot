@@ -45,6 +45,10 @@ const AGENT_FILENAME_PREFIX = "agent__";
 // Tool cards are not saved, so each reply keeps the tools it used in a hidden JSON line that a reopened chat sends the agent as history; escaping ">" keeps any value from closing the comment.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
 const MESSAGE_DATA_LINE = /(?:^|\r?\n)<!-- copilot-message ([^>\r\n]*) -->$/;
+// A message line that starts like a sender label would split the message when its note is read back, so saving puts a backslash before the colon (Markdown still shows ":") and loading takes it off.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/927
+const LABEL_LINE = /^(\*\*(?:user|ai)\*\*)(\\*): /gm;
+const ESCAPED_LABEL_LINE = /^(\*\*(?:user|ai)\*\*)\\(\\*): /gm;
 
 interface SavedMessageData {
   tools?: readonly string[];
@@ -387,7 +391,7 @@ export class AgentChatPersistenceManager {
           Object.keys(data).length > 0 || MESSAGE_DATA_LINE.test(body.trim())
             ? `\n<!-- copilot-message ${JSON.stringify(data).replace(/>/g, "\\u003e")} -->`
             : "";
-        return `${formatChatNoteMessage(m.sender, body)}${dataLine}\n[Timestamp: ${ts}]`;
+        return `${formatChatNoteMessage(m.sender, body.replace(LABEL_LINE, "$1\\$2: "))}${dataLine}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
@@ -444,7 +448,7 @@ export class AgentChatPersistenceManager {
         : `loaded-${messages.length}`;
       messages.push({
         id,
-        message: stripChatImageReceipts(messageText),
+        message: stripChatImageReceipts(messageText).replace(ESCAPED_LABEL_LINE, "$1$2: "),
         sender,
         isVisible: true,
         timestamp,
