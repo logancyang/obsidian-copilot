@@ -137,28 +137,30 @@ export function CopilotLicenseSection({
         </div>
       ) : (
         <>
-          <div className="tw-flex tw-items-center tw-gap-2">
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
             <PasswordInput
-              className="tw-w-full"
+              className="tw-flex-1 tw-basis-48"
               placeholder="Enter your license key"
               value={licenseKey}
               onChange={onLicenseKeyChange}
             />
-            <Button
-              variant="secondary"
-              disabled={isApplying}
-              onClick={onApply}
-              className="tw-min-w-10 tw-text-xs md:tw-text-sm"
-            >
-              {isApplying ? (
-                <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" />
-              ) : (
-                "Apply"
-              )}
-            </Button>
-            <Button variant="secondary" className="tw-text-xs md:tw-text-sm" onClick={onSeePlans}>
-              See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
-            </Button>
+            <div className="tw-flex tw-flex-wrap tw-gap-2">
+              <Button
+                variant="secondary"
+                disabled={isApplying}
+                onClick={onApply}
+                className="tw-min-w-10 tw-text-xs md:tw-text-sm"
+              >
+                {isApplying ? (
+                  <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" />
+                ) : (
+                  "Apply"
+                )}
+              </Button>
+              <Button variant="secondary" className="tw-text-xs md:tw-text-sm" onClick={onSeePlans}>
+                See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
+              </Button>
+            </div>
           </div>
           {applyError && <div className="tw-text-sm tw-text-error">{applyError}</div>}
         </>
