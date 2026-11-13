@@ -83,6 +83,7 @@ const context = await esbuild.context({
   define: {
     global: "window",
     "process.env.NODE_ENV": prod ? '"production"' : '"development"',
+    "process.env.COPILOT_WEBSITE_ORIGIN": JSON.stringify(process.env.COPILOT_WEBSITE_ORIGIN ?? ""),
     "import.meta.url": "import_meta.url",
   },
   minify: prod,

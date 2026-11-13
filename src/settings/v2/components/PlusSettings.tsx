@@ -2,6 +2,8 @@ import type { UsageWindow } from "@/agentMode";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
+import { usePlugin } from "@/contexts/PluginContext";
+import { useAccountControl } from "@/copilotAccount/ui/useAccountControl";
 import { checkIsPaidUser, navigateToPlusPage, removeLicense, useLicenseState } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { CopilotLicenseSection } from "@/settings/v2/components/ui/CopilotLicenseSection";
@@ -40,6 +42,7 @@ export function PlusSettings() {
   const license = useLicenseState();
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
   const usageWindows = useLicenseUsage(!isChecking && license.status === "active");
+  const account = useAccountControl(usePlugin().copilotAccount);
 
   const confirmRemoveLicense = () => {
     new ConfirmModal(
@@ -80,6 +83,7 @@ export function PlusSettings() {
       onSeePlans={() => navigateToPlusPage("settings")}
       usageWindows={usageWindows}
       onRemoveLicense={confirmRemoveLicense}
+      account={account}
     />
   );
 }

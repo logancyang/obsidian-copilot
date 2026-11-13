@@ -22,6 +22,7 @@ The words Copilot shows users. Each concept has one plain name; use it in UI lab
 | Custom commands                                           | command, Add command, Slash menu, Right-click             | Cmd, Add Cmd, Slash Cmd, In Menu      |
 | Saved chats                                               | Saving chats, chat note                                   | conversation                          |
 | Notes, folders, and other items a project uses as context | link, Linked, Link context, Unlink                        | inclusion, context source             |
+| Connecting the plugin to a Copilot website account        | Sign in, Sign out, Copilot account                        | Log in, login, OAuth, connect         |
 
 ## Rules
 

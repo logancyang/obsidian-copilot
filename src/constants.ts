@@ -4,6 +4,10 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
+// A test build signs in to a local website; a shipped build has no way to point sign-in elsewhere.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+export const COPILOT_WEBSITE_ORIGIN =
+  process.env.COPILOT_WEBSITE_ORIGIN || "https://www.obsidiancopilot.com";
 export const USAGE_DASHBOARD_URL = "https://www.obsidiancopilot.com/en/dashboard/token-usage";
 export const COPILOT_OAUTH_CLIENT_METADATA_URL =
   "https://www.obsidiancopilot.com/oauth/client-metadata.json";

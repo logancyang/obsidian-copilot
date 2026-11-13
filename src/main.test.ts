@@ -80,6 +80,7 @@ jest.mock("@/agentMode", () => ({
 jest.mock("@/agentMode/agentModelDiscovery", () => ({ wireAgentModelDiscovery: jest.fn() }));
 jest.mock("@/connectors/connectionManager");
 jest.mock("@/connectors/custom/customConnectors");
+jest.mock("@/copilotAccount/copilotAccount");
 
 import CopilotPlugin from "@/main";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -127,6 +128,7 @@ import { Notice, TFile, type WorkspaceLeaf } from "obsidian";
 import { ConnectionManager } from "@/connectors/connectionManager";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
+import { CopilotAccount } from "@/copilotAccount/copilotAccount";
 
 function createPluginUnderTest(calls: string[]) {
   const plugin = Object.create(CopilotPlugin.prototype) as CopilotPlugin;
@@ -724,6 +726,25 @@ describe("main", () => {
         expect(custom.dispose).toHaveBeenCalledTimes(1);
       });
 
+      it("gives the plugin a Copilot account on desktop without reading it at startup, and disposes it when the plugin unloads — https://github.com/Brevilabs/obsidian-copilot-private/issues/923", async () => {
+        (isDesktopRuntime as jest.Mock).mockReturnValue(true);
+        (startActiveWebTabTracking as jest.Mock).mockReturnValue({
+          activeLeafRef: {},
+          layoutRef: {},
+        });
+        const { plugin, registrations, finishStartup } = createLoadingPlugin();
+
+        plugin.onload();
+        await finishStartup();
+
+        const account = jest.mocked(CopilotAccount).mock.instances[0];
+        expect(plugin.copilotAccount).toBe(account);
+        expect(account.refreshProfile).not.toHaveBeenCalled();
+        expect(account.dispose).not.toHaveBeenCalled();
+        for (const [cleanup] of registrations.register.mock.calls) (cleanup as () => void)();
+        expect(account.dispose).toHaveBeenCalledTimes(1);
+      });
+
       it("starts no connection manager on mobile, where connector logins cannot run", async () => {
         const { plugin, finishStartup } = createLoadingPlugin();
 
@@ -734,6 +755,7 @@ describe("main", () => {
         expect(plugin.connectionManager).toBeUndefined();
         expect(plugin.connectorTools).toBeUndefined();
         expect(plugin.customConnectors).toBeUndefined();
+        expect(plugin.copilotAccount).toBeUndefined();
       });
 
       it.each([

@@ -38,6 +38,7 @@ import {
   COPILOT_AGENT_ICON_ID,
   APPLY_VIEW_TYPE,
   COPILOT_AGENT_ICON_SVG,
+  COPILOT_WEBSITE_ORIGIN,
   DEFAULT_OPEN_AREA,
   DESKTOP_VIEW_TYPES,
   EVENT_NAMES,
@@ -64,6 +65,7 @@ import { isConnectorsEnabled } from "@/connectors/connectorsEntitlement";
 import { ConnectorTools } from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { ConnectorAuth } from "@/connectors/oauth/connectorAuth";
+import { CopilotAccount } from "@/copilotAccount/copilotAccount";
 import { backupLegacyCredentials } from "@/services/legacyCredentialBackup";
 import {
   persistSettings,
@@ -105,7 +107,7 @@ import { ensureCopilotSubfolders, getEffectiveConversationsFolder } from "@/sett
 import { revealHiddenCopilotFolder } from "@/settings/revealCopilotFolder";
 import { buildUpgradeRelocationEntries } from "@/settings/upgradeNotice";
 import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
-import { getDeviceId } from "@/utils/deviceId";
+import { getDeviceId, getPersistedDeviceId } from "@/utils/deviceId";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { getElectronShell } from "@/utils/electronShell";
 import { disposeNotificationSound } from "@/utils/notificationSound";
@@ -182,6 +184,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   connectionManager?: ConnectionManager;
   connectorTools?: ConnectorTools;
   customConnectors?: CustomConnectors;
+  copilotAccount?: CopilotAccount;
   openArtifactsPublisher!: OpenArtifactsPublisher;
   skills?: SkillManager;
   private CopilotAgentView?: typeof import("@/agentMode").CopilotAgentView;
@@ -358,6 +361,23 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
 
     void verifyCachedEntitlement();
     if (!isLegacyUpgrade) void checkIsPaidUser(this.app, { trigger: "startup" });
+    // Signing in waits for the browser on a local address, which only desktop can listen on.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+    if (isDesktopRuntime()) {
+      const openUrl = (url: string) => {
+        getElectronShell()
+          ?.openExternal?.(url)
+          .catch((error) => logError("[Account] could not open the system browser:", error));
+      };
+      const copilotAccount = new CopilotAccount({
+        auth: new ConnectorAuth({ keychain: KeychainService.getInstance(), openUrl }),
+        websiteOrigin: COPILOT_WEBSITE_ORIGIN,
+        installId: () => getPersistedDeviceId(this.app),
+        openUrl,
+      });
+      this.copilotAccount = copilotAccount;
+      this.register(() => copilotAccount.dispose());
+    }
     this.registerInterval(
       window.setInterval(
         () => void checkIsPaidUser(this.app, { trigger: "refresh" }),
