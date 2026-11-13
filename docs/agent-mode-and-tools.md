@@ -111,7 +111,7 @@ Each agent has its own model list. The models shown in one agent do not automati
 
 - Set the model and effort used by new chats under [**Settings → Copilot → Basic → Agents**](settings.md#basic).
 - Use the controls beside the composer to change the model or effort for the current chat.
-- Before the first message, choosing a model from another installed agent switches the empty chat to that agent. Once a conversation has started, it stays with its agent.
+- Before the first message, choosing a model from another installed agent switches the chat to that agent. A chat opened with **Continue from here in a new chat** keeps its earlier messages, title and chat note when it switches. Once you send a message, the chat stays with its agent.
 - **Effort** appears only when the selected agent and model support it. Higher effort can improve difficult reasoning but may take longer and use more of your account allowance.
 - Models with effort controls always use a concrete effort. A supported saved effort is kept; otherwise Copilot chooses the lowest supported effort and updates the saved default. Models without effort controls omit effort. **Agent default** clears the saved model preference; the new chat shows the agent's model and its resolved effort.
 - Reloading an agent keeps each open chat's model and effort. If that model is no longer enabled for the agent, or is still waiting for its API key, the chat falls back to your saved default, or to one of your enabled models.

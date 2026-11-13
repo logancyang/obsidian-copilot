@@ -761,6 +761,27 @@ describe("AgentChatPersistenceManager", () => {
     });
   });
 
+  describe("setAgent()", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 points a chat note at another agent and its model, leaving its messages, title, carried count and continued-from list as they were", async () => {
+      const messages = [makeMessage(USER_SENDER, "hi"), makeMessage(AI_SENDER, "hello", 1)];
+      const saved = await manager.saveSession(messages, "claude", {
+        label: "Heron chat",
+        model: { baseModelId: "sonnet", effort: "high" },
+        carriedMessages: 2,
+        continuedFrom: ["chats/original.md"],
+      });
+      const file = app.files.get(saved!.path)!;
+      Object.setPrototypeOf(file, TFile.prototype);
+      const before = await manager.loadFile(file as unknown as TFile);
+      const codex = { baseModelId: "gpt-6", effort: "medium" };
+
+      await manager.setAgent(saved!.path, "codex", codex);
+      const after = await manager.loadFile(file as unknown as TFile);
+
+      expect(after).toEqual({ ...before, backendId: "codex", model: codex });
+    });
+  });
+
   describe("loadFile()", () => {
     it("restores the tools a reply used from its note without showing them in the message (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
       const reply: AgentChatMessage = {

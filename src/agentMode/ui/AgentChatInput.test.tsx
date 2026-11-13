@@ -122,6 +122,8 @@ const image = {
 } as File;
 const imageBlock = { type: "image", mimeType: "image/png", data: "AQID" };
 
+const NEVER_MOVED = () => false;
+
 const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInputDraftControls => ({
   input: "hello",
   images: [],
@@ -165,6 +167,7 @@ function inputNode(
       modelPickerOverride={undefined}
       modePickerOverride={undefined}
       onCycleMode={jest.fn()}
+      hasChatMovedFrom={NEVER_MOVED}
       {...extraProps}
     />
   );
@@ -1050,6 +1053,37 @@ describe("AgentChatInput", () => {
       const promptContent = (backend.sendMessage as jest.Mock).mock.calls[0][2];
       expect(promptContent).toHaveLength(1);
       expect(promptContent[0].type).toBe("image");
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 returns a message and its image to the chat's draft, ahead of anything typed since, instead of sending it to a chat that moved to another agent while the image was read", async () => {
+      let resolveRead!: (buf: ArrayBuffer) => void;
+      const slowImage = {
+        type: "image/png",
+        arrayBuffer: () =>
+          new Promise<ArrayBuffer>((resolve) => {
+            resolveRead = resolve;
+          }),
+      } as unknown as File;
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        cancel: jest.fn(),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      const draft = makeDraft({ input: "What was the codeword?", images: [slowImage] });
+      let moved = false;
+
+      renderInput(backend, draft, { hasChatMovedFrom: (from) => moved && from === backend });
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(draft.resetCompose).toHaveBeenCalledTimes(1));
+      moved = true;
+      resolveRead(new Uint8Array([1, 2, 3]).buffer);
+
+      await waitFor(() => expect(draft.setInput).toHaveBeenCalledTimes(1));
+      const restoreText = (draft.setInput as jest.Mock).mock.calls[0][0];
+      const restoreImages = (draft.setSelectedImages as jest.Mock).mock.calls[0][0];
+      expect(restoreText("typed meanwhile")).toBe("What was the codeword?\n\ntyped meanwhile");
+      expect(restoreImages([])).toEqual([slowImage]);
+      expect(backend.sendMessage).not.toHaveBeenCalled();
     });
 
     it("drops a send when the composer is disabled (orphaned project)", async () => {

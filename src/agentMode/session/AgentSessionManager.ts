@@ -1726,17 +1726,59 @@ export class AgentSessionManager {
   ): Promise<AgentSession> {
     const oldIdx = Array.from(this.sessions.keys()).indexOf(oldId);
     const replaced = this.sessions.get(oldId);
+    // A chat with messages its agent never received moves with its note: the note is opened again on the other agent, as a restart opens it, and then names that agent.
+    // Its pending save is written first, or it would land after the note names the new agent and point it back.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    if (replaced?.hasUserVisibleMessages()) await this.drainAutoSave(replaced);
+    const note = replaced?.hasUserVisibleMessages()
+      ? this.app.vault.getAbstractFileByPath(this.getSessionSourcePath(oldId))
+      : null;
+    const persistence = this.opts.persistenceManager;
+    const loaded = note instanceof TFile && persistence ? await persistence.loadFile(note) : null;
     const created = await this.createSession(
       backendId,
       replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
       replaced?.chatInputId
     );
+    // A message sent before the other agent is up ties the chat to the agent that received it, so the switch is dropped.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+    if (replaced && this.isTiedToAgent(oldId)) {
+      await this.closeSession(created.internalId);
+      this.setActiveSession(oldId);
+      return replaced;
+    }
+    if (loaded && note instanceof TFile) {
+      this.restoreFromNote(created, false, note, loaded);
+      if (loaded.label) created.setLabel(loaded.label);
+    }
     this.moveIntoTabSlot(created.internalId, oldIdx);
     void this.closeSession(oldId).catch((e) =>
       logWarn(`[AgentMode] closeSession during replaceSessionInPlace failed`, e)
     );
+    if (loaded) await this.recordUnsentChatAgent(created, options.seedSelection);
     return created;
+  }
+
+  // A chat whose agent has received nothing reopens on the agent and model its note names, so the note follows each switch and model or effort change until the first send.
+  // The chat has moved by then, so a failed write is only logged; the first send saves the agent anyway.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+  private recordUnsentChatAgent(session: AgentSession, model?: ModelSelection): Promise<void> {
+    const state = this.getSessionState(session.internalId);
+    const path = state.source?.path;
+    const persistence = this.opts.persistenceManager;
+    if (!path || !persistence || this.isTiedToAgent(session.internalId)) return Promise.resolve();
+    const write = (state.saving ?? Promise.resolve())
+      .then(() => persistence.setAgent(path, session.backendId, model))
+      .catch((e) => logWarn(`[AgentMode] pointing ${path} at ${session.backendId} failed`, e));
+    state.saving = write;
+    return write;
+  }
+
+  isTiedToAgent(internalId: string): boolean {
+    if (!this.sessions.get(internalId)?.hasUserVisibleMessages()) return false;
+    const state = this.sessionState.get(internalId);
+    return !state?.withholdsSessionId || state.replacedSessionId !== undefined;
   }
 
   async startNewChatInPlace(oldId: string, backendId?: BackendId): Promise<AgentSession> {
@@ -2401,6 +2443,10 @@ export class AgentSessionManager {
       onMessagesChanged: trigger,
       onStatusChanged: () => {},
       onLabelChanged: trigger,
+      onModelChanged: () => {
+        const model = session.getState()?.model?.current;
+        if (model) void this.recordUnsentChatAgent(session, model);
+      },
       onPromptSent: () => {
         this.getSessionState(session.internalId).withholdsSessionId = false;
         this.unarchiveSavedChat(session);

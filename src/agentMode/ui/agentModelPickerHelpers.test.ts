@@ -189,7 +189,7 @@ function noSessionContext(): ModelActiveContext {
     activeChatUIState: null,
     activeBackendId: null,
     activeDescriptor: undefined,
-    activeSessionHasHistory: false,
+    activeChatTiedToAgent: false,
     activeModelState: null,
     activeCurrentEntry: undefined,
   };
@@ -207,9 +207,9 @@ describe("agentModelPickerHelpers", () => {
         getActiveSession: () => ({
           backendId: "codex",
           getState: () => activeState,
-          hasUserVisibleMessages: () => false,
         }),
         getActiveChatUIState: () => null,
+        isTiedToAgent: () => false,
       } as unknown as AgentSessionManager;
 
       expect(collectModelActiveContext(manager).activeModelState).toBe(activeState.model);
@@ -220,13 +220,33 @@ describe("agentModelPickerHelpers", () => {
         getActiveSession: () => ({
           backendId: "codex",
           getState: () => null,
-          hasUserVisibleMessages: () => false,
         }),
         getActiveChatUIState: () => null,
+        isTiedToAgent: () => false,
       } as unknown as AgentSessionManager;
 
       expect(collectModelActiveContext(manager).activeModelState).toBeNull();
     });
+
+    it.each([
+      ["before its first message is sent", false],
+      ["after its first message is sent", true],
+    ])(
+      "https://github.com/Brevilabs/obsidian-copilot-private/issues/908 ties a continued chat with carried messages to its agent only %s",
+      (_when, tied) => {
+        const manager = {
+          getActiveSession: () => ({
+            internalId: "continued",
+            backendId: "codex",
+            getState: () => null,
+          }),
+          getActiveChatUIState: () => null,
+          isTiedToAgent: (id: string) => id === "continued" && tied,
+        } as unknown as AgentSessionManager;
+
+        expect(collectModelActiveContext(manager).activeChatTiedToAgent).toBe(tied);
+      }
+    );
   });
 
   describe("buildPickerEntries()", () => {
@@ -402,7 +422,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: true,
+        activeChatTiedToAgent: true,
         activeModelState: makeModelState("gpt-5", [codexEntry]),
         activeCurrentEntry: codexEntry,
       };
@@ -425,7 +445,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost-model", [stranded]),
         activeCurrentEntry: stranded,
       };
@@ -448,7 +468,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("gpt-5", [entry]),
         activeCurrentEntry: entry,
       };
@@ -501,7 +521,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "opencode",
         activeDescriptor: opencode,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState(pushed.baseModelId, [pushed, enabled]),
         activeCurrentEntry: pushed,
       };
@@ -540,7 +560,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "opencode",
         activeDescriptor: opencode,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
         activeCurrentEntry: agentDefault,
       };
@@ -573,7 +593,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState(agentDefault.baseModelId, [agentDefault]),
         activeCurrentEntry: agentDefault,
       };
@@ -608,7 +628,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("gpt-5", [entry]),
         activeCurrentEntry: entry,
       };
@@ -636,7 +656,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost", [stranded]),
         activeCurrentEntry: stranded,
       };
@@ -696,7 +716,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: "codex",
         activeDescriptor: codex,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("ghost-model", [stranded]),
         activeCurrentEntry: stranded,
       };
@@ -819,7 +839,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: null,
         activeBackendId: backendId,
         activeDescriptor: makeDescriptor(backendId),
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: null,
         activeCurrentEntry: undefined,
       };
@@ -1019,7 +1039,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: makeUIState({ canSwitchEffort: opts.canSwitchEffort }),
         activeBackendId: "codex",
         activeDescriptor: makeDescriptor("codex"),
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: makeModelState("m", [entry]),
         activeCurrentEntry: entry,
       };
@@ -1078,7 +1098,7 @@ describe("agentModelPickerHelpers", () => {
         activeChatUIState: makeUIState({ canSwitchModel: true }),
         activeBackendId,
         activeDescriptor: activeBackendId ? makeDescriptor("codex") : undefined,
-        activeSessionHasHistory: false,
+        activeChatTiedToAgent: false,
         activeModelState: null,
         activeCurrentEntry: undefined,
       };

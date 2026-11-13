@@ -147,3 +147,55 @@ export const BlockedByAgentConfig: StoryObj<Props> = {
     },
   },
 };
+
+const AGENT_EFFORTS = ConcreteEffort.args.override.effortOptionsByModelKey["example|agent"];
+
+export const SeveralAgents: StoryObj<Props> = {
+  args: {
+    override: {
+      ...ConcreteEffort.args.override,
+      models: [
+        {
+          name: "sonnet",
+          displayName: "Sonnet",
+          provider: "agent",
+          enabled: true,
+          _group: "Claude",
+          _backendId: "claude",
+        },
+        {
+          name: "opus",
+          displayName: "Opus",
+          provider: "agent",
+          enabled: true,
+          _group: "Claude",
+          _backendId: "claude",
+        },
+        {
+          name: "gpt-5.5",
+          displayName: "GPT-5.5",
+          provider: "agent",
+          enabled: true,
+          _group: "Codex",
+          _backendId: "codex",
+        },
+        {
+          name: "opencode/big-pickle",
+          displayName: "opencode/Big Pickle",
+          provider: "agent",
+          enabled: true,
+          _group: "OpenCode",
+          _backendId: "opencode",
+          _isFree: true,
+        },
+      ],
+      value: "claude:sonnet|agent",
+      effortOptionsByModelKey: {
+        "claude:sonnet|agent": AGENT_EFFORTS,
+        "claude:opus|agent": AGENT_EFFORTS,
+        "codex:gpt-5.5|agent": AGENT_EFFORTS,
+        "opencode:opencode/big-pickle|agent": [],
+      },
+    },
+  },
+};

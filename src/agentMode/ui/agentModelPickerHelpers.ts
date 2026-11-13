@@ -186,7 +186,7 @@ export interface ModelActiveContext {
   activeChatUIState: AgentChatUIState | null;
   activeBackendId: BackendId | null;
   activeDescriptor: BackendDescriptor | undefined;
-  activeSessionHasHistory: boolean;
+  activeChatTiedToAgent: boolean;
   activeModelState: ModelState | null;
   activeCurrentEntry: ModelEntry | undefined;
 }
@@ -196,7 +196,9 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
   const activeChatUIState = manager.getActiveChatUIState();
   const activeBackendId = activeSession?.backendId ?? null;
   const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
-  const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
+  const activeChatTiedToAgent = activeSession
+    ? manager.isTiedToAgent(activeSession.internalId)
+    : false;
   const activeState = activeSession?.getState() ?? null;
   const activeModelState = activeState?.model ?? null;
   const activeCurrentEntry = activeModelState?.availableModels.find(
@@ -207,7 +209,7 @@ export function collectModelActiveContext(manager: AgentSessionManager): ModelAc
     activeChatUIState,
     activeBackendId,
     activeDescriptor,
-    activeSessionHasHistory,
+    activeChatTiedToAgent,
     activeModelState,
     activeCurrentEntry,
   };
@@ -222,7 +224,7 @@ export function buildPickerEntries(
   const entries: ModelSelectorEntry[] = [];
   for (const descriptor of descriptors) {
     const isActiveBackend = descriptor.id === ctx.activeBackendId;
-    if (!isActiveBackend && ctx.activeSessionHasHistory) continue;
+    if (!isActiveBackend && ctx.activeChatTiedToAgent) continue;
     const catalog = manager.getCachedModelCatalog(descriptor.id);
     const backendModels = catalog?.availableModels ?? null;
     const hasNoCatalog = catalog === null;
