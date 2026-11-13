@@ -4649,6 +4649,32 @@ describe("AgentSessionManager", () => {
         expect(saveSession).toHaveBeenCalledWith(messages, session.backendId, expect.anything());
       });
 
+      it("saves again when the last reply gains a tool call without new text, so its note lists that tool (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+        const { mgr, saveSession } = savedNoteFixture();
+        const session = await mgr.createSession();
+        const handle = getSessionTestHandle(session);
+        handle.setMessages([{ message: "Question" }, { message: "Answer" }]);
+        await mgr.saveActiveSession();
+        const withTool = [
+          { message: "Question" },
+          {
+            message: "Answer",
+            parts: [{ kind: "tool_call", id: "tc1", title: "Edit a.md", status: "completed" }],
+          },
+        ];
+        handle.setMessages(withTool);
+
+        await mgr.saveActiveSession();
+
+        expect(saveSession).toHaveBeenCalledTimes(2);
+        expect(saveSession).toHaveBeenLastCalledWith(
+          withTool,
+          session.backendId,
+          expect.anything()
+        );
+        await mgr.shutdown();
+      });
+
       it("persists changes during the first manual save for https://github.com/logancyang/obsidian-copilot/issues/3225", async () => {
         const { mgr, saveSession } = savedNoteFixture();
         let finishSave!: (result: { path: string }) => void;

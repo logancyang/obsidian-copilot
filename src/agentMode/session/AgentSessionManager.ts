@@ -1,4 +1,6 @@
 import { isCompactCommand } from "@/commands/compactCommand";
+import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
+import { getVaultBase } from "@/utils/vaultPath";
 import type { AgentMcpServer, BackendState } from "@/agentMode/session/types";
 import type { ChatExtension } from "@/agentMode/session/chatExtension";
 import type { CopilotMcpServer, FindCallingChat } from "@/agentMode/session/copilotMcpServer";
@@ -2497,9 +2499,12 @@ export class AgentSessionManager {
           .map((a) => `${a.status}:${a.text.length}`)
           .join(",") + `|${last.fanout.summary.status}:${last.fanout.summary.text.length}`
       : "";
+    // The note lists each reply's tools, so a tool call that adds no text still needs a save.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+    const toolsSig = last ? toolsUsedLines(last, getVaultBase(this.app)).join("|") : "";
     const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       last?.message ?? ""
-    }-${fanoutSig}-${usage?.updatedAt ?? ""}`;
+    }-${fanoutSig}-${toolsSig}-${usage?.updatedAt ?? ""}`;
     if (state.signature === signature) {
       return state.source ?? null;
     }

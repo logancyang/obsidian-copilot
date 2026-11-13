@@ -5,6 +5,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## Sub-features
 
 - row-open: click a row to show its chat in Agent Chat.
+- row-open-saved: a saved chat the agent no longer has, such as one saved on another computer, opens from its note. On the next message the agent is told the earlier messages and which tools and files each reply used. The chat shows the same messages, with no tool steps.
 - row-status: the row shows `Running` (a green dot), a spinner while responding, `Waiting for permission`, or `Unread result`.
 - row-agent: in the Navigator, the row starts with the logo of the agent that runs the chat.
 - row-attention: in the Navigator, a chat with an unread result shows a bell in the accent color in place of the green `Running` dot. It and a chat waiting for permission show a bold title; other chats are dimmed except the current one.
@@ -25,6 +26,7 @@ One chat in a list: the Navigator, Recent chats on the start screen, or the chat
 ## Driving it
 
 - Open: choose a row in Recent chats. Its conversation shows in Agent Chat.
+- Open saved: ask Claude to read three notes and summarize them, then open the chat on another computer, or remove Claude's own record of it. Reopen it from Recent chats: the messages show without tool steps. Ask which notes the summary came from: Claude names all three with their paths.
 - Pin: hover the row and choose `Pin chat`. The chat moves under Pinned and offers `Unpin chat`.
 - Rename: choose `More actions` → Rename, type a name, confirm. The row shows the new name.
 - Close: on a row offering `Shut down`, choose it. The button goes away, the chat's tab closes, and the row stays.

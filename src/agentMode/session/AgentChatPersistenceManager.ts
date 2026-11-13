@@ -5,6 +5,7 @@ import {
   updateChatTranscript,
 } from "@/utils/chatImagePersistence";
 import { serializeFanoutComposite } from "@/agentMode/session/fanout/fanoutTypes";
+import { toolsUsedLines } from "@/agentMode/session/conversationHistory";
 import { AGENT_CHAT_MODE, AI_SENDER, COPILOT_CONVERSATION_TAG, USER_SENDER } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -25,6 +26,7 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import { formatChatNoteMessage } from "@/utils/chatHistoryUtils";
 import { joinPosix } from "@/utils/pathUtils";
+import { getVaultBase } from "@/utils/vaultPath";
 import { TFile, type App } from "obsidian";
 import {
   coerceProjectId,
@@ -38,6 +40,21 @@ import type { AgentChatMessage, BackendId, SessionUsage } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 const AGENT_FILENAME_PREFIX = "agent__";
+// Tool cards are not saved, so each reply keeps the tools it used in a hidden JSON line that a reopened chat sends the agent as history; escaping ">" keeps any value from closing the comment.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+const MESSAGE_DATA_LINE = /(?:^|\r?\n)<!-- copilot-message ([^>\r\n]*) -->$/;
+
+interface SavedMessageData {
+  tools?: readonly string[];
+}
+
+function readMessageData(json: string): SavedMessageData {
+  try {
+    return (JSON.parse(json) ?? {}) as SavedMessageData;
+  } catch {
+    return {};
+  }
+}
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
   const epoch = Number(raw);
@@ -271,7 +288,15 @@ export class AgentChatPersistenceManager {
           m.message.length === 0 && m.fanout
             ? serializeFanoutComposite(m.fanout, (id) => id)
             : m.message;
-        return `${formatChatNoteMessage(m.sender, body)}\n[Timestamp: ${ts}]`;
+        const tools = toolsUsedLines(m, getVaultBase(this.app));
+        const data: SavedMessageData = tools.length > 0 ? { tools } : {};
+        // A message ending in a literal hidden line gets an empty one after it, so loading keeps that text.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/906
+        const dataLine =
+          Object.keys(data).length > 0 || MESSAGE_DATA_LINE.test(body.trim())
+            ? `\n<!-- copilot-message ${JSON.stringify(data).replace(/>/g, "\\u003e")} -->`
+            : "";
+        return `${formatChatNoteMessage(m.sender, body)}${dataLine}\n[Timestamp: ${ts}]`;
       })
       .join("\n\n");
   }
@@ -297,7 +322,13 @@ export class AgentChatPersistenceManager {
         }
       }
 
-      const messageText = lines.slice(0, endIndex).join("\n").trim();
+      const savedText = lines.slice(0, endIndex).join("\n").trim();
+      const dataLine = MESSAGE_DATA_LINE.exec(savedText);
+      const messageText = dataLine ? savedText.slice(0, dataLine.index).trim() : savedText;
+      const data = dataLine ? readMessageData(dataLine[1]) : {};
+      const tools = Array.isArray(data.tools)
+        ? data.tools.filter((tool) => typeof tool === "string")
+        : [];
 
       let timestamp: FormattedDateTime | null = null;
       if (timestampStr !== "Unknown time") {
@@ -325,6 +356,7 @@ export class AgentChatPersistenceManager {
         sender,
         isVisible: true,
         timestamp,
+        ...(tools.length > 0 ? { toolsUsed: tools } : {}),
       });
     }
     return messages;

@@ -33,6 +33,7 @@ interface StoredAgentMessage {
   turnDurationMs?: number;
   fanout?: FanoutTurn;
   fileChanges?: TurnFileChange[];
+  toolsUsed?: readonly string[];
   version: number;
 }
 
@@ -511,6 +512,7 @@ export class AgentMessageStore {
         turnStopReason: msg.turnStopReason,
         turnDurationMs: msg.turnDurationMs,
         fanout,
+        toolsUsed: msg.toolsUsed,
         version: 0,
       });
     }
@@ -532,6 +534,7 @@ export class AgentMessageStore {
       agentCancelCause: m.agentCancelCause,
       turnDurationMs: m.turnDurationMs,
       fileChanges: m.fileChanges,
+      toolsUsed: m.toolsUsed,
       ...(m.fanout ? { fanout: snapshotFanoutTurn(m.fanout) } : {}),
     };
   }

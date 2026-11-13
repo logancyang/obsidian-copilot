@@ -649,6 +649,184 @@ describe("AgentChatPersistenceManager", () => {
   });
 
   describe("loadFile()", () => {
+    it("restores the tools a reply used from its note without showing them in the message (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const reply: AgentChatMessage = {
+        ...makeMessage(AI_SENDER, "Here is the summary.", 1735732800001),
+        parts: [
+          { kind: "text", text: "Here is the summary." },
+          {
+            kind: "tool_call",
+            id: "tc1",
+            title: "Read a.md",
+            toolKind: "read",
+            status: "completed",
+            locations: [{ path: "notes/a.md" }],
+            output: [{ type: "text", text: "SECRET NOTE BODY" }],
+          },
+          {
+            kind: "tool_call",
+            id: "tc2",
+            title: 'Search "budget"',
+            toolKind: "search",
+            status: "completed",
+          },
+        ],
+      };
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, "Summarize my notes."), reply],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        [
+          "**user**: Summarize my notes.",
+          "[Timestamp: 2026/01/01 12:00:00]",
+          "",
+          "**ai**: Here is the summary.",
+          '<!-- copilot-message {"tools":["Read a.md (read): notes/a.md","Search \\"budget\\" (search)"]} -->',
+          "[Timestamp: 2026/01/01 12:00:00]",
+        ].join("\n")
+      );
+      expect(file.contents).not.toContain("SECRET NOTE BODY");
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[1].message).toBe("Here is the summary.");
+      expect(loaded.messages[1].parts).toBeUndefined();
+      expect(loaded.messages[1].toolsUsed).toEqual([
+        "Read a.md (read): notes/a.md",
+        'Search "budget" (search)',
+      ]);
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it("restores a tool title holding --> or > exactly, without letting it close the hidden line (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "Run it."),
+          {
+            ...makeMessage(AI_SENDER, "Ran it.", 1735732800001),
+            parts: [
+              {
+                kind: "tool_call",
+                id: "tc1",
+                title: "Run echo a --> b > c.md",
+                toolKind: "execute",
+                status: "completed",
+              },
+            ],
+          },
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        "**ai**: Ran it.\n" +
+          '<!-- copilot-message {"tools":["Run echo a --\\u003e b \\u003e c.md (execute)"]} -->\n'
+      );
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[1].message).toBe("Ran it.");
+      expect(loaded.messages[1].toolsUsed).toEqual(["Run echo a --> b > c.md (execute)"]);
+    });
+
+    it("keeps a hidden line a reply quotes at the end of its text, next to the tools it used (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const quoted = 'Your note stores:\n<!-- copilot-message {"tools":["Read a.md"]} -->';
+      const saved = await manager.saveSession(
+        [
+          makeMessage(USER_SENDER, "What does the note store?"),
+          {
+            ...makeMessage(AI_SENDER, quoted, 1735732800001),
+            parts: [{ kind: "tool_call", id: "tc1", title: "Read b.md", status: "completed" }],
+          },
+        ],
+        "claude"
+      );
+
+      const loaded = await manager.loadFile(app.files.get(saved!.path)! as unknown as TFile);
+
+      expect(loaded.messages[1].message).toBe(quoted);
+      expect(loaded.messages[1].toolsUsed).toEqual(["Read b.md"]);
+    });
+
+    it("keeps a message that ends with a literal hidden line and used no tools, across saves (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const literal = 'Each reply ends with:\n<!-- copilot-message {"tools":["Read a.md"]} -->';
+      const saved = await manager.saveSession(
+        [makeMessage(USER_SENDER, literal), makeMessage(AI_SENDER, "Noted.", 1735732800001)],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+
+      expect(file.contents).toContain(
+        `**user**: ${literal}\n<!-- copilot-message {} -->\n[Timestamp: `
+      );
+      const loaded = await manager.loadFile(file as unknown as TFile);
+      expect(loaded.messages[0].message).toBe(literal);
+      expect(loaded.messages[0].toolsUsed).toBeUndefined();
+
+      const before = file.contents;
+      await manager.saveSession(loaded.messages, "claude", { existingPath: saved!.path });
+      expect(file.contents).toBe(before);
+    });
+
+    it("drops a hidden line whose data cannot be read and keeps the message text (https://github.com/Brevilabs/obsidian-copilot-private/issues/906)", async () => {
+      const path = "test-folder/agent__bad-line.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1789109351267",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+          '<!-- copilot-message {"tools":["Read a.md" -->',
+          "[Timestamp: 2026/09/10 23:49:11]",
+          "",
+          "**ai**: hello",
+          '<!-- copilot-message {"tools":"Read a.md"} -->',
+          "[Timestamp: 2026/09/10 23:49:15]",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.messages.map((m) => m.message)).toEqual(["hi", "hello"]);
+      expect(loaded.messages.map((m) => m.toolsUsed)).toEqual([undefined, undefined]);
+    });
+
+    it("loads a note saved without hidden lines as before", async () => {
+      const path = "test-folder/agent__no-tools.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1789109351267",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+          "[Timestamp: 2026/09/10 23:49:11]",
+          "",
+          "**ai**: hello <!-- a comment the user wrote -->",
+          "[Timestamp: 2026/09/10 23:49:15]",
+        ].join("\n")
+      );
+
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+
+      expect(loaded.messages.map((m) => m.message)).toEqual([
+        "hi",
+        "hello <!-- a comment the user wrote -->",
+      ]);
+      expect(loaded.messages.map((m) => m.toolsUsed)).toEqual([undefined, undefined]);
+    });
+
     it("throws on missing backendId instead of silently defaulting", async () => {
       const path = "test-folder/agent__broken.md";
       await app.vault.adapter.write(
