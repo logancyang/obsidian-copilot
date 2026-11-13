@@ -1,6 +1,6 @@
 # Copilot license
 
-The `Copilot license` section at the top of Copilot settings' Basic tab: what the paid plans add, signing in to a Copilot account, the license key, the plan badge, and how much of the plan's allowance is used.
+The `Copilot license` section at the top of Copilot settings' Basic tab: what the paid plans add, signing in to a Copilot account, the license key, the plan badge, how much of the plan's allowance is used, and the invite to the Copilot Discord.
 
 ## Sub-features
 
@@ -9,7 +9,8 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 - account-signing-in: while the browser is open, that spot reads `Finish signing in in your browser` with `Open page` and `Cancel`.
 - account-sign-in-failure: a cancelled, failed or timed-out sign-in says what happened under the title and leaves any applied license as it was.
 - account-pill: once signed in, that spot is one pill with the account's initial and its plan: `Free`, `Lite`, `Plus` or `Lifetime`. The plan badge is gone.
-- account-menu: the pill opens a menu with the account's email, `Dashboard`, `Refresh plan` and `Sign out`. `Refresh plan` reads the account's plan again.
+- account-menu: the pill opens a menu with the account's email, `Dashboard`, `Refresh plan`, `Join the Copilot Discord` and `Sign out`. `Refresh plan` reads the account's plan again; `Join the Copilot Discord` opens the Discord invite in the browser.
+- account-discord-invite: once signed in, the section ends with `You're invited to the Copilot Discord: help from the team and other users.`, `Join Discord` and a close button. `Join Discord` opens the invite in the browser. Either one puts the invite away for good, also after signing out and in again and on the user's other synced devices. Signed-out users never see it.
 - account-license: signing in to a paid account applies its license with no key to paste: the pill shows the plan and the usage line shows without `Remove license`. A license key the user pasted stays and is never replaced.
 - account-upgrade: a signed-in free user who buys a plan after `See plans` finds it applied on returning to Obsidian: the pill shows the plan, `You're on Plus. Your license was applied from your account.` shows under the description, and the welcome opens.
 - account-plan-ended: when the account's plan ends, or a paid feature is refused because its license is no longer valid, the account's license is removed. The user stays signed in, the pill reads `Free`, the key row returns, `Your Plus plan has ended. You're still signed in, now on the free plan.` shows, and the plan-expired dialog opens.
@@ -29,7 +30,8 @@ The `Copilot license` section at the top of Copilot settings' Basic tab: what th
 
 - Sign in: choose `Sign in`, then sign in or sign up on the website. The browser page reads `You're signed in to Copilot`, and the section shows the pill with the account's plan.
 - Signing in: choose `Sign in` and leave the browser page open. The section reads `Finish signing in in your browser`; `Open page` opens the same page again and `Cancel` brings back `Sign in` with `Sign-in cancelled.`
-- Account menu: choose the pill. The menu shows the account's email, `Dashboard`, `Refresh plan` and `Sign out`.
+- Account menu: choose the pill. The menu shows the account's email, `Dashboard`, `Refresh plan`, `Join the Copilot Discord` and `Sign out`.
+- Discord invite: sign in for the first time. The invite shows at the bottom of the section. Choose the close button: it goes away and stays away after `Sign out` and `Sign in`. `Join the Copilot Discord` in the menu still opens the invite.
 - Refresh plan: change the account's plan on the website, then choose `Refresh plan`. The pill shows the new plan.
 - Account license: sign in to a paid account. The pill shows the plan, the key row is gone, and the usage line shows without `Remove license`.
 - Upgrade: signed in on a free account, choose `See plans`, buy a plan on the website, and go back to Obsidian. Within a minute the pill shows the plan, the confirmation line shows, and the welcome opens.

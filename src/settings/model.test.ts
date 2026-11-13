@@ -1106,6 +1106,14 @@ describe("model", () => {
       expect(settingsStore.get(settingsAtom).customConnectors).toEqual(customConnectors);
     });
 
+    it("keeps a closed Discord invite closed (https://github.com/Brevilabs/obsidian-copilot-private/issues/925)", () => {
+      settingsStore.set(settingsAtom, { ...DEFAULT_SETTINGS, discordInviteDismissed: true });
+
+      resetSettings();
+
+      expect(settingsStore.get(settingsAtom).discordInviteDismissed).toBe(true);
+    });
+
     it("preserves every custom model, including rows that carry no key (https://github.com/logancyang/obsidian-copilot-preview/issues/259)", () => {
       const withKey: CustomModel = {
         name: "my-llama",

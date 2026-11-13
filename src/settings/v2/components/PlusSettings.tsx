@@ -93,6 +93,9 @@ export function PlusSettings() {
       usageWindows={usageWindows}
       onRemoveLicense={isLicenseFromAccount ? null : confirmRemoveLicense}
       account={account}
+      onDismissDiscordInvite={
+        settings.discordInviteDismissed ? null : () => setSettings({ discordInviteDismissed: true })
+      }
     />
   );
 }

@@ -4,6 +4,14 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { CopilotLicenseSection, type CopilotLicenseSectionProps } from "./CopilotLicenseSection";
 
+const mockOpenedInSystemBrowser: string[] = [];
+jest.mock("@/utils/electronShell", () => ({
+  openLinkInSystemBrowser: (event: { preventDefault(): void; currentTarget: { href: string } }) => {
+    event.preventDefault();
+    mockOpenedInSystemBrowser.push(event.currentTarget.href);
+  },
+}));
+
 function accountIn(state: CopilotAccountState): AccountControlProps {
   return {
     state,
@@ -19,7 +27,16 @@ const SIGNED_OUT: CopilotAccountState = { status: "signed-out", failure: null };
 
 const PLUS_PROFILE = { email: "you@example.com", name: "You", plan: "plus" };
 
+const SIGNED_IN_FREE: CopilotAccountState = {
+  status: "signed-in",
+  profile: { ...PLUS_PROFILE, plan: "free" },
+  notice: null,
+};
+
 const KEY_FIELD_PLACEHOLDER = "Enter your license key";
+
+const DISCORD_INVITE_TEXT =
+  "You're invited to the Copilot Discord: help from the team and other users.";
 
 function renderSection(overrides: Partial<CopilotLicenseSectionProps> = {}) {
   const props: CopilotLicenseSectionProps = {
@@ -33,6 +50,7 @@ function renderSection(overrides: Partial<CopilotLicenseSectionProps> = {}) {
     usageWindows: null,
     onRemoveLicense: jest.fn(),
     account: null,
+    onDismissDiscordInvite: null,
     ...overrides,
   };
   render(<CopilotLicenseSection {...props} />);
@@ -46,6 +64,10 @@ function usageLineText(): Array<string | null> {
 }
 
 describe("CopilotLicenseSection", () => {
+  beforeEach(() => {
+    mockOpenedInSystemBrowser.length = 0;
+  });
+
   describe("CopilotLicenseSection()", () => {
     it("offers the key field, Apply and See plans while no license is applied", () => {
       const props = renderSection();
@@ -280,6 +302,80 @@ describe("CopilotLicenseSection", () => {
       expect(screen.getByRole("link", { name: "Miyo" }).getAttribute("href")).toBe(
         "https://www.miyo.md/?utm_source=obsidian_copilot&utm_medium=license_settings"
       );
+    });
+    it("invites a signed-in user to the Copilot Discord at the bottom of the section — https://github.com/Brevilabs/obsidian-copilot-private/issues/925", () => {
+      renderSection({ account: accountIn(SIGNED_IN_FREE), onDismissDiscordInvite: jest.fn() });
+
+      const banner = screen.getByText(DISCORD_INVITE_TEXT).parentElement;
+      expect(document.querySelector("section")?.lastElementChild).toBe(banner);
+      expect(screen.getByRole("link", { name: "Join Discord" }).getAttribute("href")).toBe(
+        "https://discord.gg/5byWwcq5Qq"
+      );
+      expect(screen.getByRole("button", { name: "Hide the Discord invite" })).toBeTruthy();
+    });
+
+    it("opens the invite in the system browser and puts the invite away for good from Join Discord", () => {
+      const props = renderSection({
+        account: accountIn(SIGNED_IN_FREE),
+        onDismissDiscordInvite: jest.fn(),
+      });
+
+      fireEvent.click(screen.getByRole("link", { name: "Join Discord" }));
+
+      expect(mockOpenedInSystemBrowser).toEqual(["https://discord.gg/5byWwcq5Qq"]);
+      expect(props.onDismissDiscordInvite).toHaveBeenCalledTimes(1);
+    });
+
+    it("puts the invite away for good from Hide the Discord invite without opening it", () => {
+      const props = renderSection({
+        account: accountIn(SIGNED_IN_FREE),
+        onDismissDiscordInvite: jest.fn(),
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Hide the Discord invite" }));
+
+      expect(props.onDismissDiscordInvite).toHaveBeenCalledTimes(1);
+      expect(mockOpenedInSystemBrowser).toEqual([]);
+    });
+
+    it("shows no invite once it has been put away", () => {
+      renderSection({ account: accountIn(SIGNED_IN_FREE), onDismissDiscordInvite: null });
+
+      expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
+    });
+
+    it.each<[string, AccountControlProps | null]>([
+      ["signed out", accountIn(SIGNED_OUT)],
+      ["signing in", accountIn({ status: "signing-in" })],
+      ["without account sign-in", null],
+    ])(
+      "shows no invite %s — https://github.com/Brevilabs/obsidian-copilot-private/issues/925",
+      (_label, account) => {
+        renderSection({ account, onDismissDiscordInvite: jest.fn() });
+
+        expect(screen.queryByText(DISCORD_INVITE_TEXT)).toBeNull();
+      }
+    );
+
+    it("keeps a plan notice under the description and the invite last, below the usage line — https://github.com/Brevilabs/obsidian-copilot-private/issues/925", () => {
+      renderSection({
+        license: { status: "active", plan: "plus" },
+        usageWindows: [{ id: "weekly", label: "Weekly", percent: 34 }],
+        onRemoveLicense: null,
+        account: accountIn({
+          status: "signed-in",
+          profile: PLUS_PROFILE,
+          notice: { kind: "applied", plan: "plus" },
+        }),
+        onDismissDiscordInvite: jest.fn(),
+      });
+
+      const rows = Array.from(document.querySelector("section")?.children ?? []);
+      const rowOf = (element: HTMLElement) => rows.findIndex((row) => row.contains(element));
+      expect(rowOf(screen.getByRole("status"))).toBeLessThan(
+        rowOf(screen.getByRole("list", { name: "Usage" }))
+      );
+      expect(rowOf(screen.getByText(DISCORD_INVITE_TEXT))).toBe(rows.length - 1);
     });
   });
 });

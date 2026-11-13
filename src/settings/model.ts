@@ -44,6 +44,7 @@ export interface CopilotSettings {
   userId: string;
   plusLicenseKey: string;
   accountLicenseKey: string;
+  discordInviteDismissed?: boolean;
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;
