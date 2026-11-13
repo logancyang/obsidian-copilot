@@ -38,7 +38,7 @@ function useAgentModelSignal(
       session?.internalId ?? "",
       session?.backendId ?? "",
       session?.getStatus() ?? "",
-      session?.hasUserVisibleMessages() ? "1" : "0",
+      session && manager.isTiedToAgent(session.internalId) ? "1" : "0",
       modelStateSignature(session?.getState() ?? null),
     ];
     for (const d of descriptors) {

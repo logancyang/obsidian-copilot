@@ -604,6 +604,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   );
   const showProjectShelf = isProjectContextInline ? !isOrphanedProject : projectPlacement !== null;
 
+  const hasChatMovedFrom = useCallback(
+    (from: AgentChatBackend) =>
+      manager.getActiveSession()?.chatInputId === chatInputId &&
+      manager.getActiveChatUIState() !== from,
+    [manager, chatInputId]
+  );
+
   const composerNode = (
     <AgentChatInput
       backend={backend}
@@ -624,6 +631,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onCycleMode={handleCycleMode}
       disabled={isOrphanedProject}
       projectFolderPath={projectFolderPath}
+      hasChatMovedFrom={hasChatMovedFrom}
     />
   );
 

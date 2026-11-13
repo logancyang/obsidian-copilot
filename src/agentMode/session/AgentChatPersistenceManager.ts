@@ -323,6 +323,13 @@ export class AgentChatPersistenceManager {
     await this.patchExistingNote(fileId, { archivedAt });
   }
 
+  async setAgent(fileId: string, backendId: BackendId, model?: ModelSelection): Promise<void> {
+    await patchFrontmatter(this.app, fileId, {
+      backendId,
+      ...(model ? { model: JSON.stringify(model) } : {}),
+    });
+  }
+
   private async patchExistingNote(
     fileId: string,
     updates: Record<string, number | null>

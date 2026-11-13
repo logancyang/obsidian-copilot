@@ -50,7 +50,9 @@ jest.mock("./agentModelPickerHelpers", () => ({
     models: [],
     value: `${
       manager.getActiveSession()?.getState()?.model?.current.baseModelId ?? ""
-    }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}`,
+    }:${manager.getModelCacheSignature("opencode")}:${descriptors[0].getInstallState({} as never).kind}:${
+      manager.isTiedToAgent("active") ? "tied" : "free"
+    }`,
     onChange: jest.fn(),
   }),
 }));
@@ -73,9 +75,10 @@ describe("useAgentModelPicker", () => {
   });
 
   describe("useAgentModelPicker()", () => {
-    it("rerenders from session, catalog, and backend readiness signals", () => {
+    it("rerenders from session, catalog, backend readiness, and whether the chat is tied to its agent", () => {
       let state = stateWithModel("first");
       let catalogSignal = "catalog-one";
+      let tied = false;
       let activeListener: (() => void) | null = null;
       let cacheListener: (() => void) | null = null;
       const activeUI = {
@@ -91,7 +94,6 @@ describe("useAgentModelPicker", () => {
         backendId: "opencode",
         getStatus: () => "idle",
         getState: () => state,
-        hasUserVisibleMessages: () => false,
       } as unknown as AgentSession;
       const manager = {
         getActiveSession: () => session,
@@ -104,22 +106,27 @@ describe("useAgentModelPicker", () => {
           };
         },
         getModelCacheSignature: () => catalogSignal,
+        isTiedToAgent: () => tied,
       } as unknown as AgentSessionManager;
 
       const { result } = renderHook(() => useAgentModelPicker(manager, plugin));
-      expect(result.current?.value).toBe("first:catalog-one:ready");
+      expect(result.current?.value).toBe("first:catalog-one:ready:free");
 
       state = stateWithModel("second");
       act(() => activeListener?.());
-      expect(result.current?.value).toBe("second:catalog-one:ready");
+      expect(result.current?.value).toBe("second:catalog-one:ready:free");
 
       catalogSignal = "catalog-two";
       act(() => cacheListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:ready");
+      expect(result.current?.value).toBe("second:catalog-two:ready:free");
 
       mockInstallKind = "incompatible";
       act(() => mockInstallListener?.());
-      expect(result.current?.value).toBe("second:catalog-two:incompatible");
+      expect(result.current?.value).toBe("second:catalog-two:incompatible:free");
+
+      tied = true;
+      act(() => activeListener?.());
+      expect(result.current?.value).toBe("second:catalog-two:incompatible:tied");
     });
   });
 });

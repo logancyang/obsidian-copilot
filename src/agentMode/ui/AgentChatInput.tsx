@@ -65,6 +65,7 @@ interface AgentChatInputProps {
   onCycleMode: () => void;
   disabled?: boolean;
   projectFolderPath?: string;
+  hasChatMovedFrom: (backend: AgentChatBackend) => boolean;
 }
 
 const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
@@ -167,6 +168,7 @@ export const AgentChatInput = memo(function AgentChatInput({
   onCycleMode,
   disabled = false,
   projectFolderPath,
+  hasChatMovedFrom,
 }: AgentChatInputProps) {
   const eventTarget = useContext(EventTargetContext);
   const chatInputRef = useRef<ChatInputHandle>(null);
@@ -401,6 +403,17 @@ export const AgentChatInput = memo(function AgentChatInput({
         mentionedAgents,
       };
 
+      // A chat moved to another agent while its images were read is closing, and a message sent to it would vanish. The composer remounts for the new chat, so the draft goes back through the store.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
+      if (hasChatMovedFrom(backend)) {
+        setInputMessage((current) =>
+          [rawInput, current].filter((part) => part.trim()).join("\n\n")
+        );
+        setContextNotes((previous) => dedupeBy([...contextNotes, ...previous], (n) => n.path));
+        setSelectedImages((previous) => [...selectedImages, ...previous]);
+        return;
+      }
+
       if (loading || isStarting || queuedPrompts.length > 0) {
         // Compaction and multi-agent questions are whole turns of their own, so Copilot holds them until the agent finishes. https://github.com/Brevilabs/obsidian-copilot-private/issues/509
         if (
@@ -438,6 +451,11 @@ export const AgentChatInput = memo(function AgentChatInput({
       setQueuedMessages,
       mainAgentId,
       installedAgentIds,
+      backend,
+      hasChatMovedFrom,
+      setInputMessage,
+      setContextNotes,
+      setSelectedImages,
     ]
   );
 
