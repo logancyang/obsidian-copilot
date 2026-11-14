@@ -1,5 +1,7 @@
 import { DebuggingSupportSection } from "@/settings/v2/components/DebuggingSupportSection";
 import { LegacyChatPromptsNotice } from "@/settings/v2/components/LegacyChatPromptsNotice";
+import { SettingItem } from "@/components/ui/setting-item";
+import { SettingSection } from "@/components/ui/setting-section";
 import { usePlugin } from "@/contexts/PluginContext";
 import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -76,6 +78,16 @@ export const AdvancedSettings: React.FC = () => {
   return (
     <div className="tw-space-y-4">
       <LegacyChatPromptsNotice />
+
+      <SettingSection label="Copilot Navigator">
+        <SettingItem
+          type="switch"
+          title="Hide Recent chats and Projects while the Navigator is open"
+          description="The Navigator already lists your chats and projects. Turn this on to keep the start screen of a new chat to Relevant Notes, and a project's start screen to its Files."
+          checked={settings.hideHomeChatsWithNavigator}
+          onCheckedChange={(checked) => updateSetting("hideHomeChatsWithNavigator", checked)}
+        />
+      </SettingSection>
 
       <DebuggingSupportSection
         debug={settings.debug}

@@ -421,7 +421,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     archivedChatCount: archivedChatItems.length,
   });
   const projectPlacement = placementRef.current;
-  const isProjectContextInline = projectPlacement?.standalone === true;
+  // Users who keep the Navigator open can drop the start screen's copy of its chat and project lists.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/931
+  const hideHomeChats = navigatorOpen && settings.hideHomeChatsWithNavigator;
+  const isProjectContextInline = hideHomeChats || projectPlacement?.standalone === true;
 
   const mainAgentId =
     manager.getActiveSession()?.backendId ?? manager.getStartingBackendId() ?? null;
@@ -531,6 +534,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       plugin,
       settings.chatHistorySortStrategy,
     ]
+  );
+
+  const globalShelfSections = useMemo(
+    () =>
+      hideHomeChats
+        ? landingSections.filter((section) => section.id === "relevant-notes")
+        : landingSections,
+    [hideHomeChats, landingSections]
   );
 
   const projectLandingSections = useMemo<AgentHomeShelfSection[]>(
@@ -802,13 +813,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             onSectionSelect={setProjectShelfTab}
                           />
                         ) : null
-                      ) : (
+                      ) : globalShelfSections.length > 0 ? (
                         <AgentHomeShelf
-                          sections={landingSections}
+                          sections={globalShelfSections}
                           activeSectionId={globalShelfTab}
                           onSectionSelect={setGlobalShelfTab}
                         />
-                      )
+                      ) : null
                     }
                   />
                 ) : (
