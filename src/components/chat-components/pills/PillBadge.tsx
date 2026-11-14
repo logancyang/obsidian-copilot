@@ -7,16 +7,12 @@ interface PillBadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   className?: string;
 }
 
+export const PILL_BADGE_CLASS =
+  "tw-mx-0.5 tw-inline-flex tw-items-center tw-gap-1 tw-border tw-border-solid tw-border-border tw-px-2 tw-py-0 tw-align-middle tw-text-xs";
+
 export function PillBadge({ children, className, ...props }: PillBadgeProps) {
   return (
-    <Badge
-      variant="secondary"
-      className={cn(
-        "tw-mx-0.5 tw-inline-flex tw-items-center tw-gap-1 tw-border tw-border-solid tw-border-border tw-px-2 tw-py-0 tw-align-middle tw-text-xs",
-        className
-      )}
-      {...props}
-    >
+    <Badge variant="secondary" className={cn(PILL_BADGE_CLASS, className)} {...props}>
       {children}
     </Badge>
   );

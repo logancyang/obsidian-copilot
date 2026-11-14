@@ -1,3 +1,5 @@
+import { renderFolderMentions } from "@/components/chat-components/renderFolderMentions";
+import { attachedContext } from "@/components/chat-components/attachedContext";
 import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
@@ -183,7 +185,8 @@ const linkInlineCitations = (root: HTMLElement): void => {
   });
 };
 
-function MessageContext({ context }: { context: ChatMessage["context"] }) {
+function MessageContext({ message }: { message: ChatMessage }) {
+  const context = message.context && attachedContext(message.context, message.message);
   if (
     !context ||
     (!context.notes?.length &&
@@ -789,6 +792,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     void insertAtCursor(app, message.message);
   };
 
+  const mentionedFolders = message.context?.folders;
+  const renderMentionedFolders = useCallback(
+    (container: HTMLElement) => renderFolderMentions(container, mentionedFolders ?? []),
+    [mentionedFolders]
+  );
+
   const renderMessageContent = () => {
     if (message.content) {
       return (
@@ -803,6 +812,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       <Markdown
                         text={message.message}
                         sourcePath={sourcePath}
+                        onRendered={renderMentionedFolders}
                         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
                       />
                     ) : (
@@ -836,6 +846,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <Markdown
         text={message.message}
         sourcePath={sourcePath}
+        onRendered={renderMentionedFolders}
         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
       />
     ) : (
@@ -871,7 +882,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         }
       >
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
-          {!isEditing && <MessageContext context={message.context} />}
+          {!isEditing && <MessageContext message={message} />}
 
           {reasoningData && message.sender !== USER_SENDER && (
             <AgentReasoningBlock

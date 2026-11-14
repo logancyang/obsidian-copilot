@@ -43,7 +43,10 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
-        handleSendMessage?: () => void;
+        handleSendMessage?: (meta?: {
+          contextNotes?: import("obsidian").TFile[];
+          contextFolders?: string[];
+        }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
       },
@@ -65,6 +68,17 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              props.handleSendMessage?.({
+                contextNotes: mockMentionedNotes,
+                contextFolders: ["Research", "Daily"],
+              })
+            }
+          >
+            send with mentions
+          </button>
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
@@ -74,6 +88,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
   ),
 }));
 
+let mockMentionedNotes: TFile[] = [];
 let mockActiveWebTab: WebTabContext | undefined;
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
@@ -547,6 +562,41 @@ describe("AgentChatInput", () => {
         urls: [],
         folders: ["Research/Pricing"],
       });
+    });
+
+    it("sends the notes and folders mentioned in the text with the attached ones, each once (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+      const attached = makeFile("Attached.md");
+      const mentioned = makeFile("Mentioned.md");
+      mockMentionedNotes = [attached, mentioned];
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ contextNotes: [attached], contextFolders: ["Research"] }));
+
+      fireEvent.click(screen.getByText("send with mentions"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [attached, mentioned],
+        urls: [],
+        folders: ["Research", "Daily"],
+      });
+    });
+
+    it("sends the active note as context when the text mentions it and its badge is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+      const note = makeFile("Research.md");
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      const app = { workspace: { getActiveFile: () => note } } as unknown as App;
+      renderInput(backend, makeDraft({ input: "Summarize {activeNote}" }), { app });
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]?.notes).toEqual([note]);
     });
 
     it("returns the folders of queued follow-ups to the composer, each once (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
