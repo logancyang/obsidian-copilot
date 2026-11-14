@@ -119,3 +119,38 @@ export const RunningWithDraft: StoryObj = {
 export const RunningWithoutDraft: StoryObj = {
   render: () => <RunningComposer draft="" />,
 };
+
+function MentionedAndAttachedComposer() {
+  const app = useApp();
+  const [input, setInput] = React.useState("Compare [[Research notes]] with last week's summary.");
+  const [notes, setNotes] = React.useState<TFile[]>([note]);
+  const [images, setImages] = React.useState<File[]>([]);
+  return (
+    <GalleryChatInputProvider>
+      <ChatInput
+        app={app}
+        isAgentMode
+        inputMessage={input}
+        setInputMessage={setInput}
+        contextNotes={notes}
+        setContextNotes={setNotes}
+        selectedImages={images}
+        setSelectedImages={setImages}
+        onAddImage={(files) => setImages((previous) => [...previous, ...files])}
+        includeActiveNote={false}
+        setIncludeActiveNote={() => undefined}
+        activeWebTab={null}
+        includeActiveWebTab={false}
+        setIncludeActiveWebTab={() => undefined}
+        handleSendMessage={() => undefined}
+        onStopGenerating={() => undefined}
+        isGenerating={false}
+        disableModelSwitch
+      />
+    </GalleryChatInputProvider>
+  );
+}
+
+export const MentionedAndAttached: StoryObj = {
+  render: () => <MentionedAndAttachedComposer />,
+};

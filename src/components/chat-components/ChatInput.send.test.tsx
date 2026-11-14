@@ -188,6 +188,27 @@ describe("ChatInput", () => {
       });
     });
 
+    it("sends a mentioned note that was renamed before sending, under its new path (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
+      const plan = new (TFile as unknown as new (path: string) => TFile)("Notes/Plan.md");
+      const files = new Map([[plan.path, plan]]);
+      const { node, send } = composer("see [[Plan]]", [], {
+        app: {
+          workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
+          vault: { getAbstractFileByPath: (path: string) => files.get(path) ?? null },
+        } as unknown as ChatInputProps["app"],
+      });
+      render(node);
+      act(() => mockMention());
+
+      files.clear();
+      plan.path = "Archive/Plan.md";
+      act(() => mockMention());
+      fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
+
+      expect(jest.mocked(send).mock.calls[0][0]?.contextNotes).toEqual([plan]);
+      expect(plan.path).toBe("Archive/Plan.md");
+    });
+
     it("leaves the message text as typed when a badge is removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
       const { node } = composer("compare", [], {
         contextFolders: ["Research"],

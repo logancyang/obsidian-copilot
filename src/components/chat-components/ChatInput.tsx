@@ -212,7 +212,21 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     const activeFile = app.workspace.getActiveFile();
     return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
   });
-  const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
+  const [mentionedNotes, setMentionedNotes] = useState<{ mentionPath: string; file: TFile }[]>([]);
+  // A mention keeps the file it was resolved to, so a note renamed before sending is still sent.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
+  const handleNoteMentionsChange = useCallback(
+    (mentions: { path: string }[]) =>
+      setMentionedNotes((previous) =>
+        mentions.flatMap(({ path }) => {
+          const known = previous.find((mention) => mention.mentionPath === path);
+          if (known) return [known];
+          const file = app.vault.getAbstractFileByPath(path);
+          return file instanceof TFile ? [{ mentionPath: path, file }] : [];
+        })
+      ),
+    [app.vault]
+  );
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [webTabsFromPills, setWebTabsFromPills] = useState<WebTabContext[]>([]);
@@ -242,13 +256,10 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const onSendMessage = () => {
     // A mention is sent as context with the message but never shown as a badge, so it joins the attached context only here.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
-    const mentionedNotes = notesFromPills.flatMap((note) => {
-      const file = app.vault.getAbstractFileByPath(note.path);
-      return file instanceof TFile ? [file] : [];
-    });
+    const mentionedFiles = mentionedNotes.map((mention) => mention.file);
     const notes = [
       ...contextNotes,
-      ...mentionedNotes.filter((note) => !contextNotes.some((n) => n.path === note.path)),
+      ...mentionedFiles.filter((note) => !contextNotes.some((n) => n.path === note.path)),
     ];
     const urls = [...new Set([...contextUrls, ...urlsFromPills])];
     const folders = [...new Set([...contextFolders, ...foldersFromPills])];
@@ -264,7 +275,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     if (!isCopilotPlus) {
       handleSendMessage({
         webTabs: allWebTabs,
-        contextNotes: mentionedNotes,
+        contextNotes: mentionedFiles,
         ...(isAgentMode ? { contextFolders: foldersFromPills } : {}),
       });
       return;
@@ -565,7 +576,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               value={inputMessage}
               onChange={(value) => setInputMessage(value)}
               onSubmit={onSendMessage}
-              onNotesChange={setNotesFromPills}
+              onNotesChange={handleNoteMentionsChange}
               onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
               onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
               onFoldersChange={setFoldersFromPills}
