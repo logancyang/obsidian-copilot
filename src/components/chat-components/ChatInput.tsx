@@ -23,6 +23,8 @@ import {
   $isRangeSelection,
   LexicalEditor as LexicalEditorType,
 } from "lexical";
+import { mentionsInText } from "./mentionsInText";
+import { formatNoteMention } from "./pills/NotePillNode";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
 import { attachToChat, CONTEXT_FILE_ACCEPT } from "./attachToChat";
@@ -212,17 +214,20 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     const activeFile = app.workspace.getActiveFile();
     return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
   });
-  const [mentionedNotes, setMentionedNotes] = useState<{ mentionPath: string; file: TFile }[]>([]);
+  const [mentionedNotes, setMentionedNotes] = useState<
+    { mentionPath: string; text: string; file: TFile }[]
+  >([]);
   // A mention keeps the file it was resolved to, so a note renamed before sending is still sent.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
   const handleNoteMentionsChange = useCallback(
-    (mentions: { path: string }[]) =>
+    (mentions: { path: string; basename: string }[]) =>
       setMentionedNotes((previous) =>
-        mentions.flatMap(({ path }) => {
+        mentions.flatMap(({ path, basename }) => {
           const known = previous.find((mention) => mention.mentionPath === path);
           if (known) return [known];
           const file = app.vault.getAbstractFileByPath(path);
-          return file instanceof TFile ? [{ mentionPath: path, file }] : [];
+          const text = formatNoteMention(path, basename);
+          return file instanceof TFile ? [{ mentionPath: path, text, file }] : [];
         })
       ),
     [app.vault]
@@ -256,13 +261,22 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const onSendMessage = () => {
     // A mention is sent as context with the message but never shown as a badge, so it joins the attached context only here.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
-    const mentionedFiles = mentionedNotes.map((mention) => mention.file);
+    const typed = mentionsInText(
+      app,
+      inputMessage,
+      new Set(mentionedNotes.map((mention) => mention.text))
+    );
+    const mentionedFiles = [
+      ...mentionedNotes.map((mention) => mention.file),
+      ...typed.notes,
+    ].filter((note, index, all) => all.findIndex((other) => other.path === note.path) === index);
+    const mentionedFolders = [...new Set([...foldersFromPills, ...typed.folders])];
     const notes = [
       ...contextNotes,
       ...mentionedFiles.filter((note) => !contextNotes.some((n) => n.path === note.path)),
     ];
     const urls = [...new Set([...contextUrls, ...urlsFromPills])];
-    const folders = [...new Set([...contextFolders, ...foldersFromPills])];
+    const folders = [...new Set([...contextFolders, ...mentionedFolders])];
 
     if (editMode && onEditSave) {
       onEditSave(inputMessage, { notes, urls, folders });
@@ -276,7 +290,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
       handleSendMessage({
         webTabs: allWebTabs,
         contextNotes: mentionedFiles,
-        ...(isAgentMode ? { contextFolders: foldersFromPills } : {}),
+        ...(isAgentMode ? { contextFolders: mentionedFolders } : {}),
       });
       return;
     }

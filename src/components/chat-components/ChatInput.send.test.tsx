@@ -3,7 +3,7 @@ import ChatInput, {
   type ChatInputProps,
 } from "@/components/chat-components/ChatInput";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { TFile } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import React from "react";
 import {
   createEditor,
@@ -110,7 +110,11 @@ function composer(
     handleSendMessage: jest.fn(),
     isGenerating: false,
     isAgentMode: true,
-    app: { workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() } },
+    app: {
+      workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
+      vault: { getAbstractFileByPath: () => null },
+      metadataCache: { getFirstLinkpathDest: () => null },
+    },
     contextNotes: [],
     setContextNotes: jest.fn(),
     setInputMessage: jest.fn(),
@@ -168,6 +172,7 @@ describe("ChatInput", () => {
         app: {
           workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
           vault: { getAbstractFileByPath: (path: string) => (path === plan.path ? plan : null) },
+          metadataCache: { getFirstLinkpathDest: () => null },
         } as unknown as ChatInputProps["app"],
         contextFolders: [],
         setContextNotes,
@@ -195,6 +200,7 @@ describe("ChatInput", () => {
         app: {
           workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
           vault: { getAbstractFileByPath: (path: string) => files.get(path) ?? null },
+          metadataCache: { getFirstLinkpathDest: () => null },
         } as unknown as ChatInputProps["app"],
       });
       render(node);
@@ -207,6 +213,31 @@ describe("ChatInput", () => {
 
       expect(jest.mocked(send).mock.calls[0][0]?.contextNotes).toEqual([plan]);
       expect(plan.path).toBe("Archive/Plan.md");
+    });
+
+    it("sends the note and folder a restored draft mentions as plain text, without pills (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
+      const plan = new (TFile as unknown as new (path: string) => TFile)("Notes/Plan.md");
+      const research = new (TFolder as unknown as new (path: string) => TFolder)("Research");
+      const { node, send } = composer("see [[Plan]] in {Research}", [], {
+        app: {
+          workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
+          vault: {
+            getAbstractFileByPath: (path: string) => (path === research.path ? research : null),
+          },
+          metadataCache: {
+            getFirstLinkpathDest: (linkpath: string) => (linkpath === "Plan" ? plan : null),
+          },
+        } as unknown as ChatInputProps["app"],
+      });
+      render(node);
+
+      fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
+
+      expect(send).toHaveBeenCalledWith({
+        webTabs: [],
+        contextNotes: [plan],
+        contextFolders: ["Research"],
+      });
     });
 
     it("leaves the message text as typed when a badge is removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
