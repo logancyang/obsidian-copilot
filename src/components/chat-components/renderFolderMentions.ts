@@ -2,7 +2,7 @@ import { PILL_BADGE_CLASS } from "@/components/chat-components/pills/PillBadge";
 import { badgeVariants } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// A sent message draws a folder it mentions as the same pill the chat input shows, since the mention has no badge.
+// The Markdown renderer leaves a folder mention as plain `{path}` text, and a mentioned folder gets no badge, so the sent message styles it as a pill.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
 export function renderFolderMentions(container: HTMLElement, folders: readonly string[]): void {
   const mentions = folders.map((folder) => `{${folder}}`);
