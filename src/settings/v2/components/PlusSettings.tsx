@@ -1,156 +1,85 @@
-import { createProductUrl, PRODUCT_URLS } from "@/lib/productLinks";
+import type { UsageWindow } from "@/agentMode";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
 import { useApp } from "@/context";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { PasswordInput } from "@/components/ui/password-input";
-import { checkIsPaidUser, navigateToPlusPage, useIsPaidUser, useLicenseState } from "@/plusUtils";
+import { checkIsPaidUser, navigateToPlusPage, removeLicense, useLicenseState } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { ExternalLink, Loader2 } from "lucide-react";
-import React, { useState } from "react";
+import { CopilotLicenseSection } from "@/settings/v2/components/ui/CopilotLicenseSection";
+import { isDesktopRuntime } from "@/utils/desktopRuntime";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
+import React, { useEffect, useState } from "react";
 
-function getPlusUsageMock(): { currentPct: number; weeklyPct: number } | null {
-  return null;
+function useLicenseUsage(isLicenseActive: boolean): readonly UsageWindow[] | null {
+  const [usageWindows, setUsageWindows] = useState<readonly UsageWindow[] | null>(null);
+
+  useEffect(() => {
+    // The usage reader ships with Agent Mode, whose code cannot load on mobile.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/923
+    if (!isLicenseActive || !isDesktopRuntime()) return;
+    let cancelled = false;
+    void import("@/agentMode")
+      .then(({ CopilotPlusUsageReader }) => new CopilotPlusUsageReader().readPlanUsage())
+      .then((reading) => {
+        if (!cancelled)
+          setUsageWindows(reading.kind === "usage" ? reading.planUsage.windows : null);
+      });
+    return () => {
+      cancelled = true;
+      setUsageWindows(null);
+    };
+  }, [isLicenseActive]);
+
+  return usageWindows;
 }
-
-const LIFETIME_PLAN = "believer";
 
 export function PlusSettings() {
   const app = useApp();
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
-  const isPaidUser = useIsPaidUser();
   const license = useLicenseState();
-  const licenseStatus = isChecking ? "none" : license.status;
   const [localLicenseKey, setLocalLicenseKey] = useState(settings.plusLicenseKey);
-  const usageData = getPlusUsageMock();
+  const usageWindows = useLicenseUsage(!isChecking && license.status === "active");
+
+  const confirmRemoveLicense = () => {
+    new ConfirmModal(
+      app,
+      () => {
+        removeLicense();
+        setLocalLicenseKey("");
+        setError(null);
+      },
+      "Paid features turn off until you apply a license key again. Your plan itself is not affected.",
+      "Remove license?",
+      "Remove license",
+      "Cancel",
+      undefined,
+      "destructive"
+    ).open();
+  };
 
   return (
-    <section className="tw-flex tw-flex-col tw-gap-4 tw-rounded-xl tw-border tw-border-solid tw-border-border tw-p-4 tw-shadow-sm tw-bg-interactive-accent/10">
-      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-text-lg tw-font-semibold">
-        <span>Copilot license</span>
-        {licenseStatus === "active" && (
-          <Badge className="tw-rounded-full tw-bg-success tw-capitalize tw-text-success">
-            {license.plan === LIFETIME_PLAN ? "Lifetime" : (license.plan ?? "Active")}
-          </Badge>
-        )}
-        {licenseStatus === "inactive" && (
-          <Badge className="tw-rounded-full tw-bg-error tw-text-error">Inactive</Badge>
-        )}
-      </div>
-      <div className="tw-flex tw-flex-col tw-gap-2 tw-text-sm tw-text-muted">
-        <div>
-          <a
-            href={createProductUrl(PRODUCT_URLS.COPILOT_PRICING, "settings")}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="tw-font-semibold tw-text-accent"
-          >
-            Copilot paid plans
-          </a>{" "}
-          add <strong className="tw-font-semibold tw-text-normal">premium chat models</strong>,{" "}
-          <strong className="tw-font-semibold tw-text-normal">advanced web search</strong>, and{" "}
-          <strong className="tw-font-semibold tw-text-normal">multi-agent answers</strong> to your
-          Copilot agentic experience. Pair it with{" "}
-          <a
-            href={createProductUrl(PRODUCT_URLS.MIYO, "license_settings")}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="tw-font-semibold tw-text-accent"
-          >
-            Miyo
-          </a>{" "}
-          and turn your vault into a centralized workspace for all your AI tools across devices.
-        </div>
-      </div>
-
-      {(isPaidUser === false || licenseStatus === "inactive") && !isChecking && (
-        <div className="tw-flex tw-flex-col tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3">
-          <div className="tw-text-sm tw-text-normal">All of it for a few dollars a month.</div>
-          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-2">
-            <Button
-              className="tw-text-xs md:tw-text-sm"
-              onClick={() => navigateToPlusPage("settings")}
-            >
-              See plans <ExternalLink className="tw-size-2 md:tw-size-4" />
-            </Button>
-            <a
-              href={createProductUrl(PRODUCT_URLS.MIYO, "pairing")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="tw-inline-flex tw-items-center tw-gap-0.5 tw-text-sm tw-text-accent"
-            >
-              New: pair Copilot with Miyo <ExternalLink className="tw-size-3.5" />
-            </a>
-          </div>
-        </div>
-      )}
-
-      <div className="tw-flex tw-items-center tw-gap-2">
-        <PasswordInput
-          className="tw-w-full"
-          placeholder="Enter your license key"
-          value={localLicenseKey}
-          onChange={(value) => {
-            setLocalLicenseKey(value);
-          }}
-        />
-        <Button
-          disabled={isChecking}
-          onClick={safeAsyncHandler(async () => {
-            updateSetting("plusLicenseKey", localLicenseKey);
-            setIsChecking(true);
-            const result = await checkIsPaidUser(app, { trigger: "manual" });
-            setIsChecking(false);
-            if (!result) {
-              setError("Invalid license key");
-            } else {
-              setError(null);
-              new CopilotPlusWelcomeModal(app).open();
-            }
-          })}
-          className="tw-min-w-10 tw-text-xs md:tw-text-sm"
-        >
-          {isChecking ? <Loader2 className="tw-size-2 tw-animate-spin md:tw-size-4" /> : "Apply"}
-        </Button>
-      </div>
-      {error && <div className="tw-text-error">{error}</div>}
-
-      {isPaidUser && usageData && (
-        <div className="tw-flex tw-items-center tw-justify-between tw-gap-4 tw-border-t tw-border-border tw-pt-4 tw-text-sm">
-          <div className="tw-flex tw-items-center tw-gap-3 tw-text-muted">
-            <span className="tw-flex tw-items-center tw-gap-1.5">
-              <span className="tw-text-accent">●</span>
-              <span>
-                Current 5h <strong className="tw-font-semibold">{usageData.currentPct}%</strong>{" "}
-                used
-              </span>
-            </span>
-            <span className="tw-text-faint">·</span>
-            <span className="tw-flex tw-items-center tw-gap-1.5">
-              <span className="tw-text-accent">●</span>
-              <span>
-                Weekly <strong className="tw-font-semibold">{usageData.weeklyPct}%</strong> used
-              </span>
-            </span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="tw-gap-1 tw-text-sm tw-text-accent hover:tw-text-accent-hover"
-            onClick={() => {
-              window.open(
-                createProductUrl(PRODUCT_URLS.COPILOT_DASHBOARD, "usage_footer"),
-                "_blank"
-              );
-            }}
-          >
-            Dashboard <ExternalLink className="tw-size-3.5" />
-          </Button>
-        </div>
-      )}
-    </section>
+    <CopilotLicenseSection
+      license={license}
+      licenseKey={localLicenseKey}
+      onLicenseKeyChange={setLocalLicenseKey}
+      isApplying={isChecking}
+      onApply={safeAsyncHandler(async () => {
+        updateSetting("plusLicenseKey", localLicenseKey);
+        setIsChecking(true);
+        const result = await checkIsPaidUser(app, { trigger: "manual" });
+        setIsChecking(false);
+        if (!result) {
+          setError("Invalid license key");
+        } else {
+          setError(null);
+          new CopilotPlusWelcomeModal(app).open();
+        }
+      })}
+      applyError={error}
+      onSeePlans={() => navigateToPlusPage("settings")}
+      usageWindows={usageWindows}
+      onRemoveLicense={confirmRemoveLicense}
+    />
   );
 }

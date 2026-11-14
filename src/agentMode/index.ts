@@ -91,6 +91,8 @@ export { ModelEnableList } from "@/components/ui/ModelEnableList";
 export type { ModelEnableGroup } from "@/components/ui/ModelEnableList";
 export { PlanPreviewView } from "./ui/PlanPreviewView";
 export { openReportIssueModal } from "./ui/ReportIssueModal";
+export { CopilotPlusUsageReader } from "./backends/shared/copilotPlusUsage";
+export type { PlanUsageReading, UsageWindow } from "./session/planUsage";
 export { closeRestoredTurnDiffs, registerTurnDiffCommands, TurnDiffView } from "./ui/TurnDiffView";
 export {
   backendDisplayOrder,
