@@ -156,6 +156,7 @@ import { withTimeout } from "@/utils";
 import { StartupLoadingView, type CopilotStartup } from "@/components/StartupLoadingView";
 import { OpenArtifactsPublisher } from "@/openArtifacts/OpenArtifactsPublisher";
 import { migrateOpenArtifactsFolder } from "@/openArtifacts/openArtifactsLedger";
+import { migrateMiyoVaultExclusions } from "@/miyo/miyoVaultExclusions";
 import {
   createSelfHostWebSearchAgentBridge,
   type SelfHostWebSearchAgentBridge,
@@ -349,6 +350,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
         );
       },
     });
+    void migrateMiyoVaultExclusions(this.app);
     const isLegacyUpgrade = getSettings().upgradedToV8FromLegacy;
     initializeBuiltinTools(this.app);
 
