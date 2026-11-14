@@ -144,6 +144,7 @@ function hasUnsentInput(draft: AgentInputDraft | undefined): boolean {
     (draft.input.trim() !== "" ||
       draft.images.length > 0 ||
       draft.contextNotes.length > 0 ||
+      draft.contextFolders.length > 0 ||
       draft.queue.length > 0)
   );
 }

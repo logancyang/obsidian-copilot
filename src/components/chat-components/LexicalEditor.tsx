@@ -28,7 +28,6 @@ import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
 import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
 import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
 import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
-import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
 import { AgentPillSyncPlugin } from "./plugins/AgentPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
@@ -47,17 +46,10 @@ interface LexicalEditorProps {
   onSubmit: () => void;
   placeholder?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onURLsChange?: (urls: string[]) => void;
-  onURLsRemoved?: (removedUrls: string[]) => void;
   onToolsChange?: (tools: string[]) => void;
   onFoldersChange?: (folders: string[]) => void;
-  onFoldersRemoved?: (removedFolders: string[]) => void;
-  onActiveNoteAdded?: () => void;
-  onActiveNoteRemoved?: () => void;
   onWebTabsChange?: (webTabs: WebTabContext[]) => void;
-  onActiveWebTabAdded?: () => void;
-  onActiveWebTabRemoved?: () => void;
   onAgentsChange?: (backendIds: string[]) => void;
   agentBrands?: ReadonlyArray<AgentMentionBrand>;
   cloudAgentIds?: ReadonlySet<string>;
@@ -78,17 +70,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onSubmit,
   placeholder = "Type a message...",
   onNotesChange,
-  onNotesRemoved,
   onURLsChange,
-  onURLsRemoved,
   onToolsChange,
   onFoldersChange,
-  onFoldersRemoved,
-  onActiveNoteAdded,
-  onActiveNoteRemoved,
   onWebTabsChange,
-  onActiveWebTabAdded,
-  onActiveWebTabRemoved,
   onAgentsChange,
   agentBrands = EMPTY_AGENT_MENTION_BRANDS,
   cloudAgentIds = EMPTY_CLOUD_AGENT_IDS,
@@ -205,24 +190,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             />
             <ValueSyncPlugin value={value} />
             <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
-            <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
-            {onURLsChange && (
-              <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
-            )}
+            <NotePillSyncPlugin onNotesChange={onNotesChange} />
+            {onURLsChange && <URLPillSyncPlugin onURLsChange={onURLsChange} />}
             <ToolPillSyncPlugin onToolsChange={onToolsChange} />
-            <FolderPillSyncPlugin
-              onFoldersChange={onFoldersChange}
-              onFoldersRemoved={onFoldersRemoved}
-            />
-            <ActiveNotePillSyncPlugin
-              onActiveNoteAdded={onActiveNoteAdded}
-              onActiveNoteRemoved={onActiveNoteRemoved}
-            />
-            <WebTabPillSyncPlugin
-              onWebTabsChange={onWebTabsChange}
-              onActiveWebTabAdded={onActiveWebTabAdded}
-              onActiveWebTabRemoved={onActiveWebTabRemoved}
-            />
+            <FolderPillSyncPlugin onFoldersChange={onFoldersChange} />
+            <WebTabPillSyncPlugin onWebTabsChange={onWebTabsChange} />
             <AgentPillSyncPlugin onAgentsChange={onAgentsChange} />
             <PillDeletionPlugin />
             <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />

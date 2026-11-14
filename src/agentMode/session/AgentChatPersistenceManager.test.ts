@@ -1028,6 +1028,30 @@ describe("AgentChatPersistenceManager", () => {
       expect(file.contents).toBe(before);
     });
 
+    it("restores each attached folder as the message's context (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const saved = await manager.saveSession(
+        [
+          {
+            ...makeMessage(USER_SENDER, "Summarize this folder."),
+            context: { notes: [], urls: [], folders: ["Research/Pricing, v2"] },
+          },
+        ],
+        "claude"
+      );
+      const file = app.files.get(saved!.path)!;
+      expect(file.contents).toContain(
+        '<!-- copilot-message {"folders":["Research/Pricing, v2"]} -->'
+      );
+
+      const loaded = await manager.loadFile(file as unknown as TFile);
+
+      expect(loaded.messages[0].context).toEqual({
+        notes: [],
+        urls: [],
+        folders: ["Research/Pricing, v2"],
+      });
+    });
+
     it(`leaves out an attached note that no longer exists in the vault (${CONTEXT_ISSUE})`, async () => {
       const kept = addNote(app, "kept.md");
       const gone = addNote(app, "gone.md");

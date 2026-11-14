@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  $getRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -15,6 +14,16 @@ import { PillBadge } from "./PillBadge";
 export interface SerializedNotePillNode extends SerializedBasePillNode {
   noteTitle: string;
   notePath: string;
+}
+
+export function formatNoteMention(notePath: string, noteTitle: string): string {
+  const lowerPath = notePath.toLowerCase();
+  const displayName = lowerPath.endsWith(".pdf")
+    ? `${noteTitle}.pdf`
+    : lowerPath.endsWith(".canvas")
+      ? `${noteTitle}.canvas`
+      : noteTitle;
+  return `[[${displayName}]]`;
 }
 
 export class NotePillNode extends BasePillNode {
@@ -91,13 +100,7 @@ export class NotePillNode extends BasePillNode {
   }
 
   getTextContent(): string {
-    const lowerPath = this.__notePath.toLowerCase();
-    const displayName = lowerPath.endsWith(".pdf")
-      ? `${this.__noteTitle}.pdf`
-      : lowerPath.endsWith(".canvas")
-        ? `${this.__noteTitle}.canvas`
-        : this.__noteTitle;
-    return `[[${displayName}]]`;
+    return formatNoteMention(this.__notePath, this.__noteTitle);
   }
 
   getNoteTitle(): string {
@@ -158,24 +161,4 @@ export function $createNotePillNode(noteTitle: string, notePath: string): NotePi
 
 export function $isNotePillNode(node: LexicalNode | null | undefined): node is NotePillNode {
   return node instanceof NotePillNode;
-}
-
-export function $removePillsByPath(notePath: string): number {
-  const root = $getRoot();
-  let removedCount = 0;
-
-  function traverse(node: LexicalNode): void {
-    if ($isNotePillNode(node) && node.getNotePath() === notePath) {
-      node.remove();
-      removedCount++;
-    } else if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren() as LexicalNode[];
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return removedCount;
 }

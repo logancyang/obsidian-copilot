@@ -8,7 +8,6 @@ import type { LexicalNode } from "lexical";
 
 interface FolderPillSyncPluginProps {
   onFoldersChange?: (folders: string[]) => void;
-  onFoldersRemoved?: (removedFolders: string[]) => void;
 }
 
 const folderPillConfig: PillSyncConfig<string> = {
@@ -16,15 +15,6 @@ const folderPillConfig: PillSyncConfig<string> = {
   extractData: (node: LexicalNode) => (node as FolderPillNode).getFolderPath(),
 };
 
-export function FolderPillSyncPlugin({
-  onFoldersChange,
-  onFoldersRemoved,
-}: FolderPillSyncPluginProps) {
-  return (
-    <GenericPillSyncPlugin
-      config={folderPillConfig}
-      onChange={onFoldersChange}
-      onRemoved={onFoldersRemoved}
-    />
-  );
+export function FolderPillSyncPlugin({ onFoldersChange }: FolderPillSyncPluginProps) {
+  return <GenericPillSyncPlugin config={folderPillConfig} onChange={onFoldersChange} />;
 }

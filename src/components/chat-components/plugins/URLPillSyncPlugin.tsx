@@ -5,7 +5,6 @@ import type { LexicalNode } from "lexical";
 
 interface URLPillSyncPluginProps {
   onURLsChange?: (urls: string[]) => void;
-  onURLsRemoved?: (removedUrls: string[]) => void;
 }
 
 const urlPillConfig: PillSyncConfig<string> = {
@@ -13,12 +12,6 @@ const urlPillConfig: PillSyncConfig<string> = {
   extractData: (node: LexicalNode) => (node as URLPillNode).getURL(),
 };
 
-export function URLPillSyncPlugin({ onURLsChange, onURLsRemoved }: URLPillSyncPluginProps) {
-  return (
-    <GenericPillSyncPlugin
-      config={urlPillConfig}
-      onChange={onURLsChange}
-      onRemoved={onURLsRemoved}
-    />
-  );
+export function URLPillSyncPlugin({ onURLsChange }: URLPillSyncPluginProps) {
+  return <GenericPillSyncPlugin config={urlPillConfig} onChange={onURLsChange} />;
 }

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  $getRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -143,36 +142,6 @@ function convertURLPillElement(domNode: HTMLElement): DOMConversionOutput | null
 
 export function $createURLPillNode(url: string, title?: string, isActive = false): URLPillNode {
   return new URLPillNode(url, title, isActive);
-}
-
-function $findURLPills(): URLPillNode[] {
-  const root = $getRoot();
-  const pills: URLPillNode[] = [];
-
-  function traverse(node: LexicalNode) {
-    if (node instanceof URLPillNode) {
-      pills.push(node);
-    }
-
-    if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren() as LexicalNode[];
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return pills;
-}
-
-export function $removePillsByURL(url: string): void {
-  const pills = $findURLPills();
-  for (const pill of pills) {
-    if (pill.getURL() === url) {
-      pill.remove();
-    }
-  }
 }
 
 export function $isURLPillNode(node: LexicalNode): node is URLPillNode {

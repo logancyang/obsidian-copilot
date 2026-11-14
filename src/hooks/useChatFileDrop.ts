@@ -12,6 +12,7 @@ export interface UseChatFileDropProps {
   containerRef: RefObject<HTMLElement>;
   acceptAnyFileType?: boolean;
   projectFolderPath?: string;
+  onAddFolders?: (folderPaths: string[]) => void;
 }
 
 export interface UseChatFileDropReturn {
@@ -28,6 +29,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
     containerRef,
     acceptAnyFileType = false,
     projectFolderPath,
+    onAddFolders,
   } = props;
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -84,6 +86,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         setContextNotes,
         acceptAnyFileType,
         projectFolderPath,
+        onAddFolders,
       });
     };
 
@@ -109,6 +112,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
     containerRef,
     acceptAnyFileType,
     projectFolderPath,
+    onAddFolders,
   ]);
 
   return { isDragActive };

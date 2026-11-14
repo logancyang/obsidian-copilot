@@ -6,7 +6,6 @@ import {
   LexicalEditor,
   LexicalNode,
   NodeKey,
-  $getRoot,
 } from "lexical";
 import { Globe } from "lucide-react";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
@@ -147,24 +146,4 @@ export function $isActiveWebTabPillNode(
   node: LexicalNode | null | undefined
 ): node is ActiveWebTabPillNode {
   return node instanceof ActiveWebTabPillNode;
-}
-
-export function $removeActiveWebTabPills(): number {
-  const root = $getRoot();
-  let removedCount = 0;
-
-  function traverse(node: LexicalNode): void {
-    if ($isActiveWebTabPillNode(node)) {
-      node.remove();
-      removedCount++;
-    } else if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = (node as { getChildren: () => LexicalNode[] }).getChildren();
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return removedCount;
 }

@@ -16,6 +16,7 @@ export interface AgentInputDraft {
   input: string;
   images: File[];
   contextNotes: TFile[];
+  contextFolders: string[];
   includeActiveNote: boolean;
   includeActiveWebTab: boolean;
   loading: boolean;
@@ -81,6 +82,7 @@ const createDraft = (): AgentInputDraft => ({
   input: "",
   images: [],
   contextNotes: [],
+  contextFolders: [],
   includeActiveNote: getSettings().autoAttachActiveNote,
   includeActiveWebTab: true,
   loading: false,

@@ -115,22 +115,37 @@ function RunFrame({ run, children }: RunFrameProps): React.ReactElement {
       ? "This text changed in the note after the turn."
       : null;
   }, [after, current, run]);
-  if (run === undefined || context === null) return <>{children}</>;
+  if (run === undefined) return <>{children}</>;
   return (
-    <div className="tw-group tw-relative tw-rounded-sm focus-within:tw-ring-1 focus-within:tw-ring-ring hover:tw-ring-1 hover:tw-ring-ring">
-      {children}
-      <RevokeButton
-        label="Revoke"
-        blocked={blocked}
-        tooltipSide="left"
-        className={cn(
-          "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
-          blocked === null
-            ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
-            : "group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
-        )}
-        onRevoke={() => context.revoke.onRevoke(run)}
+    <div
+      className={cn(
+        "tw-relative",
+        context !== null &&
+          "tw-group tw-rounded-sm focus-within:tw-ring-1 focus-within:tw-ring-ring hover:tw-ring-1 hover:tw-ring-ring"
+      )}
+    >
+      {/* A tint on one or two changed characters is easy to miss, so every run of changes also carries a bar in the margin.
+      https://github.com/Brevilabs/obsidian-copilot-private/issues/910 */}
+      <span
+        aria-hidden
+        data-change-bar
+        className="tw-absolute tw-inset-y-0 -tw-left-1.5 tw-w-0.5 tw-rounded-sm tw-bg-interactive-accent"
       />
+      {children}
+      {context !== null && (
+        <RevokeButton
+          label="Revoke"
+          blocked={blocked}
+          tooltipSide="left"
+          className={cn(
+            "tw-absolute tw-right-0 tw-top-0 tw-opacity-0",
+            blocked === null
+              ? "group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
+              : "group-focus-within:tw-opacity-50 group-hover:tw-opacity-50"
+          )}
+          onRevoke={() => context.revoke.onRevoke(run)}
+        />
+      )}
     </div>
   );
 }

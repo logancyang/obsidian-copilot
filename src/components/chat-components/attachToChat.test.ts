@@ -47,6 +47,7 @@ function makeTargets({
 } = {}) {
   let notes = initialNotes;
   const added: File[] = [];
+  const folders: string[] = [];
   const options: AttachToChatOptions = {
     contextNotes: initialNotes,
     selectedImages: images,
@@ -55,8 +56,14 @@ function makeTargets({
       notes = update(notes);
     },
     acceptAnyFileType,
+    onAddFolders: (folderPaths) => folders.push(...folderPaths),
   };
-  return { options, notes: () => notes.map((note) => note.path), images: () => added };
+  return {
+    options,
+    notes: () => notes.map((note) => note.path),
+    images: () => added,
+    folders: () => folders,
+  };
 }
 
 function notices(): string[] {
@@ -250,7 +257,7 @@ describe("attachToChat", () => {
       expect(notices()).toEqual(["Copied brief.docx into attachments/"]);
     });
 
-    it("names folders from the vault or the computer in one notice and attaches the files dropped with them (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+    it("adds a vault folder by its full vault path, names a folder from the computer in a notice, and attaches the files dropped with them (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
       const { app } = makeApp();
       const targets = makeTargets();
 
@@ -263,8 +270,25 @@ describe("attachToChat", () => {
         targets.options
       );
 
-      expect(notices()).toEqual(["Folders can't be attached to a message: Pricing, my-codebase"]);
+      expect(targets.folders()).toEqual(["Research/Pricing"]);
+      expect(notices()).toEqual(["Folders can't be attached to a message: my-codebase"]);
       expect(targets.notes()).toEqual(["Notes/plan.md"]);
+    });
+
+    it("names a vault folder in the notice too when the chat does not take folders (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const { app } = makeApp();
+      const options = { ...makeTargets().options, onAddFolders: undefined };
+
+      await attachToChat(
+        app,
+        split({
+          vaultItems: [vaultFolder("Research/Pricing")],
+          outsideFolderNames: ["my-codebase"],
+        }),
+        options
+      );
+
+      expect(notices()).toEqual(["Folders can't be attached to a message: Pricing, my-codebase"]);
     });
 
     it("shows a notice naming the file when copying it into the vault fails, and still attaches the rest", async () => {

@@ -43,7 +43,10 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
       props: {
         setInputMessage: React.Dispatch<React.SetStateAction<string>>;
         agentBrands?: ReadonlyArray<unknown>;
-        handleSendMessage?: () => void;
+        handleSendMessage?: (meta?: {
+          contextNotes?: import("obsidian").TFile[];
+          contextFolders?: string[];
+        }) => void;
         onStopGenerating?: () => void;
         isGenerating?: boolean;
       },
@@ -65,6 +68,17 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
           <button type="button" onClick={() => props.handleSendMessage?.()}>
             send
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              props.handleSendMessage?.({
+                contextNotes: mockMentionedNotes,
+                contextFolders: ["Research", "Daily"],
+              })
+            }
+          >
+            send with mentions
+          </button>
           <button type="button" onClick={() => props.onStopGenerating?.()}>
             stop
           </button>
@@ -74,6 +88,7 @@ jest.mock("@/components/chat-components/ChatInput", () => ({
   ),
 }));
 
+let mockMentionedNotes: TFile[] = [];
 let mockActiveWebTab: WebTabContext | undefined;
 jest.mock("@/components/chat-components/hooks/useActiveWebTabState", () => ({
   useActiveWebTabState: () => ({ activeWebTabForMentions: mockActiveWebTab }),
@@ -128,12 +143,14 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   input: "hello",
   images: [],
   contextNotes: [],
+  contextFolders: [],
   includeActiveNote: false,
   includeActiveWebTab: false,
   loading: false,
   queue: [],
   setInput: jest.fn(),
   setContextNotes: jest.fn(),
+  setContextFolders: jest.fn(),
   setSelectedImages: jest.fn(),
   addImages: jest.fn(),
   setIncludeActiveNote: jest.fn(),
@@ -527,6 +544,82 @@ describe("AgentChatInput", () => {
       expect(getDraft().contextNotes).toEqual([note]);
       expect(getDraft().images).toHaveLength(1);
       expect(getDraft().images[0]).toMatchObject({ type: "image/png", size: 3 });
+      await act(async () => settleCancel());
+    });
+
+    it("sends the folders attached to the draft as the message's context (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ contextFolders: ["Research/Pricing"] }));
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [],
+        urls: [],
+        folders: ["Research/Pricing"],
+      });
+    });
+
+    it("sends the notes and folders mentioned in the text with the attached ones, each once (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+      const attached = makeFile("Attached.md");
+      const mentioned = makeFile("Mentioned.md");
+      mockMentionedNotes = [attached, mentioned];
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ contextNotes: [attached], contextFolders: ["Research"] }));
+
+      fireEvent.click(screen.getByText("send with mentions"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [attached, mentioned],
+        urls: [],
+        folders: ["Research", "Daily"],
+      });
+    });
+
+    it("sends the active note as context when the text mentions it and its badge is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+      const note = makeFile("Research.md");
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      const app = { workspace: { getActiveFile: () => note } } as unknown as App;
+      renderInput(backend, makeDraft({ input: "Summarize {activeNote}" }), { app });
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]?.notes).toEqual([note]);
+    });
+
+    it("returns the folders of queued follow-ups to the composer, each once (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      for (const [text, folders] of [
+        ["look in here", ["Research"]],
+        ["and here", ["Research", "Daily"]],
+      ] as const) {
+        act(() => {
+          getDraft().setInput(text);
+          getDraft().setContextFolders([...folders]);
+        });
+        fireEvent.click(screen.getByText("send"));
+      }
+      await waitFor(() => expect(getDraft().queue).toHaveLength(2));
+      expect(getDraft().contextFolders).toEqual([]);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().contextFolders).toEqual(["Research", "Daily"]);
       await act(async () => settleCancel());
     });
 

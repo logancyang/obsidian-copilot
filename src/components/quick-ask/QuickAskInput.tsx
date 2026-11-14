@@ -17,7 +17,6 @@ import { ValueSyncPlugin } from "@/components/chat-components/plugins/ValueSyncP
 import { FocusPlugin } from "@/components/chat-components/plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "@/components/chat-components/plugins/NotePillSyncPlugin";
 import { FolderPillSyncPlugin } from "@/components/chat-components/plugins/FolderPillSyncPlugin";
-import { ActiveNotePillSyncPlugin } from "@/components/chat-components/plugins/ActiveNotePillSyncPlugin";
 import { PillDeletionPlugin } from "@/components/chat-components/plugins/PillDeletionPlugin";
 import { AtMentionCommandPlugin } from "@/components/chat-components/plugins/AtMentionCommandPlugin";
 import { ActiveFileProvider } from "@/components/chat-components/context/ActiveFileContext";
@@ -34,11 +33,7 @@ interface QuickAskInputProps {
   disabled?: boolean;
   className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onFoldersChange?: (folders: string[]) => void;
-  onFoldersRemoved?: (removedFolders: string[]) => void;
-  onActiveNoteAdded?: () => void;
-  onActiveNoteRemoved?: () => void;
   onEditorReady?: (editor: LexicalEditorType) => void;
   currentActiveFile?: TFile | null;
 }
@@ -52,11 +47,7 @@ export const QuickAskInput = React.memo(function QuickAskInput({
   disabled = false,
   className = "",
   onNotesChange,
-  onNotesRemoved,
   onFoldersChange,
-  onFoldersRemoved,
-  onActiveNoteAdded,
-  onActiveNoteRemoved,
   onEditorReady,
   currentActiveFile = null,
 }: QuickAskInputProps) {
@@ -138,15 +129,8 @@ export const QuickAskInput = React.memo(function QuickAskInput({
           <KeyboardPlugin onSubmit={onSubmit} sendShortcut={sendShortcut} />
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
-          <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
-          <FolderPillSyncPlugin
-            onFoldersChange={onFoldersChange}
-            onFoldersRemoved={onFoldersRemoved}
-          />
-          <ActiveNotePillSyncPlugin
-            onActiveNoteAdded={onActiveNoteAdded}
-            onActiveNoteRemoved={onActiveNoteRemoved}
-          />
+          <NotePillSyncPlugin onNotesChange={onNotesChange} />
+          <FolderPillSyncPlugin onFoldersChange={onFoldersChange} />
           <PillDeletionPlugin />
           <AtMentionCommandPlugin showTools={false} currentActiveFile={currentActiveFile} />
         </div>

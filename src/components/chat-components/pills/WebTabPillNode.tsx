@@ -19,7 +19,7 @@ export interface SerializedWebTabPillNode extends SerializedBasePillNode {
   faviconUrl?: string;
 }
 
-function formatWebTabPillTextContent(url: string, title?: string): string {
+export function formatWebTabPillTextContent(url: string, title?: string): string {
   const displayText = title?.trim() || getDomainFromUrl(url) || "Untitled";
   return `[🌐: ${displayText}]`;
 }
@@ -177,13 +177,4 @@ export function $findWebTabPills(): WebTabPillNode[] {
 
   traverse(root);
   return pills;
-}
-
-export function $removeWebTabPillsByUrl(url: string): void {
-  const pills = $findWebTabPills();
-  for (const pill of pills) {
-    if (pill.getURL() === url) {
-      pill.remove();
-    }
-  }
 }

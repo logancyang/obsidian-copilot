@@ -15,6 +15,7 @@ interface UseAgentInputDraftsArgs {
 export interface AgentInputDraftControls extends AgentInputDraft {
   setInput: React.Dispatch<React.SetStateAction<string>>;
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  setContextFolders: React.Dispatch<React.SetStateAction<string[]>>;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   addImages: (files: File[]) => void;
   setIncludeActiveNote: (include: boolean) => void;
@@ -26,6 +27,7 @@ export interface AgentInputDraftControls extends AgentInputDraft {
 
 const EMPTY_IMAGES = Object.freeze([]) as unknown as File[];
 const EMPTY_CONTEXT_NOTES = Object.freeze([]) as unknown as TFile[];
+const EMPTY_CONTEXT_FOLDERS = Object.freeze([]) as unknown as string[];
 const EMPTY_QUEUE = Object.freeze([]) as unknown as QueuedAgentMessage[];
 
 const applyState = <T>(value: React.SetStateAction<T>, previous: T): T =>
@@ -53,6 +55,15 @@ export function useAgentInputDrafts({
       updateActive((draft) => ({
         ...draft,
         contextNotes: applyState(value, draft.contextNotes),
+      })),
+    [updateActive]
+  );
+
+  const setContextFolders = useCallback<React.Dispatch<React.SetStateAction<string[]>>>(
+    (value) =>
+      updateActive((draft) => ({
+        ...draft,
+        contextFolders: applyState(value, draft.contextFolders),
       })),
     [updateActive]
   );
@@ -94,6 +105,7 @@ export function useAgentInputDrafts({
         input: "",
         images: [],
         contextNotes: [],
+        contextFolders: [],
       })),
     [updateActive]
   );
@@ -104,6 +116,7 @@ export function useAgentInputDrafts({
         input: "",
         images: EMPTY_IMAGES,
         contextNotes: EMPTY_CONTEXT_NOTES,
+        contextFolders: EMPTY_CONTEXT_FOLDERS,
         includeActiveNote: autoAttachActiveNote,
         includeActiveWebTab: true,
         loading: false,
@@ -117,6 +130,7 @@ export function useAgentInputDrafts({
       ...fields,
       setInput,
       setContextNotes,
+      setContextFolders,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,
@@ -129,6 +143,7 @@ export function useAgentInputDrafts({
       fields,
       setInput,
       setContextNotes,
+      setContextFolders,
       setSelectedImages,
       addImages,
       setIncludeActiveNote,

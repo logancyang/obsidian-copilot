@@ -201,6 +201,21 @@ describe("ChatManager", () => {
         expect(mockContextManager.processMessageContext.mock.calls[0][6]).toBe(activeFile);
       });
 
+      it("adds the active note when the text mentions it and its badge is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+        const activeFile = mockTFile({ path: "active.md", basename: "active" });
+        getActiveFile.mockReturnValue(activeFile);
+
+        const messageId = await chatManager.sendMessage(
+          "Summarize {activeNote}",
+          emptyContext(),
+          ChainType.LLM_CHAIN,
+          false
+        );
+
+        expect(chatManager.getMessage(messageId)?.context?.notes).toEqual([activeFile]);
+        expect(mockContextManager.processMessageContext.mock.calls[0][5]).toBe(true);
+      });
+
       it("does not add the active note again when it is already attached", async () => {
         const activeFile = mockTFile({ path: "active.md", basename: "active" });
         getActiveFile.mockReturnValue(activeFile);
@@ -580,6 +595,14 @@ describe("ChatManager", () => {
           []
         );
         expect(mockChainManager.memoryManager.clearChatMemory).toHaveBeenCalled();
+      });
+
+      it("reprocesses with the active note when the edited text mentions it (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+        const { userId } = addExchange();
+
+        await chatManager.editMessage(userId, "Summarize {activeNote}", ChainType.LLM_CHAIN);
+
+        expect(mockContextManager.reprocessMessageContext.mock.calls[0][6]).toBe(true);
       });
 
       it("returns false without reprocessing when the message does not exist", async () => {
