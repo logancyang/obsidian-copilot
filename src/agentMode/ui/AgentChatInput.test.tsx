@@ -584,6 +584,21 @@ describe("AgentChatInput", () => {
       });
     });
 
+    it("sends the active note as context when the text mentions it and its badge is off (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", async () => {
+      const note = makeFile("Research.md");
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      const app = { workspace: { getActiveFile: () => note } } as unknown as App;
+      renderInput(backend, makeDraft({ input: "Summarize {activeNote}" }), { app });
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]?.notes).toEqual([note]);
+    });
+
     it("returns the folders of queued follow-ups to the composer, each once (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
       const { backend, getDraft, settleCancel } = setupCancellation();
       act(() => getDraft().setInput("first turn"));

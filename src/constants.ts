@@ -145,6 +145,7 @@ export const WEB_TAB_CONTEXT_TAG = "web_tab_context";
 export const ACTIVE_WEB_TAB_CONTEXT_TAG = "active_web_tab";
 export const YOUTUBE_VIDEO_CONTEXT_TAG = "youtube_video_context";
 export const ACTIVE_WEB_TAB_MARKER = "{activeWebTab}";
+export const ACTIVE_NOTE_MENTION = /\{activenote\}/i;
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;

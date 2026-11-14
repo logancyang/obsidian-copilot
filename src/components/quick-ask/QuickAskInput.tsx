@@ -17,7 +17,6 @@ import { ValueSyncPlugin } from "@/components/chat-components/plugins/ValueSyncP
 import { FocusPlugin } from "@/components/chat-components/plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "@/components/chat-components/plugins/NotePillSyncPlugin";
 import { FolderPillSyncPlugin } from "@/components/chat-components/plugins/FolderPillSyncPlugin";
-import { ActiveNotePillSyncPlugin } from "@/components/chat-components/plugins/ActiveNotePillSyncPlugin";
 import { PillDeletionPlugin } from "@/components/chat-components/plugins/PillDeletionPlugin";
 import { AtMentionCommandPlugin } from "@/components/chat-components/plugins/AtMentionCommandPlugin";
 import { ActiveFileProvider } from "@/components/chat-components/context/ActiveFileContext";
@@ -35,8 +34,6 @@ interface QuickAskInputProps {
   className?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
   onFoldersChange?: (folders: string[]) => void;
-  onActiveNoteAdded?: () => void;
-  onActiveNoteRemoved?: () => void;
   onEditorReady?: (editor: LexicalEditorType) => void;
   currentActiveFile?: TFile | null;
 }
@@ -51,8 +48,6 @@ export const QuickAskInput = React.memo(function QuickAskInput({
   className = "",
   onNotesChange,
   onFoldersChange,
-  onActiveNoteAdded,
-  onActiveNoteRemoved,
   onEditorReady,
   currentActiveFile = null,
 }: QuickAskInputProps) {
@@ -136,10 +131,6 @@ export const QuickAskInput = React.memo(function QuickAskInput({
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} />
           <FolderPillSyncPlugin onFoldersChange={onFoldersChange} />
-          <ActiveNotePillSyncPlugin
-            onActiveNoteAdded={onActiveNoteAdded}
-            onActiveNoteRemoved={onActiveNoteRemoved}
-          />
           <PillDeletionPlugin />
           <AtMentionCommandPlugin showTools={false} currentActiveFile={currentActiveFile} />
         </div>

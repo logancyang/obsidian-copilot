@@ -31,9 +31,7 @@ import { openFilePicker } from "./openFilePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import { ModePicker } from "@/components/ui/ModePicker";
-import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
-import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
@@ -402,11 +400,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     switch (category) {
       case "activeNote":
         setIncludeActiveNote(false);
-        if (lexicalEditorRef.current) {
-          lexicalEditorRef.current.update(() => {
-            $removeActiveNotePills();
-          });
-        }
         break;
       case "notes":
         if (typeof data === "string") {
@@ -434,11 +427,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         break;
       case "activeWebTab":
         setIncludeActiveWebTab(false);
-        if (lexicalEditorRef.current) {
-          lexicalEditorRef.current.update(() => {
-            $removeActiveWebTabPills();
-          });
-        }
         break;
       case "webTabs":
         if (typeof data === "string") {
@@ -523,22 +511,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     [agentBrands, setInputMessage]
   );
 
-  const handleActiveNoteAdded = useCallback(() => {
-    setIncludeActiveNote(true);
-  }, [setIncludeActiveNote]);
-
-  const handleActiveNoteRemoved = useCallback(() => {
-    setIncludeActiveNote(false);
-  }, [setIncludeActiveNote]);
-
-  const handleActiveWebTabAdded = useCallback(() => {
-    setIncludeActiveWebTab(true);
-  }, [setIncludeActiveWebTab]);
-
-  const handleActiveWebTabRemoved = useCallback(() => {
-    setIncludeActiveWebTab(false);
-  }, [setIncludeActiveWebTab]);
-
   return (
     <div
       className={cn(
@@ -594,14 +566,10 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onChange={(value) => setInputMessage(value)}
               onSubmit={onSendMessage}
               onNotesChange={setNotesFromPills}
-              onActiveNoteAdded={handleActiveNoteAdded}
-              onActiveNoteRemoved={handleActiveNoteRemoved}
               onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
               onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
               onFoldersChange={setFoldersFromPills}
               onWebTabsChange={setWebTabsFromPills}
-              onActiveWebTabAdded={handleActiveWebTabAdded}
-              onActiveWebTabRemoved={handleActiveWebTabRemoved}
               agentBrands={agentBrands}
               cloudAgentIds={cloudAgentIds}
               onAgentsChange={handleAgentsChange}

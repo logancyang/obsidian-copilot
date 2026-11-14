@@ -19,7 +19,7 @@ import ChatInput, {
 } from "@/components/chat-components/ChatInput";
 import { EMPTY_AGENT_MENTION_BRANDS } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
-import { ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
+import { ACTIVE_NOTE_MENTION, ACTIVE_WEB_TAB_MARKER, EVENT_NAMES } from "@/constants";
 import { EventTargetContext } from "@/context";
 import { logError, logWarn } from "@/logger";
 import {
@@ -348,7 +348,9 @@ export const AgentChatInput = memo(function AgentChatInput({
       const activeFile = app.workspace.getActiveFile();
 
       const candidateNotes: TFile[] = [];
-      if (includeActiveNote && activeFile) {
+      // An active note mentioned in the text is sent as context even when its badge is off.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
+      if ((includeActiveNote || ACTIVE_NOTE_MENTION.test(text)) && activeFile) {
         candidateNotes.push(activeFile);
       }
       candidateNotes.push(...contextNotes, ...mentionedNotes);

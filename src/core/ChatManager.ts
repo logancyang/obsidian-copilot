@@ -18,7 +18,7 @@ import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
-import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
+import { ACTIVE_NOTE_MENTION, ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { TFile, Vault } from "obsidian";
 import { buildWebTabsWithActiveSnapshot } from "@/services/webViewerService/activeWebTabSnapshot";
@@ -189,8 +189,11 @@ export class ChatManager {
       // https://github.com/logancyang/obsidian-copilot/issues/2960#issuecomment-5445353610
       const messageText = resolveCustomCommandPrefix(displayText, getCachedCustomCommands()).text;
 
+      // An active note mentioned in the text is sent as context even when its badge is off.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
+      const sendsActiveNote = includeActiveNote || ACTIVE_NOTE_MENTION.test(messageText);
       const updatedContext = { ...context };
-      if (includeActiveNote && activeNote) {
+      if (sendsActiveNote && activeNote) {
         const existingNotes = context.notes || [];
         const hasActiveNote = existingNotes.some((note) => note.path === activeNote.path);
         updatedContext.notes = hasActiveNote ? existingNotes : [...existingNotes, activeNote];
@@ -230,7 +233,7 @@ export class ChatManager {
         this.fileParserManager,
         this.plugin.app.vault,
         chainType,
-        includeActiveNote,
+        sendsActiveNote,
         activeNote,
         this.messageRepo,
         systemPrompt,
@@ -272,7 +275,7 @@ export class ChatManager {
         this.fileParserManager,
         this.plugin.app.vault,
         chainType,
-        includeActiveNote,
+        includeActiveNote || ACTIVE_NOTE_MENTION.test(newText),
         activeNote,
         systemPrompt,
         systemPromptIncludedFiles

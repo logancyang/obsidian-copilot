@@ -6,7 +6,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 
 - input-send: type a message and press Enter or `Send`. While the agent works, typing a draft turns `Stop generating` into `Send`, which [queues the message](queued-messages.md).
 - input-stop: `Stop generating` or Escape stops the agent's reply.
-- input-mentions: `@` lists Notes, Web tabs, and Folders; `Add context` (**+**) also offers Files. A mentioned note shows as a pill in the text only and is still sent as context; badges show only what was attached, and removing a badge leaves the text unchanged. With multi-agent access, Agents asks other agents the same message.
+- input-mentions: `@` lists Notes, Web tabs, and Folders; `Add context` (**+**) also offers Files. A mentioned note shows as a pill in the text only and is still sent as context; badges show only what was attached, in the chat input and on the sent message, and removing a badge leaves the text unchanged. Mentioning the active note does not switch its `Current` badge on. With multi-agent access, Agents asks other agents the same message.
 - input-current-note: the open note or web tab shows as a `Current` badge that the user can remove.
 - input-selection: text selected in a note shows as a badge with the text and its line, such as `L3`; text selected in a [turn diff](turn-diffs.md) or a web page shows as a `Selection` badge.
 - input-images: paste or drop images to attach them; `Remove image` takes one off.

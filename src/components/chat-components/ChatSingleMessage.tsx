@@ -1,3 +1,4 @@
+import { attachedContext } from "@/components/chat-components/attachedContext";
 import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { AssistantResponseFooter } from "@/components/ui/AssistantResponseFooter";
@@ -183,7 +184,8 @@ const linkInlineCitations = (root: HTMLElement): void => {
   });
 };
 
-function MessageContext({ context }: { context: ChatMessage["context"] }) {
+function MessageContext({ message }: { message: ChatMessage }) {
+  const context = message.context && attachedContext(message.context, message.message);
   if (
     !context ||
     (!context.notes?.length &&
@@ -871,7 +873,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         }
       >
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
-          {!isEditing && <MessageContext context={message.context} />}
+          {!isEditing && <MessageContext message={message} />}
 
           {reasoningData && message.sender !== USER_SENDER && (
             <AgentReasoningBlock

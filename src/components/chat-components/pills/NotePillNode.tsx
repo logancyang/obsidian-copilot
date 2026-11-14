@@ -16,6 +16,16 @@ export interface SerializedNotePillNode extends SerializedBasePillNode {
   notePath: string;
 }
 
+export function formatNoteMention(notePath: string, noteTitle: string): string {
+  const lowerPath = notePath.toLowerCase();
+  const displayName = lowerPath.endsWith(".pdf")
+    ? `${noteTitle}.pdf`
+    : lowerPath.endsWith(".canvas")
+      ? `${noteTitle}.canvas`
+      : noteTitle;
+  return `[[${displayName}]]`;
+}
+
 export class NotePillNode extends BasePillNode {
   __noteTitle: string;
   __notePath: string;
@@ -90,13 +100,7 @@ export class NotePillNode extends BasePillNode {
   }
 
   getTextContent(): string {
-    const lowerPath = this.__notePath.toLowerCase();
-    const displayName = lowerPath.endsWith(".pdf")
-      ? `${this.__noteTitle}.pdf`
-      : lowerPath.endsWith(".canvas")
-        ? `${this.__noteTitle}.canvas`
-        : this.__noteTitle;
-    return `[[${displayName}]]`;
+    return formatNoteMention(this.__notePath, this.__noteTitle);
   }
 
   getNoteTitle(): string {
