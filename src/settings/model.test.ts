@@ -366,6 +366,22 @@ describe("model", () => {
       expect(sanitized.enableSelfHostMode).toBe(true);
     });
 
+    it("keeps Recent chats and Projects on the start screen with the Navigator open when hideHomeChatsWithNavigator is missing or not a boolean (https://github.com/Brevilabs/obsidian-copilot-private/issues/931)", () => {
+      const missing = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        hideHomeChatsWithNavigator: undefined,
+      } as unknown as CopilotSettings);
+      const bogus = sanitizeSettings({
+        ...DEFAULT_SETTINGS,
+        hideHomeChatsWithNavigator: "yes",
+      } as unknown as CopilotSettings);
+      const optedIn = sanitizeSettings({ ...DEFAULT_SETTINGS, hideHomeChatsWithNavigator: true });
+
+      expect(missing.hideHomeChatsWithNavigator).toBe(false);
+      expect(bogus.hideHomeChatsWithNavigator).toBe(false);
+      expect(optedIn.hideHomeChatsWithNavigator).toBe(true);
+    });
+
     it("defaults enableMiyoDocumentProcessing to true when missing", () => {
       const out = sanitizeSettings({
         ...DEFAULT_SETTINGS,

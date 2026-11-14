@@ -11,7 +11,8 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-archived: `View archived` under Recent chats lists archived chats and projects, each with `Unarchive`.
 - home-relevant-notes: the `Relevant Notes` tab shows [Relevant Notes](relevant-notes.md); it is hidden while the Relevant Notes pane is open.
 - home-projects: the `Projects` tab lists [projects](projects.md) with `New project` and `Search projects...`.
-- home-project-start: inside a [project](projects.md), the shelf opens on `Files`, with `Recent chats` for that project. Files appears alone when the project has no chats or the [Copilot Navigator](copilot-navigator.md) is open.
+- home-project-start: inside a [project](projects.md), the shelf opens on `Files`, with `Recent chats` for that project. Files appears alone when the project has no chats.
+- home-navigator-hide: with `Hide Recent chats and Projects while the Navigator is open` on in Settings → Advanced and the [Copilot Navigator](copilot-navigator.md) open, the shelf shows only `Relevant Notes`, and a project's start screen shows `Files` alone. Off by default.
 - home-release-update: when a newer Copilot is out, a `Copilot <version> is ready` card offers `See what’s new` for the release notes, and `Dismiss release update`.
 
 ## How to get to it
@@ -29,11 +30,13 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - Archived: choose `View archived`. A list of archived chats and projects opens; `Unarchive` on a project returns it to `Projects` and raises the count.
 - Relevant Notes: with a note open beside Agent Chat, choose `Relevant Notes`. `Relevant to` names the note and related notes are listed.
 - Projects: choose `Projects`. `New project`, `Search projects...`, and the projects show; the count on the tab matches the list.
-- Project start: enter a project that has chats. The greeting reads `Chat in <project>`, and the shelf has `Files` selected and `Recent chats` for the project. Enter a project with no chats, or open the Navigator: Files shows alone without a tab bar.
+- Project start: enter a project that has chats. The greeting reads `Chat in <project>`, and the shelf has `Files` selected and `Recent chats` for the project. Enter a project with no chats: Files shows alone without a tab bar.
+- Hide with the Navigator: turn on `Hide Recent chats and Projects while the Navigator is open` in Settings → Advanced, open the Navigator, and choose `New chat`. The shelf shows only `Relevant Notes`. Enter a project that has chats: Files shows alone. Close the Navigator: `Recent chats` and `Projects` return.
 - Release update: on a build older than the latest release, open a new chat. The `Copilot <version> is ready` card shows at the bottom; `See what’s new` opens the release notes, and `Dismiss release update` hides the card for that version.
 
 ## Gotchas
 
 - Opening a project's chat from Recent chats or another list outside the project enters that project.
 - The release update card shows only on the start screen outside a project.
-- Outside a project, the shelf is the same whether or not the Navigator is open, so `Recent chats` and `Projects` repeat what the Navigator lists.
+- With home-navigator-hide off, the shelf is the same whether or not the Navigator is open, so `Recent chats` and `Projects` repeat what the Navigator lists.
+- With the Relevant Notes pane also open, home-navigator-hide leaves the start screen with no shelf.

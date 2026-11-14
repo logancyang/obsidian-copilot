@@ -493,6 +493,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
   chatHistorySortStrategy: "recent",
+  hideHomeChatsWithNavigator: false,
   projectsFolder: DEFAULT_PROJECTS_FOLDER,
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   inlineEditCommands: [],
