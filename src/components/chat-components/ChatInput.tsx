@@ -78,6 +78,8 @@ export interface ChatInputProps {
   app: App;
   contextNotes: TFile[];
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
+  contextFolders?: string[];
+  setContextFolders?: React.Dispatch<React.SetStateAction<string[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
   includeActiveWebTab: boolean;
@@ -174,6 +176,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     app,
     contextNotes,
     setContextNotes,
+    contextFolders: draftContextFolders,
+    setContextFolders: setDraftContextFolders,
     includeActiveNote,
     setIncludeActiveNote,
     includeActiveWebTab,
@@ -205,7 +209,13 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   ref
 ) {
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
-  const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
+  const [ownContextFolders, setOwnContextFolders] = useState<string[]>(
+    initialContext?.folders || []
+  );
+  // Agent Chat keeps folders in the chat's draft so they are sent with the message and survive a switch to another chat.
+  // https://github.com/logancyang/obsidian-copilot/issues/3858
+  const contextFolders = draftContextFolders ?? ownContextFolders;
+  const setContextFolders = setDraftContextFolders ?? setOwnContextFolders;
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
@@ -560,15 +570,14 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   }, [urlsFromPills, currentChain]);
 
   useEffect(() => {
-    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- merge pill folders into user-owned context without removing manual entries
     setContextFolders((prev) => {
       const contextFolderPaths = new Set(prev);
       const newFoldersFromPills = foldersFromPills.filter(
         (pillFolder) => !contextFolderPaths.has(pillFolder)
       );
-      return [...prev, ...newFoldersFromPills];
+      return newFoldersFromPills.length > 0 ? [...prev, ...newFoldersFromPills] : prev;
     });
-  }, [foldersFromPills]);
+  }, [foldersFromPills, setContextFolders]);
 
   useEffect(() => {
     let timeoutId: number;

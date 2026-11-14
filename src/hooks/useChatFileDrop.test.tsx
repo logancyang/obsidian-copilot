@@ -1,8 +1,5 @@
-import { FolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
-import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
-import { $createParagraphNode, $getRoot, createEditor, type LexicalEditor } from "lexical";
 import { TFile, TFolder, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
@@ -57,37 +54,21 @@ function makeApp({ draggable = null }: { draggable?: unknown } = {}) {
   return { app, createBinary };
 }
 
-function vaultFolder(path: string): TFolder {
-  return new (TFolder as unknown as new (path: string) => TFolder)(path);
-}
-
 interface HarnessProps {
   app: App;
-  editor?: LexicalEditor;
   setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
   projectFolderPath?: string;
+  onAddFolders?: (folderPaths: string[]) => void;
 }
 
 const ignoreContextNotes = jest.fn();
 
-function Harness(props: HarnessProps) {
-  return (
-    <ChatInputProvider>
-      <DropTarget {...props} />
-    </ChatInputProvider>
-  );
-}
-
-function DropTarget({
+function Harness({
   app,
-  editor,
   setContextNotes = ignoreContextNotes,
   projectFolderPath,
+  onAddFolders,
 }: HarnessProps) {
-  const { registerEditor } = useChatInput();
-  useEffect(() => {
-    if (editor) registerEditor(editor);
-  }, [registerEditor, editor]);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
@@ -98,6 +79,7 @@ function DropTarget({
     onAddImage: jest.fn(),
     containerRef,
     projectFolderPath,
+    onAddFolders,
   });
 
   useEffect(() => {
@@ -156,23 +138,19 @@ describe("useChatFileDrop", () => {
       await expect(attached).resolves.toEqual([note]);
     });
 
-    it("mentions a folder dragged from Obsidian's file explorer in the message by its full vault path (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
-      const folder = vaultFolder("Projects/Alpha/docs");
+    it("adds a folder dragged from Obsidian's file explorer by its full vault path (https://github.com/logancyang/obsidian-copilot/issues/3858)", () => {
+      const folder = new (TFolder as unknown as new (path: string) => TFolder)(
+        "Projects/Alpha/docs"
+      );
       const { app } = makeApp({ draggable: { type: "folder", file: folder } });
-      const editor = createEditor({ nodes: [FolderPillNode] });
-      editor.update(() => $getRoot().append($createParagraphNode()), { discrete: true });
-      render(<Harness app={app} editor={editor} />);
-      const message = new Promise<string>((resolve) => {
-        editor.registerUpdateListener(({ editorState }) =>
-          resolve(editorState.read(() => $getRoot().getTextContent()))
-        );
-      });
+      const onAddFolders = jest.fn();
+      render(<Harness app={app} onAddFolders={onAddFolders} />);
 
       dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
         types: ["text/plain"],
       });
 
-      await expect(message).resolves.toBe("{Projects/Alpha/docs} ");
+      expect(onAddFolders).toHaveBeenCalledWith(["Projects/Alpha/docs"]);
     });
 
     it("copies and attaches a file dropped with its name as text, as WeChat sends it, reading the file before the drop event ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {

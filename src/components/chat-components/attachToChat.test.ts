@@ -271,10 +271,24 @@ describe("attachToChat", () => {
       );
 
       expect(targets.folders()).toEqual(["Research/Pricing"]);
-      expect(notices()).toEqual([
-        "Folders from outside the vault can't be added to a message: my-codebase",
-      ]);
+      expect(notices()).toEqual(["Folders can't be attached to a message: my-codebase"]);
       expect(targets.notes()).toEqual(["Notes/plan.md"]);
+    });
+
+    it("names a vault folder in the notice too when the chat does not take folders (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const { app } = makeApp();
+      const options = { ...makeTargets().options, onAddFolders: undefined };
+
+      await attachToChat(
+        app,
+        split({
+          vaultItems: [vaultFolder("Research/Pricing")],
+          outsideFolderNames: ["my-codebase"],
+        }),
+        options
+      );
+
+      expect(notices()).toEqual(["Folders can't be attached to a message: Pricing, my-codebase"]);
     });
 
     it("shows a notice naming the file when copying it into the vault fails, and still attaches the rest", async () => {

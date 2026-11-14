@@ -25,7 +25,27 @@ jest.mock("@/components/ui/ModelSelector", () => ({
     return null;
   },
 }));
-jest.mock("@/components/chat-components/ContextControl", () => ({ ContextControl: () => null }));
+jest.mock("@/components/chat-components/ContextControl", () => ({
+  ContextControl: ({
+    contextFolders,
+    onAddToContext,
+    onRemoveFromContext,
+  }: {
+    contextFolders: string[];
+    onAddToContext: (category: string, data: { path: string }) => void;
+    onRemoveFromContext: (category: string, data: string) => void;
+  }) => (
+    <>
+      <span data-testid="folder-badges">{contextFolders.join("|")}</span>
+      <button type="button" onClick={() => onAddToContext("folders", { path: "Daily" })}>
+        add Daily folder
+      </button>
+      <button type="button" onClick={() => onRemoveFromContext("folders", "Research")}>
+        remove Research folder
+      </button>
+    </>
+  ),
+}));
 jest.mock("@/components/chat-components/AddContextButton", () => ({
   AddContextButton: () => null,
 }));
@@ -114,6 +134,20 @@ describe("ChatInput", () => {
       expect(mockModelSelectorProps?.models).toEqual([]);
       expect(mockModelSelectorProps?.value).toBe("");
       expect(mockModelSelectorProps?.disabled).toBe(true);
+    });
+
+    it("shows the draft's folders as badges and adds or removes one in the draft (https://github.com/logancyang/obsidian-copilot/issues/3858)", () => {
+      let folders = ["Research"];
+      const setContextFolders = jest.fn((update: React.SetStateAction<string[]>) => {
+        folders = typeof update === "function" ? update(folders) : update;
+      });
+      render(composer("", [], { contextFolders: folders, setContextFolders }).node);
+
+      expect(screen.getByTestId("folder-badges").textContent).toBe("Research");
+      fireEvent.click(screen.getByText("add Daily folder"));
+      expect(folders).toEqual(["Research", "Daily"]);
+      fireEvent.click(screen.getByText("remove Research folder"));
+      expect(folders).toEqual(["Daily"]);
     });
   });
   describe("prependContent()", () => {

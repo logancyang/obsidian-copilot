@@ -98,16 +98,19 @@ export async function attachToChat(
   incoming: VaultSplit,
   options: AttachToChatOptions
 ): Promise<void> {
-  const folderPaths = incoming.vaultItems
-    .filter((item) => item instanceof TFolder)
-    .map((folder) => folder.path);
-  if (folderPaths.length > 0) options.onAddFolders?.(folderPaths);
-  if (incoming.outsideFolderNames.length > 0) {
-    // A message mentions a folder by its vault path, which a folder from the computer does not have.
-    // https://github.com/logancyang/obsidian-copilot/issues/3858
-    new Notice(
-      `Folders from outside the vault can't be added to a message: ${incoming.outsideFolderNames.join(", ")}`
-    );
+  const vaultFolders = incoming.vaultItems.filter((item) => item instanceof TFolder);
+  const { onAddFolders } = options;
+  if (onAddFolders && vaultFolders.length > 0) {
+    onAddFolders(vaultFolders.map((folder) => folder.path));
+  }
+  // A folder reaches the agent as a vault path, which a folder from the computer lacks and which only Agent Chat sends.
+  // https://github.com/logancyang/obsidian-copilot/issues/3858
+  const refusedFolderNames = [
+    ...(onAddFolders ? [] : vaultFolders.map((folder) => folder.name)),
+    ...incoming.outsideFolderNames,
+  ];
+  if (refusedFolderNames.length > 0) {
+    new Notice(`Folders can't be attached to a message: ${refusedFolderNames.join(", ")}`);
   }
   const files = [
     ...incoming.vaultItems.filter((item): item is TFile => item instanceof TFile),
