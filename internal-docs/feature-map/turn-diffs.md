@@ -5,7 +5,7 @@ The file changes an agent made in each turn, and Revoke.
 ## Sub-features
 
 - diff-summary: a turn that changed files lists each file with lines added and removed, and `new` or `deleted`; more than one file shows `Files changed (N)` with the totals.
-- diff-open: choose a file to open its diff in a tab, showing the note with removed text struck through and added text highlighted.
+- diff-open: choose a file to open its diff in a tab, showing the note with removed text struck through, added text highlighted, and a bar in the margin beside each change.
 - diff-step: `Previous change` / `Next change` move between changes and show `N of M`, wrapping at the ends; the marks beside the diff show where each change is.
 - diff-revoke: `Revoke` on one change undoes just that change in the note.
 - diff-revoke-all: `Revoke all` puts the note back as it was before the turn.
