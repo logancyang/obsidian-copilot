@@ -1,3 +1,4 @@
+import { renderFolderMentions } from "@/components/chat-components/renderFolderMentions";
 import { attachedContext } from "@/components/chat-components/attachedContext";
 import { Markdown } from "@/components/Markdown";
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
@@ -791,6 +792,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     void insertAtCursor(app, message.message);
   };
 
+  const mentionedFolders = message.context?.folders;
+  const renderMentionedFolders = useCallback(
+    (container: HTMLElement) => renderFolderMentions(container, mentionedFolders ?? []),
+    [mentionedFolders]
+  );
+
   const renderMessageContent = () => {
     if (message.content) {
       return (
@@ -805,6 +812,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                       <Markdown
                         text={message.message}
                         sourcePath={sourcePath}
+                        onRendered={renderMentionedFolders}
                         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
                       />
                     ) : (
@@ -838,6 +846,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <Markdown
         text={message.message}
         sourcePath={sourcePath}
+        onRendered={renderMentionedFolders}
         className="tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal"
       />
     ) : (
