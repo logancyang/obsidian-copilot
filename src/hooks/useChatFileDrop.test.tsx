@@ -1,6 +1,6 @@
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { createEvent, fireEvent, render } from "@testing-library/react";
-import { TFile, type App } from "obsidian";
+import { TFile, TFolder, type App } from "obsidian";
 import React, { useEffect, useRef } from "react";
 
 interface FakeDrag {
@@ -58,11 +58,17 @@ interface HarnessProps {
   app: App;
   setContextNotes?: (update: TFile[] | ((prev: TFile[]) => TFile[])) => void;
   projectFolderPath?: string;
+  onAddFolders?: (folderPaths: string[]) => void;
 }
 
 const ignoreContextNotes = jest.fn();
 
-function Harness({ app, setContextNotes = ignoreContextNotes, projectFolderPath }: HarnessProps) {
+function Harness({
+  app,
+  setContextNotes = ignoreContextNotes,
+  projectFolderPath,
+  onAddFolders,
+}: HarnessProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const innerZoneRef = useRef<HTMLDivElement>(null);
   const { isDragActive } = useChatFileDrop({
@@ -73,6 +79,7 @@ function Harness({ app, setContextNotes = ignoreContextNotes, projectFolderPath 
     onAddImage: jest.fn(),
     containerRef,
     projectFolderPath,
+    onAddFolders,
   });
 
   useEffect(() => {
@@ -129,6 +136,21 @@ describe("useChatFileDrop", () => {
       dispatchDrag("drop", overlay, drag);
 
       await expect(attached).resolves.toEqual([note]);
+    });
+
+    it("adds a folder dragged from Obsidian's file explorer by its full vault path (https://github.com/logancyang/obsidian-copilot/issues/3858)", () => {
+      const folder = new (TFolder as unknown as new (path: string) => TFolder)(
+        "Projects/Alpha/docs"
+      );
+      const { app } = makeApp({ draggable: { type: "folder", file: folder } });
+      const onAddFolders = jest.fn();
+      render(<Harness app={app} onAddFolders={onAddFolders} />);
+
+      dispatchDrag("drop", document.querySelector("[data-testid=overlay]")!, {
+        types: ["text/plain"],
+      });
+
+      expect(onAddFolders).toHaveBeenCalledWith(["Projects/Alpha/docs"]);
     });
 
     it("copies and attaches a file dropped with its name as text, as WeChat sends it, reading the file before the drop event ends (https://github.com/Brevilabs/obsidian-copilot-private/issues/898)", async () => {

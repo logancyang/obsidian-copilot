@@ -128,12 +128,14 @@ const makeDraft = (overrides: Partial<AgentInputDraftControls> = {}): AgentInput
   input: "hello",
   images: [],
   contextNotes: [],
+  contextFolders: [],
   includeActiveNote: false,
   includeActiveWebTab: false,
   loading: false,
   queue: [],
   setInput: jest.fn(),
   setContextNotes: jest.fn(),
+  setContextFolders: jest.fn(),
   setSelectedImages: jest.fn(),
   addImages: jest.fn(),
   setIncludeActiveNote: jest.fn(),
@@ -527,6 +529,47 @@ describe("AgentChatInput", () => {
       expect(getDraft().contextNotes).toEqual([note]);
       expect(getDraft().images).toHaveLength(1);
       expect(getDraft().images[0]).toMatchObject({ type: "image/png", size: 3 });
+      await act(async () => settleCancel());
+    });
+
+    it("sends the folders attached to the draft as the message's context (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const backend = {
+        sendMessage: jest.fn(() => ({ turn: Promise.resolve() })),
+        takeWithdrawnPrompts: () => [],
+      } as unknown as AgentChatBackend;
+      renderInput(backend, makeDraft({ contextFolders: ["Research/Pricing"] }));
+
+      fireEvent.click(screen.getByText("send"));
+
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(backend.sendMessage).mock.calls[0][1]).toEqual({
+        notes: [],
+        urls: [],
+        folders: ["Research/Pricing"],
+      });
+    });
+
+    it("returns the folders of queued follow-ups to the composer, each once (https://github.com/logancyang/obsidian-copilot/issues/3858)", async () => {
+      const { backend, getDraft, settleCancel } = setupCancellation();
+      act(() => getDraft().setInput("first turn"));
+      fireEvent.click(screen.getByText("send"));
+      await waitFor(() => expect(backend.sendMessage).toHaveBeenCalledTimes(1));
+      for (const [text, folders] of [
+        ["look in here", ["Research"]],
+        ["and here", ["Research", "Daily"]],
+      ] as const) {
+        act(() => {
+          getDraft().setInput(text);
+          getDraft().setContextFolders([...folders]);
+        });
+        fireEvent.click(screen.getByText("send"));
+      }
+      await waitFor(() => expect(getDraft().queue).toHaveLength(2));
+      expect(getDraft().contextFolders).toEqual([]);
+
+      await act(async () => fireEvent.click(screen.getByText("stop")));
+
+      expect(getDraft().contextFolders).toEqual(["Research", "Daily"]);
       await act(async () => settleCancel());
     });
 

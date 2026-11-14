@@ -85,11 +85,13 @@ describe("useAgentInputDrafts", () => {
     act(() => result.current.setInput("typed"));
     act(() => result.current.setInput((prev) => `restored\n\n${prev}`));
     act(() => result.current.setContextNotes((prev) => [...prev, file("one.md")]));
+    act(() => result.current.setContextFolders((prev) => [...prev, "Research"]));
     act(() => result.current.addImages([new File([], "img.png")]));
     act(() => result.current.setQueue((q) => [...q, queued("q1")]));
 
     expect(result.current.input).toBe("restored\n\ntyped");
     expect(result.current.contextNotes.map((n) => n.path)).toEqual(["one.md"]);
+    expect(result.current.contextFolders).toEqual(["Research"]);
     expect(result.current.images).toHaveLength(1);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);
   });
@@ -99,6 +101,7 @@ describe("useAgentInputDrafts", () => {
 
     act(() => {
       result.current.setInput("hi");
+      result.current.setContextFolders(["Research"]);
       result.current.addImages([new File([], "img.png")]);
       result.current.setLoading(true);
       result.current.setQueue(() => [queued("q1")]);
@@ -107,6 +110,7 @@ describe("useAgentInputDrafts", () => {
     act(() => result.current.resetCompose());
 
     expect(result.current.input).toBe("");
+    expect(result.current.contextFolders).toEqual([]);
     expect(result.current.images).toEqual([]);
     expect(result.current.loading).toBe(true);
     expect(result.current.queue.map((q) => q.id)).toEqual(["q1"]);

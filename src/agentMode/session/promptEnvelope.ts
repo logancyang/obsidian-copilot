@@ -128,7 +128,8 @@ function buildContextEnvelope(context: MessageContext | undefined): string | nul
   if (!context) return null;
   const notePaths = (context.notes ?? []).map((n) => n.path).filter(Boolean);
   const excerpts = (context.selectedTextContexts ?? []).filter(isNoteSelectedTextContext);
-  if (notePaths.length === 0 && excerpts.length === 0) return null;
+  const folderPaths = (context.folders ?? []).filter(Boolean);
+  if (notePaths.length === 0 && folderPaths.length === 0 && excerpts.length === 0) return null;
 
   const lines: string[] = [
     "<copilot-context>",
@@ -137,6 +138,10 @@ function buildContextEnvelope(context: MessageContext | undefined): string | nul
   if (notePaths.length > 0) {
     lines.push("", "Notes:");
     for (const p of notePaths) lines.push(`- ${p}`);
+  }
+  if (folderPaths.length > 0) {
+    lines.push("", "Folders:");
+    for (const p of folderPaths) lines.push(`- ${p}`);
   }
   if (excerpts.length > 0) {
     lines.push("", "Selected excerpts (already inlined; no need to re-read):");

@@ -101,6 +101,45 @@ describe("promptEnvelope", () => {
       expect(text).toContain("<user-message>\nsummarize them\n</user-message>");
     });
 
+    it("lists attached folders by vault path after the notes, in the same context block (https://github.com/logancyang/obsidian-copilot/issues/3858)", () => {
+      const blocks = buildPromptBlocks("compare them", {
+        notes: [makeFile("projects/copilot.md")],
+        urls: [],
+        folders: ["Research/Pricing", "Daily"],
+      });
+
+      expect((blocks[0] as { type: "text"; text: string }).text).toBe(
+        [
+          "<copilot-context>",
+          "The user attached the following vault items as context. The vault is your current working directory; open them if you need their contents.",
+          "",
+          "Notes:",
+          "- projects/copilot.md",
+          "",
+          "Folders:",
+          "- Research/Pricing",
+          "- Daily",
+          "</copilot-context>",
+          "",
+          "<user-message>",
+          "compare them",
+          "</user-message>",
+        ].join("\n")
+      );
+    });
+
+    it("sends a context block for a message whose only attachment is a folder (https://github.com/logancyang/obsidian-copilot/issues/3858)", () => {
+      const blocks = buildPromptBlocks("what is in here?", {
+        notes: [],
+        urls: [],
+        folders: ["Research"],
+      });
+
+      expect((blocks[0] as { type: "text"; text: string }).text).toContain(
+        "\n\nFolders:\n- Research\n</copilot-context>"
+      );
+    });
+
     it("inlines selected text excerpts with path and line range", () => {
       const blocks = buildPromptBlocks("explain", {
         notes: [],

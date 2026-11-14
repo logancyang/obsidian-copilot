@@ -83,12 +83,15 @@ const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
 const buildMessageContext = (
   notes: TFile[],
   selected: readonly SelectedTextContext[],
-  webTabs: readonly WebTabContext[] = []
+  webTabs: readonly WebTabContext[],
+  folders: readonly string[]
 ): MessageContext | undefined => {
-  if (notes.length === 0 && selected.length === 0 && webTabs.length === 0) return undefined;
+  if (notes.length === 0 && selected.length === 0 && webTabs.length === 0 && folders.length === 0)
+    return undefined;
   return {
     notes,
     urls: [],
+    folders: folders.length > 0 ? [...folders] : undefined,
     selectedTextContexts: selected.length > 0 ? [...selected] : undefined,
     webTabs: webTabs.length > 0 ? [...webTabs] : undefined,
   };
@@ -100,6 +103,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
   const allNotes = items.flatMap((i) => i.context?.notes ?? []);
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
   const allWebTabs = items.flatMap((i) => i.context?.webTabs ?? []);
+  const allFolders = items.flatMap((i) => i.context?.folders ?? []);
   const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
   const mergedAgents = dedupeBy(
     items.flatMap((i) => i.mentionedAgents ?? []),
@@ -113,7 +117,8 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
     context: buildMessageContext(
       dedupeBy(allNotes, (n) => n.path),
       dedupeBy(allSelected, (s) => s.id),
-      mergeWebTabContexts(allWebTabs)
+      mergeWebTabContexts(allWebTabs),
+      dedupeBy(allFolders, (folder) => folder)
     ),
     promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
     mentionedAgents: mergedAgents.length > 0 ? mergedAgents : undefined,
@@ -195,11 +200,13 @@ export const AgentChatInput = memo(function AgentChatInput({
     input: inputMessage,
     images: selectedImages,
     contextNotes,
+    contextFolders,
     includeActiveNote,
     includeActiveWebTab,
     queue: queuedMessages,
     setInput: setInputMessage,
     setContextNotes,
+    setContextFolders,
     setSelectedImages,
     addImages,
     setIncludeActiveNote,
@@ -250,6 +257,10 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (notes.length > 0) {
         setContextNotes((previous) => dedupeBy([...notes, ...previous], (note) => note.path));
       }
+      const folders = restored.context?.folders ?? [];
+      if (folders.length > 0) {
+        setContextFolders((previous) => dedupeBy([...folders, ...previous], (folder) => folder));
+      }
       const images = (restored.promptContent ?? [])
         .map(imageBlockToFile)
         .filter((file): file is File => file !== null);
@@ -259,6 +270,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       activeWebTabForMentions,
       app,
       setContextNotes,
+      setContextFolders,
       setIncludeActiveNote,
       setIncludeActiveWebTab,
       setSelectedImages,
@@ -398,7 +410,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         id: `queued-${uuidv4()}`,
         text: resolvedText,
         rawInput,
-        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs),
+        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs, contextFolders),
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
@@ -410,6 +422,9 @@ export const AgentChatInput = memo(function AgentChatInput({
           [rawInput, current].filter((part) => part.trim()).join("\n\n")
         );
         setContextNotes((previous) => dedupeBy([...contextNotes, ...previous], (n) => n.path));
+        setContextFolders((previous) =>
+          dedupeBy([...contextFolders, ...previous], (folder) => folder)
+        );
         setSelectedImages((previous) => [...selectedImages, ...previous]);
         return;
       }
@@ -436,6 +451,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       inputMessage,
       selectedImages,
       contextNotes,
+      contextFolders,
       includeActiveNote,
       includeActiveWebTab,
       selectedTextContexts,
@@ -455,6 +471,7 @@ export const AgentChatInput = memo(function AgentChatInput({
       hasChatMovedFrom,
       setInputMessage,
       setContextNotes,
+      setContextFolders,
       setSelectedImages,
     ]
   );
@@ -527,6 +544,8 @@ export const AgentChatInput = memo(function AgentChatInput({
           app={app}
           contextNotes={contextNotes}
           setContextNotes={setContextNotes}
+          contextFolders={contextFolders}
+          setContextFolders={setContextFolders}
           includeActiveNote={includeActiveNote}
           setIncludeActiveNote={setIncludeActiveNote}
           includeActiveWebTab={includeActiveWebTab}

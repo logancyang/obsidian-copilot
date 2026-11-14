@@ -2794,6 +2794,21 @@ describe("AgentSessionManager", () => {
         expect(mgr.drafts.get(drafted.chatInputId)?.contextNotes).toEqual([note]);
       });
 
+      it("keeps a chat without a sent message open while its composer holds an attached folder, which closing would discard, for https://github.com/logancyang/obsidian-copilot/issues/3858", async () => {
+        const mgr = buildManager();
+        const drafted = await mgr.createSession();
+        mgr.drafts.update(drafted.chatInputId, (draft) => ({
+          ...draft,
+          contextFolders: ["Research"],
+        }));
+        await mgr.createSession();
+
+        mgr.detachSessionFromTab(drafted.internalId);
+
+        expect(closedSessions()).toEqual([]);
+        expect(mgr.drafts.get(drafted.chatInputId)?.contextFolders).toEqual(["Research"]);
+      });
+
       it("keeps an empty chat holding unsent text when a saved chat is opened from it, which would otherwise take its place and discard the text, for https://github.com/Brevilabs/obsidian-copilot-private/issues/812", async () => {
         const loadFile = jest.fn().mockResolvedValue({
           backendId: "opencode",

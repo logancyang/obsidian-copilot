@@ -357,6 +357,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   useChatRelevantNotesContext(app, rootEl, chatInputId, draft, messages, activeProject);
 
+  const { setContextFolders } = draft;
+  const addContextFolders = useCallback(
+    (folderPaths: string[]) =>
+      setContextFolders((previous) => [...new Set([...previous, ...folderPaths])]),
+    [setContextFolders]
+  );
+
   const { isDragActive } = useChatFileDrop({
     app,
     contextNotes: draft.contextNotes,
@@ -366,6 +373,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     containerRef: chatContainerRef,
     acceptAnyFileType: true,
     projectFolderPath,
+    onAddFolders: addContextFolders,
   });
 
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
@@ -383,6 +391,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       draft.input.trim() === "" &&
       draft.images.length === 0 &&
       draft.contextNotes.length === 0 &&
+      draft.contextFolders.length === 0 &&
       draft.queue.length === 0;
     if (!draftEmpty) return false;
     try {
@@ -398,6 +407,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     draft.input.trim() === "" &&
     draft.images.length === 0 &&
     draft.contextNotes.length === 0 &&
+    draft.contextFolders.length === 0 &&
     draft.queue.length === 0;
   const activeProjectLandingCaptureSignature = useMemo(() => {
     if (!isProjectScope) return null;

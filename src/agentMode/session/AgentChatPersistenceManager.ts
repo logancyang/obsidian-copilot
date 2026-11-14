@@ -55,6 +55,7 @@ interface SavedMessageData {
   // A reopened or continued chat gets its attached context back only from the note; JSON keeps paths holding ", " or " | " whole.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/920
   notes?: string[];
+  folders?: string[];
   webTabs?: { url: string; title?: string }[];
 }
 
@@ -69,6 +70,7 @@ function readMessageData(json: string): SavedMessageData {
 function savedContext(context: MessageContext | undefined): SavedMessageData {
   const saved: SavedMessageData = {};
   if (context?.notes?.length) saved.notes = context.notes.map((note) => note.path);
+  if (context?.folders?.length) saved.folders = context.folders;
   if (context?.webTabs?.length)
     saved.webTabs = context.webTabs.map(({ url, title }) => ({ url, title }));
   return saved;
@@ -82,8 +84,16 @@ function loadedContext(saved: SavedMessageData, app: App): MessageContext | unde
   const webTabs = (Array.isArray(saved.webTabs) ? saved.webTabs : []).filter(
     (tab) => typeof tab?.url === "string"
   );
-  if (notes.length === 0 && webTabs.length === 0) return undefined;
-  return { notes, urls: [], ...(webTabs.length > 0 ? { webTabs } : {}) };
+  const folders = (Array.isArray(saved.folders) ? saved.folders : []).filter(
+    (path) => typeof path === "string"
+  );
+  if (notes.length === 0 && webTabs.length === 0 && folders.length === 0) return undefined;
+  return {
+    notes,
+    urls: [],
+    ...(folders.length > 0 ? { folders } : {}),
+    ...(webTabs.length > 0 ? { webTabs } : {}),
+  };
 }
 
 function parseLinkableEpoch(raw: string | undefined): number | undefined {
