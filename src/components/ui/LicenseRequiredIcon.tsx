@@ -3,7 +3,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Lock } from "lucide-react";
 import React from "react";
 
-const LICENSE_REQUIRED = "Copilot license required";
+const LICENSE_REQUIRED = "License needed for this option, not the plugin.";
 
 export function LicenseRequiredIcon({ className }: { className?: string }) {
   return (
