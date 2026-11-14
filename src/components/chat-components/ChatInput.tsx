@@ -15,14 +15,7 @@ import { isAllowedFileForNoteContext } from "@/utils";
 import { getFileIdentityKey } from "@/utils/fileListUtils";
 import { CornerDownLeft, Square, X } from "lucide-react";
 import { App, TFile, TFolder } from "obsidian";
-import React, {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import {
   $getRoot,
   $createTextNode,
@@ -38,13 +31,10 @@ import { openFilePicker } from "./openFilePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import { ModePicker } from "@/components/ui/ModePicker";
-import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
-import { $removePillsByURL } from "./pills/URLPillNode";
-import { $removePillsByFolder } from "./pills/FolderPillNode";
 import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
 import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
-import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
+import { $findWebTabPills } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 import { cn } from "@/lib/utils";
 import { useObjectUrl } from "@/hooks/useObjectUrl";
@@ -231,10 +221,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
   const isCopilotPlus = isPlusChain(currentChain);
   const showAtMentionTools = shouldShowAtMentionTools({ isCopilotPlus, isAgentMode });
 
-  const mergedContextWebTabs = useMemo(() => {
-    return mergeWebTabContexts([...contextWebTabs, ...webTabsFromPills]);
-  }, [contextWebTabs, webTabsFromPills]);
-
   const getWebTabsFromEditorSnapshot = (): WebTabContext[] => {
     const editor = lexicalEditorRef.current;
     if (!editor) {
@@ -256,12 +242,21 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     isGenerating && !(isAgentMode && (inputMessage.trim().length > 0 || selectedImages.length > 0));
 
   const onSendMessage = () => {
+    // A mention is sent as context with the message but never shown as a badge, so it joins the attached context only here.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/932
+    const mentionedNotes = notesFromPills.flatMap((note) => {
+      const file = app.vault.getAbstractFileByPath(note.path);
+      return file instanceof TFile ? [file] : [];
+    });
+    const notes = [
+      ...contextNotes,
+      ...mentionedNotes.filter((note) => !contextNotes.some((n) => n.path === note.path)),
+    ];
+    const urls = [...new Set([...contextUrls, ...urlsFromPills])];
+    const folders = [...new Set([...contextFolders, ...foldersFromPills])];
+
     if (editMode && onEditSave) {
-      onEditSave(inputMessage, {
-        notes: contextNotes,
-        urls: contextUrls,
-        folders: contextFolders,
-      });
+      onEditSave(inputMessage, { notes, urls, folders });
       return;
     }
 
@@ -269,26 +264,15 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
 
     if (!isCopilotPlus) {
-      handleSendMessage({ webTabs: allWebTabs });
+      handleSendMessage({
+        webTabs: allWebTabs,
+        contextNotes: mentionedNotes,
+        ...(isAgentMode ? { contextFolders: foldersFromPills } : {}),
+      });
       return;
     }
 
-    handleSendMessage({
-      contextNotes,
-      urls: contextUrls,
-      contextFolders,
-      webTabs: allWebTabs,
-    });
-  };
-
-  const handleNotePillsRemoved = (removedNotes: { path: string; basename: string }[]) => {
-    const removedPaths = new Set(removedNotes.map((note) => note.path));
-
-    setContextNotes((prev) => {
-      return prev.filter((contextNote) => {
-        return !removedPaths.has(contextNote.path);
-      });
-    });
+    handleSendMessage({ contextNotes: notes, urls, contextFolders: folders, webTabs: allWebTabs });
   };
 
   const handleAgentsChange = useCallback(
@@ -297,49 +281,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     },
     [onMentionedAgentsChange]
   );
-
-  const handleURLPillsRemoved = (removedUrls: string[]) => {
-    const removedUrlSet = new Set(removedUrls);
-
-    setContextUrls((prev) => {
-      return prev.filter((url) => {
-        if (removedUrlSet.has(url)) {
-          return false;
-        }
-        return true;
-      });
-    });
-  };
-
-  const handleContextNoteRemoved = (notePath: string) => {
-    if (lexicalEditorRef.current) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByPath(notePath);
-      });
-    }
-
-    setNotesFromPills((prev) => prev.filter((note) => note.path !== notePath));
-  };
-
-  const handleURLContextRemoved = (url: string) => {
-    if (lexicalEditorRef.current) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByURL(url);
-      });
-    }
-
-    setUrlsFromPills((prev) => prev.filter((pillUrl) => pillUrl !== url));
-  };
-
-  const handleFolderContextRemoved = (folderPath: string) => {
-    if (lexicalEditorRef.current) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByFolder(folderPath);
-      });
-    }
-
-    setFoldersFromPills((prev) => prev.filter((pillFolder) => pillFolder !== folderPath));
-  };
 
   const handleAddToContext = (
     category: string,
@@ -474,19 +415,16 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           } else {
             setContextNotes((prev) => prev.filter((note) => note.path !== data));
           }
-          handleContextNoteRemoved(data);
         }
         break;
       case "urls":
         if (typeof data === "string") {
           setContextUrls((prev) => prev.filter((u) => u !== data));
-          handleURLContextRemoved(data);
         }
         break;
       case "folders":
         if (typeof data === "string") {
           setContextFolders((prev) => prev.filter((f) => f !== data));
-          handleFolderContextRemoved(data);
         }
         break;
       case "selectedText":
@@ -508,76 +446,10 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           if (!url) break;
 
           setContextWebTabs((prev) => prev.filter((t) => normalizeUrlString(t.url) !== url));
-          setWebTabsFromPills((prev) => prev.filter((t) => normalizeUrlString(t.url) !== url));
-          if (lexicalEditorRef.current) {
-            lexicalEditorRef.current.update(() => {
-              $removeWebTabPillsByUrl(url);
-            });
-          }
         }
         break;
     }
   };
-
-  const handleFolderPillsRemoved = (removedFolders: string[]) => {
-    const removedFolderPaths = new Set(removedFolders);
-
-    setContextFolders((prev) => {
-      return prev.filter((folder) => {
-        if (removedFolderPaths.has(folder)) {
-          return false;
-        }
-        return true;
-      });
-    });
-  };
-
-  useEffect(() => {
-    setContextNotes((prev) => {
-      const contextPaths = new Set(prev.map((note) => note.path));
-
-      const newNotesFromPills = notesFromPills.filter((pillNote) => {
-        return !contextPaths.has(pillNote.path);
-      });
-
-      const newFiles: TFile[] = [];
-      newNotesFromPills.forEach((pillNote) => {
-        const file = app.vault.getAbstractFileByPath(pillNote.path);
-        if (file instanceof TFile) {
-          newFiles.push(file);
-        }
-      });
-
-      return [...prev, ...newFiles];
-    });
-  }, [notesFromPills, app.vault, setContextNotes]);
-
-  useEffect(() => {
-    if (isPlusChain(currentChain)) {
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- merge pill URLs into user-owned context without removing manual entries
-      setContextUrls((prev) => {
-        const contextUrlSet = new Set(prev);
-        const newUrlsFromPills = urlsFromPills.filter((pillUrl) => !contextUrlSet.has(pillUrl));
-        if (newUrlsFromPills.length > 0) {
-          return Array.from(new Set([...prev, ...newUrlsFromPills]));
-        }
-        return prev;
-      });
-    } else {
-      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- clear Plus-only URL context when switching chains
-      setContextUrls([]);
-    }
-  }, [urlsFromPills, currentChain]);
-
-  useEffect(() => {
-    setContextFolders((prev) => {
-      const contextFolderPaths = new Set(prev);
-      const newFoldersFromPills = foldersFromPills.filter(
-        (pillFolder) => !contextFolderPaths.has(pillFolder)
-      );
-      return newFoldersFromPills.length > 0 ? [...prev, ...newFoldersFromPills] : prev;
-    });
-  }, [foldersFromPills, setContextFolders]);
 
   useEffect(() => {
     let timeoutId: number;
@@ -689,7 +561,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               activeWebTab={activeWebTab}
               contextUrls={contextUrls}
               contextFolders={contextFolders}
-              contextWebTabs={mergedContextWebTabs}
+              contextWebTabs={contextWebTabs}
               selectedTextContexts={selectedTextContexts}
               onAddToContext={handleAddToContext}
               onRemoveFromContext={handleRemoveFromContext}
@@ -722,14 +594,11 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               onChange={(value) => setInputMessage(value)}
               onSubmit={onSendMessage}
               onNotesChange={setNotesFromPills}
-              onNotesRemoved={handleNotePillsRemoved}
               onActiveNoteAdded={handleActiveNoteAdded}
               onActiveNoteRemoved={handleActiveNoteRemoved}
               onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
-              onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
               onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
               onFoldersChange={setFoldersFromPills}
-              onFoldersRemoved={handleFolderPillsRemoved}
               onWebTabsChange={setWebTabsFromPills}
               onActiveWebTabAdded={handleActiveWebTabAdded}
               onActiveWebTabRemoved={handleActiveWebTabRemoved}

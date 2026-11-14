@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  $getRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -110,34 +109,4 @@ export function $createFolderPillNode(folderPath: string): FolderPillNode {
 
 export function $isFolderPillNode(node: LexicalNode): node is FolderPillNode {
   return node instanceof FolderPillNode;
-}
-
-function $findFolderPills(): FolderPillNode[] {
-  const root = $getRoot();
-  const pills: FolderPillNode[] = [];
-
-  function traverse(node: LexicalNode) {
-    if (node instanceof FolderPillNode) {
-      pills.push(node);
-    }
-
-    if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren() as LexicalNode[];
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return pills;
-}
-
-export function $removePillsByFolder(folderPath: string): void {
-  const pills = $findFolderPills();
-  for (const pill of pills) {
-    if (pill.getValue() === folderPath) {
-      pill.remove();
-    }
-  }
 }

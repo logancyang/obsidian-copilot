@@ -4,7 +4,6 @@ import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
 interface NotePillSyncPluginProps {
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
 }
 
 type NoteData = { path: string; basename: string };
@@ -21,12 +20,6 @@ const notePillConfig: PillSyncConfig<NoteData> = {
   getKey: (note: NoteData) => note.path,
 };
 
-export function NotePillSyncPlugin({ onNotesChange, onNotesRemoved }: NotePillSyncPluginProps) {
-  return (
-    <GenericPillSyncPlugin
-      config={notePillConfig}
-      onChange={onNotesChange}
-      onRemoved={onNotesRemoved}
-    />
-  );
+export function NotePillSyncPlugin({ onNotesChange }: NotePillSyncPluginProps) {
+  return <GenericPillSyncPlugin config={notePillConfig} onChange={onNotesChange} />;
 }

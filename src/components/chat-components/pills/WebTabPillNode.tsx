@@ -178,12 +178,3 @@ export function $findWebTabPills(): WebTabPillNode[] {
   traverse(root);
   return pills;
 }
-
-export function $removeWebTabPillsByUrl(url: string): void {
-  const pills = $findWebTabPills();
-  for (const pill of pills) {
-    if (pill.getURL() === url) {
-      pill.remove();
-    }
-  }
-}

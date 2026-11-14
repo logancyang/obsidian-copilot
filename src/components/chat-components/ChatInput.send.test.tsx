@@ -3,6 +3,7 @@ import ChatInput, {
   type ChatInputProps,
 } from "@/components/chat-components/ChatInput";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { TFile } from "obsidian";
 import React from "react";
 import {
   createEditor,
@@ -14,6 +15,7 @@ import {
 import { AgentPillNode, $createAgentPillNode, $isAgentPillNode } from "./pills/AgentPillNode";
 import type { ModelSelector } from "@/components/ui/ModelSelector";
 let mockEditor: LexicalEditor;
+let mockMention: () => void;
 let mockModelSelectorProps: React.ComponentProps<typeof ModelSelector> | undefined;
 
 jest.mock("@/aiParams", () => ({
@@ -54,12 +56,20 @@ jest.mock("@/components/chat-components/LexicalEditor", () => ({
   default: function MockLexicalEditor({
     onSubmit,
     onEditorReady,
+    onNotesChange,
+    onFoldersChange,
     value,
   }: {
     onSubmit: () => void;
     onEditorReady: (editor: LexicalEditor) => void;
+    onNotesChange: (notes: { path: string; basename: string }[]) => void;
+    onFoldersChange: (folders: string[]) => void;
     value: string;
   }) {
+    mockMention = () => {
+      onNotesChange([{ path: "Notes/Plan.md", basename: "Plan" }]);
+      onFoldersChange(["Research"]);
+    };
     React.useEffect(() => {
       mockEditor = createEditor({
         namespace: "restore-test",
@@ -148,6 +158,47 @@ describe("ChatInput", () => {
       expect(folders).toEqual(["Research", "Daily"]);
       fireEvent.click(screen.getByText("remove Research folder"));
       expect(folders).toEqual(["Daily"]);
+    });
+
+    it("shows a note and a folder mentioned in the text as no badge, and sends them as context with the message (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
+      const plan = new (TFile as unknown as new (path: string) => TFile)("Notes/Plan.md");
+      const setContextNotes = jest.fn();
+      const setContextFolders = jest.fn();
+      const { node, send } = composer("see [[Plan]] {Research}", [], {
+        app: {
+          workspace: { getActiveFile: () => null, on: jest.fn(), offref: jest.fn() },
+          vault: { getAbstractFileByPath: (path: string) => (path === plan.path ? plan : null) },
+        } as unknown as ChatInputProps["app"],
+        contextFolders: [],
+        setContextNotes,
+        setContextFolders,
+      });
+      render(node);
+
+      act(() => mockMention());
+      expect(screen.getByTestId("folder-badges").textContent).toBe("");
+      expect(setContextNotes).not.toHaveBeenCalled();
+      expect(setContextFolders).not.toHaveBeenCalled();
+      fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
+
+      expect(send).toHaveBeenCalledWith({
+        webTabs: [],
+        contextNotes: [plan],
+        contextFolders: ["Research"],
+      });
+    });
+
+    it("leaves the message text as typed when a badge is removed (https://github.com/Brevilabs/obsidian-copilot-private/issues/932)", () => {
+      const { node } = composer("compare", [], {
+        contextFolders: ["Research"],
+        setContextFolders: jest.fn(),
+      });
+      render(node);
+      const before = mockEditor.getEditorState().read(() => $getRoot().getTextContent());
+
+      fireEvent.click(screen.getByText("remove Research folder"));
+
+      expect(mockEditor.getEditorState().read(() => $getRoot().getTextContent())).toBe(before);
     });
   });
   describe("prependContent()", () => {

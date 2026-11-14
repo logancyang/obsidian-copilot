@@ -47,12 +47,9 @@ interface LexicalEditorProps {
   onSubmit: () => void;
   placeholder?: string;
   onNotesChange?: (notes: { path: string; basename: string }[]) => void;
-  onNotesRemoved?: (removedNotes: { path: string; basename: string }[]) => void;
   onURLsChange?: (urls: string[]) => void;
-  onURLsRemoved?: (removedUrls: string[]) => void;
   onToolsChange?: (tools: string[]) => void;
   onFoldersChange?: (folders: string[]) => void;
-  onFoldersRemoved?: (removedFolders: string[]) => void;
   onActiveNoteAdded?: () => void;
   onActiveNoteRemoved?: () => void;
   onWebTabsChange?: (webTabs: WebTabContext[]) => void;
@@ -78,12 +75,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onSubmit,
   placeholder = "Type a message...",
   onNotesChange,
-  onNotesRemoved,
   onURLsChange,
-  onURLsRemoved,
   onToolsChange,
   onFoldersChange,
-  onFoldersRemoved,
   onActiveNoteAdded,
   onActiveNoteRemoved,
   onWebTabsChange,
@@ -205,15 +199,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             />
             <ValueSyncPlugin value={value} />
             <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
-            <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
-            {onURLsChange && (
-              <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
-            )}
+            <NotePillSyncPlugin onNotesChange={onNotesChange} />
+            {onURLsChange && <URLPillSyncPlugin onURLsChange={onURLsChange} />}
             <ToolPillSyncPlugin onToolsChange={onToolsChange} />
-            <FolderPillSyncPlugin
-              onFoldersChange={onFoldersChange}
-              onFoldersRemoved={onFoldersRemoved}
-            />
+            <FolderPillSyncPlugin onFoldersChange={onFoldersChange} />
             <ActiveNotePillSyncPlugin
               onActiveNoteAdded={onActiveNoteAdded}
               onActiveNoteRemoved={onActiveNoteRemoved}

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  $getRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -158,24 +157,4 @@ export function $createNotePillNode(noteTitle: string, notePath: string): NotePi
 
 export function $isNotePillNode(node: LexicalNode | null | undefined): node is NotePillNode {
   return node instanceof NotePillNode;
-}
-
-export function $removePillsByPath(notePath: string): number {
-  const root = $getRoot();
-  let removedCount = 0;
-
-  function traverse(node: LexicalNode): void {
-    if ($isNotePillNode(node) && node.getNotePath() === notePath) {
-      node.remove();
-      removedCount++;
-    } else if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren() as LexicalNode[];
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return removedCount;
 }

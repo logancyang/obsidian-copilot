@@ -335,7 +335,11 @@ export const AgentChatInput = memo(function AgentChatInput({
   );
 
   const handleSendMessage = useCallback(
-    async (webTabs?: WebTabContext[]) => {
+    async ({
+      webTabs,
+      contextNotes: mentionedNotes = [],
+      contextFolders: mentionedFolders = [],
+    }: Parameters<ChatInputProps["handleSendMessage"]>[0] = {}) => {
       if (disabled) return;
       const text = inputMessage.trim();
       if (!text && selectedImages.length === 0) return;
@@ -347,8 +351,9 @@ export const AgentChatInput = memo(function AgentChatInput({
       if (includeActiveNote && activeFile) {
         candidateNotes.push(activeFile);
       }
-      candidateNotes.push(...contextNotes);
+      candidateNotes.push(...contextNotes, ...mentionedNotes);
       const notes = dedupeBy(candidateNotes, (n) => n.path);
+      const folders = dedupeBy([...contextFolders, ...mentionedFolders], (folder) => folder);
 
       const noteSelection = selectedTextContexts.find(isNoteSelectedTextContext);
       const expanded = await expandCustomCommandPrefix(
@@ -410,7 +415,7 @@ export const AgentChatInput = memo(function AgentChatInput({
         id: `queued-${uuidv4()}`,
         text: resolvedText,
         rawInput,
-        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs, contextFolders),
+        context: buildMessageContext(notes, selectedTextContexts, resolvedWebTabs, folders),
         promptContent: content.length > 0 ? content : undefined,
         mentionedAgents,
       };
@@ -536,7 +541,7 @@ export const AgentChatInput = memo(function AgentChatInput({
           placeholder="Ask anything • @ to add context • / for commands"
           inputMessage={inputMessage}
           setInputMessage={setInputMessage}
-          handleSendMessage={safeAsyncHandler((meta) => handleSendMessage(meta?.webTabs))}
+          handleSendMessage={safeAsyncHandler(handleSendMessage)}
           isGenerating={isReplyRunning}
           onStopGenerating={safeAsyncHandler(handleStopGenerating)}
           onEscape={isReplyRunning ? safeAsyncHandler(handleStopGenerating) : undefined}
