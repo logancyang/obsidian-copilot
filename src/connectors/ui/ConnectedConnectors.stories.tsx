@@ -56,6 +56,14 @@ const CUSTOM_EVERY_STATUS: CustomConnectorState[] = [
     status: { kind: "key-not-accepted" },
   },
   {
+    config: { id: "podwise", name: "Podwise", url: "https://mcp.podwise.ai/mcp", headerNames: [] },
+    status: { kind: "needs-login" },
+  },
+  {
+    config: { id: "apify", name: "Apify", url: "https://mcp.apify.com", headerNames: [] },
+    status: { kind: "login-failed", reason: "rejected" },
+  },
+  {
     config: { id: "brave", name: "Brave Search", command: "npx", args: [], envNames: ["KEY"] },
     status: { kind: "needs-key" },
   },
@@ -94,6 +102,7 @@ const meta = {
     customActions: {
       onEdit: () => undefined,
       onTryAgain: () => undefined,
+      onLogIn: () => undefined,
       onSetTurnedOff: () => undefined,
       onRemove: () => undefined,
       onShowTools: () => undefined,
@@ -121,6 +130,27 @@ export const CustomConnectorsInEveryStatus: StoryObj<ConnectedConnectorsProps> =
       needsAttention: false,
     }),
     customConnectors: CUSTOM_EVERY_STATUS,
+  },
+};
+
+export const CustomConnectorWaitingForBrowser: StoryObj<ConnectedConnectorsProps> = {
+  args: {
+    snapshot: snapshotOf({ connections: [], needsAttention: false }),
+    customConnectors: [
+      {
+        config: {
+          id: "linear",
+          name: "Linear",
+          url: "https://mcp.linear.app/mcp",
+          headerNames: [],
+        },
+        status: {
+          kind: "logging-in",
+          loginUrl: () => "https://mcp.linear.app/authorize",
+          cancel: () => undefined,
+        },
+      },
+    ],
   },
 };
 

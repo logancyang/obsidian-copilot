@@ -43,6 +43,7 @@ export class FakeMcpService {
   repliesWithEventStream = false;
   unreachable = false;
   hangs = false;
+  publishesLoginMetadata = false;
   failWithStatus: number | null = null;
   failBody = "Service error";
   holdsCalls = false;
@@ -68,6 +69,15 @@ export class FakeMcpService {
       params: message?.params,
       signal: init?.signal ?? null,
     });
+    if (
+      this.publishesLoginMetadata &&
+      new URL(String(url)).pathname.startsWith("/.well-known/oauth-protected-resource")
+    ) {
+      return Response.json({
+        resource: this.url,
+        authorization_servers: [new URL(this.url).origin],
+      });
+    }
     if (String(url) !== this.url) return new Response("Not found", { status: 404 });
     if (this.failWithStatus) return new Response(this.failBody, { status: this.failWithStatus });
     const token = this.requests[this.requests.length - 1].token;

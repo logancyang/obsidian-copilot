@@ -5,6 +5,7 @@ import { MAX_PROVIDED_TOOL_NAME_LENGTH } from "@/agentMode/session/copilotMcpSer
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { FakeProcess } from "@/connectors/custom/testing/fakeCustomProcess";
 import { fakeKeychain } from "@/connectors/custom/testing/fakeKeychain";
+import { fakeAuth } from "@/connectors/oauth/testing/fakeConnectorAuth";
 import { FakeMcpService } from "@/connectors/testing/fakeMcpService";
 import { logWarn } from "@/logger";
 import { getSettings, setSettings } from "@/settings/model";
@@ -18,6 +19,7 @@ jest.mock("@/utils/loginShellPath", () => ({
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
 const REMOTE_URL = "https://mcp.acme.test/mcp";
 const KEYCHAIN_PREFIX = "copilot-vtestvault-custom-connector-";
+const LOGIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/933";
 
 const LOCAL_JSON = JSON.stringify({
   mcpServers: { Echo: { command: "echo-server", args: ["--stdio"], env: { FAKE_KEY: "k-1" } } },
@@ -25,6 +27,10 @@ const LOCAL_JSON = JSON.stringify({
 const REMOTE_JSON = JSON.stringify({
   mcpServers: { Acme: { url: REMOTE_URL, headers: { Authorization: "Bearer acme-1" } } },
 });
+const LOGIN_JSON = JSON.stringify({
+  mcpServers: { Acme: { url: REMOTE_URL, headers: { "X-Workspace": "w-1" } } },
+});
+const LOGIN_TOKEN = "token-custom-acme";
 
 function setUp(options: { enabled?: boolean } = {}) {
   jest.mocked(logWarn).mockClear();
@@ -35,7 +41,9 @@ function setUp(options: { enabled?: boolean } = {}) {
   const remote = new FakeMcpService(REMOTE_URL);
   remote.validTokens.add("acme-1");
   remote.tools = [{ name: "search", annotations: { readOnlyHint: true } }];
+  const login = fakeAuth();
   const custom = new CustomConnectors({
+    auth: login.auth,
     keychain,
     deviceStorage: {
       load: (key) => device.get(key) ?? null,
@@ -60,7 +68,7 @@ function setUp(options: { enabled?: boolean } = {}) {
     custom.add(parsed.connectors);
     await custom.refresh();
   };
-  return { custom, secrets, device, processes, remote, statusOf, add };
+  return { custom, secrets, device, processes, remote, login, statusOf, add };
 }
 
 function connectedWith(...names: string[]) {
@@ -153,6 +161,16 @@ describe("customConnectors", () => {
         expect(fake.remote.callsOf("tools/list")[0].token).toBe("acme-1");
       });
 
+      it(`shows "Needs login" and asks for attention when a remote server that publishes login metadata refuses it, even with a non-login header pasted: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+
+        await fake.add(LOGIN_JSON);
+
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+        expect(fake.custom.getSnapshot().needsAttention).toBe(true);
+      });
+
       it("leaves every connector unstarted while connectors aren't enabled", () => {
         const fake = setUp({ enabled: false });
         const parsed = fake.custom.parse(LOCAL_JSON);
@@ -243,6 +261,81 @@ describe("customConnectors", () => {
         expect(getSettings().customConnectors).toBe(before);
         expect(fake.processes[0].stopped).toBe(false);
       });
+
+      it(`drops the stored login when the URL changes and keeps it when the URL stays: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        await fake.add(LOGIN_JSON);
+        const withUrl = (url: string) =>
+          JSON.stringify({ mcpServers: { Acme: { url, headers: { "X-Workspace": "" } } } });
+
+        fake.custom.edit("acme", withUrl(REMOTE_URL));
+        expect(fake.login.auth.disconnect).not.toHaveBeenCalled();
+
+        fake.custom.edit("acme", withUrl("https://mcp.other.test/mcp"));
+        expect(fake.login.auth.disconnect).toHaveBeenCalledWith("custom-acme");
+      });
+    });
+
+    describe("logIn()", () => {
+      async function needingLogin() {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        fake.remote.validTokens.add(LOGIN_TOKEN);
+        await fake.add(LOGIN_JSON);
+        return fake;
+      }
+
+      it(`logs in to the connector's URL under a login of its own, then connects with the login's token: ${LOGIN_ISSUE}`, async () => {
+        const fake = await needingLogin();
+
+        const login = fake.custom.logIn("acme");
+
+        expect(fake.statusOf("acme")).toMatchObject({ kind: "logging-in" });
+        expect(fake.login.pendingLogin()?.target).toEqual({
+          connectionId: "custom-acme",
+          serverUrl: REMOTE_URL,
+          serviceName: "Acme",
+        });
+        fake.login.finishLogin({ status: "connected" });
+        await login.outcome;
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+        expect(fake.remote.callsOf("tools/list")[0].token).toBe(LOGIN_TOKEN);
+      });
+
+      it(`sends the login's token in place of a pasted Authorization header: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        fake.remote.validTokens.add(LOGIN_TOKEN);
+        await fake.add(
+          JSON.stringify({
+            mcpServers: { Acme: { url: REMOTE_URL, headers: { authorization: "Bearer stale" } } },
+          })
+        );
+
+        const login = fake.custom.logIn("acme");
+        fake.login.finishLogin({ status: "connected" });
+        await login.outcome;
+        await fake.custom.refresh();
+
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+        expect(fake.remote.callsOf("tools/list")[0].token).toBe(LOGIN_TOKEN);
+      });
+
+      it(`shows why a login failed, and returns to "Needs login" after a cancelled one: ${LOGIN_ISSUE}`, async () => {
+        const fake = await needingLogin();
+
+        const failed = fake.custom.logIn("acme");
+        fake.login.finishLogin({ status: "failed", reason: "rejected" });
+        await failed.outcome;
+        expect(fake.statusOf("acme")).toEqual({ kind: "login-failed", reason: "rejected" });
+
+        const cancelled = fake.custom.logIn("acme");
+        cancelled.cancel();
+        await cancelled.outcome;
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+      });
     });
 
     describe("remove()", () => {
@@ -260,6 +353,18 @@ describe("customConnectors", () => {
         expect(fake.secrets.size).toBe(0);
         expect(fake.device.get("copilot-custom-connectors-off")).toEqual([]);
         expect(fake.custom.getSnapshot().connectors).toEqual([]);
+      });
+
+      it(`cancels a waiting login and revokes the connector's login: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        await fake.add(LOGIN_JSON);
+        const login = fake.custom.logIn("acme");
+
+        fake.custom.remove("acme");
+
+        await expect(login.outcome).resolves.toEqual({ status: "cancelled" });
+        expect(fake.login.auth.disconnect).toHaveBeenCalledWith("custom-acme");
       });
     });
 
@@ -531,6 +636,19 @@ describe("customConnectors", () => {
         expect(result?.isError).toBe(false);
         expect(textOf(result)).toContain("Settings → Connectors");
         expect(fake.statusOf("acme")).toEqual({ kind: "key-not-accepted" });
+      });
+
+      it(`moves a connector whose login stops working to "Needs login" and tells the agent the user must log in again: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        await fake.add(REMOTE_JSON);
+        fake.remote.validTokens.clear();
+
+        const result = await fake.custom.call("acme_search", {});
+
+        expect(result?.isError).toBe(false);
+        expect(textOf(result)).toContain("log in again");
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
       });
 
       it(`shows *** in place of this device's keychain values in the error returned to the agent when a server's error echoes its key: ${ISSUE}`, async () => {

@@ -414,7 +414,16 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       // frame logging is off. https://github.com/logancyang/obsidian-copilot-preview/issues/250
       void acpFrameSink.narrowLegacyLogs();
 
+      const connectorAuth = new ConnectorAuth({
+        keychain: KeychainService.getInstance(),
+        openUrl: (url) => {
+          getElectronShell()
+            ?.openExternal?.(url)
+            .catch((error) => logError("[Connectors] could not open the system browser:", error));
+        },
+      });
       const customConnectors = new CustomConnectors({
+        auth: connectorAuth,
         keychain: KeychainService.getInstance(),
         deviceStorage: {
           load: (key) => this.app.loadLocalStorage(key),
@@ -428,14 +437,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
       this.customConnectors = customConnectors;
       this.register(() => customConnectors.dispose());
       const connectionManager = new ConnectionManager({
-        auth: new ConnectorAuth({
-          keychain: KeychainService.getInstance(),
-          openUrl: (url) => {
-            getElectronShell()
-              ?.openExternal?.(url)
-              .catch((error) => logError("[Connectors] could not open the system browser:", error));
-          },
-        }),
+        auth: connectorAuth,
         catalog: CONNECTOR_CATALOG,
         custom: customConnectors,
       });

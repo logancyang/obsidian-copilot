@@ -2,11 +2,13 @@ import type {
   CustomConnectorState,
   CustomConnectorStatus,
 } from "@/connectors/custom/customConnectors";
+import { loginFailureMessage } from "@/connectors/oauth/connectorAuth";
 import {
   ConnectedStatus,
   ConnectorRow,
   RowMenu,
   StatusLine,
+  WaitingConnectorRow,
   type StatusTone,
 } from "@/connectors/ui/ConnectorRow";
 import { Button } from "@/components/ui/button";
@@ -16,6 +18,7 @@ import React from "react";
 export interface CustomConnectorActions {
   onEdit: (id: string) => void;
   onTryAgain: () => void;
+  onLogIn: (id: string) => void;
   onSetTurnedOff: (id: string, off: boolean) => void;
   onRemove: (id: string) => void;
   onShowTools: (id: string) => void;
@@ -29,13 +32,29 @@ export function CustomConnectorRow({
   connector: { config, status },
   onEdit,
   onTryAgain,
+  onLogIn,
   onSetTurnedOff,
   onRemove,
   onShowTools,
 }: CustomConnectorRowProps): React.ReactElement {
-  const [tone, text] = statusText(status);
+  if (status.kind === "logging-in") {
+    return <WaitingConnectorRow service={config} waitingLogin={status} />;
+  }
+  const [tone, text] = statusText(status, config.name);
   let action: React.ReactNode = null;
-  if (status.kind === "needs-key" || status.kind === "key-not-accepted") {
+  if (status.kind === "needs-login") {
+    action = (
+      <Button size="sm" onClick={() => onLogIn(config.id)}>
+        Log in
+      </Button>
+    );
+  } else if (status.kind === "login-failed") {
+    action = (
+      <Button size="sm" variant="secondary" onClick={() => onLogIn(config.id)}>
+        Try again
+      </Button>
+    );
+  } else if (status.kind === "needs-key" || status.kind === "key-not-accepted") {
     action = (
       <Button size="sm" onClick={() => onEdit(config.id)}>
         Add API key
@@ -102,7 +121,10 @@ export function CustomConnectorRow({
   );
 }
 
-function statusText(status: CustomConnectorStatus): [StatusTone, string] {
+function statusText(
+  status: Exclude<CustomConnectorStatus, { kind: "logging-in" }>,
+  name: string
+): [StatusTone, string] {
   switch (status.kind) {
     case "connected":
       return [
@@ -121,6 +143,10 @@ function statusText(status: CustomConnectorStatus): [StatusTone, string] {
       return ["attention", "Key not accepted"];
     case "needs-key":
       return ["attention", "Add API key on this device"];
+    case "needs-login":
+      return ["attention", "Needs login"];
+    case "login-failed":
+      return ["attention", loginFailureMessage(status.reason, name)];
     case "off":
       return ["idle", "Off on this device"];
   }

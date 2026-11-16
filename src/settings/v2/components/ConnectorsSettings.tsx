@@ -59,7 +59,7 @@ function ConnectorsPanel({
   const toolsByConnection = useSyncExternalStore(tools.subscribe, tools.getSnapshot);
   const enabled = useIsConnectorsEnabled();
   const subPage = useSettingsSubPage();
-  const loginStartedHere = useRef<WaitingLogin | null>(null);
+  const loginStartedHere = useRef<Pick<WaitingLogin, "cancel"> | null>(null);
   const connectedIds = snapshot?.connections
     .filter(({ status }) => status === "connected")
     .map(({ id }) => id)
@@ -128,6 +128,13 @@ function ConnectorsPanel({
       }).open();
     },
     onTryAgain: () => void custom.refresh(),
+    onLogIn: (id: string) => {
+      void ensureConnectorsEntitlement(app)
+        .then((entitled) => {
+          if (entitled) loginStartedHere.current = custom.logIn(id);
+        })
+        .catch((error) => new Notice(err2String(error)));
+    },
     onShowTools: (id: string) => {
       const config = customConfigOf(id);
       if (!config) return;

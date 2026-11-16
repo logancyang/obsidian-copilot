@@ -113,6 +113,7 @@ function setUp(
   const enabledListeners = new Set<() => void>();
   const processes: FakeProcess[] = [];
   const custom = new CustomConnectors({
+    auth,
     keychain: fakeKeychain().keychain,
     deviceStorage: { load: () => null, save: () => {} },
     catalogIds: [NOTION.id, ATLASSIAN.id, LINEAR.id],
