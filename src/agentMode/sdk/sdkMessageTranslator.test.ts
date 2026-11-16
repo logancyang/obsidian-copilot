@@ -280,6 +280,60 @@ describe("sdkMessageTranslator", () => {
       expect(out).toEqual([]);
     });
 
+    describe("main replies Claude sends whole", () => {
+      const ISSUE_4259 = "https://github.com/logancyang/obsidian-copilot/issues/4259";
+
+      function wholeReply(id: string, text: string, model = "claude-test"): SDKMessage {
+        return {
+          type: "assistant",
+          message: { id, model, role: "assistant", content: [{ type: "text", text }] },
+          parent_tool_use_id: null,
+          uuid: "uuid-whole" as Uuid,
+          session_id: SESSION_ID,
+        } as unknown as SDKMessage;
+      }
+
+      function startStream(state: ReturnType<typeof createTranslatorState>): void {
+        translateSdkMessage(
+          streamEvent({ type: "message_start", message: { id: "msg-streamed" } }),
+          SESSION_ID,
+          state
+        );
+      }
+
+      it(`shows the text of a reply that never streamed, such as Claude's retry after a silent stream (${ISSUE_4259})`, () => {
+        const state = createTranslatorState();
+        startStream(state);
+
+        const out = translateSdkMessage(wholeReply("msg-retry", "Full reply."), SESSION_ID, state);
+
+        expect(out.map((e) => e.update)).toEqual([
+          { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Full reply." } },
+        ]);
+      });
+
+      it(`does not repeat the text of a reply that already streamed (${ISSUE_4259})`, () => {
+        const state = createTranslatorState();
+        startStream(state);
+
+        expect(
+          translateSdkMessage(wholeReply("msg-streamed", "Streamed."), SESSION_ID, state)
+        ).toEqual([]);
+      });
+
+      it(`leaves Claude Code's own notices, which the turn result reports, out of the reply (${ISSUE_4259})`, () => {
+        const state = createTranslatorState();
+
+        expect(
+          translateSdkMessage(
+            wholeReply("notice-1", "Not enough messages to compact.", "<synthetic>"),
+            SESSION_ID,
+            state
+          )
+        ).toEqual([]);
+      });
+    });
+
     it("ignores assistant messages whose tool_use blocks were already streamed", () => {
       const state = createTranslatorState();
       state.emittedToolUseIds.add("tool-1");
