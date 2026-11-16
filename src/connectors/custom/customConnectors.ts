@@ -126,6 +126,7 @@ const EMPTY_CUSTOM_CONNECTORS: readonly CustomConnectorState[] = Object.freeze([
 export class CustomConnectors {
   private readonly runs = new Map<string, Run>();
   private readonly logins = new Map<string, CustomConnectorStatus>();
+  private readonly droppedLogins = new Map<string, Promise<void>>();
   private readonly listeners = new Set<() => void>();
   private snapshot: CustomConnectorsSnapshot;
 
@@ -159,11 +160,9 @@ export class CustomConnectors {
     const edited = { ...config, id };
     const previous = configs().find((existing) => existing.id === id);
     this.cancelLogin(id);
-    // A login belongs to the server that issued it, so a new URL must not receive the old server's token.
+    // A login belongs to the server that issued it, so a new URL must not receive the old server's token, even one a refresh in flight returns.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
-    if (previous && serverUrl(previous) !== serverUrl(edited)) {
-      void this.deps.auth.disconnect(loginId(id));
-    }
+    if (previous && serverUrl(previous) !== serverUrl(edited)) this.dropLogin(id);
     const stored = this.secretsOf(id);
     // Edit shows each value blank because values never leave the keychain, so a value left blank keeps the stored one.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
@@ -182,7 +181,7 @@ export class CustomConnectors {
   remove(id: string): void {
     this.stopRun(id);
     this.cancelLogin(id);
-    void this.deps.auth.disconnect(loginId(id));
+    this.dropLogin(id);
     this.deps.keychain.deleteSecretById(this.keychainId(id));
     this.saveOffIds([...this.offIds()].filter((offId) => offId !== id));
     updateSetting(
@@ -292,18 +291,19 @@ export class CustomConnectors {
         this.setRunStatus(run, { kind: "connected", tools: tools.tools });
       })
       .catch(async (error: unknown) => {
+        const { session } = run;
         logWarn(
           `[Connectors] Couldn't start ${config.name}`,
-          this.masked(config.id, err2String(error, true))
+          this.masked(config.id, err2String(error, true), session)
         );
         void run.process?.stop();
-        if (run.session instanceof ServiceSession) void run.session.close();
+        if (session instanceof ServiceSession) void session.close();
         run.session = null;
         this.setRunStatus(
           run,
           isKeyRejection(error) && (await this.offersLogin(config))
             ? NEEDS_LOGIN
-            : failureStatus(config, error, (text) => this.masked(config.id, text))
+            : failureStatus(config, error, (text) => this.masked(config.id, text, session))
         );
       });
     this.publish();
@@ -367,10 +367,11 @@ export class CustomConnectors {
   }
 
   private async forward(run: Run, toolName: string, args: unknown): Promise<ConnectorToolResult> {
-    const { name } = run.config;
-    if (!run.session) return toolText(`${name} isn't running right now. Try again in a moment.`);
+    const { config, session } = run;
+    const { name } = config;
+    if (!session) return toolText(`${name} isn't running right now. Try again in a moment.`);
     try {
-      const result = await run.session.request(
+      const result = await session.request(
         "tools/call",
         { name: toolName, arguments: args ?? {} },
         // A custom server's tool can run as long as a catalog service's, which outlasts the SDK's 60-second default.
@@ -386,7 +387,7 @@ export class CustomConnectors {
         content: toolResult.content.map((item) => {
           const { text } = item as { text?: unknown };
           return typeof text === "string"
-            ? { ...(item as object), text: this.masked(run.config.id, text) }
+            ? { ...(item as object), text: this.masked(config.id, text, session) }
             : item;
         }),
       };
@@ -411,7 +412,9 @@ export class CustomConnectors {
         this.setRunStatus(run, { kind: "unreachable", reason: unreachableReason(error) });
         return toolText(`Couldn't reach ${name}, which isn't a Copilot failure. Try again later.`);
       }
-      return toolText(`${name} returned an error: ${this.masked(run.config.id, messageOf(error))}`);
+      return toolText(
+        `${name} returned an error: ${this.masked(config.id, messageOf(error), session)}`
+      );
     }
   }
 
@@ -420,6 +423,7 @@ export class CustomConnectors {
     headers: Record<string, string>,
     forceRefresh: boolean
   ): Promise<Record<string, string>> {
+    await this.droppedLogins.get(config.id);
     const id = loginId(config.id);
     if (!this.deps.auth.hasLogin(id)) return headers;
     const token = await this.deps.auth.accessToken(id, { forceRefresh });
@@ -443,6 +447,10 @@ export class CustomConnectors {
     } catch {
       return false;
     }
+  }
+
+  private dropLogin(id: string): void {
+    this.droppedLogins.set(id, this.deps.auth.disconnect(loginId(id)));
   }
 
   private cancelLogin(id: string): void {
@@ -484,6 +492,15 @@ export class CustomConnectors {
       .map(({ config }) => config);
   }
 
+  // A login's token replaces a pasted Authorization header, so deleting that unused key must not stop the connector.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
+  private requiredSecretNames(config: CustomConnectorConfig): readonly string[] {
+    const names = secretNames(config);
+    return "command" in config || !this.deps.auth.hasLogin(loginId(config.id))
+      ? names
+      : names.filter((name) => name.toLowerCase() !== "authorization");
+  }
+
   private keychainId(id: string): string {
     return `copilot-v${this.deps.keychain.getVaultId()}-custom-connector-${id}`;
   }
@@ -502,8 +519,9 @@ export class CustomConnectors {
 
   // Servers can echo their keys in errors and stderr, which reach the agent's chat and Copilot's log, and the log goes into bug reports.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
-  private masked(id: string, text: string): string {
-    return maskSecretValues(text, Object.values(this.secretsOf(id)));
+  private masked(id: string, text: string, session?: McpRequester | null): string {
+    const masked = maskSecretValues(text, Object.values(this.secretsOf(id)));
+    return session instanceof ServiceSession ? session.mask(masked) : masked;
   }
 
   private saveSecrets(id: string, secrets: Readonly<Record<string, string>>): void {
@@ -532,7 +550,7 @@ export class CustomConnectors {
       const secrets = this.secretsOf(config.id);
       const status = offIds.has(config.id)
         ? OFF
-        : secretNames(config).some((name) => !secrets[name])
+        : this.requiredSecretNames(config).some((name) => !secrets[name])
           ? NEEDS_KEY
           : (this.logins.get(config.id) ?? this.runs.get(config.id)?.status ?? IDLE);
       return Object.freeze({ config, status });

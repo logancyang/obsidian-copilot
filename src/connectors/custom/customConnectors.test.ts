@@ -71,6 +71,18 @@ function setUp(options: { enabled?: boolean } = {}) {
   return { custom, secrets, device, processes, remote, login, statusOf, add };
 }
 
+async function loggedIn(json: string) {
+  const fake = setUp();
+  fake.remote.publishesLoginMetadata = true;
+  fake.remote.validTokens.add(LOGIN_TOKEN);
+  await fake.add(json);
+  const login = fake.custom.logIn("acme");
+  fake.login.finishLogin({ status: "connected" });
+  await login.outcome;
+  await fake.custom.refresh();
+  return fake;
+}
+
 function connectedWith(...names: string[]) {
   return {
     kind: "connected",
@@ -273,6 +285,38 @@ describe("customConnectors", () => {
 
         fake.custom.edit("acme", withUrl("https://mcp.other.test/mcp"));
         expect(fake.login.auth.disconnect).toHaveBeenCalledWith("custom-acme");
+      });
+
+      it(`sends the new URL no token from the old login while a refresh of that login is in flight: ${LOGIN_ISSUE}`, async () => {
+        jest.useFakeTimers();
+        const fake = await loggedIn(LOGIN_JSON);
+        const otherUrl = "https://mcp.other.test/mcp";
+        let finishRefresh = () => {};
+        const refreshing = new Promise<void>((resolve) => (finishRefresh = resolve));
+        fake.login.auth.accessToken.mockImplementation(async (connectionId) => {
+          await refreshing;
+          return { status: "connected", accessToken: `token-${connectionId}` };
+        });
+        fake.login.auth.disconnect.mockImplementationOnce(async (connectionId) => {
+          await refreshing;
+          fake.login.logins.delete(connectionId);
+        });
+
+        fake.custom.edit(
+          "acme",
+          JSON.stringify({
+            mcpServers: { Acme: { url: otherUrl, headers: { "X-Workspace": "" } } },
+          })
+        );
+        const waited = fake.custom.refresh();
+        await jest.advanceTimersByTimeAsync(10_000);
+        await waited;
+        finishRefresh();
+        await fake.custom.refresh();
+
+        const sentToOther = fake.remote.requests.filter(({ url }) => url === otherUrl);
+        expect(sentToOther.length).toBeGreaterThan(0);
+        expect(sentToOther.map(({ token }) => token)).not.toContain(LOGIN_TOKEN);
       });
     });
 
@@ -507,6 +551,27 @@ describe("customConnectors", () => {
         expect(loggedText()).not.toContain("acme-1");
       });
 
+      it(`keeps a logged-in connector running once its unused pasted Authorization key is deleted, but still needs its other header values: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(
+          JSON.stringify({
+            mcpServers: {
+              Acme: {
+                url: REMOTE_URL,
+                headers: { Authorization: "Bearer stale", "X-Workspace": "w-1" },
+              },
+            },
+          })
+        );
+
+        fake.secrets.set(`${KEYCHAIN_PREFIX}acme`, JSON.stringify({ "X-Workspace": "w-1" }));
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+
+        fake.secrets.delete(`${KEYCHAIN_PREFIX}acme`);
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-key" });
+      });
+
       it(`logs no part of a keychain entry that isn't readable JSON: ${ISSUE}`, async () => {
         const fake = setUp();
         await fake.add(LOCAL_JSON);
@@ -656,6 +721,16 @@ describe("customConnectors", () => {
         await fake.add(REMOTE_JSON);
         fake.remote.failWithStatus = 400;
         fake.remote.failBody = "unknown token acme-1";
+
+        const text = textOf(await fake.custom.call("acme_search", {}));
+
+        expect(text).toBe("Acme returned an error: HTTP 400 unknown token ***");
+      });
+
+      it(`shows *** in place of the login's token in the error returned to the agent when a server's error echoes it: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(LOGIN_JSON);
+        fake.remote.failWithStatus = 400;
+        fake.remote.failBody = `unknown token ${LOGIN_TOKEN}`;
 
         const text = textOf(await fake.custom.call("acme_search", {}));
 
