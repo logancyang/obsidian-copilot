@@ -117,6 +117,7 @@ function fakeDescriptor(): BackendDescriptor {
 
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
 const ISSUE_870 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/870";
+const ISSUE_958 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/958";
 
 function pickerDescriptor(auto: string): BackendDescriptor {
   return {
@@ -939,11 +940,51 @@ describe("ClaudeSdkBackendProcess", () => {
           options: { env?: Record<string, string> };
         };
         expect(options.env).toEqual({
+          CLAUDE_CODE_ARTIFACT: "1",
           ...process.env,
           PATH: "/login/bin:/usr/bin",
           CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: "1",
           CLAUDE_CONFIG_DIR: "/config",
         });
+      });
+
+      it.each<[string, Record<string, string>, string]>([
+        ["no value set", {}, "1"],
+        ["CLAUDE_CODE_ARTIFACT=0 in the env overrides", { CLAUDE_CODE_ARTIFACT: "0" }, "0"],
+      ])(
+        "with %s, starts Claude with CLAUDE_CODE_ARTIFACT at the expected value, so the agent can publish and upload claude.ai artifacts unless the user turned them off (https://github.com/Brevilabs/obsidian-copilot-private/issues/957)",
+        async (_condition, overrides, expected) => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc({ getEnvOverrides: () => overrides });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const { options } = getPromptQueryCalls()[0][0] as {
+            options: { env: Record<string, string> };
+          };
+          expect(options.env.CLAUDE_CODE_ARTIFACT).toBe(expected);
+        }
+      );
+
+      it("keeps a CLAUDE_CODE_ARTIFACT value from Obsidian's own environment over Copilot's default (https://github.com/Brevilabs/obsidian-copilot-private/issues/957)", async () => {
+        const previous = process.env.CLAUDE_CODE_ARTIFACT;
+        process.env.CLAUDE_CODE_ARTIFACT = "0";
+        try {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc();
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+          const { options } = getPromptQueryCalls()[0][0] as {
+            options: { env: Record<string, string> };
+          };
+          expect(options.env.CLAUDE_CODE_ARTIFACT).toBe("0");
+        } finally {
+          if (previous === undefined) delete process.env.CLAUDE_CODE_ARTIFACT;
+          else process.env.CLAUDE_CODE_ARTIFACT = previous;
+        }
       });
 
       it("runs Claude with the user's login-shell PATH, because its Bash tool keeps the PATH Claude starts with (https://github.com/logancyang/obsidian-copilot/issues/4096)", async () => {
@@ -1141,6 +1182,50 @@ describe("ClaudeSdkBackendProcess", () => {
         );
         expect(questionPrompter).toHaveBeenLastCalledWith(
           expect.objectContaining({ sessionId: sessionB, requestId: "tool-b" })
+        );
+      });
+
+      describe("approving a plan", () => {
+        async function approvePlan(proc: ClaudeSdkBackendProcess): Promise<unknown> {
+          proc.setPermissionPrompter(async () => ({
+            outcome: { outcome: "selected", optionId: "allow_once" },
+          }));
+          const canUseTool = (
+            getPromptQueryCalls()[0][0] as { options: { canUseTool: CanUseTool } }
+          ).options.canUseTool;
+          const result = await canUseTool("ExitPlanMode", { plan: "# x" }, {
+            signal: new AbortController().signal,
+            toolUseID: "tool-plan",
+          } as never);
+          return (result as { updatedPermissions?: unknown }).updatedPermissions;
+        }
+
+        it(`returns Claude to the mode the chat's last prompt outside Plan ran in (${ISSUE_958})`, async () => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc({ descriptor: pickerDescriptor("auto") });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "look around" }] });
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "plan it" }] });
+
+          expect(await approvePlan(proc)).toEqual([
+            { type: "setMode", mode: "default", destination: "session" },
+          ]);
+        });
+
+        it.each([["acceptEdits"], ["auto"]])(
+          `switches a chat that has only prompted in Plan to Auto, with Auto set to %s (${ISSUE_958})`,
+          async (auto) => {
+            queryMock.mockImplementation(answering([resultMessage()]));
+            const proc = makeProc({ descriptor: pickerDescriptor(auto) });
+            const { sessionId } = await proc.newSession({ cwd: "/vault" });
+            await proc.setSessionMode({ sessionId, modeId: "plan" });
+            await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "plan it" }] });
+
+            expect(await approvePlan(proc)).toEqual([
+              { type: "setMode", mode: auto, destination: "session" },
+            ]);
+          }
         );
       });
 
