@@ -44,6 +44,8 @@ export class FakeMcpService {
   unreachable = false;
   hangs = false;
   publishesLoginMetadata = false;
+  publishesAuthorizationServerMetadata = false;
+  loginMetadataHangs = false;
   failWithStatus: number | null = null;
   failBody = "Service error";
   holdsCalls = false;
@@ -69,9 +71,24 @@ export class FakeMcpService {
       params: message?.params,
       signal: init?.signal ?? null,
     });
+    const { origin, pathname } = new URL(String(url));
+    if (this.loginMetadataHangs && pathname.startsWith("/.well-known/")) {
+      return new Promise<Response>(() => {});
+    }
+    if (
+      this.publishesAuthorizationServerMetadata &&
+      pathname === "/.well-known/oauth-authorization-server"
+    ) {
+      return Response.json({
+        issuer: origin,
+        authorization_endpoint: `${origin}/authorize`,
+        token_endpoint: `${origin}/token`,
+        response_types_supported: ["code"],
+      });
+    }
     if (
       this.publishesLoginMetadata &&
-      new URL(String(url)).pathname.startsWith("/.well-known/oauth-protected-resource")
+      pathname.startsWith("/.well-known/oauth-protected-resource")
     ) {
       return Response.json({
         resource: this.url,

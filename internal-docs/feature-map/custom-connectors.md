@@ -35,6 +35,6 @@ Servers the user adds from a pasted config, listed on the [Connectors tab](conne
 
 - Values in `env` and `headers` stay in this device's keychain and do not sync; the command, its arguments, and the URL sync with the vault.
 - `Turn off on this device` affects only this device. `Remove` removes the connector from every device.
-- A login stays in this device's keychain, so each device with the same vault logs in on its own. `Remove` signs Copilot out of the service, and changing the URL drops the login.
+- A login stays in this device's keychain, so each device with the same vault logs in on its own. `Remove` signs Copilot out of the service. A login works only for the URL it was made for, so changing the URL on any device asks for a new login.
 - A custom connector that couldn't start, lacks a key, had its key rejected, or needs a login raises the [Connectors tab](connectors-tab.md) warning and the chat's [connectors banner](status-and-error-cards.md). `Couldn't reach` does not.
 - Open chats get a custom connector that was added, edited, turned off, or removed only after `Reload` on their `<agent> settings changed` [card](status-and-error-cards.md).

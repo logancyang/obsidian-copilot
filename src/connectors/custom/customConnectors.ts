@@ -41,8 +41,9 @@ import type { KeychainService } from "@/services/keychainService";
 import { getSettings, updateSetting } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { augmentPathForDetection } from "@/utils/binaryPath";
+import { md5 } from "@/utils/hash";
 import { loginShellPathDirs } from "@/utils/loginShellPath";
-import { discoverOAuthProtectedResourceMetadata } from "@modelcontextprotocol/sdk/client/auth.js";
+import { discoverOAuthServerInfo } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 export type CustomConnectorStatus =
@@ -106,6 +107,7 @@ interface Run {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
 const OFF_STORAGE_KEY = "copilot-custom-connectors-off";
 const CHAT_WAIT_MS = 10_000;
+const LOGIN_CHECK_MS = 5_000;
 const RESTART_DELAY_MS = 1_000;
 const MAX_RESTARTS = 3;
 const IDLE: CustomConnectorStatus = Object.freeze({ kind: "idle" });
@@ -126,7 +128,6 @@ const EMPTY_CUSTOM_CONNECTORS: readonly CustomConnectorState[] = Object.freeze([
 export class CustomConnectors {
   private readonly runs = new Map<string, Run>();
   private readonly logins = new Map<string, CustomConnectorStatus>();
-  private readonly droppedLogins = new Map<string, Promise<void>>();
   private readonly listeners = new Set<() => void>();
   private snapshot: CustomConnectorsSnapshot;
 
@@ -160,9 +161,7 @@ export class CustomConnectors {
     const edited = { ...config, id };
     const previous = configs().find((existing) => existing.id === id);
     this.cancelLogin(id);
-    // A login belongs to the server that issued it, so a new URL must not receive the old server's token, even one a refresh in flight returns.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
-    if (previous && serverUrl(previous) !== serverUrl(edited)) this.dropLogin(id);
+    if (previous && serverUrl(previous) !== serverUrl(edited)) this.dropLogin(previous);
     const stored = this.secretsOf(id);
     // Edit shows each value blank because values never leave the keychain, so a value left blank keeps the stored one.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
@@ -179,9 +178,10 @@ export class CustomConnectors {
   }
 
   remove(id: string): void {
+    const config = configs().find((existing) => existing.id === id);
     this.stopRun(id);
     this.cancelLogin(id);
-    this.dropLogin(id);
+    if (config) this.dropLogin(config);
     this.deps.keychain.deleteSecretById(this.keychainId(id));
     this.saveOffIds([...this.offIds()].filter((offId) => offId !== id));
     updateSetting(
@@ -207,7 +207,7 @@ export class CustomConnectors {
     const config = configs().find((existing) => existing.id === id);
     if (!config || "command" in config) throw new Error(`No remote connector ${id}.`);
     const login = this.deps.auth.login({
-      connectionId: loginId(id),
+      connectionId: loginId(config),
       serverUrl: config.url,
       serviceName: config.name,
     });
@@ -423,8 +423,7 @@ export class CustomConnectors {
     headers: Record<string, string>,
     forceRefresh: boolean
   ): Promise<Record<string, string>> {
-    await this.droppedLogins.get(config.id);
-    const id = loginId(config.id);
+    const id = loginId(config);
     if (!this.deps.auth.hasLogin(id)) return headers;
     const token = await this.deps.auth.accessToken(id, { forceRefresh });
     if (token.status === "needs-login") throw new NeedsLoginError();
@@ -434,23 +433,28 @@ export class CustomConnectors {
   }
 
   // A refused request says nothing about how to fix it; only a server that publishes OAuth metadata can be logged in to, whatever headers were pasted.
+  // The check is bounded because a rejected tool call waits on it, and a metadata endpoint that never answers must not hold the call.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
   private async offersLogin(config: CustomConnectorConfig): Promise<boolean> {
     if ("command" in config) return false;
+    const send = this.deps.fetch ?? nodeFetch;
     try {
-      await discoverOAuthProtectedResourceMetadata(
-        config.url,
-        undefined,
-        this.deps.fetch ?? nodeFetch
+      const info = await withTimeout(
+        (signal) =>
+          discoverOAuthServerInfo(config.url, {
+            fetchFn: (url, init) => send(url, { ...init, signal }),
+          }),
+        LOGIN_CHECK_MS,
+        `Checking ${config.name}'s login`
       );
-      return true;
+      return Boolean(info.resourceMetadata ?? info.authorizationServerMetadata);
     } catch {
       return false;
     }
   }
 
-  private dropLogin(id: string): void {
-    this.droppedLogins.set(id, this.deps.auth.disconnect(loginId(id)));
+  private dropLogin(config: CustomConnectorConfig): void {
+    if (!("command" in config)) void this.deps.auth.disconnect(loginId(config));
   }
 
   private cancelLogin(id: string): void {
@@ -492,13 +496,16 @@ export class CustomConnectors {
       .map(({ config }) => config);
   }
 
-  // A login's token replaces a pasted Authorization header, so deleting that unused key must not stop the connector.
+  // A login's token replaces a pasted Authorization header, so deleting that unused key must not stop the connector, nor hide Log in once the server refuses a revoked login.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
   private requiredSecretNames(config: CustomConnectorConfig): readonly string[] {
     const names = secretNames(config);
-    return "command" in config || !this.deps.auth.hasLogin(loginId(config.id))
-      ? names
-      : names.filter((name) => name.toLowerCase() !== "authorization");
+    if ("command" in config) return names;
+    const logsIn =
+      this.deps.auth.hasLogin(loginId(config)) ||
+      this.logins.has(config.id) ||
+      this.runs.get(config.id)?.status.kind === "needs-login";
+    return logsIn ? names.filter((name) => name.toLowerCase() !== "authorization") : names;
   }
 
   private keychainId(id: string): string {
@@ -563,9 +570,10 @@ export class CustomConnectors {
 }
 
 // Catalog connections and custom connectors share one keychain namespace for logins, and a custom connector can carry a catalog service's name.
+// The URL syncs while logins stay on each device, so naming the URL keeps a login from reaching a server another device changed the URL to.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
-function loginId(id: string): string {
-  return `custom-${id}`;
+function loginId(config: RemoteConnectorConfig): string {
+  return `custom-${config.id}-${md5(config.url).slice(0, 8)}`;
 }
 
 function serverUrl(config: CustomConnectorConfig): string | null {
