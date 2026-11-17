@@ -134,6 +134,8 @@ async function claudeChatEnv(opts: ClaudeChatEnvOptions): Promise<Options["env"]
   const managedEnv = (await opts.getManagedEnv?.()) ?? {};
   const shellPath = await agentShellPath();
   return {
+    // Claude Code leaves its Artifact tool off in SDK sessions unless asked; a user's own value still wins. https://github.com/Brevilabs/obsidian-copilot-private/issues/957
+    CLAUDE_CODE_ARTIFACT: "1",
     ...process.env,
     PATH: shellPath,
     // Claude reports when it has finished its subagents and its replies about them only when asked. https://github.com/Brevilabs/obsidian-copilot-private/issues/757
