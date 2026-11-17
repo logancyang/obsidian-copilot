@@ -4,11 +4,17 @@
 import { MAX_PROVIDED_TOOL_NAME_LENGTH } from "@/agentMode/session/copilotMcpServer";
 import type { ConnectorCatalogEntry } from "@/connectors/catalog";
 import { ConnectionManager, type ConnectorAuthPort } from "@/connectors/connectionManager";
-import { ConnectorTools, describeConnectorTool } from "@/connectors/connectorTools";
+import {
+  bearerHeader,
+  ConnectorTools,
+  describeConnectorTool,
+  NeedsLoginError,
+} from "@/connectors/connectorTools";
 import { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { FakeProcess } from "@/connectors/custom/testing/fakeCustomProcess";
 import { fakeKeychain } from "@/connectors/custom/testing/fakeKeychain";
 import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
+import { ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
 import { FakeMcpService } from "@/connectors/testing/fakeMcpService";
 import { logWarn } from "@/logger";
 import { setSettings } from "@/settings/model";
@@ -945,6 +951,27 @@ describe("connectorTools", () => {
 
         expect(listener).toHaveBeenCalledTimes(2);
       });
+    });
+  });
+
+  describe("bearerHeader()", () => {
+    it("turns a login's access token into a Bearer Authorization header", async () => {
+      await expect(
+        bearerHeader(NOTION.serverUrl, Promise.resolve({ status: "connected", accessToken: "t-1" }))
+      ).resolves.toEqual({ authorization: "Bearer t-1" });
+    });
+
+    it(`throws NeedsLoginError when the login is gone or was refused: ${ISSUE}`, async () => {
+      await expect(
+        bearerHeader(NOTION.serverUrl, Promise.resolve({ status: "needs-login" }))
+      ).rejects.toBeInstanceOf(NeedsLoginError);
+    });
+
+    it(`throws ServiceUnreachableError naming the service when its login server can't be reached: ${ISSUE}`, async () => {
+      const header = bearerHeader(NOTION.serverUrl, Promise.resolve({ status: "unreachable" }));
+
+      await expect(header).rejects.toBeInstanceOf(ServiceUnreachableError);
+      await expect(header).rejects.toThrow("Couldn't reach https://mcp.notion.test.");
     });
   });
 

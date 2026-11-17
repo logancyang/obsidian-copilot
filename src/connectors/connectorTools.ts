@@ -3,6 +3,7 @@ import type { ConnectionManager, ConnectionState } from "@/connectors/connection
 import type { CustomConnectors } from "@/connectors/custom/customConnectors";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
 import { nodeFetch } from "@/connectors/nodeFetch";
+import type { AccessTokenResult } from "@/connectors/oauth/connectorAuth";
 import { ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
 import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
@@ -276,14 +277,11 @@ export class ConnectorTools {
     if (!service) return;
     const session = new ServiceSession(
       service.serverUrl,
-      async (forceRefresh) => {
-        const token = await this.deps.manager.accessToken(connection.id, { forceRefresh });
-        if (token.status === "needs-login") throw new NeedsLoginError();
-        if (token.status === "unreachable") {
-          throw new ServiceUnreachableError(service.serverUrl, token);
-        }
-        return { authorization: `Bearer ${token.accessToken}` };
-      },
+      (forceRefresh) =>
+        bearerHeader(
+          service.serverUrl,
+          this.deps.manager.accessToken(connection.id, { forceRefresh })
+        ),
       this.deps.fetch ?? nodeFetch
     );
     try {
@@ -444,6 +442,16 @@ export class ServiceSession implements McpRequester {
     }
     return this.fetch(url, { ...init, headers });
   }
+}
+
+export async function bearerHeader(
+  serverUrl: string,
+  token: Promise<AccessTokenResult>
+): Promise<Record<string, string>> {
+  const result = await token;
+  if (result.status === "needs-login") throw new NeedsLoginError();
+  if (result.status === "unreachable") throw new ServiceUnreachableError(serverUrl, result);
+  return { authorization: `Bearer ${result.accessToken}` };
 }
 
 export async function listTools(session: McpRequester): Promise<ServiceToolInfo[]> {

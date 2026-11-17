@@ -1,4 +1,5 @@
 import {
+  bearerHeader,
   defineTools,
   HttpStatusError,
   toToolResult,
@@ -425,11 +426,9 @@ export class CustomConnectors {
   ): Promise<Record<string, string>> {
     const id = loginId(config);
     if (!this.deps.auth.hasLogin(id)) return headers;
-    const token = await this.deps.auth.accessToken(id, { forceRefresh });
-    if (token.status === "needs-login") throw new NeedsLoginError();
-    if (token.status === "unreachable") throw new ServiceUnreachableError(config.url, token);
+    const bearer = await bearerHeader(config.url, this.deps.auth.accessToken(id, { forceRefresh }));
     const kept = Object.entries(headers).filter(([name]) => name.toLowerCase() !== "authorization");
-    return { ...Object.fromEntries(kept), authorization: `Bearer ${token.accessToken}` };
+    return { ...Object.fromEntries(kept), ...bearer };
   }
 
   // A refused request says nothing about how to fix it; only a server that publishes OAuth metadata can be logged in to, whatever headers were pasted.
