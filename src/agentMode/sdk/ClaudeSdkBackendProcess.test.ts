@@ -117,6 +117,7 @@ function fakeDescriptor(): BackendDescriptor {
 
 const ISSUE_175 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/175";
 const ISSUE_870 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/870";
+const ISSUE_958 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/958";
 
 function pickerDescriptor(auto: string): BackendDescriptor {
   return {
@@ -1181,6 +1182,50 @@ describe("ClaudeSdkBackendProcess", () => {
         );
         expect(questionPrompter).toHaveBeenLastCalledWith(
           expect.objectContaining({ sessionId: sessionB, requestId: "tool-b" })
+        );
+      });
+
+      describe("approving a plan", () => {
+        async function approvePlan(proc: ClaudeSdkBackendProcess): Promise<unknown> {
+          proc.setPermissionPrompter(async () => ({
+            outcome: { outcome: "selected", optionId: "allow_once" },
+          }));
+          const canUseTool = (
+            getPromptQueryCalls()[0][0] as { options: { canUseTool: CanUseTool } }
+          ).options.canUseTool;
+          const result = await canUseTool("ExitPlanMode", { plan: "# x" }, {
+            signal: new AbortController().signal,
+            toolUseID: "tool-plan",
+          } as never);
+          return (result as { updatedPermissions?: unknown }).updatedPermissions;
+        }
+
+        it(`returns Claude to the mode the chat's last prompt outside Plan ran in (${ISSUE_958})`, async () => {
+          queryMock.mockImplementation(answering([resultMessage()]));
+          const proc = makeProc({ descriptor: pickerDescriptor("auto") });
+          const { sessionId } = await proc.newSession({ cwd: "/vault" });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "look around" }] });
+          await proc.setSessionMode({ sessionId, modeId: "plan" });
+          await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "plan it" }] });
+
+          expect(await approvePlan(proc)).toEqual([
+            { type: "setMode", mode: "default", destination: "session" },
+          ]);
+        });
+
+        it.each([["acceptEdits"], ["auto"]])(
+          `switches a chat that has only prompted in Plan to Auto, with Auto set to %s (${ISSUE_958})`,
+          async (auto) => {
+            queryMock.mockImplementation(answering([resultMessage()]));
+            const proc = makeProc({ descriptor: pickerDescriptor(auto) });
+            const { sessionId } = await proc.newSession({ cwd: "/vault" });
+            await proc.setSessionMode({ sessionId, modeId: "plan" });
+            await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "plan it" }] });
+
+            expect(await approvePlan(proc)).toEqual([
+              { type: "setMode", mode: auto, destination: "session" },
+            ]);
+          }
         );
       });
 

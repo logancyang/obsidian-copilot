@@ -1,5 +1,6 @@
 import type {
   CanUseTool,
+  PermissionMode,
   PermissionResult,
   PermissionUpdate,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -35,6 +36,7 @@ export interface PermissionBridgeOptions {
   getAskUserQuestionPrompter?: () => AskUserQuestionPrompter | null;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
   getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
+  getModeAfterPlanApproval?: () => PermissionMode | null;
 }
 
 export class PermissionBridge {
@@ -84,7 +86,19 @@ export class PermissionBridge {
     }
     const prompt = synthesizePermissionPrompt(toolName, input, sessionId, ctx);
     const decision = await prompter(prompt);
-    const result = mapDecisionToSdk(decision, ctx.suggestions, input);
+    let result = mapDecisionToSdk(decision, ctx.suggestions, input);
+    const modeAfterPlan =
+      toolName === "ExitPlanMode" ? this.opts.getModeAfterPlanApproval?.() : null;
+    // A plain approval leaves Claude in its default mode, so the chat would stop to ask before each edit. https://github.com/Brevilabs/obsidian-copilot-private/issues/958
+    if (modeAfterPlan && result.behavior === "allow") {
+      result = {
+        ...result,
+        updatedPermissions: [
+          ...(result.updatedPermissions ?? []),
+          { type: "setMode", mode: modeAfterPlan, destination: "session" },
+        ],
+      };
+    }
     logSdkOutbound("canUseTool:response", result, sessionId);
     return result;
   };

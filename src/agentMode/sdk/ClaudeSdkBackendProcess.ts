@@ -69,6 +69,7 @@ interface SessionState {
   hasTranscript: boolean;
   model?: string;
   permissionMode?: PermissionMode;
+  lastNonPlanPromptMode?: PermissionMode;
   effort?: EffortLevel;
   thinking?: boolean;
   mcpServers?: ReadonlyArray<AgentMcpServer>;
@@ -321,6 +322,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
 
     const messageContent = promptInputToAnthropicContent(params);
+    const promptMode = session.permissionMode ?? "default";
+    if (promptMode !== "plan") session.lastNonPlanPromptMode = promptMode;
     const live = await this.ensureLiveQuery(params.sessionId, session);
     await this.applyThinkingSetting(session, live);
     if (typeof messageContent === "string" && isCompactCommand(messageContent)) {
@@ -369,6 +372,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: this.opts.isPlanModePlanFilePath,
       getIsReadOnlySession: () => this.isReadOnlySession,
+      getModeAfterPlanApproval: () => session.lastNonPlanPromptMode ?? this.autoPermissionMode(),
     });
 
     const options: Options = {
@@ -524,6 +528,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const state = this.computeState(params.sessionId);
     this.dispatchStateChanged(params.sessionId, state);
     return state;
+  }
+
+  private autoPermissionMode(): PermissionMode | null {
+    const autoModeId = this.opts.descriptor.getModeMapping?.(null, null)?.canonical.auto;
+    return autoModeId ? canonicalModeToSdk(autoModeId) : null;
   }
 
   isSetSessionModeSupported(): boolean | null {
