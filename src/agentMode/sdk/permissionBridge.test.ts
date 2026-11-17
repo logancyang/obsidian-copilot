@@ -401,6 +401,46 @@ describe("permissionBridge", () => {
           expect(captured!.toolCall.isPlanProposal).toBe(true);
         });
 
+        describe("mode after the plan", () => {
+          function makePlanBridge(optionId: string) {
+            return new PermissionBridge("session-1", {
+              getPrompter: () => async () => ({ outcome: { outcome: "selected", optionId } }),
+              getModeAfterPlanApproval: () => "auto",
+            });
+          }
+
+          it("switches Claude to the chosen mode for the session when the plan is approved (https://github.com/Brevilabs/obsidian-copilot-private/issues/958)", async () => {
+            const result = await makePlanBridge("allow_once").canUseTool(
+              "ExitPlanMode",
+              { plan: "# x" },
+              ctx
+            );
+            expect(result).toEqual({
+              behavior: "allow",
+              updatedInput: { plan: "# x" },
+              updatedPermissions: [{ type: "setMode", mode: "auto", destination: "session" }],
+            });
+          });
+
+          it("leaves the mode alone when the plan is rejected (https://github.com/Brevilabs/obsidian-copilot-private/issues/958)", async () => {
+            const result = await makePlanBridge("reject_once").canUseTool(
+              "ExitPlanMode",
+              { plan: "# x" },
+              ctx
+            );
+            expect(result).toEqual({ behavior: "deny", message: "User declined" });
+          });
+
+          it("leaves the mode alone when another tool is approved (https://github.com/Brevilabs/obsidian-copilot-private/issues/958)", async () => {
+            const result = await makePlanBridge("allow_once").canUseTool(
+              "Bash",
+              { command: "ls" },
+              ctx
+            );
+            expect(result).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
+          });
+        });
+
         it("does not set isPlanProposal for non-ExitPlanMode tools", async () => {
           let captured: PermissionPrompt | null = null;
           const bridge = makeBridge(async (req) => {
