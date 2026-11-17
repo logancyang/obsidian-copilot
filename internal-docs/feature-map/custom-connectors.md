@@ -6,8 +6,9 @@ Servers the user adds from a pasted config, listed on the [Connectors tab](conne
 
 - custom-add: `Add custom connector` takes a pasted `mcpServers` block or one server with a name, shows each server it found as `Local · <command>` or `Remote · <url>` and how many values stay in this device's keychain, then `Add`.
 - custom-invalid: a config that cannot be read shows why under the box, and `Add` stays disabled.
-- custom-status: a custom row reads `Connected · <N> tools`, `Starting…`, `Starts in your next chat`, `Couldn't start · <reason>`, `Couldn't reach · <reason>`, `Key not accepted`, `Add API key on this device`, or `Off on this device`.
+- custom-status: a custom row reads `Connected · <N> tools`, `Starting…`, `Starts in your next chat`, `Couldn't start · <reason>`, `Couldn't reach · <reason>`, `Key not accepted`, `Add API key on this device`, `Needs login`, the login's failure reason, or `Off on this device`.
 - custom-fix: `Add API key` opens the edit dialog for a missing or rejected key; `Try again` restarts a server that couldn't start or be reached.
+- custom-login: a remote server that refuses Copilot and supports login shows `Needs login` with `Log in`, which opens the service's login page in the browser while the row reads "Waiting for you to log in in your browser…" with `Cancel`; a failed login shows its reason with `Try again`.
 - custom-edit: `Edit` from `More actions` opens `Edit <name>` with every stored value blank, "Leave a value blank to keep the one stored on this device.", and names any value this device lacks as "No value on this device: <names>".
 - custom-turn-off: `Turn off on this device` and `Turn on on this device` in `More actions`.
 - custom-remove: `Remove` in `More actions` asks `Remove <name>?` first.
@@ -24,6 +25,7 @@ Servers the user adds from a pasted config, listed on the [Connectors tab](conne
 - Invalid: paste text that is not a server config. The reason shows under the box and `Add` is disabled.
 - Edit: choose `Edit` from the row's `More actions`. `Edit <name>` shows the config with its values blank; change an argument, choose `Save`, and the row restarts.
 - Missing key: on a second device with the same vault, open the tab. The row reads `Add API key on this device`; `Add API key` opens the edit dialog naming the missing value.
+- Log in: add `{"mcpServers":{"linear":{"url":"https://mcp.linear.app/mcp"}}}`. The row reads `Needs login`; choose `Log in`, approve in the browser, and the row reads `Connected · <N> tools`. Adding the same URL with a valid API key under `headers` connects without a login.
 - Couldn't start: add a server whose command does not exist. The row reads `Couldn't start · <reason>` with `Try again`.
 - Turn off: choose `Turn off on this device`. The row reads `Off on this device`; `Turn on on this device` starts it again.
 - Remove: choose `Remove`. `Remove <name>?` says agents lose access on all devices; confirm and the row goes away.
@@ -33,5 +35,6 @@ Servers the user adds from a pasted config, listed on the [Connectors tab](conne
 
 - Values in `env` and `headers` stay in this device's keychain and do not sync; the command, its arguments, and the URL sync with the vault.
 - `Turn off on this device` affects only this device. `Remove` removes the connector from every device.
-- A custom connector that couldn't start, lacks a key, or had its key rejected raises the [Connectors tab](connectors-tab.md) warning and the chat's [connectors banner](status-and-error-cards.md). `Couldn't reach` does not.
+- A login stays in this device's keychain, so each device with the same vault logs in on its own. `Remove` signs Copilot out of the service. A login works only for the URL it was made for, so changing the URL on any device asks for a new login.
+- A custom connector that couldn't start, lacks a key, had its key rejected, or needs a login raises the [Connectors tab](connectors-tab.md) warning and the chat's [connectors banner](status-and-error-cards.md). `Couldn't reach` does not.
 - Open chats get a custom connector that was added, edited, turned off, or removed only after `Reload` on their `<agent> settings changed` [card](status-and-error-cards.md).

@@ -2,13 +2,15 @@
  * @jest-environment node
  */
 import { MAX_PROVIDED_TOOL_NAME_LENGTH } from "@/agentMode/session/copilotMcpServer";
-import { CustomConnectors } from "@/connectors/custom/customConnectors";
+import { CustomConnectors, type CustomConnectorsDeps } from "@/connectors/custom/customConnectors";
 import { FakeProcess } from "@/connectors/custom/testing/fakeCustomProcess";
 import { fakeKeychain } from "@/connectors/custom/testing/fakeKeychain";
+import { fakeAuth } from "@/connectors/oauth/testing/fakeConnectorAuth";
 import { FakeMcpService } from "@/connectors/testing/fakeMcpService";
 import { logWarn } from "@/logger";
 import { getSettings, setSettings } from "@/settings/model";
 import { augmentPathForDetection } from "@/utils/binaryPath";
+import { md5 } from "@/utils/hash";
 
 jest.mock("@/logger", () => ({ logWarn: jest.fn() }));
 jest.mock("@/utils/loginShellPath", () => ({
@@ -18,6 +20,7 @@ jest.mock("@/utils/loginShellPath", () => ({
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
 const REMOTE_URL = "https://mcp.acme.test/mcp";
 const KEYCHAIN_PREFIX = "copilot-vtestvault-custom-connector-";
+const LOGIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/933";
 
 const LOCAL_JSON = JSON.stringify({
   mcpServers: { Echo: { command: "echo-server", args: ["--stdio"], env: { FAKE_KEY: "k-1" } } },
@@ -25,6 +28,12 @@ const LOCAL_JSON = JSON.stringify({
 const REMOTE_JSON = JSON.stringify({
   mcpServers: { Acme: { url: REMOTE_URL, headers: { Authorization: "Bearer acme-1" } } },
 });
+const LOGIN_JSON = JSON.stringify({
+  mcpServers: { Acme: { url: REMOTE_URL, headers: { "X-Workspace": "w-1" } } },
+});
+const LOGIN_ID = `custom-acme-${md5(REMOTE_URL).slice(0, 8)}`;
+const LOGIN_TOKEN = `token-${LOGIN_ID}`;
+const OTHER_URL = "https://mcp.other.test/mcp";
 
 function setUp(options: { enabled?: boolean } = {}) {
   jest.mocked(logWarn).mockClear();
@@ -35,7 +44,9 @@ function setUp(options: { enabled?: boolean } = {}) {
   const remote = new FakeMcpService(REMOTE_URL);
   remote.validTokens.add("acme-1");
   remote.tools = [{ name: "search", annotations: { readOnlyHint: true } }];
-  const custom = new CustomConnectors({
+  const login = fakeAuth();
+  const deps: CustomConnectorsDeps = {
+    auth: login.auth,
     keychain,
     deviceStorage: {
       load: (key) => device.get(key) ?? null,
@@ -51,7 +62,8 @@ function setUp(options: { enabled?: boolean } = {}) {
       processes.push(process);
       return process;
     },
-  });
+  };
+  const custom = new CustomConnectors(deps);
   const statusOf = (id: string) =>
     custom.getSnapshot().connectors.find(({ config }) => config.id === id)?.status;
   const add = async (text: string) => {
@@ -60,7 +72,19 @@ function setUp(options: { enabled?: boolean } = {}) {
     custom.add(parsed.connectors);
     await custom.refresh();
   };
-  return { custom, secrets, device, processes, remote, statusOf, add };
+  return { custom, deps, secrets, device, processes, remote, login, statusOf, add };
+}
+
+async function loggedIn(json: string) {
+  const fake = setUp();
+  fake.remote.publishesLoginMetadata = true;
+  fake.remote.validTokens.add(LOGIN_TOKEN);
+  await fake.add(json);
+  const login = fake.custom.logIn("acme");
+  fake.login.finishLogin({ status: "connected" });
+  await login.outcome;
+  await fake.custom.refresh();
+  return fake;
 }
 
 function connectedWith(...names: string[]) {
@@ -153,6 +177,25 @@ describe("customConnectors", () => {
         expect(fake.remote.callsOf("tools/list")[0].token).toBe("acme-1");
       });
 
+      it(`shows "Needs login" and asks for attention when a remote server that publishes login metadata refuses it, even with a non-login header pasted: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+
+        await fake.add(LOGIN_JSON);
+
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+        expect(fake.custom.getSnapshot().needsAttention).toBe(true);
+      });
+
+      it(`shows "Needs login" for a refusing server that publishes only authorization server metadata at its origin: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesAuthorizationServerMetadata = true;
+
+        await fake.add(LOGIN_JSON);
+
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+      });
+
       it("leaves every connector unstarted while connectors aren't enabled", () => {
         const fake = setUp({ enabled: false });
         const parsed = fake.custom.parse(LOCAL_JSON);
@@ -243,6 +286,112 @@ describe("customConnectors", () => {
         expect(getSettings().customConnectors).toBe(before);
         expect(fake.processes[0].stopped).toBe(false);
       });
+
+      it(`drops the stored login when the URL changes and keeps it when the URL stays: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        await fake.add(LOGIN_JSON);
+        const withUrl = (url: string) =>
+          JSON.stringify({ mcpServers: { Acme: { url, headers: { "X-Workspace": "" } } } });
+
+        fake.custom.edit("acme", withUrl(REMOTE_URL));
+        expect(fake.login.auth.disconnect).not.toHaveBeenCalled();
+
+        fake.custom.edit("acme", withUrl(OTHER_URL));
+        expect(fake.login.auth.disconnect).toHaveBeenCalledWith(LOGIN_ID);
+      });
+
+      it(`sends the new URL no token from the old login while a refresh of that login is in flight: ${LOGIN_ISSUE}`, async () => {
+        jest.useFakeTimers();
+        const fake = await loggedIn(LOGIN_JSON);
+        let finishRefresh = () => {};
+        const refreshing = new Promise<void>((resolve) => (finishRefresh = resolve));
+        fake.login.auth.accessToken.mockImplementation(async (connectionId) => {
+          await refreshing;
+          return { status: "connected", accessToken: `token-${connectionId}` };
+        });
+        fake.login.auth.disconnect.mockImplementationOnce(async (connectionId) => {
+          await refreshing;
+          fake.login.logins.delete(connectionId);
+        });
+
+        fake.custom.edit(
+          "acme",
+          JSON.stringify({
+            mcpServers: { Acme: { url: OTHER_URL, headers: { "X-Workspace": "" } } },
+          })
+        );
+        const waited = fake.custom.refresh();
+        await jest.advanceTimersByTimeAsync(10_000);
+        await waited;
+        finishRefresh();
+        await fake.custom.refresh();
+
+        const sentToOther = fake.remote.requests.filter(({ url }) => url === OTHER_URL);
+        expect(sentToOther.length).toBeGreaterThan(0);
+        expect(sentToOther.map(({ token }) => token)).not.toContain(LOGIN_TOKEN);
+      });
+    });
+
+    describe("logIn()", () => {
+      async function needingLogin() {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        fake.remote.validTokens.add(LOGIN_TOKEN);
+        await fake.add(LOGIN_JSON);
+        return fake;
+      }
+
+      it(`logs in to the connector's URL under a login of its own, then connects with the login's token: ${LOGIN_ISSUE}`, async () => {
+        const fake = await needingLogin();
+
+        const login = fake.custom.logIn("acme");
+
+        expect(fake.statusOf("acme")).toMatchObject({ kind: "logging-in" });
+        expect(fake.login.pendingLogin()?.target).toEqual({
+          connectionId: LOGIN_ID,
+          serverUrl: REMOTE_URL,
+          serviceName: "Acme",
+        });
+        fake.login.finishLogin({ status: "connected" });
+        await login.outcome;
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+        expect(fake.remote.callsOf("tools/list")[0].token).toBe(LOGIN_TOKEN);
+      });
+
+      it(`sends the login's token in place of a pasted Authorization header: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        fake.remote.validTokens.add(LOGIN_TOKEN);
+        await fake.add(
+          JSON.stringify({
+            mcpServers: { Acme: { url: REMOTE_URL, headers: { authorization: "Bearer stale" } } },
+          })
+        );
+
+        const login = fake.custom.logIn("acme");
+        fake.login.finishLogin({ status: "connected" });
+        await login.outcome;
+        await fake.custom.refresh();
+
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+        expect(fake.remote.callsOf("tools/list")[0].token).toBe(LOGIN_TOKEN);
+      });
+
+      it(`shows why a login failed, and returns to "Needs login" after a cancelled one: ${LOGIN_ISSUE}`, async () => {
+        const fake = await needingLogin();
+
+        const failed = fake.custom.logIn("acme");
+        fake.login.finishLogin({ status: "failed", reason: "rejected" });
+        await failed.outcome;
+        expect(fake.statusOf("acme")).toEqual({ kind: "login-failed", reason: "rejected" });
+
+        const cancelled = fake.custom.logIn("acme");
+        cancelled.cancel();
+        await cancelled.outcome;
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+      });
     });
 
     describe("remove()", () => {
@@ -260,6 +409,18 @@ describe("customConnectors", () => {
         expect(fake.secrets.size).toBe(0);
         expect(fake.device.get("copilot-custom-connectors-off")).toEqual([]);
         expect(fake.custom.getSnapshot().connectors).toEqual([]);
+      });
+
+      it(`cancels a waiting login and revokes the connector's login: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        await fake.add(LOGIN_JSON);
+        const login = fake.custom.logIn("acme");
+
+        fake.custom.remove("acme");
+
+        await expect(login.outcome).resolves.toEqual({ status: "cancelled" });
+        expect(fake.login.auth.disconnect).toHaveBeenCalledWith(LOGIN_ID);
       });
     });
 
@@ -402,6 +563,43 @@ describe("customConnectors", () => {
         expect(loggedText()).not.toContain("acme-1");
       });
 
+      it(`keeps a logged-in connector running once its unused pasted Authorization key is deleted, but still needs its other header values: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(
+          JSON.stringify({
+            mcpServers: {
+              Acme: {
+                url: REMOTE_URL,
+                headers: { Authorization: "Bearer stale", "X-Workspace": "w-1" },
+              },
+            },
+          })
+        );
+
+        fake.secrets.set(`${KEYCHAIN_PREFIX}acme`, JSON.stringify({ "X-Workspace": "w-1" }));
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+
+        fake.secrets.delete(`${KEYCHAIN_PREFIX}acme`);
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-key" });
+      });
+
+      it(`sends no login from this device to a URL another device changed the connector to: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(LOGIN_JSON);
+        setSettings({
+          customConnectors: getSettings().customConnectors.map((config) => ({
+            ...config,
+            url: OTHER_URL,
+          })),
+        });
+
+        await new CustomConnectors(fake.deps).refresh();
+
+        const sentToOther = fake.remote.requests.filter(({ url }) => url === OTHER_URL);
+        expect(sentToOther.length).toBeGreaterThan(0);
+        expect(new Set(sentToOther.map(({ token }) => token))).toEqual(new Set([null]));
+      });
+
       it(`logs no part of a keychain entry that isn't readable JSON: ${ISSUE}`, async () => {
         const fake = setUp();
         await fake.add(LOCAL_JSON);
@@ -533,11 +731,72 @@ describe("customConnectors", () => {
         expect(fake.statusOf("acme")).toEqual({ kind: "key-not-accepted" });
       });
 
+      it(`moves a connector whose login stops working to "Needs login" and tells the agent the user must log in again: ${LOGIN_ISSUE}`, async () => {
+        const fake = setUp();
+        fake.remote.publishesLoginMetadata = true;
+        await fake.add(REMOTE_JSON);
+        fake.remote.validTokens.clear();
+
+        const result = await fake.custom.call("acme_search", {});
+
+        expect(result?.isError).toBe(false);
+        expect(textOf(result)).toContain("log in again");
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+      });
+
+      it(`keeps offering "Log in" when a revoked login is refused after its unused pasted Authorization key was deleted: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(
+          JSON.stringify({
+            mcpServers: { Acme: { url: REMOTE_URL, headers: { Authorization: "Bearer stale" } } },
+          })
+        );
+        fake.secrets.delete(`${KEYCHAIN_PREFIX}acme`);
+        await fake.custom.refresh();
+        fake.login.logins.delete(LOGIN_ID);
+
+        const result = await fake.custom.call("acme_search", {});
+        expect(textOf(result)).toContain("log in again");
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual({ kind: "needs-login" });
+
+        const login = fake.custom.logIn("acme");
+        expect(fake.statusOf("acme")).toMatchObject({ kind: "logging-in" });
+        fake.login.finishLogin({ status: "connected" });
+        await login.outcome;
+        await fake.custom.refresh();
+        expect(fake.statusOf("acme")).toEqual(connectedWith("search"));
+      });
+
+      it(`tells the agent its key wasn't accepted after 5 seconds when the refusing server's login metadata never answers: ${LOGIN_ISSUE}`, async () => {
+        jest.useFakeTimers();
+        const fake = setUp();
+        await fake.add(REMOTE_JSON);
+        fake.remote.validTokens.clear();
+        fake.remote.loginMetadataHangs = true;
+
+        const pending = fake.custom.call("acme_search", {});
+        await jest.advanceTimersByTimeAsync(5_000);
+
+        expect(textOf(await pending)).toContain("didn't accept its API key");
+        expect(fake.statusOf("acme")).toEqual({ kind: "key-not-accepted" });
+      });
+
       it(`shows *** in place of this device's keychain values in the error returned to the agent when a server's error echoes its key: ${ISSUE}`, async () => {
         const fake = setUp();
         await fake.add(REMOTE_JSON);
         fake.remote.failWithStatus = 400;
         fake.remote.failBody = "unknown token acme-1";
+
+        const text = textOf(await fake.custom.call("acme_search", {}));
+
+        expect(text).toBe("Acme returned an error: HTTP 400 unknown token ***");
+      });
+
+      it(`shows *** in place of the login's token in the error returned to the agent when a server's error echoes it: ${LOGIN_ISSUE}`, async () => {
+        const fake = await loggedIn(LOGIN_JSON);
+        fake.remote.failWithStatus = 400;
+        fake.remote.failBody = `unknown token ${LOGIN_TOKEN}`;
 
         const text = textOf(await fake.custom.call("acme_search", {}));
 

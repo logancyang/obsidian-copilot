@@ -1,4 +1,5 @@
 import {
+  bearerHeader,
   defineTools,
   HttpStatusError,
   toToolResult,
@@ -20,6 +21,7 @@ import {
   type CustomConnectorConfig,
   type CustomConnectorParse,
   type ParsedCustomConnector,
+  type RemoteConnectorConfig,
 } from "@/connectors/custom/customConnectorConfig";
 import {
   START_TIMEOUT_MS,
@@ -28,6 +30,11 @@ import {
 } from "@/connectors/custom/stdioServer";
 import { maskSecretValues } from "@/connectors/maskSecretValues";
 import { nodeFetch } from "@/connectors/nodeFetch";
+import type {
+  ConnectorAuth,
+  ConnectorLogin,
+  LoginFailureReason,
+} from "@/connectors/oauth/connectorAuth";
 import { ServiceUnreachableError } from "@/connectors/oauth/requestUrlFetch";
 import { err2String } from "@/errorFormat";
 import { logWarn } from "@/logger";
@@ -35,7 +42,9 @@ import type { KeychainService } from "@/services/keychainService";
 import { getSettings, updateSetting } from "@/settings/model";
 import { withTimeout } from "@/utils";
 import { augmentPathForDetection } from "@/utils/binaryPath";
+import { md5 } from "@/utils/hash";
 import { loginShellPathDirs } from "@/utils/loginShellPath";
+import { discoverOAuthServerInfo } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 export type CustomConnectorStatus =
@@ -46,6 +55,9 @@ export type CustomConnectorStatus =
   | { readonly kind: "unreachable"; readonly reason: string }
   | { readonly kind: "key-not-accepted" }
   | { readonly kind: "needs-key" }
+  | { readonly kind: "needs-login" }
+  | ({ readonly kind: "logging-in" } & Pick<ConnectorLogin, "loginUrl" | "cancel">)
+  | { readonly kind: "login-failed"; readonly reason: LoginFailureReason }
   | { readonly kind: "off" };
 
 export interface CustomConnectorState {
@@ -69,6 +81,7 @@ export interface CustomConnectorsDeps {
     "getVaultId" | "getSecretById" | "setSecretById" | "deleteSecretById"
   >;
   deviceStorage: { load(key: string): unknown; save(key: string, value: unknown): void };
+  auth: Pick<ConnectorAuth, "login" | "accessToken" | "disconnect" | "hasLogin">;
   catalogIds: readonly string[];
   isEnabled: () => boolean;
   maxToolNameLength: number;
@@ -95,22 +108,27 @@ interface Run {
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
 const OFF_STORAGE_KEY = "copilot-custom-connectors-off";
 const CHAT_WAIT_MS = 10_000;
+const LOGIN_CHECK_MS = 5_000;
 const RESTART_DELAY_MS = 1_000;
 const MAX_RESTARTS = 3;
 const IDLE: CustomConnectorStatus = Object.freeze({ kind: "idle" });
 const STARTING: CustomConnectorStatus = Object.freeze({ kind: "starting" });
 const KEY_NOT_ACCEPTED: CustomConnectorStatus = Object.freeze({ kind: "key-not-accepted" });
 const NEEDS_KEY: CustomConnectorStatus = Object.freeze({ kind: "needs-key" });
+const NEEDS_LOGIN: CustomConnectorStatus = Object.freeze({ kind: "needs-login" });
 const OFF: CustomConnectorStatus = Object.freeze({ kind: "off" });
 const ATTENTION_KINDS: ReadonlySet<CustomConnectorStatus["kind"]> = new Set([
   "couldnt-start",
   "key-not-accepted",
   "needs-key",
+  "needs-login",
+  "login-failed",
 ]);
 const EMPTY_CUSTOM_CONNECTORS: readonly CustomConnectorState[] = Object.freeze([]);
 
 export class CustomConnectors {
   private readonly runs = new Map<string, Run>();
+  private readonly logins = new Map<string, CustomConnectorStatus>();
   private readonly listeners = new Set<() => void>();
   private snapshot: CustomConnectorsSnapshot;
 
@@ -142,6 +160,9 @@ export class CustomConnectors {
     if (!parsed.ok) return parsed;
     const [{ config, secrets }] = parsed.connectors;
     const edited = { ...config, id };
+    const previous = configs().find((existing) => existing.id === id);
+    this.cancelLogin(id);
+    if (previous && serverUrl(previous) !== serverUrl(edited)) this.dropLogin(previous);
     const stored = this.secretsOf(id);
     // Edit shows each value blank because values never leave the keychain, so a value left blank keeps the stored one.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
@@ -158,7 +179,10 @@ export class CustomConnectors {
   }
 
   remove(id: string): void {
+    const config = configs().find((existing) => existing.id === id);
     this.stopRun(id);
+    this.cancelLogin(id);
+    if (config) this.dropLogin(config);
     this.deps.keychain.deleteSecretById(this.keychainId(id));
     this.saveOffIds([...this.offIds()].filter((offId) => offId !== id));
     updateSetting(
@@ -178,6 +202,35 @@ export class CustomConnectors {
 
   storedValueNames(id: string): ReadonlySet<string> {
     return new Set(Object.keys(this.secretsOf(id)));
+  }
+
+  logIn(id: string): ConnectorLogin {
+    const config = configs().find((existing) => existing.id === id);
+    if (!config || "command" in config) throw new Error(`No remote connector ${id}.`);
+    const login = this.deps.auth.login({
+      connectionId: loginId(config),
+      serverUrl: config.url,
+      serviceName: config.name,
+    });
+    const waiting: CustomConnectorStatus = Object.freeze({
+      kind: "logging-in",
+      loginUrl: () => login.loginUrl(),
+      cancel: () => login.cancel(),
+    });
+    this.logins.set(id, waiting);
+    this.publish();
+    void login.outcome.then((outcome) => {
+      if (this.logins.get(id) !== waiting) return;
+      if (outcome.status === "failed") {
+        this.logins.set(id, Object.freeze({ kind: "login-failed", reason: outcome.reason }));
+        this.publish();
+        return;
+      }
+      this.logins.delete(id);
+      if (outcome.status === "connected") this.restart(id);
+      else this.publish();
+    });
+    return login;
   }
 
   async refresh(): Promise<void> {
@@ -218,6 +271,7 @@ export class CustomConnectors {
 
   dispose(): void {
     for (const id of [...this.runs.keys()]) this.stopRun(id);
+    for (const id of [...this.logins.keys()]) this.cancelLogin(id);
     this.listeners.clear();
   }
 
@@ -237,17 +291,20 @@ export class CustomConnectors {
         run.tools = tools;
         this.setRunStatus(run, { kind: "connected", tools: tools.tools });
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
+        const { session } = run;
         logWarn(
           `[Connectors] Couldn't start ${config.name}`,
-          this.masked(config.id, err2String(error, true))
+          this.masked(config.id, err2String(error, true), session)
         );
         void run.process?.stop();
-        if (run.session instanceof ServiceSession) void run.session.close();
+        if (session instanceof ServiceSession) void session.close();
         run.session = null;
         this.setRunStatus(
           run,
-          failureStatus(config, error, (text) => this.masked(config.id, text))
+          isKeyRejection(error) && (await this.offersLogin(config))
+            ? NEEDS_LOGIN
+            : failureStatus(config, error, (text) => this.masked(config.id, text, session))
         );
       });
     this.publish();
@@ -284,7 +341,7 @@ export class CustomConnectors {
       const headers = pick(secrets, config.headerNames);
       run.session = new ServiceSession(
         config.url,
-        async () => headers,
+        (forceRefresh) => this.authHeaders(config, headers, forceRefresh),
         this.deps.fetch ?? nodeFetch
       );
     }
@@ -311,10 +368,11 @@ export class CustomConnectors {
   }
 
   private async forward(run: Run, toolName: string, args: unknown): Promise<ConnectorToolResult> {
-    const { name } = run.config;
-    if (!run.session) return toolText(`${name} isn't running right now. Try again in a moment.`);
+    const { config, session } = run;
+    const { name } = config;
+    if (!session) return toolText(`${name} isn't running right now. Try again in a moment.`);
     try {
-      const result = await run.session.request(
+      const result = await session.request(
         "tools/call",
         { name: toolName, arguments: args ?? {} },
         // A custom server's tool can run as long as a catalog service's, which outlasts the SDK's 60-second default.
@@ -330,11 +388,18 @@ export class CustomConnectors {
         content: toolResult.content.map((item) => {
           const { text } = item as { text?: unknown };
           return typeof text === "string"
-            ? { ...(item as object), text: this.masked(run.config.id, text) }
+            ? { ...(item as object), text: this.masked(config.id, text, session) }
             : item;
         }),
       };
     } catch (error) {
+      if (isKeyRejection(error) && (await this.offersLogin(run.config))) {
+        this.setRunStatus(run, NEEDS_LOGIN);
+        return toolText(
+          `${name} needs the user to log in again, which isn't a Copilot failure. The user can log in from Settings → Connectors.`,
+          false
+        );
+      }
       if (isKeyRejection(error)) {
         this.setRunStatus(run, KEY_NOT_ACCEPTED);
         // Agents offer a Copilot bug report for an obsidian-copilot tool that fails, but a rejected key only needs the user to update it.
@@ -348,8 +413,53 @@ export class CustomConnectors {
         this.setRunStatus(run, { kind: "unreachable", reason: unreachableReason(error) });
         return toolText(`Couldn't reach ${name}, which isn't a Copilot failure. Try again later.`);
       }
-      return toolText(`${name} returned an error: ${this.masked(run.config.id, messageOf(error))}`);
+      return toolText(
+        `${name} returned an error: ${this.masked(config.id, messageOf(error), session)}`
+      );
     }
+  }
+
+  private async authHeaders(
+    config: RemoteConnectorConfig,
+    headers: Record<string, string>,
+    forceRefresh: boolean
+  ): Promise<Record<string, string>> {
+    const id = loginId(config);
+    if (!this.deps.auth.hasLogin(id)) return headers;
+    const bearer = await bearerHeader(config.url, this.deps.auth.accessToken(id, { forceRefresh }));
+    const kept = Object.entries(headers).filter(([name]) => name.toLowerCase() !== "authorization");
+    return { ...Object.fromEntries(kept), ...bearer };
+  }
+
+  // A refused request says nothing about how to fix it; only a server that publishes OAuth metadata can be logged in to, whatever headers were pasted.
+  // The check is bounded because a rejected tool call waits on it, and a metadata endpoint that never answers must not hold the call.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
+  private async offersLogin(config: CustomConnectorConfig): Promise<boolean> {
+    if ("command" in config) return false;
+    const send = this.deps.fetch ?? nodeFetch;
+    try {
+      const info = await withTimeout(
+        (signal) =>
+          discoverOAuthServerInfo(config.url, {
+            fetchFn: (url, init) => send(url, { ...init, signal }),
+          }),
+        LOGIN_CHECK_MS,
+        `Checking ${config.name}'s login`
+      );
+      return Boolean(info.resourceMetadata ?? info.authorizationServerMetadata);
+    } catch {
+      return false;
+    }
+  }
+
+  private dropLogin(config: CustomConnectorConfig): void {
+    if (!("command" in config)) void this.deps.auth.disconnect(loginId(config));
+  }
+
+  private cancelLogin(id: string): void {
+    const login = this.logins.get(id);
+    this.logins.delete(id);
+    if (login?.kind === "logging-in") login.cancel();
   }
 
   private restart(id: string): void {
@@ -385,6 +495,18 @@ export class CustomConnectors {
       .map(({ config }) => config);
   }
 
+  // A login's token replaces a pasted Authorization header, so deleting that unused key must not stop the connector, nor hide Log in once the server refuses a revoked login.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/933
+  private requiredSecretNames(config: CustomConnectorConfig): readonly string[] {
+    const names = secretNames(config);
+    if ("command" in config) return names;
+    const logsIn =
+      this.deps.auth.hasLogin(loginId(config)) ||
+      this.logins.has(config.id) ||
+      this.runs.get(config.id)?.status.kind === "needs-login";
+    return logsIn ? names.filter((name) => name.toLowerCase() !== "authorization") : names;
+  }
+
   private keychainId(id: string): string {
     return `copilot-v${this.deps.keychain.getVaultId()}-custom-connector-${id}`;
   }
@@ -403,8 +525,9 @@ export class CustomConnectors {
 
   // Servers can echo their keys in errors and stderr, which reach the agent's chat and Copilot's log, and the log goes into bug reports.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/862
-  private masked(id: string, text: string): string {
-    return maskSecretValues(text, Object.values(this.secretsOf(id)));
+  private masked(id: string, text: string, session?: McpRequester | null): string {
+    const masked = maskSecretValues(text, Object.values(this.secretsOf(id)));
+    return session instanceof ServiceSession ? session.mask(masked) : masked;
   }
 
   private saveSecrets(id: string, secrets: Readonly<Record<string, string>>): void {
@@ -433,9 +556,9 @@ export class CustomConnectors {
       const secrets = this.secretsOf(config.id);
       const status = offIds.has(config.id)
         ? OFF
-        : secretNames(config).some((name) => !secrets[name])
+        : this.requiredSecretNames(config).some((name) => !secrets[name])
           ? NEEDS_KEY
-          : (this.runs.get(config.id)?.status ?? IDLE);
+          : (this.logins.get(config.id) ?? this.runs.get(config.id)?.status ?? IDLE);
       return Object.freeze({ config, status });
     });
     return Object.freeze({
@@ -443,6 +566,17 @@ export class CustomConnectors {
       needsAttention: connectors.some(({ status }) => ATTENTION_KINDS.has(status.kind)),
     });
   }
+}
+
+// Catalog connections and custom connectors share one keychain namespace for logins, and a custom connector can carry a catalog service's name.
+// The URL syncs while logins stay on each device, so naming the URL keeps a login from reaching a server another device changed the URL to.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/933
+function loginId(config: RemoteConnectorConfig): string {
+  return `custom-${config.id}-${md5(config.url).slice(0, 8)}`;
+}
+
+function serverUrl(config: CustomConnectorConfig): string | null {
+  return "command" in config ? null : config.url;
 }
 
 function configs(): readonly CustomConnectorConfig[] {

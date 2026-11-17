@@ -142,8 +142,8 @@ export function TextButton({ className, ...props }: ButtonProps): React.ReactEle
 }
 
 interface WaitingConnectorRowProps {
-  service: ConnectorCatalogEntry;
-  waitingLogin: WaitingLogin;
+  service: Pick<ConnectorCatalogEntry, "name" | "logoUrl">;
+  waitingLogin: Pick<WaitingLogin, "loginUrl" | "cancel">;
 }
 
 export function WaitingConnectorRow({

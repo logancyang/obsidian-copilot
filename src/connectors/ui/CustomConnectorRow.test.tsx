@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/862";
+const LOGIN_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/933";
 const THREE_TOOLS = [{ name: "search" }, { name: "create" }, { name: "delete" }];
 
 function localConnector(status: CustomConnectorStatus): CustomConnectorState {
@@ -20,6 +21,7 @@ function renderRow(status: CustomConnectorStatus) {
   const actions = {
     onEdit: jest.fn(),
     onTryAgain: jest.fn(),
+    onLogIn: jest.fn(),
     onSetTurnedOff: jest.fn(),
     onRemove: jest.fn(),
     onShowTools: jest.fn(),
@@ -69,6 +71,11 @@ describe("CustomConnectorRow", () => {
       [{ kind: "unreachable", reason: "HTTP 502" }, "Couldn't reach · HTTP 502"],
       [{ kind: "key-not-accepted" }, "Key not accepted"],
       [{ kind: "needs-key" }, "Add API key on this device"],
+      [{ kind: "needs-login" }, "Needs login"],
+      [
+        { kind: "login-failed", reason: "timed-out" },
+        "The login timed out. Try again when you're ready.",
+      ],
       [{ kind: "off" }, "Off on this device"],
     ])("shows the %j status as %s", (status, text) => {
       const { row } = renderRow(status);
@@ -80,6 +87,7 @@ describe("CustomConnectorRow", () => {
       [{ kind: "couldnt-start", reason: "x" }, "Couldn't start · x", true],
       [{ kind: "key-not-accepted" }, "Key not accepted", true],
       [{ kind: "needs-key" }, "Add API key on this device", true],
+      [{ kind: "needs-login" }, "Needs login", true],
       [{ kind: "unreachable", reason: "x" }, "Couldn't reach · x", false],
       [{ kind: "off" }, "Off on this device", false],
     ])("colors %j red only when it needs the user (%s: %s)", (status, text, red) => {
@@ -107,6 +115,31 @@ describe("CustomConnectorRow", () => {
         expect(onEdit).toHaveBeenCalledWith("github");
       }
     );
+
+    it.each<[CustomConnectorStatus, string]>([
+      [{ kind: "needs-login" }, "Log in"],
+      [{ kind: "login-failed", reason: "rejected" }, "Try again"],
+    ])(
+      `starts a login from %j's %s button instead of asking for an API key: ${LOGIN_ISSUE}`,
+      (status, label) => {
+        const { row, onLogIn, onEdit } = renderRow(status);
+
+        fireEvent.click(row.getByRole("button", { name: label }));
+
+        expect(onLogIn).toHaveBeenCalledWith("github");
+        expect(row.queryByRole("button", { name: "Add API key" })).toBeNull();
+        expect(onEdit).not.toHaveBeenCalled();
+      }
+    );
+
+    it(`shows a login waiting in the browser with Cancel and the login link, like a catalog login: ${LOGIN_ISSUE}`, () => {
+      const cancel = jest.fn();
+      const { row } = renderRow({ kind: "logging-in", loginUrl: () => "https://x.test", cancel });
+
+      expect(row.getByText("Waiting for you to log in in your browser…")).toBeTruthy();
+      fireEvent.click(row.getByRole("button", { name: "Cancel" }));
+      expect(cancel).toHaveBeenCalledTimes(1);
+    });
 
     it.each<[CustomConnectorStatus]>([
       [{ kind: "couldnt-start", reason: "x" }],

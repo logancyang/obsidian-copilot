@@ -43,6 +43,7 @@ function renderList(props: Partial<ConnectedConnectorsProps> & { snapshot: Conne
     customActions: {
       onEdit: jest.fn(),
       onTryAgain: jest.fn(),
+      onLogIn: jest.fn(),
       onSetTurnedOff: jest.fn(),
       onRemove: jest.fn(),
       onShowTools: jest.fn(),
