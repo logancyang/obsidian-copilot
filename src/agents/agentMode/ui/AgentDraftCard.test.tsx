@@ -213,7 +213,7 @@ describe("AgentDraftCard", () => {
         expect(store.createAgent).not.toHaveBeenCalled();
       });
 
-      it(`after Create, opens the new agent's home with it selected and the cursor in its chat input, and leaves the card as it was (${ISSUE})`, async () => {
+      it(`after Create, opens the new agent's home with it selected and the cursor in its chat input, and removes the card from the drafting chat (${ISSUE})`, async () => {
         const { plugin, manager } = fakePlugin();
         const { chat, focusComposer } = renderSlot(draftCard(), plugin);
         fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
@@ -222,7 +222,20 @@ describe("AgentDraftCard", () => {
 
         await waitFor(() => expect(focusComposer).toHaveBeenCalled());
         expect(startCustomAgentChat).toHaveBeenCalledWith(manager, NORA_AGENT);
+        expect(chat.readChatState(AGENT_DRAFT_CARD)).toBeNull();
+      });
+
+      it(`keeps the card and its Review and create… button when the dialog closes without creating, so the draft can be opened again (${ISSUE})`, () => {
+        const { plugin, store } = fakePlugin();
+        const { chat } = renderSlot(draftCard(), plugin);
+        fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
+
+        act(() => void openedModals[0].pressEscape());
+
+        expect(openedModals[0].isOpen).toBe(false);
+        expect(store.createAgent).not.toHaveBeenCalled();
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toEqual(draftCard());
+        expect(screen.getByRole("button", { name: "Review and create…" })).not.toBeNull();
       });
 
       it(`opens the dialog without "Drafted by" once the drafting agent is gone (${ISSUE})`, () => {
