@@ -23,6 +23,10 @@ function deriveSubfolder(settings: FolderSettings, subfolder: string): string {
   return normalizePath(`${copilotRoot(settings)}/${subfolder}`);
 }
 
+export function deriveCopilotFolder(settings: FolderSettings): string {
+  return normalizePath(copilotRoot(settings));
+}
+
 export function deriveConversationsFolder(settings: FolderSettings): string {
   return deriveSubfolder(settings, COPILOT_SUBFOLDER.conversations);
 }
@@ -52,7 +56,7 @@ export function deriveProjectsFolder(settings: FolderSettings): string {
 }
 
 export function getEffectiveCopilotFolder(): string {
-  return normalizePath(copilotRoot(getSettings()));
+  return deriveCopilotFolder(getSettings());
 }
 
 export function getEffectiveConversationsFolder(): string {

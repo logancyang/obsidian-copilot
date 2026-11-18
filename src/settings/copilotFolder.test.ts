@@ -2,6 +2,7 @@ import {
   COPILOT_SUBFOLDER,
   deriveConversationAttachmentsFolder,
   deriveConversationsFolder,
+  deriveCopilotFolder,
   deriveCustomPromptsFolder,
   deriveMemoryFolder,
   deriveProjectsFolder,
@@ -37,6 +38,16 @@ function settingsWithRoot(copilotFolder: string): CopilotSettings {
 }
 
 describe("copilotFolder", () => {
+  describe("deriveCopilotFolder()", () => {
+    it("returns the configured root as a normalized vault path", () => {
+      expect(deriveCopilotFolder(settingsWithRoot("team//ai"))).toBe("team/ai");
+    });
+
+    it("falls back to the default root when the configured root is blank", () => {
+      expect(deriveCopilotFolder(settingsWithRoot("  "))).toBe("copilot");
+    });
+  });
+
   describe("deriveConversationsFolder()", () => {
     it("derives the historical default conversations path for the default root", () => {
       expect(deriveConversationsFolder(settingsWithRoot("copilot"))).toBe(

@@ -16,7 +16,6 @@ import {
   CategoryOption,
   EMPTY_AGENT_MENTION_BRANDS,
 } from "./useAtMentionCategories";
-import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 import { SelfHostCloudWarningIcon } from "@/components/ui/SelfHostCloudWarningIcon";
 
 const MAX_SEARCH_RESULTS = 30;
@@ -245,26 +244,6 @@ export function useAtMentionSearch(
       }
 
       if (!query) {
-        if (selectedCategory === "notes") {
-          const customPromptsFolder = getEffectiveCustomPromptsFolder();
-          const regularNotes = items.filter(
-            (item) =>
-              !(
-                typeof item.data === "object" &&
-                "path" in item.data &&
-                typeof item.data.path === "string" &&
-                item.data.path.startsWith(customPromptsFolder + "/")
-              )
-          );
-          const customCommandNotes = items.filter(
-            (item) =>
-              typeof item.data === "object" &&
-              "path" in item.data &&
-              typeof item.data.path === "string" &&
-              item.data.path.startsWith(customPromptsFolder + "/")
-          );
-          return [...regularNotes, ...customCommandNotes].slice(0, MAX_SEARCH_RESULTS);
-        }
         return items.slice(0, MAX_SEARCH_RESULTS);
       }
 

@@ -4,7 +4,6 @@ import { FileText, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
-import { getEffectiveCustomPromptsFolder } from "@/settings/copilotFolder";
 
 export interface NoteSearchOption extends TypeaheadOption {
   file: TFile;
@@ -41,16 +40,8 @@ export function useNoteSearch(
 
   const searchResults = useMemo(() => {
     const mergedConfig = { ...DEFAULT_CONFIG, ...config };
-    const customPromptsFolder = getEffectiveCustomPromptsFolder();
 
     if (!query.trim()) {
-      const regularNotes = allNoteOptions.filter(
-        (opt) => !opt.file.path.startsWith(customPromptsFolder + "/")
-      );
-      const customCommandNotes = allNoteOptions.filter((opt) =>
-        opt.file.path.startsWith(customPromptsFolder + "/")
-      );
-
       if (currentActiveFile) {
         const activeNoteOption: NoteSearchOption = {
           key: `active-note-${currentActiveFile.path}`,
@@ -61,15 +52,10 @@ export function useNoteSearch(
           icon: React.createElement(FileClock, { className: "tw-size-4" }),
           file: currentActiveFile,
         };
-        const noteResults = [...regularNotes, ...customCommandNotes].slice(
-          0,
-          mergedConfig.limit - 1
-        );
-        return [activeNoteOption, ...noteResults];
+        return [activeNoteOption, ...allNoteOptions.slice(0, mergedConfig.limit - 1)];
       }
 
-      const noteResults = [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
-      return noteResults;
+      return allNoteOptions.slice(0, mergedConfig.limit);
     }
 
     const searchQuery = query.trim();

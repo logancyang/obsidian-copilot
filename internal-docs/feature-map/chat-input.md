@@ -6,7 +6,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 
 - input-send: type a message and press Enter or `Send`. While the agent works, typing a draft turns `Stop generating` into `Send`, which [queues the message](queued-messages.md).
 - input-stop: `Stop generating` or Escape stops the agent's reply.
-- input-mentions: `@` lists Notes, Web tabs, and Folders; `Add context` (**+**) also offers Files. A mentioned note shows as a pill in the text only and is still sent as context; badges show only what was attached, in the chat input and on the sent message, and removing a badge leaves the text unchanged. Mentioning the active note does not switch its `Current` badge on. A sent message draws a mentioned folder as a `{Parent/Folder}` pill in its text. With multi-agent access, Agents asks other agents the same message.
+- input-mentions: `@` lists Notes, Web tabs, and Folders; `Add context` (**+**) also offers Files. A mentioned note shows as a pill in the text only and is still sent as context; badges show only what was attached, in the chat input and on the sent message, and removing a badge leaves the text unchanged. Mentioning the active note does not switch its `Current` badge on. A sent message draws a mentioned folder as a `{Parent/Folder}` pill in its text. With multi-agent access, Agents asks other agents the same message. `@` and `[[` suggest no files or folders from the Copilot folder except the projects folder and what the user keeps in each project, and never a project's `project.md`.
 - input-current-note: the open note or web tab shows as a `Current` badge that the user can remove.
 - input-selection: text selected in a note shows as a badge with the text and its line, such as `L3`; text selected in a [turn diff](turn-diffs.md) or a web page shows as a `Selection` badge.
 - input-images: paste or drop images to attach them; `Remove image` takes one off.
@@ -27,6 +27,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Escape: send another long task and press Escape in the chat input. The reply stops.
 - Draft while working: while the agent works, type text. `Stop generating` becomes `Send`.
 - Mentions: type `@`. Notes, Web tabs, and Folders are listed. Type part of a note name and press Enter. The note shows as a pill in the text and no badge is added. Attach the same note through `Add context`, then remove its badge: the pill stays in the text.
+- Copilot files: with a saved chat, a custom command, and a project holding a note, type `@` then part of each name, and `[[` then the same. The project's note is listed; the saved chat, the custom command, and the project's `project.md` are not.
 - Add context: choose `Add context` (**+**). Notes, Web tabs, Folders, and Files are listed.
 - Current note: open a note beside Agent Chat. A badge with its name and `Current` shows above the text.
 - Selection: select a line in that note. A badge with the selected text and its line (`L3`) shows next to the `Current` badge.
@@ -41,4 +42,5 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Picking another agent's model in `Model · effort` replaces the chat in the tab with a new chat on that agent, and that agent becomes the default for new chats. Other agents' models are listed only until a message is sent. A chat opened with `Continue from here in a new chat` lists them too until its first message; switching it keeps its messages, title and single chat note, and reopening it from Recent chats before that message opens it on the agent and model picked.
 - A chat reopened from Recent chats or [Copilot Navigator](copilot-navigator.md), after `Shut down` or an Obsidian restart, comes back on the model and effort of its last reply, not the agent's `Default model`.
 - While the agent works, Escape in the chat input stops the reply even when a draft is typed.
+- Only suggestions skip Copilot's own files: a note link typed in full, a dropped file, and the `Active Note` row still attach one.
 - A file dragged from Finder that is already in the vault is attached where it is, not copied. One drop can carry notes and outside files together; each is attached. A folder from outside the vault can't be added: dropping one shows a notice.
