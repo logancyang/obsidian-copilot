@@ -74,6 +74,11 @@ function type(label: string | RegExp, text: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
 }
 
+function enterName(text: string) {
+  type("Name", text);
+  fireEvent.blur(screen.getByLabelText("Name"));
+}
+
 describe("CreateAgentModal", () => {
   beforeAll(() => {
     (window as unknown as { activeDocument: Document }).activeDocument = window.document;
@@ -318,7 +323,7 @@ describe("CreateAgentModal", () => {
     describe("onOpen()", () => {
       it(`creates the agent in the store, closes, and hands back its folder name so the home selects it (${ISSUE})`, async () => {
         const { modal, onCreated, createAgent } = openDialog();
-        type("Name", "Kai");
+        enterName("Kai");
         type("What Kai handles", "You handle marketing.");
 
         fireEvent.click(screen.getByRole("button", { name: "Create" }));
@@ -351,7 +356,7 @@ describe("CreateAgentModal", () => {
         const { modal, onCreated } = openDialog(
           jest.fn().mockRejectedValue(new Error("Custom agents are not available."))
         );
-        type("Name", "Kai");
+        enterName("Kai");
         type("What Kai handles", "You handle marketing.");
 
         fireEvent.click(screen.getByRole("button", { name: "Create" }));

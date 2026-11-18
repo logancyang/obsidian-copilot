@@ -106,6 +106,11 @@ function type(label: string | RegExp, text: string) {
   fireEvent.change(screen.getByLabelText(label), { target: { value: text } });
 }
 
+function enterName(text: string) {
+  type("Name", text);
+  fireEvent.blur(screen.getByLabelText("Name"));
+}
+
 function createButton(): HTMLButtonElement {
   return screen.getByRole("button", { name: "Create" });
 }
@@ -144,20 +149,56 @@ describe("CreateAgentForm", () => {
       expect(createButton().disabled).toBe(true);
     });
 
-    it("names the agent in the instruction's label, its hint and the folder it is saved in as the name is typed", () => {
+    it(`names the agent in the instruction's label, its hint and the folder it is saved in once the name field is left, not while it is typed (${ISSUE})`, () => {
       renderForm();
 
       type("Name", "Kai");
+      expect(screen.getByLabelText("What it handles")).not.toBeNull();
+      expect(screen.getByText(/It reads this at the start of every chat\./)).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
 
+      fireEvent.blur(screen.getByLabelText("Name"));
       expect(screen.getByLabelText("What Kai handles")).not.toBeNull();
       expect(screen.getByText(/Kai reads this at the start of every chat\./)).not.toBeNull();
       expect(screen.getByText("Saved in copilot/agents/kai/")).not.toBeNull();
+
+      type("Name", "Kaia");
+      expect(screen.getByLabelText("What Kai handles")).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/agents/kai/")).not.toBeNull();
+    });
+
+    it(`says a taken name and updates Create on every key, before the name field is left (${ISSUE})`, async () => {
+      renderForm();
+      type("What it handles", "You handle marketing.");
+
+      type("Name", "leo");
+      expect(screen.getByRole("alert").textContent).toBe(
+        "Leo is already on your team. Pick another name."
+      );
+      expect(createButton().disabled).toBe(true);
+      expect(await createButtonHint()).toBe("Leo is already on your team. Pick another name.");
+
+      type("Name", "leon");
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(createButton().disabled).toBe(false);
+    });
+
+    it(`creates the agent with the name in the field even when the field was never left (${ISSUE})`, async () => {
+      const { onCreate } = renderForm();
+      type("What it handles", "You handle marketing.");
+      type("Name", "Kai");
+
+      fireEvent.click(createButton());
+
+      await waitFor(() =>
+        expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ name: "Kai" }))
+      );
     });
 
     it("creates the agent from the trimmed name and title, the instruction and the default model", async () => {
       const { onCreate } = renderForm();
 
-      type("Name", "  Kai ");
+      enterName("  Kai ");
       type(/Title/, " Writes launch posts ");
       type("What Kai handles", "You handle marketing.\n");
       fireEvent.click(createButton());
@@ -175,7 +216,7 @@ describe("CreateAgentForm", () => {
 
     it("creates the agent on the model and effort picked from the model list", async () => {
       const { onCreate } = renderForm();
-      type("Name", "Kai");
+      enterName("Kai");
       type("What Kai handles", "You handle marketing.");
 
       fireEvent.click(screen.getByTitle("Model · effort"));
@@ -191,7 +232,7 @@ describe("CreateAgentForm", () => {
     it("creates the agent with an uploaded image as its face, shown in place of the empty face", async () => {
       const { onCreate } = renderForm();
       const photo = new File(["png bytes"], "kai.png", { type: "image/png" });
-      type("Name", "Kai");
+      enterName("Kai");
       type("What Kai handles", "You handle marketing.");
 
       fireEvent.click(screen.getByRole("button", { name: "Change face" }));
@@ -212,7 +253,7 @@ describe("CreateAgentForm", () => {
 
     it(`opens on the first preset face no other agent wears and creates the agent with its bytes (${ISSUE})`, async () => {
       const { onCreate } = renderForm({ presetFaces: presetsWithLeoUsed });
-      type("Name", "Kai");
+      enterName("Kai");
       type("What Kai handles", "You handle marketing.");
 
       expect(faceShown()).toBe("data:image/webp;base64,a2Fp");
@@ -225,7 +266,7 @@ describe("CreateAgentForm", () => {
 
     it("creates the agent with the preset face picked from the grid", async () => {
       const { onCreate } = renderForm({ presetFaces: presetsWithLeoUsed });
-      type("Name", "Kai");
+      enterName("Kai");
       type("What Kai handles", "You handle marketing.");
 
       fireEvent.click(screen.getByRole("button", { name: "Change face" }));
@@ -256,7 +297,7 @@ describe("CreateAgentForm", () => {
     it(`says a name is already on the team whatever its case, names no folder for it, and keeps Create unavailable (${ISSUE})`, async () => {
       renderForm();
 
-      type("Name", "leo");
+      enterName("leo");
       type("What leo handles", "You handle marketing.");
 
       expect(screen.getByRole("alert").textContent).toBe(
@@ -285,7 +326,7 @@ describe("CreateAgentForm", () => {
       async ({ props, name, message }) => {
         renderForm(props);
 
-        type("Name", name);
+        enterName(name);
         type(`What ${name} handles`, "You handle marketing.");
 
         expect(screen.getByRole("alert").textContent).toBe(message);
@@ -307,7 +348,7 @@ describe("CreateAgentForm", () => {
 
     it(`says why the instruction is needed once the user leaves it empty, not before, and Create says to write it first (${ISSUE})`, async () => {
       renderForm();
-      type("Name", "Kai");
+      enterName("Kai");
       expect(screen.queryByRole("alert")).toBeNull();
 
       fireEvent.blur(screen.getByLabelText("What Kai handles"));
@@ -320,7 +361,7 @@ describe("CreateAgentForm", () => {
 
     it(`counts the instruction's characters and turns the count orange past 4,000 without blocking Create (${ISSUE})`, () => {
       renderForm();
-      type("Name", "Kai");
+      enterName("Kai");
 
       type("What Kai handles", "x".repeat(4000));
       expect(screen.getByText("4,000 / 4,000").className).toContain("tw-text-faint");
@@ -333,7 +374,7 @@ describe("CreateAgentForm", () => {
     it(`keeps everything typed and says why when creating the agent fails (${ISSUE})`, async () => {
       const onCreate = jest.fn().mockRejectedValue(new Error("Custom agents are not available."));
       renderForm({ onCreate });
-      type("Name", "Kai");
+      enterName("Kai");
       type("What Kai handles", "You handle marketing.");
 
       fireEvent.click(createButton());
@@ -398,7 +439,7 @@ describe("CreateAgentForm", () => {
       expect(closeGuard).toMatchObject({ hasInput: true, name: "Coco" });
     });
 
-    it("starts from the values it is given", () => {
+    it(`starts from the values it is given, with the given name in the instruction's label, its hint and the folder at once (${ISSUE})`, () => {
       renderForm({
         initialValues: {
           name: "Nora",
@@ -412,6 +453,8 @@ describe("CreateAgentForm", () => {
       expect(screen.getByLabelText<HTMLInputElement>("What Nora handles").value).toBe(
         "You plan pickups."
       );
+      expect(screen.getByText(/Nora reads this at the start of every chat\./)).not.toBeNull();
+      expect(screen.getByText("Saved in copilot/agents/nora/")).not.toBeNull();
       expect(createButton().disabled).toBe(false);
     });
 
