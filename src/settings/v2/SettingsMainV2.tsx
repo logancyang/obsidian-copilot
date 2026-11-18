@@ -105,7 +105,6 @@ const SettingsContent: React.FC = () => {
               : tab.id === "connectors" && connectorsNeedAttention
                 ? "You have connectors that need your attention"
                 : undefined,
-          warningTone: tab.id === "connectors" ? "error" : "warning",
         }))}
         selectedId={selectedTab}
         onSelect={setSelectedTab}

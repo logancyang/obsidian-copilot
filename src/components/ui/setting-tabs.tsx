@@ -15,7 +15,6 @@ export interface TabItem {
   label: string;
   id: string;
   warningLabel?: string;
-  warningTone?: "warning" | "error";
 }
 
 export type TabVariant = "page" | "inline";
@@ -105,11 +104,7 @@ const WarningDot: React.FC<{ tab: TabItem; className?: string }> = ({ tab, class
   <span
     aria-hidden="true"
     title={tab.warningLabel}
-    className={cn(
-      "tw-size-1.5 tw-shrink-0 tw-rounded-full",
-      tab.warningTone === "error" ? "tw-bg-modifier-error" : "tw-bg-warning",
-      className
-    )}
+    className={cn("tw-size-1.5 tw-shrink-0 tw-rounded-full tw-bg-warning", className)}
   />
 );
 
@@ -228,9 +223,7 @@ function TabOverflowMenu<Id extends string>({
   onSelect,
 }: TabOverflowMenuProps<Id>): JSX.Element {
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/166 A warning on a tab hidden in the menu must stay visible from every settings section.
-  const flaggedTab =
-    tabs.find((tab) => tab.warningLabel && tab.warningTone === "error") ??
-    tabs.find((tab) => tab.warningLabel);
+  const flaggedTab = tabs.find((tab) => tab.warningLabel);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
