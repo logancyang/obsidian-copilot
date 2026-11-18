@@ -1,4 +1,15 @@
-import { deleteAgentWithChats, listAgentChats } from "@/agents/agentMode/agentChats";
+import {
+  agentBackend,
+  agentSetupProblem,
+  agentSetupReason,
+  deleteAgentWithChats,
+  listAgentChats,
+} from "@/agents/agentMode/agentChats";
+import { AgentUnavailableError } from "@/agents/agentUnavailableError";
+import { ClaudeBackendDescriptor } from "@/agentMode/backends/claude/descriptor";
+import { CodexBackendDescriptor } from "@/agentMode/backends/codex/descriptor";
+import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descriptor";
+import type { EnabledModelEntry, InstallState } from "@/agentMode/session/types";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { getFrontMatterInfo, parseYaml, TFile, type App } from "obsidian";
@@ -12,6 +23,29 @@ import type { ProjectFileRecord } from "@/projects/type";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 const STOP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
+const READY: InstallState = { kind: "ready", source: "managed" };
+const ABSENT: InstallState = { kind: "absent" };
+
+function enabled(baseModelId: string, credentialState: "ok" | "missing_key" = "ok") {
+  return { baseModelId, name: baseModelId, credentialState } as EnabledModelEntry;
+}
+
+function setUpDevice(installed: { opencode: InstallState; claude: InstallState }) {
+  jest
+    .spyOn(OpencodeBackendDescriptor, "getEnabledModelEntries")
+    .mockReturnValue([enabled("opencode/big-pickle"), enabled("gpt-byok", "missing_key")]);
+  jest.spyOn(ClaudeBackendDescriptor, "getEnabledModelEntries").mockReturnValue([enabled("haiku")]);
+  jest.spyOn(CodexBackendDescriptor, "getEnabledModelEntries").mockReturnValue([]);
+  jest.spyOn(OpencodeBackendDescriptor, "getInstallState").mockReturnValue(installed.opencode);
+  jest.spyOn(ClaudeBackendDescriptor, "getInstallState").mockReturnValue(installed.claude);
+  jest.spyOn(CodexBackendDescriptor, "getInstallState").mockReturnValue(ABSENT);
+}
+
+function withDefaultBackend(activeBackend: string) {
+  setSettings({ agentMode: { ...getSettings().agentMode, activeBackend } });
+  return getSettings();
+}
 
 function chat(id: string, agent?: string): ChatHistoryItem {
   return { id, title: id, agent, createdAt: new Date(0), lastAccessedAt: new Date(0) };
@@ -30,7 +64,113 @@ function fakeManager(chatsByScope: Record<string, ChatHistoryItem[]>) {
 }
 
 describe("agentChats", () => {
-  afterEach(() => updateCachedProjectRecords([]));
+  afterEach(() => {
+    updateCachedProjectRecords([]);
+    jest.restoreAllMocks();
+  });
+
+  describe("agentSetupProblem()", () => {
+    beforeEach(() => resetSettings());
+
+    it(`finds nothing wrong with an agent whose model is enabled for a coding agent that is set up here (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: READY, claude: READY });
+
+      expect(
+        agentSetupProblem(getSettings(), { baseModelId: "opencode/big-pickle", effort: null })
+      ).toBeNull();
+    });
+
+    it(`names the coding agent when the model's coding agent isn't set up on this device (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: ABSENT, claude: READY });
+
+      expect(
+        agentSetupProblem(getSettings(), { baseModelId: "opencode/big-pickle", effort: null })
+      ).toEqual({ kind: "coding_agent", backendId: "opencode" });
+    });
+
+    it(`names the model when no coding agent here has it enabled, or its coding agent can't use it yet (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: READY, claude: READY });
+
+      expect(agentSetupProblem(getSettings(), { baseModelId: "gpt-6", effort: null })).toEqual({
+        kind: "model",
+        baseModelId: "gpt-6",
+      });
+      expect(agentSetupProblem(getSettings(), { baseModelId: "gpt-byok", effort: null })).toEqual({
+        kind: "model",
+        baseModelId: "gpt-byok",
+      });
+    });
+
+    it(`checks an agent saved without a model against the vault's default coding agent (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: ABSENT, claude: READY });
+
+      expect(agentSetupProblem(withDefaultBackend("claude"), null)).toBeNull();
+      expect(agentSetupProblem(withDefaultBackend("opencode"), null)).toEqual({
+        kind: "coding_agent",
+        backendId: "opencode",
+      });
+    });
+
+    it(`reads the coding agent's install state from the caller when given, as a view subscribed to it does (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: READY, claude: READY });
+
+      expect(
+        agentSetupProblem(getSettings(), { baseModelId: "haiku", effort: null }, () => ABSENT)
+      ).toEqual({ kind: "coding_agent", backendId: "claude" });
+      expect(
+        agentSetupProblem(getSettings(), { baseModelId: "haiku", effort: null }, () => ({
+          kind: "checking",
+          source: "custom",
+        }))
+      ).toBeNull();
+    });
+  });
+
+  describe("agentSetupReason()", () => {
+    it(`says in plain words which coding agent or model can't run here (${SETUP_ISSUE})`, () => {
+      expect(agentSetupReason("Leo", { kind: "coding_agent", backendId: "opencode" })).toBe(
+        "Leo runs on OpenCode, which isn't set up on this device."
+      );
+      expect(agentSetupReason("Leo", { kind: "model", baseModelId: "opencode/big-pickle" })).toBe(
+        "Leo's model, big-pickle, isn't available on this device anymore."
+      );
+    });
+  });
+
+  describe("agentBackend()", () => {
+    beforeEach(() => resetSettings());
+
+    function managerSeeding() {
+      return {
+        getSeedSelection: jest.fn((_backendId: string, preferred: unknown) => preferred),
+      } as unknown as AgentSessionManager;
+    }
+
+    it("picks the coding agent that runs the agent's model, seeded with that model", () => {
+      setUpDevice({ opencode: READY, claude: READY });
+      const model = { baseModelId: "haiku", effort: "low" };
+
+      expect(agentBackend(managerSeeding(), { name: "Leo", model })).toEqual({
+        backendId: "claude",
+        seed: model,
+      });
+    });
+
+    it(`refuses an agent whose model can't run here with the reason, instead of starting it on another coding agent or model (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: ABSENT, claude: READY });
+      const manager = managerSeeding();
+
+      const start = () =>
+        agentBackend(manager, {
+          name: "Leo",
+          model: { baseModelId: "opencode/big-pickle", effort: null },
+        });
+
+      expect(start).toThrow(AgentUnavailableError);
+      expect(start).toThrow("Leo runs on OpenCode, which isn't set up on this device.");
+      expect(manager.getSeedSelection).not.toHaveBeenCalled();
+    });
+  });
 
   describe("listAgentChats()", () => {
     it("lists every chat recorded with the agent's slug, archived ones included", async () => {
@@ -220,6 +360,19 @@ describe("agentChats", () => {
       expect(steps[0]).toBe("new chat in place of host");
     });
 
+    it(`still deletes the agent and its chats when the vault's default coding agent can't start the new chat (${SETUP_ISSUE})`, async () => {
+      const { vault, remove, manager, hiddenChats } = await setup();
+      jest
+        .mocked(manager.startNewChatInPlace)
+        .mockRejectedValueOnce(new Error("OpenCode isn't installed"));
+
+      const result = await remove();
+
+      expect(result).toEqual({ deletedChats: 2, failedChats: 0, agentDeleted: true });
+      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
+      expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
+    });
+
     it("leaves the new chat page the profile covers in place", async () => {
       const { steps, remove } = await setup({ host: { agentSlug: "coco", hasMessages: false } });
 
@@ -264,13 +417,6 @@ describe("agentChats", () => {
       const kept = await setup({ failingChat: "coco-1.md" });
       await kept.remove();
       expect(kept.hiddenChats.stopAgent).not.toHaveBeenCalled();
-
-      const noNewChat = await setup();
-      (noNewChat.manager.startNewChatInPlace as jest.Mock).mockRejectedValueOnce(
-        new Error("OpenCode isn't installed")
-      );
-      await expect(noNewChat.remove()).rejects.toThrow("OpenCode isn't installed");
-      expect(noNewChat.hiddenChats.stopAgent).not.toHaveBeenCalled();
     });
 
     it(`deletes nothing when the agent's folder is already gone at confirm (${ISSUE})`, async () => {

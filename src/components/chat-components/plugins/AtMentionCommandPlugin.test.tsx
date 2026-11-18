@@ -14,6 +14,7 @@ import React from "react";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const MENTION_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
 const mockEditorUpdate = jest.fn((change: () => void) => change());
 jest.mock("@lexical/react/LexicalComposerContext", () => ({
@@ -155,6 +156,25 @@ describe("AtMentionCommandPlugin", () => {
         title: "Maya",
         data: "maya",
       });
+    });
+
+    it(`greys an agent whose model can't run on this device and opens its profile with nothing inserted when it is chosen (${SETUP_ISSUE})`, () => {
+      const openProfile = jest.fn();
+      render(
+        <ChatAgentsContext.Provider
+          value={{ agents: THREE_AGENTS, self: null, needsSetup: new Set([LEO.slug]), openProfile }}
+        >
+          <AtMentionCommandPlugin />
+        </ChatAgentsContext.Provider>
+      );
+
+      expect(option(LEO.name).lockedNote).toBe("Needs setup");
+      expect(option(MAYA.name).lockedNote).toBeUndefined();
+      act(() => mockTypeahead?.onSelect(option(LEO.name)));
+
+      expect(mockCloseMenu).toHaveBeenCalledTimes(1);
+      expect(openProfile).toHaveBeenCalledWith(LEO.slug);
+      expect($replaceTriggeredTextWithPill).not.toHaveBeenCalled();
     });
 
     it(`opens the upsell from Ask an agent and puts nothing in the message (${LOCKED_ISSUE})`, () => {

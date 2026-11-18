@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile } from "obsidian";
 import { useApp } from "@/context";
@@ -16,7 +16,7 @@ import {
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 import { agentMentionOptions } from "@/agents/ui/agentMentionOptions";
-import { useMentionableAgents } from "@/agents/ui/chatAgents";
+import { ChatAgentsContext, useMentionableAgents } from "@/agents/ui/chatAgents";
 import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 
 interface AtMentionCommandPluginProps {
@@ -88,6 +88,7 @@ export function AtMentionCommandPlugin({
     currentActiveFile
   );
   const mentionableAgents = useMentionableAgents();
+  const { needsSetup, openProfile } = useContext(ChatAgentsContext);
   // Agents lead the menu's first level, above notes and the other context, and are not a category of their own.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/947
   const searchResults = useMemo(
@@ -95,12 +96,25 @@ export function AtMentionCommandPlugin({
       extendedState.mode === "category"
         ? [
             ...(lockedAgentMention
-              ? agentMentionOptions(lockedAgentMention.agents, currentQuery, true)
-              : agentMentionOptions(mentionableAgents, currentQuery)),
+              ? agentMentionOptions(
+                  lockedAgentMention.agents,
+                  currentQuery,
+                  () => "Supporter preview"
+                )
+              : agentMentionOptions(mentionableAgents, currentQuery, (agent) =>
+                  needsSetup?.has(agent.slug) ? "Needs setup" : undefined
+                )),
             ...contextResults,
           ]
         : contextResults,
-    [extendedState.mode, lockedAgentMention, mentionableAgents, currentQuery, contextResults]
+    [
+      extendedState.mode,
+      lockedAgentMention,
+      mentionableAgents,
+      needsSetup,
+      currentQuery,
+      contextResults,
+    ]
   );
 
   const isAtMentionOption = useCallback(
@@ -125,6 +139,13 @@ export function AtMentionCommandPlugin({
       if (lockedAgentMention && option.lockedNote) {
         closeMenuRef.current();
         lockedAgentMention.choose();
+        return;
+      }
+      // An agent whose model can't run on this device opens its profile, which says why and what to fix, instead of joining the message.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+      if (option.lockedNote && option.category === "customAgent" && isAtMentionOption(option)) {
+        closeMenuRef.current();
+        openProfile?.(option.data as string);
         return;
       }
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
@@ -156,6 +177,7 @@ export function AtMentionCommandPlugin({
     },
     [
       lockedAgentMention,
+      openProfile,
       extendedState.mode,
       currentQuery,
       isCategoryOption,

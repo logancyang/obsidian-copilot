@@ -18,6 +18,7 @@ jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError:
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const PROFILE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
 function agent(slug: string, name: string): CustomAgent {
   return {
@@ -39,13 +40,17 @@ const NEW_CHAT: AgentHomeChat = {
   isLanding: true,
 };
 
+const ALL_RUN_HERE: ReadonlySet<string> = new Set();
+
 function renderSelection(
   store: CustomAgentStore,
   chat: AgentHomeChat = NEW_CHAT,
-  switchAgent: (agent: CustomAgent | null) => Promise<void> = jest.fn(() => new Promise(() => {}))
+  switchAgent: (agent: CustomAgent | null) => Promise<void> = jest.fn(() => new Promise(() => {})),
+  needsSetup: ReadonlySet<string> = ALL_RUN_HERE
 ) {
   const hook = renderHook(
-    ({ current }: { current: AgentHomeChat }) => useAgentHomeSelection(store, current, switchAgent),
+    (props: { current: AgentHomeChat; needsSetup?: ReadonlySet<string> }) =>
+      useAgentHomeSelection(store, props.current, switchAgent, props.needsSetup ?? needsSetup),
     { initialProps: { current: chat } }
   );
   return { ...hook, switchAgent };
@@ -148,6 +153,31 @@ describe("useAgentHomeSelection", () => {
       setCustomAgentsLaunched(true);
       await act(() => setCustomAgentsAccess("free"));
       rerender({ current: { ...NEW_CHAT, agentSlug: "maya" } });
+
+      expect(switchAgent).toHaveBeenLastCalledWith(null);
+    });
+
+    it(`keeps Copilot on a new chat instead of the last chat's agent when that agent's model can't run on this device (${SETUP_ISSUE})`, () => {
+      rememberLastAgent("maya");
+      const { store } = fakeAgentStore([COCO, MAYA]);
+      const { result, switchAgent } = renderSelection(
+        store,
+        NEW_CHAT,
+        undefined,
+        new Set(["maya"])
+      );
+
+      expect(switchAgent).not.toHaveBeenCalled();
+      expect(result.current.selected).toBeNull();
+    });
+
+    it(`moves a new chat on an agent back to Copilot once that agent's model can't run on this device (${SETUP_ISSUE})`, () => {
+      const { store } = fakeAgentStore([COCO, MAYA]);
+      const chat = { ...NEW_CHAT, agentSlug: "maya" };
+      const { rerender, switchAgent } = renderSelection(store, chat);
+      expect(switchAgent).not.toHaveBeenCalled();
+
+      rerender({ current: chat, needsSetup: new Set(["maya"]) });
 
       expect(switchAgent).toHaveBeenLastCalledWith(null);
     });

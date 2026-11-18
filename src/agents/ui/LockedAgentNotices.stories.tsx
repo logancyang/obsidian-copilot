@@ -14,3 +14,13 @@ export const ReadOnlyAfterLicenseLapsed: StoryObj<LockedAgentChatProps> = {};
 export const ReadOnlyOnDeviceWithoutLicense: StoryObj<LockedAgentChatProps> = {
   args: { lapsed: false },
 };
+
+export const ReadOnlyWhileModelCantRunHere: StoryObj<LockedAgentChatProps> = {
+  args: {
+    lapsed: false,
+    setup: {
+      reason: "Coco runs on OpenCode, which isn't set up on this device.",
+      onOpenProfile: () => {},
+    },
+  },
+};

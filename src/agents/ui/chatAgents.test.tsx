@@ -40,9 +40,23 @@ describe("chatAgents", () => {
       const { store } = fakeAgentStore(THREE_AGENTS);
       const openRun = jest.fn();
 
-      const { result } = renderHook(() => useChatAgentsValue(store, "coco", openRun));
+      const { result } = renderHook(() => useChatAgentsValue(store, "coco", { openRun }));
 
       expect(result.current.openRun).toBe(openRun);
+    });
+
+    it("carries which agents can't run on this device and how to open an agent's profile, for the @ menu (https://github.com/Brevilabs/obsidian-copilot-private/issues/962)", async () => {
+      await setCustomAgentsAccess("team");
+      const { store } = fakeAgentStore(THREE_AGENTS);
+      const needsSetup = new Set(["leo"]);
+      const openProfile = jest.fn();
+
+      const { result } = renderHook(() =>
+        useChatAgentsValue(store, null, { needsSetup, openProfile })
+      );
+
+      expect(result.current.needsSetup).toBe(needsSetup);
+      expect(result.current.openProfile).toBe(openProfile);
     });
 
     it(`carries no agents without a license that includes custom agents, so the chat shows none of them (${ISSUE})`, async () => {

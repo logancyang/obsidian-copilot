@@ -8,18 +8,21 @@ import React from "react";
 export function agentMentionOptions(
   agents: readonly CustomAgent[],
   query: string,
-  locked = false
+  lockedNote: (agent: CustomAgent) => string | undefined = () => undefined
 ): AtMentionOption[] {
   const wanted = query.trim().toLowerCase();
   return agents
     .filter((agent) => agent.name.toLowerCase().includes(wanted))
-    .map((agent) => ({
-      key: `custom-agent-${agent.slug}`,
-      title: agent.name,
-      subtitle: agentTitle(agent) || undefined,
-      category: "customAgent",
-      data: agent.slug,
-      icon: <AgentFace src={agent.faceSrc} size="xs" className={cn(locked && LOCKED_FACE_CLASS)} />,
-      ...(locked ? { lockedNote: "Supporter preview" } : {}),
-    }));
+    .map((agent) => {
+      const note = lockedNote(agent);
+      return {
+        key: `custom-agent-${agent.slug}`,
+        title: agent.name,
+        subtitle: agentTitle(agent) || undefined,
+        category: "customAgent",
+        data: agent.slug,
+        icon: <AgentFace src={agent.faceSrc} size="xs" className={cn(note && LOCKED_FACE_CLASS)} />,
+        ...(note ? { lockedNote: note } : {}),
+      };
+    });
 }

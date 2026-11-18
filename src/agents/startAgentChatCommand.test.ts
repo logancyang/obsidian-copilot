@@ -1,3 +1,4 @@
+import { AgentUnavailableError } from "@/agents/agentUnavailableError";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import {
   registerStartAgentChatCommand,
@@ -119,6 +120,24 @@ describe("startAgentChatCommand", () => {
         failure
       );
       expect(Notice).toHaveBeenCalledWith("Could not start the chat. Check the Copilot log.");
+    });
+
+    it("tells the user why when the agent's model can't run on this device, for https://github.com/Brevilabs/obsidian-copilot-private/issues/962", async () => {
+      await setCustomAgentsAccess("team");
+      const { plugin, commands } = buildPlugin();
+      const reason = "Coco runs on OpenCode, which isn't set up on this device.";
+      let failed!: () => void;
+      const reported = new Promise<void>((resolve) => (failed = resolve));
+      jest.mocked(logError).mockImplementationOnce(() => failed());
+
+      const dispose = registerStartAgentChatCommand(plugin, store, async () => {
+        throw new AgentUnavailableError(reason);
+      });
+      pickAgentFromPalette(commands, COCO);
+      await reported;
+      dispose();
+
+      expect(Notice).toHaveBeenCalledWith(reason);
     });
   });
 });

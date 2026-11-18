@@ -33,12 +33,20 @@ describe("agentMentionOptions", () => {
       expect(option.subtitle).toBeUndefined();
     });
     it(`marks each agent locked, with a greyed face, while custom agents are locked (${LOCKED_ISSUE})`, () => {
-      const [option] = agentMentionOptions([MAYA], "", true);
+      const [option] = agentMentionOptions([MAYA], "", () => "Supporter preview");
 
       expect(option).toMatchObject({ title: "Maya", lockedNote: "Supporter preview" });
       const { container } = render(<>{option.icon}</>);
       expect(container.querySelector("img")?.className).toContain("tw-grayscale");
       expect(agentMentionOptions([MAYA], "")[0].lockedNote).toBeUndefined();
+    });
+
+    it("locks only the agents its note names, as an agent whose model can't run on this device, for https://github.com/Brevilabs/obsidian-copilot-private/issues/962", () => {
+      const options = agentMentionOptions([MAYA, LEO], "", (agent) =>
+        agent.slug === LEO.slug ? "Needs setup" : undefined
+      );
+
+      expect(options.map((option) => option.lockedNote)).toEqual([undefined, "Needs setup"]);
     });
   });
 });

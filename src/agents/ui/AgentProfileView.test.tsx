@@ -7,11 +7,13 @@ import {
   type AgentProfileFacts,
   type AgentProfileViewProps,
 } from "@/agents/ui/AgentProfileView";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
 const NOW = new Date(2026, 10, 16, 15, 20).getTime();
 
@@ -81,25 +83,27 @@ function renderProfile(props: Partial<AgentProfileViewProps> = {}) {
     onDelete: jest.fn(),
   };
   render(
-    <AgentProfileView
-      agent={agent()}
-      facts={FACTS}
-      now={NOW}
-      otherAgents={[agent(), agent({ slug: "maya", name: "Maya" })]}
-      models={MODELS}
-      renderFacePicker={(onPick) => (
-        <AgentFacePicker
-          presets={{
-            status: "ready",
-            faces: [{ id: "leo", alt: "Leo's face", bytes: PRESET_BYTES, src: "face:leo" }],
-            usedIds: new Set(),
-          }}
-          onPick={onPick}
-        />
-      )}
-      {...handlers}
-      {...props}
-    />
+    <TooltipProvider>
+      <AgentProfileView
+        agent={agent()}
+        facts={FACTS}
+        now={NOW}
+        otherAgents={[agent(), agent({ slug: "maya", name: "Maya" })]}
+        models={MODELS}
+        renderFacePicker={(onPick) => (
+          <AgentFacePicker
+            presets={{
+              status: "ready",
+              faces: [{ id: "leo", alt: "Leo's face", bytes: PRESET_BYTES, src: "face:leo" }],
+              usedIds: new Set(),
+            }}
+            onPick={onPick}
+          />
+        )}
+        {...handlers}
+        {...props}
+      />
+    </TooltipProvider>
   );
   return handlers;
 }
@@ -519,6 +523,41 @@ describe("AgentProfileView", () => {
       ).not.toBeNull();
       expect(screen.getByText("Locked until you enter a Supporter license key")).not.toBeNull();
       expect(screen.getByRole("button", { name: "Enter license key" })).not.toBeNull();
+    });
+
+    it(`shows a setup-locked agent's reason under the header, marks the Model field with what to do, and turns New chat off with the reason as its tooltip (${SETUP_ISSUE})`, async () => {
+      const reason = "Coco runs on OpenCode, which isn't set up on this device.";
+      const open = jest.fn();
+      const { onNewChat } = renderProfile({
+        setupLocked: { reason, setUp: { label: "Set up OpenCode", open } },
+      });
+
+      expect(screen.getByText(reason)).not.toBeNull();
+      expect(screen.getByRole("alert").textContent).toBe("Pick a model that runs on this device.");
+      expect(screen.getByTitle("Model · effort").hasAttribute("disabled")).toBe(false);
+      expect(screen.getByRole("button", { name: "Rename Coco" })).not.toBeNull();
+      const newChat = screen.getByRole("button", { name: "New chat with Coco" });
+      expect(newChat.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(newChat);
+      fireEvent.click(screen.getByRole("button", { name: "Set up OpenCode" }));
+      fireEvent.focus(newChat);
+
+      expect(onNewChat).not.toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect((await screen.findByRole("tooltip")).textContent).toBe(reason);
+    });
+
+    it(`shows the license banner, not the setup reason, when both lock the agent (${SETUP_ISSUE})`, () => {
+      renderProfile({
+        locked: { lapsed: true, onUnlock: jest.fn() },
+        setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device anymore." },
+      });
+
+      expect(
+        screen.getByText("Your Supporter plan ended. Coco can't chat until you renew.")
+      ).not.toBeNull();
+      expect(screen.queryByText(/isn't available on this device/)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
     });
   });
 

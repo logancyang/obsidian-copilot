@@ -1,6 +1,8 @@
 import {
+  agentSetupReason,
   deleteAgentWithChats,
   listAgentChats,
+  type AgentSetupProblem,
   type DeleteAgentResult,
 } from "@/agents/agentMode/agentChats";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
@@ -16,7 +18,9 @@ import { unlockCustomAgents } from "@/agents/ui/LockedAgentNotices";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { usePresetFaces } from "@/agents/ui/usePresetFaces";
+import { backendRegistry } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { BackendId } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { Notice, type App } from "obsidian";
@@ -32,6 +36,8 @@ export interface AgentProfileProps {
   getModels: () => AgentModelChoices;
   onBack: () => void;
   onNewChat: (agent: CustomAgent) => void;
+  setupProblem?: AgentSetupProblem;
+  onSetUp: (backendId: BackendId) => void;
 }
 
 export function agentDeleteNotice(
@@ -61,6 +67,8 @@ export function AgentProfile({
   getModels,
   onBack,
   onNewChat,
+  setupProblem,
+  onSetUp,
 }: AgentProfileProps) {
   const facts = useAgentProfileFacts(app, manager, agent);
   const agents = useCustomAgents(store);
@@ -130,6 +138,18 @@ export function AgentProfile({
         locked
           ? { lapsed, onUnlock: (ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow) }
           : undefined
+      }
+      setupLocked={
+        setupProblem && {
+          reason: agentSetupReason(name, setupProblem),
+          setUp:
+            setupProblem.kind === "coding_agent"
+              ? {
+                  label: `Set up ${backendRegistry[setupProblem.backendId].displayName}`,
+                  open: () => onSetUp(setupProblem.backendId),
+                }
+              : undefined,
+        }
       }
     />
   );

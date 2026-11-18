@@ -1,3 +1,4 @@
+import type { AgentSetupProblem } from "@/agents/agentMode/agentChats";
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProfile";
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
@@ -9,6 +10,8 @@ import { webpBytes } from "@/agents/testing/webpBytes";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { BackendId } from "@/agentMode/session/types";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -23,6 +26,7 @@ jest.mock("@/agents/ui/AgentDeleteModal", () => ({
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
 const setRequestUrlImpl = (
   obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }
@@ -65,7 +69,12 @@ function seed(vault: FakeAgentVault, slug: string, name: string, title = "") {
 interface ProfileHarnessProps {
   store: CustomAgentStore;
   app: App;
-  handlers: { onBack: () => void; onNewChat: (agent: CustomAgent) => void };
+  handlers: {
+    onBack: () => void;
+    onNewChat: (agent: CustomAgent) => void;
+    onSetUp: (backendId: BackendId) => void;
+  };
+  setupProblem?: AgentSetupProblem;
 }
 
 const deletedChats = jest.fn(async (_id: string, _options?: unknown) => {});
@@ -74,7 +83,7 @@ const hiddenChats = {
   stopAgent: jest.fn((_slug: string) => {}),
 } as unknown as HiddenAgentChats;
 
-function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
+function ProfileHarness({ store, app, handlers, setupProblem }: ProfileHarnessProps) {
   const coco = useCustomAgents(store).find((agent) => agent.slug === "coco");
   const manager = {
     getChatHistoryItems: async () => [
@@ -94,12 +103,13 @@ function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
       hiddenChats={hiddenChats}
       hostSessionId="host"
       getModels={() => MODELS}
+      setupProblem={setupProblem}
       {...handlers}
     />
   );
 }
 
-async function setup() {
+async function setup(setupProblem?: AgentSetupProblem) {
   await setCustomAgentsAccess("team");
   const vault = createFakeAgentVault();
   seed(vault, "coco", "Coco", "Keeps the whole vault in view");
@@ -114,8 +124,12 @@ async function setup() {
   } as unknown as App;
   const store = new CustomAgentStore(app);
   await store.start();
-  const handlers = { onBack: jest.fn(), onNewChat: jest.fn() };
-  render(<ProfileHarness store={store} app={app} handlers={handlers} />);
+  const handlers = { onBack: jest.fn(), onNewChat: jest.fn(), onSetUp: jest.fn() };
+  render(
+    <TooltipProvider>
+      <ProfileHarness store={store} app={app} handlers={handlers} setupProblem={setupProblem} />
+    </TooltipProvider>
+  );
   await waitFor(() => expect(screen.getByText(/^1 chat · since /)).not.toBeNull());
   return { vault, app, store, newLeaf, handlers };
 }
@@ -326,6 +340,40 @@ describe("AgentProfile", () => {
         expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
       }
     );
+
+    it(`says why an agent whose coding agent isn't set up here can't chat, offers that coding agent's setup, and keeps New chat unavailable (${SETUP_ISSUE})`, async () => {
+      const { handlers } = await setup({ kind: "coding_agent", backendId: "opencode" });
+
+      expect(
+        screen.getByText("Coco runs on OpenCode, which isn't set up on this device.")
+      ).not.toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Set up OpenCode" }));
+      fireEvent.click(screen.getByRole("button", { name: "New chat with Coco" }));
+
+      expect(handlers.onSetUp).toHaveBeenCalledWith("opencode");
+      expect(handlers.onNewChat).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert").textContent).toBe("Pick a model that runs on this device.");
+    });
+
+    it(`lets a setup-locked agent change its model, rename and change its face like any agent (${SETUP_ISSUE})`, async () => {
+      const { vault } = await setup({ kind: "model", baseModelId: "gpt-6" });
+
+      expect(
+        screen.getByText("Coco's model, gpt-6, isn't available on this device anymore.")
+      ).not.toBeNull();
+      expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Rename Coco" })).not.toBeNull();
+      expect(screen.getByRole("button", { name: "Change Coco's face" })).not.toBeNull();
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      fireEvent.click(await screen.findByRole("option", { name: /Sonnet 5\.5/ }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+
+      await waitFor(() =>
+        expect(vault.readText(`${FOLDER}/instructions.md`)).toContain(
+          '{"baseModelId":"sonnet","effort":null}'
+        )
+      );
+    });
 
     it(`tells the delete dialog which chat the agent is working in when an @ runs it (https://github.com/Brevilabs/obsidian-copilot-private/issues/945)`, async () => {
       await setup();

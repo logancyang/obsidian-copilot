@@ -31,6 +31,7 @@ export interface AgentRosterProps {
   newAgentButton?: React.ReactNode;
   onOpenProfile?: (slug: string) => void;
   locked?: LockedRoster;
+  needsSetup?: Pick<ReadonlySet<string>, "has">;
 }
 
 export interface LockedRoster {
@@ -59,6 +60,7 @@ export function AgentRoster({
   newAgentButton,
   onOpenProfile,
   locked,
+  needsSetup,
 }: AgentRosterProps): React.ReactElement {
   const headingId = useId();
   if (agents.length === 0 && !newAgentButton) return <>{emptyHero}</>;
@@ -68,14 +70,25 @@ export function AgentRoster({
   const select = (slug: string | null) => {
     if (slug !== (selected?.slug ?? null)) onSelect(slug);
   };
+  // An agent whose model can't run on this device is locked too, and its face opens its profile to fix that.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+  const lockOf = (slug: string): AgentLock | undefined =>
+    locked ? "license" : needsSetup?.has(slug) ? "setup" : undefined;
+  const choose = (slug: string) => {
+    const lock = lockOf(slug);
+    if (lock === "license") locked?.onOpen(slug);
+    else if (lock === "setup") onOpenProfile?.(slug);
+    else select(slug);
+  };
   const row = (
     <FaceRow
       agents={agents}
       selected={selected}
       onSelect={select}
+      onChoose={choose}
+      lockOf={lockOf}
       newAgentButton={newAgentButton}
       labelledBy={headingId}
-      onOpenLocked={locked?.onOpen}
     />
   );
 
@@ -189,22 +202,31 @@ function ProfileFaceButton({ agent, onOpen }: ProfileFaceButtonProps) {
   );
 }
 
+type AgentLock = "license" | "setup";
+
+const LOCK_LABEL: Record<AgentLock, string> = {
+  license: "Supporter preview",
+  setup: "Needs setup",
+};
+
 interface FaceRowProps {
   agents: readonly RosterAgent[];
   selected: RosterAgent | null;
   onSelect: (slug: string | null) => void;
+  onChoose: (slug: string) => void;
+  lockOf: (slug: string) => AgentLock | undefined;
   newAgentButton?: React.ReactNode;
   labelledBy: string;
-  onOpenLocked?: (slug: string) => void;
 }
 
 function FaceRow({
   agents,
   selected,
   onSelect,
+  onChoose,
+  lockOf,
   newAgentButton,
   labelledBy,
-  onOpenLocked,
 }: FaceRowProps) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -255,16 +277,12 @@ function FaceRow({
           key={agents[index].slug}
           agent={agents[index]}
           selected={agents[index] === selected}
-          locked={!!onOpenLocked}
-          onSelect={onOpenLocked ?? onSelect}
+          lock={lockOf(agents[index].slug)}
+          onSelect={onChoose}
         />
       ))}
       {overflow.length > 0 && (
-        <MoreAgentsMenu
-          agents={overflow}
-          locked={!!onOpenLocked}
-          onSelect={onOpenLocked ?? onSelect}
-        />
+        <MoreAgentsMenu agents={overflow} lockOf={lockOf} onSelect={onChoose} />
       )}
       {newAgentButton}
     </div>
@@ -305,22 +323,22 @@ RosterCell.displayName = "RosterCell";
 interface AgentCellProps {
   agent: RosterAgent;
   selected: boolean;
-  locked: boolean;
+  lock: AgentLock | undefined;
   onSelect: (slug: string) => void;
 }
 
-function AgentCell({ agent, selected, locked, onSelect }: AgentCellProps) {
+function AgentCell({ agent, selected, lock, onSelect }: AgentCellProps) {
   const title = agentTitle(agent);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <RosterCell
           label={agent.name}
-          aria-label={locked ? `${agent.name} · Supporter preview` : undefined}
-          selected={locked ? undefined : selected}
+          aria-label={lock ? `${agent.name} · ${LOCK_LABEL[lock]}` : undefined}
+          selected={lock ? undefined : selected}
           onClick={() => onSelect(agent.slug)}
         >
-          <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={locked} />
+          <AgentFace src={agent.faceSrc} size="roster" selected={selected} locked={!!lock} />
         </RosterCell>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
@@ -333,11 +351,11 @@ function AgentCell({ agent, selected, locked, onSelect }: AgentCellProps) {
 
 interface MoreAgentsMenuProps {
   agents: readonly RosterAgent[];
-  locked: boolean;
+  lockOf: (slug: string) => AgentLock | undefined;
   onSelect: (slug: string) => void;
 }
 
-function MoreAgentsMenu({ agents, locked, onSelect }: MoreAgentsMenuProps) {
+function MoreAgentsMenu({ agents, lockOf, onSelect }: MoreAgentsMenuProps) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -348,22 +366,25 @@ function MoreAgentsMenu({ agents, locked, onSelect }: MoreAgentsMenuProps) {
         </RosterCell>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="tw-max-h-72 tw-w-56 tw-overflow-y-auto">
-        {agents.map((agent) => (
-          <DropdownMenuItem
-            key={agent.slug}
-            onSelect={() => onSelect(agent.slug)}
-            className="tw-gap-2"
-          >
-            <AgentFace src={agent.faceSrc} size="s" className={cn(locked && LOCKED_FACE_CLASS)} />
-            <span className="tw-min-w-0 tw-shrink tw-truncate tw-text-normal">{agent.name}</span>
-            <span className="tw-ml-auto tw-min-w-0 tw-max-w-[55%] tw-truncate tw-text-ui-smaller tw-text-muted">
-              {agentTitle(agent)}
-            </span>
-            {locked && (
-              <Lock aria-label="Locked" className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-            )}
-          </DropdownMenuItem>
-        ))}
+        {agents.map((agent) => {
+          const locked = !!lockOf(agent.slug);
+          return (
+            <DropdownMenuItem
+              key={agent.slug}
+              onSelect={() => onSelect(agent.slug)}
+              className="tw-gap-2"
+            >
+              <AgentFace src={agent.faceSrc} size="s" className={cn(locked && LOCKED_FACE_CLASS)} />
+              <span className="tw-min-w-0 tw-shrink tw-truncate tw-text-normal">{agent.name}</span>
+              <span className="tw-ml-auto tw-min-w-0 tw-max-w-[55%] tw-truncate tw-text-ui-smaller tw-text-muted">
+                {agentTitle(agent)}
+              </span>
+              {locked && (
+                <Lock aria-label="Locked" className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+              )}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

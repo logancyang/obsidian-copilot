@@ -51,6 +51,7 @@ jest.mock("./backends/shared/builtinSkillEnv", () => ({
 }));
 jest.mock("./backends/registry", () => ({
   backendRegistry: {},
+  getActiveBackendDescriptor: () => mockDescriptors[0],
   listBackendDescriptors: () => mockDescriptors,
   findBackendForModel: (settings: unknown, baseModelId: string) =>
     mockDescriptors.find((descriptor) =>
@@ -899,19 +900,27 @@ describe("agentMode", () => {
         getSeedSelection: jest.fn((_backendId: string, preferred: unknown) => preferred),
         createSession: jest.fn(async () => ({})),
       };
-      mockDescriptors.forEach((descriptor) =>
+      mockDescriptors.forEach((descriptor) => {
+        mockStates[descriptor.id] = { kind: "ready", source: "managed" };
         Object.assign(descriptor, {
-          getEnabledModelEntries: () => [{ baseModelId: `${descriptor.id}-model` }],
-        })
-      );
-      void startCustomAgentChat(manager as unknown as AgentSessionManager, { slug: "coco", model });
-      return manager;
+          getEnabledModelEntries: () => [
+            { baseModelId: `${descriptor.id}-model`, credentialState: "ok" },
+          ],
+        });
+      });
+      const started = startCustomAgentChat(manager as unknown as AgentSessionManager, {
+        slug: "coco",
+        name: "Coco",
+        model,
+      });
+      return { manager, started };
     }
 
-    it("starts the agent's chat as that agent on the backend that runs its model, on that model", () => {
+    it("starts the agent's chat as that agent on the backend that runs its model, on that model", async () => {
       const model = { baseModelId: "opencode-model", effort: null };
 
-      const manager = startWith(model);
+      const { manager, started } = startWith(model);
+      await started;
 
       expect(manager.createSession).toHaveBeenCalledWith(
         "opencode",
@@ -922,24 +931,28 @@ describe("agentMode", () => {
       );
     });
 
-    it.each([
-      ["a model no backend runs", { baseModelId: "gpt-6", effort: null }],
-      ["no model", null],
-    ])(
-      "https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts an agent with %s on the default agent backend and its default model",
-      (_label, model) => {
-        const manager = startWith(model);
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 starts an agent with no model on the default agent backend and its default model", async () => {
+      const { manager, started } = startWith(null);
+      await started;
 
-        expect(manager.getSeedSelection).not.toHaveBeenCalled();
-        expect(manager.createSession).toHaveBeenCalledWith(
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          "coco"
-        );
-      }
-    );
+      expect(manager.getSeedSelection).not.toHaveBeenCalled();
+      expect(manager.createSession).toHaveBeenCalledWith(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "coco"
+      );
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/962 refuses an agent whose model no backend runs here, before any chat opens", async () => {
+      const { manager, started } = startWith({ baseModelId: "gpt-6", effort: null });
+
+      await expect(started).rejects.toThrow(
+        "Coco's model, gpt-6, isn't available on this device anymore."
+      );
+      expect(manager.createSession).not.toHaveBeenCalled();
+    });
   });
 });
 

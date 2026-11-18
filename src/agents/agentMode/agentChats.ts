@@ -1,33 +1,81 @@
 import type { HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
+import { AgentUnavailableError } from "@/agents/agentUnavailableError";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
-import { findBackendForModel } from "@/agentMode/backends/registry";
+import {
+  backendRegistry,
+  findBackendForModel,
+  getActiveBackendDescriptor,
+} from "@/agentMode/backends/registry";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendId, ModelSelection } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  BackendId,
+  InstallState,
+  ModelSelection,
+} from "@/agentMode/session/types";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { deleteChatAndBookmark } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { getCachedProjectRecords } from "@/projects/state";
 import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
-import { getSettings, setSettings } from "@/settings/model";
+import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
 import { TFile, type App } from "obsidian";
+
+export type AgentSetupProblem =
+  | { kind: "coding_agent"; backendId: BackendId }
+  | { kind: "model"; baseModelId: string };
+
+const RUNNABLE_INSTALL_KINDS: ReadonlySet<InstallState["kind"]> = new Set(["ready", "checking"]);
+
+// An agent's files sync between devices while each coding agent and its models are set up per device, so an agent whose model can't run here is locked instead of answering on another model.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+export function agentSetupProblem(
+  settings: CopilotSettings,
+  model: CustomAgent["model"],
+  installStateOf: (backend: BackendDescriptor) => InstallState = (backend) =>
+    backend.getInstallState(settings)
+): AgentSetupProblem | null {
+  const backend = model
+    ? findBackendForModel(settings, model.baseModelId)
+    : getActiveBackendDescriptor(settings);
+  if (!backend) return model ? { kind: "model", baseModelId: model.baseModelId } : null;
+  if (!RUNNABLE_INSTALL_KINDS.has(installStateOf(backend).kind)) {
+    return { kind: "coding_agent", backendId: backend.id };
+  }
+  const runnable = backend
+    .getEnabledModelEntries?.(settings)
+    ?.some((entry) => entry.baseModelId === model?.baseModelId && entry.credentialState === "ok");
+  return model && runnable === false ? { kind: "model", baseModelId: model.baseModelId } : null;
+}
+
+export function agentSetupReason(name: string, problem: AgentSetupProblem): string {
+  if (problem.kind === "coding_agent") {
+    return `${name} runs on ${backendRegistry[problem.backendId].displayName}, which isn't set up on this device.`;
+  }
+  const model = problem.baseModelId.split("/").pop() || problem.baseModelId;
+  return `${name}'s model, ${model}, isn't available on this device anymore.`;
+}
 
 export function agentBackend(
   manager: AgentSessionManager,
-  model: CustomAgent["model"]
+  { name, model }: Pick<CustomAgent, "name" | "model">
 ): { backendId?: BackendId; seed?: ModelSelection } {
-  const backendId = model && findBackendForModel(getSettings(), model.baseModelId)?.id;
+  const settings = getSettings();
+  const problem = agentSetupProblem(settings, model);
+  if (problem) throw new AgentUnavailableError(agentSetupReason(name, problem));
+  const backendId = model && findBackendForModel(settings, model.baseModelId)?.id;
   if (!backendId) return {};
   return { backendId, seed: manager.getSeedSelection(backendId, model) ?? undefined };
 }
 
-export function startCustomAgentChat(
+export async function startCustomAgentChat(
   manager: AgentSessionManager,
-  { slug, model }: Pick<CustomAgent, "slug" | "model">
+  agent: Pick<CustomAgent, "slug" | "name" | "model">
 ): Promise<AgentSession> {
-  const { backendId, seed } = agentBackend(manager, model);
-  return manager.createSession(backendId, undefined, seed, undefined, slug);
+  const { backendId, seed } = agentBackend(manager, agent);
+  return manager.createSession(backendId, undefined, seed, undefined, agent.slug);
 }
 
 export async function listAgentChats(
@@ -94,7 +142,11 @@ export async function deleteAgentWithChats({
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   const host = manager.getSession(hostSessionId);
   if (host?.agentSlug === slug && host.hasUserVisibleMessages()) {
-    await manager.startNewChatInPlace(hostSessionId);
+    // A vault whose default coding agent can't start here still deletes the agent; the tab then closes with the agent's chat.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+    await manager.startNewChatInPlace(hostSessionId).catch((error: unknown) => {
+      logWarn(`[Custom agents] No new chat in place of ${slug}'s chat`, error);
+    });
   }
   const chats = await listAgentChats(manager, slug);
   // A history row can carry the agent from the chat index while its note was moved out of the chats folder, replaced, or no longer names the agent; only the note itself proves it is this agent's chat.

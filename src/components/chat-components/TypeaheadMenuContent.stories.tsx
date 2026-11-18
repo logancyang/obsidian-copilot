@@ -97,7 +97,10 @@ export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProp
 
 export const AgentMentionMenuAfterLicenseLapsed: StoryObj<TypeaheadMenuContentProps> = {
   args: {
-    options: [...agentMentionOptions([COCO, MAYA, LEO, NORA], "", true), ...agentMentionCategories],
+    options: [
+      ...agentMentionOptions([COCO, MAYA, LEO, NORA], "", () => "Supporter preview"),
+      ...agentMentionCategories,
+    ],
     selectedIndex: 0,
     onSelect: () => undefined,
     onHighlight: () => undefined,

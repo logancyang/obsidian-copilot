@@ -22,6 +22,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-stop: telling the chat's agent to stop the other agent, such as "Tell Maya to stop.", stops it at once. Its changes stay, and the chat's agent says how far it got, with a Files changed card for what it changed. Mentioning it again continues the same conversation.
 - mention-delete-while-working: deleting an agent from its profile while it works for another chat stops it. The delete dialog says so in an orange line, such as "Maya is working in Coco's chat. Deleting stops it."; the chat's agent then says how far it got.
 - mention-remember: a standing rule given through a mention, such as `@Maya from now on, flag video length first.`, is saved to the mentioned agent's own memory under the same rules as in its own chat, without a permission card. The relayed turn shows `Maya remembered` or `Maya replaced a rule` with the saved sentence under the `Message from` card, as in her own chat; the row opens her `MEMORY.md` at that rule, and the Files changed card leaves `MEMORY.md` out. The chat's own agent saves nothing for a rule meant for another agent. In `Plan` mode nothing is saved and the reply says so.
+- mention-needs-setup: mentioning an agent whose model can't run on this device starts nothing, and no other model answers as it. The chat's agent says why, such as "Leo runs on OpenCode, which isn't set up on this device", and that another model can be picked in Leo's profile.
 - mention-no-self: an agent never asks itself; its own name is plain text in its chat.
 
 ## How to get to it
@@ -50,6 +51,7 @@ All of these need a license that includes custom agents and at least two agents 
 - Stop: send `@Maya check every claim in <note>, one by one`, then `Tell Maya to stop.` while she works. The chat's agent stops her, then says how far she got; the note keeps any change she made.
 - Delete while working: send `@Maya …` with a long job, open Maya's profile, and choose Delete. The dialog shows `Maya is working in <agent>'s chat. Deleting stops it.` in orange. After Delete, the chat's agent says Maya was deleted and how far she got.
 - Remember: in `Safe` mode, send `@Maya from now on, flag video length first.` No permission card shows; the relayed turn shows `Maya remembered` with the sentence under `Message from Maya`, and her `MEMORY.md` has the rule with a dated context line. The chat agent's own `MEMORY.md` is unchanged. Click the row: Maya's `MEMORY.md` opens at that rule. Reload the plugin and reopen the chat: the row is still there. Send `@Maya actually, flag the budget first instead.`: the row reads `Maya replaced a rule`. In `Plan` mode, send `@Maya from now on, open with the hook.`: nothing is saved and the reply says she can't save a rule in this mode. A new chat with Maya follows the saved rule.
+- Needs setup: take Leo's coding agent off this device, then send `@Leo add up the October books.` from Maya's chat. Maya says Leo can't be asked here and why; no `Messaged Leo` card or reply from Leo follows.
 - Itself: in Maya's own chat, send `@Maya hello`. Maya answers directly.
 
 ## Gotchas
