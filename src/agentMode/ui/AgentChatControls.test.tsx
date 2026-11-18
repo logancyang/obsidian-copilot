@@ -114,7 +114,7 @@ describe("AgentChatControls", () => {
       expect(onCopyChatLink).toHaveBeenCalledTimes(1);
     });
 
-    it("archives the open chat from the More actions menu", () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives the open chat from the More actions menu", () => {
       const onArchiveChat = jest.fn(async () => {});
       renderSessionControls({ onArchiveChat });
 
@@ -123,7 +123,7 @@ describe("AgentChatControls", () => {
       expect(onArchiveChat).toHaveBeenCalledTimes(1);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link, Add to bookmarks, and Archive chat in an empty chat and explains on hover that a message is needed", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 and https://github.com/Brevilabs/obsidian-copilot-private/issues/968 disable Copy chat link, Add to bookmarks, and Archive chat in an empty chat and explains on hover that a message is needed", async () => {
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({ onSetChatBookmarked });
 

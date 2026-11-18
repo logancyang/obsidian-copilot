@@ -701,6 +701,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       return (await manager.saveActiveSession())?.path ?? "";
     });
 
+  // Archiving the open chat moves the tab to a new chat; staying on it would show no change, and the next message would unarchive it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/968
   const handleArchiveChat = async () => {
     await archiveActiveChat();
     handleNewChat();

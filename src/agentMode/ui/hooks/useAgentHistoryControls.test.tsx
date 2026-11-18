@@ -932,7 +932,7 @@ describe("useAgentHistoryControls", () => {
   });
 
   describe("archiveActiveChat()", () => {
-    it("saves the open chat and moves its note's row from the chat list to the archived list", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 saves the open chat and moves its note's row from the chat list to the archived list", async () => {
       const manager = makeManager();
       manager.getChatHistoryItems.mockResolvedValue([item("chats/saved.md"), item("b")]);
       const { result } = renderControls(manager);
@@ -952,7 +952,7 @@ describe("useAgentHistoryControls", () => {
       ]);
     });
 
-    it("archives nothing, shows a notice, and rejects when the open chat cannot be saved", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives nothing, shows a notice, and rejects when the open chat cannot be saved", async () => {
       const manager = makeManager();
       manager.saveActiveSession.mockResolvedValue(null);
       const { result } = renderControls(manager);
