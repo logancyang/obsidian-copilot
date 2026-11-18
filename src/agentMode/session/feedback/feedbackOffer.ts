@@ -5,9 +5,10 @@ import {
   type ChatView,
 } from "@/agentMode/session/chatExtension";
 import type { FeedbackDraft, FeedbackOfferResult } from "@/agentMode/session/copilotMcpServer";
-import { AuthRequiredError } from "@/agentMode/session/errors";
-import { isProviderSideFailure } from "@/agentMode/session/feedback/providerSideFailure";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
+import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { USER_SENDER } from "@/constants";
+import { describeConnectorTool } from "@/connectors/connectorTools";
 import { getSettings } from "@/settings/model";
 
 export interface FeedbackEvidence {
@@ -69,8 +70,37 @@ export const FEEDBACK_OFFER: ChatStateKey<FeedbackOffer | null> = Object.freeze(
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/672
 export function offerFeedback(chat: ChatStateHost, draft: FeedbackDraft): FeedbackOfferResult {
   if (chat.readChatState(FEEDBACK_OFFER)) return "already_offered";
-  chat.updateChatState(FEEDBACK_OFFER, (_, view) => openFeedbackOffer(view, "agent", draft));
-  return "shown";
+  let result: FeedbackOfferResult = "shown";
+  chat.updateChatState(FEEDBACK_OFFER, (offer, view) => {
+    if (!latestFailureIsNotCopilots(view.getDisplayMessages())) {
+      return openFeedbackOffer(view, "agent", draft);
+    }
+    result = "not_copilot";
+    return offer;
+  });
+  return result;
+}
+
+// Agents report any failing tool as a Copilot failure, but a tool Copilot doesn't run, a connected service included, fails for reasons Copilot cannot fix.
+// A Copilot tool used after that failure can still be the problem without failing itself, such as one that hangs.
+// https://github.com/logancyang/obsidian-copilot/issues/4483
+function latestFailureIsNotCopilots(messages: readonly AgentChatMessage[]): boolean {
+  const lastUserIndex = messages.map(({ sender }) => sender).lastIndexOf(USER_SENDER);
+  const relevant = messages
+    .slice(lastUserIndex + 1)
+    .flatMap(({ parts }) => parts ?? [])
+    .filter(
+      (part) => part.kind === "tool_call" && (part.status === "failed" || ranCopilotTool(part))
+    );
+  const latest = relevant[relevant.length - 1];
+  return latest !== undefined && !ranCopilotTool(latest);
+}
+
+function ranCopilotTool(part: AgentMessagePart): boolean {
+  return (
+    part.kind === "tool_call" &&
+    (part.copilotTools?.calls.some(({ name }) => !describeConnectorTool(name)) ?? false)
+  );
 }
 
 export function dismissFeedbackOffer(offer: FeedbackOffer | null): FeedbackOffer | null {
@@ -94,7 +124,9 @@ export const FEEDBACK_OFFER_EXTENSION = defineChatExtension({
     if (offer || !getSettings().agentMode.offerFeedbackCards) return offer;
     // A missing sign-in is the user's account state, and the error already points at the Sign in button.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/831
-    if (error instanceof AuthRequiredError || isProviderSideFailure(error, errorText)) return offer;
+    // Only failures Copilot produced earn a card; the agent's own reports name its provider, model or service, and new kinds keep appearing.
+    // https://github.com/logancyang/obsidian-copilot/issues/4483
+    if (error instanceof AuthRequiredError || error instanceof AgentReportedError) return offer;
     return openFeedbackOffer(chat, "turn_error", {
       title: `Agent Chat reply failed on ${chat.backendId}`,
       whatHappened: errorText,

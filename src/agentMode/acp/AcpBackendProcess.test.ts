@@ -9,7 +9,7 @@ import { AcpBackendProcess } from "./AcpBackendProcess";
 import { AcpProcessManager } from "./AcpProcessManager";
 import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { AgentReportedError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
 
 jest.mock("@/logger", () => ({
@@ -1744,9 +1744,49 @@ describe("AcpBackendProcess", () => {
         const failure = new RequestError(-32603, "Internal error: Provider offline");
         promptMock(backend).mockRejectedValue(failure);
 
-        expect(await promptTurn(backend)).toMatchObject({ error: failure });
+        expect(await promptTurn(backend)).toMatchObject({
+          error: expect.objectContaining({
+            name: "AgentReportedError",
+            message: "Internal error: Provider offline",
+            cause: failure,
+          }),
+        });
         expect(recover).not.toHaveBeenCalled();
       });
+
+      it.each([
+        ["an internal error", new RequestError(-32603, "Internal error: Provider offline")],
+        ["an authentication error", new RequestError(-32000, "Authentication required")],
+      ])(
+        "https://github.com/logancyang/obsidian-copilot/issues/4483 marks %s the agent answers a prompt with as the agent's own report",
+        async (_label, failure) => {
+          const backend = await makeBackend();
+          promptMock(backend).mockRejectedValue(failure);
+
+          expect(await promptTurn(backend)).toMatchObject({
+            error: expect.any(AgentReportedError),
+          });
+        }
+      );
+
+      it.each([
+        ["parse error", -32700],
+        ["invalid request", -32600],
+        ["method not found", -32601],
+        ["invalid params", -32602],
+      ])(
+        "https://github.com/logancyang/obsidian-copilot/issues/4483 keeps the agent's %s rejection of Copilot's prompt as a possible Copilot failure",
+        async (_label, code) => {
+          const backend = await makeBackend();
+          const failure = new RequestError(code, "Rejected");
+          promptMock(backend).mockRejectedValue(failure);
+
+          const end = await promptTurn(backend);
+
+          expect(end).toMatchObject({ error: failure });
+          expect(end).not.toMatchObject({ error: expect.any(AgentReportedError) });
+        }
+      );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/175 ends a running turn with the request's failure when the agent exits mid-turn", async () => {
         const backend = await makeBackend();
