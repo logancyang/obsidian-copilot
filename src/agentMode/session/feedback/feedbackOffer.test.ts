@@ -26,14 +26,22 @@ const TRANSCRIPT: readonly AgentChatMessage[] = [
 
 const ISSUE_4483 = "https://github.com/logancyang/obsidian-copilot/issues/4483";
 
-function failedTool(id: string, copilotToolName?: string): AgentMessagePart {
+function toolCall(
+  id: string,
+  status: "failed" | "in_progress" | "completed",
+  copilotToolName?: string
+): AgentMessagePart {
   return {
     kind: "tool_call",
     id,
     title: id,
-    status: "failed",
+    status,
     ...(copilotToolName ? { copilotTools: { calls: [{ name: copilotToolName, args: {} }] } } : {}),
   };
+}
+
+function failedTool(id: string, copilotToolName?: string): AgentMessagePart {
+  return toolCall(id, "failed", copilotToolName);
 }
 
 function transcriptEndingWith(...parts: AgentMessagePart[]): AgentChatMessage[] {
@@ -169,6 +177,35 @@ describe("feedbackOffer", () => {
       );
 
       expect(offerFeedback(chat, DRAFT)).toBe("shown");
+    });
+
+    it.each([
+      ["still running, such as a hung call", "in_progress"],
+      ["finished without an error, such as one returning bad output", "completed"],
+    ] as const)(
+      `${ISSUE_4483} opens a card when a Copilot tool ran after another party's tool failed and is %s`,
+      (_label, status) => {
+        const chat = fakeChat(
+          fakeChatView(
+            transcriptEndingWith(
+              failedTool("computer-use"),
+              toolCall("cli", status, "obsidian_cli")
+            )
+          )
+        );
+
+        expect(offerFeedback(chat, DRAFT)).toBe("shown");
+      }
+    );
+
+    it(`${ISSUE_4483} shows no card when another party's tool failed after the last Copilot tool ran`, () => {
+      const chat = fakeChat(
+        fakeChatView(
+          transcriptEndingWith(toolCall("cli", "completed", "obsidian_cli"), failedTool("shell"))
+        )
+      );
+
+      expect(offerFeedback(chat, DRAFT)).toBe("not_copilot");
     });
 
     it(`${ISSUE_4483} ignores tool failures from before the latest user message`, () => {

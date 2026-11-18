@@ -82,14 +82,17 @@ export function offerFeedback(chat: ChatStateHost, draft: FeedbackDraft): Feedba
 }
 
 // Agents report any failing tool as a Copilot failure, but a tool Copilot doesn't run, a connected service included, fails for reasons Copilot cannot fix.
+// A Copilot tool used after that failure can still be the problem without failing itself, such as one that hangs.
 // https://github.com/logancyang/obsidian-copilot/issues/4483
 function latestFailureIsNotCopilots(messages: readonly AgentChatMessage[]): boolean {
   const lastUserIndex = messages.map(({ sender }) => sender).lastIndexOf(USER_SENDER);
-  const failed = messages
+  const relevant = messages
     .slice(lastUserIndex + 1)
     .flatMap(({ parts }) => parts ?? [])
-    .filter((part) => part.kind === "tool_call" && part.status === "failed");
-  const latest = failed[failed.length - 1];
+    .filter(
+      (part) => part.kind === "tool_call" && (part.status === "failed" || ranCopilotTool(part))
+    );
+  const latest = relevant[relevant.length - 1];
   return latest !== undefined && !ranCopilotTool(latest);
 }
 
