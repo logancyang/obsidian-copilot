@@ -83,6 +83,7 @@ export function CreateAgentForm({
     initialValues?.instruction ?? "",
   ]);
   const [name, setName] = useState(start[0]);
+  const [leftName, setLeftName] = useState(start[0]);
   const [title, setTitle] = useState(start[1]);
   const [instruction, setInstruction] = useState(start[2]);
   const [model, setModel] = useState(models.initial);
@@ -95,7 +96,10 @@ export function CreateAgentForm({
 
   const face = pickedFace ?? unusedPresetFace(presetFaces);
   const trimmedName = name.trim();
-  const who = trimmedName || "it";
+  // The name shows elsewhere in the dialog only once its field is left, so typing changes just the field.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  const shownName = leftName.trim();
+  const who = shownName || "it";
   // Closing a prefilled dialog the user has not touched loses nothing, so only their own edits are guarded.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/963
   const hasInput = [name, title, instruction].some(
@@ -110,7 +114,10 @@ export function CreateAgentForm({
       : missingInstruction
         ? `Write what ${trimmedName} handles first`
         : null;
-  const slug = trimmedName && !nameTaken && deriveAgentSlug(trimmedName);
+  const shownSlug =
+    shownName &&
+    !findAgentNameConflict(agents, folderNames, shownName) &&
+    deriveAgentSlug(shownName);
 
   useEffect(() => {
     closeGuard.hasInput = hasInput;
@@ -193,6 +200,7 @@ export function CreateAgentForm({
               aria-invalid={!!nameTaken}
               className={cn(nameTaken && "!tw-border-[color:var(--text-error)]")}
               onChange={(event) => setName(event.target.value)}
+              onBlur={() => setLeftName(name)}
             />
             {nameTaken ? (
               <FieldError>{nameTaken}</FieldError>
@@ -240,14 +248,14 @@ export function CreateAgentForm({
         />
         {instructionLeftEmpty && missingInstruction ? (
           <FieldError>
-            Write at least one sentence. Without it, {trimmedName || "this agent"} is just Copilot
+            Write at least one sentence. Without it, {shownName || "this agent"} is just Copilot
             with a face.
           </FieldError>
         ) : (
           <div className="tw-flex tw-items-start tw-gap-3 tw-text-ui-smaller tw-text-muted">
             <span className="tw-flex-1">
               In your own words: what it handles, where things live, how it should talk.{" "}
-              {trimmedName || "It"} reads this at the start of every chat.
+              {shownName || "It"} reads this at the start of every chat.
             </span>
             {instruction && (
               // Past the soft limit the count turns orange without blocking Create.
@@ -277,7 +285,7 @@ export function CreateAgentForm({
         <span className="tw-mr-auto tw-inline-flex tw-min-w-0 tw-items-center tw-gap-1.5 tw-text-ui-smaller tw-text-faint">
           <Folder className="tw-size-3 tw-shrink-0" />
           <span className="tw-truncate">
-            Saved in {agentsFolder}/{slug && `${slug}/`}
+            Saved in {agentsFolder}/{shownSlug && `${shownSlug}/`}
           </span>
         </span>
         <Button type="button" variant="secondary" onClick={onClose}>
