@@ -12,4 +12,11 @@ export class AuthRequiredError extends Error {
   }
 }
 
+export class AgentReportedError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "AgentReportedError";
+  }
+}
+
 export const JSONRPC_METHOD_NOT_FOUND = -32601;

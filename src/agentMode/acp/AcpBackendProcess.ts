@@ -20,7 +20,11 @@ import {
 import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
-import { JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  AgentReportedError,
+  JSONRPC_METHOD_NOT_FOUND,
+  MethodUnsupportedError,
+} from "@/agentMode/session/errors";
 import type {
   AgentMcpServer,
   BackendDescriptor,
@@ -89,6 +93,20 @@ function isMethodNotFoundError(err: unknown): boolean {
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 const JSONRPC_INTERNAL_ERROR = -32603;
+const MALFORMED_REQUEST_CODES: ReadonlySet<number> = new Set([
+  -32700,
+  -32600,
+  JSONRPC_METHOD_NOT_FOUND,
+  -32602,
+]);
+
+// An agent's error reply to a well-formed prompt reports its own provider, model, account or service, which a Copilot bug report cannot fix.
+// https://github.com/logancyang/obsidian-copilot/issues/4483
+function agentReportedOr(err: unknown): unknown {
+  return err instanceof RequestError && !MALFORMED_REQUEST_CODES.has(err.code)
+    ? new AgentReportedError(err.message, { cause: err })
+    : err;
+}
 
 interface SessionWireState {
   modes: SessionModeState | null;
@@ -370,7 +388,7 @@ export class AcpBackendProcess implements BackendProcess {
         prompt: promptContentToAcp(params.prompt),
       })
       .catch(async (err: unknown) => {
-        throw await this.serviceStoppedOr(err);
+        throw agentReportedOr(await this.serviceStoppedOr(err));
       })
       .finally(() => this.manualCompactSessions.delete(params.sessionId));
     this.hasServedSession = true;

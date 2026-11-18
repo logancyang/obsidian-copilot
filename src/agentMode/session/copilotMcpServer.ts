@@ -71,13 +71,19 @@ export interface FeedbackDraft {
   repro: string;
 }
 
-export type FeedbackOfferResult = "shown" | "already_offered" | "turned_off" | "unattributed";
+export type FeedbackOfferResult =
+  | "shown"
+  | "already_offered"
+  | "not_copilot"
+  | "turned_off"
+  | "unattributed";
 
 export type FindCallingChat = (callerSessionId: string | null) => ChatStateHost | null;
 
 const OFFER_RESULT_TEXT: Readonly<Record<FeedbackOfferResult, string>> = Object.freeze({
   shown: "Shown to the user. Continue; don't mention it unless asked.",
   already_offered: `Already offered this session. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
+  not_copilot: `Not offered: the latest failed tool isn't one Copilot runs, so Copilot can't fix it. Don't call ${SEND_FEEDBACK_TOOL_NAME} for it; tell the user what failed.`,
   turned_off: `The user turned off feedback reports. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
   unattributed: `Copilot couldn't tell which chat this came from, so nothing was shown. Don't call ${SEND_FEEDBACK_TOOL_NAME} again.`,
 });

@@ -1,6 +1,6 @@
-import { AuthRequiredError } from "@/agentMode/session/errors";
+import { AgentReportedError, AuthRequiredError } from "@/agentMode/session/errors";
 import { fakeChat, fakeChatView, FAKE_EVIDENCE } from "@/agentMode/session/testing/fakeChat";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentChatMessage, AgentMessagePart } from "@/agentMode/session/types";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import {
@@ -23,6 +23,25 @@ const TRANSCRIPT: readonly AgentChatMessage[] = [
   { id: "a1", sender: AI_SENDER, message: "hej", isVisible: true, timestamp: null },
   { id: "u2", sender: USER_SENDER, message: "why?", isVisible: true, timestamp: null },
 ];
+
+const ISSUE_4483 = "https://github.com/logancyang/obsidian-copilot/issues/4483";
+
+function failedTool(id: string, copilotToolName?: string): AgentMessagePart {
+  return {
+    kind: "tool_call",
+    id,
+    title: id,
+    status: "failed",
+    ...(copilotToolName ? { copilotTools: { calls: [{ name: copilotToolName, args: {} }] } } : {}),
+  };
+}
+
+function transcriptEndingWith(...parts: AgentMessagePart[]): AgentChatMessage[] {
+  return [
+    ...TRANSCRIPT,
+    { id: "a2", sender: AI_SENDER, message: "", isVisible: true, timestamp: null, parts },
+  ];
+}
 
 const DRAFT = {
   title: "Replied in Swedish to an English request",
@@ -132,6 +151,38 @@ describe("feedbackOffer", () => {
       expect(chat.readChatState(FEEDBACK_OFFER)?.afterUserMessageId).toBeNull();
     });
 
+    it.each([
+      ["a backend's own tool, such as its shell", failedTool("shell")],
+      ["a connected service's tool", failedTool("linear_save_issue", "linear_save_issue")],
+    ])(`${ISSUE_4483} shows no card when the latest failed tool is %s`, (_label, failure) => {
+      const chat = fakeChat(fakeChatView(transcriptEndingWith(failure)));
+
+      expect(offerFeedback(chat, DRAFT)).toBe("not_copilot");
+      expect(chat.readChatState(FEEDBACK_OFFER)).toBeNull();
+    });
+
+    it(`${ISSUE_4483} opens a card when the latest failed tool is one Copilot runs, even after another party's tool failed`, () => {
+      const chat = fakeChat(
+        fakeChatView(
+          transcriptEndingWith(failedTool("shell"), failedTool("read", "excalidraw_read"))
+        )
+      );
+
+      expect(offerFeedback(chat, DRAFT)).toBe("shown");
+    });
+
+    it(`${ISSUE_4483} ignores tool failures from before the latest user message`, () => {
+      const chat = fakeChat(
+        fakeChatView([
+          { ...TRANSCRIPT[0], parts: [] },
+          { ...TRANSCRIPT[1], parts: [failedTool("shell")] },
+          TRANSCRIPT[2],
+        ])
+      );
+
+      expect(offerFeedback(chat, DRAFT)).toBe("shown");
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/672 refuses a second card in the same chat whether the first is open, dismissed or sent", () => {
       const chat = fakeChat();
       offerFeedback(chat, DRAFT);
@@ -208,38 +259,13 @@ describe("feedbackOffer", () => {
         });
       });
 
-      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/810 shows no card when the backend files the failure as a provider quota", () => {
-        const quota = Object.assign(new Error("Internal error: Free usage limit reached."), {
-          code: -32603,
-          data: { service: "session", errorName: "provider.quota" },
-        });
-
-        expect(fail(null, quota)).toBeNull();
+      it(`${ISSUE_4483} shows no card when the agent reports the failure of its own run`, () => {
+        expect(fail(null, new AgentReportedError("Prompt is too long"))).toBeNull();
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/831 shows no card when the reply fails because the user is not signed in", () => {
         expect(fail(null, new AuthRequiredError("You're not signed in to Claude."))).toBeNull();
       });
-
-      it.each([
-        [
-          "categorized provider authentication failure",
-          { service: "session", errorName: "provider.auth" },
-          "Internal error: credentials rejected",
-        ],
-        [
-          "OpenCode authentication-required response",
-          {},
-          "Authentication required: provider authentication required",
-        ],
-      ])(
-        "https://github.com/logancyang/obsidian-copilot/issues/4244 shows no card for the %s",
-        (_label, data, message) => {
-          const error = Object.assign(new Error(message), { code: -32000, data });
-
-          expect(fail(null, error)).toBeNull();
-        }
-      );
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/762 shows no card when feedback reports are turned off", () => {
         jest

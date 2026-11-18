@@ -6,6 +6,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { v4 as uuidv4 } from "uuid";
+import { AgentReportedError } from "@/agentMode/session/errors";
 import { logWarn } from "@/logger";
 import { err2String } from "@/utils";
 import type { SessionEvent, SessionId, SessionUpdate, TurnEnd } from "@/agentMode/session/types";
@@ -194,11 +195,13 @@ export class ClaudeLiveQuery {
     if (!this.openTurnId) return;
     const stopReason = mapStopReason(msg);
     let error: Error | undefined;
+    // Claude's own result names its API, account, context or execution failure, which a Copilot bug report cannot fix.
+    // https://github.com/logancyang/obsidian-copilot/issues/4483
     if (msg.subtype === "success" && msg.is_error && msg.result.trim()) {
-      error = new Error(msg.result);
+      error = new AgentReportedError(msg.result);
     } else if (stopReason !== "end_turn" && msg.subtype !== "success") {
       const errors = "errors" in msg ? msg.errors : undefined;
-      if (errors && errors.length > 0) error = new Error(errors.join("; "));
+      if (errors && errors.length > 0) error = new AgentReportedError(errors.join("; "));
       // A turn Stop ended can fail without naming an error. https://github.com/Brevilabs/obsidian-copilot-private/issues/747
       else if (!interrupted) this.opts.onSignedOut();
     }

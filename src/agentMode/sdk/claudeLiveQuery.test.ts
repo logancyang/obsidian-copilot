@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { AgentReportedError } from "@/agentMode/session/errors";
 import type { SessionUpdate } from "@/agentMode/session/types";
 
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
@@ -411,7 +412,7 @@ describe("claudeLiveQuery", () => {
         }
       });
 
-      it("ends the turn with Claude's message when a success-shaped result reports an error", async () => {
+      it("https://github.com/logancyang/obsidian-copilot/issues/4483 ends the turn with Claude's message as its own report when a success-shaped result reports an error", async () => {
         const { live, fake, recorder } = startLive();
 
         live.push("prompt-1", "hi");
@@ -419,7 +420,20 @@ describe("claudeLiveQuery", () => {
         fake.emit(resultFrame({ is_error: true, result: "You've hit your session limit" }));
         const end = await recorder.waitFor("turn_ended");
 
-        expect(end.error).toEqual(new Error("You've hit your session limit"));
+        expect(end.error).toEqual(new AgentReportedError("You've hit your session limit"));
+        expect(end.error).toBeInstanceOf(AgentReportedError);
+      });
+
+      it("https://github.com/logancyang/obsidian-copilot/issues/4483 ends the turn with Claude's named execution errors as its own report", async () => {
+        const { live, fake, recorder } = startLive();
+
+        live.push("prompt-1", "hi");
+        fake.echo(await fake.nextInput());
+        fake.emit(resultFrame({ subtype: "error_max_turns", is_error: true, errors: ["a", "b"] }));
+        const end = await recorder.waitFor("turn_ended");
+
+        expect(end.error).toBeInstanceOf(AgentReportedError);
+        expect(end.error?.message).toBe("a; b");
       });
 
       it("reports a sign-out when a turn fails without naming an error", async () => {
