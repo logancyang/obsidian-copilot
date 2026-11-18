@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useSettingsValue } from "@/settings/model";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import {
+  Archive,
   Bookmark,
   Bug,
   Download,
@@ -34,7 +35,7 @@ const resolveDeleteSummary = (item: ChatHistoryItem) =>
 const resolveHistoryIcon = (item: ChatHistoryItem) =>
   item.backendId ? backendRegistry[item.backendId]?.Icon : undefined;
 
-// An empty chat has no note to link or bookmark, so its items stay visible but explain why they are off.
+// An empty chat has no note to link, bookmark, or archive, so its items stay visible but explain why they are off.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/702
 const NeedsMessageMenuItem: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <Tooltip>
@@ -63,6 +64,7 @@ interface AgentChatControlsProps {
   onCopyChatLink?: () => void | Promise<void>;
   getChatBookmarkState?: () => Promise<ChatBookmarkState>;
   onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
+  onArchiveChat?: () => Promise<void>;
   onReportError?: () => void;
   usageMeter?: React.ReactNode;
   tasksIndicator?: React.ReactNode;
@@ -84,6 +86,7 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onCopyChatLink,
   getChatBookmarkState,
   onSetChatBookmarked,
+  onArchiveChat,
   onReportError,
   usageMeter,
   tasksIndicator,
@@ -197,6 +200,17 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                     Add to bookmarks
                   </NeedsMessageMenuItem>
                 ))}
+              {onArchiveChat ? (
+                <DropdownMenuItem onSelect={safeAsyncHandler(onArchiveChat)}>
+                  <Archive />
+                  Archive chat
+                </DropdownMenuItem>
+              ) : (
+                <NeedsMessageMenuItem>
+                  <Archive />
+                  Archive chat
+                </NeedsMessageMenuItem>
+              )}
               {/* A report from here names the chat's agent, model and session, so only a host with a chat offers it.
                   https://github.com/Brevilabs/obsidian-copilot-private/issues/672 */}
               {onReportError && (

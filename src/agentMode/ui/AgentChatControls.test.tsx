@@ -114,12 +114,21 @@ describe("AgentChatControls", () => {
       expect(onCopyChatLink).toHaveBeenCalledTimes(1);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link and Add to bookmarks in an empty chat and explains on hover that a message is needed", async () => {
+    it("archives the open chat from the More actions menu", () => {
+      const onArchiveChat = jest.fn(async () => {});
+      renderSessionControls({ onArchiveChat });
+
+      fireEvent.click(within(openMoreActions()).getByRole("menuitem", { name: "Archive chat" }));
+
+      expect(onArchiveChat).toHaveBeenCalledTimes(1);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 disables Copy chat link, Add to bookmarks, and Archive chat in an empty chat and explains on hover that a message is needed", async () => {
       const onSetChatBookmarked = jest.fn(async () => {});
       renderSessionControls({ onSetChatBookmarked });
 
       const menu = openMoreActions();
-      for (const name of ["Copy chat link", "Add to bookmarks"]) {
+      for (const name of ["Copy chat link", "Add to bookmarks", "Archive chat"]) {
         const item = within(menu).getByRole("menuitem", { name });
         expect(item.getAttribute("aria-disabled")).toBe("true");
         fireEvent.focus(item.parentElement!);

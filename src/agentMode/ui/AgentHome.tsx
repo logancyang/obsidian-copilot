@@ -245,6 +245,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     deleteChats: handleDeleteChats,
     setChatPinned: handleSetChatPinned,
     setChatArchived: handleSetChatArchived,
+    archiveActiveChat,
     archiveChats: handleArchiveChats,
     openSourceFile: handleOpenSourceFile,
     copyChatLink: handleCopyHistoryChatLink,
@@ -700,6 +701,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       return (await manager.saveActiveSession())?.path ?? "";
     });
 
+  const handleArchiveChat = async () => {
+    await archiveActiveChat();
+    handleNewChat();
+  };
+
   const showHeader = isProjectScope;
   const headerProjectActions = activeProject
     ? projectRowActions({ app, project: activeProject })
@@ -866,6 +872,9 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                             : undefined
                         }
                         onSetChatBookmarked={handleSetActiveChatBookmarked}
+                        onArchiveChat={
+                          activeSession?.hasUserVisibleMessages() ? handleArchiveChat : undefined
+                        }
                         onOpenChatNote={handleOpenChatNote}
                         onReportError={handleReportError}
                         onNewChat={handleNewChat}
