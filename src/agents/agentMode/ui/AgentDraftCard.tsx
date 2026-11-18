@@ -85,15 +85,16 @@ function AgentDraftChatCard({ card, plugin, chat }: AgentDraftChatCardProps) {
     <AgentDraftCard
       draft={card.draft}
       onDismiss={() => dismissAgentDraft(chat)}
-      onReview={() => openAgentDraft(plugin, card, focusInput)}
+      onReview={() => openAgentDraft(plugin, chat, card, focusInput)}
     />
   );
 }
 
-// Only the user creates an agent and approves its instruction, so the draft opens the same dialog as "+", and Create lands on the new agent's home.
+// Only the user creates an agent and approves its instruction, so the draft opens the same dialog as "+", and Create lands on the new agent's home; the card goes only once its agent exists, so a dialog closed by accident can be opened again.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
 function openAgentDraft(
   plugin: CopilotPlugin,
+  chat: ChatStateHost,
   { draft, draftedBy }: AgentDraftCardState,
   focusInput: () => void
 ) {
@@ -111,6 +112,7 @@ function openAgentDraft(
     initialValues: draft,
     draftedBy: drafter && { name: drafter.name, faceSrc: drafter.faceSrc },
     onCreated: (slug) => {
+      dismissAgentDraft(chat);
       const agent = store.getAgents().find((candidate) => candidate.slug === slug);
       if (!agent) return;
       startCustomAgentChat(manager, agent)
