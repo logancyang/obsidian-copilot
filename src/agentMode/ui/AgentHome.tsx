@@ -778,14 +778,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
 
   const chatSetupProblem = agentHome.selected && needsSetup.get(agentHome.selected.slug);
   const lockedChatAgent = useReadOnlyChatAgent(agentHome.selected, isLoading, !!chatSetupProblem);
-  const handleNewCopilotChat = useCallback(() => {
-    // A read-only chat's coding agent may not be set up here, so its new chat starts on the vault's default.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
-    manager.startNewChatInPlace(sessionId).catch((e: unknown) => {
-      logError("[AgentMode] new chat failed", e);
-      new Notice("Failed to start a new chat. Please try again.");
-    });
-  }, [manager, sessionId]);
 
   const { queue: heldMessages, setQueue: setHeldMessages } = draft;
   const handleRemoveHeldMessage = useCallback(
@@ -1127,7 +1119,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         <LockedAgentChat
                           name={lockedChatAgent.name}
                           lapsed={lapsed}
-                          onNewChat={handleNewCopilotChat}
+                          onNewChat={handleNewChat}
                           onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
                           setup={
                             customAgentsGate !== "locked" && chatSetupProblem
