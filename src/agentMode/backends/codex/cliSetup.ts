@@ -6,7 +6,7 @@ export const CODEX_BINARY_NAME = "codex-acp";
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/685
 // 2.2.2 is the first package returning Codex turn diffs; an older pin silently loses them in diff view.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/347
-export const CODEX_PINNED_VERSION = "2.2.2";
+export const CODEX_PINNED_VERSION = "2.7.0";
 
 export function codexBinaryPathPlaceholder(platform: NodeJS.Platform): string {
   return platform === "win32"
