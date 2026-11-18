@@ -1,8 +1,16 @@
+import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { TFolder } from "obsidian";
 import { foldersAtom } from "@/state/vaultDataAtoms";
-import { settingsStore } from "@/settings/model";
+import { settingsStore, useSettingsValue } from "@/settings/model";
+import { isSuggestedVaultPath } from "./noteSuggestionPaths";
 
 export function useAllFolders(): TFolder[] {
-  return useAtomValue(foldersAtom, { store: settingsStore });
+  const allFolders = useAtomValue(foldersAtom, { store: settingsStore });
+  const { copilotFolder } = useSettingsValue();
+
+  return useMemo(
+    () => allFolders.filter((folder) => isSuggestedVaultPath(folder.path, { copilotFolder })),
+    [allFolders, copilotFolder]
+  );
 }
