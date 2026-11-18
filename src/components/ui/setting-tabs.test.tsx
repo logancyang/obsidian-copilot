@@ -28,7 +28,6 @@ const STRIP_TABS: TabItemType[] = [
     label: "Connectors",
     icon: null,
     warningLabel: "You have connectors that need your attention",
-    warningTone: "error",
   },
 ];
 
@@ -119,14 +118,15 @@ describe("setting-tabs", () => {
       ).toEqual(["Miyo", "Skills: Some skills failed to load"]);
     });
 
-    it("shows the most severe warning of overflowed tabs on the overflow button for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
+    it("shows the first overflowed tab's warning dot on the overflow button for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", () => {
       stubStripWidth(300);
       render(<SettingTabStrip tabs={STRIP_TABS} selectedId="basic" onSelect={jest.fn()} />);
 
-      const dot = within(screen.getByRole("button", { name: "Show 2 more tabs" })).getByTitle(
-        "You have connectors that need your attention"
-      );
-      expect(dot.className).toContain("tw-bg-modifier-error");
+      expect(
+        within(screen.getByRole("button", { name: "Show 2 more tabs" })).getByTitle(
+          "Some skills failed to load"
+        )
+      ).not.toBeNull();
     });
   });
 
@@ -148,25 +148,6 @@ describe("setting-tabs", () => {
         screen.getByRole("tab", { name: "Skills: Some skills failed to load" })
       ).not.toBeNull();
       expect(screen.getByTitle("Some skills failed to load")).not.toBeNull();
-    });
-
-    it("shows the warning dot in the error color when the tab carries an error-toned warning", () => {
-      render(
-        <TabItem
-          {...baseProps}
-          tab={{
-            id: "connectors",
-            label: "Connectors",
-            icon: null,
-            warningLabel: "You have connectors that need your attention",
-            warningTone: "error",
-          }}
-        />
-      );
-
-      expect(screen.getByTitle("You have connectors that need your attention").className).toContain(
-        "tw-bg-modifier-error"
-      );
     });
 
     it("does not show a warning dot when the tab has no warning", () => {

@@ -28,7 +28,6 @@ const ALL_SETTINGS_TABS = [
     label: "Connectors",
     icon: <Plug className="tw-size-5" />,
     warningLabel: "You have connectors that need your attention",
-    warningTone: "error" as const,
   },
   { id: "advanced", label: "Advanced", icon: <Wrench className="tw-size-5" /> },
 ];
@@ -88,35 +87,6 @@ export const WarningDot: StoryObj<TabItemProps> = {
           label: "Skills",
           icon: <Sparkle className="tw-size-5" />,
           warningLabel: "Some skills failed to load",
-        }}
-        isSelected
-        onClick={() => undefined}
-      />
-    </div>
-  ),
-};
-
-export const ErrorDot: StoryObj<TabItemProps> = {
-  render: () => (
-    <div className="tw-flex tw-gap-2">
-      <TabItem
-        tab={{
-          id: "connectors-idle",
-          label: "Connectors",
-          icon: <Plug className="tw-size-5" />,
-          warningLabel: "You have connectors that need your attention",
-          warningTone: "error",
-        }}
-        isSelected={false}
-        onClick={() => undefined}
-      />
-      <TabItem
-        tab={{
-          id: "connectors-selected",
-          label: "Connectors",
-          icon: <Plug className="tw-size-5" />,
-          warningLabel: "You have connectors that need your attention",
-          warningTone: "error",
         }}
         isSelected
         onClick={() => undefined}
