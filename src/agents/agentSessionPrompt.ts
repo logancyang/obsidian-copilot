@@ -29,8 +29,9 @@ const ASK_OTHER_AGENTS =
   "When the user's message @-mentions one of them by name or clearly points to one, ask that agent with the ask_agent tool from obsidian-copilot; never otherwise. A rule the user gives that agent is not yours to save.";
 // Codex lists MCP tools only on search, so an agent learns from its own prompt that it drafts a new agent as a card for the user to create, never creating one itself.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
-const DRAFT_NEW_AGENTS =
-  "When the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.";
+const DRAFT_WITH_TOOL =
+  "draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it";
+const DRAFT_NEW_AGENTS = `When the user asks you to make a new agent, ${DRAFT_WITH_TOOL}. If you or another agent already handles that job, say so and ask before drafting. You can't create an agent yourself.`;
 
 // Codex finds MCP tools only through its tool search, so an agent's prompt also names the tools for an agent it asked.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
@@ -47,11 +48,12 @@ export function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title
   return title ? `${name} (${title})` : name;
 }
 
-// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it.
+// A Copilot chat asked about earlier work read every chat note, agents' included, so it lists its own with list_chats too; the shared prompt is the one prompt a Copilot chat has on every backend, and a line that limited the tool to Copilot chats stopped agents from using it. Codex learns of draft_agent only from the prompt, so a Copilot chat is told it drafts new agents too; that line names chats without a custom agent because an agent's own prompt already says it and an asked agent's hidden chat has no draft_agent.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/959
-export function buildCopilotChatRecall(): string | null {
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/941
+export function buildCopilotChatSteering(): string | null {
   if (getCustomAgentsGate() !== "full") return null;
-  return "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said.";
+  return `In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat without a custom agent, when the user asks you to make a new agent, ${DRAFT_WITH_TOOL}; you can't create an agent yourself.`;
 }
 
 export function buildAgentPrompt({

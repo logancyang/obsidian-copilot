@@ -315,9 +315,10 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       createStopAgentTool(hiddenAgentChats, askingChatsHost),
       createDraftAgentTool({
         isUnlistedChat: (sessionKey) => managerRef?.isUnlistedSession(sessionKey) ?? false,
-        isCopilotChat: (sessionKey) => managerRef?.getSession(sessionKey)?.agentSlug === null,
-        agentOfCaller: (chat) =>
-          managerRef?.getSessions().find((session) => session === chat)?.agentSlug ?? null,
+        callerOf: (chat) => {
+          const session = managerRef?.getSessions().find((candidate) => candidate === chat);
+          return session ? { agent: session.agentSlug } : null;
+        },
       }),
       createListChatsTool({
         earlierChats: async (chat) => {

@@ -1,4 +1,4 @@
-import { buildCopilotChatRecall } from "@/agents/agentSessionPrompt";
+import { buildCopilotChatSteering } from "@/agents/agentSessionPrompt";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { PROJECT_WORKSPACE_POLICY } from "@/projects/projectContextBlock";
 import { getSettings, resetSettings, updateSetting, type CopilotSettings } from "@/settings/model";
@@ -355,22 +355,23 @@ describe("agentSystemPrompt", () => {
       }
     });
 
-    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats, only while custom agents are available (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", async () => {
+    it("ends every chat's shared prompt with the line telling a chat without a custom agent to list its earlier chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/959) and draft new agents (https://github.com/Brevilabs/obsidian-copilot-private/issues/941), only while custom agents are available", async () => {
       await setCustomAgentsAccess("free");
       const withoutCustomAgents = buildAgentSystemPrompt(AGENT, APP);
       await setCustomAgentsAccess("team");
 
       expect(buildAgentSystemPrompt(AGENT, APP)).toBe(
-        `${withoutCustomAgents}\n\n${buildCopilotChatRecall()}`
+        `${withoutCustomAgents}\n\n${buildCopilotChatSteering()}`
       );
     });
 
     it.each(["free", "keyless", "plus-without-custom-agents", "unverified"] as const)(
-      "adds nothing about earlier chats while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
+      "adds nothing about earlier chats or drafting agents while custom agents aren't available (%s) (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)",
       async (access) => {
         await setCustomAgentsAccess(access);
 
         expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("list_chats");
+        expect(buildAgentSystemPrompt(AGENT, APP)).not.toContain("draft_agent");
       }
     );
 

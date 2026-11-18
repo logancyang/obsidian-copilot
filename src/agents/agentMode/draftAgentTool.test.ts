@@ -14,13 +14,14 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/941"
 const NORA = { name: "Nora", title: "Family logistics", instruction: "You plan pickups." };
 
 function buildTool(
-  options: { unlisted?: string[]; copilotChats?: string[]; callerAgent?: string | null } = {}
+  options: { unlisted?: string[]; callerAgent?: string | null; callerSeen?: boolean } = {}
 ) {
   return createDraftAgentTool({
     isUnlistedChat: (key) => options.unlisted?.includes(key) ?? false,
-    isCopilotChat: (key) => options.copilotChats?.includes(key) ?? false,
-    agentOfCaller: (chat) =>
-      chat && options.callerAgent !== null ? (options.callerAgent ?? "coco") : null,
+    callerOf: (chat) =>
+      chat && options.callerSeen !== false
+        ? { agent: options.callerAgent === undefined ? "coco" : options.callerAgent }
+        : null,
   });
 }
 
@@ -59,10 +60,13 @@ describe("draftAgentTool", () => {
         ).not.toBeNull();
       });
 
-      it(`leaves the tool out of a Copilot chat without an agent (${ISSUE})`, () => {
-        const tool = buildTool({ copilotChats: ["copilot-chat"] });
-
-        expect(tool.listedAs?.({ sessionKey: "copilot-chat", backendId: "claude" })).toBeNull();
+      it(`lists the tool for a Copilot chat without a custom agent too, so the user can ask Copilot for a new agent (${ISSUE})`, () => {
+        expect(
+          buildTool({ callerAgent: null }).listedAs?.({
+            sessionKey: "copilot-chat",
+            backendId: "codex",
+          })?.name
+        ).toBe(DRAFT_AGENT_TOOL_NAME);
       });
 
       it(`leaves the tool out of an asked agent's hidden chat (${ISSUE})`, () => {
@@ -100,6 +104,19 @@ describe("draftAgentTool", () => {
         });
       });
 
+      it(`shows a Copilot chat's draft as a card drafted by no agent (${ISSUE})`, async () => {
+        const chat = cocoChat();
+
+        const result = await buildTool({ callerAgent: null }).call(NORA, chat);
+
+        expect(result.text).toContain("Shown to the user as a card below your reply");
+        expect(chat.readChatState(AGENT_DRAFT_CARD)).toEqual({
+          draft: NORA,
+          draftedBy: null,
+          afterUserTurn: 1,
+        });
+      });
+
       it(`writes nothing to the agents folder, even when the agent was asked to just create it (${ISSUE})`, async () => {
         const vault = createFakeAgentVault();
         vault.writeByHand(
@@ -130,18 +147,18 @@ describe("draftAgentTool", () => {
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toBeNull();
       });
 
-      it(`refuses a call from a chat that isn't a custom agent's chat the user sees, as from a hidden chat on OpenCode, and shows nothing (${ISSUE})`, async () => {
+      it(`refuses a call from a chat the user doesn't see, as from a hidden chat on OpenCode, and shows nothing (${ISSUE})`, async () => {
         const chat = cocoChat();
 
-        const fromHidden = await buildTool().call(NORA, null);
-        const fromCopilot = await buildTool({ callerAgent: null }).call(NORA, chat);
+        const unknown = await buildTool().call(NORA, null);
+        const hidden = await buildTool({ callerSeen: false }).call(NORA, chat);
 
         const refused = {
-          text: `Only a custom agent can draft an agent, in its own chat. Don't call ${DRAFT_AGENT_TOOL_NAME} again.`,
+          text: `Only a chat the user sees can draft an agent. Don't call ${DRAFT_AGENT_TOOL_NAME} again.`,
           isError: false,
         };
-        expect(fromHidden).toEqual(refused);
-        expect(fromCopilot).toEqual(refused);
+        expect(unknown).toEqual(refused);
+        expect(hidden).toEqual(refused);
         expect(chat.readChatState(AGENT_DRAFT_CARD)).toBeNull();
       });
 
