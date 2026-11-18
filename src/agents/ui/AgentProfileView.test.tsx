@@ -550,7 +550,7 @@ describe("AgentProfileView", () => {
     it(`shows the license banner, not the setup reason, when both lock the agent (${SETUP_ISSUE})`, () => {
       renderProfile({
         locked: { lapsed: true, onUnlock: jest.fn() },
-        setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device anymore." },
+        setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device." },
       });
 
       expect(

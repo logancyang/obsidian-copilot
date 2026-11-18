@@ -93,12 +93,32 @@ describe("agentChats", () => {
 
       expect(agentSetupProblem(getSettings(), { baseModelId: "gpt-6", effort: null })).toEqual({
         kind: "model",
-        baseModelId: "gpt-6",
+        modelName: "gpt-6",
       });
       expect(agentSetupProblem(getSettings(), { baseModelId: "gpt-byok", effort: null })).toEqual({
         kind: "model",
-        baseModelId: "gpt-byok",
+        modelName: "gpt-byok",
       });
+    });
+
+    it(`names a model that can't run here as the model picker names it, or by the last part of its id when Copilot doesn't list it (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: READY, claude: READY });
+      setSettings({
+        configuredModels: [
+          {
+            ...getSettings().configuredModels[0],
+            info: { id: "sonnet", displayName: "Sonnet 5.5" },
+          },
+        ],
+      });
+
+      expect(agentSetupProblem(getSettings(), { baseModelId: "sonnet", effort: null })).toEqual({
+        kind: "model",
+        modelName: "Sonnet 5.5",
+      });
+      expect(
+        agentSetupProblem(getSettings(), { baseModelId: "copilot-plus/glm-9", effort: null })
+      ).toEqual({ kind: "model", modelName: "glm-9" });
     });
 
     it(`checks an agent saved without a model against the vault's default coding agent (${SETUP_ISSUE})`, () => {
@@ -123,8 +143,8 @@ describe("agentChats", () => {
       expect(agentSetupReason("Leo", { kind: "coding_agent", backendId: "opencode" })).toBe(
         "Leo runs on OpenCode, which isn't set up on this device."
       );
-      expect(agentSetupReason("Leo", { kind: "model", baseModelId: "opencode/big-pickle" })).toBe(
-        "Leo's model, big-pickle, isn't available on this device anymore."
+      expect(agentSetupReason("Leo", { kind: "model", modelName: "Big Pickle" })).toBe(
+        "Leo's model, Big Pickle, isn't available on this device."
       );
     });
   });

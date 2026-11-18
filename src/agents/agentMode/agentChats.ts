@@ -20,7 +20,15 @@ import { TFile, type App } from "obsidian";
 
 export type AgentSetupProblem =
   | { kind: "coding_agent"; backendId: BackendId }
-  | { kind: "model"; baseModelId: string };
+  | { kind: "model"; modelName: string };
+
+function modelGone(settings: CopilotSettings, baseModelId: string): AgentSetupProblem {
+  const id = baseModelId.split("/").pop() || baseModelId;
+  const configured = settings.configuredModels.find(({ info }) =>
+    [baseModelId, id].includes(info.id)
+  );
+  return { kind: "model", modelName: configured?.info.displayName || id };
+}
 
 const RUNNABLE_INSTALL_KINDS: ReadonlySet<InstallState["kind"]> = new Set(["ready", "checking"]);
 
@@ -33,22 +41,21 @@ export function agentSetupProblem(
   const backend = model
     ? findBackendForModel(settings, model.baseModelId)
     : getActiveBackendDescriptor(settings);
-  if (!backend) return model ? { kind: "model", baseModelId: model.baseModelId } : null;
+  if (!backend) return model ? modelGone(settings, model.baseModelId) : null;
   if (!RUNNABLE_INSTALL_KINDS.has(backend.getInstallState(settings).kind)) {
     return { kind: "coding_agent", backendId: backend.id };
   }
   const runnable = backend
     .getEnabledModelEntries?.(settings)
     ?.some((entry) => entry.baseModelId === model?.baseModelId && entry.credentialState === "ok");
-  return model && runnable === false ? { kind: "model", baseModelId: model.baseModelId } : null;
+  return model && runnable === false ? modelGone(settings, model.baseModelId) : null;
 }
 
 export function agentSetupReason(name: string, problem: AgentSetupProblem): string {
   if (problem.kind === "coding_agent") {
     return `${name} runs on ${backendRegistry[problem.backendId].displayName}, which isn't set up on this device.`;
   }
-  const model = problem.baseModelId.split("/").pop() || problem.baseModelId;
-  return `${name}'s model, ${model}, isn't available on this device anymore.`;
+  return `${name}'s model, ${problem.modelName}, isn't available on this device.`;
 }
 
 export function agentBackend(
