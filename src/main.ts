@@ -1,3 +1,4 @@
+import { registerIntelligentUiProcessor } from "@/intelligentUi/registerProcessor";
 import { startReleaseUpdateCheck } from "@/services/releaseUpdateNotice";
 import { releaseCursorAssociation } from "@/editor/releaseCursorAssociation";
 import { registerNoteHeaderAction } from "@/editor/registerNoteHeaderAction";
@@ -225,6 +226,7 @@ export default class CopilotPlugin extends Plugin implements CopilotStartup {
   // startup work runs in the background and registers what needs loaded settings only after its
   // last await. https://github.com/logancyang/obsidian-copilot/issues/3518
   onload(): void {
+    registerIntelligentUiProcessor(this);
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     installRendererEventsShim();
