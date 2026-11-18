@@ -19,13 +19,13 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 - create-close: with nothing typed, or nothing changed in a dialog that opened filled in, Esc, the close button, `Cancel`, or a click outside closes the dialog. With text typed, a click outside does nothing, and Esc, the close button, or `Cancel` ask "Discard Kai?" with `Keep editing` and `Discard`.
 - create-agent: `Create` writes the agent's folder with its instructions and face, and no memory file. The dialog closes and the [start screen](agent-home.md) shows the new agent selected, with the cursor in the chat input.
 - create-failed: when the agent cannot be written, the dialog stays open with everything typed and says why: "Couldn't create Kai. …"
-- create-drafted: opened from an agent's draft card, the dialog is filled with the draft's name, title, and instruction, under a first line with the drafting agent's face: "Drafted by Coco. Check it, pick a face and a model, then create." Everything else works as for **New**: a drafted name already on the team, an empty instruction, or one past 4,000 characters gets the usual notes. After `Create`, the start screen opens with the new agent selected and the cursor in the chat input.
+- create-drafted: opened from an agent's draft card, the dialog is filled with the draft's name, title, and instruction, under a first line with the drafting agent's face: "Drafted by Coco. Check it, pick a face and a model, then create." From a plain Copilot chat's card the first line is left out. Everything else works as for **New**: a drafted name already on the team, an empty instruction, or one past 4,000 characters gets the usual notes. After `Create`, the start screen opens with the new agent selected and the cursor in the chat input.
 
 ## How to get to it
 
 - **New** (**+**) in the row of faces on the [start screen](agent-home.md), and on a [project](projects.md)'s start screen.
 - `Create your first agent` on the first agent banner on the [start screen](agent-home.md).
-- `Review and create…` on a custom agent's draft card in its chat ([agent replies](agent-replies.md)).
+- `Review and create…` on a draft card in a custom agent's chat or a plain Copilot chat ([agent replies](agent-replies.md)).
 
 It needs a license that includes custom agents (a team license until launch).
 

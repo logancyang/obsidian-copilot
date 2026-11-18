@@ -13,7 +13,7 @@ export interface AgentDraft {
 
 export interface AgentDraftCard {
   draft: AgentDraft;
-  draftedBy: string;
+  draftedBy: string | null;
   afterUserTurn: number;
 }
 
@@ -40,13 +40,18 @@ export function readAgentDraft(value: unknown): AgentDraft | null {
 function readAgentDraftCard(saved: unknown): AgentDraftCard | null {
   const { draft, draftedBy, afterUserTurn } = (saved ?? {}) as Record<string, unknown>;
   const read = readAgentDraft(draft);
-  if (!read || typeof draftedBy !== "string" || !Number.isSafeInteger(afterUserTurn)) return null;
+  if (!read || !(draftedBy === null || typeof draftedBy === "string")) return null;
+  if (!Number.isSafeInteger(afterUserTurn)) return null;
   return { draft: read, draftedBy, afterUserTurn: afterUserTurn as number };
 }
 
 // A Reload or a reopened note gives the chat's messages new IDs, so the card is placed by its user turn.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
-export function showAgentDraft(chat: ChatStateHost, draft: AgentDraft, draftedBy: string): void {
+export function showAgentDraft(
+  chat: ChatStateHost,
+  draft: AgentDraft,
+  draftedBy: string | null
+): void {
   chat.updateChatState(AGENT_DRAFT_CARD, (_, view) => ({
     draft,
     draftedBy,

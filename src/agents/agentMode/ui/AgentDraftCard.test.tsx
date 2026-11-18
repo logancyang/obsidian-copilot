@@ -238,8 +238,11 @@ describe("AgentDraftCard", () => {
         expect(screen.getByRole("button", { name: "Review and create…" })).not.toBeNull();
       });
 
-      it(`opens the dialog without "Drafted by" once the drafting agent is gone (${ISSUE})`, () => {
-        renderSlot(draftCard({ draftedBy: "removed" }));
+      it.each([
+        ["once the drafting agent is gone", "removed"],
+        ["for a draft from a Copilot chat", null],
+      ])(`opens the dialog without "Drafted by" %s (${ISSUE})`, (_case, draftedBy) => {
+        renderSlot(draftCard({ draftedBy }));
 
         fireEvent.click(screen.getByRole("button", { name: "Review and create…" }));
 

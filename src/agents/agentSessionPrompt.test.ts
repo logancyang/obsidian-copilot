@@ -1,6 +1,6 @@
 import {
   buildAgentPrompt,
-  buildCopilotChatRecall,
+  buildCopilotChatSteering,
   describeAgent,
   loadAgentSessionPrompt,
 } from "@/agents/agentSessionPrompt";
@@ -329,12 +329,12 @@ describe("agentSessionPrompt", () => {
     });
   });
 
-  describe("buildCopilotChatRecall()", () => {
-    it("tells a chat without a custom agent to list its earlier chats with list_chats when asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/959)", async () => {
+  describe("buildCopilotChatSteering()", () => {
+    it("tells a chat without a custom agent to list its earlier chats with list_chats when asked (https://github.com/Brevilabs/obsidian-copilot-private/issues/959) and to draft a new agent with draft_agent when asked for one, naming only chats without a custom agent because the shared prompt also reaches agents' own and hidden chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/941)", async () => {
       await setCustomAgentsAccess("team");
 
-      expect(buildCopilotChatRecall()).toBe(
-        "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said."
+      expect(buildCopilotChatSteering()).toBe(
+        "In a chat without a custom agent, when the user asks what you and they worked on, discussed or decided before, list your earlier chats with list_chats from obsidian-copilot and read a listed note when you need what was said. In a chat without a custom agent, when the user asks you to make a new agent, draft it with the draft_agent tool from obsidian-copilot, which shows them a card to review and create it; you can't create an agent yourself."
       );
     });
 
@@ -343,7 +343,7 @@ describe("agentSessionPrompt", () => {
       async (access) => {
         await setCustomAgentsAccess(access);
 
-        expect(buildCopilotChatRecall()).toBeNull();
+        expect(buildCopilotChatSteering()).toBeNull();
       }
     );
   });

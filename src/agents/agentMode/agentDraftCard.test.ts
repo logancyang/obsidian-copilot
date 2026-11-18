@@ -111,6 +111,16 @@ describe("agentDraftCard", () => {
       });
     });
 
+    it(`reads back a card a Copilot chat drafted, with no drafting agent (${ISSUE})`, () => {
+      expect(
+        AGENT_DRAFT_CARD_EXTENSION.readFromNote?.({
+          draft: NORA,
+          draftedBy: null,
+          afterUserTurn: 2,
+        })
+      ).toEqual({ draft: NORA, draftedBy: null, afterUserTurn: 2 });
+    });
+
     it.each([
       ["a list", []],
       ["a draft without a name", { draft: { title: "x" }, draftedBy: "coco", afterUserTurn: 1 }],

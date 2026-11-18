@@ -12,8 +12,7 @@ const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the use
 
 export interface DraftAgentToolHost {
   isUnlistedChat: (sessionKey: string) => boolean;
-  isCopilotChat: (sessionKey: string) => boolean;
-  agentOfCaller: (chat: ChatStateHost | null) => string | null;
+  callerOf: (chat: ChatStateHost | null) => { agent: string | null } | null;
 }
 
 // OpenCode's Code Mode catalog shows only the first ~120 characters of a description, so the opening carries when to call it.
@@ -51,14 +50,10 @@ export function createDraftAgentTool(host: DraftAgentToolHost): HostedTool {
   return {
     definition: DRAFT_AGENT_TOOL,
     turnedOffText: UNAVAILABLE_TEXT,
-    // Only a custom agent drafts, from a chat the user sees; OpenCode lists tools once per folder, so its listing can't tell and the call checks again.
+    // Only a chat the user sees drafts, with or without a custom agent; OpenCode lists tools once per folder, so its listing can't tell a hidden chat and the call checks again.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/941
     listedAs: ({ sessionKey }: ToolListing) =>
-      getCustomAgentsGate() !== "full" ||
-      host.isUnlistedChat(sessionKey) ||
-      host.isCopilotChat(sessionKey)
-        ? null
-        : DRAFT_AGENT_TOOL,
+      getCustomAgentsGate() !== "full" || host.isUnlistedChat(sessionKey) ? null : DRAFT_AGENT_TOOL,
     call: async (args, chat) => {
       const draft = readAgentDraft(args);
       if (!draft) {
@@ -68,14 +63,14 @@ export function createDraftAgentTool(host: DraftAgentToolHost): HostedTool {
         };
       }
       if (getCustomAgentsGate() !== "full") return { text: UNAVAILABLE_TEXT, isError: false };
-      const draftedBy = host.agentOfCaller(chat);
-      if (!chat || !draftedBy) {
+      const caller = host.callerOf(chat);
+      if (!chat || !caller) {
         return {
-          text: `Only a custom agent can draft an agent, in its own chat. Don't call ${DRAFT_AGENT_TOOL_NAME} again.`,
+          text: `Only a chat the user sees can draft an agent. Don't call ${DRAFT_AGENT_TOOL_NAME} again.`,
           isError: false,
         };
       }
-      showAgentDraft(chat, draft, draftedBy);
+      showAgentDraft(chat, draft, caller.agent);
       return {
         text: `Shown to the user as a card below your reply, replacing any earlier draft in this chat. Nothing is created until they review it and press Create.`,
         isError: false,

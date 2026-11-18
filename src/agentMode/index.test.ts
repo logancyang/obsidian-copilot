@@ -795,7 +795,7 @@ describe("agentMode", () => {
       );
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent only to a custom agent's chat the user sees, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 offers draft_agent to every chat the user sees, with or without a custom agent, refuses a hidden chat's call, and keeps the draft card with the chat", async () => {
       const coco = Object.assign(fakeChat(), { agentSlug: "coco" });
       const copilot = Object.assign(fakeChat(), { agentSlug: null });
       Object.assign(mockManager, {
@@ -812,13 +812,15 @@ describe("agentMode", () => {
       const nora = { name: "Nora", title: "", instruction: "You plan pickups." };
 
       expect(listedFor("coco-chat")).not.toBeNull();
-      expect(listedFor("copilot-chat")).toBeNull();
+      expect(listedFor("copilot-chat")).not.toBeNull();
       expect(listedFor("hidden-chat")).toBeNull();
       expect((await draftAgent.call(nora, fakeChat())).text).toContain(
-        "Only a custom agent can draft an agent"
+        "Only a chat the user sees can draft an agent"
       );
       expect((await draftAgent.call(nora, coco)).text).toContain("Shown to the user as a card");
       expect(coco.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBe("coco");
+      expect((await draftAgent.call(nora, copilot)).text).toContain("Shown to the user as a card");
+      expect(copilot.readChatState(AGENT_DRAFT_CARD)?.draftedBy).toBeNull();
       expect(jest.mocked(AgentSessionManager).mock.calls[0][2].chatExtensions).toContain(
         AGENT_DRAFT_CARD_EXTENSION
       );
