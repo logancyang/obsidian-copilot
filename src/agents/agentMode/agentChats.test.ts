@@ -2,6 +2,7 @@ import {
   agentBackend,
   agentSetupProblem,
   agentSetupReason,
+  agentToSetUpBeforeChat,
   deleteAgentWithChats,
   listAgentChats,
 } from "@/agents/agentMode/agentChats";
@@ -146,6 +147,24 @@ describe("agentChats", () => {
       expect(agentSetupReason("Leo", { kind: "model", modelName: "Big Pickle" })).toBe(
         "Leo's model, Big Pickle, isn't available on this device."
       );
+    });
+  });
+
+  describe("agentToSetUpBeforeChat()", () => {
+    const problems = new Map([
+      ["leo", { kind: "coding_agent", backendId: "opencode" } as const],
+      ["nora", { kind: "model", modelName: "Sonnet 5.5" } as const],
+    ]);
+
+    it(`names the agent whose profile opens in place of its saved chat when the chat's coding agent isn't set up on this device (${SETUP_ISSUE})`, () => {
+      expect(agentToSetUpBeforeChat({ agent: "leo", backendId: "opencode" }, problems)).toBe("leo");
+    });
+
+    it(`opens the chat itself when it ran on another coding agent, its agent's only problem is the model, or it has no agent (${SETUP_ISSUE})`, () => {
+      expect(agentToSetUpBeforeChat({ agent: "leo", backendId: "claude" }, problems)).toBeNull();
+      expect(agentToSetUpBeforeChat({ agent: "nora", backendId: "claude" }, problems)).toBeNull();
+      expect(agentToSetUpBeforeChat({ agent: "maya", backendId: "claude" }, problems)).toBeNull();
+      expect(agentToSetUpBeforeChat({ backendId: "opencode" }, problems)).toBeNull();
     });
   });
 

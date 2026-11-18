@@ -58,6 +58,18 @@ export function agentSetupReason(name: string, problem: AgentSetupProblem): stri
   return `${name}'s model, ${problem.modelName}, isn't available on this device.`;
 }
 
+// A saved chat reopens on the coding agent it ran on, so an agent's chat whose coding agent isn't set up here opens the agent's profile, which says why, instead of failing to load.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+export function agentToSetUpBeforeChat(
+  { agent, backendId }: Pick<ChatHistoryItem, "agent" | "backendId">,
+  problems: ReadonlyMap<string, AgentSetupProblem>
+): string | null {
+  const problem = agent && problems.get(agent);
+  return problem && problem.kind === "coding_agent" && problem.backendId === backendId
+    ? agent
+    : null;
+}
+
 export function agentBackend(
   manager: AgentSessionManager,
   { name, model }: Pick<CustomAgent, "name" | "model">

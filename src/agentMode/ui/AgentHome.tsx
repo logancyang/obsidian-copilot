@@ -57,6 +57,7 @@ import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import {
   agentBackend,
   agentSetupReason,
+  agentToSetUpBeforeChat,
   startCustomAgentChat,
 } from "@/agents/agentMode/agentChats";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
@@ -486,6 +487,15 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     (slug: string) => void openLockedAgentProfile(app, () => openProfile(slug)),
     [app, openProfile]
   );
+  const openSavedChat = useCallback(
+    async (id: string) => {
+      const chat = chatHistoryItems.find((item) => item.id === id);
+      const slug = chat && agentToSetUpBeforeChat(chat, needsSetup);
+      if (slug) openProfile(slug);
+      else await handleLoadChat(id);
+    },
+    [chatHistoryItems, needsSetup, openProfile, handleLoadChat]
+  );
   const leaveProfile = useCallback(() => {
     markProfileClosedByUser();
     closeProfile();
@@ -583,7 +593,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         renderBody: () => (
           <GlobalRecentChatsSection
             {...recentChats}
-            onLoadChat={handleLoadChat}
+            onLoadChat={openSavedChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onCloseSession={handleCloseSession}
@@ -648,7 +658,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       handleSelectProject,
       handleCreateProject,
       handleProjectDeleted,
-      handleLoadChat,
+      openSavedChat,
       handleUpdateChatTitle,
       handleDeleteChat,
       handleDeleteChats,
@@ -687,7 +697,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
           <GlobalRecentChatsSection
             {...recentChats}
             variant="project"
-            onLoadChat={handleLoadChat}
+            onLoadChat={openSavedChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
             onCloseSession={handleCloseSession}
@@ -712,7 +722,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [
       recentChats,
       activeProjectId,
-      handleLoadChat,
+      openSavedChat,
       handleUpdateChatTitle,
       handleDeleteChat,
       handleDeleteChats,
@@ -1096,7 +1106,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         onSaveAsNote={handleSaveAsNote}
                         chatHistoryItems={chatHistoryItems}
                         onLoadHistory={handleLoadChatHistory}
-                        onLoadChat={handleLoadChat}
+                        onLoadChat={openSavedChat}
                         onUpdateChatTitle={handleUpdateChatTitle}
                         onDeleteChat={handleDeleteChat}
                         onCloseSession={handleCloseSession}
