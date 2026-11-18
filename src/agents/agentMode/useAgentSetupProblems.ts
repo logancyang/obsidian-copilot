@@ -16,13 +16,10 @@ export function useAgentSetupProblems(
   const settings = useSettingsValue();
   const installStates = useBackendInstallStates(plugin);
   return useMemo(() => {
+    void installStates;
     const problems = new Map<string, AgentSetupProblem>();
     for (const agent of agents) {
-      const problem = agentSetupProblem(
-        settings,
-        agent.model,
-        (backend) => installStates[backend.id]
-      );
+      const problem = agentSetupProblem(settings, agent.model);
       if (problem) problems.set(agent.slug, problem);
     }
     return problems.size > 0 ? problems : NO_SETUP_PROBLEMS;

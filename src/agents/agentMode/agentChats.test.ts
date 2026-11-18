@@ -111,18 +111,10 @@ describe("agentChats", () => {
       });
     });
 
-    it(`reads the coding agent's install state from the caller when given, as a view subscribed to it does (${SETUP_ISSUE})`, () => {
-      setUpDevice({ opencode: READY, claude: READY });
+    it(`treats a coding agent still checking its install as set up, so no agent locks while Obsidian starts (${SETUP_ISSUE})`, () => {
+      setUpDevice({ opencode: READY, claude: { kind: "checking", source: "custom" } });
 
-      expect(
-        agentSetupProblem(getSettings(), { baseModelId: "haiku", effort: null }, () => ABSENT)
-      ).toEqual({ kind: "coding_agent", backendId: "claude" });
-      expect(
-        agentSetupProblem(getSettings(), { baseModelId: "haiku", effort: null }, () => ({
-          kind: "checking",
-          source: "custom",
-        }))
-      ).toBeNull();
+      expect(agentSetupProblem(getSettings(), { baseModelId: "haiku", effort: null })).toBeNull();
     });
   });
 

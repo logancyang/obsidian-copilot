@@ -8,12 +8,7 @@ import {
 } from "@/agentMode/backends/registry";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type {
-  BackendDescriptor,
-  BackendId,
-  InstallState,
-  ModelSelection,
-} from "@/agentMode/session/types";
+import type { BackendId, InstallState, ModelSelection } from "@/agentMode/session/types";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import { deleteChatAndBookmark } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -33,15 +28,13 @@ const RUNNABLE_INSTALL_KINDS: ReadonlySet<InstallState["kind"]> = new Set(["read
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
 export function agentSetupProblem(
   settings: CopilotSettings,
-  model: CustomAgent["model"],
-  installStateOf: (backend: BackendDescriptor) => InstallState = (backend) =>
-    backend.getInstallState(settings)
+  model: CustomAgent["model"]
 ): AgentSetupProblem | null {
   const backend = model
     ? findBackendForModel(settings, model.baseModelId)
     : getActiveBackendDescriptor(settings);
   if (!backend) return model ? { kind: "model", baseModelId: model.baseModelId } : null;
-  if (!RUNNABLE_INSTALL_KINDS.has(installStateOf(backend).kind)) {
+  if (!RUNNABLE_INSTALL_KINDS.has(backend.getInstallState(settings).kind)) {
     return { kind: "coding_agent", backendId: backend.id };
   }
   const runnable = backend
