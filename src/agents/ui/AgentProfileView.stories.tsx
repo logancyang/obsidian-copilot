@@ -225,6 +225,6 @@ export const NeedsSetupModelGone: StoryObj<StoryProps> = {
       model: { baseModelId: "gpt-6", effort: null },
       ...paths("coco"),
     },
-    setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device anymore." },
+    setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device." },
   },
 };

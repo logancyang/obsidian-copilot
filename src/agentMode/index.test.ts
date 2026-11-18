@@ -948,9 +948,7 @@ describe("agentMode", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/962 refuses an agent whose model no backend runs here, before any chat opens", async () => {
       const { manager, started } = startWith({ baseModelId: "gpt-6", effort: null });
 
-      await expect(started).rejects.toThrow(
-        "Coco's model, gpt-6, isn't available on this device anymore."
-      );
+      await expect(started).rejects.toThrow("Coco's model, gpt-6, isn't available on this device.");
       expect(manager.createSession).not.toHaveBeenCalled();
     });
   });

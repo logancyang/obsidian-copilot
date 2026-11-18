@@ -356,10 +356,10 @@ describe("AgentProfile", () => {
     });
 
     it(`lets a setup-locked agent change its model, rename and change its face like any agent (${SETUP_ISSUE})`, async () => {
-      const { vault } = await setup({ kind: "model", baseModelId: "gpt-6" });
+      const { vault } = await setup({ kind: "model", modelName: "gpt-6" });
 
       expect(
-        screen.getByText("Coco's model, gpt-6, isn't available on this device anymore.")
+        screen.getByText("Coco's model, gpt-6, isn't available on this device.")
       ).not.toBeNull();
       expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
       expect(screen.getByRole("button", { name: "Rename Coco" })).not.toBeNull();
