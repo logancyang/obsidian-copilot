@@ -931,7 +931,7 @@ describe("useAgentHistoryControls", () => {
     });
   });
 
-  describe("archiveActiveChat()", () => {
+  describe("setActiveChatArchived()", () => {
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 saves the open chat and moves its note's row from the chat list to the archived list", async () => {
       const manager = makeManager();
       manager.getChatHistoryItems.mockResolvedValue([item("chats/saved.md"), item("b")]);
@@ -941,7 +941,7 @@ describe("useAgentHistoryControls", () => {
       });
 
       await act(async () => {
-        await result.current.archiveActiveChat();
+        await result.current.setActiveChatArchived(true);
       });
 
       expect(manager.saveActiveSession).toHaveBeenCalledTimes(1);
@@ -952,6 +952,24 @@ describe("useAgentHistoryControls", () => {
       ]);
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 unarchives the open chat through its saved note without resaving the chat", async () => {
+      const manager = makeManager();
+      manager.getActiveSession.mockReturnValue({ internalId: "live-1" });
+      manager.setChatArchived.mockImplementation(async (id: string) => ({
+        id,
+        archivedAt: undefined,
+      }));
+      const { result } = renderControls(manager);
+
+      await act(async () => {
+        await result.current.setActiveChatArchived(false);
+      });
+
+      expect(manager.getSessionSourcePath).toHaveBeenCalledWith("live-1");
+      expect(manager.saveActiveSession).not.toHaveBeenCalled();
+      expect(manager.setChatArchived).toHaveBeenCalledWith("chats/saved.md", false);
+    });
+
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives nothing, shows a notice, and rejects when the open chat cannot be saved", async () => {
       const manager = makeManager();
       manager.saveActiveSession.mockResolvedValue(null);
@@ -959,7 +977,7 @@ describe("useAgentHistoryControls", () => {
       (Notice as unknown as jest.Mock).mockClear();
 
       await act(async () => {
-        await expect(result.current.archiveActiveChat()).rejects.toThrow(
+        await expect(result.current.setActiveChatArchived(true)).rejects.toThrow(
           "The active chat has no saved note."
         );
       });

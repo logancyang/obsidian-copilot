@@ -18,6 +18,7 @@ import { useSettingsValue } from "@/settings/model";
 import { safeAsyncHandler } from "@/utils/safeAsyncHandler";
 import {
   Archive,
+  ArchiveRestore,
   Bookmark,
   Bug,
   Download,
@@ -64,7 +65,8 @@ interface AgentChatControlsProps {
   onCopyChatLink?: () => void | Promise<void>;
   getChatBookmarkState?: () => Promise<ChatBookmarkState>;
   onSetChatBookmarked?: (bookmarked: boolean) => Promise<void>;
-  onArchiveChat?: () => Promise<void>;
+  chatArchived?: boolean;
+  onSetChatArchived?: (archived: boolean) => Promise<void>;
   onReportError?: () => void;
   usageMeter?: React.ReactNode;
   tasksIndicator?: React.ReactNode;
@@ -86,7 +88,8 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onCopyChatLink,
   getChatBookmarkState,
   onSetChatBookmarked,
-  onArchiveChat,
+  chatArchived,
+  onSetChatArchived,
   onReportError,
   usageMeter,
   tasksIndicator,
@@ -200,10 +203,12 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
                     Add to bookmarks
                   </NeedsMessageMenuItem>
                 ))}
-              {onArchiveChat ? (
-                <DropdownMenuItem onSelect={safeAsyncHandler(onArchiveChat)}>
-                  <Archive />
-                  Archive chat
+              {onSetChatArchived ? (
+                <DropdownMenuItem
+                  onSelect={() => safeAsyncHandler(onSetChatArchived)(!chatArchived)}
+                >
+                  {chatArchived ? <ArchiveRestore /> : <Archive />}
+                  {chatArchived ? "Unarchive chat" : "Archive chat"}
                 </DropdownMenuItem>
               ) : (
                 <NeedsMessageMenuItem>

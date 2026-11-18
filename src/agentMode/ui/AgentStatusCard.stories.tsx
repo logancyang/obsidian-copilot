@@ -127,3 +127,11 @@ export const ConnectorsNeedAttention: StoryObj<AgentStatusCardProps> = {
     action: { label: "Manage", onClick: () => undefined },
   },
 };
+
+export const ArchivedChat: StoryObj<AgentStatusCardProps> = {
+  args: {
+    layout: "row",
+    message: "This chat is archived.",
+    action: { label: "Unarchive", onClick: () => undefined },
+  },
+};

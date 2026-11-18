@@ -115,12 +115,23 @@ describe("AgentChatControls", () => {
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 archives the open chat from the More actions menu", () => {
-      const onArchiveChat = jest.fn(async () => {});
-      renderSessionControls({ onArchiveChat });
+      const onSetChatArchived = jest.fn(async () => {});
+      renderSessionControls({ onSetChatArchived });
 
       fireEvent.click(within(openMoreActions()).getByRole("menuitem", { name: "Archive chat" }));
 
-      expect(onArchiveChat).toHaveBeenCalledTimes(1);
+      expect(onSetChatArchived).toHaveBeenCalledWith(true);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/968 offers Unarchive chat instead of Archive chat when the open chat is archived", () => {
+      const onSetChatArchived = jest.fn(async () => {});
+      renderSessionControls({ chatArchived: true, onSetChatArchived });
+
+      const menu = openMoreActions();
+      expect(within(menu).queryByRole("menuitem", { name: "Archive chat" })).toBeNull();
+      fireEvent.click(within(menu).getByRole("menuitem", { name: "Unarchive chat" }));
+
+      expect(onSetChatArchived).toHaveBeenCalledWith(false);
     });
 
     it("https://github.com/Brevilabs/obsidian-copilot-private/issues/702 and https://github.com/Brevilabs/obsidian-copilot-private/issues/968 disable Copy chat link, Add to bookmarks, and Archive chat in an empty chat and explains on hover that a message is needed", async () => {
