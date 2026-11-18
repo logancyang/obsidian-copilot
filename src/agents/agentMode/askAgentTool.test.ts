@@ -176,6 +176,23 @@ describe("askAgentTool", () => {
       });
     });
 
+    it(`fails a call for an agent whose model can't run on this device, giving the reason to tell the user and where to fix it (https://github.com/Brevilabs/obsidian-copilot-private/issues/962)`, async () => {
+      const { tool } = buildTool({
+        asked: {
+          kind: "cannot_run",
+          agent: LEO,
+          reason: "Leo runs on OpenCode, which isn't set up on this device.",
+        },
+      });
+
+      await expect(tool.call({ agent: "Leo", message: "Check the books." }, CHAT)).resolves.toEqual(
+        {
+          text: "Nothing was sent: Leo runs on OpenCode, which isn't set up on this device. Tell the user, and that they can pick another model in Leo's profile.",
+          isError: true,
+        }
+      );
+    });
+
     it("rejects a call without an agent or a message", async () => {
       const { tool, ask } = buildTool();
 

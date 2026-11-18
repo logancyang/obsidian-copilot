@@ -9,6 +9,8 @@ export interface ChatAgents {
   agents: readonly CustomAgent[];
   self: string | null;
   openRun?: (run: RunRef) => void;
+  needsSetup?: Pick<ReadonlySet<string>, "has">;
+  openProfile?: (slug: string) => void;
 }
 
 const NO_AGENTS: readonly CustomAgent[] = Object.freeze([]);
@@ -20,10 +22,13 @@ export const ChatAgentsContext = createContext<ChatAgents>(
 export function useChatAgentsValue(
   store: CustomAgentStore | undefined,
   self: string | null,
-  openRun?: (run: RunRef) => void
+  { openRun, needsSetup, openProfile }: Omit<ChatAgents, "agents" | "self"> = {}
 ): ChatAgents {
   const agents = useCustomAgents(store);
-  return useMemo(() => ({ agents, self, openRun }), [agents, self, openRun]);
+  return useMemo(
+    () => ({ agents, self, openRun, needsSetup, openProfile }),
+    [agents, self, openRun, needsSetup, openProfile]
+  );
 }
 
 export function useChatAgents(): readonly CustomAgent[] {

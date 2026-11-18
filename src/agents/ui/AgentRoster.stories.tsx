@@ -173,3 +173,14 @@ export const LockedAgentsOnDeviceWithoutLicense: StoryObj<AgentRosterProps> = {
     newAgentButton: <NewAgentButton locked onClick={() => {}} />,
   },
 };
+
+export const OneAgentNeedsSetupOnThisDevice: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: FIVE_AGENTS,
+    selectedSlug: "coco",
+    onOpenProfile: () => {},
+    needsSetup: new Set([LEO.slug]),
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};

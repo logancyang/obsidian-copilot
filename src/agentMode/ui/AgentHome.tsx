@@ -52,8 +52,13 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
-import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
+import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
+import {
+  agentBackend,
+  agentSetupReason,
+  startCustomAgentChat,
+} from "@/agents/agentMode/agentChats";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
 import { findRun } from "@/agents/agentMode/agentRelays";
 import { ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
@@ -78,7 +83,8 @@ import {
 } from "@/agents/ui/LockedAgentNotices";
 import { openLockedAgentProfile, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
-import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
+import { CustomAgentStoreContext, useCustomAgents } from "@/agents/ui/useCustomAgents";
+import { useAgentSetupProblems } from "@/agents/agentMode/useAgentSetupProblems";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -413,29 +419,20 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const isLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
   const isProjectLanding = isLanding && isProjectScope;
 
-  const agentChatStart = useCallback(
-    (agent: CustomAgent | null) => {
-      const model = agent?.model;
-      const backendId =
-        (model && findBackendForModel(getSettings(), model.baseModelId)?.id) || undefined;
-      const seedSelection = (backendId && manager.getSeedSelection(backendId, model)) || undefined;
-      return { backendId, seedSelection };
-    },
-    [manager]
-  );
   const switchLandingAgent = useCallback(
     async (agent: CustomAgent | null) => {
       const landing = manager.getActiveSession();
       if (!landing) return;
-      const { backendId, seedSelection } = agentChatStart(agent);
+      const { backendId, seed } = agent ? agentBackend(manager, agent) : {};
       const chat = await manager.replaceSessionInPlace(landing.internalId, backendId, {
-        seedSelection,
+        seedSelection: seed,
         agentSlug: agent?.slug ?? null,
       });
       await chat.ready;
     },
-    [manager, agentChatStart]
+    [manager]
   );
+  const needsSetup = useAgentSetupProblems(plugin, useCustomAgents(plugin.customAgents));
   const agentHome = useAgentHomeSelection(
     plugin.customAgents,
     {
@@ -444,14 +441,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       agentSlug: manager.getSession(sessionId)?.agentSlug ?? null,
       isLanding,
     },
-    switchLandingAgent
+    switchLandingAgent,
+    needsSetup
   );
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
-  const chatAgents = useChatAgentsValue(
-    plugin.customAgents,
-    agentHome.selected?.slug ?? null,
-    handleOpenRun
-  );
   const customAgentsGate = useCustomAgentsGate();
   const lapsed = isLicenseLapsed(settings);
   const { focusInput } = useChatInput();
@@ -484,6 +477,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const profile = useAgentProfileRoute(agentHome.agents, chatInputId);
   const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
   const { close: closeProfile, open: openProfile } = profile;
+  const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null, {
+    openRun: handleOpenRun,
+    needsSetup,
+    openProfile,
+  });
   const openLockedProfile = useCallback(
     (slug: string) => void openLockedAgentProfile(app, () => openProfile(slug)),
     [app, openProfile]
@@ -492,20 +490,24 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     markProfileClosedByUser();
     closeProfile();
   }, [markProfileClosedByUser, closeProfile]);
+  const selectedSlug = agentHome.selected?.slug ?? null;
   const startChatFromProfile = useCallback(
     (agent: CustomAgent) => {
       // The new chat page already has the agent picked, so its new chat is that page.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-      if (isLanding) return leaveProfile();
-      const { backendId, seedSelection } = agentChatStart(agent);
-      manager
-        .createSession(backendId, undefined, seedSelection, undefined, agent.slug)
-        .catch((e: unknown) => {
-          logError("[AgentMode] new chat from an agent's profile failed", e);
-          new Notice(`Couldn't start a chat with ${agent.name}. Please try again.`);
-        });
+      // An agent unlocked from its profile was never picked, so the new chat page picks it now.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+      if (isLanding) {
+        leaveProfile();
+        if (selectedSlug !== agent.slug) void selectAgent(agent.slug);
+        return;
+      }
+      startCustomAgentChat(manager, agent).catch((e: unknown) => {
+        logError("[AgentMode] new chat from an agent's profile failed", e);
+        new Notice(`Couldn't start a chat with ${agent.name}. Please try again.`);
+      });
     },
-    [isLanding, leaveProfile, agentChatStart, manager]
+    [isLanding, leaveProfile, selectedSlug, selectAgent, manager]
   );
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
@@ -774,7 +776,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     </ChatAgentsContext.Provider>
   );
 
-  const lockedChatAgent = useReadOnlyChatAgent(agentHome.selected, isLoading);
+  const chatSetupProblem = agentHome.selected && needsSetup.get(agentHome.selected.slug);
+  const lockedChatAgent = useReadOnlyChatAgent(agentHome.selected, isLoading, !!chatSetupProblem);
+  const handleNewCopilotChat = useCallback(() => {
+    // A read-only chat's coding agent may not be set up here, so its new chat starts on the vault's default.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+    manager.startNewChatInPlace(sessionId).catch((e: unknown) => {
+      logError("[AgentMode] new chat failed", e);
+      new Notice("Failed to start a new chat. Please try again.");
+    });
+  }, [manager, sessionId]);
 
   const { queue: heldMessages, setQueue: setHeldMessages } = draft;
   const handleRemoveHeldMessage = useCallback(
@@ -811,6 +822,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onSelect={(slug) => void agentHome.select(slug)}
       newAgentButton={newAgentButton}
       onOpenProfile={profile.open}
+      needsSetup={needsSetup}
       locked={
         customAgentsGate === "locked"
           ? {
@@ -956,6 +968,10 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               getModels={getAgentModelChoices}
               onBack={leaveProfile}
               onNewChat={startChatFromProfile}
+              setupProblem={
+                customAgentsGate === "full" ? needsSetup.get(profile.agent.slug) : undefined
+              }
+              onSetUp={(backendId) => backendRegistry[backendId].openInstallUI(plugin)}
             />
           )
         }
@@ -1111,8 +1127,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         <LockedAgentChat
                           name={lockedChatAgent.name}
                           lapsed={lapsed}
-                          onNewChat={handleNewChat}
+                          onNewChat={handleNewCopilotChat}
                           onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
+                          setup={
+                            customAgentsGate !== "locked" && chatSetupProblem
+                              ? {
+                                  reason: agentSetupReason(lockedChatAgent.name, chatSetupProblem),
+                                  onOpenProfile: () => openProfile(lockedChatAgent.slug),
+                                }
+                              : undefined
+                          }
                         />
                       ) : (
                         composerNode

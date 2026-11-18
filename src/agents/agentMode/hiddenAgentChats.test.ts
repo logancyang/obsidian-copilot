@@ -12,7 +12,7 @@ import {
   type FakeAgentBackend,
 } from "@/agents/agentMode/testing/fakeAgentBackend";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
-import { CustomAgentStore } from "@/agents/CustomAgentStore";
+import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { serializeInstructionsFile } from "@/agents/customAgentFiles";
 import * as customAgentsGate from "@/agents/customAgentsGate";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
@@ -31,6 +31,7 @@ const RUNNING = "https://github.com/Brevilabs/obsidian-copilot-private/issues/94
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
 const SEVERAL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/949";
 const ASKED_MEMORY = "https://github.com/Brevilabs/obsidian-copilot-private/issues/969";
+const SETUP = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
 const PLAN: BackendState = { model: null, mode: { current: "plan", options: [], apply: {} } };
 const PLAN_CHANGE = Object.freeze({
@@ -52,6 +53,7 @@ let started: AgentSession[];
 let starts: HiddenChatStart[];
 let startWaiters: Set<() => void>;
 let startChat: jest.Mock<Promise<AgentSession>, [HiddenChatStart]>;
+let unavailableReason: jest.Mock<string | null, [CustomAgent]>;
 let nextChat = 1;
 
 function seedAgent(slug: string, name: string, instruction: string): void {
@@ -238,6 +240,7 @@ beforeEach(async () => {
   started = [];
   starts = [];
   startWaiters = new Set();
+  unavailableReason = jest.fn((_agent: CustomAgent): string | null => null);
   startChat = jest.fn(async (start: HiddenChatStart) => {
     starts.push(start);
     const session = AgentSession.start({
@@ -259,6 +262,7 @@ beforeEach(async () => {
     store: () => store,
     vaultBase: () => "/vault",
     listedChat: (chat) => listed.find((session) => session === chat) ?? null,
+    unavailableReason,
     startChat,
   });
 });
@@ -282,6 +286,22 @@ describe("hiddenAgentChats", () => {
         });
         expect(startChat).not.toHaveBeenCalled();
         await untilAgentChatStarted();
+      });
+
+      it(`turns down an agent whose model can't run on this device with the reason, and starts no chat in its place (${SETUP})`, async () => {
+        unavailableReason.mockImplementation((agent) =>
+          agent.slug === "maya" ? "Maya runs on OpenCode, which isn't set up on this device." : null
+        );
+        const coco = await openChat({ agentSlug: "coco" });
+
+        const result = chats.ask(coco, "Maya", "What do you think of this plan?");
+
+        expect(result).toEqual({
+          kind: "cannot_run",
+          agent: store.getAgents().find(({ slug }) => slug === "maya"),
+          reason: "Maya runs on OpenCode, which isn't set up on this device.",
+        });
+        expect(startChat).not.toHaveBeenCalled();
       });
 
       it(`starts the asked agent's chat with its own instruction, memory and save rules, and the path of its own MEMORY.md that it writes without a card (${ASKED_MEMORY})`, async () => {
@@ -772,6 +792,7 @@ describe("hiddenAgentChats", () => {
           store: () => store,
           vaultBase: () => null,
           listedChat: (chat) => listed.find((session) => session === chat) ?? null,
+          unavailableReason,
           startChat,
         });
         const coco = await openChat({ agentSlug: "coco" });

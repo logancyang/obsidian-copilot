@@ -39,7 +39,8 @@ function rememberLastAgent(slug: string | null): void {
 export function useAgentHomeSelection(
   store: CustomAgentStore | undefined,
   { sessionId, chatInputId, agentSlug, isLanding }: AgentHomeChat,
-  switchAgent: (agent: CustomAgent | null) => Promise<void>
+  switchAgent: (agent: CustomAgent | null) => Promise<void>,
+  needsSetup: Pick<ReadonlySet<string>, "has">
 ): AgentHomeSelection {
   const gate = useCustomAgentsGate();
   const agents = useCustomAgents(store);
@@ -86,7 +87,9 @@ export function useAgentHomeSelection(
     if (!isLanding) return;
     // A new chat that started on an agent before the license check locked custom agents, as at the first launch after a plan lapses, goes back to Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
-    if (gate === "locked" && agentSlug !== null) {
+    // A new chat on an agent whose model stopped running on this device goes back to Copilot the same way.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+    if ((gate === "locked" || needsSetup.has(agentSlug ?? "")) && agentSlug !== null) {
       void select(null);
       return;
     }
@@ -101,8 +104,10 @@ export function useAgentHomeSelection(
     }
     if (chosenChatInputIds.current.has(chatInputId) || !isListed(lastAgent)) return;
     chosenChatInputIds.current.add(chatInputId);
-    if (agentSlug === null && lastAgent !== null) void select(lastAgent);
-  }, [gate, isLanding, chatInputId, agentSlug, lastAgent, agents, select]);
+    if (agentSlug === null && lastAgent !== null && !needsSetup.has(lastAgent)) {
+      void select(lastAgent);
+    }
+  }, [gate, isLanding, chatInputId, agentSlug, lastAgent, agents, needsSetup, select]);
 
   // A new chat reads its agent when it is built, so an agent changed before the first message, as from its profile, rebuilds the chat to start as the agent now is.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940

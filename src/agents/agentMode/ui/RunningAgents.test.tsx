@@ -222,6 +222,7 @@ describe("RunningAgents", () => {
         store: () => store,
         vaultBase: () => "/vault",
         listedChat: (chat) => (chat === coco ? coco : null),
+        unavailableReason: () => null,
         startChat,
       });
       coco.sendPrompt("@Leo reconcile October");

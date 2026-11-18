@@ -1,3 +1,4 @@
+import { AgentUnavailableError } from "@/agents/agentUnavailableError";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 import { AgentPickerModal } from "@/agents/ui/AgentPickerModal";
@@ -19,7 +20,11 @@ export function registerStartAgentChatCommand(
   const start = (agent: CustomAgent): void => {
     startChat(agent).catch((error) => {
       logError(`[Custom agents] Could not start a chat with ${agent.slug}`, error);
-      new Notice("Could not start the chat. Check the Copilot log.");
+      new Notice(
+        error instanceof AgentUnavailableError
+          ? error.message
+          : "Could not start the chat. Check the Copilot log."
+      );
     });
   };
   const sync = (): void => {

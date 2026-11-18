@@ -7,6 +7,8 @@ import {
   type LockedProfile,
   LockedProfileBanner,
   lockedUntil,
+  type SetupLockedProfile,
+  SetupLockedProfileBanner,
 } from "@/agents/ui/LockedAgentNotices";
 import { NO_OBSIDIAN_TOOLTIP } from "@/connectors/ui/ConnectorRow";
 import type { PickedFace } from "@/agents/ui/AgentFacePicker";
@@ -19,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SLIDE_IN_PAGE_CLASS } from "@/components/ui/slideIn";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import {
@@ -73,6 +76,7 @@ export interface AgentProfileViewProps {
   onChangeModel: (model: ModelSelection) => void;
   onDelete: () => void;
   locked?: LockedProfile;
+  setupLocked?: SetupLockedProfile;
 }
 
 // A pencil follows the pointer over the head, or keyboard focus on its own control; focus a click leaves in the head
@@ -140,6 +144,7 @@ export function AgentProfileView({
   onChangeModel,
   onDelete,
   locked,
+  setupLocked,
 }: AgentProfileViewProps): React.ReactElement {
   const { name } = agent;
   // A lapsed or synced agent keeps its files open and Delete; its face, name, title and model can't change and it can't chat.
@@ -210,7 +215,11 @@ export function AgentProfileView({
           Back to chat
         </button>
       </div>
-      {locked && <LockedProfileBanner name={name} {...locked} />}
+      {locked ? (
+        <LockedProfileBanner name={name} {...locked} />
+      ) : (
+        setupLocked && <SetupLockedProfileBanner {...setupLocked} />
+      )}
       <div className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col tw-gap-3.5 tw-overflow-y-auto tw-p-3.5">
         <div className="tw-group tw-flex tw-min-w-0 tw-flex-col tw-items-center tw-gap-1.5 tw-pb-1 tw-pt-2 tw-text-center">
           {readOnly ? (
@@ -269,17 +278,29 @@ export function AgentProfileView({
           )}
         </div>
         {!readOnly && (
-          <button
-            type="button"
-            onClick={onNewChat}
-            className={cn(
-              BLOCK_BUTTON_CLASS,
-              "tw-border-border tw-text-normal hover:tw-bg-modifier-hover"
-            )}
-          >
-            <MessageSquarePlus className="tw-size-4 tw-shrink-0" />
-            <span className="tw-truncate">New chat with {name}</span>
-          </button>
+          <Tooltip open={setupLocked ? undefined : false}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-disabled={setupLocked ? true : undefined}
+                onClick={setupLocked ? undefined : onNewChat}
+                className={cn(
+                  BLOCK_BUTTON_CLASS,
+                  "tw-border-border tw-text-normal",
+                  setupLocked
+                    ? "tw-cursor-not-allowed tw-opacity-50"
+                    : "hover:tw-bg-modifier-hover",
+                  NO_OBSIDIAN_TOOLTIP
+                )}
+              >
+                <MessageSquarePlus className="tw-size-4 tw-shrink-0" />
+                <span className="tw-truncate">New chat with {name}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="tw-max-w-64 tw-text-center">
+              {setupLocked?.reason}
+            </TooltipContent>
+          </Tooltip>
         )}
         <SectionLabel>What {name} knows</SectionLabel>
         <div className="tw-flex tw-flex-col tw-gap-2">
@@ -305,7 +326,13 @@ export function AgentProfileView({
           </FileRow>
         </div>
         <SectionLabel>Model</SectionLabel>
-        <div className={cn(ROW_CLASS, readOnly && "tw-opacity-60")}>
+        <div
+          className={cn(
+            ROW_CLASS,
+            readOnly && "tw-opacity-60",
+            !readOnly && setupLocked && "tw-border-error"
+          )}
+        >
           <span className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col">
             <span className="tw-text-sm tw-font-semibold tw-text-normal">Model</span>
             <span className="tw-text-ui-smaller tw-text-muted">
@@ -321,6 +348,13 @@ export function AgentProfileView({
             className="tw-h-7 tw-w-auto tw-min-w-0 tw-shrink tw-px-2 tw-text-ui-small"
           />
         </div>
+        {/* The Model field is what keeps a setup-locked agent from chatting, so it is marked and says how to fix it.
+            https://github.com/Brevilabs/obsidian-copilot-private/issues/962 */}
+        {!readOnly && setupLocked && (
+          <div className="-tw-mt-2">
+            <FieldError>Pick a model that runs on this device.</FieldError>
+          </div>
+        )}
         <div className="tw-flex-1" />
         <button
           type="button"

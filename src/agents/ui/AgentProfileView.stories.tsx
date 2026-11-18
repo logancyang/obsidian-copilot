@@ -13,6 +13,7 @@ import {
   TWELVE_AGENTS,
 } from "@/agents/ui/testing/rosterFixtures";
 import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { Meta, StoryObj } from "@/lib/story";
 import React, { useEffect, useRef } from "react";
 
@@ -73,9 +74,11 @@ function SidebarPage({ setup, ...props }: StoryProps) {
     if (ref.current) setup?.(ref.current);
   }, [setup]);
   return (
-    <div ref={ref} className="tw-h-[640px]">
-      <AgentProfileView {...props} />
-    </div>
+    <TooltipProvider>
+      <div ref={ref} className="tw-h-[640px]">
+        <AgentProfileView {...props} />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -196,5 +199,32 @@ export const LockedAfterLicenseLapsed: StoryObj<StoryProps> = {
 export const LockedOnDeviceWithoutLicense: StoryObj<StoryProps> = {
   args: {
     locked: { lapsed: false, onUnlock: () => {} },
+  },
+};
+
+export const NeedsSetupCodingAgentMissing: StoryObj<StoryProps> = {
+  args: {
+    agent: {
+      ...COCO,
+      instruction: COCO_INSTRUCTION,
+      model: { baseModelId: "opencode/big-pickle", effort: null },
+      ...paths("coco"),
+    },
+    setupLocked: {
+      reason: "Coco runs on OpenCode, which isn't set up on this device.",
+      setUp: { label: "Set up OpenCode", open: () => {} },
+    },
+  },
+};
+
+export const NeedsSetupModelGone: StoryObj<StoryProps> = {
+  args: {
+    agent: {
+      ...COCO,
+      instruction: COCO_INSTRUCTION,
+      model: { baseModelId: "gpt-6", effort: null },
+      ...paths("coco"),
+    },
+    setupLocked: { reason: "Coco's model, gpt-6, isn't available on this device anymore." },
   },
 };

@@ -57,7 +57,7 @@ import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
 import { buildNativeChatId } from "@/utils/nativeChatId";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
-import { agentBackend } from "@/agents/agentMode/agentChats";
+import { agentBackend, agentSetupProblem, agentSetupReason } from "@/agents/agentMode/agentChats";
 import { AGENT_DRAFT_CARD_EXTENSION } from "@/agents/agentMode/agentDraftCard";
 import {
   createAnswerAgentTool,
@@ -241,9 +241,13 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     store: () => plugin.customAgents,
     vaultBase: () => getVaultBase(app),
     listedChat: (chat) => managerRef?.getSessions().find((session) => session === chat) ?? null,
+    unavailableReason: (agent) => {
+      const problem = agentSetupProblem(getSettings(), agent.model);
+      return problem && agentSetupReason(agent.name, problem);
+    },
     startChat: ({ agent, prompt, projectId, mode, observeSessionEvent, askedFrom, resume }) => {
       const manager = requireManager();
-      const { backendId, seed } = agentBackend(manager, agent.model);
+      const { backendId, seed } = agentBackend(manager, agent);
       return manager.startUnlistedSession({
         backendId,
         seedSelection: seed,

@@ -12,6 +12,7 @@ const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/588"
 const CREATE_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
 const LOCKED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/582";
 const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
+const SETUP_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/962";
 
 function agent(name: string, title = `${name}'s job`): RosterAgent {
   return {
@@ -38,6 +39,7 @@ interface RenderOptions {
   newAgentButton?: React.ReactNode;
   onOpenProfile?: (slug: string) => void;
   locked?: LockedRoster;
+  needsSetup?: ReadonlySet<string>;
 }
 
 function renderRoster({
@@ -47,6 +49,7 @@ function renderRoster({
   newAgentButton,
   onOpenProfile,
   locked,
+  needsSetup,
 }: RenderOptions = {}) {
   jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(width);
   const onSelect = jest.fn();
@@ -60,6 +63,7 @@ function renderRoster({
         newAgentButton={newAgentButton}
         onOpenProfile={onOpenProfile}
         locked={locked}
+        needsSetup={needsSetup}
       />
     </TooltipProvider>
   );
@@ -437,6 +441,44 @@ describe("AgentRoster", () => {
       fireEvent.click(items[1]);
 
       expect(onOpenLocked).toHaveBeenCalledWith("kai");
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it(`greys only the agents whose model can't run on this device, with the lock, and opens such an agent's profile instead of picking it (${SETUP_ISSUE})`, () => {
+      const onOpenProfile = jest.fn();
+      const { onSelect } = renderRoster({ onOpenProfile, needsSetup: new Set(["leo"]) });
+
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo · Needs setup"]);
+      const leo = screen.getByRole("button", { name: "Leo · Needs setup" });
+      expect(leo.querySelector("img")?.className).toContain("tw-grayscale");
+      expect(leo.querySelector(".lucide-lock")).not.toBeNull();
+
+      fireEvent.click(leo);
+      fireEvent.click(screen.getByRole("button", { name: "Maya" }));
+
+      expect(onOpenProfile).toHaveBeenCalledWith("leo");
+      expect(onSelect.mock.calls).toEqual([["maya"]]);
+    });
+
+    it(`marks and opens the profile of a setup-locked agent from the More menu (${SETUP_ISSUE})`, () => {
+      const onOpenProfile = jest.fn();
+      const { onSelect } = renderRoster({
+        agents: SIX,
+        width: 260,
+        onOpenProfile,
+        needsSetup: new Set(["kai"]),
+      });
+
+      openMoreMenu(3);
+      const items = screen.getAllByRole("menuitem");
+      expect(items.map((item) => !!within(item).queryByLabelText("Locked"))).toEqual([
+        false,
+        true,
+        false,
+      ]);
+      fireEvent.click(items[1]);
+
+      expect(onOpenProfile).toHaveBeenCalledWith("kai");
       expect(onSelect).not.toHaveBeenCalled();
     });
   });

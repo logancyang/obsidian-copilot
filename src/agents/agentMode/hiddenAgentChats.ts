@@ -39,6 +39,7 @@ export interface HiddenAgentChatsHost {
   store: () => CustomAgentStore | undefined;
   vaultBase: () => string | null;
   listedChat: (chat: ChatStateHost) => AgentSession | null;
+  unavailableReason: (agent: CustomAgent) => string | null;
   startChat: (start: HiddenChatStart) => Promise<AgentSession>;
 }
 
@@ -52,6 +53,7 @@ export type AskAgentResult =
   | { kind: "asked"; agent: CustomAgent }
   | { kind: "sent"; agent: CustomAgent; now: boolean }
   | { kind: "awaiting_answer"; agent: CustomAgent; question: string }
+  | { kind: "cannot_run"; agent: CustomAgent; reason: string }
   | AgentRefusal;
 
 export type CheckAgentResult =
@@ -160,6 +162,10 @@ export class HiddenAgentChats {
         now: existing.started?.acceptsMidTurnPrompts() ?? false,
       };
     }
+    // An agent whose model can't run on this device is turned down with the reason, so no other model answers as it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
+    const reason = this.host.unavailableReason(agent);
+    if (reason) return { kind: "cannot_run", agent, reason };
     const from = agents.find((other) => other.slug === parent.agentSlug)?.name ?? "Copilot";
     const hidden =
       existing?.started && existing.started.getStatus() !== "closed"
