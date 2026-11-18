@@ -23,6 +23,7 @@ export interface CreateAgentDialogOptions {
   initialValues?: CreateAgentInitialValues;
   draftedBy?: DraftedBy;
   onCreated: (slug: string) => void;
+  onAskCopilot?: (message: string) => void;
 }
 
 const OPEN_PICKER_SELECTOR = '[data-radix-popper-content-wrapper] > [data-state="open"]';
@@ -31,6 +32,7 @@ export class CreateAgentModal extends Modal {
   private root: Root | null = null;
   private readonly closeGuard = new CreateAgentCloseGuard();
   private closingForGood = false;
+  private afterClose: (() => void) | null = null;
 
   constructor(
     app: App,
@@ -52,6 +54,7 @@ export class CreateAgentModal extends Modal {
           this.options.onCreated(slug);
         }}
         onCancel={() => this.close()}
+        onAskCopilot={this.options.onAskCopilot && ((message) => this.askCopilot(message))}
       />
     );
   }
@@ -59,6 +62,16 @@ export class CreateAgentModal extends Modal {
   onClose(): void {
     this.root?.unmount();
     this.root = null;
+    const afterClose = this.afterClose;
+    this.afterClose = null;
+    afterClose?.();
+  }
+
+  // Ask Copilot leaves the dialog the way closing it does, asking before typed text goes, and opens the chat only once it has closed.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  private askCopilot(message: string): void {
+    this.afterClose = () => this.options.onAskCopilot?.(message);
+    this.close();
   }
 
   // Esc, the close button and Cancel ask before throwing away what the user typed.
@@ -75,7 +88,9 @@ export class CreateAgentModal extends Modal {
       `Discard ${this.closeGuard.name || "this agent"}?`,
       "Discard",
       "Keep editing",
-      undefined,
+      () => {
+        this.afterClose = null;
+      },
       "destructive"
     ).open();
   }
@@ -107,9 +122,16 @@ interface CreateAgentDialogProps {
   closeGuard: CreateAgentCloseGuard;
   onCreated: (slug: string) => void;
   onCancel: () => void;
+  onAskCopilot?: (message: string) => void;
 }
 
-function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateAgentDialogProps) {
+function CreateAgentDialog({
+  options,
+  closeGuard,
+  onCreated,
+  onCancel,
+  onAskCopilot,
+}: CreateAgentDialogProps) {
   const agents = useCustomAgents(options.store);
   const presetFaces = usePresetFaces(useApp().vault, options.store);
   return (
@@ -129,6 +151,7 @@ function CreateAgentDialog({ options, closeGuard, onCreated, onCancel }: CreateA
         closeGuard={closeGuard}
         onCreate={async (agent) => onCreated(await options.store.createAgent(agent))}
         onClose={onCancel}
+        onAskCopilot={onAskCopilot}
       />
     </TooltipProvider>
   );

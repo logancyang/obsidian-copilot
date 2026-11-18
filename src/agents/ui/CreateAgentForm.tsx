@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getModelKeyFromModel } from "@/lib/model-key";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { AlertCircle, Folder, Pencil } from "lucide-react";
+import { AlertCircle, Folder, Lightbulb, Pencil } from "lucide-react";
 import React, { useEffect, useId, useState } from "react";
 
 export const INSTRUCTION_SOFT_LIMIT = 4000;
@@ -62,6 +62,21 @@ export interface CreateAgentFormProps {
   closeGuard: CreateAgentCloseGuard;
   onCreate: (agent: NewCustomAgent) => Promise<void>;
   onClose: () => void;
+  onAskCopilot?: (message: string) => void;
+}
+
+interface DialogNoteProps {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}
+
+function DialogNote({ icon, children }: DialogNoteProps): React.ReactElement {
+  return (
+    <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-px-2.5 tw-py-2 tw-text-ui-small tw-text-muted">
+      {icon}
+      {children}
+    </div>
+  );
 }
 
 export function CreateAgentForm({
@@ -75,6 +90,7 @@ export function CreateAgentForm({
   closeGuard,
   onCreate,
   onClose,
+  onAskCopilot,
 }: CreateAgentFormProps): React.ReactElement {
   const [rootEl, setRootEl] = useState<HTMLFormElement | null>(null);
   const [start] = useState(() => [
@@ -124,6 +140,15 @@ export function CreateAgentForm({
     closeGuard.name = trimmedName;
   }, [closeGuard, hasInput, trimmedName]);
 
+  // Only what the user typed goes to Copilot; a prefilled template is the dialog's, not theirs.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  const typed = (text: string, index: number) =>
+    text.trim() === start[index].trim() ? "" : text.trim();
+  const askCopilot = () =>
+    onAskCopilot?.(
+      `Create a new agent for me. Name: ${typed(name, 0)}\nWhat it should do: ${typed(instruction, 2)}`
+    );
+
   const create = async () => {
     if (blocker) {
       setInstructionLeftEmpty(missingInstruction);
@@ -157,13 +182,23 @@ export function CreateAgentForm({
       }}
     >
       {draftedBy && (
-        <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-px-2.5 tw-py-2 tw-text-ui-small tw-text-muted">
-          <AgentFace src={draftedBy.faceSrc} size="s" />
+        <DialogNote icon={<AgentFace src={draftedBy.faceSrc} size="s" />}>
           <span>
             <span className="tw-font-semibold tw-text-normal">Drafted by {draftedBy.name}.</span>{" "}
             Check it, pick a face and a model, then create.
           </span>
-        </div>
+        </DialogNote>
+      )}
+      {onAskCopilot && (
+        <DialogNote icon={<Lightbulb className="tw-size-4 tw-shrink-0" />}>
+          <span className="tw-flex-1">
+            <span className="tw-font-semibold tw-text-normal">Tip:</span> you can also just ask.
+            Tell Copilot what you need and it drafts the agent for you.
+          </span>
+          <Button type="button" variant="secondary" size="sm" onClick={askCopilot}>
+            Ask Copilot
+          </Button>
+        </DialogNote>
       )}
       <div className="tw-flex tw-items-start tw-gap-4">
         <Popover open={facePickerOpen} onOpenChange={setFacePickerOpen}>
@@ -196,7 +231,7 @@ export function CreateAgentForm({
               id={ids.name}
               value={name}
               autoFocus
-              placeholder="e.g. Kai"
+              placeholder="e.g. Leo"
               aria-invalid={!!nameTaken}
               className={cn(nameTaken && "!tw-border-[color:var(--text-error)]")}
               onChange={(event) => setName(event.target.value)}

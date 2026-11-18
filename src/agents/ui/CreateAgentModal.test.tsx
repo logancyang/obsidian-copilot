@@ -52,19 +52,25 @@ const openedModals: OpenedModal[] = [];
 
 function newDialog(
   createAgent = jest.fn().mockResolvedValue("kai"),
-  agents?: readonly CustomAgent[]
+  agents?: readonly CustomAgent[],
+  onAskCopilot?: jest.Mock
 ) {
   const onCreated = jest.fn();
   const modal = new CreateAgentModal(createFakeAgentVault().app, {
     store: fakeStore(createAgent, agents),
     models: MODELS,
     onCreated,
+    onAskCopilot,
   }) as OpenedModal;
   return { modal, onCreated, createAgent };
 }
 
-function openDialog(createAgent?: jest.Mock, agents?: readonly CustomAgent[]) {
-  const dialog = newDialog(createAgent, agents);
+function openDialog(
+  createAgent?: jest.Mock,
+  agents?: readonly CustomAgent[],
+  onAskCopilot?: jest.Mock
+) {
+  const dialog = newDialog(createAgent, agents, onAskCopilot);
   act(() => dialog.modal.open());
   openedModals.push(dialog.modal);
   return dialog;
@@ -277,6 +283,39 @@ describe("CreateAgentModal", () => {
 
         expect(modal.isOpen).toBe(true);
         expect(screen.getByText("Discard Coco?")).not.toBeNull();
+      });
+
+      it(`closes at once on Ask Copilot while nothing is typed, then hands Copilot the message (${ISSUE})`, () => {
+        const onAskCopilot = jest.fn();
+        const { modal } = openDialog(undefined, undefined, onAskCopilot);
+
+        fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+
+        expect(modal.isOpen).toBe(false);
+        expect(onAskCopilot).toHaveBeenCalledWith(
+          "Create a new agent for me. Name: \nWhat it should do: "
+        );
+      });
+
+      it(`asks before discarding typed text on Ask Copilot: Discard closes and hands Copilot the typed name, Keep editing stays and hands nothing (${ISSUE})`, () => {
+        const onAskCopilot = jest.fn();
+        const { modal } = openDialog(undefined, undefined, onAskCopilot);
+        type("Name", "Kai");
+
+        fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+        fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+        expect(modal.isOpen).toBe(true);
+        act(() => void modal.pressEscape());
+        fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+        expect(onAskCopilot).not.toHaveBeenCalled();
+
+        openDialog(undefined, undefined, onAskCopilot);
+        type("Name", "Kai");
+        fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+        fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+        expect(onAskCopilot).toHaveBeenCalledWith(
+          "Create a new agent for me. Name: Kai\nWhat it should do: "
+        );
       });
 
       it(`keeps the dialog and everything typed when the user chooses Keep editing (${ISSUE})`, () => {

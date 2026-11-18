@@ -127,7 +127,7 @@ const meta = {
 export default meta;
 
 export const Empty: StoryObj<CreateAgentFormProps> = {
-  render: () => <FormStory />,
+  render: () => <FormStory onAskCopilot={() => {}} />,
 };
 
 export const FirstAgent: StoryObj<CreateAgentFormProps> = {
@@ -136,6 +136,7 @@ export const FirstAgent: StoryObj<CreateAgentFormProps> = {
       agents={[]}
       initialValues={FIRST_AGENT_TEMPLATE}
       presetFaces={{ ...PRESET_FACES, usedIds: new Set() }}
+      onAskCopilot={() => {}}
     />
   ),
 };

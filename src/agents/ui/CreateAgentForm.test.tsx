@@ -136,6 +136,7 @@ describe("CreateAgentForm", () => {
       renderForm();
 
       expect(document.activeElement).toBe(screen.getByLabelText("Name"));
+      expect(screen.getByLabelText("Name").getAttribute("placeholder")).toBe("e.g. Leo");
       expect(screen.getByLabelText(/Title/).getAttribute("placeholder")).toBe(
         "One line under the name, e.g. Writes the newsletter"
       );
@@ -458,6 +459,48 @@ describe("CreateAgentForm", () => {
       expect(createButton().disabled).toBe(false);
     });
 
+    it(`shows a tip to ask Copilot instead, whose Ask Copilot hands over a message asking for a new agent with blank Name and What it should do lines (${ISSUE})`, () => {
+      const onAskCopilot = jest.fn();
+      renderForm({ onAskCopilot });
+
+      expect(document.querySelector("form")?.firstElementChild?.textContent).toBe(
+        "Tip: you can also just ask. Tell Copilot what you need and it drafts the agent for you.Ask Copilot"
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+
+      expect(onAskCopilot).toHaveBeenCalledWith(
+        "Create a new agent for me. Name: \nWhat it should do: "
+      );
+    });
+
+    it(`carries the name and instruction the user typed into the message for Copilot, so nothing they wrote is lost (${ISSUE})`, () => {
+      const onAskCopilot = jest.fn();
+      renderForm({ onAskCopilot });
+      type("Name", " Kai ");
+      type("What it handles", "You handle marketing.\n");
+
+      fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+
+      expect(onAskCopilot).toHaveBeenCalledWith(
+        "Create a new agent for me. Name: Kai\nWhat it should do: You handle marketing."
+      );
+    });
+
+    it(`leaves the values the dialog opened with out of the message for Copilot, as the first agent's template (${ISSUE})`, () => {
+      const onAskCopilot = jest.fn();
+      renderForm({
+        onAskCopilot,
+        initialValues: { name: "Coco", title: "", instruction: "You look after my vault." },
+      });
+      type(/^Title/, "Runs my week");
+
+      fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+
+      expect(onAskCopilot).toHaveBeenCalledWith(
+        "Create a new agent for me. Name: \nWhat it should do: "
+      );
+    });
+
     it(`opens a drafted agent with "Drafted by" and the drafting agent's face as its first line, and nothing above the fields otherwise (${DRAFT_ISSUE})`, () => {
       renderForm({
         initialValues: {
@@ -473,10 +516,12 @@ describe("CreateAgentForm", () => {
         "Drafted by Coco. Check it, pick a face and a model, then create."
       );
       expect(banner.querySelector("img")?.getAttribute("src")).toBe("app://coco.webp");
+      expect(screen.queryByText(/^Tip:/)).toBeNull();
       cleanup();
 
       renderForm();
       expect(screen.queryByText(/Drafted by/)).toBeNull();
+      expect(screen.queryByRole("button", { name: "Ask Copilot" })).toBeNull();
     });
 
     it(`lets the dialog's own checks handle a drafted name already on the team and a drafted empty instruction (${DRAFT_ISSUE})`, async () => {

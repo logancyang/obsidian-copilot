@@ -448,7 +448,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
   const customAgentsGate = useCustomAgentsGate();
   const lapsed = isLicenseLapsed(settings);
-  const { focusInput } = useChatInput();
+  const { focusInput, insertTextWithPills } = useChatInput();
   const selectAgent = agentHome.select;
   const getAgentModelChoices = useCallback(
     () =>
@@ -466,8 +466,13 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       store,
       models: getAgentModelChoices(),
       onCreated: (slug) => void selectAgent(slug).then(focusInput),
+      onAskCopilot: (message) =>
+        void selectAgent(null).then(() => {
+          focusInput();
+          insertTextWithPills(message);
+        }),
     }).open();
-  }, [app, plugin, getAgentModelChoices, selectAgent, focusInput]);
+  }, [app, plugin, getAgentModelChoices, selectAgent, focusInput, insertTextWithPills]);
   const newAgentButton = renderNewAgentButton(customAgentsGate, {
     emphasized: agentHome.agents.length === 0,
     onCreate: openCreateAgentDialog,
