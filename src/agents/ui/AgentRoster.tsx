@@ -11,7 +11,7 @@ import {
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Lock, Plus } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
 export type RosterAgent = Pick<CustomAgent, "slug" | "name" | "title" | "instruction" | "faceSrc">;
@@ -255,21 +255,35 @@ function MoreAgentsMenu({ agents, onSelect }: MoreAgentsMenuProps) {
 export interface NewAgentButtonProps {
   onClick: () => void;
   emphasized?: boolean;
+  locked?: boolean;
 }
 
-export function NewAgentButton({ onClick, emphasized }: NewAgentButtonProps): React.ReactElement {
+export function NewAgentButton({
+  onClick,
+  emphasized,
+  locked,
+}: NewAgentButtonProps): React.ReactElement {
   return (
-    <RosterCell label="New" aria-label="New agent" onClick={onClick}>
+    <RosterCell
+      label="New"
+      aria-label={locked ? "New agent · Supporter preview" : "New agent"}
+      onClick={onClick}
+    >
       <span
         className={cn(
           CIRCLE_CLASS,
-          "tw-border-[1.5px] tw-border-dashed tw-bg-transparent",
+          "tw-relative tw-border-[1.5px] tw-border-dashed tw-bg-transparent",
           emphasized
             ? "tw-border-[color:var(--text-muted)] tw-text-normal"
             : "tw-border-border tw-text-muted"
         )}
       >
         <Plus className="tw-size-4" />
+        {locked && (
+          <span className="tw-absolute tw--bottom-1 tw--right-1 tw-flex tw-size-4 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted">
+            <Lock className="tw-size-2.5" />
+          </span>
+        )}
       </span>
     </RosterCell>
   );

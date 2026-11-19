@@ -139,6 +139,10 @@ export interface LicenseCheckContext {
   [key: string]: unknown;
 }
 
+export interface LicenseCheckOptions {
+  sendWithoutKey?: boolean;
+}
+
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private pluginVersion: string = "Unknown";
@@ -204,19 +208,20 @@ export class BrevilabsClient {
 
   async validateLicenseKey(
     app: App | undefined,
-    context: LicenseCheckContext
+    context: LicenseCheckContext,
+    options: LicenseCheckOptions = {}
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
     const requestedLicenseKey = getSettings().plusLicenseKey;
 
     // The server answers an empty key with the same 403 as a wrong one, so a keyless check would revoke a user who has not entered a key yet.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/307
-    if (!requestedLicenseKey) {
+    if (!requestedLicenseKey && !options.sendWithoutKey) {
       return { isValid: false };
     }
 
-    const requestBody: Record<string, unknown> = {
-      license_key: requestedLicenseKey,
-    };
+    const requestBody: Record<string, unknown> = requestedLicenseKey
+      ? { license_key: requestedLicenseKey }
+      : {};
 
     if (context && typeof context === "object") {
       const filteredContext = Object.fromEntries(
@@ -244,6 +249,10 @@ export class BrevilabsClient {
     if (getSettings().plusLicenseKey !== requestedLicenseKey) {
       return { isValid: undefined };
     }
+
+    // A check sent without a key only records a free user's interest; no reply to it may revoke or grant anything.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
+    if (!requestedLicenseKey) return { isValid: false };
 
     if (error) {
       // Revoke only on a 403 with an API error body; a bare 403 comes from a gateway or WAF and says nothing about the key.

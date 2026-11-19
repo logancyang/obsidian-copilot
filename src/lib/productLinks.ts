@@ -23,6 +23,8 @@ export type ProductUtmMedium =
   | "preview_hint"
   | "navigator_dialog"
   | "navigator_blocked_view"
+  | "custom_agent_dialog"
+  | "custom_agent_mention"
   | "connectors_settings"
   | "connectors_chat"
   | "skill_no_license"

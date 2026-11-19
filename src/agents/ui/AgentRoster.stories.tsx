@@ -84,3 +84,14 @@ export const NoAgentsWithNewAgentButton: StoryObj<AgentRosterProps> = {
     newAgentButton: <NewAgentButton emphasized onClick={() => {}} />,
   },
 };
+
+export const NoAgentsWithLockedNewAgentButton: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: [],
+    emptyHero: (
+      <span className="tw-text-3xl tw-font-[330] tw-text-normal">What are you working on?</span>
+    ),
+    newAgentButton: <NewAgentButton emphasized locked onClick={() => {}} />,
+  },
+};
