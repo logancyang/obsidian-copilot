@@ -3,12 +3,14 @@ import { AnswerCompletion, type AnswerEnd } from "@/agentMode/session/answerComp
 import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import { replayPersistedMode } from "@/agentMode/session/replayPersistedMode";
 import type { ProjectScopeId } from "@/agentMode/session/scope";
+import { buildChatFileChanges } from "@/agentMode/session/turnFileChanges";
 import type {
   CopilotMode,
   PermissionDecision,
   PermissionPrompt,
   SessionAgent,
   SessionEvent,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
@@ -42,6 +44,7 @@ export type AskAgentResult =
 
 interface HiddenRunEnd {
   reply: string;
+  files: readonly TurnFileChange[];
   denied: readonly string[];
   error?: Error;
 }
@@ -203,7 +206,7 @@ export class HiddenAgentChats {
     try {
       end = await this.runTurn(hidden, run, answer, await hidden.session, message);
     } catch (error) {
-      end = { reply: run.reply.trim(), denied: run.denied, error: asError(error) };
+      end = { reply: run.reply.trim(), files: [], denied: run.denied, error: asError(error) };
     } finally {
       hidden.run = null;
     }
@@ -231,7 +234,7 @@ export class HiddenAgentChats {
       // A continued chat follows the mode the asking chat is in now, not the one it started in.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
-      const { turn } = session.sendPrompt(hiddenJobText(hidden, message));
+      const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
       turn.then(
         () => {
           if (!run.sawTurn) run.finish({ error: new Error(`${hidden.agent.name} didn't start.`) });
@@ -240,8 +243,11 @@ export class HiddenAgentChats {
       );
       const { error } = await answer;
       if (!error) await untilSettled(session);
+      const messages = session.store.getDisplayMessages();
+      const asked = messages.findIndex((m) => m.id === userMessageId);
       return {
         reply: run.reply.trim(),
+        files: buildChatFileChanges(messages.slice(asked + 1)),
         denied: run.denied,
         ...(error ? { error } : {}),
       };
@@ -263,8 +269,10 @@ export class HiddenAgentChats {
         mention: run.id,
         reply: end.reply,
         denied: end.denied,
+        changed: end.files.map((change) => change.path),
         error: end.error?.message,
-      })
+      }),
+      end.files
     );
   }
 
@@ -297,7 +305,11 @@ export class HiddenAgentChats {
 
 // Claude reads a message mid-turn and Stop would move a waiting one into the user's draft, so a reply waits for the turn to end there; Codex and OpenCode hold it themselves.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
-async function relay(parent: AgentSession, text: string): Promise<void> {
+async function relay(
+  parent: AgentSession,
+  text: string,
+  files: readonly TurnFileChange[]
+): Promise<void> {
   for (;;) {
     const status = parent.getStatus();
     if (status === "closed") return;
@@ -312,11 +324,32 @@ async function relay(parent: AgentSession, text: string): Promise<void> {
       logWarn("[Custom agents] couldn't pass an asked agent's reply to its chat", error);
       return;
     }
+    const stopAttaching = attachFiles(parent, sent.userMessageId, files);
     const outcome = await sent.turn.catch(() => null);
+    stopAttaching();
     // A reply dropped before it reached the agent, as by Stop while it waited, goes again once the chat can take it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
     if (outcome !== "cancelled" || parent.store.getMessage(sent.userMessageId)) return;
   }
+}
+
+// The relayed reply shows the files the asked agent changed in the existing Files changed card, so they ride on the message that carries the reply, which a busy chat adds only when it sends it.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+function attachFiles(
+  parent: AgentSession,
+  messageId: string,
+  files: readonly TurnFileChange[]
+): () => void {
+  const attach = () => files.length === 0 || parent.store.setFileChanges(messageId, [...files]);
+  if (attach()) return () => {};
+  const unsubscribe = parent.subscribe({
+    onMessagesChanged: () => {},
+    onStatusChanged: () => {},
+    onPromptSent: () => {
+      if (attach()) unsubscribe();
+    },
+  });
+  return unsubscribe;
 }
 
 async function stopSession(session: AgentSession): Promise<void> {

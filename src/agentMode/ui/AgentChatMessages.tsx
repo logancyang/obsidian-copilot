@@ -13,6 +13,8 @@ import { permissionRequesterName } from "@/agentMode/ui/taskDisplay";
 import { openTurnDiff } from "@/agentMode/ui/TurnDiffView";
 import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
+import { useAgentReply } from "@/agents/agentMode/useAgentReply";
+import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { ChatTranscriptViewport } from "@/components/chat-components/ui/ChatTranscriptViewport";
@@ -26,6 +28,7 @@ import type {
   AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
+  TurnFileChange,
 } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { logError } from "@/logger";
@@ -117,7 +120,12 @@ const AgentMessageRow = memo(function AgentMessageRow({
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
   const memorySaves = useMemorySaveTrail(message, app);
+  const agentReply = useAgentReply(message);
   const onContinue = isAssistant && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
+  const openFileChange = (change: TurnFileChange) =>
+    void openTurnDiff(app, change, message.id).catch((error: unknown) =>
+      logError("[AgentChatMessages] failed to open the turn diff", error)
+    );
 
   return (
     // Off-screen turns skip paint so scrolling a long chat costs what is on screen, not the whole transcript.
@@ -154,13 +162,18 @@ const AgentMessageRow = memo(function AgentMessageRow({
             }
             memorySaves={memorySaves}
             onContinue={onContinue}
-            onOpenFileChange={(change) =>
-              void openTurnDiff(app, change, message.id).catch((error: unknown) =>
-                logError("[AgentChatMessages] failed to open the turn diff", error)
-              )
-            }
+            onOpenFileChange={openFileChange}
           />
         </div>
+      ) : agentReply ? (
+        // Until #947 draws the folded reply, a relayed reply shows as the agent's words under one line, never as the message the agent received.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+        <AgentReplyMessage
+          name={agentReply.marker.name}
+          reply={agentReply.reply}
+          fileChanges={message.fileChanges}
+          onOpenFileChange={openFileChange}
+        />
       ) : (
         <>
           <ChatSingleMessage
