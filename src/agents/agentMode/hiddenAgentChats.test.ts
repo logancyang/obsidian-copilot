@@ -148,6 +148,17 @@ async function askFromMessage(): Promise<{ coco: ObservedChat; maya: AgentSessio
   return { coco, maya };
 }
 
+async function waitingOnQuestion(): Promise<{ coco: ObservedChat; maya: AgentSession }> {
+  const { coco, maya } = await askFromMessage();
+  chats.askUser(maya, "October or November?");
+  fake.say(sessionIdOf(maya), "Waiting for the user.");
+  fake.endTurn(sessionIdOf(maya));
+  fake.endTurn(sessionIdOf(coco));
+  await fake.untilPrompt(sessionIdOf(coco), 2);
+  fake.endTurn(sessionIdOf(coco));
+  return { coco, maya };
+}
+
 function answer(maya: AgentSession, text: string): void {
   fake.say(sessionIdOf(maya), text);
   fake.endTurn(sessionIdOf(maya));
@@ -814,6 +825,117 @@ describe("hiddenAgentChats", () => {
       });
     });
 
+    describe("askUser()", () => {
+      it(`tells the asked agent it can ask the user with ask_user and then end its turn (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+
+        const maya = await askedAndPrompted(coco);
+
+        expect(fake.promptsTo(sessionIdOf(maya))[0]).toContain(
+          "If you can't go on without the user's answer to a question, ask it with the ask_user tool from obsidian-copilot, then end your turn; the answer comes back as your next message."
+        );
+      });
+
+      it(`relays the asked agent's question when its turn ends, saves the run as waiting on a question, and keeps it running (${CONTROL})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        expect(chats.askUser(maya, "October or November?")).toBe("asked");
+        fake.say(sessionIdOf(maya), "I need one call from the user.");
+        fake.endTurn(sessionIdOf(maya));
+        fake.endTurn(sessionIdOf(coco));
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 2);
+        expect(relayed).toContain(
+          "Maya has a question for the user, quoted below, and waits for the answer. Ask the user in your own words, then end your turn. When the user answers, pass the answer to Maya with answer_agent."
+        );
+        expect(relayed).toContain(
+          '<agent-reply from="Maya">\nOctober or November?\n</agent-reply>'
+        );
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "question" }));
+        expect(chats.workingIn("maya")).toBe("Coco");
+        const progress = chats.check(coco, "Maya");
+        expect(progress.kind === "progress" && progress.progress).toContain(
+          "Maya is waiting for the user to answer this question:\nOctober or November?"
+        );
+      });
+
+      it(`turns down a question from a chat the user sees, which can ask the user itself (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+
+        expect(chats.askUser(coco, "October?")).toBe("not_from_here");
+        expect(chats.askUser(null, "October?")).toBe("not_from_here");
+      });
+
+      it(`ends a run waiting on a question as didn't finish when the asked agent's chat closes, as when its process dies (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+
+        await maya.dispose();
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayed).toContain("Maya didn't finish (Maya's chat stopped before it finished.).");
+        expect(mentionsOn(coco)?.[0]).toEqual(
+          expect.objectContaining({
+            status: "didnt_finish",
+            end: { kind: "error", message: "Maya's chat stopped before it finished." },
+          })
+        );
+        expect(chats.workingIn("maya")).toBeNull();
+      });
+
+      it(`stops a run waiting on a question when the user stops it instead of answering, relaying what the agent wrote before it asked (${CONTROL})`, async () => {
+        const { coco } = await waitingOnQuestion();
+
+        expect(chats.stop(coco, "Maya")).toEqual(expect.objectContaining({ kind: "stopped" }));
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayed).toContain("Maya stopped, as the user asked.");
+        expect(relayed).toContain("Waiting for the user.");
+        expect(mentionsOn(coco)?.[0]).toEqual(
+          expect.objectContaining({ status: "stopped", end: { kind: "stopped_by_user" } })
+        );
+      });
+    });
+
+    describe("answer()", () => {
+      it(`passes the user's answer into the same chat, saves the run as working again, and relays only what the agent wrote after the answer when it is done (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+
+        expect(chats.answer(coco, "Maya", "October. They're October sales.")).toEqual({
+          kind: "answered",
+          agent: agentNamed("Maya"),
+        });
+
+        const passed = await fake.untilPrompt(sessionIdOf(maya), 2);
+        expect(passed).toContain("Coco passed on the user's answer to your question.");
+        expect(passed).toContain("October. They're October sales.");
+        expect(mentionsOn(coco)?.[0].status).toBe("working");
+        answer(maya, "All matched.");
+
+        const relayed = await fake.untilPrompt(sessionIdOf(coco), 3);
+        expect(relayed).toContain("Maya replied.");
+        expect(relayed).toContain("All matched.");
+        expect(relayed).not.toContain("Waiting for the user.");
+        expect(mentionsOn(coco)?.[0].status).toBe("finished");
+        expect(startChat).toHaveBeenCalledTimes(1);
+      });
+
+      it(`passes nothing and says no question waits when the agent isn't waiting on one, including from a chat with no chat open with it, as after a restart (${CONTROL})`, async () => {
+        const coco = await openChat({ agentSlug: "coco" });
+        const other = await openChat();
+        const maya = await askedAndPrompted(coco);
+
+        expect(chats.answer(coco, "Maya", "October.")).toEqual({
+          kind: "no_question",
+          agent: agentNamed("Maya"),
+        });
+        expect(chats.answer(other, "Maya", "October.")).toEqual({
+          kind: "no_question",
+          agent: agentNamed("Maya"),
+        });
+        expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+      });
+    });
+
     describe("check()", () => {
       it(`reports how long the agent has worked, the end of what it has written and its latest steps, without sending it anything (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
@@ -1119,6 +1241,15 @@ describe("hiddenAgentChats", () => {
         );
         expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
         expect(fake.promptsTo(sessionIdOf(coco))).toEqual([]);
+      });
+
+      it(`passes an open question on only once, not again on unload (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+
+        chats.dispose();
+
+        await untilStatus(maya, (status) => status === "closed");
+        expect(fake.promptsTo(sessionIdOf(coco))).toHaveLength(2);
       });
 
       it(`relays nothing for an asked agent whose chat fails to start after unload stopped it (${ISSUE})`, async () => {

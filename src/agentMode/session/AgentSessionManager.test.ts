@@ -1165,7 +1165,8 @@ describe("AgentSessionManager", () => {
         expect(copilotMcpServer.connect).toHaveBeenCalledWith(
           session.internalId,
           session.backendId,
-          expect.any(Function)
+          expect.any(Function),
+          false
         );
         expect(sessionCreateSpy).toHaveBeenLastCalledWith(
           expect.objectContaining({ mcpServers: [FEEDBACK_CHANNEL] })
@@ -1211,6 +1212,29 @@ describe("AgentSessionManager", () => {
         const findChat = copilotMcpServer.connect.mock.calls[1][2] as FindCallingChat;
 
         expect(findChat(caller.getBackendSessionId())).toBe(caller);
+      });
+
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/945 finds an asked agent's chat, which no list shows, as the caller on a shared connection", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({
+          copilotMcpServer,
+          descriptor: buildDescriptor({ sharesMcpServersAcrossSessions: true }),
+        });
+        const asked = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+        });
+        const [, , findChat, shared] = copilotMcpServer.connect.mock.calls[0] as [
+          string,
+          string,
+          FindCallingChat,
+          boolean,
+        ];
+
+        expect(shared).toBe(true);
+        expect(findChat(asked.getBackendSessionId())).toBe(asked);
       });
 
       it.each([
@@ -1633,7 +1657,7 @@ describe("AgentSessionManager", () => {
       const MAYA = Object.freeze({ slug: "maya", prompt: "In this chat you are Maya." });
       const observeSessionEvent = jest.fn();
 
-      it(`starts an asked agent's chat in the asking chat's project folder with the agent's prompt, mode and model (${ISSUE_944})`, async () => {
+      it(`starts an asked agent's chat in the asking chat's project folder with the agent's prompt, mode and model, and finds it behind its own tool calls (${ISSUE_944})`, async () => {
         seedProjects("launch");
         const copilotMcpServer = buildCopilotMcpServer();
         const mgr = buildManager({ copilotMcpServer });
@@ -1661,8 +1685,11 @@ describe("AgentSessionManager", () => {
         expect(copilotMcpServer.connect).toHaveBeenCalledWith(
           session.internalId,
           "opencode",
-          expect.any(Function)
+          expect.any(Function),
+          false
         );
+        const findChat = copilotMcpServer.connect.mock.calls[0][2] as FindCallingChat;
+        expect(findChat(null)).toBe(session);
       });
 
       it(`keeps an asked agent's chat out of the tabs, the chat lists and the running chats (${ISSUE_944})`, async () => {
