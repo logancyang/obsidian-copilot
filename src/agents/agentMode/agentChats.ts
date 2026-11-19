@@ -10,13 +10,10 @@ import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { BackendId, InstallState, ModelSelection } from "@/agentMode/session/types";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
-import { deleteChatAndBookmark } from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { logError, logWarn } from "@/logger";
 import { getCachedProjectRecords } from "@/projects/state";
-import { getEffectiveConversationsFolder } from "@/settings/copilotFolder";
 import { getSettings, setSettings, type CopilotSettings } from "@/settings/model";
-import { TFile, type App } from "obsidian";
 
 export type AgentSetupProblem =
   | { kind: "coding_agent"; backendId: BackendId }
@@ -105,16 +102,17 @@ export async function listAgentChats(
   return lists.flat().filter((chat) => chat.agent === slug);
 }
 
-function isAgentChatNote(app: App, slug: string, path: string): boolean {
-  if (!path.startsWith(`${getEffectiveConversationsFolder()}/`)) return false;
-  const file = app.vault.getAbstractFileByPath(path);
-  const agent: unknown =
-    file instanceof TFile ? app.metadataCache.getFileCache(file)?.frontmatter?.agent : undefined;
-  return typeof agent === "string" && agent.trim() === slug;
+export async function listAgentChatsToArchive(
+  manager: AgentSessionManager,
+  slug: string
+): Promise<ChatHistoryItem[]> {
+  // A chat the user already archived, or one in an archived project, stays where the user put it, so only the all-chats list's unarchived chats move to the archive.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+  const chats = await manager.getChatHistoryItems(GLOBAL_SCOPE);
+  return chats.filter((chat) => chat.agent === slug && chat.archivedAt === undefined);
 }
 
 export interface DeleteAgentRequest {
-  app: App;
   manager: AgentSessionManager;
   store: CustomAgentStore;
   slug: string;
@@ -123,26 +121,23 @@ export interface DeleteAgentRequest {
 }
 
 export interface DeleteAgentResult {
-  deletedChats: number;
-  failedChats: number;
+  archivedChats: number;
   agentDeleted: boolean;
 }
 
 const NOTHING_DELETED: DeleteAgentResult = Object.freeze({
-  deletedChats: 0,
-  failedChats: 0,
+  archivedChats: 0,
   agentDeleted: false,
 });
 
-export async function deleteAgentWithChats({
-  app,
+export async function deleteAgentAndArchiveChats({
   manager,
   store,
   slug,
   hostSessionId,
   hiddenChats,
 }: DeleteAgentRequest): Promise<DeleteAgentResult> {
-  // A confirm that lands after the agent's folder is gone or custom agents stopped must not delete its chats on their own.
+  // A confirm that lands after the agent's folder is gone or custom agents stopped must not archive its chats on their own.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
   if (!store.getAgents().some((agent) => agent.slug === slug)) return NOTHING_DELETED;
   // New chats must not reopen on the agent being deleted, or the new chat below would start as it.
@@ -160,31 +155,26 @@ export async function deleteAgentWithChats({
       logWarn(`[Custom agents] No new chat in place of ${slug}'s chat`, error);
     });
   }
-  const chats = await listAgentChats(manager, slug);
-  // A history row can carry the agent from the chat index while its note was moved out of the chats folder, replaced, or no longer names the agent; only the note itself proves it is this agent's chat.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-  const canTrashNote = (path: string) => isAgentChatNote(app, slug, path);
-  let deletedChats = 0;
-  for (const chat of chats) {
-    try {
-      await deleteChatAndBookmark(app, manager, chat.id, { canTrashNote });
-      deletedChats++;
-    } catch (error) {
-      logError(`[Custom agents] Deleting ${slug}'s chat ${chat.id} failed`, error);
-    }
-  }
-  const failedChats = chats.length - deletedChats;
-  // An agent deleted while some of its chats stay would leave them recorded with an agent nobody can open or delete them from.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
-  if (failedChats > 0) return { deletedChats, failedChats, agentDeleted: false };
-  // An agent the delete keeps keeps working, so its run is stopped and reported as deleted only once nothing is left to keep it.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
   hiddenChats?.stopAgent(slug);
   try {
     await store.deleteAgent(slug);
   } catch (error) {
     logError(`[Custom agents] Trashing ${slug}'s folder failed`, error);
-    return { deletedChats, failedChats, agentDeleted: false };
+    return NOTHING_DELETED;
   }
-  return { deletedChats, failedChats, agentDeleted: true };
+  let archivedChats = 0;
+  for (const chat of await listAgentChatsToArchive(manager, slug)) {
+    // An open chat would keep replying as an agent that no longer exists, so it closes first; one its coding agent can't close is archived all the same.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+    await manager.closeChatSession(chat.id).catch((error: unknown) => {
+      logWarn(`[Custom agents] Closing ${slug}'s chat ${chat.id} failed`, error);
+    });
+    try {
+      await manager.setChatArchived(chat.id, true);
+      archivedChats++;
+    } catch (error) {
+      logError(`[Custom agents] Archiving ${slug}'s chat ${chat.id} failed`, error);
+    }
+  }
+  return { archivedChats, agentDeleted: true };
 }

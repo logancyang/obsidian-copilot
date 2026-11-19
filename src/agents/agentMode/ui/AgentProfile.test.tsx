@@ -77,7 +77,7 @@ interface ProfileHarnessProps {
   setupProblem?: AgentSetupProblem;
 }
 
-const deletedChats = jest.fn(async (_id: string, _options?: unknown) => {});
+const archivedChats = jest.fn(async (id: string, _archived: boolean) => ({ id, archivedAt: 10 }));
 const hiddenChats = {
   workingIn: jest.fn((_slug: string): string | null => "Maya"),
   stopAgent: jest.fn((_slug: string) => {}),
@@ -88,10 +88,12 @@ function ProfileHarness({ store, app, handlers, setupProblem }: ProfileHarnessPr
   const manager = {
     getChatHistoryItems: async () => [
       { id: "a.md", agent: "coco" },
+      { id: "old.md", agent: "coco", archivedAt: 5 },
       { id: "maya.md", agent: "maya" },
     ],
     getSession: () => undefined,
-    deleteChatHistory: deletedChats,
+    closeChatSession: async () => {},
+    setChatArchived: archivedChats,
   } as unknown as AgentSessionManager;
   if (!coco) return null;
   return (
@@ -130,7 +132,7 @@ async function setup(setupProblem?: AgentSetupProblem) {
       <ProfileHarness store={store} app={app} handlers={handlers} setupProblem={setupProblem} />
     </TooltipProvider>
   );
-  await waitFor(() => expect(screen.getByText(/^1 chat · since /)).not.toBeNull());
+  await waitFor(() => expect(screen.getByText(/^2 chats · since /)).not.toBeNull());
   return { vault, app, store, newLeaf, handlers };
 }
 
@@ -273,7 +275,7 @@ describe("AgentProfile", () => {
       ]);
     });
 
-    it(`asks before deleting, naming the chat count, then deletes the agent's folder and its chats only (${ISSUE})`, async () => {
+    it(`asks before deleting, counting the chats it will archive, then deletes the agent's folder and archives only its unarchived chats (${ISSUE})`, async () => {
       const { vault } = await setup();
 
       fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
@@ -287,9 +289,11 @@ describe("AgentProfile", () => {
       expect(vault.trashedPaths).toEqual([]);
       confirm();
 
-      await waitFor(() => expect(obsidian.Notice).toHaveBeenCalledWith("Deleted Coco and 1 chat."));
+      await waitFor(() =>
+        expect(obsidian.Notice).toHaveBeenCalledWith("Deleted Coco and archived 1 chat.")
+      );
       expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
-      expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
+      expect(archivedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
       expect(vault.trashedPaths).toEqual([FOLDER]);
     });
 
@@ -313,10 +317,10 @@ describe("AgentProfile", () => {
         action: "Enter license key",
       },
     ] as const)(
-      `shows the locked profile on $device, with its banner, a model that can't change and Delete but no New chat, and still deletes the agent and its chats (${LOCKED_ISSUE})`,
+      `shows the locked profile on $device, with its banner, a model that can't change and Delete but no New chat, and still deletes the agent and archives its chats (${LOCKED_ISSUE})`,
       async ({ access, banner, action }) => {
         jest.mocked(AgentDeleteModal).mockClear();
-        deletedChats.mockClear();
+        archivedChats.mockClear();
         const { vault } = await setup();
 
         setCustomAgentsLaunched(true);
@@ -337,7 +341,7 @@ describe("AgentProfile", () => {
         confirm();
 
         await waitFor(() => expect(vault.trashedPaths).toEqual([FOLDER]));
-        expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
+        expect(archivedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
       }
     );
 
@@ -387,23 +391,22 @@ describe("AgentProfile", () => {
   });
 
   describe("agentDeleteNotice()", () => {
-    it("names the deleted agent and how many of its chats went with it", () => {
+    it(`names the deleted agent and how many of its chats were archived (${ISSUE})`, () => {
       expect([
-        agentDeleteNotice("Coco", { deletedChats: 3, failedChats: 0, agentDeleted: true }),
-        agentDeleteNotice("Coco", { deletedChats: 0, failedChats: 0, agentDeleted: true }),
-      ]).toEqual(["Deleted Coco and 3 chats.", "Deleted Coco."]);
+        agentDeleteNotice("Coco", { archivedChats: 3, agentDeleted: true }),
+        agentDeleteNotice("Coco", { archivedChats: 1, agentDeleted: true }),
+        agentDeleteNotice("Coco", { archivedChats: 0, agentDeleted: true }),
+      ]).toEqual([
+        "Deleted Coco and archived 3 chats.",
+        "Deleted Coco and archived 1 chat.",
+        "Deleted Coco.",
+      ]);
     });
 
-    it(`says what was and wasn't deleted when the agent was kept (${ISSUE})`, () => {
-      expect([
-        agentDeleteNotice("Coco", { deletedChats: 2, failedChats: 1, agentDeleted: false }),
-        agentDeleteNotice("Coco", { deletedChats: 2, failedChats: 0, agentDeleted: false }),
-        agentDeleteNotice("Coco", { deletedChats: 0, failedChats: 0, agentDeleted: false }),
-      ]).toEqual([
-        "Couldn't delete 1 of Coco's 3 chats, so Coco was kept.",
-        "Deleted 2 chats with Coco, but couldn't delete Coco.",
-        "Couldn't delete Coco.",
-      ]);
+    it(`says the agent couldn't be deleted when its folder stayed (${ISSUE})`, () => {
+      expect(agentDeleteNotice("Coco", { archivedChats: 0, agentDeleted: false })).toBe(
+        "Couldn't delete Coco."
+      );
     });
   });
 });

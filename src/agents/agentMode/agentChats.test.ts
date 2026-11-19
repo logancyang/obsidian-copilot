@@ -3,7 +3,7 @@ import {
   agentSetupProblem,
   agentSetupReason,
   agentToSetUpBeforeChat,
-  deleteAgentWithChats,
+  deleteAgentAndArchiveChats,
   listAgentChats,
 } from "@/agents/agentMode/agentChats";
 import { AgentUnavailableError } from "@/agents/agentUnavailableError";
@@ -13,10 +13,8 @@ import { OpencodeBackendDescriptor } from "@/agentMode/backends/opencode/descrip
 import type { EnabledModelEntry, InstallState } from "@/agentMode/session/types";
 import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { createFakeAgentVault } from "@/agents/testing/fakeAgentVault";
-import { getFrontMatterInfo, parseYaml, TFile, type App } from "obsidian";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
-import { trashFile } from "@/utils/vaultAdapterUtils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { updateCachedProjectRecords } from "@/projects/state";
 import { getSettings, resetSettings, setSettings } from "@/settings/model";
@@ -251,28 +249,25 @@ describe("agentChats", () => {
     });
   });
 
-  describe("deleteAgentWithChats()", () => {
-    const COPILOT_CHAT = chat("copilot.md");
+  describe("deleteAgentAndArchiveChats()", () => {
+    const CHATS = "copilot/copilot-conversations";
     const HISTORY = [
-      chat("coco-1.md", "coco"),
+      chat(`${CHATS}/coco-1.md`, "coco"),
       chat("native:claude:s1", "coco"),
-      chat("maya.md", "maya"),
-      COPILOT_CHAT,
-      chat("cocoa.md", "cocoa"),
+      { ...chat(`${CHATS}/coco-old.md`, "coco"), archivedAt: 5 },
+      chat(`${CHATS}/maya.md`, "maya"),
+      chat(`${CHATS}/copilot.md`),
+      chat(`${CHATS}/cocoa.md`, "cocoa"),
     ];
 
     async function setup({
       host = { agentSlug: "coco", hasMessages: true },
       failingChat = "",
-      history = HISTORY,
-      notes = {},
-      notesOf = {},
+      projectChats = [],
     }: {
       host?: { agentSlug: string; hasMessages: boolean };
       failingChat?: string;
-      history?: ChatHistoryItem[];
-      notes?: Record<string, string>;
-      notesOf?: Record<string, string[]>;
+      projectChats?: ChatHistoryItem[];
     } = {}) {
       resetSettings();
       const vault = createFakeAgentVault();
@@ -281,27 +276,16 @@ describe("agentChats", () => {
       }
       vault.writeByHand("copilot/agents/coco/MEMORY.md", "## How to work\n");
       vault.writeByHand("copilot/agents/coco/face.webp", new ArrayBuffer(1));
-      for (const [path, frontmatter] of Object.entries(notes)) {
-        vault.writeByHand(path, `---\n${frontmatter}\n---\nHi.`);
+      for (const { id, agent } of [...HISTORY, ...projectChats]) {
+        if (!id.startsWith("native:"))
+          vault.writeByHand(id, `---\nagent: ${agent ?? ""}\n---\nHi.`);
       }
-      const app = {
-        ...vault.app,
-        metadataCache: {
-          getCache: () => null,
-          getFileCache: (file: TFile) => {
-            const info = getFrontMatterInfo(vault.readText(file.path) ?? "");
-            return info.exists
-              ? { frontmatter: parseYaml(info.frontmatter) as Record<string, unknown> }
-              : null;
-          },
-        },
-      } as unknown as App;
       const store = new CustomAgentStore(vault.app);
       await store.start();
       const steps: string[] = [];
       const manager = {
         getChatHistoryItems: jest.fn(async (scope: string) =>
-          scope === GLOBAL_SCOPE ? history : []
+          scope === GLOBAL_SCOPE ? HISTORY : projectChats
         ),
         getSession: (id: string) =>
           id === "host"
@@ -310,17 +294,14 @@ describe("agentChats", () => {
         startNewChatInPlace: jest.fn(async (id: string) => {
           steps.push(`new chat in place of ${id}`);
         }),
-        deleteChatHistory: jest.fn(
-          async (id: string, options?: { canTrashNote?: (path: string) => boolean }) => {
-            if (id === failingChat) throw new Error("locked");
-            steps.push(`delete ${id}`);
-            for (const path of notesOf[id] ?? [id]) {
-              if (options?.canTrashNote && !options.canTrashNote(path)) continue;
-              const file = app.vault.getAbstractFileByPath(path);
-              if (file) await trashFile(app, file);
-            }
-          }
-        ),
+        closeChatSession: jest.fn(async (id: string) => {
+          steps.push(`close ${id}`);
+        }),
+        setChatArchived: jest.fn(async (id: string, archived: boolean) => {
+          if (id === failingChat) throw new Error("Chat note not found");
+          steps.push(`${archived ? "archive" : "unarchive"} ${id}`);
+          return { id, archivedAt: archived ? 10 : undefined };
+        }),
       } as unknown as AgentSessionManager;
       const hiddenChats = {
         stopAgent: jest.fn((slug: string): void => {
@@ -328,62 +309,76 @@ describe("agentChats", () => {
         }),
       };
       const remove = () =>
-        deleteAgentWithChats({
-          app,
+        deleteAgentAndArchiveChats({
           manager,
           store,
           slug: "coco",
           hostSessionId: "host",
           hiddenChats,
         });
-      return { vault, store, steps, remove, hiddenChats, manager };
+      const archived = () =>
+        steps.filter((step) => step.startsWith("archive")).map((step) => step.slice(8));
+      return { vault, store, steps, remove, archived, hiddenChats, manager };
     }
 
-    it(`trashes only the agent's folder and deletes only the chats recorded with its slug (${ISSUE})`, async () => {
-      const { vault, steps, remove } = await setup();
+    it(`trashes only the agent's folder and archives the agent's chats, keeping every chat note in the vault (${ISSUE})`, async () => {
+      const { vault, remove, archived } = await setup();
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 2, failedChats: 0, agentDeleted: true });
-      expect(steps.filter((step) => step.startsWith("delete"))).toEqual([
-        "delete coco-1.md",
-        "delete native:claude:s1",
-      ]);
+      expect(result).toEqual({ archivedChats: 2, agentDeleted: true });
+      expect(archived()).toEqual([`${CHATS}/coco-1.md`, "native:claude:s1"]);
       expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
       expect(vault.listPaths()).toEqual([
         "copilot/agents/cocoa/instructions.md",
         "copilot/agents/maya/instructions.md",
+        `${CHATS}/coco-1.md`,
+        `${CHATS}/coco-old.md`,
+        `${CHATS}/cocoa.md`,
+        `${CHATS}/copilot.md`,
+        `${CHATS}/maya.md`,
       ]);
     });
 
-    it(`trashes a chat's note only when the note is in the chats folder and itself records the agent, so a moved, re-tagged or replaced note stays (${ISSUE})`, async () => {
-      const chats = "copilot/copilot-conversations";
-      const { vault, remove } = await setup({
-        history: [
-          chat(`${chats}/agent__coco.md`, "coco"),
-          chat(`${chats}/agent__retagged.md`, "coco"),
-          chat("native:claude:moved", "coco"),
-          chat("native:claude:replaced", "coco"),
-        ],
-        notes: {
-          [`${chats}/agent__coco.md`]: "agent: coco",
-          [`${chats}/agent__retagged.md`]: "agent: [coco]",
-          "Notes/agent__moved.md": "agent: coco",
-          [`${chats}/agent__replaced.md`]: "agent: maya",
-        },
-        notesOf: {
-          "native:claude:moved": ["Notes/agent__moved.md"],
-          "native:claude:replaced": [`${chats}/agent__replaced.md`],
-        },
+    it(`leaves a chat already archived, and the agent's chats in an archived project, as they are (${ISSUE})`, async () => {
+      updateCachedProjectRecords([project("launch", 10)]);
+      const { remove, archived, manager } = await setup({
+        projectChats: [{ ...chat(`${CHATS}/launch-coco.md`, "coco"), projectId: "launch" }],
       });
+
+      await remove();
+
+      expect(archived()).not.toContain(`${CHATS}/coco-old.md`);
+      expect(archived()).not.toContain(`${CHATS}/launch-coco.md`);
+      expect(manager.closeChatSession).not.toHaveBeenCalledWith(`${CHATS}/launch-coco.md`);
+    });
+
+    it(`closes each chat it archives, so a reply still running stops instead of answering as an agent that no longer exists (${ISSUE})`, async () => {
+      const { steps, remove } = await setup();
+
+      await remove();
+
+      expect(steps.filter((step) => /^(close|archive) /.test(step))).toEqual([
+        `close ${CHATS}/coco-1.md`,
+        `archive ${CHATS}/coco-1.md`,
+        "close native:claude:s1",
+        "archive native:claude:s1",
+      ]);
+    });
+
+    it(`still archives an open chat its coding agent can't close (${ISSUE})`, async () => {
+      const { remove, archived, manager } = await setup();
+      jest
+        .mocked(manager.closeChatSession)
+        .mockRejectedValueOnce(new Error("This agent can't shut down a single chat."));
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 4, failedChats: 0, agentDeleted: true });
-      expect(vault.trashedPaths).toEqual([`${chats}/agent__coco.md`, "copilot/agents/coco"]);
+      expect(result).toEqual({ archivedChats: 2, agentDeleted: true });
+      expect(archived()).toEqual([`${CHATS}/coco-1.md`, "native:claude:s1"]);
     });
 
-    it(`turns the agent's chat the profile covers into a new chat before deleting it, so the tab returns to the agent home (${ISSUE})`, async () => {
+    it(`turns the agent's chat the profile covers into a new chat first, so the tab returns to the agent home (${ISSUE})`, async () => {
       const { steps, remove } = await setup();
 
       await remove();
@@ -391,7 +386,7 @@ describe("agentChats", () => {
       expect(steps[0]).toBe("new chat in place of host");
     });
 
-    it(`still deletes the agent and its chats when the vault's default coding agent can't start the new chat (${SETUP_ISSUE})`, async () => {
+    it(`still deletes the agent and archives its chats when the vault's default coding agent can't start the new chat (${SETUP_ISSUE})`, async () => {
       const { vault, remove, manager, hiddenChats } = await setup();
       jest
         .mocked(manager.startNewChatInPlace)
@@ -399,7 +394,7 @@ describe("agentChats", () => {
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 2, failedChats: 0, agentDeleted: true });
+      expect(result).toEqual({ archivedChats: 2, agentDeleted: true });
       expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
       expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
     });
@@ -421,66 +416,59 @@ describe("agentChats", () => {
       expect(getSettings().agentMode.lastCustomAgent).toBeUndefined();
     });
 
-    it(`keeps the agent's folder when one of its chats could not be deleted, so that chat is still the agent's (${ISSUE})`, async () => {
-      const { vault, remove } = await setup({ failingChat: "coco-1.md" });
+    it(`still deletes the agent when one of its chats can't be archived, and counts only the chats it archived (${ISSUE})`, async () => {
+      const { vault, remove, archived } = await setup({ failingChat: `${CHATS}/coco-1.md` });
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 1, failedChats: 1, agentDeleted: false });
-      expect(vault.trashedPaths).toEqual([]);
-      expect(vault.listPaths()).toContain("copilot/agents/coco/instructions.md");
+      expect(result).toEqual({ archivedChats: 1, agentDeleted: true });
+      expect(archived()).toEqual(["native:claude:s1"]);
+      expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
     });
 
-    it(`stops the agent wherever an @ runs it once its chats are deleted and before its folder goes to the trash (${STOP_ISSUE})`, async () => {
-      const { vault, steps, remove, hiddenChats } = await setup();
-      hiddenChats.stopAgent.mockImplementation((slug: string) => {
-        steps.push(`stop ${slug}`);
+    it(`stops the agent wherever an @ runs it before its folder goes to the trash (${STOP_ISSUE})`, async () => {
+      const { vault, remove, hiddenChats } = await setup();
+      hiddenChats.stopAgent.mockImplementation(() => {
         expect(vault.trashedPaths).toEqual([]);
       });
 
       await remove();
 
-      expect(steps.slice(-2)).toEqual(["delete native:claude:s1", "stop coco"]);
+      expect(hiddenChats.stopAgent).toHaveBeenCalledWith("coco");
       expect(vault.trashedPaths).toEqual(["copilot/agents/coco"]);
     });
 
-    it(`leaves the agent working when the delete keeps it, so its @ is never reported as deleted (${STOP_ISSUE})`, async () => {
-      const kept = await setup({ failingChat: "coco-1.md" });
-      await kept.remove();
-      expect(kept.hiddenChats.stopAgent).not.toHaveBeenCalled();
-    });
-
-    it(`deletes nothing when the agent's folder is already gone at confirm (${ISSUE})`, async () => {
+    it(`changes nothing when the agent's folder is already gone at confirm (${ISSUE})`, async () => {
       const { vault, steps, remove, store } = await setup();
       vault.deleteByHand("copilot/agents/coco/instructions.md");
       await store.start();
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 0, failedChats: 0, agentDeleted: false });
+      expect(result).toEqual({ archivedChats: 0, agentDeleted: false });
       expect(steps).toEqual([]);
       expect(vault.trashedPaths).toEqual([]);
     });
 
-    it(`deletes nothing when custom agents stopped between the dialog and the confirm (${ISSUE})`, async () => {
+    it(`changes nothing when custom agents stopped between the dialog and the confirm (${ISSUE})`, async () => {
       const { vault, steps, remove, store } = await setup();
       store.stop();
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 0, failedChats: 0, agentDeleted: false });
+      expect(result).toEqual({ archivedChats: 0, agentDeleted: false });
       expect(steps).toEqual([]);
       expect(vault.listPaths()).toContain("copilot/agents/coco/instructions.md");
     });
 
-    it(`reports the chats it deleted when the agent's folder can't go to the trash (${ISSUE})`, async () => {
-      const { steps, remove, store } = await setup();
+    it(`archives none of the agent's chats when its folder can't go to the trash (${ISSUE})`, async () => {
+      const { archived, remove, store } = await setup();
       jest.spyOn(store, "deleteAgent").mockRejectedValueOnce(new Error("trash refused"));
 
       const result = await remove();
 
-      expect(result).toEqual({ deletedChats: 2, failedChats: 0, agentDeleted: false });
-      expect(steps).toContain("delete coco-1.md");
+      expect(result).toEqual({ archivedChats: 0, agentDeleted: false });
+      expect(archived()).toEqual([]);
     });
   });
 });

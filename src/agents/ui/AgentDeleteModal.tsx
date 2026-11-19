@@ -3,7 +3,7 @@ import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { countOf } from "@/agents/ui/AgentProfileView";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Brain, FileText, ImageIcon, MessageSquare } from "lucide-react";
+import { AlertTriangle, Brain, FileText, ImageIcon } from "lucide-react";
 import type { App } from "obsidian";
 import React from "react";
 
@@ -53,22 +53,18 @@ export function AgentDeleteForm({
             <FilePath>{agent.memoryPath}</FilePath>
           </DeleteItem>
         )}
-        {chatCount > 0 && (
-          <DeleteItem
-            icon={<MessageSquare className={ICON_CLASS} />}
-            title={`${countOf(chatCount, "chat")} with ${name}`}
-          >
-            <span className="tw-text-ui-smaller tw-text-muted">
-              They leave Recent chats and the Navigator.
-            </span>
-          </DeleteItem>
-        )}
         {/* An agent wearing the placeholder has no face file to delete.
             https://github.com/Brevilabs/obsidian-copilot-private/issues/940 */}
         {agent.faceSrc !== NEUTRAL_FACE_SRC && (
           <DeleteItem icon={<ImageIcon className={ICON_CLASS} />} title={`${name}'s face`} />
         )}
       </ul>
+      {chatCount > 0 && (
+        <p className="tw-m-0 tw-px-1 tw-text-ui-small tw-text-muted">
+          {countOf(chatCount, "chat")} with {name} will be archived, not deleted. You can find{" "}
+          {chatCount === 1 ? "it" : "them"} under View archived.
+        </p>
+      )}
       <p className="tw-m-0 tw-px-1 tw-text-ui-small tw-text-muted">
         What {name} said in chats with other agents stays there.
       </p>

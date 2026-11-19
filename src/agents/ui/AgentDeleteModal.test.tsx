@@ -25,26 +25,32 @@ function renderForm(props: Partial<AgentDeleteFormProps> = {}) {
 
 describe("AgentDeleteModal", () => {
   describe("AgentDeleteForm()", () => {
-    it(`names both files with where they live, the number of chats and the face, and says it can't be undone (${ISSUE})`, () => {
+    it(`lists both files with where they live and the face as what goes, and says it can't be undone (${ISSUE})`, () => {
       renderForm();
 
       expect(
         screen.getByText("This deletes Coco and everything below. You can't undo it.")
       ).not.toBeNull();
-      expect(screen.getByText("What Coco handles")).not.toBeNull();
-      expect(screen.getByText("copilot/agents/coco/instructions.md")).not.toBeNull();
-      expect(screen.getByText("Rules Coco remembers")).not.toBeNull();
-      expect(screen.getByText("· 9 rules")).not.toBeNull();
-      expect(screen.getByText("copilot/agents/coco/MEMORY.md")).not.toBeNull();
-      expect(screen.getByText("23 chats with Coco")).not.toBeNull();
-      expect(screen.getByText("They leave Recent chats and the Navigator.")).not.toBeNull();
-      expect(screen.getByText("Coco's face")).not.toBeNull();
+      expect(screen.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+        "What Coco handlescopilot/agents/coco/instructions.md",
+        "Rules Coco remembers · 9 rulescopilot/agents/coco/MEMORY.md",
+        "Coco's face",
+      ]);
+    });
+
+    it(`says below the list, outside it, that the agent's chats are archived and not deleted, and where to find them (${ISSUE})`, () => {
+      renderForm();
+
+      const chats = screen.getByText(
+        "23 chats with Coco will be archived, not deleted. You can find them under View archived."
+      );
+      expect(chats.closest("ul")).toBeNull();
       expect(
         screen.getByText("What Coco said in chats with other agents stays there.")
       ).not.toBeNull();
     });
 
-    it(`lists no memory file and no face for a new agent that has neither (${ISSUE})`, () => {
+    it(`lists no memory file and no face for a new agent that has neither, and speaks of a single chat in the singular (${ISSUE})`, () => {
       renderForm({
         agent: { ...COCO, faceSrc: NEUTRAL_FACE_SRC },
         memoryRules: null,
@@ -53,14 +59,17 @@ describe("AgentDeleteModal", () => {
 
       expect(screen.queryByText("Rules Coco remembers")).toBeNull();
       expect(screen.queryByText("Coco's face")).toBeNull();
-      expect(screen.getByText("1 chat with Coco")).not.toBeNull();
+      expect(
+        screen.getByText(
+          "1 chat with Coco will be archived, not deleted. You can find it under View archived."
+        )
+      ).not.toBeNull();
     });
 
-    it(`lists no chats for an agent nobody has chatted with yet (${ISSUE})`, () => {
+    it(`says nothing about chats for an agent nobody has chatted with yet (${ISSUE})`, () => {
       renderForm({ chatCount: 0 });
 
-      expect(screen.queryByText(/chats with Coco/)).toBeNull();
-      expect(screen.queryByText("They leave Recent chats and the Navigator.")).toBeNull();
+      expect(screen.queryByText(/archived/)).toBeNull();
       expect(screen.getByText("What Coco handles")).not.toBeNull();
     });
 
