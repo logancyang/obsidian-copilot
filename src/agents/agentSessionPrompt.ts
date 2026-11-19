@@ -32,7 +32,7 @@ const DRAFT_NEW_AGENTS =
 // Codex finds MCP tools only through its tool search, so an agent's prompt also names the tools for an agent it asked.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
 const CONTROL_ASKED_AGENTS =
-  "When the user tells you to stop an agent you asked, stop it with stop_agent from obsidian-copilot.";
+  "When the user asks how an agent you asked is doing, check with check_agent; when the user gives it a new instruction while it works, send that with ask_agent; when the user tells you to stop it, use stop_agent. All are in obsidian-copilot.";
 
 function describeAgent({ name, title }: Pick<CustomAgent, "name" | "title">): string {
   return title ? `${name} (${title})` : name;

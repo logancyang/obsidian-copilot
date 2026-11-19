@@ -42,7 +42,15 @@ export type AgentRefusal =
   | { kind: "unknown_agent"; roster: readonly CustomAgent[] }
   | { kind: "self"; agent: CustomAgent };
 
-export type AskAgentResult = { kind: "asked" | "busy"; agent: CustomAgent } | AgentRefusal;
+export type AskAgentResult =
+  | { kind: "asked"; agent: CustomAgent }
+  | { kind: "sent"; agent: CustomAgent; now: boolean }
+  | AgentRefusal;
+
+export type CheckAgentResult =
+  | { kind: "progress"; agent: CustomAgent; progress: string }
+  | { kind: "not_asked"; agent: CustomAgent }
+  | AgentRefusal;
 
 export type StopAgentResult =
   | { kind: "stopped" | "not_working" | "not_asked"; agent: CustomAgent }
@@ -67,6 +75,8 @@ interface HiddenRunEnd {
 interface HiddenRun {
   id: string;
   askedIn: string | null;
+  startedAt: number;
+  since: string | null;
   reply: string;
   sawTurn: boolean;
   denied: string[];
@@ -83,6 +93,10 @@ interface HiddenChat {
   started: AgentSession | null;
   run: HiddenRun | null;
 }
+
+const PROGRESS_TEXT_CHARS = 1500;
+const PROGRESS_STEPS = 10;
+const PROGRESS_STEP_CHARS = 120;
 
 const BUSY_STATUSES: ReadonlySet<AgentSessionStatus> = new Set([
   "starting",
@@ -114,7 +128,7 @@ export class HiddenAgentChats {
     const { parent, agent, agents, store } = asking;
     const key = chatKey(parent, agent.slug);
     const existing = this.chats.get(key);
-    if (existing?.run) return { kind: "busy", agent };
+    if (existing?.run) return this.sendMore(existing, message);
     const from = agents.find((other) => other.slug === parent.agentSlug)?.name ?? "Copilot";
     const hidden =
       existing?.started && existing.started.getStatus() !== "closed"
@@ -123,6 +137,16 @@ export class HiddenAgentChats {
     this.chats.set(key, hidden);
     void this.run(hidden, message);
     return { kind: "asked", agent };
+  }
+
+  // The user asks the current agent how an asked agent is doing; it reads the progress without interrupting it.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  check(chat: ChatStateHost | null, agentName: string): CheckAgentResult {
+    const asking = this.resolve(chat, agentName);
+    if ("kind" in asking) return asking;
+    const hidden = this.chats.get(chatKey(asking.parent, asking.agent.slug));
+    if (!hidden) return { kind: "not_asked", agent: asking.agent };
+    return { kind: "progress", agent: asking.agent, progress: describeProgress(hidden) };
   }
 
   // The user stops an agent from the chat that asked it, by telling its agent or from the running agents list; its changes stay and its chat stays open to continue.
@@ -195,6 +219,21 @@ export class HiddenAgentChats {
     return { parent, agent, agents, store };
   }
 
+  // A new instruction for an agent still at work redirects it in the same chat instead of starting over.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+  private sendMore(hidden: HiddenChat, message: string): AskAgentResult {
+    const text = `${hidden.from} sent you more from the user while you work.\n\n<message from="${hidden.from}">\n${message}\n</message>`;
+    void hidden.session.then(
+      (session) => session.sendPrompt(text).turn.catch(() => undefined),
+      () => undefined
+    );
+    return {
+      kind: "sent",
+      agent: hidden.agent,
+      now: hidden.started?.acceptsMidTurnPrompts() ?? false,
+    };
+  }
+
   private stopRun(hidden: HiddenChat, reason: StopReason): boolean {
     const run = hidden.run;
     if (!run) return false;
@@ -254,6 +293,8 @@ export class HiddenAgentChats {
     const run: HiddenRun = {
       id: uuidv4(),
       askedIn: lastUserMessageId(hidden.parent),
+      startedAt: Date.now(),
+      since: null,
       reply: "",
       sawTurn: false,
       denied: [],
@@ -275,7 +316,7 @@ export class HiddenAgentChats {
       agent: hidden.agent.slug,
       name: hidden.agent.name,
       status: "working",
-      startedAt: Date.now(),
+      startedAt: run.startedAt,
     });
     let end: HiddenRunEnd;
     try {
@@ -315,6 +356,7 @@ export class HiddenAgentChats {
       await replayPersistedMode(session, hidden.parent.getState()?.mode?.current ?? null);
       if (run.stopped) return { reply: "", files: [], denied: run.denied };
       const { userMessageId, turn } = session.sendPrompt(hiddenJobText(hidden, message));
+      run.since = userMessageId;
       turn.then(
         () => {
           if (!run.sawTurn) run.finish({ error: new Error(`${hidden.agent.name} didn't start.`) });
@@ -502,6 +544,29 @@ function findAgent(agents: readonly CustomAgent[], name: string): CustomAgent | 
     agents.find((agent) => agent.name.toLowerCase() === wanted) ??
     agents.find((agent) => agent.slug === wanted)
   );
+}
+
+function describeProgress({ agent: { name }, run, started }: HiddenChat): string {
+  if (!run) return `${name} isn't working on anything from this chat now.`;
+  const minutes = Math.floor((Date.now() - run.startedAt) / 60_000);
+  const messages = started?.store.getDisplayMessages() ?? [];
+  const steps = messages
+    .slice(messages.findIndex((message) => message.id === run.since) + 1)
+    .flatMap((message) => message.parts ?? [])
+    .flatMap((part) =>
+      part.kind === "tool_call"
+        ? [`- ${part.title.slice(0, PROGRESS_STEP_CHARS)} (${part.status})`]
+        : []
+    )
+    .slice(-PROGRESS_STEPS);
+  const written = run.reply.trim().slice(-PROGRESS_TEXT_CHARS);
+  return [
+    `${name} has been working for ${minutes < 1 ? "under a minute" : `${minutes} min`}.`,
+    written
+      ? `The end of what ${name} has written so far:\n${written}`
+      : `${name} hasn't written anything yet.`,
+    ...(steps.length > 0 ? [`${name}'s latest steps:\n${steps.join("\n")}`] : []),
+  ].join("\n\n");
 }
 
 function hiddenJobText({ from }: HiddenChat, message: string): string {

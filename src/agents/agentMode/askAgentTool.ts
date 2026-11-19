@@ -1,3 +1,4 @@
+import type { ChatStateHost } from "@/agentMode/session/chatExtension";
 import type {
   HostedTool,
   McpToolDefinition,
@@ -6,6 +7,7 @@ import type {
 import type {
   AgentRefusal,
   AskAgentResult,
+  CheckAgentResult,
   HiddenAgentChats,
   StopAgentResult,
 } from "@/agents/agentMode/hiddenAgentChats";
@@ -15,6 +17,7 @@ import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
 export const ASK_AGENT_TOOL_NAME = "ask_agent";
 export const STOP_AGENT_TOOL_NAME = "stop_agent";
+export const CHECK_AGENT_TOOL_NAME = "check_agent";
 const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
 
 export interface AskAgentToolHost {
@@ -82,10 +85,21 @@ function resultText(result: AskAgentResult): string {
   switch (result.kind) {
     case "asked":
       return `${result.agent.name} is working on it in the background. Tell the user in one short line that you asked ${result.agent.name} and will bring back the reply, then end your turn.`;
-    case "busy":
-      return `${result.agent.name} is still working on the earlier request from this chat. Tell the user you'll bring back the reply when ${result.agent.name} is done, and that they can ask again after that.`;
+    case "sent":
+      return `Sent ${result.agent.name} your message in the chat ${result.agent.name} is working in; ${result.agent.name} ${result.now ? "reads it now" : "gets it after the current step"}. Tell the user in one short line, then end your turn.`;
     default:
       return refusalText(result, ASK_AGENT_TOOL_NAME);
+  }
+}
+
+function checkResultText(result: CheckAgentResult): string {
+  switch (result.kind) {
+    case "progress":
+      return `${result.progress}\n\nTell the user in your own words how far ${result.agent.name} got. Don't paste this.`;
+    case "not_asked":
+      return `${result.agent.name} isn't working on anything from this chat now. To send ${result.agent.name} back to it, use ${ASK_AGENT_TOOL_NAME}.`;
+    default:
+      return refusalText(result, CHECK_AGENT_TOOL_NAME);
   }
 }
 
@@ -116,11 +130,6 @@ function listedForAskingChats(
   };
 }
 
-const AGENT_ARGUMENT = Object.freeze({
-  type: "string",
-  description: "The name of an agent you asked from this chat.",
-});
-
 export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
   return {
     definition: askAgentDefinition([]),
@@ -134,38 +143,71 @@ export function createAskAgentTool(chats: HiddenAgentChats, host: AskAgentToolHo
       const result = chats.ask(chat, agent, message);
       // The chat draws a call's line from its error flag, so a call that asked no one fails.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-      return { text: resultText(result), isError: result.kind !== "asked" };
+      return {
+        text: resultText(result),
+        isError: result.kind !== "asked" && result.kind !== "sent",
+      };
     },
   };
 }
 
-const STOP_AGENT_TOOL: McpToolDefinition = Object.freeze({
-  name: STOP_AGENT_TOOL_NAME,
-  description:
-    "Stop an agent you asked from this chat, when the user tells you to stop it. It stops at once and its changes stay. Then end your turn: its report comes back next, with how far it got and what it changed, and you pass that on.",
-  inputSchema: {
-    type: "object",
-    properties: { agent: AGENT_ARGUMENT },
-    required: ["agent"],
-  },
-  // Stopping changes no file, and Codex asks the user before any tool that isn't read-only.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
-  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-  _meta: { "anthropic/alwaysLoad": true },
-});
-
-export function createStopAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
+// Only the chat that asked an agent can check on or stop it, so each call names the agent and the calling chat decides.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+function askedAgentTool(
+  name: string,
+  description: string,
+  host: AskAgentToolHost,
+  call: (chat: ChatStateHost | null, agent: string) => { text: string; isError: boolean }
+): HostedTool {
+  const definition: McpToolDefinition = Object.freeze({
+    name,
+    description,
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent: { type: "string", description: "The name of an agent you asked from this chat." },
+      },
+      required: ["agent"],
+    },
+    // Checking on or stopping an agent changes no file, and Codex asks the user before any tool that isn't read-only.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    _meta: { "anthropic/alwaysLoad": true },
+  });
   return {
-    definition: STOP_AGENT_TOOL,
+    definition,
     turnedOffText: UNAVAILABLE_TEXT,
-    listedAs: listedForAskingChats(host, () => STOP_AGENT_TOOL),
+    listedAs: listedForAskingChats(host, () => definition),
     call: async (args, chat) => {
       const { agent } = (args ?? {}) as Record<string, unknown>;
       if (typeof agent !== "string" || !agent.trim()) {
         return { text: "agent must be a non-empty string.", isError: true };
       }
-      const result = chats.stop(chat, agent);
-      return { text: stopResultText(result), isError: result.kind !== "stopped" };
+      return call(chat, agent);
     },
   };
+}
+
+export function createCheckAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
+  return askedAgentTool(
+    CHECK_AGENT_TOOL_NAME,
+    "Read how an agent you asked from this chat is doing: call it each time the user asks how an agent you asked is doing, even if you think you know. It doesn't interrupt the agent. It returns how long the agent has worked, the end of what it has written and its latest steps; tell the user in your own words how far it got. To give it a new instruction while it works, call ask_agent again.",
+    host,
+    (chat, agent) => {
+      const result = chats.check(chat, agent);
+      return { text: checkResultText(result), isError: result.kind !== "progress" };
+    }
+  );
+}
+
+export function createStopAgentTool(chats: HiddenAgentChats, host: AskAgentToolHost): HostedTool {
+  return askedAgentTool(
+    STOP_AGENT_TOOL_NAME,
+    "Stop an agent you asked from this chat, when the user tells you to stop it. It stops at once and its changes stay. Then end your turn: its report comes back next, with how far it got and what it changed, and you pass that on.",
+    host,
+    (chat, agent) => {
+      const result = chats.stop(chat, agent);
+      return { text: stopResultText(result), isError: result.kind !== "stopped" };
+    }
+  );
 }
