@@ -1,5 +1,6 @@
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { act, renderHook } from "@testing-library/react";
 import type { App } from "obsidian";
@@ -43,6 +44,14 @@ describe("useMemorySaveTrail", () => {
       await act(async () => {
         await setCustomAgentsAccess("team");
       });
+
+      expect(result.current?.saves).toEqual([SAVE]);
+    });
+    it("gives a reply's saves while custom agents are locked, so an agent chat from before the license lapsed still shows what it remembered (https://github.com/Brevilabs/obsidian-copilot-private/issues/950)", async () => {
+      setCustomAgentsLaunched(true);
+      await setCustomAgentsAccess("free");
+
+      const { result } = renderHook(() => useMemorySaveTrail(REPLY, {} as App));
 
       expect(result.current?.saves).toEqual([SAVE]);
     });

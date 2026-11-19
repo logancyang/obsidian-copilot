@@ -8,7 +8,8 @@ import { useMemo } from "react";
 export function useMemorySaveTrail(message: AgentChatMessage, app: App): MemorySaveTrail | null {
   const gate = useCustomAgentsGate();
   return useMemo(
-    () => (gate === "full" ? memorySaveTrail(message, getVaultBase(app)) : null),
+    () =>
+      gate === "full" || gate === "locked" ? memorySaveTrail(message, getVaultBase(app)) : null,
     [gate, message, app]
   );
 }

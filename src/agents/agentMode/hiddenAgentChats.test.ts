@@ -15,6 +15,7 @@ import { CustomAgentStore } from "@/agents/CustomAgentStore";
 import { serializeInstructionsFile } from "@/agents/customAgentFiles";
 import * as customAgentsGate from "@/agents/customAgentsGate";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { setCustomAgentsLaunched } from "@/agents/testing/customAgentsLaunched";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
 import { setSettings } from "@/settings/model";
 import { FileSystemAdapter, type App } from "obsidian";
@@ -23,6 +24,7 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
+const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 const CONTROL = "https://github.com/Brevilabs/obsidian-copilot-private/issues/945";
 const PERMISSION = "https://github.com/Brevilabs/obsidian-copilot-private/issues/946";
 const AUTO_MODE: BackendState = { model: null, mode: { current: "auto", options: [], apply: {} } };
@@ -762,12 +764,20 @@ describe("hiddenAgentChats", () => {
         });
       });
 
-      it(`turns down asking while custom agents are not available (${ISSUE})`, async () => {
-        const coco = await openChat({ agentSlug: "coco" });
-        await setCustomAgentsAccess("free");
+      it.each([
+        { gate: "hidden", launched: false },
+        { gate: "locked", launched: true },
+      ])(
+        `turns down asking while custom agents are $gate (${ISSUE}, ${LAPSED_ISSUE})`,
+        async ({ gate, launched }) => {
+          const coco = await openChat({ agentSlug: "coco" });
+          setCustomAgentsLaunched(launched);
+          await setCustomAgentsAccess("free");
+          expect(customAgentsGate.getCustomAgentsGate()).toBe(gate);
 
-        expect(chats.ask(coco, "Maya", "Review.")).toEqual({ kind: "unavailable" });
-      });
+          expect(chats.ask(coco, "Maya", "Review.")).toEqual({ kind: "unavailable" });
+        }
+      );
 
       it(`stops each asked agent's chat when the chat that asked closes for good (${ISSUE})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
@@ -787,6 +797,20 @@ describe("hiddenAgentChats", () => {
 
         await untilStatus(maya, (status) => status === "closed");
         expect(coco.store.getDisplayMessages()).toEqual([]);
+      });
+
+      it(`lets an asked agent finish and relays its reply when the license lapses while it works, since the license is checked only when an @ is sent (${LAPSED_ISSUE})`, async () => {
+        const { coco, maya } = await askFromMessage();
+
+        setCustomAgentsLaunched(true);
+        await setCustomAgentsAccess("free");
+        expect(customAgentsGate.getCustomAgentsGate()).toBe("locked");
+        answer(maya, "Too many features.");
+        fake.endTurn(sessionIdOf(coco));
+        await fake.untilPrompt(sessionIdOf(coco), 2);
+
+        expect(mentionsOn(coco)?.[0]).toEqual(expect.objectContaining({ status: "finished" }));
+        expect(fake.promptsTo(sessionIdOf(coco))[1]).toContain("Too many features.");
       });
 
       it(`saves the run as working with its hidden chat, then finished with when it ended (${ISSUE})`, async () => {
