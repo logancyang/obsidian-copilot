@@ -1,6 +1,10 @@
 import * as customAgentsGate from "@/agents/customAgentsGate";
 import { CustomAgentsUpsellModal } from "@/agents/ui/CustomAgentsUpsell";
-import { openLockedCustomAgents, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
+import {
+  openLockedCustomAgents,
+  renderNewAgentButton,
+  useLockedAgentMention,
+} from "@/agents/ui/lockedCustomAgents";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,7 +13,7 @@ import { verifyEntitlement, type EntitlementFeature } from "@/entitlement";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { applyEntitlement, verifyCachedEntitlement } from "@/plusUtils";
 import { getSettings, setSettings } from "@/settings/model";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import * as obsidianModule from "obsidian";
 import { App } from "obsidian";
 import React from "react";
@@ -110,6 +114,14 @@ async function enterLicenseKey(key: string): Promise<void> {
 
 function awaitRunningLicenseCheck(): Promise<void> {
   return act(() => openLockedCustomAgents(new App(), "custom_agent_dialog"));
+}
+
+function renderMentionHook(enabled: boolean) {
+  return renderHook(() => useLockedAgentMention(enabled), {
+    wrapper: ({ children }) => (
+      <AppContext.Provider value={new App()}>{children}</AppContext.Provider>
+    ),
+  });
 }
 
 function renderWithApp(element: React.ReactElement | undefined) {
@@ -324,6 +336,68 @@ describe("lockedCustomAgents", () => {
 
       expect(onCreate).toHaveBeenCalledTimes(1);
       expect(mockOpenUpsell).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("useLockedAgentMention()", () => {
+    it(`offers a locked Ask an agent row, marked Supporter preview, while the gate is locked (${ISSUE})`, () => {
+      const { result } = renderMentionHook(true);
+
+      expect(result.current?.option).toMatchObject({
+        title: "Ask an agent",
+        lockedNote: "Supporter preview",
+      });
+    });
+
+    it.each([
+      { gate: "hidden", setUp: () => jest.replaceProperty(customAgentsGate, "launched", false) },
+      { gate: "pending", setUp: () => setCustomAgentsAccess("unverified") },
+      { gate: "full", setUp: () => setCustomAgentsAccess("team") },
+    ])(`offers no row while the gate is $gate (${ISSUE})`, async ({ gate, setUp }) => {
+      await setUp();
+      expect(customAgentsGate.getCustomAgentsGate()).toBe(gate);
+
+      const { result } = renderMentionHook(true);
+
+      expect(result.current).toBeNull();
+    });
+
+    it("offers no row in a chat that cannot use custom agents", () => {
+      const { result } = renderMentionHook(false);
+
+      expect(result.current).toBeNull();
+    });
+
+    it(`checks the license with trigger custom_agents, then shows the dialog tagged custom_agent_mention, once when chosen twice meanwhile (${ISSUE})`, async () => {
+      const { requestUrl, reply } = holdLicenseCheck();
+      const { result } = renderMentionHook(true);
+
+      act(() => result.current?.choose());
+      act(() => result.current?.choose());
+      reply(REFUSED_403);
+      await awaitRunningLicenseCheck();
+
+      expect(requestUrl).toHaveBeenCalledTimes(1);
+      expect(sentBody(requestUrl).trigger).toBe("custom_agents");
+      expect(CustomAgentsUpsellModal).toHaveBeenCalledWith(
+        expect.anything(),
+        "custom_agent_mention"
+      );
+      expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
+    });
+
+    it(`drops the row, opening nothing else, once a license with custom_agents is entered after the dialog (${ISSUE})`, async () => {
+      answerLicenseChecks(REFUSED_403);
+      const { result } = renderMentionHook(true);
+      act(() => result.current?.choose());
+      await awaitRunningLicenseCheck();
+
+      setSettings({ plusLicenseKey: "supporter-key" });
+      mockSignedClaims(["multi_agent", "custom_agents"]);
+      await act(() => applyEntitlement("license-entitlement-token"));
+
+      expect(result.current).toBeNull();
+      expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile } from "obsidian";
 import { useApp } from "@/context";
@@ -15,15 +15,18 @@ import {
   CategoryOption,
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
+import { useLockedAgentMention } from "@/agents/ui/lockedCustomAgents";
 
 interface AtMentionCommandPluginProps {
   showTools?: boolean;
   currentActiveFile?: TFile | null;
+  isAgentMode?: boolean;
 }
 
 export function AtMentionCommandPlugin({
   showTools = false,
   currentActiveFile = null,
+  isAgentMode = false,
 }: AtMentionCommandPluginProps): JSX.Element {
   const app = useApp();
   const [editor] = useLexicalComposerContext();
@@ -37,10 +40,11 @@ export function AtMentionCommandPlugin({
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
   const allCategoryOptions = useAtMentionCategories(showTools);
-  const availableCategoryOptions = useMemo(
-    () => allCategoryOptions.filter((c) => !c.isAction),
-    [allCategoryOptions]
-  );
+  const lockedAgentMention = useLockedAgentMention(isAgentMode);
+  const availableCategoryOptions = useMemo(() => {
+    const categories = allCategoryOptions.filter((c) => !c.isAction);
+    return lockedAgentMention ? [...categories, lockedAgentMention.option] : categories;
+  }, [allCategoryOptions, lockedAgentMention]);
 
   const loadNoteContentForPreview = useCallback(
     async (file: TFile | null) => {
@@ -96,8 +100,16 @@ export function AtMentionCommandPlugin({
     []
   );
 
+  const closeMenuRef = useRef(() => {});
   const handleSelect = useCallback(
     (option: CategoryOption | AtMentionOption) => {
+      // The locked row opens the upsell and puts nothing in the message; it closes the menu itself because a license check that grants custom agents opens no dialog to take focus.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
+      if (option.key === lockedAgentMention?.option.key) {
+        closeMenuRef.current();
+        lockedAgentMention.choose();
+        return;
+      }
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
         setExtendedState((prev) => ({
           ...prev,
@@ -125,7 +137,14 @@ export function AtMentionCommandPlugin({
         }
       }
     },
-    [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]
+    [
+      lockedAgentMention,
+      extendedState.mode,
+      currentQuery,
+      isCategoryOption,
+      isAtMentionOption,
+      editor,
+    ]
   );
 
   const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {
@@ -138,7 +157,7 @@ export function AtMentionCommandPlugin({
     }
   }, []);
 
-  const { state, handleHighlight } = useTypeaheadPlugin({
+  const { state, handleHighlight, closeMenu } = useTypeaheadPlugin({
     triggerConfig: {
       char: "@",
       allowWhitespace: true,
@@ -147,6 +166,7 @@ export function AtMentionCommandPlugin({
     onSelect: handleSelect,
     onStateChange: onStateChangeCallback,
   });
+  closeMenuRef.current = closeMenu;
 
   const selectedFile = useMemo<TFile | null>(() => {
     const selectedOption = searchResults[state.selectedIndex];

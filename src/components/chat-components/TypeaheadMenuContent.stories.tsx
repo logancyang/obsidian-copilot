@@ -1,6 +1,6 @@
 import React from "react";
 import type { Meta, StoryObj } from "@/lib/story";
-import { FileText, Folder, Hash } from "lucide-react";
+import { FileText, Folder, Globe, Hash, UserPlus } from "lucide-react";
 import { composeSlashMenuItems } from "./plugins/slashMenuItems";
 import { TypeaheadMenuContent, type TypeaheadMenuContentProps } from "./TypeaheadMenuContent";
 
@@ -67,5 +67,28 @@ export const AddContextSearch: StoryObj<TypeaheadMenuContentProps> = {
     searchBarMode: true,
     searchQuery: "",
     onSearchChange: () => undefined,
+  },
+};
+
+const agentMentionCategories = [
+  { key: "notes", title: "Notes", icon: <FileText className="tw-size-4" /> },
+  { key: "webTabs", title: "Web tabs", icon: <Globe className="tw-size-4" /> },
+  { key: "folders", title: "Folders", icon: <Folder className="tw-size-4" /> },
+];
+
+const askAnAgent = {
+  key: "locked-custom-agents",
+  title: "Ask an agent",
+  icon: <UserPlus className="tw-size-4" />,
+  lockedNote: "Supporter preview",
+};
+
+export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProps> = {
+  args: {
+    options: [...agentMentionCategories, askAnAgent],
+    selectedIndex: 0,
+    onSelect: () => undefined,
+    onHighlight: () => undefined,
+    mode: "category",
   },
 };

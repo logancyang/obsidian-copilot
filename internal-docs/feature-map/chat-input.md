@@ -7,6 +7,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - input-send: type a message and press Enter or `Send`. While the agent works, typing a draft turns `Stop generating` into `Send`, which [queues the message](queued-messages.md).
 - input-stop: `Stop generating` or Escape stops the agent's reply.
 - input-mentions: `@` lists Notes, Web tabs, and Folders; `Add context` (**+**) also offers Files. A mentioned note shows as a pill in the text only and is still sent as context; badges show only what was attached, in the chat input and on the sent message, and removing a badge leaves the text unchanged. Mentioning the active note does not switch its `Current` badge on. A sent message draws a mentioned folder as a `{Parent/Folder}` pill in its text. `@` and `[[` suggest no files or folders from the Copilot folder except the projects folder and what the user keeps in each project, and never a project's `project.md`.
+- input-locked-agents: without custom agents in the license, the `@` list ends with `Ask an agent · Supporter preview` below a divider, with a lock. Choosing it checks the license, then opens the "Custom Agent is a preview for Supporters" dialog and puts nothing in the message; its `See plans` opens the pricing page. If the license now includes custom agents, the row goes away instead.
 - input-current-note: the open note or web tab shows as a `Current` badge that the user can remove.
 - input-selection: text selected in a note shows as a badge with the text and its line, such as `L3`; text selected in a [turn diff](turn-diffs.md) or a web page shows as a `Selection` badge.
 - input-images: paste or drop images to attach them; `Remove image` takes one off.
@@ -27,6 +28,7 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - Escape: send another long task and press Escape in the chat input. The reply stops.
 - Draft while working: while the agent works, type text. `Stop generating` becomes `Send`.
 - Mentions: type `@`. Notes, Web tabs, and Folders are listed. Type part of a note name and press Enter. The note shows as a pill in the text and no badge is added. Attach the same note through `Add context`, then remove its badge: the pill stays in the text.
+- Locked agents: after custom agents have launched, with a license without custom agents, or none, type `@` in a chat. `Ask an agent · Supporter preview` is the last row, with a lock. Choose it: the "Custom Agent is a preview for Supporters" dialog opens and the message keeps only what was typed. `See plans` opens the pricing page. Enter a license with custom agents: the row is gone from the `@` list.
 - Copilot files: with a saved chat, a custom command, and a project holding a note, type `@` then part of each name, and `[[` then the same. The project's note is listed; the saved chat, the custom command, and the project's `project.md` are not.
 - Add context: choose `Add context` (**+**). Notes, Web tabs, Folders, and Files are listed.
 - Current note: open a note beside Agent Chat. A badge with its name and `Current` shows above the text.
@@ -44,3 +46,4 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - While the agent works, Escape in the chat input stops the reply even when a draft is typed.
 - Only suggestions skip Copilot's own files: a note link typed in full, a dropped file, and the `Active Note` row still attach one.
 - A file dragged from Finder that is already in the vault is attached where it is, not copied. One drop can carry notes and outside files together; each is attached. A folder from outside the vault can't be added: dropping one shows a notice.
+- `Ask an agent · Supporter preview` shows only in Agent Chat, never in Quick Chat. It shows only after launch, for every license without custom agents. It checks the license with Brevilabs even with no license key.

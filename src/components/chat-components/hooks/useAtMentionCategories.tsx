@@ -12,7 +12,8 @@ export type AtMentionCategory =
   | "activeNote"
   | "webTabs"
   | "activeWebTab"
-  | "files";
+  | "files"
+  | "agents";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;

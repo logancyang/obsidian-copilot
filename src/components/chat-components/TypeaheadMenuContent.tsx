@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface TypeaheadOption {
@@ -11,6 +11,7 @@ export interface TypeaheadOption {
   icon?: React.ReactNode;
   disabled?: boolean;
   disabledReason?: string;
+  lockedNote?: string;
 }
 
 export interface TypeaheadMenuContentProps {
@@ -133,57 +134,73 @@ export function TypeaheadMenuContent({
                 mode === "category" && !query && option.icon && !("data" in option);
 
               return (
-                <div
-                  key={option.key}
-                  ref={isSelected ? selectedItemRef : undefined}
-                  className={cn(
-                    "tw-flex tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm",
-                    isDisabled
-                      ? "tw-cursor-not-allowed tw-text-muted tw-opacity-50"
-                      : "tw-cursor-pointer tw-text-normal",
-                    shouldHighlight && "tw-bg-modifier-hover"
+                <React.Fragment key={option.key}>
+                  {/* A locked entry sits apart below the categories so users looking for a note see those first: https://github.com/Brevilabs/obsidian-copilot-private/issues/582 */}
+                  {option.lockedNote && (
+                    <div
+                      role="separator"
+                      className="tw-mx-3 tw-my-1 tw-border-0 tw-border-t tw-border-solid tw-border-border"
+                    />
                   )}
-                  title={isDisabled ? option.disabledReason : undefined}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    if (isDisabled) return;
-                    onSelect(option);
-                  }}
-                  onMouseEnter={() => {
-                    if (isDisabled) return;
-                    setHoveredIndex(index);
-                    onHighlight(index);
-                  }}
-                  onMouseLeave={() => setHoveredIndex(null)}
-                >
-                  {isCategory ? (
-                    <div className="tw-flex tw-w-full tw-items-center tw-justify-between">
-                      <div className="tw-flex tw-items-center tw-gap-2">
-                        {option.icon}
-                        <span className="tw-font-medium">{option.title}</span>
-                      </div>
-                      <ChevronRight className="tw-size-4 tw-text-muted" />
-                    </div>
-                  ) : (
-                    <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-                      {option.icon && (
-                        <div className="tw-flex tw-h-full tw-shrink-0 tw-items-center">
+                  <div
+                    ref={isSelected ? selectedItemRef : undefined}
+                    className={cn(
+                      "tw-flex tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm",
+                      isDisabled
+                        ? "tw-cursor-not-allowed tw-text-muted tw-opacity-50"
+                        : "tw-cursor-pointer tw-text-normal",
+                      option.lockedNote && "tw-text-muted",
+                      shouldHighlight && "tw-bg-modifier-hover"
+                    )}
+                    title={isDisabled ? option.disabledReason : undefined}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (isDisabled) return;
+                      onSelect(option);
+                    }}
+                    onMouseEnter={() => {
+                      if (isDisabled) return;
+                      setHoveredIndex(index);
+                      onHighlight(index);
+                    }}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  >
+                    {isCategory ? (
+                      <div className="tw-flex tw-w-full tw-items-center tw-justify-between">
+                        <div className="tw-flex tw-items-center tw-gap-2">
                           {option.icon}
+                          <span className="tw-font-medium">{option.title}</span>
+                          {option.lockedNote && (
+                            <span className="tw-text-xs">{option.lockedNote}</span>
+                          )}
                         </div>
-                      )}
-                      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
-                        <div className="tw-truncate tw-font-medium tw-text-normal">
-                          {option.title}
-                        </div>
-                        {option.subtitle && (
-                          <div className="tw-truncate tw-text-xs tw-text-muted">
-                            {option.subtitle}
-                          </div>
+                        {option.lockedNote ? (
+                          <Lock className="tw-size-4 tw-text-faint" />
+                        ) : (
+                          <ChevronRight className="tw-size-4 tw-text-muted" />
                         )}
                       </div>
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
+                        {option.icon && (
+                          <div className="tw-flex tw-h-full tw-shrink-0 tw-items-center">
+                            {option.icon}
+                          </div>
+                        )}
+                        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
+                          <div className="tw-truncate tw-font-medium tw-text-normal">
+                            {option.title}
+                          </div>
+                          {option.subtitle && (
+                            <div className="tw-truncate tw-text-xs tw-text-muted">
+                              {option.subtitle}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </React.Fragment>
               );
             })}
           </div>

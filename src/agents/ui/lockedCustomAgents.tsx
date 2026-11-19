@@ -1,6 +1,7 @@
 import {
   getCustomAgentsGate,
   subscribeToCustomAgentsGate,
+  useCustomAgentsGate,
   type CustomAgentsGate,
 } from "@/agents/customAgentsGate";
 import { NewAgentButton } from "@/agents/ui/AgentRoster";
@@ -8,10 +9,12 @@ import {
   CustomAgentsUpsellModal,
   type CustomAgentsUpsellMedium,
 } from "@/agents/ui/CustomAgentsUpsell";
+import type { CategoryOption } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useApp } from "@/context";
 import { ensureEntitlement } from "@/plusUtils";
+import { UserPlus } from "lucide-react";
 import type { App } from "obsidian";
-import React from "react";
+import React, { useMemo } from "react";
 
 let runningCheck: Promise<void> | null = null;
 let stopWaitingForUnlock: (() => void) | null = null;
@@ -93,4 +96,32 @@ export function renderNewAgentButton(
     return <LockedNewAgentButton emphasized={emphasized} onUnlocked={onCreate} />;
   }
   return undefined;
+}
+
+export interface LockedAgentMention {
+  option: CategoryOption;
+  choose: () => void;
+}
+
+const LOCKED_AGENT_MENTION_OPTION: CategoryOption = {
+  key: "locked-custom-agents",
+  title: "Ask an agent",
+  category: "agents",
+  icon: <UserPlus className="tw-size-4" />,
+  lockedNote: "Supporter preview",
+};
+
+export function useLockedAgentMention(enabled: boolean): LockedAgentMention | null {
+  const app = useApp();
+  const gate = useCustomAgentsGate();
+  return useMemo(
+    () =>
+      enabled && gate === "locked"
+        ? {
+            option: LOCKED_AGENT_MENTION_OPTION,
+            choose: () => void openLockedCustomAgents(app, "custom_agent_mention"),
+          }
+        : null,
+    [app, enabled, gate]
+  );
 }
