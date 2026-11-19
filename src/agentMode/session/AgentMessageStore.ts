@@ -281,18 +281,16 @@ export class AgentMessageStore {
   adoptNoteRows(saved: readonly AgentChatMessage[]): void {
     const visible = this.messages.filter((m) => m.isVisible);
     let next = 0;
-    let afterCompact = false;
     for (const row of saved) {
       // Claude's replay drops a /compact turn, which the note keeps.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/635
-      if (row.sender === USER_SENDER && isCompactCommand(row.message)) {
-        afterCompact = true;
-        continue;
-      }
+      if (row.sender === USER_SENDER && isCompactCommand(row.message)) continue;
       const msg = visible[next];
       if (!msg) return;
       if (msg.sender !== row.sender) {
-        if (afterCompact && row.sender !== USER_SENDER) continue;
+        // A reply only the note has, such as a failed turn's error, is skipped so the rows after it keep their saved rules, @ runs and times.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+        if (row.sender !== USER_SENDER) continue;
         return;
       }
       const isUser = msg.sender === USER_SENDER;
@@ -301,7 +299,6 @@ export class AgentMessageStore {
       if (isUser && row.message.replace(CHAT_IMAGE_EMBED, "").trim() !== msg.displayText.trim()) {
         return;
       }
-      afterCompact = false;
       next += 1;
       if (row.timestamp) msg.timestamp = row.timestamp;
       if (isUser) msg.displayText = row.message;

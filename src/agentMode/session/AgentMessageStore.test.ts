@@ -838,7 +838,7 @@ describe("AgentMessageStore", () => {
       expect(store.getDisplayMessages()[1].memorySaves).toEqual([MEMORY_SAVE]);
     });
 
-    it(`${issue} leaves messages unchanged from the first position where the note's sender differs`, () => {
+    it(`${issue} leaves messages unchanged from a note user message where the replay has a reply`, () => {
       const store = new AgentMessageStore();
       store.addMessage(replayed(USER_SENDER, "q"));
       store.addMessage(replayed(AI_SENDER, "a"));
@@ -883,6 +883,30 @@ describe("AgentMessageStore", () => {
         ["a", noteAt, undefined, undefined],
         ["sent after the last save", replayAt, undefined, undefined],
         ["a2", replayAt, undefined, undefined],
+      ]);
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/942 skips a reply only the note has, such as a failed turn's error, and gives the later messages their saved rules, @ runs and times", () => {
+      const store = new AgentMessageStore();
+      store.addMessage(replayed(USER_SENDER, "q"));
+      store.addMessage(replayed(USER_SENDER, "remember this"));
+      store.addMessage(replayed(AI_SENDER, "saved"));
+
+      store.adoptNoteRows([
+        noteRow(USER_SENDER, "q"),
+        noteRow(AI_SENDER, "**Error:** the turn returned nothing"),
+        noteRow(USER_SENDER, "remember this", { agentMentions: [MAYA_MENTION] }),
+        noteRow(AI_SENDER, "saved", { memorySaves: [MEMORY_SAVE] }),
+      ]);
+
+      expect(
+        store
+          .getDisplayMessages()
+          .map((m) => [m.message, m.timestamp, m.agentMentions, m.memorySaves])
+      ).toEqual([
+        ["q", noteAt, undefined, undefined],
+        ["remember this", noteAt, [MAYA_MENTION], undefined],
+        ["saved", noteAt, undefined, [MEMORY_SAVE]],
       ]);
     });
 
