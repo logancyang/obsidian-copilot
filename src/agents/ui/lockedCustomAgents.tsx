@@ -33,9 +33,9 @@ function runWhenUnlocked(onUnlocked: () => void): void {
   stopWaitingForUnlock = stop;
 }
 
-async function checkThenOpenUpsell(
+async function checkLicense(
   app: App,
-  medium: CustomAgentsUpsellMedium,
+  afterCheck: (unlocked: boolean) => void,
   onUnlocked: (() => void) | undefined
 ): Promise<void> {
   // A user who upgrades after the upsell, or whose check on this click grants the feature, lands in what they clicked.
@@ -49,7 +49,18 @@ async function checkThenOpenUpsell(
     () => getCustomAgentsGate() === "full",
     { sendWithoutKey: true }
   );
-  if (!unlocked) new CustomAgentsUpsellModal(app, medium).open();
+  afterCheck(unlocked);
+}
+
+function checkLicenseOnce(
+  app: App,
+  afterCheck: (unlocked: boolean) => void,
+  onUnlocked?: () => void
+): Promise<void> {
+  runningCheck ??= checkLicense(app, afterCheck, onUnlocked).finally(() => {
+    runningCheck = null;
+  });
+  return runningCheck;
 }
 
 export function openLockedCustomAgents(
@@ -57,10 +68,17 @@ export function openLockedCustomAgents(
   medium: CustomAgentsUpsellMedium,
   onUnlocked?: () => void
 ): Promise<void> {
-  runningCheck ??= checkThenOpenUpsell(app, medium, onUnlocked).finally(() => {
-    runningCheck = null;
-  });
-  return runningCheck;
+  return checkLicenseOnce(
+    app,
+    (unlocked) => {
+      if (!unlocked) new CustomAgentsUpsellModal(app, medium).open();
+    },
+    onUnlocked
+  );
+}
+
+export function openLockedAgentProfile(app: App, openProfile: () => void): Promise<void> {
+  return checkLicenseOnce(app, openProfile);
 }
 
 interface LockedNewAgentButtonProps {

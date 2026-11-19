@@ -25,6 +25,7 @@ export type ProductUtmMedium =
   | "navigator_blocked_view"
   | "custom_agent_dialog"
   | "custom_agent_mention"
+  | "custom_agent_renew"
   | "connectors_settings"
   | "connectors_chat"
   | "skill_no_license"

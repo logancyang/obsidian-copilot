@@ -9,5 +9,5 @@ export function useCustomAgents(store: CustomAgentStore | undefined): readonly C
   const gate = useCustomAgentsGate();
   const source = store ?? NO_STORE;
   const listed = useSyncExternalStore(source.subscribe, source.getAgents);
-  return gate === "full" ? listed : NO_AGENTS;
+  return gate === "full" || gate === "locked" ? listed : NO_AGENTS;
 }

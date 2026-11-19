@@ -55,7 +55,7 @@ import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
 import { findBackendForModel, listBackendDescriptors } from "@/agentMode/backends/registry";
 import { buildAgentModelChoices } from "@/agentMode/ui/agentModelPickerHelpers";
 import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
-import { useCustomAgentsGate } from "@/agents/customAgentsGate";
+import { isLicenseLapsed, useCustomAgentsGate } from "@/agents/customAgentsGate";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentIdentityBar } from "@/agents/ui/AgentIdentityBar";
 import { ChatAgentsContext, useChatAgentsValue } from "@/agents/ui/chatAgents";
@@ -67,7 +67,8 @@ import {
   FirstAgentBanner,
   useFirstAgentBannerVisible,
 } from "@/agents/ui/FirstAgentBanner";
-import { renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
+import { LockedHomeNote, unlockCustomAgents } from "@/agents/ui/LockedAgentNotices";
+import { openLockedAgentProfile, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
@@ -433,6 +434,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
   const chatAgents = useChatAgentsValue(plugin.customAgents, agentHome.selected?.slug ?? null);
   const customAgentsGate = useCustomAgentsGate();
+  const lapsed = isLicenseLapsed(settings);
   const { focusInput } = useChatInput();
   const selectAgent = agentHome.select;
   const getAgentModelChoices = useCallback(
@@ -460,7 +462,11 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const firstAgentBannerVisible = useFirstAgentBannerVisible(agentHome.agents.length);
   const profile = useAgentProfileRoute(agentHome.agents, sessionId);
   const markProfileClosedByUser = useComposerFocusAfterTaskView(profile.agent !== null);
-  const closeProfile = profile.close;
+  const { close: closeProfile, open: openProfile } = profile;
+  const openLockedProfile = useCallback(
+    (slug: string) => void openLockedAgentProfile(app, () => openProfile(slug)),
+    [app, openProfile]
+  );
   const leaveProfile = useCallback(() => {
     markProfileClosedByUser();
     closeProfile();
@@ -782,6 +788,19 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       onSelect={(slug) => void agentHome.select(slug)}
       newAgentButton={newAgentButton}
       onOpenProfile={profile.open}
+      locked={
+        customAgentsGate === "locked"
+          ? {
+              onOpen: openLockedProfile,
+              note: (
+                <LockedHomeNote
+                  lapsed={lapsed}
+                  onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
+                />
+              ),
+            }
+          : undefined
+      }
       emptyHero={
         <div className="tw-flex tw-min-w-0 tw-items-center tw-justify-center tw-gap-3">
           {!newAgentButton && <CopilotBrandIcon className="tw-size-6 tw-shrink-0 tw-text-normal" />}

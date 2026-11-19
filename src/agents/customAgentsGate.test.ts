@@ -1,6 +1,7 @@
 import * as customAgentsGate from "@/agents/customAgentsGate";
 import {
   getCustomAgentsGate,
+  isLicenseLapsed,
   subscribeToCustomAgentsGate,
   useCustomAgentsGate,
 } from "@/agents/customAgentsGate";
@@ -8,6 +9,8 @@ import { setCustomAgentsAccess, verifyStoredToken } from "@/agents/testing/custo
 import { act, renderHook } from "@testing-library/react";
 
 jest.mock("@/entitlement");
+
+const LAPSED_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/950";
 
 describe("customAgentsGate", () => {
   let launchedConstant: jest.ReplaceProperty<boolean>;
@@ -99,5 +102,44 @@ describe("customAgentsGate", () => {
       await verifyStoredToken(true);
       expect(listener).not.toHaveBeenCalled();
     });
+  });
+
+  describe("isLicenseLapsed()", () => {
+    it.each([
+      {
+        device: "a device whose Supporter plan lapsed and kept its license key",
+        access: "free",
+        gate: "locked",
+        lapsed: true,
+      },
+      {
+        device: "a device whose expired Supporter key now verifies as a free-tier token",
+        access: "free-tier-token",
+        gate: "locked",
+        lapsed: true,
+      },
+      {
+        device:
+          "a device on an active paid plan without custom agents, as a Plus user whose vault syncs agents",
+        access: "plus-without-custom-agents",
+        gate: "locked",
+        lapsed: false,
+      },
+      {
+        device: "a device that never had a license, as when Sync brings another device's agents",
+        access: "keyless",
+        gate: "locked",
+        lapsed: false,
+      },
+    ] as const)(
+      `tells $device apart by the gate, the stored license key and whether a paid plan is active (${LAPSED_ISSUE})`,
+      async ({ access, gate, lapsed }) => {
+        launchedConstant.replaceValue(true);
+        await setCustomAgentsAccess(access);
+
+        expect(getCustomAgentsGate()).toBe(gate);
+        expect(isLicenseLapsed()).toBe(lapsed);
+      }
+    );
   });
 });

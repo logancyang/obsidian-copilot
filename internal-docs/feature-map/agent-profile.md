@@ -18,6 +18,7 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 - profile-delete: `Delete <name>…` at the bottom asks first in "Delete <name>?": "This deletes <name> and everything below. You can't undo it.", then "What <name> handles" and "Rules <name> remembers" with their file locations and the rule count, "<n> chats with <name>" ("They leave Recent chats and the Navigator."), and the agent's face. A memory file, face, or chats the agent does not have are not listed. A long name shortens on the red button with an ellipsis. `Cancel` has the keyboard; the red button reads `Delete <name>`.
 - profile-delete-done: deleting moves the agent's folder to the trash that the "Deleted files" setting names, deletes every chat with the agent (a running one is stopped first) and closes their tabs. The tab the profile covered becomes a new chat on the start screen with Copilot selected, the agent is gone from the row of faces, and a notice reads "Deleted <name> and <n> chats." Only chats recorded with exactly this agent go: other agents' chats, Copilot chats, notes outside the chats folder (an open chat's note moved out of it included), and a chat note whose own `agent` property no longer names this agent stay.
 - profile-delete-failed: when one of the agent's chats can't be deleted, the agent stays with that chat and the notice reads "Couldn't delete 1 of <name>'s 4 chats, so <name> was kept."; deleting again finishes the job. When the folder can't go to the trash, the notice names the chats that went: "Deleted 3 chats with <name>, but couldn't delete <name>." When the agent is already gone, or custom agents stop, by the time `Delete <name>` is chosen, nothing is deleted and the notice reads "Couldn't delete <name>."
+- profile-locked: when the license no longer includes custom agents, or on a device with no license key that has the agent's files, the profile opens locked from the agent's face. A banner under `Back to chat` reads "Your Supporter plan ended. <name> can't chat until you renew." with `Renew` (opens the pricing page), or, without an active paid plan on the device, "<name> can't chat until you enter a Supporter license key on this device." with `Enter license key` (opens the license field in Copilot settings). The face is greyed with a lock, the name and title are plain text, the greyed `Model` row reads "Locked until you renew" (or "Locked until you enter a Supporter license key") and its picker does not open, and there is no `New chat with <name>`. "What <name> handles", "Rules <name> remembers", and `Delete <name>…` work as usual.
 - profile-gone: when the agent's folder is deleted while its profile is open, or the license stops including custom agents, the profile goes back to the chat with no error.
 
 ## How to get to it
@@ -25,7 +26,7 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 - The [agent identity bar](agent-identity-bar.md) at the top of an agent's chat.
 - `Profile` in the line under the row of faces on the [start screen](agent-home.md), with an agent selected.
 
-It needs a license that includes custom agents (a team license until launch).
+It needs a license that includes custom agents (a team license until launch). Without one, the locked profile opens from a greyed face on the start screen.
 
 ## Driving it
 
@@ -42,6 +43,7 @@ It needs a license that includes custom agents (a team license until launch).
 - New chat: choose `New chat with <name>` in the profile opened from an agent's chat. A new tab opens with the agent selected. Open the profile from the start screen and choose it: the start screen shows again with the agent selected.
 - Delete: choose `Delete <name>…`. The dialog names both files, the rule count, the number of chats, and the face; press Enter: nothing is deleted and the dialog closes. Choose `Delete <name>…` again and then `Delete <name>`. The start screen shows with Copilot selected and without the agent, the notice names the deleted chats, the agent's folder is in the trash, its chats are gone from Recent chats and the Navigator, and other agents' chats remain.
 - Delete while working: send the agent a message and, while it replies, delete it from the profile. The reply stops, its tab closes, and the agent is deleted.
+- Locked: after custom agents have launched, in a vault with agents, with a license that no longer includes custom agents, choose an agent's face on the start screen. The locked profile opens with `Renew` in its banner. Hover the face, name, and title: no pencil shows; the model picker does not open. Open both files, then delete the agent: it leaves the row and its folder and chats go to the trash. Remove the license key and open another agent's profile: the banner offers `Enter license key`.
 - Gone: open an agent's profile and delete its folder outside Obsidian. The profile goes back to the chat.
 
 ## Gotchas

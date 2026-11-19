@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Lock } from "lucide-react";
 import React from "react";
 
 export type AgentFaceSize = "xs" | "s" | "m" | "l" | "xl" | "xxl";
@@ -15,11 +16,22 @@ const FACE_SIZE_CLASS: Record<AgentFaceSize, string> = {
 export const SELECTED_FACE_CLASS =
   "tw-outline tw-outline-2 tw-outline-offset-2 tw-outline-[color:var(--text-muted)]";
 
+export const LOCKED_FACE_CLASS = "tw-opacity-50 tw-grayscale";
+
+export function LockBadge(): React.ReactElement {
+  return (
+    <span className="tw-absolute -tw-bottom-1 -tw-right-1 tw-flex tw-size-4 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted">
+      <Lock className="tw-size-2.5" />
+    </span>
+  );
+}
+
 export interface AgentFaceProps {
   src: string;
   size: AgentFaceSize;
   selected?: boolean;
   running?: boolean;
+  locked?: boolean;
   className?: string;
 }
 
@@ -28,8 +40,10 @@ export function AgentFace({
   size,
   selected,
   running,
+  locked,
   className,
 }: AgentFaceProps): React.ReactElement {
+  const wrapped = running || locked;
   const face = (
     <img
       src={src}
@@ -39,19 +53,23 @@ export function AgentFace({
         "tw-shrink-0 tw-rounded-full tw-bg-primary tw-object-cover",
         FACE_SIZE_CLASS[size],
         selected && SELECTED_FACE_CLASS,
-        !running && className
+        locked && LOCKED_FACE_CLASS,
+        !wrapped && className
       )}
     />
   );
-  if (!running) return face;
+  if (!wrapped) return face;
   return (
     <span className={cn("tw-relative tw-inline-flex tw-shrink-0", className)}>
       {face}
-      <span
-        aria-hidden="true"
-        data-agent-face-ring="running"
-        className="tw-pointer-events-none tw-absolute -tw-inset-[3px] tw-animate-spin tw-rounded-full tw-border-[1.5px] tw-border-solid tw-border-transparent tw-border-r-[color:var(--color-blue)] tw-border-t-[color:var(--color-blue)]"
-      />
+      {running && (
+        <span
+          aria-hidden="true"
+          data-agent-face-ring="running"
+          className="tw-pointer-events-none tw-absolute -tw-inset-[3px] tw-animate-spin tw-rounded-full tw-border-[1.5px] tw-border-solid tw-border-transparent tw-border-r-[color:var(--color-blue)] tw-border-t-[color:var(--color-blue)]"
+        />
+      )}
+      {locked && <LockBadge />}
     </span>
   );
 }

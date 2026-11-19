@@ -1,3 +1,4 @@
+import { LockedHomeNote } from "@/agents/ui/LockedAgentNotices";
 import { AgentRoster, NewAgentButton, type AgentRosterProps } from "@/agents/ui/AgentRoster";
 import {
   COCO,
@@ -93,5 +94,31 @@ export const NoAgentsWithLockedNewAgentButton: StoryObj<AgentRosterProps> = {
       <span className="tw-text-3xl tw-font-[330] tw-text-normal">What are you working on?</span>
     ),
     newAgentButton: <NewAgentButton emphasized locked onClick={() => {}} />,
+  },
+};
+
+export const LockedAgentsAfterLicenseLapsed: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: FIVE_AGENTS,
+    selectedSlug: null,
+    locked: {
+      onOpen: () => {},
+      note: <LockedHomeNote lapsed onUnlock={() => {}} />,
+    },
+    newAgentButton: <NewAgentButton locked onClick={() => {}} />,
+  },
+};
+
+export const LockedAgentsOnDeviceWithoutLicense: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: FIVE_AGENTS,
+    selectedSlug: null,
+    locked: {
+      onOpen: () => {},
+      note: <LockedHomeNote lapsed={false} onUnlock={() => {}} />,
+    },
+    newAgentButton: <NewAgentButton locked onClick={() => {}} />,
   },
 };
