@@ -18,6 +18,7 @@ import type {
 import type { AgentMention } from "@/agents/agentMentions";
 import { formatAgentReply } from "@/agents/agentReply";
 import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
+import { readTurnMemorySaves, type MemorySave } from "@/agents/memorySaves";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { getCustomAgentsGate, subscribeToCustomAgentsGate } from "@/agents/customAgentsGate";
 import { USER_SENDER } from "@/constants";
@@ -390,7 +391,7 @@ export class HiddenAgentChats {
   ): Promise<AgentSession> {
     const vaultBase = this.host.vaultBase();
     const prompt = vaultBase
-      ? await loadAgentSessionPrompt(store, agent.slug, vaultBase, { saveRules: false })
+      ? await loadAgentSessionPrompt(store, agent.slug, vaultBase, { asked: true })
       : null;
     if (!prompt) throw new Error(`${agent.name} couldn't be loaded.`);
     return this.host.startChat({
@@ -524,6 +525,15 @@ export class HiddenAgentChats {
     record(hidden.parent, run, {
       status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
     });
+    // The asking chat shows the asked agent's save as its own chat does, as a line in place of its MEMORY.md among the changed files, so the asking agent hears only the files the user sees.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/969
+    const memorySaves = readTurnMemorySaves(end.files, {
+      agentName: hidden.agent.name,
+      memoryPath: hidden.agent.memoryPath,
+    });
+    const shown = memorySaves.length
+      ? end.files.filter((change) => change.path !== hidden.agent.memoryPath)
+      : end.files;
     void relay(
       hidden.parent,
       formatAgentReply({
@@ -531,7 +541,7 @@ export class HiddenAgentChats {
         name: hidden.agent.name,
         mention: run.id,
         reply: end.reply,
-        changed: end.files.map((change) => change.path),
+        changed: shown.map((change) => change.path),
         error: end.error?.message,
         stopped: run.stopped ?? undefined,
         declined: run.declined,
@@ -542,7 +552,8 @@ export class HiddenAgentChats {
           )
           .map((other) => other.agent.name),
       }),
-      end.files
+      end.files,
+      memorySaves
     );
     if (run.stopped !== "agent_deleted") return;
     this.chats.delete(key);
@@ -581,7 +592,8 @@ export class HiddenAgentChats {
 async function relay(
   parent: AgentSession,
   text: string,
-  files: readonly TurnFileChange[]
+  files: readonly TurnFileChange[],
+  memorySaves: readonly MemorySave[] = []
 ): Promise<void> {
   for (;;) {
     const status = parent.getStatus();
@@ -597,7 +609,7 @@ async function relay(
       logWarn("[Custom agents] couldn't pass an asked agent's reply to its chat", error);
       return;
     }
-    const stopAttaching = attachFiles(parent, sent.userMessageId, files);
+    const stopAttaching = attachFiles(parent, sent.userMessageId, files, memorySaves);
     const outcome = await sent.turn.catch(() => null);
     stopAttaching();
     // A reply dropped before it reached the agent, as by Stop while it waited, goes again once the chat can take it.
@@ -611,9 +623,11 @@ async function relay(
 function attachFiles(
   parent: AgentSession,
   messageId: string,
-  files: readonly TurnFileChange[]
+  files: readonly TurnFileChange[],
+  memorySaves: readonly MemorySave[]
 ): () => void {
-  const attach = () => files.length === 0 || parent.store.setFileChanges(messageId, [...files]);
+  const attach = () =>
+    files.length === 0 || parent.store.setFileChanges(messageId, [...files], memorySaves);
   if (attach()) return () => {};
   const unsubscribe = parent.subscribe({
     onMessagesChanged: () => {},
@@ -734,7 +748,7 @@ export function readAskedMessage(text: string): { answer: boolean; text: string 
 
 function hiddenJobText({ from }: HiddenChat, message: string): string {
   return [
-    `${from} asked you this for the user, from another chat. Your reply goes back to ${from}, who passes it on to the user. You can't save rules to your memory or change your instruction from this chat.`,
+    `${from} asked you this for the user, from another chat. Your reply goes back to ${from}, who passes it on to the user.`,
     `If you can't go on without the user's answer to a question, ask it with the ask_user tool from obsidian-copilot, then end your turn; the answer comes back as your next message.`,
     `<message from="${from}">\n${message}\n</message>`,
   ].join("\n\n");

@@ -21,7 +21,7 @@ Asking another custom agent from a chat with `@`: that agent works in the backgr
 - mention-resume: mentioning an agent again after Obsidian restarts continues the conversation it had in that chat, so it remembers the earlier exchange.
 - mention-stop: telling the chat's agent to stop the other agent, such as "Tell Maya to stop.", stops it at once. Its changes stay, and the chat's agent says how far it got, with a Files changed card for what it changed. Mentioning it again continues the same conversation.
 - mention-delete-while-working: deleting an agent from its profile while it works for another chat stops it. The delete dialog says so in an orange line, such as "Maya is working in Coco's chat. Deleting stops it."; the chat's agent then says how far it got.
-- mention-cant-remember: asked through a mention to remember something, the mentioned agent saves nothing; the chat's agent says it can't save rules from a chat it was asked into, and to tell it in its own chat.
+- mention-remember: a standing rule given through a mention, such as `@Maya from now on, flag video length first.`, is saved to the mentioned agent's own memory under the same rules as in its own chat, without a permission card. The relayed turn shows `Maya remembered` or `Maya replaced a rule` with the saved sentence under the `Message from` card, as in her own chat; the row opens her `MEMORY.md` at that rule, and the Files changed card leaves `MEMORY.md` out. The chat's own agent saves nothing for a rule meant for another agent. In `Plan` mode nothing is saved and the reply says so.
 - mention-no-self: an agent never asks itself; its own name is plain text in its chat.
 
 ## How to get to it
@@ -49,13 +49,13 @@ All of these need a license that includes custom agents and at least two agents 
 - Resume: after a relay, reload the plugin and open the chat from Recent chats. Choose `Message from Maya`: her reply shows below the note that her steps are no longer available; choose Back. Send `@Maya what did you tell me before?`. She recalls the earlier exchange.
 - Stop: send `@Maya check every claim in <note>, one by one`, then `Tell Maya to stop.` while she works. The chat's agent stops her, then says how far she got; the note keeps any change she made.
 - Delete while working: send `@Maya …` with a long job, open Maya's profile, and choose Delete. The dialog shows `Maya is working in <agent>'s chat. Deleting stops it.` in orange. After Delete, the chat's agent says Maya was deleted and how far she got.
-- Can't remember: send `@Maya from now on, flag video length first.` The relay says Maya can't save rules from a chat she was asked into; her `MEMORY.md` does not change.
+- Remember: in `Safe` mode, send `@Maya from now on, flag video length first.` No permission card shows; the relayed turn shows `Maya remembered` with the sentence under `Message from Maya`, and her `MEMORY.md` has the rule with a dated context line. The chat agent's own `MEMORY.md` is unchanged. Click the row: Maya's `MEMORY.md` opens at that rule. Reload the plugin and reopen the chat: the row is still there. Send `@Maya actually, flag the budget first instead.`: the row reads `Maya replaced a rule`. In `Plan` mode, send `@Maya from now on, open with the hook.`: nothing is saved and the reply says she can't save a rule in this mode. A new chat with Maya follows the saved rule.
 - Itself: in Maya's own chat, send `@Maya hello`. Maya answers directly.
 
 ## Gotchas
 
 - Without a license that includes custom agents, `@<name>` is plain text for the chat's own agent.
-- A mentioned agent never saves rules to its memory and never changes its instruction, whatever the mode. Rules for it belong in its own chat.
+- A mentioned agent never changes its instruction, whatever the mode. A rule it saves applies from its next chat, as in its own chat; mentioning it again in the same chat continues a conversation that started with its earlier memory.
 - A mentioned agent's work can be viewed only while Obsidian keeps its chat open: after a restart, or once the chat that asked it was shut down, the conversation says its steps from that run are no longer available, with what the agent sent back from that run, such as its question and its reply, below the note, until mentioning the agent again continues its conversation. A run that sent nothing back shows the note alone.
 - The mentioned agent works in a chat no list shows: not in the [chat tabs](chat-tabs.md), Recent chats or the [Copilot Navigator](copilot-navigator.md).
 - On Codex models, a chat can mention agents only if it was opened while custom agents were available: it keeps the tools it started with. On Claude and OpenCode models, an open chat gets the tools as soon as custom agents become available, and loses them when they stop being available.

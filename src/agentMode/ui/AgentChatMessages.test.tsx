@@ -821,6 +821,32 @@ describe("AgentChatMessages", () => {
         expect(container.textContent).not.toContain("Pass the reply on");
       });
 
+      it("shows the rule the asked agent saved under its card, and leaves its MEMORY.md out of the files it changed (https://github.com/Brevilabs/obsidian-copilot-private/issues/969)", async () => {
+        await setCustomAgentsAccess("team");
+        const memoryPath = "copilot/agents/maya/MEMORY.md";
+        const saved = {
+          ...relayMessage,
+          fileChanges: [
+            ...relayMessage.fileChanges,
+            { ...relayMessage.fileChanges[0], path: memoryPath },
+          ],
+          memorySaves: [{ agentName: "Maya", memoryPath, rule: "Flag video length first." }],
+        };
+
+        const { container } = render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([saved], false)} />
+          </AppContext.Provider>
+        );
+
+        const text = container.textContent ?? "";
+        expect(text.indexOf("Message fromMaya")).toBe(0);
+        expect(text).toContain("Maya remembered“Flag video length first.”");
+        expect(screen.getByRole("button", { name: "Plans/Launch plan.md" })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: memoryPath })).toBeNull();
+        expect(screen.getByRole("button", { name: `Open ${memoryPath}` })).toBeTruthy();
+      });
+
       it("draws nothing under the message that asked, whatever its agent's run says (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", async () => {
         await setCustomAgentsAccess("team");
         const asked = assistantMessage("asked", 0, {

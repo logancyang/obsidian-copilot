@@ -127,6 +127,11 @@ const AgentMessageRow = memo(function AgentMessageRow({
     ) : null;
   const isStreamingPlaceholder = isAssistant && isStreaming && !hasParts && !message.message;
   const memorySaves = useMemorySaveTrail(message, app);
+  // A save line has no Undo, so the turn's changed files leave out the MEMORY.md its lines show.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
+  const fileChanges = memorySaves
+    ? message.fileChanges?.filter((change) => change.path !== memorySaves.saves[0].memoryPath)
+    : message.fileChanges;
   const onContinue = isAssistant && onContinueFrom ? () => onContinueFrom(message.id) : undefined;
   const openFileChange = (change: TurnFileChange) =>
     void openTurnDiff(app, change, message.id).catch((error: unknown) =>
@@ -138,7 +143,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
     // https://github.com/logancyang/obsidian-copilot/issues/3343
     <div className="tw-w-full [contain-intrinsic-size:auto_500px] [content-visibility:auto]">
       {/* A reply opened from its note, or replayed without its tool calls, has no edit to put the save in place of. https://github.com/Brevilabs/obsidian-copilot-private/issues/942 */}
-      {memorySaves && memorySaves.anchorId === null ? (
+      {memorySaves && memorySaves.anchorId === null && !agentReply ? (
         <div className="tw-px-3 tw-pt-2">
           <MemorySaveLines saves={memorySaves.saves} app={app} />
         </div>
@@ -157,15 +162,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
             turnStopReason={message.turnStopReason}
             agentCancelCause={message.agentCancelCause}
             errorText={message.isErrorMessage ? message.message : undefined}
-            // A save line has no Undo, so the turn's changed files leave out the MEMORY.md its lines show.
-            // https://github.com/Brevilabs/obsidian-copilot-private/issues/942
-            fileChanges={
-              memorySaves
-                ? message.fileChanges?.filter(
-                    (change) => change.path !== memorySaves.saves[0].memoryPath
-                  )
-                : message.fileChanges
-            }
+            fileChanges={fileChanges}
             memorySaves={memorySaves}
             onContinue={onContinue}
             onOpenFileChange={openFileChange}
@@ -176,9 +173,11 @@ const AgentMessageRow = memo(function AgentMessageRow({
           marker={agentReply.marker}
           reply={agentReply.reply}
           run={relayRun}
-          fileChanges={message.fileChanges}
+          fileChanges={fileChanges}
           onOpenFileChange={openFileChange}
-        />
+        >
+          {memorySaves ? <MemorySaveLines saves={memorySaves.saves} app={app} /> : null}
+        </AgentReplyMessage>
       ) : (
         <>
           <ChatSingleMessage

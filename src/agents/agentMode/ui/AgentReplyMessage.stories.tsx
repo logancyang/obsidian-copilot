@@ -5,7 +5,9 @@ import {
   AgentReplyMessage,
   type AgentReplyMessageProps,
 } from "@/agents/agentMode/ui/AgentReplyMessage";
+import { MemorySaveLine } from "@/agents/agentMode/ui/MemorySaveLine";
 import { ChatAgentsContext } from "@/agents/ui/chatAgents";
+import type { MemorySave } from "@/agents/memorySaves";
 import { LONG_NAMED_AGENT, THREE_AGENTS } from "@/agents/ui/testing/rosterFixtures";
 import { useApp } from "@/context";
 import type { Meta, StoryObj } from "@/lib/story";
@@ -13,6 +15,7 @@ import React from "react";
 
 interface ReplyCardProps extends AgentReplyMessageProps {
   relay?: string;
+  saves?: MemorySave[];
 }
 
 const CHAT_AGENTS = {
@@ -21,11 +24,20 @@ const CHAT_AGENTS = {
   openRun: () => {},
 };
 
-function ReplyCard({ relay, ...props }: ReplyCardProps) {
+function ReplyCard({ relay, saves, ...props }: ReplyCardProps) {
   const app = useApp();
   return (
     <ChatAgentsContext.Provider value={CHAT_AGENTS}>
-      <AgentReplyMessage {...props} />
+      <AgentReplyMessage {...props}>
+        {saves?.map((save) => (
+          <MemorySaveLine
+            key={save.rule}
+            {...save}
+            onOpen={() => {}}
+            onOpenInstruction={() => {}}
+          />
+        ))}
+      </AgentReplyMessage>
       {relay ? (
         <div className="tw-px-3 tw-pt-2">
           <AgentMarkdownText text={relay} app={app} />
@@ -44,6 +56,7 @@ function leoRun(change: Partial<AgentMention>): AgentMention {
 }
 
 const MAYA_MARKER = { agent: "maya", name: "Maya", mention: "m1" };
+const MAYA_MEMORY = "copilot/agents/maya/MEMORY.md";
 const LEO_MARKER = { agent: "leo", name: "Leo", mention: "m2" };
 
 const meta = {
@@ -63,6 +76,38 @@ export const MessageFrom: StoryObj<ReplyCardProps> = {
     run: { ...leoRun({ status: "finished" }), id: "m1", agent: "maya" },
     relay:
       "Maya disagrees with the plan. Her main point, in her words: *“Six features in 90 seconds means nobody remembers any of them.”*\n\nMy take: she's right about the feature count. Want me to rewrite the outline that way?",
+  },
+};
+
+export const RememberedARule: StoryObj<ReplyCardProps> = {
+  args: {
+    run: { ...leoRun({ status: "finished" }), id: "m1", agent: "maya" },
+    reply: "This cut runs 94 seconds, 4 over the target.",
+    saves: [
+      {
+        agentName: "Maya",
+        memoryPath: MAYA_MEMORY,
+        rule: "Flag video length before anything else.",
+      },
+    ],
+    fileChanges: [change("Plans/Launch video.md", 1, 0)],
+    relay: "Maya says this cut runs 94 seconds, 4 over the target.",
+  },
+};
+
+export const ReplacedARule: StoryObj<ReplyCardProps> = {
+  args: {
+    run: { ...leoRun({ status: "finished" }), id: "m1", agent: "maya" },
+    reply: "Budget first from now on. This plan's $8k holds if the ads stay under $3k.",
+    saves: [
+      {
+        agentName: "Maya",
+        memoryPath: MAYA_MEMORY,
+        rule: "Flag the budget before anything else.",
+        replaced: "Flag video length before anything else.",
+      },
+    ],
+    relay: "Maya will lead with the budget now. On this plan: $8k holds if ads stay under $3k.",
   },
 };
 
