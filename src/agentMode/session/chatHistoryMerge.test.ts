@@ -94,6 +94,22 @@ describe("chatHistoryMerge", () => {
       expect(merged?.pinnedAt).toBe(7_000);
     });
 
+    it("names each chat's custom agent, from its note or else from the chat index (https://github.com/Brevilabs/obsidian-copilot-private/issues/588)", () => {
+      const merged = mergeChatHistoryItems(
+        [
+          { item: mdItem({ id: "a.md", agent: "coco" }), backendId: "opencode", sessionId: "s1" },
+          { item: mdItem({ id: "b.md" }), backendId: "opencode", sessionId: "s2" },
+        ],
+        [
+          nativeEntry({ sessionId: "s1", agent: "maya" }),
+          nativeEntry({ sessionId: "s2", agent: "maya" }),
+          nativeEntry({ sessionId: "s3", agent: "leo" }),
+        ]
+      );
+
+      expect(merged.map((item) => item.agent)).toEqual(["coco", "maya", "leo"]);
+    });
+
     it("fills missing markdown project ownership from its native twin", () => {
       const [merged] = mergeChatHistoryItems(
         [{ item: mdItem(), backendId: "opencode", sessionId: "s1" }],

@@ -13,6 +13,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - home-first-message: sending the first message turns the start screen into the conversation, with the [chat controls](chat-controls.md) above the chat input.
 - home-shelf: the shelf's `Recent chats`, `Relevant Notes`, and `Projects` tabs, with the project count on `Projects`; the last tab chosen stays selected for every new chat.
 - home-recent-chats: `Recent chats` lists past chats as [chat rows](chat-rows.md), pinned chats first, filtered by `Search chats...`.
+- home-recent-agent-chats: with custom agents, each agent chat in `Recent chats` shows its agent's face. With an agent selected, the list holds only that agent's chats and the search reads `Search chats with <name>...`; an agent with no chats yet shows "No chats with <name> yet."
 - home-archived: `View archived` under Recent chats lists archived chats and projects, each with `Unarchive`.
 - home-relevant-notes: the `Relevant Notes` tab shows [Relevant Notes](relevant-notes.md); it is hidden while the Relevant Notes pane is open.
 - home-projects: the `Projects` tab lists [projects](projects.md) with `New project` and `Search projects...`.
@@ -35,6 +36,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 - First message: send a message from the start screen. The greeting and shelf give way to the conversation, with `New chat`, `Chat history`, and `More actions` above the chat input.
 - Shelf tab: choose `Projects`, close Agent Chat, and open it again. The shelf opens on `Projects`.
 - Search: in `Recent chats`, type part of a chat title into `Search chats...`. Only matching chats remain; clearing the box brings the rest back.
+- Agent chats: with custom agents and Copilot selected, `Recent chats` shows every chat, agent chats with their agent's face. Choose an agent: only its chats remain. Choose an agent with no chats: "No chats with <name> yet."
 - Archived: choose `View archived`. A list of archived chats and projects opens; `Unarchive` on a project returns it to `Projects` and raises the count.
 - Relevant Notes: with a note open beside Agent Chat, choose `Relevant Notes`. `Relevant to` names the note and related notes are listed.
 - Projects: choose `Projects`. `New project`, `Search projects...`, and the projects show; the count on the tab matches the list.

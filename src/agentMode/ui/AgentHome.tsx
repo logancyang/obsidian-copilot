@@ -56,6 +56,7 @@ import { findBackendForModel } from "@/agentMode/backends/registry";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentRoster } from "@/agents/ui/AgentRoster";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
+import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
@@ -407,6 +408,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     },
     switchLandingAgent
   );
+  const recentChats = useAgentRecentChats(chatHistoryItems, agentHome.agents, agentHome.selected);
   const dropOverlay = isDragActive && (
     <div className="tw-pointer-events-none tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
       <span>Drop files here...</span>
@@ -480,7 +482,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
-            items={chatHistoryItems}
+            {...recentChats}
             onLoadChat={handleLoadChat}
             onUpdateTitle={handleUpdateChatTitle}
             onDeleteChat={handleDeleteChat}
@@ -540,7 +542,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     [
       activeProjects,
       projectNamesById,
-      chatHistoryItems,
+      recentChats,
       app,
       projectUsageManager,
       handleSelectProject,
@@ -583,7 +585,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
         title: "Recent chats",
         renderBody: () => (
           <GlobalRecentChatsSection
-            items={chatHistoryItems}
+            {...recentChats}
             variant="project"
             onLoadChat={handleLoadChat}
             onUpdateTitle={handleUpdateChatTitle}
@@ -608,7 +610,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
       },
     ],
     [
-      chatHistoryItems,
+      recentChats,
       activeProjectId,
       handleLoadChat,
       handleUpdateChatTitle,
