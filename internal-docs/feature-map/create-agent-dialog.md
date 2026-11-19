@@ -46,7 +46,7 @@ It needs a license that includes custom agents; without one, `New` opens the Sup
 - Long name: type a 13-character name. "Long names get cut off in tabs." shows under it.
 - Close: with nothing typed, click outside: the dialog closes. Type a name, click outside: nothing happens. Press Esc: "Discard <name>?" shows; Esc again or `Keep editing` returns to the form; `Discard` closes it.
 - Create: fill a name and instruction and choose `Create`. The start screen shows the agent selected and "Ask <name> anything"; the agent's folder holds its instructions and face and no memory file. The first message starts a chat that follows the instruction.
-- Failed: lose the license while the dialog is open and choose `Create`. The dialog stays open with the text and shows why.
+- Failed: with the dialog open, clear the license key so there is no valid license, then choose `Create`. The dialog stays open with the text and shows why.
 - Drafted: in Coco's chat, ask for a family logistics agent and choose `Review and create…` on the card. The dialog opens filled in with "Drafted by Coco." and Coco's face at the top. Change the title, pick a face and a model, and choose `Create`: the start screen shows the new agent selected with the cursor in the chat input, and its `instructions.md` holds the instruction as approved.
 
 ## Gotchas

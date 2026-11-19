@@ -1031,7 +1031,7 @@ describe("hiddenAgentChats", () => {
         expect(fake.closeSession).toHaveBeenCalledWith({ sessionId: sessionIdOf(maya) });
       });
 
-      it(`lets an asked agent finish and relays its reply when the license lapses while it works, since the license is checked only when an @ is sent (${LOCKED_AGENTS_ISSUE})`, async () => {
+      it(`lets an asked agent finish and relays its reply when custom agents lock while it works, since the license is checked only when an @ is sent (${LOCKED_AGENTS_ISSUE})`, async () => {
         const { coco, maya } = await askFromMessage();
 
         await setCustomAgentsAccess("free");

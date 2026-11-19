@@ -32,7 +32,7 @@ describe("LockedAgentNotices", () => {
   afterEach(() => open.mockRestore());
 
   describe("unlockCustomAgents()", () => {
-    it(`opens the Copilot settings tab holding the license key field, whether the stored key expired or none was entered (${ISSUE})`, () => {
+    it(`opens the Copilot settings tab holding the license key field, whether the stored key is not valid or none was entered (${ISSUE})`, () => {
       const app = new App();
 
       unlockCustomAgents(app, window);

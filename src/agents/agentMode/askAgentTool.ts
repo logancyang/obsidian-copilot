@@ -136,7 +136,7 @@ function listedForAskingChats(
     getCustomAgentsGate() === "full" && !host.isUnlistedChat(sessionKey) ? definition : null;
 }
 
-// OpenCode lists a folder's tools once for every chat in it, so a license entered or lapsing while it runs has it list them again.
+// OpenCode lists a folder's tools once for every chat in it, so custom agents unlocking or locking while it runs has it list them again.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
 export function relistOnCustomAgentsGateChange(relist: () => void): () => void {
   let full = getCustomAgentsGate() === "full";

@@ -90,7 +90,7 @@ export const AgentMentionMenuWithLockedAgents: StoryObj<TypeaheadMenuContentProp
   },
 };
 
-export const AgentMentionSearchAfterLicenseLapsed: StoryObj<TypeaheadMenuContentProps> = {
+export const AgentMentionSearchWithoutValidLicense: StoryObj<TypeaheadMenuContentProps> = {
   args: {
     options: [
       ...agentMentionOptions([COCO, MAYA, LEO, NORA], "ma", () => "Supporter preview"),

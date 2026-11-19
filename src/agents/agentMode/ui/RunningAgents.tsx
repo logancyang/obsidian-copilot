@@ -71,7 +71,7 @@ interface ChatRunningAgentsInput {
   gate: CustomAgentsGate;
 }
 
-// A saved run can say working after its agent stopped, so the line lists only runs the plugin still holds; a run keeps going after the license lapses, but only a license that includes custom agents can stop it, as telling the chat's agent to stop does.
+// A saved run can say working after its agent stopped, so the line lists only runs the plugin still holds; a run keeps going once the license is not valid, but only a license that includes custom agents can stop it, as telling the chat's agent to stop does.
 // https://github.com/Brevilabs/obsidian-copilot-private/issues/948
 export function chatRunningAgents({
   messages,

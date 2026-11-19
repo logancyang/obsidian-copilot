@@ -297,14 +297,14 @@ describe("AgentProfile", () => {
     });
 
     it.each([
-      { device: "a device whose stored license key is no longer valid", access: "free" },
-      { device: "a device that never had a license", access: "keyless" },
+      { license: "a stored license key that is not valid", access: "free" },
+      { license: "no license key", access: "keyless" },
       {
-        device: "a device on a paid plan without custom agents",
+        license: "a paid plan without custom agents",
         access: "plus-without-custom-agents",
       },
     ] as const)(
-      `shows the same locked profile on $device: the valid Supporter license banner with Enter license key, a model that can't change and Delete but no New chat, and still deletes the agent and archives its chats (${LOCKED_ISSUE})`,
+      `shows the same locked profile for $license: the valid Supporter license banner with Enter license key, a model that can't change and Delete but no New chat, and still deletes the agent and archives its chats (${LOCKED_ISSUE})`,
       async ({ access }) => {
         jest.mocked(AgentDeleteModal).mockClear();
         archivedChats.mockClear();

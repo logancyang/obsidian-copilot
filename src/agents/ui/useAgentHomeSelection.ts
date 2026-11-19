@@ -85,7 +85,7 @@ export function useAgentHomeSelection(
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/588
   useEffect(() => {
     if (!isLanding) return;
-    // A new chat that started on an agent before the license check locked custom agents, as at the first launch after a plan lapses, goes back to Copilot.
+    // A new chat that started on an agent before the license check locked custom agents goes back to Copilot.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
     // A new chat on an agent whose model stopped running on this device goes back to Copilot the same way.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/962
