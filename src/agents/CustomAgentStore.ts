@@ -225,7 +225,7 @@ export class CustomAgentStore {
     // A surface left open when the license loses custom agents must not read or write the folder.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/936
     if (!this.eventRefs) throw new Error("Custom agents are not available.");
-    return normalizePath(`${getEffectiveCopilotFolder()}/${AGENTS_SUBFOLDER}`);
+    return customAgentsFolderPath();
   }
 
   private isInAgentsFolder(path: string): boolean {
@@ -247,6 +247,10 @@ export class CustomAgentStore {
       facePath: `${folderPath}/${FACE_FILE_NAME}`,
     };
   }
+}
+
+export function customAgentsFolderPath(): string {
+  return normalizePath(`${getEffectiveCopilotFolder()}/${AGENTS_SUBFOLDER}`);
 }
 
 export function runCustomAgentStoreWhileEnabled(store: CustomAgentStore): () => void {

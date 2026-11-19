@@ -11,7 +11,7 @@ import {
 import { computeVisibleTabIndices } from "@/components/ui/tabOverflow";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import React, { useId, useLayoutEffect, useRef, useState } from "react";
 
 export type RosterAgent = Pick<CustomAgent, "slug" | "name" | "title" | "instruction" | "faceSrc">;
@@ -40,11 +40,33 @@ export function AgentRoster({
   onOpenProfile,
 }: AgentRosterProps): React.ReactElement {
   const headingId = useId();
-  if (agents.length === 0) return <>{emptyHero}</>;
+  if (agents.length === 0 && !newAgentButton) return <>{emptyHero}</>;
   const selected = agents.find((agent) => agent.slug === selectedSlug) ?? null;
   const select = (slug: string | null) => {
     if (slug !== (selected?.slug ?? null)) onSelect(slug);
   };
+  const row = (
+    <FaceRow
+      agents={agents}
+      selected={selected}
+      onSelect={select}
+      newAgentButton={newAgentButton}
+      labelledBy={headingId}
+    />
+  );
+
+  // With no agents yet, the home keeps its greeting and offers "+" next to Copilot.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+  if (agents.length === 0) {
+    return (
+      <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
+        <div id={headingId} className="tw-min-w-0 tw-max-w-full">
+          {emptyHero}
+        </div>
+        {row}
+      </div>
+    );
+  }
 
   return (
     <div className="tw-flex tw-min-w-0 tw-flex-col tw-items-center">
@@ -56,13 +78,7 @@ export function AgentRoster({
       >
         Who do you want to talk to?
       </div>
-      <FaceRow
-        agents={agents}
-        selected={selected}
-        onSelect={select}
-        newAgentButton={newAgentButton}
-        labelledBy={headingId}
-      />
+      {row}
       <div className="tw-mt-2 tw-flex tw-h-5 tw-min-w-0 tw-max-w-full tw-items-center tw-justify-center tw-gap-1.5 tw-text-ui-small tw-text-muted">
         <span className="tw-min-w-0 tw-truncate">
           {selected ? agentTitle(selected) : "No agent, no memory"}
@@ -233,5 +249,28 @@ function MoreAgentsMenu({ agents, onSelect }: MoreAgentsMenuProps) {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+export interface NewAgentButtonProps {
+  onClick: () => void;
+  emphasized?: boolean;
+}
+
+export function NewAgentButton({ onClick, emphasized }: NewAgentButtonProps): React.ReactElement {
+  return (
+    <RosterCell label="New" aria-label="New agent" onClick={onClick}>
+      <span
+        className={cn(
+          CIRCLE_CLASS,
+          "tw-border-[1.5px] tw-border-dashed tw-bg-transparent",
+          emphasized
+            ? "tw-border-[color:var(--text-muted)] tw-text-normal"
+            : "tw-border-border tw-text-muted"
+        )}
+      >
+        <Plus className="tw-size-4" />
+      </span>
+    </RosterCell>
   );
 }

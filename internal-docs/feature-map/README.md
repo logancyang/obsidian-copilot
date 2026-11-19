@@ -24,6 +24,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 ## Start
 
 - [agent-home](agent-home.md): the start screen: a greeting, the chat input for the first message, and the Recent chats / Relevant Notes / Projects shelf.
+- [create-agent-dialog](create-agent-dialog.md): the `New agent` dialog that makes a custom agent.
 
 ## Chats
 

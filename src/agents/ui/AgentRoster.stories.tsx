@@ -1,4 +1,4 @@
-import { AgentRoster, type AgentRosterProps } from "@/agents/ui/AgentRoster";
+import { AgentRoster, NewAgentButton, type AgentRosterProps } from "@/agents/ui/AgentRoster";
 import {
   COCO,
   FIVE_AGENTS,
@@ -70,13 +70,17 @@ export const ProfileLinkAndNewAgentSlots: StoryObj<AgentRosterProps> = {
     agents: FIVE_AGENTS,
     selectedSlug: "coco",
     onOpenProfile: () => {},
-    newAgentButton: (
-      <div className="tw-flex tw-w-[52px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-pt-1 tw-text-ui-smaller tw-text-muted">
-        <span className="tw-flex tw-size-9 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-dashed tw-border-border">
-          +
-        </span>
-        New
-      </div>
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};
+
+export const NoAgentsWithNewAgentButton: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: [],
+    emptyHero: (
+      <span className="tw-text-3xl tw-font-[330] tw-text-normal">What are you working on?</span>
     ),
+    newAgentButton: <NewAgentButton emphasized onClick={() => {}} />,
   },
 };

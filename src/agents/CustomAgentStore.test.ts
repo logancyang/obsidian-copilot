@@ -1,4 +1,8 @@
-import { CustomAgentStore, runCustomAgentStoreWhileEnabled } from "@/agents/CustomAgentStore";
+import {
+  customAgentsFolderPath,
+  CustomAgentStore,
+  runCustomAgentStoreWhileEnabled,
+} from "@/agents/CustomAgentStore";
 import { NEUTRAL_FACE_SRC, serializeInstructionsFile } from "@/agents/customAgentFiles";
 import { setCustomAgentsAccess, verifyStoredToken } from "@/agents/testing/customAgentsAccess";
 import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
@@ -529,6 +533,14 @@ describe("CustomAgentStore", () => {
 
         expect(await store.loadForSession("coco")).toBeNull();
       });
+    });
+  });
+
+  describe("customAgentsFolderPath()", () => {
+    it("is the agents folder inside the Copilot folder the user configured", () => {
+      setSettings({ copilotFolder: "Tools/My Copilot" });
+
+      expect(customAgentsFolderPath()).toBe("Tools/My Copilot/agents");
     });
   });
 
