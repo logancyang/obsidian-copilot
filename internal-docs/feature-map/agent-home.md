@@ -59,7 +59,7 @@ The start screen of a new chat in Agent Chat: a greeting, the [chat input](chat-
 ## Gotchas
 
 - The row of faces shows with every license, and with none. Without custom agents in the license, `New` and every agent in it are locked, and only Copilot can be picked.
-- In a short window, `Recent chats` gives way first, then the space above "Who do you want to talk to?", and the picked agent's face gets smaller, so the picked agent, the row and the chat input stay in view.
+- In a short window, the space at the top of the start screen and the shelf both give way, the space faster, and the picked agent's face gets smaller, so the picked agent, the row and the chat input stay in view.
 - A vault's agent files stay as they are while its agents show locked: nothing in the agents folder changes unless an agent is deleted from its locked profile.
 - The locked `New` shows nothing while Copilot is still verifying a stored license at startup, so a Supporter never sees the lock flash.
 - Choosing the locked `New` checks the license with Brevilabs even with no license key, and shows the dialog when Brevilabs can't be reached.
