@@ -153,6 +153,16 @@ export const FaceGridLoaded: StoryObj<CreateAgentFormProps> = {
   render: () => <FormStory initialValues={{ name: "Kai" }} setup={openFacePicker} />,
 };
 
+export const FaceGridLoading: StoryObj<CreateAgentFormProps> = {
+  render: () => (
+    <FormStory
+      initialValues={{ name: "Kai" }}
+      presetFaces={{ status: "loading" }}
+      setup={openFacePicker}
+    />
+  ),
+};
+
 export const FaceGridFailedToLoad: StoryObj<CreateAgentFormProps> = {
   render: () => (
     <FormStory

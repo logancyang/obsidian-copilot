@@ -20,6 +20,9 @@ export interface AgentFacePickerProps {
 }
 
 const UPLOAD_TYPES = "image/png,image/jpeg,image/webp";
+const PLACEHOLDER_FACE_COUNT = 12;
+const PLACEHOLDER_FACE_CLASS =
+  "tw-m-0.5 tw-size-9 tw-rounded-full tw-bg-[linear-gradient(90deg,var(--background-modifier-border)_25%,var(--background-modifier-border-focus)_50%,var(--background-modifier-border)_75%)] tw-bg-[length:200%_100%] tw-animate-[copilot-text-shimmer_2.5s_ease-in-out_infinite] motion-reduce:tw-animate-none";
 
 export function readAsDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -70,10 +73,17 @@ export function AgentFacePicker({
       <div className="tw-text-ui-smaller tw-uppercase tw-tracking-wide tw-text-faint">
         Pick a face
       </div>
-      {presets.status === "ready" && (
-        <>
-          <div className="tw-grid tw-grid-cols-6 tw-gap-2" role="group" aria-label="Preset faces">
-            {presets.faces.map((face) => (
+      {presets.status !== "failed" && (
+        <div className="tw-grid tw-grid-cols-6 tw-gap-2" role="group" aria-label="Preset faces">
+          {presets.status === "loading" ? (
+            <>
+              <span className="tw-sr-only">Loading faces</span>
+              {Array.from({ length: PLACEHOLDER_FACE_COUNT }, (_, index) => (
+                <span key={index} aria-hidden="true" className={PLACEHOLDER_FACE_CLASS} />
+              ))}
+            </>
+          ) : (
+            presets.faces.map((face) => (
               <button
                 key={face.id}
                 type="button"
@@ -93,14 +103,14 @@ export function AgentFacePicker({
               >
                 <AgentFace src={face.src} size="l" selected={face.id === selectedPresetId} />
               </button>
-            ))}
-          </div>
-          {fadedIds.length > 0 && (
-            <div className="tw-text-ui-smaller tw-text-faint">
-              Faded faces are already on your team.
-            </div>
+            ))
           )}
-        </>
+        </div>
+      )}
+      {fadedIds.length > 0 && (
+        <div className="tw-text-ui-smaller tw-text-faint">
+          Faded faces are already on your team.
+        </div>
       )}
       {presets.status === "failed" && (
         <div className="tw-text-ui-smaller tw-text-muted">

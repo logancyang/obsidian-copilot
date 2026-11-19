@@ -1,6 +1,6 @@
 import { AgentFacePicker, readAsDataUrl } from "@/agents/ui/AgentFacePicker";
 import type { PresetFacesState } from "@/agents/ui/usePresetFaces";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -85,6 +85,35 @@ describe("AgentFacePicker", () => {
       });
     });
 
+    it(`holds the grid's place with twelve shimmering round placeholders, hidden from screen readers, and says the faces are loading, while they load (${ISSUE})`, () => {
+      render(<AgentFacePicker presets={{ status: "loading" }} onPick={jest.fn()} />);
+
+      const grid = screen.getByRole("group", { name: "Preset faces" });
+      expect(grid.className).toContain("tw-grid-cols-6");
+      expect(within(grid).getByText("Loading faces").className).toContain("tw-sr-only");
+      expect(within(grid).queryAllByRole("button")).toEqual([]);
+      const placeholders = Array.from(grid.querySelectorAll('[aria-hidden="true"]'));
+      expect(placeholders).toHaveLength(12);
+      for (const placeholder of placeholders) {
+        expect(placeholder.className).toContain("tw-size-9");
+        expect(placeholder.className).toContain("tw-rounded-full");
+        expect(placeholder.className).toContain(
+          "tw-animate-[copilot-text-shimmer_2.5s_ease-in-out_infinite]"
+        );
+        expect(placeholder.className).toContain("motion-reduce:tw-animate-none");
+      }
+    });
+
+    it(`replaces the placeholders with the loaded faces in the same grid (${ISSUE})`, () => {
+      render(<AgentFacePicker presets={PRESETS} onPick={jest.fn()} />);
+
+      const grid = screen.getByRole("group", { name: "Preset faces" });
+      expect(grid.className).toContain("tw-grid-cols-6");
+      expect(within(grid).getAllByRole("button")).toHaveLength(2);
+      expect(within(grid).queryByText("Loading faces")).toBeNull();
+      expect(grid.querySelectorAll('[aria-hidden="true"]:not(svg):not(img)')).toHaveLength(0);
+    });
+
     it(`says the preset faces could not load and still offers Upload image (${ISSUE})`, () => {
       render(<AgentFacePicker presets={{ status: "failed" }} onPick={jest.fn()} />);
 
@@ -93,6 +122,7 @@ describe("AgentFacePicker", () => {
       ).not.toBeNull();
       expect(screen.getByRole("button", { name: "Upload image" })).not.toBeNull();
       expect(screen.queryByRole("group", { name: "Preset faces" })).toBeNull();
+      expect(screen.queryByText("Loading faces")).toBeNull();
     });
 
     it(`keeps the current face and says why when the chosen file is not a readable image (${ISSUE})`, async () => {
