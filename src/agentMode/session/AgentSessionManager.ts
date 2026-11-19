@@ -87,6 +87,7 @@ import type {
   BackendProcess,
   CopilotMode,
   EffortOption,
+  LoadSessionInput,
   LoadSessionOutput,
   ModeApplySpec,
   ModelSelection,
@@ -186,6 +187,8 @@ export interface UnlistedSessionInput {
   mode: CopilotMode | null;
   agent: SessionAgent;
   observeSessionEvent: (event: SessionEvent) => void;
+  resumeSessionId?: SessionId;
+  askedFrom?: BackendId;
 }
 
 export interface AgentSessionManagerOptions {
@@ -256,7 +259,7 @@ export class AgentSessionManager {
   private readonly closingSessions = new Map<string, Promise<void>>();
   private readonly unlistedSessions = new Map<
     string,
-    { session: AgentSession; backend: BackendProcess } | null
+    { session: AgentSession; backend: BackendProcess; askedFrom?: BackendId } | null
   >();
   private lastShownSessionId: string | null = null;
   // A visible tab strip keeps every chat in it open until the user closes its tab, so leaving a chat there releases nothing.
@@ -1013,6 +1016,8 @@ export class AgentSessionManager {
     mode,
     agent,
     observeSessionEvent,
+    resumeSessionId,
+    askedFrom,
   }: UnlistedSessionInput): Promise<AgentSession> {
     if (this.disposed) throw new Error("AgentSessionManager has been shut down");
     const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
@@ -1023,7 +1028,7 @@ export class AgentSessionManager {
     const internalId = uuidv4();
     this.unlistedSessions.set(internalId, null);
     const mcpServers = await this.connectCopilotMcpServer(internalId, descriptor, cwd);
-    const session = AgentSession.start({
+    const options = {
       backend,
       cwd,
       internalId,
@@ -1032,21 +1037,36 @@ export class AgentSessionManager {
       defaultModelSelection: seed,
       defaultMode: mode,
       getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-      getDisplayName: (id) => this.resolveDescriptor(id).displayName,
+      getDisplayName: (id: BackendId) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
-      mcpServers,
       agentSlug: agent.slug,
       agent,
       observeSessionEvent,
-    });
-    this.unlistedSessions.set(internalId, { session, backend });
+    };
+    // Asking the same agent again, as after a restart, carries on its earlier conversation while its agent still keeps it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+    const session =
+      (resumeSessionId &&
+        (await this.reopenSession(
+          new AgentSession({ ...options, backendSessionId: resumeSessionId }),
+          backend,
+          { sessionId: resumeSessionId, cwd, projectId, mcpServers, agent }
+        ))) ||
+      AgentSession.start({ ...options, mcpServers });
+    this.unlistedSessions.set(internalId, { session, backend, askedFrom });
     const unsubscribe = session.subscribe({
       onMessagesChanged: () => {},
       onStatusChanged: (status) => {
+        // The asking chat's backend restarts only after the turn that passes the asked agent's reply on, which that chat's own status change runs.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (askedFrom !== resolvedId) void this.flushDeferredBackendRestartIfReady(resolvedId);
         if (status !== "closed") return;
         unsubscribe();
         this.unlistedSessions.delete(internalId);
         this.opts.copilotMcpServer?.disconnect(internalId);
+        // A closed asked agent passes no reply on, so no turn of the asking chat releases the restart it held.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+        if (askedFrom) void this.flushDeferredBackendRestartIfReady(askedFrom);
       },
     });
     try {
@@ -2381,6 +2401,40 @@ export class AgentSessionManager {
     return resume;
   }
 
+  private async reopenSession(
+    session: AgentSession,
+    backend: BackendProcess,
+    openInput: LoadSessionInput
+  ): Promise<AgentSession | null> {
+    let resumeResult: LoadSessionOutput | null = null;
+    let loadFailed = false;
+    try {
+      resumeResult = await backend.loadSession(openInput);
+    } catch (err) {
+      loadFailed = !(err instanceof MethodUnsupportedError);
+      if (loadFailed) logWarn(`[AgentMode] loadSession failed for ${openInput.sessionId}`, err);
+    }
+    if (!resumeResult && !loadFailed) {
+      try {
+        resumeResult = await backend.resumeSession(openInput);
+      } catch (err) {
+        if (err instanceof MethodUnsupportedError) {
+          logInfo(
+            `[AgentMode] backend ${session.backendId} does not support session resume; falling back to fresh session`
+          );
+        } else {
+          logWarn(`[AgentMode] resumeSession failed for ${openInput.sessionId}`, err);
+        }
+      }
+    }
+    if (!resumeResult) {
+      await session.dispose();
+      return null;
+    }
+    session.completeResume(resumeResult.state);
+    return session;
+  }
+
   private async untilChatClosed(backendId: BackendId, sessionId: SessionId): Promise<void> {
     for (const session of Array.from(this.sessions.values())) {
       if (session.backendId !== backendId || session.getBackendSessionId() !== sessionId) continue;
@@ -2461,35 +2515,10 @@ export class AgentSessionManager {
     });
 
     const openInput = { sessionId, cwd, projectId, mcpServers, agent: agent ?? undefined };
-    let resumeResult: LoadSessionOutput | null = null;
-    try {
-      resumeResult = await backend.loadSession(openInput);
-    } catch (err) {
-      if (!(err instanceof MethodUnsupportedError)) {
-        logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
-        await session.dispose();
-        this.opts.copilotMcpServer?.disconnect(internalId);
-        this.finishPendingCreate();
-        return null;
-      }
-    }
-
-    if (!resumeResult) {
-      try {
-        resumeResult = await backend.resumeSession(openInput);
-      } catch (err) {
-        if (err instanceof MethodUnsupportedError) {
-          logInfo(
-            `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`
-          );
-        } else {
-          logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
-        }
-        await session.dispose();
-        this.opts.copilotMcpServer?.disconnect(internalId);
-        this.finishPendingCreate();
-        return null;
-      }
+    if (!(await this.reopenSession(session, backend, openInput))) {
+      this.opts.copilotMcpServer?.disconnect(internalId);
+      this.finishPendingCreate();
+      return null;
     }
 
     if (this.disposed) {
@@ -2497,8 +2526,6 @@ export class AgentSessionManager {
       this.finishPendingCreate();
       return null;
     }
-
-    session.completeResume(resumeResult.state);
 
     // Apply the seed before replaying backend-specific startup config.
     // https://github.com/logancyang/obsidian-copilot/issues/3319
@@ -2982,8 +3009,7 @@ export class AgentSessionManager {
   }
 
   private hasBusySession(backendId: BackendId): boolean {
-    return Array.from(this.sessions.values()).some((session) => {
-      if (session.backendId !== backendId) return false;
+    const busy = (session: AgentSession) => {
       const status = session.getStatus();
       return (
         status === "starting" ||
@@ -2991,7 +3017,21 @@ export class AgentSessionManager {
         status === "awaiting_permission" ||
         hasRunningSubagent(session)
       );
-    });
+    };
+    // A restart closes the chat that asked an agent and stops the agent, so a working asked agent holds a deferred restart of either backend.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+    const askedAgentBusy = Array.from(this.unlistedSessions.values()).some(
+      (entry) =>
+        entry !== null &&
+        (entry.session.backendId === backendId || entry.askedFrom === backendId) &&
+        busy(entry.session)
+    );
+    return (
+      askedAgentBusy ||
+      Array.from(this.sessions.values()).some(
+        (session) => session.backendId === backendId && busy(session)
+      )
+    );
   }
 
   private async flushDeferredBackendRestartIfReady(backendId: BackendId): Promise<void> {

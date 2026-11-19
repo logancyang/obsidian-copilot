@@ -240,7 +240,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     store: () => plugin.customAgents,
     vaultBase: () => getVaultBase(app),
     listedChat: (chat) => managerRef?.getSessions().find((session) => session === chat) ?? null,
-    startChat: ({ agent, prompt, projectId, mode, observeSessionEvent }) => {
+    startChat: ({ agent, prompt, projectId, mode, observeSessionEvent, askedFrom, resume }) => {
       const manager = requireManager();
       const { backendId, seed } = agentBackend(manager, agent.model);
       return manager.startUnlistedSession({
@@ -250,6 +250,8 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         mode,
         agent: prompt,
         observeSessionEvent,
+        askedFrom,
+        resumeSessionId: resume && resume.backendId === backendId ? resume.sessionId : undefined,
       });
     },
   });

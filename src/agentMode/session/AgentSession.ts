@@ -237,6 +237,7 @@ export interface AgentSessionStateOptions extends ProjectContextUpdatesHooks {
   chatExtensions?: readonly ChatExtension<unknown>[];
   agentSlug?: string;
   agent?: SessionAgent | null;
+  observeSessionEvent?: (event: SessionEvent) => void;
 }
 
 export class AgentSession implements ChatStateHost, ChatView {
