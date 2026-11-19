@@ -198,7 +198,7 @@ describe("AgentRoster", () => {
     });
 
     it(`shows each newly picked agent above the row, whether picked in the row or from the More menu (${ISSUE})`, () => {
-      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(260);
+      jest.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
       render(<StatefulRoster agents={FIVE} />);
       expect(pickedAgent().name).toBe("Copilot");
 
@@ -329,22 +329,22 @@ describe("AgentRoster", () => {
       expect(pickedAgent().block.querySelector(".lucide-settings")).toBeNull();
     });
 
-    it(`fits Copilot, six agents and the new-agent button in one row of a 440px sidebar (${ISSUE})`, () => {
-      renderRoster({ agents: SIX, newAgentButton: NEW_BUTTON });
+    it(`fits Copilot, five agents and the new-agent button in one row of a 440px sidebar (${ISSUE})`, () => {
+      renderRoster({ agents: FIVE, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "Kai", "Ada", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "Kai", "New"]);
     });
 
-    it(`fits Copilot, four agents and the new-agent button in one row of a 340px sidebar (${ISSUE})`, () => {
-      renderRoster({ agents: FIVE.slice(0, 4), width: 300, newAgentButton: NEW_BUTTON });
-
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "New"]);
-    });
-
-    it(`fits Copilot, three agents and the new-agent button in one row of a 300px sidebar (${ISSUE})`, () => {
-      renderRoster({ width: 260, newAgentButton: NEW_BUTTON });
+    it(`fits Copilot, three agents and the new-agent button in one row of a 340px sidebar (${ISSUE})`, () => {
+      renderRoster({ width: 300, newAgentButton: NEW_BUTTON });
 
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New"]);
+    });
+
+    it(`fits Copilot, two agents and the new-agent button in one row of a 300px sidebar (${ISSUE})`, () => {
+      renderRoster({ agents: [COCO, MAYA], width: 260, newAgentButton: NEW_BUTTON });
+
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "New"]);
     });
 
     it(`moves the agents that do not fit a 440px sidebar into a +N More menu, keeping Copilot and the new-agent button in the row (${ISSUE})`, () => {
@@ -356,8 +356,7 @@ describe("AgentRoster", () => {
         "Maya",
         "Leo",
         "Nora",
-        "Kai",
-        "Show 7 more agents",
+        "Show 8 more agents",
         "New",
       ]);
     });
@@ -365,7 +364,7 @@ describe("AgentRoster", () => {
     it(`moves the agents that do not fit a 340px sidebar into a +N More menu (${ISSUE})`, () => {
       renderRoster({ agents: SIX, width: 300, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Show 3 more agents", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Show 4 more agents", "New"]);
     });
 
     it(`keeps the selected agent in the row when it would otherwise be in the menu (${ISSUE})`, () => {
@@ -377,21 +376,20 @@ describe("AgentRoster", () => {
         "Maya",
         "Leo",
         "Nora",
-        "Kai",
         "Gus",
-        "Show 6 more agents",
+        "Show 7 more agents",
       ]);
       expect(screen.getByRole("button", { name: "Gus", pressed: true })).not.toBeNull();
     });
 
-    it(`keeps Copilot, two agents with the selected one, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
+    it(`keeps Copilot, the selected agent, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus", width: 260, newAgentButton: NEW_BUTTON });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Gus", "Show 10 more agents", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more agents", "New"]);
     });
 
     it("selects an agent picked from the More menu, which lists each agent's name and title", () => {
-      const { onSelect } = renderRoster({ agents: SIX, width: 260 });
+      const { onSelect } = renderRoster({ agents: SIX, width: 300 });
 
       openMoreMenu(3);
       const items = screen.getAllByRole("menuitem");
@@ -440,7 +438,7 @@ describe("AgentRoster", () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
         agents: SIX,
-        width: 260,
+        width: 300,
         locked: { onOpen: onOpenLocked, note: null },
       });
 
@@ -473,7 +471,7 @@ describe("AgentRoster", () => {
       const onOpenProfile = jest.fn();
       const { onSelect } = renderRoster({
         agents: SIX,
-        width: 260,
+        width: 300,
         onOpenProfile,
         needsSetup: new Set(["kai"]),
       });

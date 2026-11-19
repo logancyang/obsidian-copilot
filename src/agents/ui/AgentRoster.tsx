@@ -39,8 +39,12 @@ export interface LockedRoster {
   note: React.ReactNode;
 }
 
-const CELL_PX = 46;
-const GAP_PX = 4;
+// A cell is wide enough for a four-character Chinese name, and the fit calculation must count the widths the classes draw.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/588
+const CELL_PX = 50;
+const CELL_WIDTH_CLASS = "tw-w-[50px]";
+const GAP_PX = 6;
+const ROW_GAP_CLASS = "tw-gap-1.5";
 
 const COPILOT_NAME = "Copilot";
 const COPILOT_TITLE = "Classic agent. Starts fresh every chat.";
@@ -258,7 +262,7 @@ function FaceRow({
       ref={rowRef}
       role="group"
       aria-labelledby={labelledBy}
-      className="tw-mt-3 tw-flex tw-w-full tw-justify-center tw-gap-1"
+      className={cn("tw-mt-3 tw-flex tw-w-full tw-justify-center", ROW_GAP_CLASS)}
     >
       <RosterCell label={COPILOT_NAME} selected={!selected} onClick={() => onSelect(null)}>
         <span
@@ -301,7 +305,8 @@ const RosterCell = React.forwardRef<HTMLButtonElement, RosterCellProps>(
       aria-pressed={selected}
       {...props}
       className={cn(
-        "clickable-icon tw-flex tw-h-auto tw-w-[46px] tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
+        "clickable-icon tw-flex tw-h-auto tw-shrink-0 tw-flex-col tw-items-center tw-gap-1 tw-rounded-md tw-bg-transparent tw-px-0 tw-pb-0.5 tw-pt-1 tw-opacity-100 tw-shadow-none",
+        CELL_WIDTH_CLASS,
         className
       )}
     >

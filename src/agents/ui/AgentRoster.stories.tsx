@@ -116,6 +116,20 @@ export const LongNameAndTitle: StoryObj<AgentRosterProps> = {
   },
 };
 
+export const ChineseNames: StoryObj<AgentRosterProps> = {
+  render,
+  args: {
+    agents: [
+      { ...COCO, slug: "xiao-zhu-shou", name: "小助手儿", title: "整理每天的笔记" },
+      { ...MAYA, slug: "yan-jiu-zhu-li", name: "研究助理", title: "读论文，写摘要" },
+      { ...LEO, slug: "xie-zuo-xiao-bang-shou", name: "写作小帮手", title: "润色文章" },
+    ],
+    selectedSlug: "xiao-zhu-shou",
+    onOpenProfile: () => {},
+    newAgentButton: <NewAgentButton onClick={() => {}} />,
+  },
+};
+
 export const ProfileFaceAndNewAgentSlots: StoryObj<AgentRosterProps> = {
   render,
   args: {
