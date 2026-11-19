@@ -24,9 +24,12 @@ export const ROSTER_SELECTED_FACE_CLASS =
 
 export const LOCKED_FACE_CLASS = "tw-opacity-50 tw-grayscale";
 
+export const FACE_BADGE_CLASS =
+  "tw-absolute -tw-bottom-1 -tw-right-1 tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted";
+
 export function LockBadge(): React.ReactElement {
   return (
-    <span className="tw-absolute -tw-bottom-1 -tw-right-1 tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted">
+    <span className={FACE_BADGE_CLASS}>
       <Lock className="tw-size-3" />
     </span>
   );
