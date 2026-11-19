@@ -123,10 +123,10 @@ export class HiddenAgentChats {
   private readonly unsubscribeGate: () => void;
 
   constructor(private readonly host: HiddenAgentChatsHost) {
-    // Custom agents stop with the license, so an agent asked before it lapsed stops too.
-    // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
+    // The license is checked only when an @ is sent, so an agent asked before it lapsed finishes and its reply arrives; only hiding custom agents altogether stops it.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/950
     this.unsubscribeGate = subscribeToCustomAgentsGate(() => {
-      if (getCustomAgentsGate() !== "full") this.stopAll();
+      if (getCustomAgentsGate() === "hidden") this.stopAll();
     });
   }
 
@@ -473,7 +473,7 @@ export class HiddenAgentChats {
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
     const key = chatKey(hidden.parent, hidden.agent.slug);
     if (this.chats.get(key) !== hidden) return;
-    if (getCustomAgentsGate() !== "full") return;
+    if (getCustomAgentsGate() === "hidden") return;
     record(hidden.parent, run, {
       status: run.stopped ? "stopped" : end.error ? "didnt_finish" : "finished",
       endedAt: Date.now(),

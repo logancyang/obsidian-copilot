@@ -1,6 +1,9 @@
+import { useCustomAgentsGate } from "@/agents/customAgentsGate";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { Button } from "@/components/ui/button";
 import { navigateToPlusPage } from "@/plusUtils";
 import { openCopilotSettings } from "@/settings/openSettings";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Lock } from "lucide-react";
 import type { App } from "obsidian";
 import React from "react";
 
@@ -42,6 +45,51 @@ export function LockedProfileBanner({
         {lapsed ? "Renew" : "Enter license key"}
         {lapsed && <ExternalLink className="tw-size-3" />}
       </button>
+    </div>
+  );
+}
+
+// An agent chat from before the license lapsed opens read-only; a turn already running when it lapsed finishes first.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/950
+export function useReadOnlyChatAgent(
+  agent: CustomAgent | null,
+  turnInFlight: boolean
+): CustomAgent | null {
+  return useCustomAgentsGate() === "locked" && !turnInFlight ? agent : null;
+}
+
+export interface LockedAgentChatProps {
+  name: string;
+  lapsed: boolean;
+  onNewChat: () => void;
+  onUnlock: (ownerWindow: Window) => void;
+}
+
+export function LockedAgentChat({
+  name,
+  lapsed,
+  onNewChat,
+  onUnlock,
+}: LockedAgentChatProps): React.ReactElement {
+  return (
+    <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2.5 tw-text-sm tw-text-muted">
+      <div className="tw-flex tw-items-start tw-gap-2">
+        <Lock className="tw-mt-0.5 tw-size-3.5 tw-shrink-0" />
+        <span>
+          {lapsed
+            ? `Your Supporter plan ended. You can read this chat, but ${name} can't reply.`
+            : `You can read this chat, but ${name} can't reply until you enter a Supporter license key on this device.`}
+        </span>
+      </div>
+      <div className="tw-flex tw-flex-wrap tw-justify-end tw-gap-2">
+        <Button variant="ghost" size="sm" onClick={onNewChat}>
+          New Copilot chat
+        </Button>
+        <Button size="sm" onClick={(event) => onUnlock(event.currentTarget.win)}>
+          {lapsed ? "Renew" : "Enter license key"}
+          {lapsed && <ExternalLink className="tw-size-3" />}
+        </Button>
+      </div>
     </div>
   );
 }

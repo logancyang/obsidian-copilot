@@ -67,7 +67,12 @@ import {
   FirstAgentBanner,
   useFirstAgentBannerVisible,
 } from "@/agents/ui/FirstAgentBanner";
-import { LockedHomeNote, unlockCustomAgents } from "@/agents/ui/LockedAgentNotices";
+import {
+  LockedAgentChat,
+  LockedHomeNote,
+  unlockCustomAgents,
+  useReadOnlyChatAgent,
+} from "@/agents/ui/LockedAgentNotices";
 import { openLockedAgentProfile, renderNewAgentButton } from "@/agents/ui/lockedCustomAgents";
 import { agentComposerHint, useAgentHomeSelection } from "@/agents/ui/useAgentHomeSelection";
 import { CustomAgentStoreContext } from "@/agents/ui/useCustomAgents";
@@ -754,6 +759,8 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
     </ChatAgentsContext.Provider>
   );
 
+  const lockedChatAgent = useReadOnlyChatAgent(agentHome.selected, isLoading);
+
   const { queue: heldMessages, setQueue: setHeldMessages } = draft;
   const handleRemoveHeldMessage = useCallback(
     (id: string) => setHeldMessages((queue) => queue.filter((m) => m.id !== id)),
@@ -1061,7 +1068,16 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                           />
                         }
                       />
-                      {composerNode}
+                      {lockedChatAgent ? (
+                        <LockedAgentChat
+                          name={lockedChatAgent.name}
+                          lapsed={lapsed}
+                          onNewChat={handleNewChat}
+                          onUnlock={(ownerWindow) => unlockCustomAgents(app, lapsed, ownerWindow)}
+                        />
+                      ) : (
+                        composerNode
+                      )}
                     </div>
                   </AgentTasksProvider>
                 )}
