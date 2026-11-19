@@ -14,6 +14,7 @@ const meta = {
   component: AgentReplyMessage,
   parameters: { gallery: { host: "leaf", layout: "padded" } },
   args: {
+    mention: "mention-1",
     name: "Maya",
     reply:
       "BIGGEST RISK: Six features in 90 seconds means nobody remembers any of them.\nOpen on custom agents and cut the other five to one line each.",

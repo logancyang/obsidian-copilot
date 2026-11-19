@@ -821,6 +821,34 @@ describe("AgentChatMessages", () => {
         expect(container.textContent).not.toContain("Pass the reply on");
       });
 
+      it("draws the asked agent's status under the message that asked, then its reply (https://github.com/Brevilabs/obsidian-copilot-private/issues/947)", async () => {
+        await setCustomAgentsAccess("team");
+        const asked = assistantMessage("asked", 0, {
+          sender: USER_SENDER,
+          message: "@Maya what do you think of this plan?",
+          agentMentions: [
+            {
+              id: "mention-1",
+              agent: "maya",
+              name: "Maya",
+              status: "finished",
+              startedAt: 0,
+              endedAt: 100_000,
+            },
+          ],
+        });
+
+        const { container } = render(
+          <AppContext.Provider value={{} as App}>
+            <AgentChatMessages {...messagesProps([asked, relayMessage], false)} />
+          </AppContext.Provider>
+        );
+
+        expect(container.textContent).toMatch(
+          /what do you think of this plan\?.*Maya finished1:40See reply ↓.*Maya's reply/
+        );
+      });
+
       it("shows a relayed reply as the message it is while custom agents are hidden", async () => {
         await setCustomAgentsAccess("free");
 

@@ -15,6 +15,7 @@ import { MemorySaveLines } from "@/agents/agentMode/memorySaveCards";
 import { useMemorySaveTrail } from "@/agents/agentMode/useMemorySaveTrail";
 import { useAgentReply } from "@/agents/agentMode/useAgentReply";
 import { AgentReplyMessage } from "@/agents/agentMode/ui/AgentReplyMessage";
+import { AgentMentionStatusLines } from "@/agents/agentMode/ui/AgentMentionStatus";
 import { AskedAgentRequester } from "@/agents/agentMode/ui/AskedAgentRequester";
 import { AgentTurnDurationIndicator } from "@/agentMode/ui/AgentTurnDurationIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
@@ -170,6 +171,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
         // Until #947 draws the folded reply, a relayed reply shows as the agent's words under one line, never as the message the agent received.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/944
         <AgentReplyMessage
+          mention={agentReply.marker.mention}
           name={agentReply.marker.name}
           reply={agentReply.reply}
           fileChanges={message.fileChanges}
@@ -188,6 +190,7 @@ const AgentMessageRow = memo(function AgentMessageRow({
           {runningTurnDuration ? <div className="tw-px-3">{runningTurnDuration}</div> : null}
         </>
       )}
+      <AgentMentionStatusLines mentions={message.agentMentions} />
       {trailingCard}
     </div>
   );
