@@ -4,6 +4,7 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 
 ## Sub-features
 
+- create-first-agent: in a vault with no agents, the dialog opens filled in as a chief of staff for the whole vault: `Coco`, "Chief of staff. Knows the whole vault.", and a four-paragraph instruction that ends by suggesting a new agent when the same kind of work keeps coming back. Every field can be changed and `Create` works at once. Closing it untouched just closes; once a field is changed, closing asks "Discard Coco?". Once the vault has an agent, the dialog opens empty.
 - create-fields: `Name`, `Title` (optional), the instruction field, and `Model`. The instruction field's label follows the name as it is typed: "What it handles", then "What Kai handles"; its grey example text disappears once the user types.
 - create-face: the dialog opens wearing a preset face no other agent wears. The face at the top left opens `Pick a face`: a grid of preset faces, with the ones already on the team faded ("Faded faces are already on your team.") but still choosable, and `Upload image` for a png, jpg, or webp file. A file that is not a readable image keeps the face as it was and shows "Couldn't read that image. Choose a PNG, JPEG or WebP file."
 - create-face-offline: when the preset faces cannot load, the dialog opens with a blank face and `Pick a face` says "Couldn't load the preset faces. You can upload an image."; `Upload image` still works.
@@ -14,7 +15,7 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 - create-name-in-use: a name already on the team, in any case, shows "Leo is already on your team. Pick another name." and Create stays unavailable.
 - create-folder-in-use: a name whose folder another agent already uses, such as `Coco` after Coco was renamed to Chief or `maya-chen` next to Maya Chen, shows "Chief already uses the folder coco. Pick another name."; a folder of that name holding no agent shows "A folder named kai already exists in your agents folder. Pick another name." Create stays unavailable either way.
 - create-long-name: a name over 12 characters shows "Long names get cut off in tabs." Names have no length limit.
-- create-close: with nothing typed, Esc, the close button, `Cancel`, or a click outside closes the dialog. With text typed, a click outside does nothing, and Esc, the close button, or `Cancel` ask "Discard Kai?" with `Keep editing` and `Discard`.
+- create-close: with nothing typed, or nothing changed in a dialog that opened filled in, Esc, the close button, `Cancel`, or a click outside closes the dialog. With text typed, a click outside does nothing, and Esc, the close button, or `Cancel` ask "Discard Kai?" with `Keep editing` and `Discard`.
 - create-agent: `Create` writes the agent's folder with its instructions and face, and no memory file. The dialog closes and the [start screen](agent-home.md) shows the new agent selected, with the cursor in the chat input.
 - create-failed: when the agent cannot be written, the dialog stays open with everything typed and says why: "Couldn't create Kai. …"
 - create-drafted: opened from an agent's draft card, the dialog is filled with the draft's name, title, and instruction, under a first line with the drafting agent's face: "Drafted by Coco. Check it, pick a face and a model, then create." Everything else works as for **New**: a drafted name already on the team, an empty instruction, or one past 4,000 characters gets the usual notes. After `Create`, the start screen opens with the new agent selected and the cursor in the chat input.
@@ -22,12 +23,14 @@ The `New agent` dialog that makes a custom agent: its face, name, optional title
 ## How to get to it
 
 - **New** (**+**) in the row of faces on the [start screen](agent-home.md), and on a [project](projects.md)'s start screen.
+- `Create your first agent` on the first agent banner on the [start screen](agent-home.md).
 - `Review and create…` on a custom agent's draft card in its chat ([agent replies](agent-replies.md)).
 
 It needs a license that includes custom agents (a team license until launch).
 
 ## Driving it
 
+- First agent: in a vault with no agents, choose **New**. The dialog shows Coco filled in with a face and the default model; press Esc: it closes without asking. Choose **New**, then `Create` without typing. The start screen shows Coco selected, and its `instructions.md` holds that name, title, and instruction. Choose **New** again: the dialog is empty. Delete Coco and choose **New**: Coco is filled in again.
 - Fields: open the dialog and type a name. The instruction label, its hint, and `Saved in` follow the name.
 - Face: open the dialog. A face shows that no agent wears. Choose it: `Pick a face` shows the grid with team faces faded. Choose another face, or `Upload image` and pick a photo. It shows as the face; after Create, the agent's face file is the preset, or the photo cut to a 256 by 256 square.
 - Faces offline: open the dialog without internet. The face is blank, `Pick a face` says the preset faces couldn't load, and `Upload image` works.

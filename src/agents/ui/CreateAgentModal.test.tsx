@@ -1,8 +1,10 @@
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
+import { FIRST_AGENT_TEMPLATE } from "@/agents/ui/firstAgentTemplate";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { CreateAgentModal } from "@/agents/ui/CreateAgentModal";
 import type { FakeObsidianModal } from "@/agents/ui/testing/fakeObsidianModal";
+import { LEO } from "@/agents/ui/testing/rosterFixtures";
 import { resetSettings } from "@/settings/model";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
@@ -19,6 +21,7 @@ jest.mock("@/entitlement");
 jest.mock("@/logger", () => ({ logInfo: jest.fn(), logWarn: jest.fn(), logError: jest.fn() }));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/939";
+const FIRST_AGENT_ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/963";
 
 const requestUrl = jest.fn(() => new Promise(() => {}));
 (obsidian as unknown as { __setRequestUrlImpl: (impl: jest.Mock) => void }).__setRequestUrlImpl(
@@ -31,8 +34,10 @@ const MODELS: AgentModelChoices = {
   initial: { baseModelId: "opus", effort: null },
 };
 
-function fakeStore(createAgent: CustomAgentStore["createAgent"]): CustomAgentStore {
-  const agents: readonly CustomAgent[] = [];
+function fakeStore(
+  createAgent: CustomAgentStore["createAgent"],
+  agents: readonly CustomAgent[] = [LEO]
+): CustomAgentStore {
   return {
     subscribe: () => () => {},
     getAgents: () => agents,
@@ -45,18 +50,21 @@ type OpenedModal = CreateAgentModal & FakeObsidianModal;
 
 const openedModals: OpenedModal[] = [];
 
-function newDialog(createAgent = jest.fn().mockResolvedValue("kai")) {
+function newDialog(
+  createAgent = jest.fn().mockResolvedValue("kai"),
+  agents?: readonly CustomAgent[]
+) {
   const onCreated = jest.fn();
   const modal = new CreateAgentModal(createFakeAgentVault().app, {
-    store: fakeStore(createAgent),
+    store: fakeStore(createAgent, agents),
     models: MODELS,
     onCreated,
   }) as OpenedModal;
   return { modal, onCreated, createAgent };
 }
 
-function openDialog(createAgent?: jest.Mock) {
-  const dialog = newDialog(createAgent);
+function openDialog(createAgent?: jest.Mock, agents?: readonly CustomAgent[]) {
+  const dialog = newDialog(createAgent, agents);
   act(() => dialog.modal.open());
   openedModals.push(dialog.modal);
   return dialog;
@@ -90,6 +98,74 @@ describe("CreateAgentModal", () => {
         expect(modal.titleEl.textContent).toBe("New agent");
         expect(screen.getByLabelText("Name")).not.toBeNull();
         expect(screen.getByText("Saved in copilot/agents/")).not.toBeNull();
+      });
+
+      it(`opens the first agent's dialog filled in as Coco, every field editable and Create available, in a vault with no agents (${FIRST_AGENT_ISSUE})`, () => {
+        openDialog(undefined, []);
+
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Coco");
+        expect(screen.getByLabelText<HTMLInputElement>(/^Title/).value).toBe(
+          "Chief of staff. Knows the whole vault."
+        );
+        expect(screen.getByLabelText<HTMLTextAreaElement>("What Coco handles").value).toBe(
+          FIRST_AGENT_TEMPLATE.instruction
+        );
+        expect(screen.getByRole<HTMLButtonElement>("button", { name: "Create" }).disabled).toBe(
+          false
+        );
+        type("Name", "Juno");
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Juno");
+      });
+
+      it("opens empty in a vault that already has an agent", () => {
+        openDialog();
+
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("");
+        expect(screen.getByLabelText<HTMLInputElement>(/^Title/).value).toBe("");
+        expect(screen.getByLabelText<HTMLTextAreaElement>("What it handles").value).toBe("");
+      });
+
+      it(`keeps Coco and what the user typed when an agent appears after the dialog opened (${FIRST_AGENT_ISSUE})`, () => {
+        let agents: readonly CustomAgent[] = [];
+        let notify = () => {};
+        const store = {
+          subscribe: (listener: () => void) => {
+            notify = listener;
+            return () => {};
+          },
+          getAgents: () => agents,
+          folderNames: () => agents.map((agent) => agent.slug),
+        } as unknown as CustomAgentStore;
+        const modal = new CreateAgentModal(createFakeAgentVault().app, {
+          store,
+          models: MODELS,
+          onCreated: jest.fn(),
+        }) as OpenedModal;
+        act(() => modal.open());
+        openedModals.push(modal);
+        type(/^Title/, "Runs my week");
+
+        act(() => {
+          agents = [LEO];
+          notify();
+        });
+
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Coco");
+        expect(screen.getByLabelText<HTMLInputElement>(/^Title/).value).toBe("Runs my week");
+      });
+
+      it(`opens a drafted agent's values, not Coco's, even in a vault with no agents (${FIRST_AGENT_ISSUE})`, () => {
+        const modal = new CreateAgentModal(createFakeAgentVault().app, {
+          store: fakeStore(jest.fn(), []),
+          models: MODELS,
+          initialValues: { name: "Nora", title: "", instruction: "You plan pickups." },
+          onCreated: jest.fn(),
+        }) as OpenedModal;
+        act(() => modal.open());
+        openedModals.push(modal);
+
+        expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe("Nora");
+        expect(screen.getByLabelText<HTMLInputElement>(/^Title/).value).toBe("");
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 shows a drafted agent's values under a Drafted by line naming the agent that drafted it", () => {
@@ -173,6 +249,31 @@ describe("CreateAgentModal", () => {
         }
       );
 
+      it.each([
+        ["a click outside", (modal: OpenedModal) => fireEvent.click(modal.bgEl)],
+        ["Esc", (modal: OpenedModal) => modal.pressEscape()],
+        ["Cancel", () => fireEvent.click(screen.getByRole("button", { name: "Cancel" }))],
+      ])(
+        `closes the first agent's untouched dialog at once on %s, since it holds nothing the user wrote (${FIRST_AGENT_ISSUE})`,
+        (_how, dismiss) => {
+          const { modal } = openDialog(undefined, []);
+
+          act(() => void dismiss(modal));
+
+          expect(modal.isOpen).toBe(false);
+        }
+      );
+
+      it(`asks before discarding the first agent's dialog once a field is edited (${FIRST_AGENT_ISSUE})`, () => {
+        const { modal } = openDialog(undefined, []);
+        type(/^Title/, "Runs my week");
+
+        act(() => void modal.pressEscape());
+
+        expect(modal.isOpen).toBe(true);
+        expect(screen.getByText("Discard Coco?")).not.toBeNull();
+      });
+
       it(`keeps the dialog and everything typed when the user chooses Keep editing (${ISSUE})`, () => {
         const { modal } = openDialog();
         type("Name", "Kai");
@@ -231,6 +332,19 @@ describe("CreateAgentModal", () => {
           face: undefined,
         });
         expect(modal.isOpen).toBe(false);
+      });
+
+      it(`creates Coco on the default model and effort without any typing in a vault with no agents (${FIRST_AGENT_ISSUE})`, async () => {
+        const { onCreated, createAgent } = openDialog(jest.fn().mockResolvedValue("coco"), []);
+
+        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+
+        await waitFor(() => expect(onCreated).toHaveBeenCalledWith("coco"));
+        expect(createAgent).toHaveBeenCalledWith({
+          ...FIRST_AGENT_TEMPLATE,
+          model: MODELS.initial,
+          face: undefined,
+        });
       });
 
       it(`stays open with everything typed when the store cannot create the agent (${ISSUE})`, async () => {
