@@ -44,13 +44,10 @@ async function checkLicense(
   // A user who upgrades after the upsell, or whose check on this click grants the feature, lands in what they clicked.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
   if (onUnlocked) runWhenUnlocked(onUnlocked);
-  // The check goes out even without a key so the server can count free users' interest.
-  // https://github.com/Brevilabs/obsidian-copilot-private/issues/582
   const unlocked = await ensureEntitlement(
     app,
     "custom_agents",
-    () => getCustomAgentsGate() === "full",
-    { sendWithoutKey: true }
+    () => getCustomAgentsGate() === "full"
   );
   afterCheck(unlocked);
 }

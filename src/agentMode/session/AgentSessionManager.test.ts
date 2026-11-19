@@ -1130,37 +1130,14 @@ describe("AgentSessionManager", () => {
         expect(session.agentSlug).toBe("coco");
       });
 
-      it(`counts a custom agent chat with one license check, trigger custom_agents, on its first message and none after (${USAGE_ISSUE})`, async () => {
+      it(`sends no license request when the user messages a custom agent chat, so the plugin never counts custom agent use (${USAGE_ISSUE})`, async () => {
         mockValidateLicenseKey.mockClear();
-        const mgr = buildManager();
-        const session = await mgr.createSession(
+        const session = await buildManager().createSession(
           "opencode",
           GLOBAL_SCOPE,
           undefined,
           undefined,
           "coco"
-        );
-        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
-
-        getSessionTestHandle(session).sendPrompt();
-        getSessionTestHandle(session).sendPrompt();
-
-        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
-        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
-      });
-
-      it.each([
-        { chat: "a Copilot chat without an agent", slug: undefined },
-        { chat: "a chat whose agent folder is gone", slug: "gone" },
-      ])(`sends no license check for $chat (${USAGE_ISSUE})`, async ({ slug }) => {
-        mockValidateLicenseKey.mockClear();
-        const mgr = buildManager();
-        const session = await mgr.createSession(
-          "opencode",
-          GLOBAL_SCOPE,
-          undefined,
-          undefined,
-          slug
         );
 
         getSessionTestHandle(session).sendPrompt();
@@ -1758,22 +1735,18 @@ describe("AgentSessionManager", () => {
         expect(listener).not.toHaveBeenCalled();
       });
 
-      it(`counts an asked agent's chat with one license check, trigger custom_agents, on its first message and none after (${USAGE_ISSUE})`, async () => {
+      it(`sends no license request when an @-mention asks an agent's chat, so the plugin never counts custom agent use (${USAGE_ISSUE})`, async () => {
         mockValidateLicenseKey.mockClear();
-        const mgr = buildManager();
-        const session = await mgr.startUnlistedSession({
+        const session = await buildManager().startUnlistedSession({
           projectId: GLOBAL_SCOPE,
           mode: null,
           agent: MAYA,
           observeSessionEvent,
         });
+
+        getSessionTestHandle(session).sendPrompt();
+
         expect(mockValidateLicenseKey).not.toHaveBeenCalled();
-
-        getSessionTestHandle(session).sendPrompt();
-        getSessionTestHandle(session).sendPrompt();
-
-        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
-        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
       });
 
       it(`never records an asked agent's chat, so Recent chats leaves it out even when the chat index is lost and OpenCode still lists it (${ISSUE_977})`, async () => {
@@ -7002,31 +6975,6 @@ describe("AgentSessionManager", () => {
           expect.objectContaining({ sessionId: "native-1", agent: COCO_AGENT })
         );
         expect(session.agentSlug).toBe("coco");
-      });
-
-      it(`counts a reopened custom agent chat with one license check on its next message (${USAGE_ISSUE})`, async () => {
-        mockValidateLicenseKey.mockClear();
-        const replay = buildReplayingBackend();
-        const backend = { ...replay.backend, prompt: jest.fn(() => new Promise(() => undefined)) };
-        const session = await buildManager({
-          persistence: {
-            loadFile: jest.fn().mockResolvedValue({
-              backendId: "opencode",
-              sessionId: "native-1",
-              projectId: GLOBAL_SCOPE,
-              messages: savedTurn,
-              agent: "coco",
-            }),
-          },
-          descriptor: buildDescriptor({ createBackendProcess: () => backend }),
-        }).loadSessionFromHistory(mockTFile({ path: "chat/Saved.md" }));
-        expect(mockValidateLicenseKey).not.toHaveBeenCalled();
-
-        session.sendPrompt("one more question");
-        session.sendPrompt("and another");
-
-        expect(mockValidateLicenseKey).toHaveBeenCalledTimes(1);
-        expect(mockValidateLicenseKey.mock.calls[0][1]).toEqual({ trigger: "custom_agents" });
       });
 
       it("https://github.com/Brevilabs/obsidian-copilot-private/issues/941 restores the card states its note keeps, so a card the user can still act on comes back with the chat", async () => {

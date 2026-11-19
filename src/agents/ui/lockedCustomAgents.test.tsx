@@ -159,7 +159,7 @@ describe("lockedCustomAgents", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     BrevilabsClient.getInstance().setPluginVersion("4.0.20");
-    await enterLicenseKey("");
+    await enterLicenseKey("free-key");
   });
 
   afterEach(() => {
@@ -168,7 +168,6 @@ describe("lockedCustomAgents", () => {
 
   describe("openLockedCustomAgents()", () => {
     it.each([
-      { who: "no license key", key: "", reply: REFUSED_403, features: [] },
       { who: "a free license key", key: "free-key", reply: REFUSED_403, features: [] },
       { who: "a Plus license key", key: "plus-key", reply: GRANTED, features: ["multi_agent"] },
     ] as const)(
@@ -190,7 +189,7 @@ describe("lockedCustomAgents", () => {
         expect(sentBody(requestUrl)).toEqual({
           trigger: "custom_agents",
           user_id: "user-1",
-          ...(key ? { license_key: key } : {}),
+          license_key: key,
         });
         expect(CustomAgentsUpsellModal).toHaveBeenCalledWith(
           expect.anything(),
@@ -200,9 +199,17 @@ describe("lockedCustomAgents", () => {
       }
     );
 
+    it(`sends no license request from a device without a license key, and still shows the dialog (https://github.com/Brevilabs/obsidian-copilot-private/issues/594)`, async () => {
+      await enterLicenseKey("");
+      const requestUrl = answerLicenseChecks(REFUSED_403);
+
+      await openLockedCustomAgents(new App(), "custom_agent_dialog", NO_AGENTS);
+
+      expect(requestUrl).not.toHaveBeenCalled();
+      expect(mockOpenUpsell).toHaveBeenCalledTimes(1);
+    });
+
     it.each([
-      { who: "no license key", key: "", reply: REFUSED_403, status: 403 },
-      { who: "no license key", key: "", reply: REFUSED_400, status: 400 },
       { who: "a free license key", key: "free-key", reply: REFUSED_403, status: 403 },
       { who: "a free license key", key: "free-key", reply: REFUSED_400, status: 400 },
     ])(
@@ -322,32 +329,26 @@ describe("lockedCustomAgents", () => {
   });
 
   describe("openLockedAgentProfile()", () => {
-    it.each([
-      { who: "a device that never had a license", key: "" },
-      { who: "a device with a license key that is no longer valid", key: "license-key" },
-    ])(
-      `checks the license with trigger custom_agents on $who, then opens the locked profile once when clicked twice meanwhile (${LOCKED_AGENTS_ISSUE})`,
-      async ({ key }) => {
-        await enterLicenseKey(key);
-        const { requestUrl, reply } = holdLicenseCheck();
-        const openProfile = jest.fn();
+    it(`checks the license with trigger custom_agents on a device with a license key, then opens the locked profile once when clicked twice meanwhile (${LOCKED_AGENTS_ISSUE})`, async () => {
+      await enterLicenseKey("license-key");
+      const { requestUrl, reply } = holdLicenseCheck();
+      const openProfile = jest.fn();
 
-        const first = openLockedAgentProfile(new App(), openProfile);
-        const second = openLockedAgentProfile(new App(), openProfile);
-        expect(openProfile).not.toHaveBeenCalled();
-        reply(REFUSED_403);
-        await Promise.all([first, second]);
+      const first = openLockedAgentProfile(new App(), openProfile);
+      const second = openLockedAgentProfile(new App(), openProfile);
+      expect(openProfile).not.toHaveBeenCalled();
+      reply(REFUSED_403);
+      await Promise.all([first, second]);
 
-        expect(requestUrl).toHaveBeenCalledTimes(1);
-        expect(sentBody(requestUrl)).toEqual({
-          trigger: "custom_agents",
-          user_id: "user-1",
-          ...(key ? { license_key: key } : {}),
-        });
-        expect(openProfile).toHaveBeenCalledTimes(1);
-        expect(mockOpenUpsell).not.toHaveBeenCalled();
-      }
-    );
+      expect(requestUrl).toHaveBeenCalledTimes(1);
+      expect(sentBody(requestUrl)).toEqual({
+        trigger: "custom_agents",
+        user_id: "user-1",
+        license_key: "license-key",
+      });
+      expect(openProfile).toHaveBeenCalledTimes(1);
+      expect(mockOpenUpsell).not.toHaveBeenCalled();
+    });
 
     it(`opens the profile unlocked when the check grants custom_agents (${LOCKED_AGENTS_ISSUE})`, async () => {
       await enterLicenseKey("supporter-key");

@@ -55,4 +55,4 @@ The box at the bottom of Agent Chat where the user writes and sends a message: m
 - A selection made in reading view keeps its badge but is not highlighted in the note once the chat has focus.
 - Only suggestions skip Copilot's own files: a note link typed in full, a dropped file, and the `Active Note` row still attach one.
 - A file dragged from Finder that is already in the vault is attached where it is, not copied. One drop can carry notes and outside files together; each is attached. A folder from outside the vault can't be added: dropping one shows a notice.
-- `Agents · Supporter preview` shows only in Agent Chat, never in Quick Chat. It shows for every license without custom agents, and with no license key. It checks the license with Brevilabs even with no license key.
+- `Agents · Supporter preview` shows only in Agent Chat, never in Quick Chat. It shows for every license without custom agents, and with no license key. With no license key, choosing it sends nothing to Brevilabs.
