@@ -16,7 +16,6 @@ import type {
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
 import { resolveToolName } from "@/agentMode/session/toolName";
-import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
@@ -35,7 +34,6 @@ export interface PermissionBridgeOptions {
   getPrompter: () => Prompter | null;
   getAskUserQuestionPrompter?: () => AskUserQuestionPrompter | null;
   isPlanModePlanFilePath?: (absolutePath: string) => boolean;
-  getIsReadOnlySession?: () => ((sessionId: SessionId) => boolean) | null;
   getModeAfterPlanApproval?: () => PermissionMode | null;
 }
 
@@ -56,20 +54,6 @@ export class PermissionBridge {
       { toolName, input, suggestions: ctx.suggestions },
       sessionId
     );
-
-    const isReadOnlySession = this.opts.getIsReadOnlySession?.();
-    if (sessionId && isReadOnlySession?.(sessionId)) {
-      const { tool, mcpServer } = resolveToolName(toolName);
-      const kind = deriveToolKind(tool, mcpServer);
-      const isUnverifiableMcpTool = Boolean(mcpServer) && kind === "other";
-      if (isVaultWriteToolKind(kind) || isUnverifiableMcpTool) {
-        return this.deny(
-          "canUseTool:response",
-          "Read-only QA turn: vault-write tools are disabled.",
-          sessionId
-        );
-      }
-    }
 
     if (toolName === "Write") {
       const filePath = typeof input.file_path === "string" ? input.file_path : null;

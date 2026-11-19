@@ -14,11 +14,10 @@ For most people, OpenCode is the best starting point. Copilot can install and ma
 
 - [Agent Chat](agent-mode-and-tools.md) explains agents, models, permissions, sessions, and safe use.
 - [Choose an agent](agent-mode-and-tools.md#choose-an-agent) for OpenCode, Claude Code, or Codex.
-- [Ask multiple agents](agent-mode-and-tools.md#multi-agent-answers) to research or review the same question in parallel.
 - [Share Skills across agents](agent-mode-and-tools.md#skills-across-agents) so one reusable workflow works in OpenCode, Claude Code, and Codex.
 - [Connectors](connectors.md) let agents work with services such as Notion, Linear, and Todoist.
 - [Projects](projects.md) give ongoing work its own instructions, context, and chat history.
-- [Context and Mentions](context-and-mentions.md) add notes, selections, folders, URLs, and other agents to a request.
+- [Context and Mentions](context-and-mentions.md) add notes, selections, folders, and URLs to a request.
 - [Instructions for Agent Chat and Quick Chat](system-prompts.md) and [`AGENTS.md` examples](agents-md-examples.md) set durable guidance for your vault and projects.
 
 ## Everyday tools

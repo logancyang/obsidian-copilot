@@ -124,16 +124,6 @@ describe("TurnTracker", () => {
       });
     });
 
-    describe("getReplyStartedAtMs()", () => {
-      it("returns the start time the open reply was dated from", () => {
-        const { tracker } = setup();
-
-        tracker.openReply(false, 1_000);
-
-        expect(tracker.getReplyStartedAtMs()).toBe(1_000);
-      });
-    });
-
     describe("getTurnFiles()", () => {
       it("returns the capture the closing reply hands to captureFileChanges with the turn's diff, then a fresh one", async () => {
         const { deps, tracker } = setup();
@@ -161,19 +151,6 @@ describe("TurnTracker", () => {
 
         expect(before).toEqual([]);
         expect(tracker.getQueuedPrompts()).toBe(before);
-      });
-    });
-
-    describe("isSending()", () => {
-      it("reports sending only from the send until the send ends, not while a turn the agent started is open", () => {
-        const { tracker } = setup();
-        const { signal } = tracker.startSend();
-        expect(tracker.isSending()).toBe(true);
-
-        tracker.endSend(signal);
-        tracker.startTurn("background-report");
-
-        expect(tracker.isSending()).toBe(false);
       });
     });
 
@@ -275,10 +252,10 @@ describe("TurnTracker", () => {
         const later = tracker.startSend();
 
         tracker.endSend(earlier.signal);
-        expect(tracker.isSending()).toBe(true);
+        expect(tracker.isMainTurnRunning()).toBe(true);
         tracker.endSend(later.signal);
 
-        expect(tracker.isSending()).toBe(false);
+        expect(tracker.isMainTurnRunning()).toBe(false);
       });
     });
 
@@ -511,19 +488,6 @@ describe("TurnTracker", () => {
       });
     });
 
-    describe("releaseReply()", () => {
-      it("forgets the open reply only when it is the given reply", () => {
-        const { tracker } = setup();
-        const replyId = tracker.openReply();
-
-        tracker.releaseReply("another-reply");
-        expect(tracker.getReplyId()).toBe(replyId);
-        tracker.releaseReply(replyId);
-
-        expect(tracker.getReplyId()).toBeNull();
-      });
-    });
-
     describe("stop()", () => {
       it("closes the reply as cancelled, resolves the sent prompt as cancelled and drops the stopped turn's later output", async () => {
         const { deps, tracker } = setup();
@@ -744,7 +708,7 @@ describe("TurnTracker", () => {
         tracker.startTurn("background-report", 5_000);
 
         expect(transcript(deps.store)).toEqual([[AI_SENDER, "", null]]);
-        expect(tracker.getReplyStartedAtMs()).toBe(5_000);
+        expect(deps.store.getDisplayMessages()[0].timestamp?.epoch).toBe(5_000);
         expect(tracker.isMainTurnRunning()).toBe(true);
         expect(deps.notifyStatus).toHaveBeenCalled();
       });
@@ -771,7 +735,6 @@ describe("TurnTracker", () => {
         tracker.startTurn("t2");
 
         expect(tracker.isStopping()).toBe(false);
-        expect(tracker.isSending()).toBe(false);
         expect(tracker.resolveContentTarget("m2")).toBe(tracker.getReplyId());
       });
 

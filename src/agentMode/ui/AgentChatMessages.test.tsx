@@ -66,15 +66,6 @@ jest.mock("@/components/chat-components/ChatSingleMessage", () => ({
   },
 }));
 
-jest.mock("@/agentMode/ui/FanoutMessageCard", () => ({
-  FanoutMessageCard: ({ onContinue }: { onContinue?: () => void }) =>
-    onContinue ? (
-      <button type="button" onClick={onContinue}>
-        Continue fanout
-      </button>
-    ) : null,
-}));
-
 jest.mock("@/agentMode/ui/AgentTrailView", () => ({
   AgentTrail: ({
     timestamp,
@@ -508,30 +499,22 @@ describe("AgentChatMessages", () => {
       expect(screen.getAllByTestId("agent-trail-timestamp")).toHaveLength(2);
     });
 
-    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 offers to continue from each reply, text, with tool cards or from several agents, only while the chat is idle, and names the chosen reply", async () => {
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/908 offers to continue from each reply, text or with tool cards, only while the chat is idle, and names the chosen reply", async () => {
       const onContinueFrom = jest.fn().mockResolvedValue(undefined);
       const messages = [
         assistantMessage("user-1", 1_000, { sender: "user", message: "Question" }),
         assistantMessage("text-reply", 2_000, { message: "Saved answer" }),
         assistantMessage("trail-reply", 3_000, { parts: [{ kind: "text", text: "Live" }] }),
-        assistantMessage("fanout-reply", 4_000, {
-          message: "",
-          fanout: { answers: {}, summary: { status: "done", text: "Both agents agree" } },
-        }),
       ];
       const { rerender, props } = renderMessages(messages, false, { onContinueFrom });
 
       expect(screen.queryByText("Continue Question")).toBeNull();
-      for (const label of ["Continue Saved answer", "Continue trail", "Continue fanout"]) {
+      for (const label of ["Continue Saved answer", "Continue trail"]) {
         await act(async () => fireEvent.click(screen.getByText(label)));
       }
       rerender(<AgentChatMessages {...props} isLoading />);
 
-      expect(onContinueFrom.mock.calls).toEqual([
-        ["text-reply"],
-        ["trail-reply"],
-        ["fanout-reply"],
-      ]);
+      expect(onContinueFrom.mock.calls).toEqual([["text-reply"], ["trail-reply"]]);
       expect(screen.queryByText(/^Continue /)).toBeNull();
     });
 

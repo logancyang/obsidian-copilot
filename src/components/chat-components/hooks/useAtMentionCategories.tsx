@@ -1,12 +1,11 @@
 import React, { useMemo } from "react";
 import { TFile, TFolder } from "obsidian";
 import { isDesktopRuntime } from "@/utils/desktopRuntime";
-import { FileText, Wrench, Folder, Globe, Paperclip, Bot } from "lucide-react";
+import { FileText, Wrench, Folder, Globe, Paperclip } from "lucide-react";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
 export type AtMentionCategory =
-  | "agents"
   | "notes"
   | "tools"
   | "folders"
@@ -21,28 +20,11 @@ export interface AtMentionOption extends TypeaheadOption {
   isAction?: boolean;
 }
 
-export interface AgentMentionBrand {
-  readonly id: string;
-  readonly displayName: string;
-  readonly Icon: React.ComponentType<{ className?: string }>;
-  readonly needsSelfHostWarning?: boolean;
-}
-
-export const EMPTY_AGENT_MENTION_BRANDS: ReadonlyArray<AgentMentionBrand> = Object.freeze([]);
-
 export interface CategoryOption extends TypeaheadOption {
   category: AtMentionCategory;
   icon: React.ReactNode;
   isAction?: boolean;
 }
-
-const AGENTS_CATEGORY: CategoryOption = {
-  key: "agents",
-  title: "Agents",
-  subtitle: "Ask another agent this turn",
-  category: "agents",
-  icon: <Bot className="tw-size-4" />,
-};
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
   {
@@ -90,12 +72,9 @@ export function shouldShowAtMentionTools(args: {
   return args.isCopilotPlus && !args.isAgentMode;
 }
 
-export function useAtMentionCategories(
-  showTools: boolean = false,
-  showAgents: boolean = false
-): CategoryOption[] {
+export function useAtMentionCategories(showTools: boolean = false): CategoryOption[] {
   return useMemo(() => {
-    const base = CATEGORY_OPTIONS.filter((cat) => {
+    return CATEGORY_OPTIONS.filter((cat) => {
       if (cat.category === "tools") {
         return showTools;
       }
@@ -104,6 +83,5 @@ export function useAtMentionCategories(
       }
       return true;
     });
-    return showAgents ? [AGENTS_CATEGORY, ...base] : base;
-  }, [showTools, showAgents]);
+  }, [showTools]);
 }

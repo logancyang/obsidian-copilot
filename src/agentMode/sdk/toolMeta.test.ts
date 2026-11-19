@@ -1,4 +1,3 @@
-import { isVaultWriteToolKind } from "@/agentMode/session/fanout/fanoutTypes";
 import { deriveToolKind } from "./toolMeta";
 
 describe("toolMeta", () => {
@@ -15,17 +14,14 @@ describe("toolMeta", () => {
       }
     });
 
-    it("classifies every native Claude file-mutation tool so read-only fan-out denies it", () => {
-      const writeTools = ["Write", "Edit", "MultiEdit", "NotebookEdit"];
-      for (const name of writeTools) {
-        const kind = deriveToolKind(name);
-        expect(isVaultWriteToolKind(kind)).toBe(true);
+    it("classifies every native Claude file-mutation tool as edit", () => {
+      for (const name of ["Write", "Edit", "MultiEdit", "NotebookEdit"]) {
+        expect(deriveToolKind(name)).toBe("edit");
       }
     });
 
-    it("classifies Bash as execute (allowed in read-only fan-out)", () => {
+    it("classifies Bash as execute", () => {
       expect(deriveToolKind("Bash")).toBe("execute");
-      expect(isVaultWriteToolKind("execute")).toBe(false);
     });
 
     it("routes native plan tools to switch_mode (not an MCP tool of the same name)", () => {

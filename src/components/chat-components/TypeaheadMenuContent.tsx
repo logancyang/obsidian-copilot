@@ -9,7 +9,6 @@ export interface TypeaheadOption {
   content?: string;
   category?: string;
   icon?: React.ReactNode;
-  trailingContent?: React.ReactNode;
   disabled?: boolean;
   disabledReason?: string;
 }
@@ -173,11 +172,8 @@ export function TypeaheadMenuContent({
                         </div>
                       )}
                       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-flex-col tw-gap-0.5">
-                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-1">
-                          <span className="tw-truncate tw-font-medium tw-text-normal">
-                            {option.title}
-                          </span>
-                          {option.trailingContent}
+                        <div className="tw-truncate tw-font-medium tw-text-normal">
+                          {option.title}
                         </div>
                         {option.subtitle && (
                           <div className="tw-truncate tw-text-xs tw-text-muted">
