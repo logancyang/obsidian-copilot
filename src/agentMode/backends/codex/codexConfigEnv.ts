@@ -42,6 +42,9 @@ export function mergeCodexConfigEnv(
   };
   return JSON.stringify({
     ...CODEX_DEFAULT_CONFIG,
+    // Adapter 2.6.0 streams Codex's warning about the question feature below into a reopened chat's last reply.
+    // https://github.com/Brevilabs/obsidian-copilot-private/issues/956
+    suppress_unstable_features_warning: true,
     ...userConfig,
     // Codex gates structured questions in Default separately from permission modes.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/551
