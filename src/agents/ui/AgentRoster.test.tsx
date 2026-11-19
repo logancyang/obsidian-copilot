@@ -41,7 +41,7 @@ interface RenderOptions {
 function renderRoster({
   agents = [COCO, MAYA, LEO],
   selectedSlug = null,
-  width = 424,
+  width = 400,
   newAgentButton,
   onOpenProfile,
   locked,
@@ -95,18 +95,28 @@ describe("AgentRoster", () => {
       expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo"]);
     });
 
-    it("marks the selected agent and shows its title under the row", () => {
+    it(`marks the selected agent with an accent ring on its 54px face and shows its title under the row (${ISSUE})`, () => {
       renderRoster({ selectedSlug: "maya" });
 
-      expect(screen.getByRole("button", { name: "Maya", pressed: true })).not.toBeNull();
+      const maya = screen.getByRole("button", { name: "Maya", pressed: true });
+      expect(maya.querySelector("img")?.className).toContain("tw-size-[54px]");
+      expect(maya.querySelector("img")?.className).toContain(
+        "tw-outline-[color:var(--interactive-accent)]"
+      );
+      expect(
+        screen.getByRole("button", { name: "Coco", pressed: false }).querySelector("img")?.className
+      ).not.toContain("tw-outline");
       expect(screen.getByRole("button", { name: "Copilot", pressed: false })).not.toBeNull();
       expect(screen.getByText("Product critic. Pushes back on plans")).not.toBeNull();
     });
 
-    it("says Copilot has no agent and no memory when Copilot is selected", () => {
+    it(`rings Copilot's face in the accent color and says it has no agent and no memory when Copilot is selected (${ISSUE})`, () => {
       renderRoster({ selectedSlug: null });
 
-      expect(screen.getByRole("button", { name: "Copilot", pressed: true })).not.toBeNull();
+      const copilot = screen.getByRole("button", { name: "Copilot", pressed: true });
+      expect(copilot.firstElementChild?.className).toContain(
+        "tw-outline-[color:var(--interactive-accent)]"
+      );
       expect(screen.getByText("No agent, no memory")).not.toBeNull();
     });
 
@@ -177,54 +187,62 @@ describe("AgentRoster", () => {
       expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
     });
 
-    it("fits Copilot, five agents and the new-agent button in one row of a 440px sidebar", () => {
-      renderRoster({ agents: FIVE, newAgentButton: <button type="button">New</button> });
+    it("fits Copilot, four agents and the new-agent button in one row of a 440px sidebar", () => {
+      renderRoster({
+        agents: FIVE.slice(0, 4),
+        newAgentButton: <button type="button">New</button>,
+      });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "Kai", "New"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Nora", "New"]);
+    });
+
+    it(`fits Copilot, three agents and the new-agent button in one row of a 340px sidebar (${ISSUE})`, () => {
+      renderRoster({ width: 300, newAgentButton: <button type="button">New</button> });
+
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "New"]);
     });
 
     it(`moves the agents that do not fit into a +N More menu, keeping Copilot and the new-agent button in the row (${ISSUE})`, () => {
       renderRoster({ agents: TWELVE, newAgentButton: <button type="button">New</button> });
 
-      expect(rowNames()).toEqual([
-        "Copilot",
-        "Coco",
-        "Maya",
-        "Leo",
-        "Nora",
-        "Show 8 more agents",
-        "New",
-      ]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Show 9 more agents", "New"]);
     });
 
     it(`keeps the selected agent in the row when it would otherwise be in the menu (${ISSUE})`, () => {
       renderRoster({ agents: TWELVE, selectedSlug: "gus" });
 
-      expect(rowNames()).toEqual([
-        "Copilot",
-        "Coco",
-        "Maya",
-        "Leo",
-        "Nora",
-        "Gus",
-        "Show 7 more agents",
-      ]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Gus", "Show 8 more agents"]);
       expect(screen.getByRole("button", { name: "Gus", pressed: true })).not.toBeNull();
     });
 
     it("moves agents into the menu in a narrow sidebar", () => {
-      renderRoster({ agents: FIVE, width: 300 });
+      renderRoster({ agents: FIVE, width: 260 });
 
-      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Leo", "Show 2 more agents"]);
+      expect(rowNames()).toEqual(["Copilot", "Coco", "Maya", "Show 3 more agents"]);
+    });
+
+    it(`keeps Copilot, the selected agent, the More menu and the new-agent button in the row of a 300px sidebar (${ISSUE})`, () => {
+      renderRoster({
+        agents: TWELVE,
+        selectedSlug: "gus",
+        width: 260,
+        newAgentButton: <button type="button">New</button>,
+      });
+
+      expect(rowNames()).toEqual(["Copilot", "Gus", "Show 11 more agents", "New"]);
     });
 
     it("selects an agent picked from the More menu, which lists each agent's name and title", () => {
-      const { onSelect } = renderRoster({ agents: FIVE, width: 300 });
+      const { onSelect } = renderRoster({ agents: FIVE, width: 260 });
 
-      openMoreMenu(2);
+      openMoreMenu(3);
       const items = screen.getAllByRole("menuitem");
-      expect(items.map((item) => item.textContent)).toEqual(["NoraNora's job", "KaiKai's job"]);
-      fireEvent.click(items[1]);
+      expect(items.map((item) => item.textContent)).toEqual([
+        "LeoKeeps the company books",
+        "NoraNora's job",
+        "KaiKai's job",
+      ]);
+      fireEvent.click(items[2]);
 
       expect(onSelect).toHaveBeenCalledWith("kai");
     });
@@ -259,14 +277,14 @@ describe("AgentRoster", () => {
       const onOpenLocked = jest.fn();
       const { onSelect } = renderRoster({
         agents: FIVE,
-        width: 300,
+        width: 260,
         locked: { onOpen: onOpenLocked, note: null },
       });
 
-      openMoreMenu(2);
+      openMoreMenu(3);
       const items = screen.getAllByRole("menuitem");
       expect(items.map((item) => within(item).queryByLabelText("Locked"))).not.toContain(null);
-      fireEvent.click(items[1]);
+      fireEvent.click(items[2]);
 
       expect(onOpenLocked).toHaveBeenCalledWith("kai");
       expect(onSelect).not.toHaveBeenCalled();

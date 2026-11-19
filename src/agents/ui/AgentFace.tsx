@@ -2,26 +2,27 @@ import { cn } from "@/lib/utils";
 import { Lock } from "lucide-react";
 import React from "react";
 
-export type AgentFaceSize = "xs" | "s" | "m" | "l" | "xl" | "xxl";
+export type AgentFaceSize = "xs" | "s" | "m" | "l" | "roster" | "xl" | "xxl";
 
 const FACE_SIZE_CLASS: Record<AgentFaceSize, string> = {
   xs: "tw-size-4",
   s: "tw-size-5",
   m: "tw-size-7",
   l: "tw-size-9",
+  roster: "tw-size-[54px]",
   xl: "tw-size-16",
   xxl: "tw-size-[88px]",
 };
 
 export const SELECTED_FACE_CLASS =
-  "tw-outline tw-outline-2 tw-outline-offset-2 tw-outline-[color:var(--text-muted)]";
+  "tw-outline tw-outline-[3px] tw-outline-offset-2 tw-outline-[color:var(--interactive-accent)]";
 
 export const LOCKED_FACE_CLASS = "tw-opacity-50 tw-grayscale";
 
 export function LockBadge(): React.ReactElement {
   return (
-    <span className="tw-absolute -tw-bottom-1 -tw-right-1 tw-flex tw-size-4 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted">
-      <Lock className="tw-size-2.5" />
+    <span className="tw-absolute -tw-bottom-1 -tw-right-1 tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-text-muted">
+      <Lock className="tw-size-3" />
     </span>
   );
 }

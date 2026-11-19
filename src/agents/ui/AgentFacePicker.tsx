@@ -91,14 +91,7 @@ export function AgentFacePicker({
                   })
                 }
               >
-                <AgentFace
-                  src={face.src}
-                  size="l"
-                  className={cn(
-                    face.id === selectedPresetId &&
-                      "tw-outline tw-outline-2 tw-outline-offset-2 tw-outline-[color:var(--interactive-accent)]"
-                  )}
-                />
+                <AgentFace src={face.src} size="l" selected={face.id === selectedPresetId} />
               </button>
             ))}
           </div>
