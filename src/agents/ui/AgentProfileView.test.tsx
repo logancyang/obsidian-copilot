@@ -1,10 +1,12 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
+import { AgentFacePicker } from "@/agents/ui/AgentFacePicker";
+import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import {
   AgentProfileView,
   type AgentProfileFacts,
   type AgentProfileViewProps,
 } from "@/agents/ui/AgentProfileView";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
@@ -31,13 +33,88 @@ const FACTS: AgentProfileFacts = {
   memory: { rules: 9, changedAt: new Date(2026, 10, 16, 14, 31).getTime() },
 };
 
+const MODELS: AgentModelChoices = {
+  models: [
+    {
+      name: "opus",
+      displayName: "Opus 5.5",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude",
+      _backendId: "claude",
+    },
+    {
+      name: "sonnet",
+      displayName: "Sonnet 5.5",
+      provider: "agent",
+      enabled: true,
+      _group: "Claude",
+      _backendId: "claude",
+    },
+  ],
+  effortOptionsByModelKey: {
+    "claude:opus|agent": [
+      { label: "medium", value: "medium" },
+      { label: "high", value: "high" },
+    ],
+    "claude:sonnet|agent": [
+      { label: "low", value: "low" },
+      { label: "medium", value: "medium" },
+    ],
+  },
+  initial: { baseModelId: "opus", effort: "high" },
+};
+
+const PRESET_BYTES = new Uint8Array([7]).buffer;
+
 function renderProfile(props: Partial<AgentProfileViewProps> = {}) {
-  const handlers = { onBack: jest.fn(), onNewChat: jest.fn(), onOpenFile: jest.fn() };
-  render(<AgentProfileView agent={agent()} facts={FACTS} now={NOW} {...handlers} {...props} />);
+  const handlers = {
+    onBack: jest.fn(),
+    onNewChat: jest.fn(),
+    onOpenFile: jest.fn(),
+    onRename: jest.fn().mockResolvedValue(undefined),
+    onRetitle: jest.fn().mockResolvedValue(undefined),
+    onChangeFace: jest.fn(),
+    onChangeModel: jest.fn(),
+  };
+  render(
+    <AgentProfileView
+      agent={agent()}
+      facts={FACTS}
+      now={NOW}
+      otherAgents={[agent(), agent({ slug: "maya", name: "Maya" })]}
+      models={MODELS}
+      renderFacePicker={(onPick) => (
+        <AgentFacePicker
+          presets={{
+            status: "ready",
+            faces: [{ id: "leo", alt: "Leo's face", bytes: PRESET_BYTES, src: "face:leo" }],
+            usedIds: new Set(),
+          }}
+          onPick={onPick}
+        />
+      )}
+      {...handlers}
+      {...props}
+    />
+  );
   return handlers;
 }
 
+function startEditing(button: string): HTMLInputElement {
+  fireEvent.click(screen.getByRole("button", { name: button }));
+  return screen.getByRole<HTMLInputElement>("textbox");
+}
+
 describe("AgentProfileView", () => {
+  beforeAll(() => {
+    window.ResizeObserver = jest.fn(() => ({
+      observe: jest.fn(),
+      unobserve: jest.fn(),
+      disconnect: jest.fn(),
+    }));
+  });
+
   describe("AgentProfileView()", () => {
     it("shows the agent's face, name, title, how many chats it has had and since when", () => {
       renderProfile();
@@ -48,11 +125,14 @@ describe("AgentProfileView", () => {
       expect(screen.getByText("23 chats · since Oct 3")).not.toBeNull();
     });
 
-    it("names the page by the agent and its section by what the agent knows, as headings", () => {
+    it("names the page by the agent and its sections by what they hold, as headings", () => {
       renderProfile();
 
       expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("Coco");
-      expect(screen.getByRole("heading", { level: 3 }).textContent).toBe("What Coco knows");
+      expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+        "What Coco knows",
+        "Model",
+      ]);
     });
 
     it("counts one chat in the singular and a first day as today", () => {
@@ -172,6 +252,152 @@ describe("AgentProfileView", () => {
       renderProfile();
 
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Back to chat" }));
+    });
+
+    it(`renames the agent in place on Enter (${ISSUE})`, async () => {
+      const { onRename } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      expect(input.value).toBe("Coco");
+      expect(screen.getByText("Enter to save · Esc to cancel")).not.toBeNull();
+      fireEvent.change(input, { target: { value: " Cocoa " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+      expect(onRename).toHaveBeenCalledWith("Cocoa");
+    });
+
+    it("saves the new name when the user clicks elsewhere", async () => {
+      const { onRename } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "Cocoa" } });
+      fireEvent.blur(input);
+
+      await waitFor(() => expect(onRename).toHaveBeenCalledWith("Cocoa"));
+    });
+
+    it(`refuses a name already on the team, in any case, the way the create dialog does (${ISSUE})`, async () => {
+      const { onRename } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "maya" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(
+        await screen.findByText("Maya is already on your team. Pick another name.")
+      ).not.toBeNull();
+      expect(screen.getByRole("textbox")).toBe(input);
+      expect(onRename).not.toHaveBeenCalled();
+    });
+
+    it("keeps the agent's own name in another case, which is no clash", async () => {
+      const { onRename } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "COCO" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => expect(onRename).toHaveBeenCalledWith("COCO"));
+    });
+
+    it(`cancels a rename on Esc without leaving the profile (${ISSUE})`, () => {
+      const { onRename, onBack } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "Cocoa" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(onRename).not.toHaveBeenCalled();
+      expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it(`keeps the name when the new one is empty (${ISSUE})`, async () => {
+      const { onRename } = renderProfile();
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "   " } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+      expect(onRename).not.toHaveBeenCalled();
+    });
+
+    it(`says what to fix and keeps the typed name when the instructions file cannot be saved (${ISSUE})`, async () => {
+      const onRename = jest.fn().mockRejectedValue(new Error("YAMLParseError: bad indentation"));
+      renderProfile({ onRename });
+
+      const input = startEditing("Rename Coco");
+      fireEvent.change(input, { target: { value: "Cocoa" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      expect(
+        await screen.findByText(
+          "Couldn't save. Fix the properties at the top of Coco's instructions.md first."
+        )
+      ).not.toBeNull();
+      expect(input.value).toBe("Cocoa");
+    });
+
+    it("changes the title in place, starting from the title as written", async () => {
+      const { onRetitle } = renderProfile();
+
+      const input = startEditing("Change Coco's title");
+      expect(input.value).toBe("Keeps the whole vault in view");
+      fireEvent.change(input, { target: { value: "Keeps the vault tidy" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => expect(onRetitle).toHaveBeenCalledWith("Keeps the vault tidy"));
+    });
+
+    it(`saves an emptied title, so the instruction's first sentence shows in its place (${ISSUE})`, async () => {
+      const { onRetitle } = renderProfile();
+
+      const input = startEditing("Change Coco's title");
+      fireEvent.change(input, { target: { value: "" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+
+      await waitFor(() => expect(onRetitle).toHaveBeenCalledWith(""));
+    });
+
+    it("starts an untitled agent's title edit empty, not from the first sentence shown", () => {
+      renderProfile({ agent: agent({ title: "" }) });
+
+      expect(startEditing("Change Coco's title").value).toBe("");
+    });
+
+    it(`changes the face from the same picker as the create dialog and closes it (${ISSUE})`, async () => {
+      const { onChangeFace } = renderProfile();
+
+      fireEvent.click(screen.getByRole("button", { name: "Change Coco's face" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Leo's face" }));
+
+      expect(onChangeFace).toHaveBeenCalledWith({ kind: "preset", bytes: PRESET_BYTES });
+      await waitFor(() => expect(screen.queryByText("Pick a face")).toBeNull());
+    });
+
+    it("shows the agent's model, or the default model for an agent that has none", () => {
+      renderProfile({ agent: agent({ model: { baseModelId: "sonnet", effort: "medium" } }) });
+      expect(screen.getByTitle("Model · effort").textContent).toContain("Sonnet 5.5");
+
+      document.body.innerHTML = "";
+      renderProfile({ agent: agent({ model: null }) });
+      expect(screen.getByTitle("Model · effort").textContent).toContain("Opus 5.5");
+    });
+
+    it(`sets the model future chats start on from the model list (${ISSUE})`, async () => {
+      const { onChangeModel, onBack } = renderProfile();
+
+      fireEvent.click(screen.getByTitle("Model · effort"));
+      const sonnet = await screen.findByRole("option", { name: /Sonnet 5\.5/ });
+      fireEvent.click(sonnet);
+      fireEvent.keyDown(sonnet, { key: "Escape" });
+
+      await waitFor(() =>
+        expect(onChangeModel).toHaveBeenCalledWith({ baseModelId: "sonnet", effort: "low" })
+      );
+      expect(onBack).not.toHaveBeenCalled();
     });
   });
 });
