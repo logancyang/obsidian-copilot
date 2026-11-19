@@ -686,7 +686,10 @@ export class AgentSessionManager {
     return saved.path;
   }
 
-  async deleteChatHistory(fileId: string): Promise<void> {
+  async deleteChatHistory(
+    fileId: string,
+    { canTrashNote }: { canTrashNote?: (path: string) => boolean } = {}
+  ): Promise<void> {
     const index = this.opts.sessionIndex;
     const persistence = this.opts.persistenceManager;
     const native = parseNativeChatId(fileId);
@@ -705,7 +708,12 @@ export class AgentSessionManager {
     }
     const notePaths = new Set(native ? savedPaths : [fileId, ...savedPaths]);
     if (persistence) {
-      for (const path of notePaths) await persistence.deleteFile(path);
+      for (const path of notePaths) {
+        // A bulk delete trashes only notes that prove they belong to it; an open chat's note may have been moved or replaced since.
+        // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
+        if (canTrashNote && !canTrashNote(path)) continue;
+        await persistence.deleteFile(path);
+      }
     }
     this.markHistoryChanged();
   }

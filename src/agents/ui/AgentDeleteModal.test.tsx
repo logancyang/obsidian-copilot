@@ -1,0 +1,112 @@
+import { NEUTRAL_FACE_SRC } from "@/agents/customAgentFiles";
+import {
+  AgentDeleteForm,
+  AgentDeleteModal,
+  type AgentDeleteFormProps,
+} from "@/agents/ui/AgentDeleteModal";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { App } from "obsidian";
+import React from "react";
+
+const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
+
+const COCO: AgentDeleteFormProps["agent"] = {
+  name: "Coco",
+  instructionsPath: "copilot/agents/coco/instructions.md",
+  memoryPath: "copilot/agents/coco/MEMORY.md",
+  faceSrc: "app://vault/copilot/agents/coco/face.webp",
+};
+
+function renderForm(props: Partial<AgentDeleteFormProps> = {}) {
+  const handlers = { onDelete: jest.fn(), onCancel: jest.fn() };
+  render(<AgentDeleteForm agent={COCO} memoryRules={9} chatCount={23} {...handlers} {...props} />);
+  return handlers;
+}
+
+describe("AgentDeleteModal", () => {
+  describe("AgentDeleteForm()", () => {
+    it(`names both files with where they live, the number of chats and the face, and says it can't be undone (${ISSUE})`, () => {
+      renderForm();
+
+      expect(
+        screen.getByText("This deletes Coco and everything below. You can't undo it.")
+      ).not.toBeNull();
+      expect(screen.getByText("What Coco handles")).not.toBeNull();
+      expect(screen.getByText("copilot/agents/coco/instructions.md")).not.toBeNull();
+      expect(screen.getByText("Rules Coco remembers")).not.toBeNull();
+      expect(screen.getByText("· 9 rules")).not.toBeNull();
+      expect(screen.getByText("copilot/agents/coco/MEMORY.md")).not.toBeNull();
+      expect(screen.getByText("23 chats with Coco")).not.toBeNull();
+      expect(screen.getByText("They leave Recent chats and the Navigator.")).not.toBeNull();
+      expect(screen.getByText("Coco's face")).not.toBeNull();
+      expect(
+        screen.getByText("What Coco said in chats with other agents stays there.")
+      ).not.toBeNull();
+    });
+
+    it(`lists no memory file and no face for a new agent that has neither (${ISSUE})`, () => {
+      renderForm({
+        agent: { ...COCO, faceSrc: NEUTRAL_FACE_SRC },
+        memoryRules: null,
+        chatCount: 1,
+      });
+
+      expect(screen.queryByText("Rules Coco remembers")).toBeNull();
+      expect(screen.queryByText("Coco's face")).toBeNull();
+      expect(screen.getByText("1 chat with Coco")).not.toBeNull();
+    });
+
+    it(`lists no chats for an agent nobody has chatted with yet (${ISSUE})`, () => {
+      renderForm({ chatCount: 0 });
+
+      expect(screen.queryByText(/chats with Coco/)).toBeNull();
+      expect(screen.queryByText("They leave Recent chats and the Navigator.")).toBeNull();
+      expect(screen.getByText("What Coco handles")).not.toBeNull();
+    });
+
+    it(`puts the keyboard on Cancel, so Enter does not delete, and names the agent on the delete button (${ISSUE})`, () => {
+      const { onDelete, onCancel } = renderForm();
+
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete Coco" }));
+
+      expect(onCancel).toHaveBeenCalledTimes(1);
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("AgentDeleteModal", () => {
+    describe("constructor()", () => {
+      it("asks to delete the agent by name in the dialog's title", () => {
+        const modal = new AgentDeleteModal(
+          new App(),
+          { agent: COCO, memoryRules: 9, chatCount: 23 },
+          jest.fn()
+        );
+
+        expect(modal.titleEl.textContent).toBe("Delete Coco?");
+      });
+    });
+
+    describe("renderContent()", () => {
+      it("closes the dialog before deleting", () => {
+        const order: string[] = [];
+        const modal = new AgentDeleteModal(
+          new App(),
+          { agent: COCO, memoryRules: 9, chatCount: 23 },
+          () => order.push("delete")
+        );
+
+        render(
+          (
+            modal as unknown as { renderContent: (close: () => void) => React.ReactElement }
+          ).renderContent(() => order.push("close"))
+        );
+        fireEvent.click(screen.getByRole("button", { name: "Delete Coco" }));
+
+        expect(order).toEqual(["close", "delete"]);
+      });
+    });
+  });
+});

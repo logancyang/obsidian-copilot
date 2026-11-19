@@ -56,6 +56,19 @@ describe("chatHistoryUtils", () => {
       );
     });
 
+    it("names no agent for a hand-edited agent value that is not text, so deleting an agent never matches it (https://github.com/Brevilabs/obsidian-copilot-private/issues/940)", () => {
+      const agents = [["coco"], 5, null].map(
+        (agent) =>
+          fileToHistoryItem(
+            makeApp({ epoch: 1735732800000, agent }),
+            makeFile(),
+            new RecentUsageManager()
+          ).agent
+      );
+
+      expect(agents).toEqual([undefined, undefined, undefined]);
+    });
+
     it("extracts a string projectId from frontmatter", () => {
       const app = makeApp({ epoch: 1735732800000, projectId: "proj-123" });
       const item = fileToHistoryItem(app, makeFile(), new RecentUsageManager<string>());

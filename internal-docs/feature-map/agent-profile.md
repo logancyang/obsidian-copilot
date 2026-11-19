@@ -1,6 +1,6 @@
 # Agent profile
 
-A custom agent's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, its model, and a way to start a new chat with it.
+A custom agent's page in the sidebar: its face, name, and title, how many chats it has had, the two files that make it, its model, a way to start a new chat with it, and Delete.
 
 ## Sub-features
 
@@ -15,6 +15,9 @@ A custom agent's page in the sidebar: its face, name, and title, how many chats 
 - profile-memory: "Rules <name> remembers" opens the agent's memory file in a new tab of the main editor area, and reads how many rules it holds and when it last changed, such as "Memory · Coco adds to this · 9 rules · today 14:31". It follows the file as the agent saves rules.
 - profile-memory-empty: an agent that has saved no rule yet reads "Nothing yet. <name> adds a rule when you correct it or ask it to remember something." and has no `Open`.
 - profile-new-chat: `New chat with <name>` opens a new chat with the agent in a new tab. From the new chat page, it returns to that page, where the agent is already selected.
+- profile-delete: `Delete <name>…` at the bottom asks first in "Delete <name>?": "This deletes <name> and everything below. You can't undo it.", then "What <name> handles" and "Rules <name> remembers" with their file locations and the rule count, "<n> chats with <name>" ("They leave Recent chats and the Navigator."), and the agent's face. A memory file, face, or chats the agent does not have are not listed. A long name shortens on the red button with an ellipsis. `Cancel` has the keyboard; the red button reads `Delete <name>`.
+- profile-delete-done: deleting moves the agent's folder to the trash that the "Deleted files" setting names, deletes every chat with the agent (a running one is stopped first) and closes their tabs. The tab the profile covered becomes a new chat on the start screen with Copilot selected, the agent is gone from the row of faces, and a notice reads "Deleted <name> and <n> chats." Only chats recorded with exactly this agent go: other agents' chats, Copilot chats, notes outside the chats folder (an open chat's note moved out of it included), and a chat note whose own `agent` property no longer names this agent stay.
+- profile-delete-failed: when one of the agent's chats can't be deleted, the agent stays with that chat and the notice reads "Couldn't delete 1 of <name>'s 4 chats, so <name> was kept."; deleting again finishes the job. When the folder can't go to the trash, the notice names the chats that went: "Deleted 3 chats with <name>, but couldn't delete <name>." When the agent is already gone, or custom agents stop, by the time `Delete <name>` is chosen, nothing is deleted and the notice reads "Couldn't delete <name>."
 - profile-gone: when the agent's folder is deleted while its profile is open, or the license stops including custom agents, the profile goes back to the chat with no error.
 
 ## How to get to it
@@ -37,10 +40,14 @@ It needs a license that includes custom agents (a team license until launch).
 - Memory: choose "Rules <name> remembers". The agent's memory file opens. Add a rule to it: the count and the time on the row change.
 - Memory empty: open the profile of an agent that has saved nothing. The row says nothing is saved yet and offers no `Open`.
 - New chat: choose `New chat with <name>` in the profile opened from an agent's chat. A new tab opens with the agent selected. Open the profile from the start screen and choose it: the start screen shows again with the agent selected.
+- Delete: choose `Delete <name>…`. The dialog names both files, the rule count, the number of chats, and the face; press Enter: nothing is deleted and the dialog closes. Choose `Delete <name>…` again and then `Delete <name>`. The start screen shows with Copilot selected and without the agent, the notice names the deleted chats, the agent's folder is in the trash, its chats are gone from Recent chats and the Navigator, and other agents' chats remain.
+- Delete while working: send the agent a message and, while it replies, delete it from the profile. The reply stops, its tab closes, and the agent is deleted.
 - Gone: open an agent's profile and delete its folder outside Obsidian. The profile goes back to the chat.
 
 ## Gotchas
 
 - An edit to the instructions file reaches chats that start after it; open chats keep the instructions they started with.
+- The dialog says deleting can't be undone even when "Deleted files" sends files to a trash they can be restored from.
+- An agent's identity is its folder: a new agent made later with the same name gets none of the deleted agent's chats, because they are deleted with it. Chats left behind when a folder is deleted outside Obsidian belong to the next agent with that folder name, and its profile counts them.
 - The preset faces download from the Brevilabs CDN only when the face picker opens.
 - The profile belongs to the tab it was opened in: switching tabs and coming back shows the chat, not the profile.
