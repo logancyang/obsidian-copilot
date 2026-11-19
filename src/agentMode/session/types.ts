@@ -410,6 +410,7 @@ export interface AgentMcpServer {
 export interface SessionAgent {
   slug: string;
   prompt: string;
+  memoryPath?: string;
 }
 
 export interface OpenSessionInput {
