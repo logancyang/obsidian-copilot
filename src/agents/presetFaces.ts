@@ -41,8 +41,8 @@ function isSmallWebp(bytes: ArrayBuffer): boolean {
   return header.startsWith("RIFF") && header.endsWith("WEBP");
 }
 
-export async function loadPresetFaces(): Promise<PresetFace[]> {
-  const entries = parseFaceList((await requestUrl({ url: PRESET_FACES_URL })).json);
+export async function loadPresetFaces(limit = MAX_PRESET_FACES): Promise<PresetFace[]> {
+  const entries = parseFaceList((await requestUrl({ url: PRESET_FACES_URL })).json).slice(0, limit);
   const faces = await Promise.all(
     entries.map(async ({ id, alt, url }) => {
       try {

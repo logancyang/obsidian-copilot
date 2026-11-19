@@ -1,6 +1,6 @@
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { AgentRoster, NewAgentButton } from "@/agents/ui/AgentRoster";
-import { FirstAgentBanner } from "@/agents/ui/FirstAgentBanner";
+import { FirstAgentBannerView } from "@/agents/ui/FirstAgentBanner";
 import { FIVE_AGENTS, RECENT_CHATS } from "@/agents/ui/testing/rosterFixtures";
 import { useAgentRecentChats } from "@/agents/ui/useAgentRecentChats";
 import { AgentHomeShelf, type AgentHomeShelfSection } from "@/agentMode/ui/AgentHomeShelf";
@@ -289,7 +289,8 @@ function AgentHomeCanvas({
                     : "Ask anything • @ to add context • / for commands"}
                 </div>
                 {agents.length === 0 && !project && !bannerDismissed && (
-                  <FirstAgentBanner
+                  <FirstAgentBannerView
+                    faces={FIVE_AGENTS.slice(0, 3).map((agent) => agent.faceSrc)}
                     onCreate={() => {}}
                     onDismiss={() => setBannerDismissed(true)}
                   />
