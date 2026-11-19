@@ -477,20 +477,25 @@ function InlineEdit({
           setDraft(value);
         }}
         className={cn(
-          "clickable-icon tw-h-auto tw-max-w-full tw-gap-1 tw-whitespace-normal tw-bg-transparent tw-p-0 tw-shadow-none",
+          "clickable-icon tw-relative tw-mx-4 tw-h-auto tw-whitespace-normal tw-bg-transparent tw-p-0 tw-shadow-none",
           NO_OBSIDIAN_TOOLTIP
         )}
       >
         <span className={cn("tw-min-w-0 tw-break-words", textClassName)}>{text}</span>
-        <span className={cn("tw-flex tw-shrink-0 tw-text-faint", SHOWN_ON_HOVER_OR_KEYBOARD_FOCUS)}>
+        <span
+          className={cn(
+            "tw-absolute tw-left-full tw-top-1/2 tw-flex -tw-translate-y-1/2 tw-pl-1 tw-text-faint",
+            SHOWN_ON_HOVER_OR_KEYBOARD_FOCUS
+          )}
+        >
           <Pencil className="tw-size-3" />
         </span>
       </button>
     );
   }
   return (
-    <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-1">
-      <div className="tw-flex tw-w-full tw-max-w-60 tw-items-center tw-gap-1.5">
+    <div className="tw-flex tw-w-full tw-flex-col tw-items-center tw-gap-1 tw-px-5">
+      <div className="tw-relative tw-flex tw-w-full tw-max-w-60 tw-items-center">
         <Input
           autoFocus
           aria-label={label}
@@ -515,7 +520,10 @@ function InlineEdit({
             }
           }}
         />
-        <Check aria-hidden="true" className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
+        <Check
+          aria-hidden="true"
+          className="tw-absolute tw-left-full tw-top-1/2 tw-ml-1.5 tw-size-3.5 -tw-translate-y-1/2 tw-text-muted"
+        />
       </div>
       {error ? (
         <FieldError>{error}</FieldError>
