@@ -38,7 +38,7 @@ export interface HiddenChatStart {
 }
 
 export interface HiddenAgentChatsHost {
-  store: () => CustomAgentStore | undefined;
+  store: () => CustomAgentStore;
   vaultBase: () => string | null;
   listedChat: (chat: ChatStateHost) => AgentSession | null;
   unavailableReason: (agent: CustomAgent) => string | null;
@@ -313,7 +313,7 @@ export class HiddenAgentChats {
 
   private resolve(chat: ChatStateHost | null, agentName: string): AskingChat | AgentRefusal {
     const store = this.host.store();
-    if (getCustomAgentsGate() !== "full" || !store) return { kind: "unavailable" };
+    if (getCustomAgentsGate() !== "full") return { kind: "unavailable" };
     const parent = chat ? this.host.listedChat(chat) : null;
     if (!parent) return { kind: "not_from_here" };
     const agents = store.getAgents();
