@@ -15,12 +15,14 @@ import type {
 } from "@/agents/agentMode/hiddenAgentChats";
 import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
+import {
+  ANSWER_AGENT_TOOL_NAME,
+  CHECK_AGENT_TOOL_NAME,
+  STOP_AGENT_TOOL_NAME,
+} from "@/agents/agentMode/agentToolCalls";
 import { RELAY_PRINCIPLE } from "@/agents/agentReply";
 import { getCustomAgentsGate } from "@/agents/customAgentsGate";
 
-export const STOP_AGENT_TOOL_NAME = "stop_agent";
-export const CHECK_AGENT_TOOL_NAME = "check_agent";
-export const ANSWER_AGENT_TOOL_NAME = "answer_agent";
 export const ASK_USER_TOOL_NAME = "ask_user";
 const UNAVAILABLE_TEXT = "Custom agents aren't available right now. Tell the user.";
 

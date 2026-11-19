@@ -3,7 +3,7 @@ import { ChevronRight, type LucideIcon } from "lucide-react";
 import React, { useId } from "react";
 
 export interface AgentActivityCardProps {
-  icon: LucideIcon;
+  icon: LucideIcon | React.ReactElement;
   label: React.ReactNode;
   trailing?: React.ReactNode;
   secondary?: React.ReactNode;
@@ -52,7 +52,7 @@ export const AgentActivityCard: React.FC<AgentActivityCardProps> = ({
         }
       >
         <span className="tw-flex tw-size-3.5 tw-shrink-0 tw-items-center tw-justify-center">
-          <Icon className="tw-size-3.5 tw-text-normal" />
+          {"props" in Icon ? Icon : <Icon className="tw-size-3.5 tw-text-normal" />}
         </span>
         <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1 tw-truncate tw-font-medium">
           {label}
