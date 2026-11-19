@@ -108,6 +108,7 @@ const meta = {
     onRetitle: async () => {},
     onChangeFace: () => {},
     onChangeModel: () => {},
+    onDelete: () => {},
   },
   parameters: { gallery: { host: "leaf", layout: "fullscreen" } },
 } satisfies Meta<StoryProps>;

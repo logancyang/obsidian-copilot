@@ -42,6 +42,26 @@ async function getChatLink(app: App, notePath: string): Promise<string | null> {
   return id && buildChatDeepLink(app.vault.getName(), id);
 }
 
+export async function deleteChatAndBookmark(
+  app: App,
+  manager: AgentSessionManager,
+  id: string,
+  options?: Parameters<AgentSessionManager["deleteChatHistory"]>[1]
+): Promise<{ bookmarkRemoved: boolean }> {
+  const link = await getChatLink(app, id);
+  await manager.deleteChatHistory(id, options);
+  if (!link) return { bookmarkRemoved: true };
+  // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
+  try {
+    getUrlBookmarks(app)?.remove(link);
+    return { bookmarkRemoved: true };
+  } catch (error) {
+    logError("[AgentMode] remove chat bookmark failed", error);
+    return { bookmarkRemoved: false };
+  }
+}
+
 export function useAgentHistoryControls(
   manager: AgentSessionManager,
   plugin: CopilotPlugin,
@@ -149,24 +169,6 @@ export function useAgentHistoryControls(
     [manager, loadChatHistory, runWithNotice]
   );
 
-  const deleteChatAndBookmark = useCallback(
-    async (id: string): Promise<{ bookmarkRemoved: boolean }> => {
-      const link = await getChatLink(plugin.app, id);
-      await manager.deleteChatHistory(id);
-      if (!link) return { bookmarkRemoved: true };
-      // Obsidian's Bookmarks internals have no public API, so a failure there must not undo or hide a completed delete.
-      // https://github.com/Brevilabs/obsidian-copilot-private/issues/694
-      try {
-        getUrlBookmarks(plugin.app)?.remove(link);
-        return { bookmarkRemoved: true };
-      } catch (error) {
-        logError("[AgentMode] remove chat bookmark failed", error);
-        return { bookmarkRemoved: false };
-      }
-    },
-    [manager, plugin]
-  );
-
   const deleteChat = useCallback(
     async (id: string) => {
       try {
@@ -174,7 +176,7 @@ export function useAgentHistoryControls(
           "delete chat",
           async () => {
             const item = chatHistoryItems.find((chat) => chat.id === id);
-            const { bookmarkRemoved } = await deleteChatAndBookmark(id);
+            const { bookmarkRemoved } = await deleteChatAndBookmark(plugin.app, manager, id);
             new Notice(
               formatChatDeleteNotice(item?.backendId ? backendRegistry[item.backendId] : undefined)
             );
@@ -186,7 +188,7 @@ export function useAgentHistoryControls(
         await loadChatHistory();
       }
     },
-    [chatHistoryItems, deleteChatAndBookmark, loadChatHistory, runWithNotice]
+    [chatHistoryItems, manager, plugin, loadChatHistory, runWithNotice]
   );
 
   // A bulk action reports once, with how many chats it changed and how many it could not, instead of a notice per chat.
@@ -197,7 +199,7 @@ export function useAgentHistoryControls(
       try {
         for (const id of ids) {
           try {
-            await deleteChatAndBookmark(id);
+            await deleteChatAndBookmark(plugin.app, manager, id);
             deleted++;
           } catch (error) {
             logError("[AgentMode] delete chat failed", error);
@@ -208,7 +210,7 @@ export function useAgentHistoryControls(
         await loadChatHistory();
       }
     },
-    [deleteChatAndBookmark, loadChatHistory]
+    [manager, plugin, loadChatHistory]
   );
 
   const setChatPinned = useCallback(

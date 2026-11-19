@@ -3,6 +3,7 @@ import { AgentFacePicker } from "@/agents/ui/AgentFacePicker";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import {
   AgentProfileView,
+  countOf,
   type AgentProfileFacts,
   type AgentProfileViewProps,
 } from "@/agents/ui/AgentProfileView";
@@ -76,6 +77,7 @@ function renderProfile(props: Partial<AgentProfileViewProps> = {}) {
     onRetitle: jest.fn().mockResolvedValue(undefined),
     onChangeFace: jest.fn(),
     onChangeModel: jest.fn(),
+    onDelete: jest.fn(),
   };
   render(
     <AgentProfileView
@@ -398,6 +400,24 @@ describe("AgentProfileView", () => {
         expect(onChangeModel).toHaveBeenCalledWith({ baseModelId: "sonnet", effort: "low" })
       );
       expect(onBack).not.toHaveBeenCalled();
+    });
+
+    it("asks to delete the agent from the red button at the bottom", () => {
+      const { onDelete } = renderProfile();
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
+
+      expect(onDelete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("countOf()", () => {
+    it("counts in the singular for one and in the plural with thousands separators otherwise", () => {
+      expect([countOf(1, "rule"), countOf(0, "chat"), countOf(4620, "character")]).toEqual([
+        "1 rule",
+        "0 chats",
+        "4,620 characters",
+      ]);
     });
   });
 });

@@ -6088,6 +6088,26 @@ describe("AgentSessionManager", () => {
         expect(await index.getEntry("opencode", "s1")).toBeNull();
       });
 
+      it("https://github.com/Brevilabs/obsidian-copilot-private/issues/940 keeps a note the caller's check turns down while still dropping the chat from history", async () => {
+        const { manager, index, persistence } = buildHistoryHarness({
+          files: { "chats/agent__a.md": { epoch: 1_000, backendId: "opencode", sessionId: "s1" } },
+        });
+        await index.recordSession({
+          backendId: "opencode",
+          sessionId: "s1",
+          title: "Kept",
+          createdAtMs: 1_000,
+          lastAccessedAtMs: 2_000,
+        });
+        const canTrashNote = jest.fn(() => false);
+
+        await manager.deleteChatHistory("chats/agent__a.md", { canTrashNote });
+
+        expect(canTrashNote).toHaveBeenCalledWith("chats/agent__a.md");
+        expect(persistence.deleteFile).not.toHaveBeenCalled();
+        expect(await index.isTombstoned("opencode", "s1")).toBe(true);
+      });
+
       async function persistedNoteFixture() {
         const notePath = "chats/agent__a.md";
         const content =

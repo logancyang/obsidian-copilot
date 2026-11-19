@@ -29,6 +29,20 @@ describe("vaultAdapterUtils", () => {
       expect(listMarkdownFiles(app, folder.path)).toEqual([chat]);
     });
 
+    it("leaves out notes in a sibling folder whose name starts with the folder's name (https://github.com/Brevilabs/obsidian-copilot-private/issues/940)", () => {
+      const folder = mockTFolder({ path: "copilot/copilot-conversations" });
+      const chat = mockTFile({ path: "copilot/copilot-conversations/agent__a.md" });
+      const backup = mockTFile({ path: "copilot/copilot-conversations-backup/agent__a.md" });
+      const app = {
+        vault: {
+          getAbstractFileByPath: (path: string) => (path === folder.path ? folder : null),
+          getMarkdownFiles: () => [chat, backup],
+        },
+      } as unknown as App;
+
+      expect(listMarkdownFiles(app, folder.path)).toEqual([chat]);
+    });
+
     it("returns no notes for a folder the vault does not have", () => {
       const app = { vault: { getAbstractFileByPath: () => null } } as unknown as App;
 

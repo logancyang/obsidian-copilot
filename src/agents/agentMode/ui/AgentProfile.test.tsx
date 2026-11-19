@@ -1,4 +1,4 @@
-import { AgentProfile } from "@/agents/agentMode/ui/AgentProfile";
+import { AgentProfile, agentDeleteNotice } from "@/agents/agentMode/ui/AgentProfile";
 import { CustomAgentStore, type CustomAgent } from "@/agents/CustomAgentStore";
 import { PRESET_FACES_URL } from "@/agents/presetFaces";
 import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
@@ -7,6 +7,7 @@ import { webpBytes } from "@/agents/testing/webpBytes";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { resetSettings } from "@/settings/model";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as obsidian from "obsidian";
@@ -14,6 +15,9 @@ import type { App } from "obsidian";
 import React from "react";
 
 jest.mock("@/entitlement");
+jest.mock("@/agents/ui/AgentDeleteModal", () => ({
+  AgentDeleteModal: jest.fn(() => ({ open: jest.fn() })),
+}));
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/940";
 
@@ -61,10 +65,17 @@ interface ProfileHarnessProps {
   handlers: { onBack: () => void; onNewChat: (agent: CustomAgent) => void };
 }
 
+const deletedChats = jest.fn(async (_id: string, _options?: unknown) => {});
+
 function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
   const coco = useCustomAgents(store).find((agent) => agent.slug === "coco");
   const manager = {
-    getChatHistoryItems: async () => [{ id: "a.md", agent: "coco" }],
+    getChatHistoryItems: async () => [
+      { id: "a.md", agent: "coco" },
+      { id: "maya.md", agent: "maya" },
+    ],
+    getSession: () => undefined,
+    deleteChatHistory: deletedChats,
   } as unknown as AgentSessionManager;
   if (!coco) return null;
   return (
@@ -73,6 +84,7 @@ function ProfileHarness({ store, app, handlers }: ProfileHarnessProps) {
       app={app}
       manager={manager}
       store={store}
+      hostSessionId="host"
       getModels={() => MODELS}
       {...handlers}
     />
@@ -89,6 +101,7 @@ async function setup() {
   const newLeaf = { openFile: jest.fn().mockResolvedValue(undefined) };
   const app = {
     ...vault.app,
+    metadataCache: { getCache: () => null },
     workspace: { getLeavesOfType: () => [], getLeaf: jest.fn(() => newLeaf) },
   } as unknown as App;
   const store = new CustomAgentStore(app);
@@ -235,6 +248,46 @@ describe("AgentProfile", () => {
         PRESET_FACES_URL,
         LEO_URL,
         KAI_URL,
+      ]);
+    });
+
+    it(`asks before deleting, naming the chat count, then deletes the agent's folder and its chats only (${ISSUE})`, async () => {
+      const { vault } = await setup();
+
+      fireEvent.click(screen.getByRole("button", { name: "Delete Coco…" }));
+      await waitFor(() => expect(AgentDeleteModal).toHaveBeenCalledTimes(1));
+      const [, details, confirm] = jest.mocked(AgentDeleteModal).mock.calls[0] as unknown as [
+        unknown,
+        { chatCount: number; memoryRules: number | null },
+        () => void,
+      ];
+      expect(details).toMatchObject({ chatCount: 1, memoryRules: 1 });
+      expect(vault.trashedPaths).toEqual([]);
+      confirm();
+
+      await waitFor(() => expect(obsidian.Notice).toHaveBeenCalledWith("Deleted Coco and 1 chat."));
+      expect(deletedChats.mock.calls.map(([id]) => id)).toEqual(["a.md"]);
+      expect(vault.trashedPaths).toEqual([FOLDER]);
+    });
+  });
+
+  describe("agentDeleteNotice()", () => {
+    it("names the deleted agent and how many of its chats went with it", () => {
+      expect([
+        agentDeleteNotice("Coco", { deletedChats: 3, failedChats: 0, agentDeleted: true }),
+        agentDeleteNotice("Coco", { deletedChats: 0, failedChats: 0, agentDeleted: true }),
+      ]).toEqual(["Deleted Coco and 3 chats.", "Deleted Coco."]);
+    });
+
+    it(`says what was and wasn't deleted when the agent was kept (${ISSUE})`, () => {
+      expect([
+        agentDeleteNotice("Coco", { deletedChats: 2, failedChats: 1, agentDeleted: false }),
+        agentDeleteNotice("Coco", { deletedChats: 2, failedChats: 0, agentDeleted: false }),
+        agentDeleteNotice("Coco", { deletedChats: 0, failedChats: 0, agentDeleted: false }),
+      ]).toEqual([
+        "Couldn't delete 1 of Coco's 3 chats, so Coco was kept.",
+        "Deleted 2 chats with Coco, but couldn't delete Coco.",
+        "Couldn't delete Coco.",
       ]);
     });
   });

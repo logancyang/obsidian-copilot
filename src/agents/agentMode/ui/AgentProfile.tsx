@@ -1,9 +1,15 @@
+import {
+  deleteAgentWithChats,
+  listAgentChats,
+  type DeleteAgentResult,
+} from "@/agents/agentMode/agentChats";
 import { openAgentFile } from "@/agents/agentMode/memorySaveCards";
 import { useAgentProfileFacts } from "@/agents/agentMode/ui/useAgentProfileFacts";
 import type { CustomAgent, CustomAgentStore } from "@/agents/CustomAgentStore";
 import { findUsedPresetIds, readAgentFaces } from "@/agents/presetFaces";
+import { AgentDeleteModal } from "@/agents/ui/AgentDeleteModal";
 import { AgentFacePicker, type PickedFace } from "@/agents/ui/AgentFacePicker";
-import { AgentProfileView } from "@/agents/ui/AgentProfileView";
+import { AgentProfileView, countOf } from "@/agents/ui/AgentProfileView";
 import type { AgentModelChoices } from "@/agents/ui/CreateAgentForm";
 import { useCustomAgents } from "@/agents/ui/useCustomAgents";
 import { usePresetFaces } from "@/agents/ui/usePresetFaces";
@@ -17,9 +23,27 @@ export interface AgentProfileProps {
   app: App;
   manager: AgentSessionManager;
   store: CustomAgentStore;
+  hostSessionId: string;
   getModels: () => AgentModelChoices;
   onBack: () => void;
   onNewChat: (agent: CustomAgent) => void;
+}
+
+export function agentDeleteNotice(
+  name: string,
+  { deletedChats, failedChats, agentDeleted }: DeleteAgentResult
+): string {
+  if (agentDeleted) {
+    return `Deleted ${name}${deletedChats > 0 ? ` and ${countOf(deletedChats, "chat")}` : ""}.`;
+  }
+  if (failedChats > 0) {
+    const all = countOf(deletedChats + failedChats, "chat");
+    return `Couldn't delete ${failedChats} of ${name}'s ${all}, so ${name} was kept.`;
+  }
+  if (deletedChats > 0) {
+    return `Deleted ${countOf(deletedChats, "chat")} with ${name}, but couldn't delete ${name}.`;
+  }
+  return `Couldn't delete ${name}.`;
 }
 
 export function AgentProfile({
@@ -27,6 +51,7 @@ export function AgentProfile({
   app,
   manager,
   store,
+  hostSessionId,
   getModels,
   onBack,
   onNewChat,
@@ -38,6 +63,23 @@ export function AgentProfile({
   const failed = (change: string) => (error: unknown) => {
     logError(`[Custom agents] Changing ${slug}'s ${change} failed`, error);
     new Notice(`Couldn't change ${name}'s ${change}.`);
+  };
+  const confirmDelete = async () => {
+    const chats = await listAgentChats(manager, slug);
+    new AgentDeleteModal(
+      app,
+      { agent, memoryRules: facts.memory?.rules ?? null, chatCount: chats.length },
+      () => void deleteAgent()
+    ).open();
+  };
+  const deleteAgent = async () => {
+    try {
+      const result = await deleteAgentWithChats({ app, manager, store, slug, hostSessionId });
+      new Notice(agentDeleteNotice(name, result));
+    } catch (error) {
+      logError(`[Custom agents] Deleting ${slug} failed`, error);
+      new Notice(`Couldn't delete ${name}.`);
+    }
   };
   return (
     <AgentProfileView
@@ -59,6 +101,11 @@ export function AgentProfile({
       onRetitle={(title) => store.updateAgent(slug, { title })}
       onChangeFace={(face) => void store.saveFace(slug, face).catch(failed("face"))}
       onChangeModel={(model) => void store.updateAgent(slug, { model }).catch(failed("model"))}
+      onDelete={() =>
+        void confirmDelete().catch((error: unknown) =>
+          logError(`[Custom agents] Could not list ${slug}'s chats`, error)
+        )
+      }
     />
   );
 }

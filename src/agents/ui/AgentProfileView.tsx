@@ -23,6 +23,7 @@ import {
   FileText,
   MessageSquarePlus,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -64,6 +65,7 @@ export interface AgentProfileViewProps {
   onRetitle: (title: string) => Promise<void>;
   onChangeFace: (face: FaceImage) => void;
   onChangeModel: (model: ModelSelection) => void;
+  onDelete: () => void;
 }
 
 const SHOWN_ON_HOVER_OR_FOCUS =
@@ -75,7 +77,7 @@ const BLOCK_BUTTON_CLASS =
 const ROW_CLASS =
   "tw-flex tw-w-full tw-items-center tw-gap-2.5 tw-whitespace-normal tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2.5 tw-text-left";
 
-function plural(count: number, noun: string): string {
+export function countOf(count: number, noun: string): string {
   return `${count.toLocaleString("en-US")} ${noun}${count === 1 ? "" : "s"}`;
 }
 
@@ -127,6 +129,7 @@ export function AgentProfileView({
   onRetitle,
   onChangeFace,
   onChangeModel,
+  onDelete,
 }: AgentProfileViewProps): React.ReactElement {
   const { name } = agent;
   const [facePickerOpen, setFacePickerOpen] = useState(false);
@@ -134,11 +137,11 @@ export function AgentProfileView({
   const length = agent.instruction.trim().length;
   const instructionTooLong = length > INSTRUCTION_SOFT_LIMIT;
   const meta = [
-    facts.chatCount !== null && plural(facts.chatCount, "chat"),
+    facts.chatCount !== null && countOf(facts.chatCount, "chat"),
     facts.createdAt !== null && `since ${formatDayOrToday(facts.createdAt, today)}`,
   ].filter(Boolean);
   const instructionLine = instructionTooLong
-    ? `Instruction · ${plural(length, "character")} · longer than ${name} follows well`
+    ? `Instruction · ${countOf(length, "character")} · longer than ${name} follows well`
     : [
         "Instruction · you write this",
         facts.editedAt !== null && formatWritten(facts.createdAt, facts.editedAt, today),
@@ -275,7 +278,7 @@ export function AgentProfileView({
             onOpen={facts.memory ? () => onOpenFile(agent.memoryPath) : undefined}
           >
             {facts.memory
-              ? `Memory · ${name} adds to this · ${plural(facts.memory.rules, "rule")} · ${formatChange(facts.memory.changedAt, today)}`
+              ? `Memory · ${name} adds to this · ${countOf(facts.memory.rules, "rule")} · ${formatChange(facts.memory.changedAt, today)}`
               : `Nothing yet. ${name} adds a rule when you correct it or ask it to remember something.`}
           </FileRow>
         </div>
@@ -293,6 +296,18 @@ export function AgentProfileView({
             className="tw-h-7 tw-w-auto tw-min-w-0 tw-shrink tw-px-2 tw-text-ui-small"
           />
         </div>
+        <div className="tw-flex-1" />
+        <button
+          type="button"
+          onClick={onDelete}
+          className={cn(
+            BLOCK_BUTTON_CLASS,
+            "tw-border-error tw-text-error hover:tw-bg-modifier-error-rgb/10"
+          )}
+        >
+          <Trash2 className="tw-size-4 tw-shrink-0" />
+          <span className="tw-truncate">Delete {name}…</span>
+        </button>
       </div>
     </div>
   );

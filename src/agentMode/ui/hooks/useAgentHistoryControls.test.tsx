@@ -1,4 +1,7 @@
-import { useAgentHistoryControls } from "@/agentMode/ui/hooks/useAgentHistoryControls";
+import {
+  deleteChatAndBookmark,
+  useAgentHistoryControls,
+} from "@/agentMode/ui/hooks/useAgentHistoryControls";
 import { GLOBAL_SCOPE } from "@/agentMode/session/scope";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -250,7 +253,7 @@ describe("useAgentHistoryControls", () => {
         await result.current.deleteChat("a");
       });
 
-      expect(manager.deleteChatHistory).toHaveBeenCalledWith("a");
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("a", undefined);
       expect(manager.getChatHistoryItems).toHaveBeenCalledWith("project-1");
     });
 
@@ -589,7 +592,7 @@ describe("useAgentHistoryControls", () => {
         await result.current.deleteChat("chats/agent__a.md");
       });
 
-      expect(manager.deleteChatHistory).toHaveBeenCalledWith("chats/agent__a.md");
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("chats/agent__a.md", undefined);
       expect(manager.getChatHistoryItems).toHaveBeenCalledTimes(1);
       expect(Notice).toHaveBeenCalledWith("Failed to remove chat bookmark.");
       expect(Notice).not.toHaveBeenCalledWith("Failed to delete chat.");
@@ -851,6 +854,23 @@ describe("useAgentHistoryControls", () => {
     });
   });
 
+  describe("deleteChatAndBookmark()", () => {
+    it("deletes the chat and removes its bookmark", async () => {
+      const bookmarks = makeBookmarks([LINK_A, LINK_SAVED]);
+      const manager = makeManager();
+
+      const result = await deleteChatAndBookmark(
+        makeBookmarkingPlugin(bookmarks).app,
+        manager,
+        "chats/agent__a.md"
+      );
+
+      expect(result).toEqual({ bookmarkRemoved: true });
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("chats/agent__a.md", undefined);
+      expect(Object.keys(bookmarks.urlBookmarkLookup)).toEqual([LINK_SAVED]);
+    });
+  });
+
   describe("deleteChats()", () => {
     it("https://github.com/logancyang/obsidian-copilot/issues/3553 deletes every given chat, shows one notice with the count, and reloads the history once", async () => {
       const manager = makeManager();
@@ -878,7 +898,7 @@ describe("useAgentHistoryControls", () => {
         await result.current.deleteChats(["a", "b"]);
       });
 
-      expect(manager.deleteChatHistory).toHaveBeenCalledWith("b");
+      expect(manager.deleteChatHistory).toHaveBeenCalledWith("b", undefined);
       expect((Notice as unknown as jest.Mock).mock.calls).toEqual([
         ["1 chat deleted from Copilot. 1 chat could not be deleted."],
       ]);
