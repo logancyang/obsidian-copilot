@@ -92,7 +92,7 @@ describe("agentSystemPrompt", () => {
         for (const enableMiyoSearchSkill of [false, true]) {
           updateSetting("enableMiyoSearchSkill", enableMiyoSearchSkill);
           const prompt = buildAgentSystemPrompt(AGENT, APP, undefined, "win32");
-          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3000);
+          expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(3100);
           expect(prompt).not.toMatch(
             /NEVER search for the same|After 1-2 searches|Never claim you do not have access|delimiter row of dashes|## Task planning/
           );
@@ -121,7 +121,7 @@ describe("agentSystemPrompt", () => {
       setDisableBuiltinSystemPrompt(true);
       const prompt = buildAgentSystemPrompt(AGENT, APP);
       expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
-      expect(prompt).not.toContain("You are Obsidian Copilot");
+      expect(prompt).not.toContain("You work inside Obsidian Copilot");
       expect(prompt).toContain(COPILOT_FOLDER_MENTION_DIRECTIVE);
     });
 

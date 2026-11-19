@@ -15,6 +15,7 @@ jest.mock("obsidian", () => ({
   normalizePath: (path: string) => path,
   Notice: jest.fn(),
   TFile: jest.fn(),
+  parseYaml: (text: string) => jest.requireActual("yaml").parse(text),
 }));
 jest.mock("@/logger");
 jest.mock("@/settings/model", () => ({
@@ -454,6 +455,23 @@ describe("AgentChatPersistenceManager", () => {
       expect(saved.continuedFrom).toEqual(continuedFrom);
       expect([kept.backendId, kept.continuedFrom]).toEqual(["opencode", continuedFrom]);
       expect(ordinary.continuedFrom).toBeUndefined();
+    });
+
+    it("round-trips the custom agent a chat runs as, keeps it through saves that omit it, and leaves a plain chat without one", async () => {
+      const messages = [makeMessage(USER_SENDER, "what do you handle?")];
+      const first = await manager.saveSession(messages, "claude", { agent: "coco" });
+      Object.setPrototypeOf(app.files.get(first!.path)!, TFile.prototype);
+      const saved = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+
+      await manager.saveSession(messages, "claude", { existingPath: first!.path });
+      const kept = await manager.loadFile(app.files.get(first!.path) as unknown as TFile);
+      const plain = await manager.saveSession([makeMessage(USER_SENDER, "other", 1)], "claude");
+      Object.setPrototypeOf(app.files.get(plain!.path)!, TFile.prototype);
+      const ordinary = await manager.loadFile(app.files.get(plain!.path) as unknown as TFile);
+
+      expect(app.files.get(first!.path)!.contents).toContain('agent: "coco"');
+      expect([saved.agent, kept.agent]).toEqual(["coco", "coco"]);
+      expect(ordinary.agent).toBeUndefined();
     });
 
     it("leaves usage undefined for a chat saved without it", async () => {
@@ -1188,6 +1206,70 @@ describe("AgentChatPersistenceManager", () => {
       const loadedB = await manager.loadFile(file as unknown as TFile);
       expect(loadedA.messages.map((m) => m.id)).toEqual(loadedB.messages.map((m) => m.id));
       expect(loadedA.messages[0].id.startsWith("loaded-0-")).toBe(true);
+    });
+
+    it("opens a chat note saved without an agent as a Copilot chat", async () => {
+      const path = "test-folder/agent__before-agents.md";
+      await app.vault.adapter.write(
+        path,
+        [
+          "---",
+          "epoch: 1735732800000",
+          "mode: agent",
+          "backendId: claude",
+          "---",
+          "",
+          "**user**: hi",
+        ].join("\n")
+      );
+      const loaded = await manager.loadFile(app.files.get(path) as unknown as TFile);
+      expect(loaded.agent).toBeUndefined();
+    });
+
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/937 opens a chat note whose agent property is a list, a number, null, blank or broken YAML as a Copilot chat, keeps that property through a save, and trims an agent written as text", async () => {
+      const agentLines = {
+        list: "agent: [coco]",
+        number: "agent: 5",
+        null: "agent: null",
+        empty: 'agent: ""',
+        whitespace: 'agent: "   "',
+        plainText: "agent:  coco  ",
+        quotedText: 'agent: " coco "',
+        brokenYaml: 'agent: "coco',
+      };
+      const read: Record<string, string | undefined> = {};
+      for (const [name, line] of Object.entries(agentLines)) {
+        const path = `test-folder/agent__${name}.md`;
+        await app.vault.adapter.write(
+          path,
+          [
+            "---",
+            "epoch: 1735732800000",
+            "backendId: claude",
+            line,
+            "---",
+            "",
+            "**user**: hi",
+          ].join("\n")
+        );
+        Object.setPrototypeOf(app.files.get(path)!, TFile.prototype);
+        read[name] = (await manager.loadFile(app.files.get(path) as unknown as TFile)).agent;
+      }
+      await manager.saveSession([makeMessage(USER_SENDER, "hi")], "claude", {
+        existingPath: "test-folder/agent__list.md",
+      });
+
+      expect(read).toEqual({
+        list: undefined,
+        number: undefined,
+        null: undefined,
+        empty: undefined,
+        whitespace: undefined,
+        plainText: "coco",
+        quotedText: "coco",
+        brokenYaml: undefined,
+      });
+      expect(app.files.get("test-folder/agent__list.md")!.contents).toContain("agent: [coco]");
     });
 
     it("maps a legacy agent__ chat with no projectId frontmatter to GLOBAL_SCOPE", async () => {

@@ -45,6 +45,7 @@ import type {
   PromptInput,
   ResumeSessionInput,
   ResumeSessionOutput,
+  SessionAgent,
   SessionEvent,
   SessionId,
   SessionUpdateHandler as DomainSessionUpdateHandler,
@@ -334,6 +335,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async newSession(params: OpenSessionInput): Promise<OpenSessionOutput> {
+    this.requireAgentRoute(params.agent);
     const req: NewSessionRequest = {
       cwd: params.cwd,
       mcpServers: this.mcpServersField(params.mcpServers),
@@ -613,6 +615,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    this.requireAgentRoute(params.agent);
     const wireResp = await this.dispatchCapability(
       "session/resume",
       (c) =>
@@ -635,6 +638,7 @@ export class AcpBackendProcess implements BackendProcess {
   }
 
   async loadSession(params: LoadSessionInput): Promise<LoadSessionOutput> {
+    this.requireAgentRoute(params.agent);
     const sessionId = params.sessionId;
     this.loadingSessions.add(sessionId);
     const wireResp = await this.dispatchCapability(
@@ -653,6 +657,13 @@ export class AcpBackendProcess implements BackendProcess {
       configOptions: wireResp.configOptions ?? null,
     });
     return { sessionId, state: this.computeState(sessionIdToAcp(sessionId)) };
+  }
+
+  // A backend that cannot take a custom agent's part in its system prompt would run the chat as Copilot under the agent's name.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  private requireAgentRoute(agent: SessionAgent | undefined): void {
+    if (!agent) return;
+    throw new Error(`${this.descriptor.displayName} needs an update to run custom agents.`);
   }
 
   async shutdown(): Promise<void> {

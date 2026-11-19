@@ -32,6 +32,7 @@ import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionIndex } from "./session/AgentSessionIndex";
 import { createNodeFileStorage } from "./session/nodeFileStorage";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import type { AgentSession } from "./session/AgentSession";
 import {
   createCopilotMcpServer,
   SEND_FEEDBACK_TOOL_NAME,
@@ -55,6 +56,8 @@ import { createExcalidrawTools, EXCALIDRAW_TOOL_NAMES } from "@/excalidraw/excal
 import { OpenArtifactsClient } from "@/openArtifacts/OpenArtifactsClient";
 import { createOpenArtifactsTools } from "@/openArtifacts/openArtifactsTools";
 import { getVaultBase } from "@/utils/vaultPath";
+import { loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
+import type { CustomAgent } from "@/agents/CustomAgentStore";
 import { SkillManager } from "./skills";
 import {
   availableBuiltinAgents,
@@ -107,6 +110,18 @@ function isAgentModeEnabled(): boolean {
 
 export function applyCopilotDefaultModel(configuredModelId: string): BackendId[] {
   return seedCopilotDefaultModel(listBackendDescriptors(), configuredModelId);
+}
+
+// Only Claude takes a custom agent's part so far, so an agent chat starts there whatever the agent's model.
+// https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+const CUSTOM_AGENT_BACKEND_ID: BackendId = "claude";
+
+export function startCustomAgentChat(
+  manager: AgentSessionManager,
+  agent: Pick<CustomAgent, "slug" | "model">
+): Promise<AgentSession> {
+  const seed = manager.getSeedSelection(CUSTOM_AGENT_BACKEND_ID, agent.model) ?? undefined;
+  return manager.createSession(CUSTOM_AGENT_BACKEND_ID, undefined, seed, undefined, agent.slug);
 }
 
 function collectAgentSkillsDirsProjectRel(): Record<string, string> {
@@ -314,6 +329,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         : []),
     ],
     copilotMcpServer,
+    resolveAgent: async (slug) => {
+      const vaultBase = getVaultBase(app);
+      return plugin.customAgents && vaultBase
+        ? loadAgentSessionPrompt(plugin.customAgents, slug, vaultBase)
+        : null;
+    },
   });
   managerRef = manager;
   // Agents read Copilot's tool list once per session, so a connected or disconnected service reaches open chats through Reload.

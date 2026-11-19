@@ -86,6 +86,7 @@ import type {
   LoadSessionOutput,
   ModeApplySpec,
   ModelSelection,
+  SessionAgent,
   PermissionDecision,
   PermissionPrompt,
   SessionId,
@@ -182,6 +183,7 @@ export interface AgentSessionManagerOptions {
   sessionIndex?: AgentSessionIndex;
   copilotMcpServer?: CopilotMcpServer;
   chatExtensions?: readonly ChatExtension<unknown>[];
+  resolveAgent?: (slug: string) => Promise<SessionAgent | null>;
 }
 
 export class AgentSessionManager {
@@ -834,7 +836,8 @@ export class AgentSessionManager {
     backendId?: BackendId,
     projectId: ProjectScopeId = this.activeProjectId,
     seedSelection?: ModelSelection,
-    chatInputId?: string
+    chatInputId?: string,
+    agentSlug?: string
   ): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
@@ -862,6 +865,7 @@ export class AgentSessionManager {
       : undefined;
 
     const cwd = this.resolveSessionCwd(projectId);
+    const agent = await this.loadAgent(agentSlug);
 
     this.pendingCreates++;
     this.startingBackendId = resolvedId;
@@ -899,6 +903,8 @@ export class AgentSessionManager {
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
       mcpServers,
+      agentSlug,
+      agent,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextBlock: () => this.buildFirstProjectContextBlock(internalId, projectId),
@@ -993,6 +999,13 @@ export class AgentSessionManager {
       throw new Error(`Unknown backend "${backendId}". Did you forget to register it?`);
     }
     return descriptor;
+  }
+
+  // A chat whose agent cannot load (custom agents not available, or its folder removed outside Copilot) runs as a Copilot chat and keeps naming its agent.
+  // https://github.com/Brevilabs/obsidian-copilot-private/issues/937
+  private async loadAgent(slug: string | null | undefined): Promise<SessionAgent | null> {
+    if (!slug || !this.opts.resolveAgent) return null;
+    return this.opts.resolveAgent(slug);
   }
 
   private resolveSessionCwd(projectId: ProjectScopeId): string {
@@ -1697,7 +1710,8 @@ export class AgentSessionManager {
       backendId,
       replaced?.projectId ?? this.activeProjectId,
       options.seedSelection,
-      replaced?.chatInputId
+      replaced?.chatInputId,
+      replaced?.agentSlug ?? undefined
     );
     // A message sent before the other agent is up ties the chat to the agent that received it, so the switch is dropped.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
@@ -1777,6 +1791,7 @@ export class AgentSessionManager {
         projectId: source.projectId,
         model: source.getState()?.model?.current,
         continuedFrom: [...continuedFrom, sourceNote.path],
+        agent: source.agentSlug,
       }
     );
     const note = saved && this.app.vault.getAbstractFileByPath(saved.path);
@@ -2042,13 +2057,27 @@ export class AgentSessionManager {
     let resumed: AgentSession | null;
     try {
       resumed = loaded.sessionId
-        ? await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId, projectId)
+        ? await this.tryResumeSessionFromHistory(
+            loaded.backendId,
+            loaded.sessionId,
+            projectId,
+            undefined,
+            undefined,
+            loaded.agent
+          )
         : null;
       // A note with no agent session to resume keeps its own record of the model it ran.
       // https://github.com/Brevilabs/obsidian-copilot-private/issues/908
       const noteModel = loaded.model && this.getSeedSelection(loaded.backendId, loaded.model);
       session =
-        resumed ?? (await this.createSession(loaded.backendId, projectId, noteModel ?? undefined));
+        resumed ??
+        (await this.createSession(
+          loaded.backendId,
+          projectId,
+          noteModel ?? undefined,
+          undefined,
+          loaded.agent
+        ));
     } catch (err) {
       this.rollbackOptimisticScopeSwitch(previousActiveProjectId, scopeSeq);
       throw err;
@@ -2194,7 +2223,14 @@ export class AgentSessionManager {
     entry: AgentSessionIndexEntry | null,
     projectId: ProjectScopeId
   ): Promise<AgentSession> {
-    const session = await this.tryResumeSessionFromHistory(backendId, sessionId, projectId);
+    const session = await this.tryResumeSessionFromHistory(
+      backendId,
+      sessionId,
+      projectId,
+      undefined,
+      undefined,
+      entry?.agent
+    );
     if (!session) {
       throw new Error(`Could not resume session ${sessionId} from the ${backendId} session store.`);
     }
@@ -2209,7 +2245,8 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    seedSelection?: ModelSelection
+    seedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession | null> {
     // A failed Shut down leaves the chat's session live, so reopening waits for the shutdown before deciding whether to reuse it.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/812
@@ -2226,7 +2263,8 @@ export class AgentSessionManager {
       sessionId,
       projectId,
       chatInputId,
-      seedSelection
+      seedSelection,
+      agentSlug
     ).finally(() => {
       if (this.resumedSessionPromiseById.get(key) === resume) {
         this.resumedSessionPromiseById.delete(key);
@@ -2248,7 +2286,8 @@ export class AgentSessionManager {
     sessionId: SessionId,
     projectId: ProjectScopeId,
     chatInputId?: string,
-    carriedSelection?: ModelSelection
+    carriedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession | null> {
     // A reopened chat continues on the model it last ran, not the agent's default.
     // https://github.com/logancyang/obsidian-copilot/issues/4274
@@ -2261,6 +2300,7 @@ export class AgentSessionManager {
     );
     const cwd = this.resolveSessionCwd(projectId);
     const descriptor = this.resolveDescriptor(backendId);
+    const agent = await this.loadAgent(agentSlug);
 
     this.pendingCreates++;
     this.startingBackendId = backendId;
@@ -2302,6 +2342,7 @@ export class AgentSessionManager {
       getDisplayName: (id) => this.resolveDescriptor(id).displayName,
       getApp: () => this.app,
       chatExtensions: this.opts.chatExtensions,
+      agentSlug,
       ...(projectId !== GLOBAL_SCOPE
         ? {
             getProjectContextUpdates: () => this.getProjectContextUpdates(internalId, projectId),
@@ -2311,7 +2352,7 @@ export class AgentSessionManager {
         : {}),
     });
 
-    const openInput = { sessionId, cwd, projectId, mcpServers };
+    const openInput = { sessionId, cwd, projectId, mcpServers, agent: agent ?? undefined };
     let resumeResult: LoadSessionOutput | null = null;
     try {
       resumeResult = await backend.loadSession(openInput);
@@ -2492,6 +2533,7 @@ export class AgentSessionManager {
       lastAccessedAtMs: now,
       projectId: session.projectId === GLOBAL_SCOPE ? undefined : session.projectId,
       model: session.getState()?.model?.current,
+      agent: session.agentSlug ?? undefined,
     });
     // The note now points at the session that replaced its unresumable one, so the old entry would list the chat twice.
     // https://github.com/Brevilabs/obsidian-copilot-private/issues/902
@@ -2573,6 +2615,7 @@ export class AgentSessionManager {
       usage: usage ?? undefined,
       model: session.getState()?.model?.current,
       carriedMessages: state.withholdsSessionId ? undefined : state.carriedMessages,
+      agent: session.agentSlug,
     });
     if (result) {
       state.source = this.app.vault.getAbstractFileByPath(result.path) ?? result;
@@ -2854,7 +2897,8 @@ export class AgentSessionManager {
     resumableSessionId: SessionId | undefined,
     label: string | null,
     labelSource: "user" | "agent" | null,
-    carriedSelection?: ModelSelection
+    carriedSelection?: ModelSelection,
+    agentSlug?: string
   ): Promise<AgentSession> {
     // A model-setting change can trigger this restart, so validate the carried
     // selection before seeding either the resumed or the fallback session.
@@ -2868,7 +2912,8 @@ export class AgentSessionManager {
         resumableSessionId,
         projectId,
         chatInputId,
-        seedSelection
+        seedSelection,
+        agentSlug
       ).catch((e) => {
         logWarn(`[AgentMode] resume after ${backendId} restart failed`, e);
         return null;
@@ -2878,7 +2923,13 @@ export class AgentSessionManager {
         return resumed;
       }
     }
-    const created = await this.createSession(backendId, projectId, seedSelection, chatInputId);
+    const created = await this.createSession(
+      backendId,
+      projectId,
+      seedSelection,
+      chatInputId,
+      agentSlug
+    );
     if (label) created.restoreLabel(label, labelSource ?? "agent");
     return created;
   }
@@ -2935,6 +2986,7 @@ export class AgentSessionManager {
             // The displayed selection is otherwise lost when the process restarts.
             // https://github.com/logancyang/obsidian-copilot/issues/3319
             seedSelection: session.getState()?.model?.current,
+            agentSlug: session.agentSlug ?? undefined,
             detached: this.detachedFromTabIds.has(session.internalId),
             recoveryMessages:
               session.getStatus() === "error" ? session.store.getDisplayMessages() : undefined,
@@ -2976,7 +3028,8 @@ export class AgentSessionManager {
               replacement.resumableSessionId,
               replacement.label,
               replacement.labelSource,
-              replacement.seedSelection
+              replacement.seedSelection,
+              replacement.agentSlug
             );
             const resumed = rebuilt.getBackendSessionId() === replacement.resumableSessionId;
             const note = this.app.vault.getAbstractFileByPath(replacement.notePath);

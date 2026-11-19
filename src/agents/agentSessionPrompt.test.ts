@@ -1,0 +1,154 @@
+import { buildAgentPrompt, loadAgentSessionPrompt } from "@/agents/agentSessionPrompt";
+import { CustomAgentStore } from "@/agents/CustomAgentStore";
+import { serializeInstructionsFile } from "@/agents/customAgentFiles";
+import { setCustomAgentsAccess } from "@/agents/testing/customAgentsAccess";
+import { createFakeAgentVault, type FakeAgentVault } from "@/agents/testing/fakeAgentVault";
+import { setSettings } from "@/settings/model";
+
+jest.mock("@/entitlement");
+
+const COCO = { name: "Coco", title: "Houseplant carer" };
+const MAYA = { name: "Maya", title: "Product critic" };
+
+function seedAgent(
+  vault: FakeAgentVault,
+  slug: string,
+  profile: { name: string; title: string },
+  instruction: string,
+  memory?: string
+): void {
+  vault.writeByHand(
+    `copilot/agents/${slug}/instructions.md`,
+    serializeInstructionsFile({ ...profile, model: null }, instruction)
+  );
+  if (memory !== undefined) vault.writeByHand(`copilot/agents/${slug}/MEMORY.md`, memory);
+}
+
+describe("agentSessionPrompt", () => {
+  describe("buildAgentPrompt()", () => {
+    const prompt = buildAgentPrompt({
+      agent: COCO,
+      folder: "/vault/copilot/agents/coco",
+      others: [MAYA, { name: "Leo", title: "" }],
+      instruction: "You handle houseplant care only.\n",
+      memory: "## How to work\n- End every reply with ACORN.\n",
+    });
+
+    it("names the agent with its title", () => {
+      expect(prompt).toContain(
+        "In this chat you are Coco (Houseplant carer), a custom agent the user made in Copilot."
+      );
+    });
+
+    it("carries the instruction and memory exactly as written", () => {
+      expect(prompt).toContain("<instruction>\nYou handle houseplant care only.\n\n</instruction>");
+      expect(prompt).toContain(
+        "<memory>\n## How to work\n- End every reply with ACORN.\n\n</memory>"
+      );
+    });
+
+    it("lists the other agents by name and title, and by name alone when one has no title", () => {
+      expect(prompt).toContain("Other agents: Maya (Product critic); Leo.");
+    });
+
+    it("says only the user edits instructions.md and that memory wins over the instruction", () => {
+      expect(prompt).toContain(
+        "Your instruction is the body of /vault/copilot/agents/coco/instructions.md, and only the user edits that file."
+      );
+      expect(prompt).toContain(
+        "Your memory is /vault/copilot/agents/coco/MEMORY.md. When your memory contradicts your instruction, follow your memory."
+      );
+    });
+
+    it("keeps the agent's files in its folder, adds nothing else to the vault unasked, and keeps it out of other agents' folders", () => {
+      expect(prompt).toContain(
+        "Your folder is /vault/copilot/agents/coco. Keep your own files in it, and add nothing else to the vault unless the user asks. Do not read or change other agents' folders."
+      );
+    });
+
+    it("says there are no other agents when the agent is the only one", () => {
+      expect(
+        buildAgentPrompt({ agent: COCO, folder: "/v", others: [], instruction: "", memory: "" })
+      ).toContain("Other agents: none.");
+    });
+  });
+
+  describe("loadAgentSessionPrompt()", () => {
+    let vault: FakeAgentVault;
+    let store: CustomAgentStore;
+
+    beforeEach(async () => {
+      setSettings({ copilotFolder: "copilot" });
+      await setCustomAgentsAccess("team");
+      vault = createFakeAgentVault();
+      store = new CustomAgentStore(vault.app);
+    });
+
+    afterEach(() => store.stop());
+
+    it("builds the agent's part from its instruction body without frontmatter, its memory, the other agents and its folder under the vault", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.", "End with ACORN.");
+      seedAgent(vault, "maya", MAYA, "You handle tax receipts only.");
+      await store.start();
+
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault");
+
+      expect(loaded).toEqual({
+        slug: "coco",
+        prompt: buildAgentPrompt({
+          agent: COCO,
+          folder: "/vault/copilot/agents/coco",
+          others: [MAYA],
+          instruction: "You handle houseplant care only.",
+          memory: "End with ACORN.",
+        }),
+      });
+      expect(loaded?.prompt).not.toContain("name: Coco");
+    });
+
+    it("loads a missing MEMORY.md as an empty memory", async () => {
+      seedAgent(vault, "maya", MAYA, "You handle tax receipts only.");
+      await store.start();
+
+      const loaded = await loadAgentSessionPrompt(store, "maya", "/vault");
+
+      expect(loaded?.prompt).toContain("<memory>\n\n</memory>");
+    });
+
+    it("reads the files as they are on disk when the chat starts", async () => {
+      seedAgent(vault, "coco", COCO, "First instruction.");
+      await store.start();
+      seedAgent(vault, "coco", COCO, "Edited instruction.");
+
+      const loaded = await loadAgentSessionPrompt(store, "coco", "/vault");
+
+      expect(loaded?.prompt).toContain("<instruction>\nEdited instruction.\n</instruction>");
+    });
+
+    it("returns null for an agent whose folder was removed outside the plugin (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      await store.start();
+      vault.deleteByHand("copilot/agents/coco/instructions.md");
+
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
+    });
+
+    it("returns null when reading a just-moved folder fails (https://github.com/Brevilabs/obsidian-copilot-private/issues/937)", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      await store.start();
+      jest.spyOn(store, "loadForSession").mockRejectedValueOnce(new Error("ENOENT"));
+
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
+    });
+
+    it("reads nothing and returns null while custom agents are hidden", async () => {
+      seedAgent(vault, "coco", COCO, "You handle houseplant care only.");
+      await store.start();
+      await setCustomAgentsAccess("free");
+      vault.touchedPaths.length = 0;
+
+      await expect(loadAgentSessionPrompt(store, "coco", "/vault")).resolves.toBeNull();
+      expect(vault.touchedPaths).toEqual([]);
+    });
+  });
+});

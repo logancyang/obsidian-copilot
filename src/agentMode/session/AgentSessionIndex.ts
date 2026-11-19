@@ -10,6 +10,7 @@ export interface AgentSessionIndexEntry {
   lastAccessedAtMs: number;
   projectId?: string;
   model?: ModelSelection;
+  agent?: string;
 }
 
 interface AgentSessionIndexFile {
@@ -52,6 +53,7 @@ function sanitizeEntry(raw: unknown): AgentSessionIndexEntry | null {
     lastAccessedAtMs: lastAccessedAtMs ?? createdAtMs!,
     projectId: typeof r.projectId === "string" && r.projectId.trim() ? r.projectId : undefined,
     model: sanitizeModel(r.model),
+    agent: typeof r.agent === "string" && r.agent ? r.agent : undefined,
   };
 }
 
@@ -102,6 +104,7 @@ export class AgentSessionIndex {
       ),
       projectId: entry.projectId ?? existing?.projectId,
       model: entry.model ?? existing?.model,
+      agent: entry.agent ?? existing?.agent,
     });
     this.scheduleSave();
   }
@@ -126,6 +129,7 @@ export class AgentSessionIndex {
         ),
         projectId: existing?.projectId ?? entry.projectId,
         model: existing?.model,
+        agent: existing?.agent,
       };
       if (
         !existing ||
