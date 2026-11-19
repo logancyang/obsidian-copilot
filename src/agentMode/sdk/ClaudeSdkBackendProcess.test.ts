@@ -1109,11 +1109,15 @@ describe("ClaudeSdkBackendProcess", () => {
 
         afterEach(() => rm(folder, { recursive: true, force: true }));
 
-        async function startAgentChat(proc: ClaudeSdkBackendProcess) {
+        async function startAgentChat(proc: ClaudeSdkBackendProcess, { savesMemory = true } = {}) {
           const memoryPath = path.join(folder, "MEMORY.md");
           const { sessionId } = await proc.newSession({
             cwd: "/vault",
-            agent: { slug: "coco", prompt: "In this chat you are Coco.", memoryPath },
+            agent: {
+              slug: "coco",
+              prompt: "In this chat you are Coco.",
+              ...(savesMemory ? { memoryPath } : {}),
+            },
           });
           proc.registerSessionHandler(sessionId, () => {});
           await promptTurn(proc, { sessionId, prompt: [{ type: "text", text: "hi" }] });
@@ -1176,14 +1180,23 @@ describe("ClaudeSdkBackendProcess", () => {
           expect(permissionPrompter).not.toHaveBeenCalled();
         });
 
-        it("turns Claude Code's own auto memory off whatever Copilot's auto memory choice, so the agent's MEMORY.md is its only memory (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)", async () => {
-          queryMock.mockImplementation(answering([resultMessage()]));
-          const proc = makeProc({ getAutoMemoryEnabled: () => true });
+        it.each([
+          ["a chat that saves to the agent's MEMORY.md", true],
+          [
+            "an asked agent's hidden chat, which saves nowhere (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)",
+            false,
+          ],
+        ])(
+          "turns Claude Code's own auto memory off whatever Copilot's auto memory choice in %s, so the agent's MEMORY.md is its only memory (https://github.com/Brevilabs/obsidian-copilot-private/issues/942)",
+          async (_chat, savesMemory) => {
+            queryMock.mockImplementation(answering([resultMessage()]));
+            const proc = makeProc({ getAutoMemoryEnabled: () => true });
 
-          const { options } = await startAgentChat(proc);
+            const { options } = await startAgentChat(proc, { savesMemory });
 
-          expect(options.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
-        });
+            expect(options.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
+          }
+        );
       });
 
       it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {

@@ -605,6 +605,7 @@ export default [
                     "skills",
                     "navigator",
                     "connectorsAgent",
+                    "customAgentsAgent",
                     "host",
                   ],
                 },

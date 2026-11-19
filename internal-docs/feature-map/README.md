@@ -39,6 +39,7 @@ The feature file a change touches defines its coverage set. Also drive every jou
 - [chat-input](chat-input.md): model, mode, and effort pickers, mentions, note context, images, send, stop.
 - [queued-messages](queued-messages.md): messages queued while the agent works.
 - [agent-replies](agent-replies.md): streaming text, reasoning, tool and activity cards, subagents, tasks.
+- [agent-mentions](agent-mentions.md): `@` another custom agent, the one line while it works, and its relayed reply.
 - [permission-requests](permission-requests.md): `Permission required` cards that wait for the user to allow or deny a tool call.
 - [agent-questions](agent-questions.md): `Question from agent` cards that wait for the user's answer.
 - [plan-proposals](plan-proposals.md): Plan mode cards to approve, reject, or redirect a plan.

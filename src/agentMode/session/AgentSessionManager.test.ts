@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { FileSystemAdapter, App, Notice, TFile } from "obsidian";
 import { mockTFile } from "@/__tests__/mockObsidian";
 import { waitFor } from "@testing-library/react";
@@ -1620,6 +1621,156 @@ describe("AgentSessionManager", () => {
       });
     });
 
+    describe("startUnlistedSession()", () => {
+      const ISSUE_944 = "https://github.com/Brevilabs/obsidian-copilot-private/issues/944";
+      const MAYA = Object.freeze({ slug: "maya", prompt: "In this chat you are Maya." });
+      const observeSessionEvent = jest.fn();
+
+      it(`starts an asked agent's chat in the asking chat's project folder with the agent's prompt, mode and model (${ISSUE_944})`, async () => {
+        seedProjects("launch");
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({ copilotMcpServer });
+
+        const session = await mgr.startUnlistedSession({
+          projectId: "launch",
+          seedSelection: { baseModelId: "sonnet", effort: null },
+          mode: "auto",
+          agent: MAYA,
+          observeSessionEvent,
+        });
+
+        expect(sessionCreateSpy).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            cwd: path.join("/vault", "Projects", "launch"),
+            projectId: "launch",
+            agentSlug: "maya",
+            agent: MAYA,
+            defaultMode: "auto",
+            defaultModelSelection: { baseModelId: "sonnet", effort: null },
+            observeSessionEvent,
+            mcpServers: [FEEDBACK_CHANNEL],
+          })
+        );
+        expect(copilotMcpServer.connect).toHaveBeenCalledWith(
+          session.internalId,
+          "opencode",
+          expect.any(Function)
+        );
+      });
+
+      it(`keeps an asked agent's chat out of the tabs, the chat lists and the running chats (${ISSUE_944})`, async () => {
+        const mgr = buildManager();
+        const listener = jest.fn();
+        mgr.subscribe(listener);
+
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+        });
+        getSessionTestHandle(session).setStatus("running");
+
+        expect(mgr.getSessions()).toEqual([]);
+        expect(mgr.getSessionsForScope(GLOBAL_SCOPE)).toEqual([]);
+        expect(mgr.getActiveSession()).toBeNull();
+        expect(mgr.getRunningChatIds().size).toBe(0);
+        expect(mgr.getSessionByBackendId(session.getBackendSessionId()!)).toBeNull();
+        expect(listener).not.toHaveBeenCalled();
+      });
+
+      it(`tombstones an asked agent's chat in the chat index so a sweep of the agent's sessions never lists it in Recent chats (${ISSUE_944})`, async () => {
+        const sessionIndex = { deleteSession: jest.fn(async () => undefined) };
+        const mgr = buildManager({ sessionIndex: sessionIndex as unknown as AgentSessionIndex });
+
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+        });
+
+        expect(sessionIndex.deleteSession).toHaveBeenCalledWith(
+          "opencode",
+          session.getBackendSessionId()
+        );
+      });
+
+      it(`forgets an asked agent's chat and its Copilot tools when the chat closes (${ISSUE_944})`, async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({ copilotMcpServer });
+        const session = await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+        });
+
+        getSessionTestHandle(session).setStatus("closed");
+
+        expect(mgr.isUnlistedSession(session.internalId)).toBe(false);
+        expect(copilotMcpServer.disconnect).toHaveBeenCalledWith(session.internalId);
+      });
+
+      it(`stops an asked agent's chat when its agent's process exits (${ISSUE_944})`, async () => {
+        const mgr = buildManager();
+        await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: MAYA,
+          observeSessionEvent,
+        });
+
+        mockBackendExitListeners.forEach((exit) => exit());
+
+        expect(mockSessionCancel).toHaveBeenCalledTimes(1);
+        expect(mockSessionDispose).toHaveBeenCalledTimes(1);
+      });
+
+      it(`closes the chat it started when the chat fails to start, and passes the failure on (${ISSUE_944})`, async () => {
+        const mgr = buildManager();
+        sessionCreateSpy.mockImplementationOnce((opts) =>
+          Object.assign(
+            makeMockSession({ internalId: opts.internalId, backendId: opts.backendId }),
+            { ready: Promise.reject(new Error("session/new failed")) }
+          )
+        );
+
+        await expect(
+          mgr.startUnlistedSession({
+            projectId: GLOBAL_SCOPE,
+            mode: null,
+            agent: MAYA,
+            observeSessionEvent,
+          })
+        ).rejects.toThrow("session/new failed");
+        expect(mockSessionDispose).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("isUnlistedSession()", () => {
+      it("names an asked agent's chat as unlisted from before it starts and never a chat the user sees (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        const copilotMcpServer = buildCopilotMcpServer();
+        const mgr = buildManager({ copilotMcpServer });
+        const unlistedWhenConnected: boolean[] = [];
+        copilotMcpServer.connect.mockImplementation(async (sessionKey: string) => {
+          unlistedWhenConnected.push(mgr.isUnlistedSession(sessionKey));
+          return FEEDBACK_CHANNEL;
+        });
+
+        const listed = await mgr.createSession();
+        await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+        });
+
+        expect(unlistedWhenConnected).toEqual([false, true]);
+        expect(mgr.isUnlistedSession(listed.internalId)).toBe(false);
+      });
+    });
+
     describe("createGlobalSessionWithDraft()", () => {
       it("writes the unsent text into the new chat's own draft for https://github.com/Brevilabs/obsidian-copilot-private/issues/166", async () => {
         const mgr = buildManager();
@@ -2763,6 +2914,21 @@ describe("AgentSessionManager", () => {
         expect(mockSessionCancel).toHaveBeenCalledTimes(2);
         expect(mockSessionDispose).toHaveBeenCalledTimes(2);
         expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+      });
+
+      it("cancels and disposes the chats of agents asked from other chats (https://github.com/Brevilabs/obsidian-copilot-private/issues/944)", async () => {
+        const mgr = buildManager();
+        await mgr.startUnlistedSession({
+          projectId: GLOBAL_SCOPE,
+          mode: null,
+          agent: { slug: "maya", prompt: "Maya" },
+          observeSessionEvent: jest.fn(),
+        });
+
+        await mgr.shutdown();
+
+        expect(mockSessionCancel).toHaveBeenCalledTimes(1);
+        expect(mockSessionDispose).toHaveBeenCalledTimes(1);
       });
 
       it("closes the feedback server", async () => {

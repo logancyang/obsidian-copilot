@@ -229,6 +229,31 @@ describe("copilotMcpServer", () => {
       expect(provider.forget).toHaveBeenCalledWith("session-a");
     });
 
+    it("https://github.com/Brevilabs/obsidian-copilot-private/issues/944 lists a tool that answers each listing as it describes itself to that session, and leaves it out where it answers none", async () => {
+      server.dispose();
+      const peek = Object.freeze({ name: "peek", description: "for session-a" });
+      server = createCopilotMcpServer(
+        () => true,
+        [
+          {
+            ...lookupTool(),
+            definition: { name: "peek" },
+            listedAs: ({ sessionKey }) => (sessionKey === "session-a" ? peek : null),
+          },
+        ]
+      );
+
+      const listedTo = async (sessionKey: string) =>
+        post(await server.connect(sessionKey, "claude", NO_CHAT), rpc(2, "tools/list"));
+
+      await expect(listedTo("session-a")).resolves.toMatchObject({
+        body: { result: { tools: [SEND_FEEDBACK_TOOL, peek] } },
+      });
+      await expect(listedTo("session-b")).resolves.toMatchObject({
+        body: { result: { tools: [SEND_FEEDBACK_TOOL] } },
+      });
+    });
+
     it(`${CONNECTORS_ISSUE} closes the connected services' connections when it is disposed`, () => {
       server.dispose();
       const provider = connectorProvider();
