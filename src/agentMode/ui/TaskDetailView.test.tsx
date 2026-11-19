@@ -287,5 +287,23 @@ describe("TaskDetailView", () => {
         "Coco and Leo"
       );
     });
+
+    it("slides in from the right with a fade as it opens, and holds still when the system asks for reduced motion (https://github.com/Brevilabs/obsidian-copilot-private/issues/967)", () => {
+      render(
+        <TaskDetailFrame title="Coco and Leo" onBack={jest.fn()}>
+          Leo's steps
+        </TaskDetailFrame>
+      );
+
+      const frame = screen.getByTestId("agent-task-detail");
+      expect(frame.className.split(" ")).toEqual(
+        expect.arrayContaining([
+          "tw-animate-in",
+          "tw-fade-in-25",
+          "tw-slide-in-from-right-1/4",
+          "motion-reduce:tw-animate-none",
+        ])
+      );
+    });
   });
 });

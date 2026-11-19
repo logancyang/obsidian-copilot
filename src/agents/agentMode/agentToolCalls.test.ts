@@ -13,14 +13,19 @@ import { ASK_AGENT_TOOL_NAME } from "@/agents/agentMentionPrompt";
 import { DRAFT_AGENT_TOOL_NAME } from "@/agents/agentMode/draftAgentTool";
 
 const ISSUE = "https://github.com/Brevilabs/obsidian-copilot-private/issues/947";
+const CARDS = "https://github.com/Brevilabs/obsidian-copilot-private/issues/967";
 const SENT = "Zero wants a blunt read of [[Launch video plan]]: six features in 90 seconds.";
 
-function claudeCall(tool: string, input: Record<string, unknown>): ToolCallPart {
+function claudeCall(
+  tool: string,
+  input: Record<string, unknown>,
+  status: ToolCallPart["status"] = "completed"
+): ToolCallPart {
   return {
     kind: "tool_call",
     id: "call-1",
     title: tool,
-    status: "completed",
+    status,
     mcpServer: "obsidian-copilot",
     vendorToolName: tool,
     input,
@@ -86,6 +91,20 @@ describe("agentToolCalls", () => {
         )
       ).toBeNull();
       expect(agentToolCall(claudeCall(ASK_AGENT_TOOL_NAME, { message: SENT }))).toBeNull();
+    });
+
+    it.each(["pending", "in_progress"] as const)(
+      `keeps an ask that is %s as an ask whose agent isn't known yet, while the model still writes its arguments (${CARDS})`,
+      (status) => {
+        expect(agentToolCall(claudeCall(ASK_AGENT_TOOL_NAME, {}, status))).toEqual({
+          tool: ASK_AGENT_TOOL_NAME,
+          agent: null,
+        });
+      }
+    );
+
+    it(`leaves the other @ tools to their own rows until they name the agent (${CARDS})`, () => {
+      expect(agentToolCall(claudeCall(CHECK_AGENT_TOOL_NAME, {}, "in_progress"))).toBeNull();
     });
 
     it(`leaves a call that failed to its ordinary row, since it did nothing with the agent (${ISSUE})`, () => {
