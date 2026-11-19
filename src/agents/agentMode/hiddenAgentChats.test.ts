@@ -505,6 +505,51 @@ describe("hiddenAgentChats", () => {
         );
       });
 
+      it(`turns down a message for an agent waiting on the user's answer to its question, sending it nothing and leaving the question open, so the answer still reaches it (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+
+        expect(chats.ask(coco, "Maya", "October or November?")).toEqual({
+          kind: "awaiting_answer",
+          agent: agentNamed("Maya"),
+          question: "October or November?",
+        });
+
+        expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
+        expect(mentionsOn(coco)?.[0].status).toBe("question");
+        expect(chats.answer(coco, "Maya", "October.")).toMatchObject({ kind: "answered" });
+        expect(await fake.untilPrompt(sessionIdOf(maya), 2)).toContain(
+          '<answer from="user">\nOctober.\n</answer>'
+        );
+        answer(maya, "Added it to October.");
+        expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain("Added it to October.");
+        expect(mentionsOn(coco)?.[0].status).toBe("finished");
+      });
+
+      it(`sends a new message on to an agent working again after the user's answer, as for any working agent (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+        chats.answer(coco, "Maya", "October.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+
+        expect(chats.ask(coco, "Maya", "Also add Figma.")).toMatchObject({ kind: "sent" });
+
+        fake.endTurn(sessionIdOf(maya));
+        expect(await fake.untilPrompt(sessionIdOf(maya), 3)).toContain(
+          '<message from="Coco">\nAlso add Figma.\n</message>'
+        );
+      });
+
+      it(`continues the same chat when asked again after the user stopped an agent that waited on a question (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+        chats.stop(coco, "Maya");
+        await fake.untilPrompt(sessionIdOf(coco), 3);
+        fake.endTurn(sessionIdOf(coco));
+
+        expect(chats.ask(coco, "Maya", "Add it to October.")).toMatchObject({ kind: "asked" });
+
+        expect(await fake.untilPrompt(sessionIdOf(maya), 2)).toContain("Add it to October.");
+        expect(startChat).toHaveBeenCalledTimes(1);
+      });
+
       it(`carries on the agent's earlier conversation saved on the asking chat when no chat with it is open, as after a restart (${CONTROL})`, async () => {
         const coco = await openChat({ agentSlug: "coco" });
         coco.sendPrompt("@Maya what do you think?");
@@ -1279,6 +1324,29 @@ describe("hiddenAgentChats", () => {
         expect(await fake.untilPrompt(sessionIdOf(leo), 2)).toContain("October.");
         expect(fake.promptsTo(sessionIdOf(maya))).toHaveLength(1);
         expect(mentionsOn(coco)?.map(({ status }) => status)).toEqual(["question", "working"]);
+      });
+
+      it(`relays a second question from the same run after the first was answered, and holds it open for its own answer (${CONTROL})`, async () => {
+        const { coco, maya } = await waitingOnQuestion();
+        chats.answer(coco, "Maya", "October.");
+        await fake.untilPrompt(sessionIdOf(maya), 2);
+
+        chats.askUser(maya, "Which year?");
+        answer(maya, "One more thing.");
+
+        expect(await fake.untilPrompt(sessionIdOf(coco), 3)).toContain(
+          '<agent-reply from="Maya">\nWhich year?\n</agent-reply>'
+        );
+        fake.endTurn(sessionIdOf(coco));
+        expect(mentionsOn(coco)?.[0].status).toBe("question");
+        expect(chats.ask(coco, "Maya", "Which year?")).toMatchObject({
+          kind: "awaiting_answer",
+          question: "Which year?",
+        });
+        chats.answer(coco, "Maya", "2026.");
+        expect(await fake.untilPrompt(sessionIdOf(maya), 3)).toContain("2026.");
+        answer(maya, "Added it to October 2026.");
+        expect(await fake.untilPrompt(sessionIdOf(coco), 4)).toContain("Added it to October 2026.");
       });
     });
 

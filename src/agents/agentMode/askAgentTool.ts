@@ -82,6 +82,8 @@ function resultText(result: AskAgentResult): string {
       return `${result.agent.name} is working on it in the background. Tell the user in one short line that you asked ${result.agent.name} and will bring back the reply, then end your turn.`;
     case "sent":
       return `Sent ${result.agent.name} your message in the chat ${result.agent.name} is working in; ${result.agent.name} ${result.now ? "reads it now" : "gets it after the current step"}. Tell the user in one short line, then end your turn.`;
+    case "awaiting_answer":
+      return `Nothing was sent: ${result.agent.name} is waiting for the user's answer to this question:\n${result.question}\n\nAsk the user this question in your own words if you haven't yet, then end your turn. When the user replies to it, even with a change of plan, pass their words to ${result.agent.name} with ${ANSWER_AGENT_TOOL_NAME}.`;
     default:
       return refusalText(result, ASK_AGENT_TOOL_NAME);
   }

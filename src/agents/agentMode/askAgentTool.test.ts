@@ -155,6 +155,19 @@ describe("askAgentTool", () => {
       expect([now.isError, later.isError]).toEqual([false, false]);
     });
 
+    it(`fails a call for an agent waiting on the user's answer, quoting the question and saying to ask the user, end the turn and pass the user's reply, even a change of plan, with answer_agent (${CONTROL})`, async () => {
+      const { tool } = buildTool({
+        asked: { kind: "awaiting_answer", agent: LEO, question: "Which month?" },
+      });
+
+      await expect(
+        tool.call({ agent: "Leo", message: "Which month should I use?" }, CHAT)
+      ).resolves.toEqual({
+        text: "Nothing was sent: Leo is waiting for the user's answer to this question:\nWhich month?\n\nAsk the user this question in your own words if you haven't yet, then end your turn. When the user replies to it, even with a change of plan, pass their words to Leo with answer_agent.",
+        isError: true,
+      });
+    });
+
     it("rejects a call without an agent or a message", async () => {
       const { tool, ask } = buildTool();
 

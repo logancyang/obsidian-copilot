@@ -50,6 +50,7 @@ export type AgentRefusal =
 export type AskAgentResult =
   | { kind: "asked"; agent: CustomAgent }
   | { kind: "sent"; agent: CustomAgent; now: boolean }
+  | { kind: "awaiting_answer"; agent: CustomAgent; question: string }
   | AgentRefusal;
 
 export type CheckAgentResult =
@@ -144,6 +145,10 @@ export class HiddenAgentChats {
     const key = chatKey(parent, agent.slug);
     const existing = this.chats.get(key);
     if (existing?.run) {
+      // An agent waiting on the user's answer gets only that answer: a small model relays the question and also asks the agent it again, which would answer it for the user.
+      // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
+      const { question } = existing.run;
+      if (question !== null) return { kind: "awaiting_answer", agent, question };
       this.sendMore(
         existing,
         `${existing.from} sent you more from the user while you work.\n\n<message from="${existing.from}">\n${message}\n</message>`
@@ -314,7 +319,7 @@ export class HiddenAgentChats {
     return { parent, agent, agents, store };
   }
 
-  // A new instruction for an agent still at work redirects it in the same chat instead of starting over, and a message for an agent waiting on a question answers it; its reply then starts after the answer.
+  // A new instruction for an agent still at work redirects it in the same chat instead of starting over, and the user's answer reaches an agent waiting on a question the same way; its reply then starts after the answer.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/945
   private sendMore(hidden: HiddenChat, text: string): void {
     const run = hidden.run;
