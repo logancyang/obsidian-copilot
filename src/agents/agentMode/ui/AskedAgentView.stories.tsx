@@ -230,6 +230,23 @@ export const NoLongerAvailable: StoryObj<ViewProps> = {
   },
 };
 
+export const SavedReplyAfterRestart: StoryObj<ViewProps> = {
+  args: {
+    run: run({ status: "finished", startedAt: ASKED_AT }),
+    chat: null,
+    replies: new Map([
+      [
+        "question",
+        "Three Stripe payouts dated Oct 29–31 land in Mercury on Nov 2. Which month should they count in?",
+      ],
+      [
+        "reply",
+        "October reconciles except three items. I listed them under “Unmatched” in [[October books]] and added Figma's billing contact to [[Vendors]].",
+      ],
+    ]),
+  },
+};
+
 export const FromACopilotChat: StoryObj<ViewProps> = {
   args: { from: "Copilot", fromFaceSrc: undefined },
 };

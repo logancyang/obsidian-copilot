@@ -1044,6 +1044,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         run={detailRun}
                         chat={activeSession}
                         hiddenChats={plugin.hiddenAgentChats}
+                        messages={messages}
                         agents={chatAgents.agents}
                         app={app}
                         onBack={handleCloseTask}

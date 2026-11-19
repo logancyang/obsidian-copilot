@@ -1,5 +1,5 @@
 import { AgentSession } from "@/agentMode/session/AgentSession";
-import type { BackendState } from "@/agentMode/session/types";
+import type { AgentChatMessage, BackendState } from "@/agentMode/session/types";
 import type { AgentMention } from "@/agents/agentMentions";
 import type { AskedAgentChat, HiddenAgentChats } from "@/agents/agentMode/hiddenAgentChats";
 import {
@@ -7,6 +7,7 @@ import {
   type FakeAgentBackend,
 } from "@/agents/agentMode/testing/fakeAgentBackend";
 import { AskedAgentView, ChatAskedAgentView } from "@/agents/agentMode/ui/AskedAgentView";
+import { formatAgentReply } from "@/agents/agentReply";
 import { COCO, LEO } from "@/agents/ui/testing/rosterFixtures";
 import { AppContext } from "@/context";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -90,9 +91,20 @@ async function turn(prompt: string, reply: string): Promise<string> {
   return userMessageId;
 }
 
+function relay(mention: string, reply: string): AgentChatMessage {
+  return {
+    id: `relay-${mention}-${reply}`,
+    sender: "user",
+    timestamp: { epoch: STARTED, display: "", fileName: "" },
+    isVisible: true,
+    message: formatAgentReply({ agent: "leo", name: "Leo", mention, reply, changed: [] }),
+  };
+}
+
 function renderView(
   change: Partial<AgentMention> = {},
-  chat: AskedAgentChat | null = { session: leo, continuedAt: new Map() }
+  chat: AskedAgentChat | null = { session: leo, continuedAt: new Map() },
+  replies?: ReadonlyMap<string, string>
 ) {
   const onBack = jest.fn();
   render(
@@ -103,6 +115,7 @@ function renderView(
         fromFaceSrc={COCO.faceSrc}
         faceSrc={LEO.faceSrc}
         chat={chat}
+        replies={replies}
         app={APP}
         onBack={onBack}
       />
@@ -117,14 +130,14 @@ function contentResized() {
   act(() => resizeCallbacks.forEach((callback) => callback([], {} as ResizeObserver)));
 }
 
-function fakeLayout(scroller: HTMLElement, viewBottom: number, scrollHeight: number) {
+function fakeLayout(scroller: HTMLElement, viewBottom: number, scrollHeight: () => number) {
   let scrollTop = 0;
   Object.defineProperties(scroller, {
-    scrollHeight: { get: () => scrollHeight },
+    scrollHeight: { get: scrollHeight },
     clientHeight: { get: () => viewBottom },
     scrollTop: {
       get: () => scrollTop,
-      set: (value: number) => (scrollTop = Math.min(value, scrollHeight - viewBottom)),
+      set: (value: number) => (scrollTop = Math.min(value, scrollHeight() - viewBottom)),
     },
   });
   scroller.getBoundingClientRect = () => ({ bottom: viewBottom }) as DOMRect;
@@ -242,12 +255,44 @@ describe("AskedAgentView", () => {
         }
       );
       const divider = screen.getByText(/^Continued at/);
-      const scrollTop = fakeLayout(divider.closest<HTMLElement>(".tw-overflow-y-auto")!, 300, 1000);
+      const scrollTop = fakeLayout(
+        divider.closest<HTMLElement>(".tw-overflow-y-auto")!,
+        300,
+        () => 1000
+      );
       divider.getBoundingClientRect = () => ({ top: 500 - scrollTop() }) as DOMRect;
 
       contentResized();
 
       expect(scrollTop()).toBe(200);
+    });
+
+    it(`opened for an earlier run, follows the newer run's output again once scrolled to the real bottom (${CARDS})`, async () => {
+      const first = await turn(job("Reconcile October."), "Matched 182 of 214.");
+      const second = await turn(job("Send Leo back to it."), "Picking up at 183.");
+      renderView(
+        {},
+        {
+          session: leo,
+          continuedAt: new Map([
+            [first, STARTED],
+            [second, STARTED + 60_000],
+          ]),
+        }
+      );
+      const divider = screen.getByText(/^Continued at/);
+      const scroller = divider.closest<HTMLElement>(".tw-overflow-y-auto")!;
+      let height = 1000;
+      const scrollTop = fakeLayout(scroller, 300, () => height);
+      divider.getBoundingClientRect = () => ({ top: 500 - scrollTop() }) as DOMRect;
+      contentResized();
+
+      scroller.scrollTop = 700;
+      fireEvent.scroll(scroller);
+      height = 1400;
+      contentResized();
+
+      expect(scrollTop()).toBe(1100);
     });
 
     it(`opened for the latest run, rests at the end of the conversation (${CARDS})`, async () => {
@@ -266,7 +311,7 @@ describe("AskedAgentView", () => {
       const scrollTop = fakeLayout(
         screen.getByText(/^Continued at/).closest<HTMLElement>(".tw-overflow-y-auto")!,
         300,
-        1000
+        () => 1000
       );
 
       contentResized();
@@ -331,6 +376,21 @@ describe("AskedAgentView", () => {
       expect(screen.getByText("Leo's steps from this run are no longer available.")).toBeTruthy();
     });
 
+    it(`shows the words the asking chat saved from the run under that note, as the agent's messages, when its chat is gone, so a reply stays readable after a restart (${CARDS})`, () => {
+      renderView(
+        { status: "finished" },
+        null,
+        new Map([
+          ["question", "Which month?"],
+          ["reply", "Matched 182 of 214."],
+        ])
+      );
+
+      const note = screen.getByText("Leo's steps from this run are no longer available.");
+      expect(note.nextElementSibling?.textContent).toBe("Which month?");
+      expect(note.nextElementSibling?.nextElementSibling?.textContent).toBe("Matched 182 of 214.");
+    });
+
     it(`says the agent is starting while its chat opens (${ISSUE})`, () => {
       renderView({}, null);
 
@@ -354,6 +414,7 @@ describe("AskedAgentView", () => {
             run={run()}
             chat={asking}
             hiddenChats={{ askedChat } as unknown as HiddenAgentChats}
+            messages={[]}
             agents={[COCO, LEO]}
             app={APP}
             onBack={() => {}}
@@ -365,5 +426,29 @@ describe("AskedAgentView", () => {
         expect(screen.getByText("Matching by date.")).toBeTruthy();
       }
     );
+
+    it(`when the run's chat is gone, shows every non-empty reply the asking chat saved for this run, in order, and none of another run's (${CARDS})`, () => {
+      render(
+        <ChatAskedAgentView
+          run={run({ status: "finished" })}
+          chat={{ agentSlug: "coco" } as AgentSession}
+          hiddenChats={{ askedChat: () => null } as unknown as HiddenAgentChats}
+          messages={[
+            relay("run-1", "Which month?"),
+            relay("run-2", "Another run's reply."),
+            relay("run-1", ""),
+            relay("run-1", "Matched 182 of 214."),
+          ]}
+          agents={[COCO, LEO]}
+          app={APP}
+          onBack={() => {}}
+        />
+      );
+
+      const note = screen.getByText("Leo's steps from this run are no longer available.");
+      expect(note.parentElement?.textContent).toBe(
+        "Leo's steps from this run are no longer available.Which month?Matched 182 of 214."
+      );
+    });
   });
 });
