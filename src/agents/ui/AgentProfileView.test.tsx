@@ -128,6 +128,31 @@ describe("AgentProfileView", () => {
       expect(screen.getByText("23 chats · since Oct 3")).not.toBeNull();
     });
 
+    it(`draws the agent's big face without the accent ring that marks a picked face, since the profile shows one agent (${ISSUE})`, () => {
+      renderProfile();
+      expect(screen.getByRole("img", { hidden: true }).className).not.toContain("tw-outline");
+
+      document.body.innerHTML = "";
+      renderProfile({ locked: { lapsed: true, onUnlock: jest.fn() } });
+      expect(screen.getAllByRole("img", { hidden: true })[0].className).not.toContain("tw-outline");
+    });
+
+    it(`slides in from the right with a fade as it opens, the way an asked agent's conversation does, and holds still when the system asks for reduced motion (${ISSUE})`, () => {
+      renderProfile();
+
+      const page = screen.getByRole("button", { name: "Back to chat" }).closest(".tw-size-full");
+      expect(page?.className.split(" ")).toEqual(
+        expect.arrayContaining([
+          "tw-duration-300",
+          "tw-ease-out",
+          "tw-animate-in",
+          "tw-fade-in-25",
+          "tw-slide-in-from-right-1/4",
+          "motion-reduce:tw-animate-none",
+        ])
+      );
+    });
+
     it("names the page by the agent and its sections by what they hold, as headings", () => {
       renderProfile();
 

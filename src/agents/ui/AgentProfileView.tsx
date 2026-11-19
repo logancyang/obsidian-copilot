@@ -18,6 +18,7 @@ import {
 } from "@/agents/ui/CreateAgentForm";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SLIDE_IN_PAGE_CLASS } from "@/components/ui/slideIn";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import {
@@ -187,7 +188,7 @@ export function AgentProfileView({
 
   return (
     <div
-      className="tw-flex tw-size-full tw-flex-col tw-bg-primary"
+      className={cn("tw-flex tw-size-full tw-flex-col tw-bg-primary", SLIDE_IN_PAGE_CLASS)}
       onKeyDown={(event) => {
         // An open picker or a name being edited takes Esc first; only an Esc nothing used leaves the profile.
         // https://github.com/Brevilabs/obsidian-copilot-private/issues/940
@@ -225,7 +226,7 @@ export function AgentProfileView({
                     NO_OBSIDIAN_TOOLTIP
                   )}
                 >
-                  <AgentFace src={agent.faceSrc} size="xxl" selected />
+                  <AgentFace src={agent.faceSrc} size="xxl" />
                   <span
                     className={cn(
                       "tw-absolute -tw-bottom-0.5 -tw-right-0.5 tw-flex tw-size-[22px] tw-items-center tw-justify-center tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-secondary tw-text-muted",
