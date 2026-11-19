@@ -1,14 +1,24 @@
 import { NEUTRAL_FACE_SRC } from "@/agents/customAgentFiles";
+import { loadPresetFaces } from "@/agents/presetFaces";
 import { AgentFace } from "@/agents/ui/AgentFace";
+import { readAsDataUrl } from "@/agents/ui/AgentFacePicker";
 import { Button } from "@/components/ui/button";
+import { logWarn } from "@/logger";
 import { setSettings, useSettingsValue } from "@/settings/model";
 import { X } from "lucide-react";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
 export interface FirstAgentBannerProps {
   onCreate: () => void;
   onDismiss: () => void;
 }
+
+export interface FirstAgentBannerViewProps extends FirstAgentBannerProps {
+  faces: readonly string[];
+}
+
+const BANNER_FACE_COUNT = 3;
+const NO_FACES: readonly string[] = Object.freeze([]);
 
 export function useFirstAgentBannerVisible(agentCount: number): boolean {
   const dismissed = useSettingsValue().agentMode.firstAgentBannerDismissed === true;
@@ -24,17 +34,49 @@ export function dismissFirstAgentBanner(): void {
   setSettings((cur) => ({ agentMode: { ...cur.agentMode, firstAgentBannerDismissed: true } }));
 }
 
-export function FirstAgentBanner({
+function useBannerFaces(): readonly string[] {
+  const [faces, setFaces] = useState(NO_FACES);
+  useEffect(() => {
+    let mounted = true;
+    void loadPresetFaces(BANNER_FACE_COUNT)
+      .then((loaded) =>
+        Promise.all(
+          loaded.map((face) => readAsDataUrl(new Blob([face.bytes], { type: "image/webp" })))
+        )
+      )
+      .then(
+        (srcs) => {
+          if (mounted) setFaces(srcs);
+        },
+        (error: unknown) => {
+          // Without the preset faces, as when offline, the banner keeps its grey placeholder faces.
+          // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
+          logWarn("[Custom agents] Could not load the first-agent banner's faces", error);
+        }
+      );
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  return faces;
+}
+
+export function FirstAgentBanner(props: FirstAgentBannerProps): React.ReactElement {
+  return <FirstAgentBannerView {...props} faces={useBannerFaces()} />;
+}
+
+export function FirstAgentBannerView({
+  faces,
   onCreate,
   onDismiss,
-}: FirstAgentBannerProps): React.ReactElement {
+}: FirstAgentBannerViewProps): React.ReactElement {
   return (
     <div className="tw-relative tw-mt-3.5 tw-flex tw-items-start tw-gap-3 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-py-3 tw-pl-3 tw-pr-9">
       <div className="tw-flex tw-shrink-0 tw-pt-0.5" aria-hidden="true">
-        {[0, 1, 2].map((index) => (
+        {Array.from({ length: BANNER_FACE_COUNT }, (_, index) => (
           <AgentFace
             key={index}
-            src={NEUTRAL_FACE_SRC}
+            src={faces[index] ?? NEUTRAL_FACE_SRC}
             size="m"
             className="tw-ring-2 tw-ring-[color:var(--background-primary)] [&:not(:first-child)]:-tw-ml-2.5"
           />

@@ -135,6 +135,27 @@ describe("presetFaces", () => {
       expect(request).toHaveBeenCalledTimes(25);
     });
 
+    it(`downloads only the list and the first faces when asked for fewer (${ISSUE})`, async () => {
+      const request = serveCdn({
+        [PRESET_FACES_URL]: {
+          faces: [
+            { id: "kai", url: KAI_URL },
+            { id: "nora", url: NORA_URL },
+          ],
+        },
+        [KAI_URL]: webpBytes(1),
+        [NORA_URL]: webpBytes(2),
+      });
+
+      const faces = await loadPresetFaces(1);
+
+      expect(faces).toEqual([{ id: "kai", alt: "", bytes: webpBytes(1) }]);
+      expect(request.mock.calls.map(([options]: [{ url: string }]) => options.url)).toEqual([
+        PRESET_FACES_URL,
+        KAI_URL,
+      ]);
+    });
+
     it.each([
       ["the list does not answer", {}],
       ["the list holds no faces", { [PRESET_FACES_URL]: { version: 1 } }],
