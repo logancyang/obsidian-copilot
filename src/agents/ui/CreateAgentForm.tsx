@@ -140,14 +140,17 @@ export function CreateAgentForm({
     closeGuard.name = trimmedName;
   }, [closeGuard, hasInput, trimmedName]);
 
-  // Only what the user typed goes to Copilot; a prefilled template is the dialog's, not theirs.
+  // Only what the user typed goes to Copilot; a prefilled template is the dialog's, not theirs. The message is one sentence ending where the user describes the agent, so a missing name is Copilot's to suggest.
   // https://github.com/Brevilabs/obsidian-copilot-private/issues/939
   const typed = (text: string, index: number) =>
     text.trim() === start[index].trim() ? "" : text.trim();
-  const askCopilot = () =>
+  const askCopilot = () => {
+    const typedName = typed(name, 0);
+    const naming = typedName ? `named ${typedName} for me` : "for me and suggest a name for it";
     onAskCopilot?.(
-      `Create a new agent for me. Name: ${typed(name, 0)}\nWhat it should do: ${typed(instruction, 2)}`
+      `Create a new agent ${naming}. Here's what it should do: ${typed(instruction, 2)}`
     );
+  };
 
   const create = async () => {
     if (blocker) {

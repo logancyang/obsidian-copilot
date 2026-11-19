@@ -459,7 +459,7 @@ describe("CreateAgentForm", () => {
       expect(createButton().disabled).toBe(false);
     });
 
-    it(`shows a tip to ask Copilot instead, whose Ask Copilot hands over a message asking for a new agent with blank Name and What it should do lines (${ISSUE})`, () => {
+    it(`shows a tip to ask Copilot instead, whose Ask Copilot hands over one sentence asking Copilot to suggest a name, ending where the user describes the agent (${ISSUE})`, () => {
       const onAskCopilot = jest.fn();
       renderForm({ onAskCopilot });
 
@@ -469,7 +469,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me. Name: \nWhat it should do: "
+        "Create a new agent for me and suggest a name for it. Here's what it should do: "
       );
     });
 
@@ -482,7 +482,19 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me. Name: Kai\nWhat it should do: You handle marketing."
+        "Create a new agent named Kai for me. Here's what it should do: You handle marketing."
+      );
+    });
+
+    it(`asks Copilot to suggest a name ahead of the typed instruction when no name is typed (${ISSUE})`, () => {
+      const onAskCopilot = jest.fn();
+      renderForm({ onAskCopilot });
+      type("What it handles", "You handle marketing.");
+
+      fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
+
+      expect(onAskCopilot).toHaveBeenCalledWith(
+        "Create a new agent for me and suggest a name for it. Here's what it should do: You handle marketing."
       );
     });
 
@@ -497,7 +509,7 @@ describe("CreateAgentForm", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask Copilot" }));
 
       expect(onAskCopilot).toHaveBeenCalledWith(
-        "Create a new agent for me. Name: \nWhat it should do: "
+        "Create a new agent for me and suggest a name for it. Here's what it should do: "
       );
     });
 
